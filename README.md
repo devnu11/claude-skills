@@ -52,3 +52,7 @@ the `.chezmoiexternal.toml.tmpl` and `run_after_link-claude-skills.sh.tmpl` in
 See Anthropic's [skills documentation](https://docs.claude.com/en/docs/claude-code/skills).
 Keep `SKILL.md` short — it is loaded into context when the skill triggers — and
 push detail into supporting files the skill references by path.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
