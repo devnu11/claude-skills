@@ -57,3 +57,17 @@ def read_key(path: Path) -> str:
 def child_env(key: str) -> dict[str, str]:
     """Environment additions for SDK child processes."""
     return {ENV_VAR: key, **dict.fromkeys(COMPETING_VARS, "")}
+
+
+def secret_paths(repo: Path, key_file: str, home: Path) -> list[Path]:
+    """Paths no role may read: both key file candidates and ``~/secrets``."""
+    return [c.path for c in candidates(repo, key_file, home)] + [home / HOME_KEY.parent]
+
+
+def deny_rules(paths: list[Path]) -> dict[str, list[str]]:
+    """Claude Code permission rules denying Read of each path (and anything under it)."""
+    rules = []
+    for path in paths:
+        absolute = path.resolve()
+        rules += [f"Read(/{absolute})", f"Read(/{absolute}/**)"]
+    return {"deny": rules}

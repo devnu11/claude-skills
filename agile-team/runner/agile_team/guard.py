@@ -6,6 +6,9 @@ Two layers:
   NotebookEdit outside the acting role's write globs, Read/Grep/Glob outside
   its read globs, and (for sandboxed roles) Bash commands that name source
   paths or fall outside an allowlist.
+* Every role: no writes under ``.git/``, no tool or Bash access to the API key
+  files, and Bash may only run read-only git subcommands (the runner owns
+  commits, so a role cannot rewrite history or hide changes from the audit).
 * ``audit_step`` / ``quarantine`` — after every step the runner diffs the tree.
   Bash cannot be path-guarded, so out-of-scope changes are committed on their
   own and immediately reverted: the work stays in history, the tree stays clean
@@ -27,6 +30,11 @@ from .paths import matches, repo_relative
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
 ALWAYS_IGNORED = (".team/run/**",)
+PROTECTED = (".git", ".git/**")
+SAFE_GIT = frozenset(
+    {"status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe"}
+)
+SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
 
 Hook = Callable[[dict[str, Any], str | None, Any], Awaitable[dict[str, Any]]]
@@ -43,6 +51,7 @@ class Scope:
     cwd: Path | None = None
     bash_forbidden: list[str] = field(default_factory=list)
     bash_allowed: list[str] | None = None
+    secrets: list[Path] = field(default_factory=list)
 
     def allows_write(self, rel: str) -> bool:
         return matches(rel, self.write)
@@ -53,6 +62,9 @@ class Scope:
 
 def check_tool_use(scope: Scope, tool: str, tool_input: dict[str, Any]) -> str | None:
     """Reason to deny this tool call, or ``None`` to allow it."""
+    raw = tool_input.get({**WRITE_TOOLS, **READ_TOOLS}.get(tool, ""), "") or ""
+    if raw and _is_secret(scope, raw):
+        return f"{scope.role} may not access {raw}"
     if tool in WRITE_TOOLS:
         return _check_write(scope, tool_input.get(WRITE_TOOLS[tool], ""))
     if tool in READ_TOOLS:
@@ -68,6 +80,8 @@ def _check_write(scope: Scope, raw: str) -> str | None:
     rel = repo_relative(scope.repo, raw, scope.cwd)
     if rel is None:
         return f"{scope.role} may not write outside the repo ({raw})"
+    if matches(rel, list(PROTECTED)):
+        return f"{scope.role} may not write inside .git"
     if not scope.allows_write(rel):
         return f"{scope.role} may not write {rel}; allowed: {', '.join(scope.write) or 'nothing'}"
     return None
@@ -83,6 +97,14 @@ def _check_read(scope: Scope, raw: str) -> str | None:
     return f"{scope.role} may not read {rel}"
 
 
+def _is_secret(scope: Scope, raw: str) -> bool:
+    """True when ``raw`` resolves to, or into, one of the scope's secret paths."""
+    base = scope.cwd or scope.repo
+    path = Path(raw).expanduser()
+    resolved = (path if path.is_absolute() else base / path).resolve()
+    return any(resolved == s.resolve() or s.resolve() in resolved.parents for s in scope.secrets)
+
+
 def _check_pattern(scope: Scope, pattern: str) -> str | None:
     """A restricted reader's Glob pattern may not climb out with ``..`` or go absolute."""
     if scope.read == ["**"] or not pattern:
@@ -94,6 +116,9 @@ def _check_pattern(scope: Scope, pattern: str) -> str | None:
 
 def check_bash(scope: Scope, command: str) -> str | None:
     """Deny commands outside the allowlist or that mention forbidden paths."""
+    reason = _check_secret_mention(scope, command) or _check_git(command)
+    if reason:
+        return reason
     if scope.bash_allowed is not None:
         reason = _check_allowlist(command, scope.bash_allowed)
         if reason:
@@ -101,6 +126,25 @@ def check_bash(scope: Scope, command: str) -> str | None:
     for token in _tokens(command):
         if _token_forbidden(scope, token):
             return f"{scope.role} may not reference {token!r} from Bash"
+    return None
+
+
+def _check_secret_mention(scope: Scope, command: str) -> str | None:
+    needles = [*SECRET_WORDS, *(str(s) for s in scope.secrets)]
+    hit = next((n for n in needles if n in command), None)
+    return f"{scope.role} may not reference the API key ({hit})" if hit else None
+
+
+def _check_git(command: str) -> str | None:
+    """Only read-only git subcommands (and ``cherry-pick -n``) are allowed."""
+    for segment in _SEGMENT_SPLIT.split(command):
+        words = _tokens(segment)
+        if not words or words[0] != "git":
+            continue
+        sub = words[1] if len(words) > 1 else ""
+        no_commit = sub == "cherry-pick" and ({"-n", "--no-commit"} & set(words))
+        if sub not in SAFE_GIT and not no_commit:
+            return f"`git {sub}` is not allowed; the runner commits for you"
     return None
 
 

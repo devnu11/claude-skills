@@ -237,3 +237,47 @@ def test_po_story_edits_committed_before_next_role(make_runtime, configured: Pat
     assert log == ["chore(team): architect step", "chore(team): product-owner step"]
     assert "s1.md" in git(configured, "show", "--name-only", "--format=", "HEAD~1")
     assert rt.git.is_clean()
+
+
+def edit_config(repo: Path, old: str, new: str):
+    def action() -> None:
+        path = repo / ".agile-team.toml"
+        path.write_text(path.read_text().replace(old, new))
+
+    return action
+
+
+def test_devops_may_edit_toolchain(make_runtime, configured: Path) -> None:
+    rt = make_runtime(FakeQuery(action=edit_config(configured, '"pytest"', '"make test"')))
+    report = run(rt, "devops")
+    assert report["commit"] and not report["quarantine"]
+
+
+def test_devops_may_not_widen_roles(make_runtime, configured: Path) -> None:
+    widen = edit_config(configured, "[team]", '[roles.devops]\nwrite = ["**"]\n\n[team]')
+    rt = make_runtime(FakeQuery(action=widen))
+    report = run(rt, "devops")
+    assert report["quarantine"] and not report["commit"]
+    assert "roles.devops" not in (configured / ".agile-team.toml").read_text()
+
+
+def test_config_edit_unreadable_is_refused(configured: Path) -> None:
+    from agile_team.git_ops import Git
+
+    (configured / ".agile-team.toml").write_text("not = [toml")
+    assert not dispatch.config_edit_allowed(Git(configured))
+
+
+def test_secret_denials_merge(tmp_path: Path) -> None:
+    assert dispatch.with_secret_denials(None, []) is None
+    merged = dispatch.with_secret_denials({"permissions": {"deny": ["X"]}}, [tmp_path / "k"])
+    assert merged["permissions"]["deny"][0] == "X"
+    assert f"Read(/{tmp_path.resolve()}/k)" in merged["permissions"]["deny"]
+
+
+def test_roles_get_secret_denials(make_runtime, tmp_path: Path) -> None:
+    q = FakeQuery()
+    rt = make_runtime(q, secrets=[tmp_path / "secrets"])
+    run(rt, "architect")
+    assert "secrets" in q.calls[0]["options"].settings
+    assert rt.scope_for(rt.book.resolve("developer")).secrets == [tmp_path / "secrets"]

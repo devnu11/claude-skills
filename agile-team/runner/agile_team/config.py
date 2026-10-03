@@ -7,6 +7,7 @@ addenda live beside it in ``.team/roles/*.md`` and are handled by ``roles``.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -216,6 +217,11 @@ def _validate_deliveries(deliveries: list[Delivery], kinds: set[str]) -> list[st
         f"delivery {d.name!r} has unknown kind {d.kind!r}"
         for d in deliveries
         if d.kind not in kinds
+    ]
+    problems += [
+        f"delivery name {d.name!r} must be lowercase letters, digits, - or _"
+        for d in deliveries
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", d.name)
     ]
     names = [d.name for d in deliveries]
     problems += [

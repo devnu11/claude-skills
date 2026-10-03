@@ -60,6 +60,7 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
             {"name": "w", "kind": "web"},
             {"name": "w", "kind": "harness"},
             {"name": "z", "kind": "bogus"},
+            {"name": "../up", "kind": "package"},
         ],
         "roles": {
             "ghost": {},

@@ -46,6 +46,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     repo, presets = Path(args.repo), onboard.load_presets()
     if args.detect:
         return _print_detection(repo, presets)
+    if not Git(repo).is_clean():
+        raise CliError("working tree is dirty; commit or stash first")
     if not args.preset or not args.delivery:
         raise CliError("--preset and --delivery are required (see --detect)")
     answers = onboard.Answers(
@@ -139,6 +141,7 @@ def make_runtime(repo: Path, home: Path, query_fn: QueryFn) -> Runtime:
         relay=Relay(config.run_dir),
         state=state_mod.load(config.run_dir),
         env=keys.child_env(keys.read_key(source.path)),
+        secrets=keys.secret_paths(repo, config.team.key_file, home),
         query_fn=query_fn,
         checks=checks,
     )

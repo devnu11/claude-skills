@@ -8,8 +8,11 @@ build the three read-blocking layers (tool globs, Bash hook, OS sandbox).
 
 from __future__ import annotations
 
+import contextlib
 import os
+import re
 import shutil
+import signal
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -21,6 +24,7 @@ from .guard import Scope
 from .paths import literal_root
 
 CUSTOMER_DIR = "customer"
+SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 STORIES_GLOB = ".team/stories/**"
 NOTES_GLOB = ".team/acceptance/**"
 PLAYWRIGHT = {"type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest", "--headless"]}
@@ -100,16 +104,22 @@ class Prepared:
     process: subprocess.Popen[bytes] | None = None
 
     def stop(self) -> None:
+        """Stop the background process and everything it spawned (its process group)."""
         if self.process and self.process.poll() is None:
-            self.process.terminate()
+            _signal_group(self.process, signal.SIGTERM)
             try:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                self.process.kill()
+                _signal_group(self.process, signal.SIGKILL)
 
     def guidance(self) -> str:
         commands = ", ".join(self.delivery.commands) or "none"
         return self.kind.guidance.format(url=self.delivery.url, commands=commands)
+
+
+def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(os.getpgid(process.pid), sig)
 
 
 def kind_of(delivery: Delivery) -> DeliveryKind:
@@ -142,6 +152,13 @@ def sandbox_env(
     return env
 
 
+def sandbox_root(config: Config, delivery: Delivery) -> Path:
+    """``.team/run/customer/<name>``; refuses names that would escape it (it gets wiped)."""
+    if not SAFE_NAME.fullmatch(delivery.name):
+        raise SandboxError(f"delivery name {delivery.name!r} must match {SAFE_NAME.pattern}")
+    return config.run_dir / CUSTOMER_DIR / delivery.name
+
+
 def prepare(
     config: Config,
     delivery: Delivery,
@@ -150,13 +167,15 @@ def prepare(
 ) -> Prepared:
     """Create a clean sandbox and run the delivery's prepare step."""
     kind = kind_of(delivery)
-    root = fresh_dir(config.run_dir / CUSTOMER_DIR / delivery.name)
+    root = fresh_dir(sandbox_root(config, delivery))
     workdir = fresh_dir(root / "consumer") if kind.consumer else root
     prepared = Prepared(delivery, kind, root, workdir, sandbox_env(delivery, root))
     if delivery.prepare:
         command = expand(delivery.prepare, config.repo, root)
         if kind.background:
-            prepared.process = popen(command, shell=True, cwd=config.repo, env=prepared.env)
+            prepared.process = popen(
+                command, shell=True, cwd=config.repo, env=prepared.env, start_new_session=True
+            )
         elif runner(command, config.repo, prepared.env) != 0:
             raise SandboxError(f"prepare for delivery {delivery.name!r} failed: {command}")
     return prepared

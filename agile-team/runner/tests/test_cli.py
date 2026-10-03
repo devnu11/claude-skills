@@ -140,3 +140,15 @@ def test_check_config_flags_bad_glob(configured: Path) -> None:
     c = cfg.load(configured)
     c.roles["developer"] = {"write": ["{nope}"]}
     assert any("placeholder" in p for p in cli.check_config(c))
+
+
+def test_init_refuses_dirty_tree(repo: Path, capsys) -> None:
+    (repo / "wip.txt").write_text("x")
+    assert run("--repo", str(repo), "init", "--preset", "python", "--delivery", "package") == 1
+    assert "dirty" in capsys.readouterr().err
+    assert (repo / "wip.txt").read_text() == "x"
+
+
+def test_make_runtime_lists_secrets(configured: Path, key_home: Path) -> None:
+    rt = cli.make_runtime(configured, key_home, FakeQuery())
+    assert key_home / "secrets" in rt.secrets

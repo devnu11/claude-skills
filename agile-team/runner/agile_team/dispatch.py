@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tomllib
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,10 +25,10 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import gates, guard, sandbox
+from . import gates, guard, keys, sandbox
 from . import state as state_mod
-from .config import Config
-from .git_ops import Git
+from .config import CONFIG_NAME, Config
+from .git_ops import Git, GitError
 from .ledger import Entry, Ledger, checkpoint_crossed
 from .relay import Relay
 from .roles import (
@@ -42,6 +43,7 @@ from .roles import (
 from .state import RunState
 
 PROXY = "customer-proxy"
+DEVOPS_SECTIONS = ("toolchain", "delivery")
 PO = "product-owner"
 MANAGER = "manager"
 COMMAND_TIMEOUT_S = 1800
@@ -118,6 +120,41 @@ def shell_runner(repo: Path) -> gates.CommandRunner:
     return run
 
 
+def with_secret_denials(settings: dict[str, Any] | None, secrets: list[Path]) -> dict | None:
+    """Add Read deny rules for the key files to a role's Claude Code settings."""
+    if not secrets:
+        return settings
+    merged = dict(settings or {})
+    permissions = dict(merged.get("permissions", {}))
+    permissions["deny"] = [*permissions.get("deny", []), *keys.deny_rules(secrets)["deny"]]
+    merged["permissions"] = permissions
+    return merged
+
+
+def restrict_config(audit: guard.Audit, git: Git) -> guard.Audit:
+    """A config edit may only touch ``[toolchain]`` and ``[[delivery]]``.
+
+    Anything else (roles, gates, team) would let a role widen its own scope on
+    the next run, so such an edit is moved to the quarantine list.
+    """
+    if CONFIG_NAME not in audit.in_scope or config_edit_allowed(git):
+        return audit
+    return guard.Audit(
+        [p for p in audit.in_scope if p != CONFIG_NAME], [*audit.out_of_scope, CONFIG_NAME]
+    )
+
+
+def config_edit_allowed(git: Git) -> bool:
+    """True when the working config differs from HEAD only in owned sections."""
+    try:
+        before = tomllib.loads(git.run("show", f"HEAD:{CONFIG_NAME}"))
+        after = tomllib.loads((git.repo / CONFIG_NAME).read_text())
+    except (GitError, OSError, tomllib.TOMLDecodeError):
+        return False
+    strip = lambda d: {k: v for k, v in d.items() if k not in DEVOPS_SECTIONS}  # noqa: E731
+    return strip(before) == strip(after)
+
+
 @dataclass
 class Plan:
     """Everything needed to launch one step."""
@@ -143,7 +180,7 @@ class Runtime:
     query_fn: QueryFn
     checks: gates.Checks
     prepare_fn: PrepareFn = sandbox.prepare
-    notes: list[str] = field(default_factory=list)
+    secrets: list[Path] = field(default_factory=list)
 
     @property
     def steps(self) -> list[str]:
@@ -185,7 +222,7 @@ class Runtime:
         """Guard scope from the role's globs with placeholders expanded."""
         values = self.config.placeholders()
         write, read = expand_globs(role.write, values), expand_globs(role.read, values)
-        return guard.Scope(role.name, self.config.repo, write, read)
+        return guard.Scope(role.name, self.config.repo, write, read, secrets=self.secrets)
 
     def settle_po(self) -> dict[str, str | None]:
         """Commit the PO's own story edits so the next role starts on a clean tree."""
@@ -207,6 +244,7 @@ class Runtime:
             raise sandbox.SandboxError("no [[delivery]] is configured for the customer proxy")
         prepared = self.prepare_fn(self.config, delivery)
         scope = sandbox.proxy_scope(self.config, prepared, write)
+        scope.secrets = self.secrets
         role.tools = [t for t in role.tools if t in prepared.kind.tools] or list(
             prepared.kind.tools
         )
@@ -237,6 +275,7 @@ class Runtime:
         system = system_prompt(
             self.book, role, self.config.repo, scope_note(scope.write, scope.read)
         )
+        extra["settings"] = with_secret_denials(extra.get("settings"), self.secrets)
         options = build_options(role, system, scope, env or self.env, **extra)
         return Plan(role, scope, options, self.user_prompt(role.name, brief, story))
 
@@ -343,7 +382,7 @@ class Runtime:
         self, role: str, scope: guard.Scope, story: gates.StoryState | None
     ) -> dict[str, str | None]:
         """Quarantine out-of-scope changes, then commit in-scope ones."""
-        audit = guard.audit_step(self.git, scope)
+        audit = restrict_config(guard.audit_step(self.git, scope), self.git)
         quarantined = (
             guard.quarantine(self.git, role, audit.out_of_scope) if audit.out_of_scope else None
         )

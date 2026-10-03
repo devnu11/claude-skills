@@ -1,5 +1,7 @@
 """Customer sandbox: one fixture per delivery kind, plus the read-blocking layers."""
 
+import os
+import signal
 import socket
 import subprocess
 import sys
@@ -88,21 +90,19 @@ def _fetch(url: str) -> bytes | None:
     return None
 
 
-def test_stop_kills_stubborn_process() -> None:
+def test_stop_escalates_to_sigkill(monkeypatch) -> None:
+    sent = []
+    monkeypatch.setattr(sandbox.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(sandbox.os, "killpg", lambda pgid, sig: sent.append(sig))
+
     class Stubborn:
-        killed = False
+        pid = 4242
 
         def poll(self):
             return None
 
-        def terminate(self):
-            pass
-
         def wait(self, timeout):
             raise subprocess.TimeoutExpired("x", timeout)
-
-        def kill(self):
-            Stubborn.killed = True
 
     p = sandbox.Prepared(
         Delivery("w", "web"),
@@ -112,7 +112,48 @@ def test_stop_kills_stubborn_process() -> None:
         process=Stubborn(),
     )  # type: ignore[arg-type]
     p.stop()
-    assert Stubborn.killed
+    assert sent == [signal.SIGTERM, signal.SIGKILL]
+
+
+def test_stop_ignores_vanished_group(monkeypatch) -> None:
+    def gone(_pid):
+        raise ProcessLookupError
+
+    monkeypatch.setattr(sandbox.os, "getpgid", gone)
+    sandbox._signal_group(type("P", (), {"pid": 1})(), signal.SIGTERM)  # type: ignore[arg-type]
+
+
+def test_web_stop_kills_child_processes(configured: Path) -> None:
+    pidfile = configured / "child.pid"
+    d = Delivery("ui", "web", prepare=f"sleep 300 & echo $! > {pidfile}; wait")
+    p = sandbox.prepare(load(configured, d), d)
+    for _ in range(50):
+        if pidfile.exists() and pidfile.read_text().strip():
+            break
+        time.sleep(0.05)
+    child = int(pidfile.read_text())
+    p.stop()
+    time.sleep(0.2)
+    assert not _alive(child)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        with open(f"/proc/{pid}/stat") as fh:  # a zombie still answers kill(0)
+            return fh.read().split()[2] != "Z"
+    except OSError:
+        return True
+
+
+def test_delivery_name_cannot_escape(configured: Path) -> None:
+    d = Delivery("../../..", "package")
+    with pytest.raises(sandbox.SandboxError, match="must match"):
+        sandbox.prepare(load(configured, d), d)
+    assert (configured / "src/app.py").exists()
 
 
 def test_library_consumer_project(configured: Path) -> None:

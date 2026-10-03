@@ -146,6 +146,17 @@ and when spend crosses each `manager_every_pct` checkpoint.
   denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox,
   `.team/stories/` and `<docs>/customer/`; its Bash may not name source or test
   directories, `..`, or repo paths outside the sandbox.
+- Every role: no writes under `.git/`; no Read/Grep/Glob/Write of the key
+  files or `~/secrets/` (hook plus Claude Code `permissions.deny` rules); Bash
+  may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
+  `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`,
+  `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
+  push.
+- A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
+  quarantined, so no role can widen its own scope for the next run.
+- Residual risk: the key is in the runner's environment, so a role's Bash could
+  still read it through an interpreter (e.g. `python -c 'import os; …'`). Use
+  a project-scoped key with a Console spend cap.
 - After each step the runner diffs the tree. Out-of-scope changes are
   committed as `chore(team): quarantine out-of-scope changes by <role>` and
   reverted at once; the PO gets the sha.

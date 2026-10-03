@@ -3,6 +3,7 @@
 import asyncio
 from pathlib import Path
 
+import pytest
 from agile_team import guard
 from agile_team.guard import Scope
 
@@ -103,3 +104,49 @@ def test_bash_write_by_developer_is_quarantined_then_reverted(repo: Path) -> Non
     assert not (repo / "tests/x").exists()
     assert git(repo, "show", "--name-only", "--format=", sha).strip() == "tests/x"
     assert g.changed_paths() == ["src/app.py"]
+
+
+def secret_scope(tmp_path: Path) -> Scope:
+    secrets = [tmp_path / "home/secrets", tmp_path / ".team/run/api-key"]
+    return Scope("developer", tmp_path, ["**"], secrets=secrets)
+
+
+def test_key_files_unreadable_by_any_tool(tmp_path: Path) -> None:
+    s = secret_scope(tmp_path)
+    assert guard.check_tool_use(s, "Read", {"file_path": str(tmp_path / "home/secrets/k")})
+    assert guard.check_tool_use(s, "Read", {"file_path": ".team/run/api-key"})
+    assert guard.check_tool_use(s, "Grep", {"path": str(tmp_path / "home/secrets")})
+    assert guard.check_tool_use(s, "Write", {"file_path": ".team/run/api-key"})
+    assert guard.check_tool_use(s, "Read", {"file_path": "src/a.py"}) is None
+
+
+def test_bash_may_not_mention_the_key(tmp_path: Path) -> None:
+    s = secret_scope(tmp_path)
+    assert guard.check_bash(s, "echo $ANTHROPIC_API_KEY")
+    assert guard.check_bash(s, "cat ~/secrets/anthropic-api-key")
+    assert guard.check_bash(s, f"cat {tmp_path}/.team/run/api-key")
+    assert guard.check_bash(s, "ls src") is None
+
+
+def test_no_writes_inside_git(tmp_path: Path) -> None:
+    s = Scope("devops", tmp_path, ["**"])
+    assert "inside .git" in guard.check_tool_use(s, "Write", {"file_path": ".git/hooks/pre-commit"})
+
+
+@pytest.mark.parametrize(
+    ("command", "allowed"),
+    [
+        ("git status", True),
+        ("git diff HEAD~1 && git log --oneline", True),
+        ("git cherry-pick -n abc123", True),
+        ("git cherry-pick abc123", False),
+        ("git commit -am x", False),
+        ("git push --force", False),
+        ("git reset --hard", False),
+        ("ls; git stash", False),
+        ("git", False),
+        ("echo git push", True),
+    ],
+)
+def test_only_read_only_git(tmp_path: Path, command: str, allowed: bool) -> None:
+    assert (guard.check_bash(Scope("developer", tmp_path, ["**"]), command) is None) is allowed

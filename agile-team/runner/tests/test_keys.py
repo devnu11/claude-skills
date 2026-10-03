@@ -37,3 +37,14 @@ def test_child_env() -> None:
     env = keys.child_env("abc")
     assert env["ANTHROPIC_API_KEY"] == "abc"
     assert env["CLAUDE_CODE_OAUTH_TOKEN"] == ""
+
+
+def test_secret_paths_and_rules(tmp_path: Path) -> None:
+    paths = keys.secret_paths(tmp_path, "k", tmp_path / "home")
+    assert paths == [
+        tmp_path / "k",
+        tmp_path / "home/secrets/anthropic-api-key",
+        tmp_path / "home/secrets",
+    ]
+    rules = keys.deny_rules([tmp_path / "k"])["deny"]
+    assert rules == [f"Read(/{tmp_path.resolve()}/k)", f"Read(/{tmp_path.resolve()}/k/**)"]
