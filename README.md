@@ -47,6 +47,17 @@ If you manage dotfiles with chezmoi, declare this repo as an external and let a
 the `.chezmoiexternal.toml.tmpl` and `run_after_link-claude-skills.sh.tmpl` in
 [devnu11/home](https://github.com/devnu11/home).
 
+## Tests
+
+```sh
+sh tests/install_test.sh
+```
+
+Covers linking, idempotency (a second run changes nothing), `--dry-run`,
+relinking, pruning, and leaving `synced/` and foreign links alone. Each test
+works in a scratch directory, never the real `~/.claude/skills`. CI runs it on
+Linux (dash) and macOS (bash 3.2 as `/bin/sh`), plus shellcheck.
+
 ## Writing a skill
 
 See Anthropic's [skills documentation](https://docs.claude.com/en/docs/claude-code/skills).
