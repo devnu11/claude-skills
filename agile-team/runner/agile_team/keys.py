@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import stat
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 ENV_VAR = "ANTHROPIC_API_KEY"
@@ -22,26 +23,47 @@ class KeyNotFound(Exception):
     """No usable key file was found."""
 
 
+class KeyOrigin(StrEnum):
+    """Where a key file lives; only a repo key must be gitignored."""
+
+    REPO = "repo"
+    HOME = "home"
+
+
 @dataclass(frozen=True)
 class KeySource:
-    """Where the key came from; ``in_repo`` decides whether gitignore matters."""
+    """One candidate key file."""
 
     path: Path
-    in_repo: bool
+    origin: KeyOrigin
 
 
-def candidates(repo: Path, key_file: str, home: Path) -> list[KeySource]:
-    """Key files in resolution order."""
-    return [KeySource(repo / key_file, True), KeySource(home / HOME_KEY, False)]
+@dataclass(frozen=True)
+class KeyLocations:
+    """The repo's configured key file and the home fallback."""
 
+    repo: Path
+    key_file: str
+    home: Path
 
-def resolve(repo: Path, key_file: str, home: Path) -> KeySource:
-    """First existing key file, or ``KeyNotFound``."""
-    for source in candidates(repo, key_file, home):
-        if source.path.is_file():
-            return source
-    tried = ", ".join(str(c.path) for c in candidates(repo, key_file, home))
-    raise KeyNotFound(f"no API key file found (tried {tried})")
+    def candidates(self) -> list[KeySource]:
+        """Key files in resolution order."""
+        return [
+            KeySource(self.repo / self.key_file, KeyOrigin.REPO),
+            KeySource(self.home / HOME_KEY, KeyOrigin.HOME),
+        ]
+
+    def resolve(self) -> KeySource:
+        """First existing key file, or ``KeyNotFound``."""
+        found = next((c for c in self.candidates() if c.path.is_file()), None)
+        if found is None:
+            tried = ", ".join(str(c.path) for c in self.candidates())
+            raise KeyNotFound(f"no API key file found (tried {tried})")
+        return found
+
+    def secret_paths(self) -> list[Path]:
+        """Paths no role may read: both key file candidates and ``~/secrets``."""
+        return [c.path for c in self.candidates()] + [self.home / HOME_KEY.parent]
 
 
 def mode_ok(path: Path) -> bool:
@@ -59,15 +81,7 @@ def child_env(key: str) -> dict[str, str]:
     return {ENV_VAR: key, **dict.fromkeys(COMPETING_VARS, "")}
 
 
-def secret_paths(repo: Path, key_file: str, home: Path) -> list[Path]:
-    """Paths no role may read: both key file candidates and ``~/secrets``."""
-    return [c.path for c in candidates(repo, key_file, home)] + [home / HOME_KEY.parent]
-
-
-def deny_rules(paths: list[Path]) -> dict[str, list[str]]:
+def deny_rules(paths: list[Path]) -> list[str]:
     """Claude Code permission rules denying Read of each path (and anything under it)."""
-    rules = []
-    for path in paths:
-        absolute = path.resolve()
-        rules += [f"Read(/{absolute})", f"Read(/{absolute}/**)"]
-    return {"deny": rules}
+    absolute = [p.resolve() for p in paths]
+    return [rule for p in absolute for rule in (f"Read(/{p})", f"Read(/{p}/**)")]

@@ -38,22 +38,15 @@ def test_commit_deletion(repo: Path) -> None:
     assert Git(repo).is_clean()
 
 
-def test_fixup(repo: Path) -> None:
-    g = Git(repo)
-    (repo / "a.txt").write_text("a")
-    first = g.commit(["a.txt"], "feat(s1): story")
-    (repo / "a.txt").write_text("b")
-    g.commit_fixup(["a.txt"], first)
-    assert git(repo, "log", "-1", "--format=%s").strip() == "fixup! feat(s1): story"
-
-
 def test_revert(repo: Path) -> None:
     g = Git(repo)
     (repo / "a.txt").write_text("a")
     sha = g.commit(["a.txt"], "add a")
-    g.revert(sha, 'Revert "add a"')
+    g.revert(sha)
     assert not (repo / "a.txt").exists()
-    assert CO_AUTHOR in git(repo, "log", "-1", "--format=%B")
+    msg = git(repo, "log", "-1", "--format=%B")
+    assert msg.startswith('Revert "add a"') and CO_AUTHOR in msg
+    assert g.subject(sha) == "add a"
 
 
 def test_is_ignored(repo: Path) -> None:

@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field, fields, replace
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ REPO_ROLES = ".team/roles"
 CHARTER = ".team/CLAUDE.md"
 BRIEFS = ".team/briefs"
 OVERRIDABLE = ("model", "effort", "tools", "write", "read", "enabled", "description")
+FRONTMATTER_KEYS = frozenset({*OVERRIDABLE, "extends"})
 HANDOFF_STATUSES = ("done", "changes_requested", "blocked", "failed")
 RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate")
 
@@ -94,15 +96,19 @@ def parse_role(name: str, text: str) -> RoleSpec:
     match = _FRONTMATTER.match(text)
     if not match:
         return RoleSpec(name=name, body=text.strip())
-    meta = yaml.safe_load(match.group(1)) or {}
+    meta = _frontmatter(name, match.group(1))
+    values = {k: meta[k] for k in FRONTMATTER_KEYS if k in meta}
+    return RoleSpec(name=meta.get("name", name), body=match.group(2).strip(), **values)
+
+
+def _frontmatter(name: str, raw: str) -> dict[str, Any]:
+    meta = yaml.safe_load(raw) or {}
     if not isinstance(meta, dict):
         raise RoleError(f"{name}: frontmatter must be a mapping")
-    known = {f.name for f in fields(RoleSpec)} - {"name", "body"}
-    unknown = set(meta) - known - {"name"}
+    unknown = set(meta) - FRONTMATTER_KEYS - {"name"}
     if unknown:
         raise RoleError(f"{name}: unknown frontmatter keys {sorted(unknown)}")
-    values = {k: meta[k] for k in known if k in meta}
-    return RoleSpec(name=meta.get("name", name), body=match.group(2).strip(), **values)
+    return meta
 
 
 def has_frontmatter(text: str) -> bool:
@@ -123,10 +129,11 @@ class RoleBook:
     builtin: dict[str, str]
     repo_files: dict[str, str]
     config_roles: dict[str, dict[str, Any]]
+    repo: Path = field(default_factory=Path)
 
     @classmethod
     def for_repo(cls, repo: Path, config_roles: dict[str, dict[str, Any]]) -> RoleBook:
-        return cls(load_dir(BUILTIN_DIR), load_dir(repo / REPO_ROLES), config_roles)
+        return cls(load_dir(BUILTIN_DIR), load_dir(repo / REPO_ROLES), config_roles, repo)
 
     def names(self) -> set[str]:
         """Every role that can be resolved (built-in, repo files, config-only)."""
@@ -138,15 +145,18 @@ class RoleBook:
 
     def spec(self, name: str) -> RoleSpec:
         """The base spec for ``name`` before ``extends`` and overrides."""
-        repo_text = self.repo_files.get(name)
-        if repo_text is not None and has_frontmatter(repo_text):
+        repo_text = self.repo_files.get(name, "")
+        if has_frontmatter(repo_text):
             return parse_role(name, repo_text)
         if name in self.builtin:
             return parse_role(name, self.builtin[name])
+        return self._config_only(name)
+
+    def _config_only(self, name: str) -> RoleSpec:
         base = self.config_roles.get(name, {}).get("extends")
-        if base:
-            return RoleSpec(name=name, extends=base)
-        raise RoleError(f"unknown role {name!r}")
+        if not base:
+            raise RoleError(f"unknown role {name!r}")
+        return RoleSpec(name=name, extends=base)
 
     def chain(self, name: str) -> list[RoleSpec]:
         """``name`` and its ancestors, root first, excluding ``_shared``."""
@@ -160,77 +170,72 @@ class RoleBook:
         return list(reversed(specs))
 
     def addendum(self, name: str) -> str:
-        text = self.repo_files.get(name)
-        return "" if text is None or has_frontmatter(text) else text.strip()
+        text = self.repo_files.get(name, "")
+        return "" if has_frontmatter(text) else text.strip()
 
     def resolve(self, name: str, runtime: dict[str, Any] | None = None) -> ResolvedRole:
         """Merge the chain, config overrides and run-time overrides."""
-        merged = _merge_chain(self.chain(name))
-        merged = _apply(merged, self.config_roles.get(name, {}))
-        merged = _apply(merged, runtime or {})
-        bodies = [s.body for s in self.chain(name) if s.body] + [self.addendum(name)]
-        return _concrete(name, merged, "\n\n".join(b for b in bodies if b))
+        chain = self.chain(name)
+        merged = _merge(chain, [self.config_roles.get(name, {}), runtime or {}])
+        bodies = [s.body for s in chain] + [self.addendum(name)]
+        merged.body = "\n\n".join(b for b in bodies if b)
+        return _concrete(merged)
 
     def shared_body(self) -> str:
         return parse_role(SHARED, self.builtin.get(SHARED, "")).body
 
-
-def _merge_chain(chain: list[RoleSpec]) -> RoleSpec:
-    merged = RoleSpec(name=chain[-1].name)
-    for spec in chain:
-        for key in OVERRIDABLE:
-            value = getattr(spec, key)
-            if value is not None:
-                merged = replace(merged, **{key: value})
-    return merged
-
-
-def _apply(spec: RoleSpec, overrides: dict[str, Any]) -> RoleSpec:
-    return replace(spec, **{k: v for k, v in overrides.items() if k in OVERRIDABLE})
+    def system_prompt(self, role: ResolvedRole, scope: str) -> str:
+        """``_shared`` + role chain + addendum + charter + Scribe brief + scope note."""
+        brief = self.repo / BRIEFS / f"{role.name}.md"
+        parts = [
+            self.shared_body(),
+            role.body,
+            _section("Repo charter", _read_optional(self.repo / CHARTER)),
+            _section("Brief from the Scribe", _read_optional(brief)),
+            _section("Your file scope", scope),
+        ]
+        return "\n\n".join(p for p in parts if p)
 
 
-def _concrete(name: str, spec: RoleSpec, body: str) -> ResolvedRole:
+def _merge(chain: list[RoleSpec], overrides: list[dict[str, Any]]) -> RoleSpec:
+    """Root-first fields from the chain, then each override dict on top."""
+    layers = [{k: getattr(s, k) for k in OVERRIDABLE} for s in chain] + overrides
+    merged: dict[str, Any] = {}
+    for layer in layers:
+        merged.update({k: v for k, v in layer.items() if k in OVERRIDABLE and v is not None})
+    return RoleSpec(name=chain[-1].name, **merged)
+
+
+def _concrete(spec: RoleSpec) -> ResolvedRole:
     if not spec.model or not spec.effort:
-        raise RoleError(f"{name}: model and effort must be set somewhere in its chain")
+        raise RoleError(f"{spec.name}: model and effort must be set somewhere in its chain")
     return ResolvedRole(
-        name=name,
-        body=body,
+        name=spec.name,
+        body=spec.body,
         model=spec.model,
         effort=spec.effort,
         tools=list(spec.tools or []),
         write=list(spec.write or []),
         read=list(spec.read or ["**"]),
-        enabled=True if spec.enabled is None else bool(spec.enabled),
+        enabled=spec.enabled is not False,
         description=spec.description or "",
     )
 
 
 def expand_globs(globs: list[str], values: dict[str, list[str]]) -> list[str]:
     """Replace ``{name}`` / ``!{name}`` entries with the configured glob lists."""
-    out: list[str] = []
-    for glob in globs:
-        match = _PLACEHOLDER.match(glob)
-        if not match:
-            out.append(glob)
-            continue
-        neg, key = match.groups()
-        if key not in values:
-            raise RoleError(f"unknown glob placeholder {{{key}}}")
-        # Negating a list drops its own exclusions: "!{tests}" excludes only what tests include.
-        out += [neg + g for g in values[key] if not (neg and g.startswith("!"))]
-    return out
+    return [out for glob in globs for out in _expand_one(glob, values)]
 
 
-def system_prompt(book: RoleBook, role: ResolvedRole, repo: Path, scope: str) -> str:
-    """``_shared`` + role chain + addendum + charter + Scribe brief + scope note."""
-    parts = [
-        book.shared_body(),
-        role.body,
-        _section("Repo charter", _read_optional(repo / CHARTER)),
-        _section("Brief from the Scribe", _read_optional(repo / BRIEFS / f"{role.name}.md")),
-        _section("Your file scope", scope),
-    ]
-    return "\n\n".join(p for p in parts if p)
+def _expand_one(glob: str, values: dict[str, list[str]]) -> list[str]:
+    match = _PLACEHOLDER.match(glob)
+    if not match:
+        return [glob]
+    neg, key = match.groups()
+    if key not in values:
+        raise RoleError(f"unknown glob placeholder {{{key}}}")
+    # Negating a list drops its own exclusions: "!{tests}" excludes only what tests include.
+    return [neg + g for g in values[key] if not (neg and g.startswith("!"))]
 
 
 def scope_note(write: list[str], read: list[str]) -> str:
@@ -259,16 +264,20 @@ def parse_handoff(text: str) -> Handoff:
     return _handoff_from(data)
 
 
+HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
+    (lambda d: d.get("status") in HANDOFF_STATUSES, f"status must be one of {HANDOFF_STATUSES}"),
+    (lambda d: isinstance(d.get("changed_files", []), list), "changed_files must be a list"),
+    (lambda d: isinstance(d.get("open_questions", []), list), "open_questions must be a list"),
+    (lambda d: d.get("ruling") in (None, *RULINGS), f"ruling must be one of {RULINGS}"),
+)
+
+
 def _handoff_from(data: Any) -> Handoff:
     if not isinstance(data, dict):
         raise HandoffError("handoff must be a JSON object")
-    if data.get("status") not in HANDOFF_STATUSES:
-        raise HandoffError(f"handoff status must be one of {HANDOFF_STATUSES}")
-    for key in ("changed_files", "open_questions"):
-        if not isinstance(data.get(key, []), list):
-            raise HandoffError(f"handoff {key} must be a list")
-    if data.get("ruling") not in (None, *RULINGS):
-        raise HandoffError(f"handoff ruling must be one of {RULINGS}")
+    broken = next((msg for ok, msg in HANDOFF_RULES if not ok(data)), None)
+    if broken:
+        raise HandoffError(f"handoff {broken}")
     return Handoff(
         status=data["status"],
         summary=str(data.get("summary", "")),

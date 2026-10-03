@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from agile_team.paths import glob_to_regex, literal_root, matches, repo_relative
+from agile_team.paths import glob_to_regex, literal_root, matches, repo_relative, resolve_in
 
 
 @pytest.mark.parametrize(
@@ -44,7 +44,7 @@ def test_literal_root(glob: str, root: str) -> None:
 def test_repo_relative(tmp_path: Path) -> None:
     repo = tmp_path / "r"
     (repo / "sub").mkdir(parents=True)
-    assert repo_relative(repo, "a.py") == "a.py"
-    assert repo_relative(repo, str(repo / "sub/x")) == "sub/x"
-    assert repo_relative(repo, "../x", cwd=repo / "sub") == "x"
-    assert repo_relative(repo, "/etc/passwd") is None
+    assert repo_relative(repo, resolve_in(repo, "a.py")) == "a.py"
+    assert repo_relative(repo, resolve_in(repo, str(repo / "sub/x"))) == "sub/x"
+    assert repo_relative(repo, resolve_in(repo / "sub", "../x")) == "x"
+    assert repo_relative(repo, resolve_in(repo, "/etc/passwd")) is None

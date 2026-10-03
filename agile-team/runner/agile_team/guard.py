@@ -1,6 +1,6 @@
 """Hard enforcement of each role's file scope.
 
-Two layers:
+Layers:
 
 * ``pre_tool_hook`` — an Agent SDK PreToolUse hook that denies Write/Edit/
   NotebookEdit outside the acting role's write globs, Read/Grep/Glob outside
@@ -25,18 +25,22 @@ from pathlib import Path
 from typing import Any
 
 from .git_ops import Git
-from .paths import matches, repo_relative
+from .paths import matches, repo_relative, resolve_in
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
-ALWAYS_IGNORED = (".team/run/**",)
-PROTECTED = (".git", ".git/**")
+PATH_KEYS = {**WRITE_TOOLS, **READ_TOOLS}
+ALWAYS_IGNORED = [".team/run/**"]
+PROTECTED = [".git", ".git/**"]
 SAFE_GIT = frozenset(
     {"status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe"}
 )
+NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
+QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
 
+# The SDK fixes the hook signature at (input, tool_use_id, context).
 Hook = Callable[[dict[str, Any], str | None, Any], Awaitable[dict[str, Any]]]
 
 
@@ -53,61 +57,82 @@ class Scope:
     bash_allowed: list[str] | None = None
     secrets: list[Path] = field(default_factory=list)
 
-    def allows_write(self, rel: str) -> bool:
-        return matches(rel, self.write)
+    @property
+    def base(self) -> Path:
+        return self.cwd or self.repo
 
-    def allows_read(self, rel: str) -> bool:
-        return matches(rel, self.read)
+    @property
+    def reads_everything(self) -> bool:
+        return self.read == ["**"]
+
+    def relative(self, raw: str) -> str | None:
+        """``raw`` resolved from the step's cwd, relative to the repo (``None`` if outside)."""
+        return repo_relative(self.repo, resolve_in(self.base, raw))
+
+    def is_secret(self, raw: str) -> bool:
+        """True when ``raw`` resolves to, or into, one of the secret paths."""
+        path = resolve_in(self.base, raw)
+        return any(path == s.resolve() or s.resolve() in path.parents for s in self.secrets)
 
 
-def check_tool_use(scope: Scope, tool: str, tool_input: dict[str, Any]) -> str | None:
+@dataclass(frozen=True)
+class ToolCall:
+    """One tool invocation as the hook sees it."""
+
+    name: str
+    input: dict[str, Any]
+
+    @property
+    def path(self) -> str:
+        return self.input.get(PATH_KEYS.get(self.name, ""), "") or ""
+
+
+def check_tool_use(scope: Scope, call: ToolCall) -> str | None:
     """Reason to deny this tool call, or ``None`` to allow it."""
-    raw = tool_input.get({**WRITE_TOOLS, **READ_TOOLS}.get(tool, ""), "") or ""
-    if raw and _is_secret(scope, raw):
-        return f"{scope.role} may not access {raw}"
-    if tool in WRITE_TOOLS:
-        return _check_write(scope, tool_input.get(WRITE_TOOLS[tool], ""))
-    if tool in READ_TOOLS:
-        return _check_read(scope, tool_input.get(READ_TOOLS[tool]) or ".") or _check_pattern(
-            scope, tool_input.get("pattern", "") if tool == "Glob" else ""
-        )
-    if tool == "Bash":
-        return check_bash(scope, tool_input.get("command", ""))
+    return _check_secret_path(scope, call) or _check_by_tool(scope, call)
+
+
+def _check_secret_path(scope: Scope, call: ToolCall) -> str | None:
+    if call.path and scope.is_secret(call.path):
+        return f"{scope.role} may not access {call.path}"
+    return None
+
+
+def _check_by_tool(scope: Scope, call: ToolCall) -> str | None:
+    if call.name in WRITE_TOOLS:
+        return _check_write(scope, call.path)
+    if call.name in READ_TOOLS:
+        return _check_read(scope, call.path or ".") or _check_pattern(scope, call)
+    if call.name == "Bash":
+        return check_bash(scope, call.input.get("command", ""))
     return None
 
 
 def _check_write(scope: Scope, raw: str) -> str | None:
-    rel = repo_relative(scope.repo, raw, scope.cwd)
+    rel = scope.relative(raw)
     if rel is None:
         return f"{scope.role} may not write outside the repo ({raw})"
-    if matches(rel, list(PROTECTED)):
+    if matches(rel, PROTECTED):
         return f"{scope.role} may not write inside .git"
-    if not scope.allows_write(rel):
+    if not matches(rel, scope.write):
         return f"{scope.role} may not write {rel}; allowed: {', '.join(scope.write) or 'nothing'}"
     return None
 
 
 def _check_read(scope: Scope, raw: str) -> str | None:
-    rel = repo_relative(scope.repo, raw, scope.cwd)
-    if rel is None or scope.read == ["**"]:
+    rel = scope.relative(raw)
+    if rel is None or scope.reads_everything:
         return None
-    probe = rel if rel != "." else ""
-    if scope.allows_read(probe) or scope.allows_read(f"{probe}/x".lstrip("/")):
+    probe = "" if rel == "." else rel
+    if matches(probe, scope.read) or matches(f"{probe}/x".lstrip("/"), scope.read):
         return None
     return f"{scope.role} may not read {rel}"
 
 
-def _is_secret(scope: Scope, raw: str) -> bool:
-    """True when ``raw`` resolves to, or into, one of the scope's secret paths."""
-    base = scope.cwd or scope.repo
-    path = Path(raw).expanduser()
-    resolved = (path if path.is_absolute() else base / path).resolve()
-    return any(resolved == s.resolve() or s.resolve() in resolved.parents for s in scope.secrets)
-
-
-def _check_pattern(scope: Scope, pattern: str) -> str | None:
+def _check_pattern(scope: Scope, call: ToolCall) -> str | None:
     """A restricted reader's Glob pattern may not climb out with ``..`` or go absolute."""
-    if scope.read == ["**"] or not pattern:
+    pattern = call.input.get("pattern", "") if call.name == "Glob" else ""
+    if scope.reads_everything or not pattern:
         return None
     if pattern.startswith("/") or ".." in pattern.split("/"):
         return f"{scope.role} may not glob {pattern}"
@@ -115,18 +140,15 @@ def _check_pattern(scope: Scope, pattern: str) -> str | None:
 
 
 def check_bash(scope: Scope, command: str) -> str | None:
-    """Deny commands outside the allowlist or that mention forbidden paths."""
-    reason = _check_secret_mention(scope, command) or _check_git(command)
-    if reason:
-        return reason
-    if scope.bash_allowed is not None:
-        reason = _check_allowlist(command, scope.bash_allowed)
-        if reason:
-            return reason
-    for token in _tokens(command):
-        if _token_forbidden(scope, token):
-            return f"{scope.role} may not reference {token!r} from Bash"
-    return None
+    """Deny key mentions, write-side git, commands off the allowlist and forbidden paths."""
+    segments = [_tokens(s) for s in _SEGMENT_SPLIT.split(command)]
+    checks = (
+        lambda: _check_secret_mention(scope, command),
+        lambda: _check_git(segments),
+        lambda: _check_allowlist(scope, segments),
+        lambda: _check_tokens(scope, _tokens(command)),
+    )
+    return next((reason for reason in (c() for c in checks) if reason), None)
 
 
 def _check_secret_mention(scope: Scope, command: str) -> str | None:
@@ -135,25 +157,30 @@ def _check_secret_mention(scope: Scope, command: str) -> str | None:
     return f"{scope.role} may not reference the API key ({hit})" if hit else None
 
 
-def _check_git(command: str) -> str | None:
+def _check_git(segments: list[list[str]]) -> str | None:
     """Only read-only git subcommands (and ``cherry-pick -n``) are allowed."""
-    for segment in _SEGMENT_SPLIT.split(command):
-        words = _tokens(segment)
-        if not words or words[0] != "git":
-            continue
+    for words in segments:
         sub = words[1] if len(words) > 1 else ""
-        no_commit = sub == "cherry-pick" and ({"-n", "--no-commit"} & set(words))
-        if sub not in SAFE_GIT and not no_commit:
+        if words[:1] == ["git"] and not _git_allowed(sub, words):
             return f"`git {sub}` is not allowed; the runner commits for you"
     return None
 
 
-def _check_allowlist(command: str, allowed: list[str]) -> str | None:
-    for segment in _SEGMENT_SPLIT.split(command):
-        words = _tokens(segment)
-        if words and words[0] not in allowed:
-            return f"`{words[0]}` is not an allowed command; allowed: {', '.join(allowed)}"
-    return None
+def _git_allowed(sub: str, words: list[str]) -> bool:
+    return sub in SAFE_GIT or (sub == "cherry-pick" and bool(NO_COMMIT_FLAGS & set(words)))
+
+
+def _check_allowlist(scope: Scope, segments: list[list[str]]) -> str | None:
+    if scope.bash_allowed is None:
+        return None
+    bad = next((w[0] for w in segments if w and w[0] not in scope.bash_allowed), None)
+    allowed = ", ".join(scope.bash_allowed)
+    return f"`{bad}` is not an allowed command; allowed: {allowed}" if bad else None
+
+
+def _check_tokens(scope: Scope, tokens: list[str]) -> str | None:
+    bad = next((t for t in tokens if _token_forbidden(scope, t)), None)
+    return f"{scope.role} may not reference {bad!r} from Bash" if bad else None
 
 
 def _tokens(command: str) -> list[str]:
@@ -164,14 +191,19 @@ def _tokens(command: str) -> list[str]:
 
 
 def _token_forbidden(scope: Scope, token: str) -> bool:
+    """For a sandboxed role: climbing up, naming the repo, or naming a source root."""
     if not scope.bash_forbidden:
         return False
-    if ".." in token.split("/"):
-        return True
-    repo = str(scope.repo.resolve())
-    sandbox = str(scope.cwd.resolve()) if scope.cwd else None
-    if token.startswith(repo) and not (sandbox and token.startswith(sandbox)):
-        return True
+    climbs = ".." in token.split("/")
+    return climbs or _names_repo(scope, token) or _names_forbidden_root(scope, token)
+
+
+def _names_repo(scope: Scope, token: str) -> bool:
+    in_sandbox = bool(scope.cwd) and token.startswith(str(scope.base.resolve()))
+    return token.startswith(str(scope.repo.resolve())) and not in_sandbox
+
+
+def _names_forbidden_root(scope: Scope, token: str) -> bool:
     head = token.lstrip("./").split("/", 1)[0]
     return bool(head) and head in scope.bash_forbidden
 
@@ -191,9 +223,8 @@ def pre_tool_hook(scope: Scope) -> Hook:
     """An SDK PreToolUse hook bound to ``scope``."""
 
     async def hook(input_data: dict[str, Any], _tool_use_id: str | None, _ctx: Any) -> dict:
-        reason = check_tool_use(
-            scope, input_data.get("tool_name", ""), input_data.get("tool_input", {})
-        )
+        call = ToolCall(input_data.get("tool_name", ""), input_data.get("tool_input", {}))
+        reason = check_tool_use(scope, call)
         return deny(reason) if reason else {}
 
     return hook
@@ -203,21 +234,23 @@ def pre_tool_hook(scope: Scope) -> Hook:
 class Audit:
     """Changed paths after a step, split by whether the role may write them."""
 
+    role: str
     in_scope: list[str]
     out_of_scope: list[str]
 
 
 def audit_step(git: Git, scope: Scope) -> Audit:
     """Split the tree's changes into in-scope and out-of-scope paths."""
-    changed = [p for p in git.changed_paths() if not matches(p, list(ALWAYS_IGNORED))]
+    changed = [p for p in git.changed_paths() if not matches(p, ALWAYS_IGNORED)]
     return Audit(
-        in_scope=[p for p in changed if scope.allows_write(p)],
-        out_of_scope=[p for p in changed if not scope.allows_write(p)],
+        role=scope.role,
+        in_scope=[p for p in changed if matches(p, scope.write)],
+        out_of_scope=[p for p in changed if not matches(p, scope.write)],
     )
 
 
-def quarantine(git: Git, role: str, paths: list[str]) -> str:
-    """Commit ``paths`` alone, revert that commit, return the quarantine sha."""
-    sha = git.commit(paths, f"chore(team): quarantine out-of-scope changes by {role}")
-    git.revert(sha, f'Revert "chore(team): quarantine out-of-scope changes by {role}"')
+def quarantine(git: Git, audit: Audit) -> str:
+    """Commit the out-of-scope paths alone, revert that commit, return its sha."""
+    sha = git.commit(audit.out_of_scope, QUARANTINE.format(role=audit.role))
+    git.revert(sha)
     return sha

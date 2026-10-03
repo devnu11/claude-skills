@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agile_team.ledger import Entry, Ledger, budget_status, checkpoint_crossed
+from agile_team.ledger import Budget, Entry, Ledger, budget_status
 
 
 def test_record_and_totals(tmp_path: Path) -> None:
@@ -25,7 +25,8 @@ def test_budget_status_zero_budget(tmp_path: Path) -> None:
 
 
 def test_checkpoint_crossed() -> None:
-    assert checkpoint_crossed(2.4, 2.6, 10, 25)
-    assert not checkpoint_crossed(2.6, 4.9, 10, 25)
-    assert checkpoint_crossed(4.9, 10.1, 10, 25)
-    assert not checkpoint_crossed(0, 5, 0, 25)
+    budget = Budget(10, 25)
+    assert budget.checkpoint_crossed(2.4, 2.6)
+    assert not budget.checkpoint_crossed(2.6, 4.9)
+    assert budget.checkpoint_crossed(4.9, 10.1)
+    assert not Budget(0, 25).checkpoint_crossed(0, 5)

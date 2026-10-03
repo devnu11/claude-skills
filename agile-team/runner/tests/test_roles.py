@@ -16,8 +16,8 @@ BUILTIN = {
 }
 
 
-def book(repo_files=None, config_roles=None) -> RoleBook:
-    return RoleBook(dict(BUILTIN), repo_files or {}, config_roles or {})
+def book(repo_files=None, repo: Path = Path()) -> RoleBook:
+    return RoleBook(dict(BUILTIN), repo_files or {}, {}, repo)
 
 
 def test_every_builtin_role_resolves(tmp_path: Path) -> None:
@@ -69,11 +69,13 @@ def test_repo_new_role_listed() -> None:
 
 
 def test_config_override_and_config_only_role() -> None:
-    b = book(
-        config_roles={
+    b = RoleBook(
+        dict(BUILTIN),
+        {},
+        {
             "child": {"model": "haiku", "enabled": False, "bogus": 1},
             "child-x": {"extends": "child"},
-        }
+        },
     )
     assert b.resolve("child").model == "haiku"
     assert not b.resolve("child").enabled
@@ -105,8 +107,8 @@ def test_system_prompt_order(tmp_path: Path) -> None:
     (tmp_path / ".team/briefs").mkdir(parents=True)
     (tmp_path / ".team/CLAUDE.md").write_text("CHARTER")
     (tmp_path / ".team/briefs/child.md").write_text("BRIEF")
-    b = book(repo_files={"child": "ADDENDUM"})
-    prompt = roles.system_prompt(b, b.resolve("child"), tmp_path, "SCOPE")
+    b = book({"child": "ADDENDUM"}, tmp_path)
+    prompt = b.system_prompt(b.resolve("child"), "SCOPE")
     order = [
         prompt.index(s)
         for s in ("SHARED", "BASE", "CHILD", "ADDENDUM", "CHARTER", "BRIEF", "SCOPE")
@@ -115,8 +117,8 @@ def test_system_prompt_order(tmp_path: Path) -> None:
 
 
 def test_system_prompt_skips_missing(tmp_path: Path) -> None:
-    b = book()
-    prompt = roles.system_prompt(b, b.resolve("base"), tmp_path, "")
+    b = book(repo=tmp_path)
+    prompt = b.system_prompt(b.resolve("base"), "")
     assert "charter" not in prompt and "Scribe" not in prompt
 
 

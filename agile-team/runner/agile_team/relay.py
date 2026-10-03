@@ -23,6 +23,15 @@ class RelayError(Exception):
 
 
 @dataclass
+class Note:
+    """What the PO wants to send; ``post`` turns it into a numbered ``Message``."""
+
+    kind: str
+    text: str
+    stories: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Message:
     """One outbox entry."""
 
@@ -56,11 +65,12 @@ class Relay:
     def inbox(self) -> Path:
         return self.run_dir / INBOX
 
-    def post(self, kind: str, text: str, stories: list[str] | None = None) -> Message:
+    def post(self, note: Note) -> Message:
         """Append a message for the liaison and return it."""
-        if kind not in KINDS:
+        if note.kind not in KINDS:
             raise RelayError(f"kind must be one of {KINDS}")
-        msg = Message(f"m{len(self.messages()) + 1}", kind, text, list(stories or []), time.time())
+        msg_id = f"m{len(self.messages()) + 1}"
+        msg = Message(msg_id, note.kind, note.text, list(note.stories), time.time())
         _append(self.outbox, asdict(msg))
         return msg
 

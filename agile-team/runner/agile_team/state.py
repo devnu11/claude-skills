@@ -4,24 +4,34 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .gates import StoryState
+from .gates import StoryState, StoryStatus
 
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
 PID_FILE = "runner.pid"
 
 
+class RunStatus(StrEnum):
+    """The run as a whole. The last three are set by the PO's ``notify_user``."""
+
+    IDLE = "idle"
+    RUNNING = "running"
+    SPRINT_END = "sprint-end"
+    BLOCKED = "blocked"
+    DONE = "done"
+
+
 @dataclass
 class ModelOverride:
-    """A PO-set model change, kept until the Manager has reviewed it."""
+    """A PO-set model change for one role, with the logged reason."""
 
     model: str
     effort: str
     reason: str
-    reviewed: bool = False
 
 
 @dataclass
@@ -31,9 +41,10 @@ class RunState:
     cadence: str = "sprint"
     sprint: int = 0
     po_session: str | None = None
-    status: str = "idle"
+    status: RunStatus = RunStatus.IDLE
     stories: dict[str, StoryState] = field(default_factory=dict)
     overrides: dict[str, ModelOverride] = field(default_factory=dict)
+    unreviewed: list[str] = field(default_factory=list)
     manager_due: list[str] = field(default_factory=list)
 
     def runtime_overrides(self, role: str) -> dict[str, Any]:
@@ -41,15 +52,26 @@ class RunState:
         o = self.overrides.get(role)
         return {"model": o.model, "effort": o.effort} if o else {}
 
+    def halted(self) -> bool:
+        """``done``/``blocked`` always halt; ``sprint-end`` halts only the sprint cadence."""
+        if self.status in (RunStatus.DONE, RunStatus.BLOCKED):
+            return True
+        return self.status is RunStatus.SPRINT_END and self.cadence == "sprint"
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
     def from_json(cls, text: str) -> RunState:
         data = json.loads(text)
-        data["stories"] = {k: StoryState(**v) for k, v in data.get("stories", {}).items()}
+        data["status"] = RunStatus(data.get("status", RunStatus.IDLE))
+        data["stories"] = {k: _story(v) for k, v in data.get("stories", {}).items()}
         data["overrides"] = {k: ModelOverride(**v) for k, v in data.get("overrides", {}).items()}
         return cls(**data)
+
+
+def _story(data: dict[str, Any]) -> StoryState:
+    return StoryState(**{**data, "status": StoryStatus(data.get("status", StoryStatus.ACTIVE))})
 
 
 def load(run_dir: Path) -> RunState:
@@ -58,6 +80,7 @@ def load(run_dir: Path) -> RunState:
 
 
 def save(run_dir: Path, state: RunState) -> None:
+    """Write atomically so a crash mid-write never leaves a torn state file."""
     run_dir.mkdir(parents=True, exist_ok=True)
     tmp = run_dir / f"{STATE_FILE}.tmp"
     tmp.write_text(state.to_json())

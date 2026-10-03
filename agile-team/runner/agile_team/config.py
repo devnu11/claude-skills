@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -163,92 +164,80 @@ def _delivery(raw: dict[str, Any]) -> Delivery:
     return Delivery(**{k: v for k, v in raw.items() if k in Delivery.__dataclass_fields__})
 
 
-def validate(config: Config, known_roles: set[str], delivery_kinds: set[str]) -> list[str]:
+@dataclass(frozen=True)
+class Known:
+    """Names the config may refer to: resolvable roles and delivery kinds."""
+
+    roles: set[str]
+    delivery_kinds: set[str]
+
+
+Rule = tuple[Callable[[Any], bool], str]
+
+TEAM_RULES: tuple[Rule, ...] = (
+    (lambda t: t.cadence in CADENCES, f"team.cadence must be one of {CADENCES}"),
+    (
+        lambda t: t.artifacts in ARTIFACT_POLICIES,
+        f"team.artifacts must be one of {ARTIFACT_POLICIES}",
+    ),
+    (lambda t: t.budget_usd > 0, "team.budget_usd must be positive"),
+    (lambda t: 0 < t.manager_every_pct <= 100, "team.manager_every_pct must be in 1..100"),
+)
+TOOLCHAIN_RULES: tuple[Rule, ...] = (
+    (lambda t: bool(t.commands.get("test")), "toolchain.test is not set"),
+    (lambda t: bool(t.commands.get("coverage")), "toolchain.coverage is not set"),
+    (lambda t: bool(t.globs.get("source")), "toolchain.globs.source is empty"),
+    (lambda t: bool(t.globs.get("tests")), "toolchain.globs.tests is empty"),
+)
+GATE_RULES: tuple[Rule, ...] = (
+    (lambda g: set(g.steps) <= set(PIPELINE_STEPS), f"gates.steps must be among {PIPELINE_STEPS}"),
+    (lambda g: 0 <= g.coverage <= 100, "gates.coverage must be in 0..100"),
+    (lambda g: g.round_cap >= 1, "gates.round_cap must be at least 1"),
+)
+DELIVERY_RULES: tuple[Rule, ...] = (
+    (lambda d: bool(SAFE_NAME.fullmatch(d.name)), "name must be lowercase letters, digits, - or _"),
+    (lambda d: d.kind != "web" or bool(d.url), "(web) needs a url"),
+    (lambda d: d.kind != "harness" or bool(d.commands), "(harness) needs commands"),
+)
+SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
+REPEATED_DELIVERY = "delivery name {name!r} is repeated"
+MISSING_ROLE = "roles.{name} is unknown; set extends or add .team/roles/{name}.md"
+DANGLING_ROLE = "roles.{name} extends unknown role {base!r}"
+
+
+def broken(rules: tuple[Rule, ...], subject: Any) -> list[str]:
+    """Messages of the rules ``subject`` breaks."""
+    return [message for ok, message in rules if not ok(subject)]
+
+
+def validate(config: Config, known: Known) -> list[str]:
     """Return human-readable problems with ``config``; empty means valid."""
-    problems: list[str] = []
-    problems += _validate_team(config.team)
-    problems += _validate_toolchain(config.toolchain)
-    problems += _validate_gates(config.gates)
-    problems += _validate_deliveries(config.deliveries, delivery_kinds)
-    problems += _validate_roles(config.roles, known_roles)
-    return problems
-
-
-def _validate_team(team: Team) -> list[str]:
-    problems = []
-    if team.cadence not in CADENCES:
-        problems.append(f"team.cadence must be one of {CADENCES}, got {team.cadence!r}")
-    if team.artifacts not in ARTIFACT_POLICIES:
-        problems.append(f"team.artifacts must be one of {ARTIFACT_POLICIES}")
-    if team.budget_usd <= 0:
-        problems.append("team.budget_usd must be positive")
-    if not 0 < team.manager_every_pct <= 100:
-        problems.append("team.manager_every_pct must be in 1..100")
-    return problems
-
-
-def _validate_toolchain(toolchain: Toolchain) -> list[str]:
-    problems = [
-        f"toolchain.{name} is not set"
-        for name in ("test", "coverage")
-        if not toolchain.commands.get(name)
+    return [
+        *broken(TEAM_RULES, config.team),
+        *broken(TOOLCHAIN_RULES, config.toolchain),
+        *broken(GATE_RULES, config.gates),
+        *_validate_deliveries(config.deliveries, known.delivery_kinds),
+        *_validate_roles(config.roles, known.roles),
     ]
-    problems += [
-        f"toolchain.globs.{name} is empty"
-        for name in ("source", "tests")
-        if not toolchain.globs.get(name)
-    ]
-    return problems
-
-
-def _validate_gates(gates: Gates) -> list[str]:
-    problems = [
-        f"gates.steps has unknown step {s!r}" for s in gates.steps if s not in PIPELINE_STEPS
-    ]
-    if not 0 <= gates.coverage <= 100:
-        problems.append("gates.coverage must be in 0..100")
-    if gates.round_cap < 1:
-        problems.append("gates.round_cap must be at least 1")
-    return problems
 
 
 def _validate_deliveries(deliveries: list[Delivery], kinds: set[str]) -> list[str]:
-    problems = [
-        f"delivery {d.name!r} has unknown kind {d.kind!r}"
-        for d in deliveries
-        if d.kind not in kinds
-    ]
-    problems += [
-        f"delivery name {d.name!r} must be lowercase letters, digits, - or _"
-        for d in deliveries
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", d.name)
-    ]
     names = [d.name for d in deliveries]
-    problems += [
-        f"delivery name {n!r} is repeated" for n in sorted(set(names)) if names.count(n) > 1
-    ]
-    problems += [
-        f"delivery {d.name!r} (web) needs a url"
-        for d in deliveries
-        if d.kind == "web" and not d.url
-    ]
-    problems += [
-        f"delivery {d.name!r} (harness) needs commands"
-        for d in deliveries
-        if d.kind == "harness" and not d.commands
-    ]
-    return problems
+    repeated = sorted({n for n in names if names.count(n) > 1})
+    problems = [p for d in deliveries for p in _delivery_problems(d, kinds)]
+    return problems + [REPEATED_DELIVERY.format(name=n) for n in repeated]
+
+
+def _delivery_problems(delivery: Delivery, kinds: set[str]) -> list[str]:
+    messages = broken(DELIVERY_RULES, delivery)
+    if delivery.kind not in kinds:
+        messages.append(f"has unknown kind {delivery.kind!r}")
+    return [f"delivery {delivery.name!r} {m}" for m in messages]
 
 
 def _validate_roles(roles: dict[str, dict[str, Any]], known: set[str]) -> list[str]:
     """A config-only role is allowed when it ``extends`` a known role."""
-    problems = []
-    for name, override in roles.items():
-        base = override.get("extends")
-        if name in known:
-            continue
-        if not base:
-            problems.append(f"roles.{name} is unknown; set extends or add .team/roles/{name}.md")
-        elif base not in known:
-            problems.append(f"roles.{name} extends unknown role {base!r}")
-    return problems
+    bases = {n: o.get("extends") for n, o in roles.items() if n not in known}
+    missing = [MISSING_ROLE.format(name=n) for n, b in bases.items() if not b]
+    dangling = {n: b for n, b in bases.items() if b and b not in known}
+    return missing + [DANGLING_ROLE.format(name=n, base=b) for n, b in dangling.items()]

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from agile_team import config as cfg
 
-KINDS = {"package", "web", "harness"}
+KNOWN = cfg.Known({"developer"}, {"package", "web", "harness"})
 
 
 def test_load_missing(tmp_path: Path) -> None:
@@ -27,7 +27,7 @@ def test_load_full(configured: Path) -> None:
     assert c.run_dir == configured / ".team/run"
     assert c.placeholders()["docs"] == ["docs/**"]
     assert c.placeholders()["config"] == [cfg.CONFIG_NAME]
-    assert cfg.validate(c, {"developer"}, KINDS) == []
+    assert cfg.validate(c, KNOWN) == []
 
 
 def test_delivery_lookup(configured: Path) -> None:
@@ -69,7 +69,7 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
             "developer": {"model": "haiku"},
         },
     }
-    problems = cfg.validate(cfg.from_raw(tmp_path, raw), {"developer"}, KINDS)
+    problems = cfg.validate(cfg.from_raw(tmp_path, raw), KNOWN)
     text = "\n".join(problems)
     for needle in [
         "cadence",
@@ -80,7 +80,7 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
         "toolchain.coverage",
         "globs.source",
         "globs.tests",
-        "unknown step",
+        "gates.steps",
         "gates.coverage",
         "round_cap",
         "unknown kind",

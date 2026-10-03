@@ -10,21 +10,39 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
-from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
+from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import gates
-from .dispatch import PO, Runtime, StepResult, build_options, collect
+from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
+from .gates import StoryState
 from .ledger import Entry, budget_status
-from .roles import scope_note, system_prompt
-from .state import ModelOverride
+from .relay import Note
+from .state import ModelOverride, RunStatus
 
 SERVER = "team"
 POLL_S = 5.0
 DEFAULT_WAIT_S = 1800
+STATUS_KINDS = {"sprint-end", "done", "blocked"}
 
 Sleep = Callable[[float], Awaitable[None]]
+
+
+class StartMode(StrEnum):
+    """How ``agile-team start`` begins the PO loop."""
+
+    DELIVERY = "delivery"
+    ONBOARD = "onboarding sprint (phase B)"
+    RESUME = "resume"
+
+
+@dataclass(frozen=True)
+class Start:
+    """The human's task and the start mode."""
+
+    task: str
+    mode: StartMode = StartMode.DELIVERY
 
 
 def text_result(data: Any) -> dict[str, Any]:
@@ -40,72 +58,81 @@ class Tools:
     sleep: Sleep = asyncio.sleep
 
     async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
-        rt = self.runtime
-        report = await rt.run_role(args["role"], args["brief"], args.get("story") or None)
-        return text_result(report)
+        request = StepRequest(args["role"], args["brief"], args.get("story") or None)
+        return text_result(await self.runtime.run_role(request))
 
     async def open_story(self, args: dict[str, Any]) -> dict[str, Any]:
         rt, sid = self.runtime, args["id"]
         if sid in rt.state.stories:
-            return text_result({"status": "refused", "reason": f"story {sid} already exists"})
-        rt.state.stories[sid] = gates.StoryState(
-            sid, args["title"], rt.steps[0], delivery=args.get("delivery") or None
-        )
+            return text_result(refused(f"story {sid} already exists"))
+        first = rt.pipeline.first()
+        rt.state.stories[sid] = StoryState(sid, args["title"], first, delivery=args.get("delivery"))
         rt.save()
-        return text_result({"status": "opened", "step": rt.steps[0]})
+        return text_result({"status": "opened", "step": first})
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
-        rt = self.runtime
-        rt.state.sprint += 1
-        rt.state.status = "running"
-        rt.state.manager_due.append(f"sprint {rt.state.sprint} start: {args.get('goal', '')}")
-        rt.save()
-        return text_result({"sprint": rt.state.sprint, "next": "run the manager"})
+        state = self.runtime.state
+        state.sprint += 1
+        state.status = RunStatus.RUNNING
+        state.manager_due.append(f"sprint {state.sprint} start: {args.get('goal', '')}")
+        self.runtime.save()
+        return text_result({"sprint": state.sprint, "next": "run the manager"})
 
     async def ask_user(self, args: dict[str, Any]) -> dict[str, Any]:
-        msg = self.runtime.relay.post("question", args["text"], args.get("stories", []))
+        msg = self.runtime.relay.post(Note("question", args["text"], args.get("stories", [])))
         return text_result({"id": msg.id, "blocks": msg.stories})
 
     async def notify_user(self, args: dict[str, Any]) -> dict[str, Any]:
-        rt, kind = self.runtime, args.get("kind", "update")
-        msg = rt.relay.post(kind, args["text"], args.get("stories", []))
-        if kind in ("sprint-end", "done", "blocked"):
-            rt.state.status = kind
-            rt.save()
+        kind = args.get("kind", "update")
+        msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
+        if kind in STATUS_KINDS:
+            self.runtime.state.status = RunStatus(kind)
+            self.runtime.save()
         return text_result({"id": msg.id})
 
     async def wait_for_answers(self, args: dict[str, Any]) -> dict[str, Any]:
         """Poll the inbox until the given questions are answered or time runs out."""
-        rt, ids = self.runtime, list(args.get("ids", []))
-        waited, limit = 0.0, float(args.get("timeout_s", DEFAULT_WAIT_S))
-        while True:
-            answers = rt.relay.answers()
-            if all(i in answers for i in ids) or rt.stop_requested() or waited >= limit:
-                return text_result({i: answers[i].text for i in ids if i in answers})
+        ids, limit = list(args.get("ids", [])), float(args.get("timeout_s", DEFAULT_WAIT_S))
+        waited = 0.0
+        while not self._settled(ids) and waited < limit:
             await self.sleep(POLL_S)
             waited += POLL_S
+        answers = self.runtime.relay.answers()
+        return text_result({i: answers[i].text for i in ids if i in answers})
+
+    def _settled(self, ids: list[str]) -> bool:
+        answers = self.runtime.relay.answers()
+        return all(i in answers for i in ids) or self.runtime.stop_requested()
 
     async def budget(self, _args: dict[str, Any]) -> dict[str, Any]:
         rt = self.runtime
         return text_result(budget_status(rt.ledger, rt.config.team.budget_usd))
 
     async def set_role_model(self, args: dict[str, Any]) -> dict[str, Any]:
-        rt, role = self.runtime, args["role"]
-        if role not in rt.book.names():
-            return text_result({"status": "refused", "reason": f"unknown role {role!r}"})
-        if not args.get("reason"):
-            return text_result({"status": "refused", "reason": "a reason is required"})
-        rt.state.overrides[role] = ModelOverride(args["model"], args["effort"], args["reason"])
-        rt.state.manager_due.append(f"review model override for {role}")
-        rt.save()
+        reason = self._override_refusal(args)
+        if reason:
+            return text_result(refused(reason))
+        self._record_override(args)
         return text_result({"status": "set", "manager_review": "due"})
+
+    def _record_override(self, args: dict[str, Any]) -> None:
+        """Store the override and queue it for the Manager's review."""
+        state, role = self.runtime.state, args["role"]
+        state.overrides[role] = ModelOverride(args["model"], args["effort"], args["reason"])
+        state.unreviewed.append(role)
+        state.manager_due.append(f"review model override for {role}")
+        self.runtime.save()
+
+    def _override_refusal(self, args: dict[str, Any]) -> str | None:
+        if args["role"] not in self.runtime.book.names():
+            return f"unknown role {args['role']!r}"
+        return None if args.get("reason") else "a reason is required"
 
     async def story_status(self, _args: dict[str, Any]) -> dict[str, Any]:
         rt = self.runtime
-        stories = {sid: vars(s) for sid, s in rt.state.stories.items()}
         return text_result(
             {
-                "stories": stories,
+                "stories": {sid: vars(s) for sid, s in rt.state.stories.items()},
                 "manager_due": rt.state.manager_due,
                 "roles": rt.book.enabled_names(),
             }
@@ -143,10 +170,10 @@ METHODS = {"budget_status": "budget"}
 
 def mcp_server(tools: Tools) -> Any:
     """SDK MCP server exposing ``tools`` to the PO."""
-    defs = []
-    for name, (desc, schema) in SCHEMAS.items():
-        method = getattr(tools, METHODS.get(name, name))
-        defs.append(tool(name, desc, schema)(method))
+    defs = [
+        tool(name, desc, schema)(getattr(tools, METHODS.get(name, name)))
+        for name, (desc, schema) in SCHEMAS.items()
+    ]
     return create_sdk_mcp_server(SERVER, tools=defs)
 
 
@@ -154,45 +181,61 @@ def tool_names() -> list[str]:
     return [f"mcp__{SERVER}__{name}" for name in SCHEMAS]
 
 
-def po_options(runtime: Runtime, server: Any, resume: str | None) -> ClaudeAgentOptions:
-    """Options for the PO's main loop."""
-    role = runtime.book.resolve(PO, runtime.state.runtime_overrides(PO))
-    scope = runtime.scope_for(role)
-    note = scope_note(scope.write, scope.read)
-    prompt = system_prompt(runtime.book, role, runtime.config.repo, note)
-    options = build_options(
-        role, prompt, scope, runtime.env, mcp_servers={SERVER: server}, extra_allowed=tool_names()
-    )
-    options.resume = resume
-    return options
+def resume_session(runtime: Runtime, start: Start) -> str | None:
+    return runtime.state.po_session if start.mode is StartMode.RESUME else None
 
 
-def kickoff_prompt(runtime: Runtime, task: str, onboard: bool) -> str:
-    """The PO's first user message."""
-    mode = "onboarding sprint (phase B)" if onboard else "delivery"
+def first_prompt(runtime: Runtime, start: Start) -> str:
+    """The PO's first user message: a resume note, or the kickoff."""
+    if resume_session(runtime, start):
+        return "Resume the run from state."
+    mode = StartMode.DELIVERY if start.mode is StartMode.RESUME else start.mode
+    roles = ", ".join(runtime.book.enabled_names())
     return (
-        f"Mode: {mode}\nCadence: {runtime.state.cadence}\n"
-        f"Roles available: {', '.join(runtime.book.enabled_names())}\n\n"
-        f"Task from the human:\n{task}"
+        f"Mode: {mode}\nCadence: {runtime.state.cadence}\nRoles available: {roles}\n\n"
+        f"Task from the human:\n{start.task}"
     )
 
 
-async def run_po(
-    runtime: Runtime, task: str, onboard: bool = False, resume: bool = False
-) -> StepResult:
-    """Run the PO loop until it ends its turn; record its cost; save state."""
-    server = mcp_server(Tools(runtime))
-    session = runtime.state.po_session if resume else None
-    options = po_options(runtime, server, session)
-    prompt = "Resume the run from state." if session else kickoff_prompt(runtime, task, onboard)
-    runtime.state.status = "running"
-    runtime.save()
-    result = await collect(runtime.query_fn, prompt, options)
-    runtime.settle_po()
-    role = runtime.book.resolve(PO, runtime.state.runtime_overrides(PO))
-    runtime.ledger.record(Entry(PO, role.model, result.cost))
-    runtime.state.po_session = result.session_id or runtime.state.po_session
-    if runtime.state.status == "running":
-        runtime.state.status = "idle"
-    runtime.save()
-    return result
+def po_plan(runtime: Runtime, start: Start) -> Plan:
+    """The PO's step: its MCP tools, its scope, and resume when asked."""
+    role = runtime.resolve(PO)
+    plan = Plan(role, runtime.scope_for(role), prompt=first_prompt(runtime, start))
+    plan.launch = Launch(
+        mcp_servers={SERVER: mcp_server(Tools(runtime))},
+        extra_allowed=tool_names(),
+        resume=resume_session(runtime, start),
+    )
+    return runtime.finish(plan)
+
+
+async def run_po(runtime: Runtime, start: Start) -> StepResult:
+    """Run the PO loop until it ends its turn; commit its stories; record its cost."""
+    return await PoRun(runtime, start).run()
+
+
+@dataclass
+class PoRun:
+    """One invocation of the PO's main loop."""
+
+    runtime: Runtime
+    start: Start
+
+    async def run(self) -> StepResult:
+        plan = po_plan(self.runtime, self.start)
+        self._set_status(RunStatus.RUNNING)
+        result = await collect(self.runtime.query_fn, plan)
+        self.runtime.settle_po()
+        self._record(plan.role.model, result)
+        return result
+
+    def _set_status(self, status: RunStatus) -> None:
+        self.runtime.state.status = status
+        self.runtime.save()
+
+    def _record(self, model: str, result: StepResult) -> None:
+        """Ledger the PO's cost, keep its session for resume, and mark the run idle."""
+        state = self.runtime.state
+        self.runtime.ledger.record(Entry(PO, model, result.cost))
+        state.po_session = result.session_id or state.po_session
+        self._set_status(RunStatus.IDLE if state.status is RunStatus.RUNNING else state.status)

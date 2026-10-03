@@ -64,9 +64,16 @@ def budget_status(ledger: Ledger, budget_usd: float) -> dict[str, object]:
     }
 
 
-def checkpoint_crossed(before: float, after: float, budget: float, every_pct: int) -> bool:
-    """True when spend moved past a multiple of ``every_pct`` percent of ``budget``."""
-    if budget <= 0:
-        return False
-    step = budget * every_pct / 100
-    return int(after // step) > int(before // step)
+@dataclass(frozen=True)
+class Budget:
+    """The soft budget and how often (in percent of it) the Manager checks in."""
+
+    usd: float
+    every_pct: int
+
+    def checkpoint_crossed(self, before: float, after: float) -> bool:
+        """True when spend moved past a multiple of ``every_pct`` percent of the budget."""
+        if self.usd <= 0:
+            return False
+        step = self.usd * self.every_pct / 100
+        return int(after // step) > int(before // step)

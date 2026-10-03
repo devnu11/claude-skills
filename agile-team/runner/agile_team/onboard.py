@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import tomllib
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ CHARTER = ".team/CLAUDE.md"
 ROLES_KEEP = ".team/roles/.gitkeep"
 RUN_IGNORE = ".team/run/"
 COMMIT_MESSAGE = "chore(team): onboard agile team"
+ONBOARD_FILES = (CONFIG_NAME, ".gitignore", CHARTER, ROLES_KEEP)
 CHARTER_TEMPLATE = """\
 # Team charter
 
@@ -68,6 +70,13 @@ def suggest_kind(repo: Path, preset: dict[str, Any]) -> str:
     return preset.get("delivery", "manual")
 
 
+class WriteMode(StrEnum):
+    """Whether ``init`` may touch an existing config (keeping every value in it)."""
+
+    CREATE = "create"
+    RECONFIGURE = "reconfigure"
+
+
 @dataclass
 class Answers:
     """The human's answers to the init questions."""
@@ -80,15 +89,11 @@ class Answers:
     budget_usd: float = 20.0
     cadence: str = "sprint"
     url: str = ""
+    mode: WriteMode = WriteMode.CREATE
 
 
-def build_config(name: str, preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
+def build_config(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
     """Fresh config data for ``answers`` on top of ``preset``."""
-    delivery: dict[str, Any] = {"name": "main", "kind": answers.delivery_kind}
-    if answers.delivery_kind in ("package", "script"):
-        delivery.update(prepare=preset.get("prepare", ""), bin=preset.get("bin", []))
-    if answers.delivery_kind == "web":
-        delivery.update(prepare="", url=answers.url)
     return {
         "team": {
             "docs_dir": answers.docs_dir,
@@ -99,25 +104,30 @@ def build_config(name: str, preset: dict[str, Any], answers: Answers) -> dict[st
             "manager_every_pct": 25,
         },
         "toolchain": {
-            "preset": name,
+            "preset": answers.preset,
             **preset["commands"],
             "pragma": preset.get("pragma", ""),
             "globs": preset["globs"],
         },
         "gates": {"coverage": 95, "round_cap": 3, "steps": list(PIPELINE_STEPS)},
-        "delivery": [delivery],
+        "delivery": [delivery_entry(preset, answers)],
         "roles": {},
     }
+
+
+def delivery_entry(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
+    """The first ``[[delivery]]``: installable kinds reuse the preset's prepare step."""
+    installed = {"prepare": preset.get("prepare", ""), "bin": preset.get("bin", [])}
+    extras = {"package": installed, "script": installed, "web": {"prepare": "", "url": answers.url}}
+    return {"name": "main", "kind": answers.delivery_kind, **extras.get(answers.delivery_kind, {})}
 
 
 def merge_keep(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
     """``fresh`` with every value already in ``existing`` kept as is."""
     merged = dict(fresh)
     for key, value in existing.items():
-        if isinstance(value, dict) and isinstance(fresh.get(key), dict):
-            merged[key] = merge_keep(value, fresh[key])
-        else:
-            merged[key] = value
+        both_tables = isinstance(value, dict) and isinstance(fresh.get(key), dict)
+        merged[key] = merge_keep(value, fresh[key]) if both_tables else value
     return merged
 
 
@@ -128,48 +138,50 @@ def gitignore_lines(artifacts: str) -> list[str]:
     return [RUN_IGNORE]
 
 
-def ensure_lines(path: Path, lines: list[str]) -> bool:
-    """Append any of ``lines`` missing from ``path``; True when the file changed."""
+def ensure_lines(path: Path, lines: list[str]) -> None:
+    """Append any of ``lines`` missing from ``path``."""
     current = path.read_text().splitlines() if path.is_file() else []
     missing = [ln for ln in lines if ln not in current]
-    if not missing:
-        return False
-    prefix = "" if not current or current[-1] == "" else "\n"
-    with path.open("a") as fh:
-        fh.write(prefix + "# agile-team\n" + "\n".join(missing) + "\n")
-    return True
+    if missing:
+        prefix = "" if not current or current[-1] == "" else "\n"
+        with path.open("a") as fh:
+            fh.write(prefix + "# agile-team\n" + "\n".join(missing) + "\n")
 
 
-def write_if_missing(path: Path, text: str) -> bool:
-    if path.exists():
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return True
+def write_if_missing(path: Path, text: str) -> None:
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
 
 
-def write_config(repo: Path, data: dict[str, Any], reconfigure: bool) -> None:
-    """Write the config, keeping existing values when reconfiguring."""
-    path = config_path(repo)
+def write_config(repo: Path, answers: Answers) -> None:
+    """Write the config; on reconfigure keep every value already in the file."""
+    path, data = config_path(repo), build_config(_preset(answers.preset), answers)
     if path.is_file():
-        if not reconfigure:
+        if answers.mode is not WriteMode.RECONFIGURE:
             raise FileExistsError(f"{CONFIG_NAME} exists; use --reconfigure")
         data = merge_keep(tomllib.loads(path.read_text()), data)
     path.write_text(tomli_w.dumps(data))
 
 
-def onboard(repo: Path, answers: Answers, reconfigure: bool = False) -> str | None:
-    """Run phase A and commit the result; returns the commit sha (None if nothing changed)."""
+def _preset(name: str) -> dict[str, Any]:
     presets = load_presets()
-    if answers.preset not in presets:
-        raise ValueError(f"unknown preset {answers.preset!r}; known: {sorted(presets)}")
-    data = build_config(answers.preset, presets[answers.preset], answers)
-    write_config(repo, data, reconfigure)
+    if name not in presets:
+        raise ValueError(f"unknown preset {name!r}; known: {sorted(presets)}")
+    return presets[name]
+
+
+def onboard(repo: Path, answers: Answers) -> str | None:
+    """Run phase A and commit the result; returns the commit sha (None if nothing changed)."""
+    write_config(repo, answers)
     ensure_lines(repo / ".gitignore", gitignore_lines(answers.artifacts))
     write_if_missing(repo / CHARTER, CHARTER_TEMPLATE)
     write_if_missing(repo / ROLES_KEEP, "")
-    git = Git(repo)
-    paths = [p for p in (CONFIG_NAME, ".gitignore", CHARTER, ROLES_KEEP) if not git.is_ignored(p)]
+    return commit_onboarding(Git(repo))
+
+
+def commit_onboarding(git: Git) -> str | None:
     if not git.changed_paths():
         return None
+    paths = [p for p in ONBOARD_FILES if not git.is_ignored(p)]
     return git.commit(paths, COMMIT_MESSAGE)

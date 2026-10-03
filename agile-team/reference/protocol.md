@@ -161,8 +161,11 @@ and when spend crosses each `manager_every_pct` checkpoint.
   committed as `chore(team): quarantine out-of-scope changes by <role>` and
   reverted at once; the PO gets the sha.
 - In-scope changes: the first commit of a story is `feat(<story>): <title>`,
-  later ones `fixup! feat(<story>): <title>`. Story-less steps commit
-  `chore(team): <role> step`. Nothing is autosquashed.
+  later ones `fixup! feat(<story>): <title>`. Every step commit has a body
+  `<role>: <handoff summary>`, so a fixup says what it changed. Story-less
+  steps commit `chore(team): <role> step`; the PO's own story edits commit as
+  `chore(team): product-owner step` before the next role runs. Nothing is
+  autosquashed.
 - Proxy OS sandbox: Claude Code `sandbox.filesystem.denyRead` on the repo with
   `allowRead` for the sandbox, stories and customer docs. Needs
   bubblewrap (Linux) or Seatbelt (macOS); not verified end to end yet.

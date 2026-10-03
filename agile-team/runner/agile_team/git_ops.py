@@ -1,4 +1,4 @@
-"""Thin git wrapper: status, scoped commits, fixups and reverts.
+"""Thin git wrapper: status, scoped commits and reverts.
 
 Every commit the runner makes carries ``CO_AUTHOR``. The runner never
 autosquashes; ``fixup!`` commits are left for a human to squash.
@@ -7,11 +7,12 @@ autosquashes; ``fixup!`` commits are left for a human to squash.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 CO_AUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
+RENAME_CODES = frozenset("RC")
 
 
 class GitError(Exception):
@@ -39,7 +40,7 @@ class Git:
     def changed_paths(self) -> list[str]:
         """Paths with staged, unstaged or untracked changes (renames give both ends)."""
         out = self.run("status", "--porcelain=v1", "-z", "--untracked-files=all")
-        return _parse_porcelain_z(out)
+        return parse_porcelain_z(out)
 
     def is_clean(self) -> bool:
         return not self.changed_paths()
@@ -51,28 +52,21 @@ class Git:
     def head(self) -> str:
         return self.run("rev-parse", "HEAD").strip()
 
+    def subject(self, sha: str) -> str:
+        return self.run("log", "-1", "--format=%s", sha).strip()
+
     def commit(self, paths: Sequence[str], message: str) -> str:
         """Stage exactly ``paths`` (including deletions) and commit them."""
-        self._stage_only(paths)
-        self.run("commit", "--no-verify", "-m", with_trailer(message))
-        return self.head()
-
-    def commit_fixup(self, paths: Sequence[str], target: str) -> str:
-        """Commit ``paths`` as ``fixup! <target subject>``; never autosquashes."""
-        self._stage_only(paths)
-        subject = self.run("log", "-1", "--format=%s", target).strip()
-        self.run("commit", "--no-verify", "-m", with_trailer(f"fixup! {subject}"))
-        return self.head()
-
-    def revert(self, sha: str, message: str) -> str:
-        """Revert ``sha`` with our own message (so it carries the trailer)."""
-        self.run("revert", "--no-commit", sha)
-        self.run("commit", "--no-verify", "-m", with_trailer(message))
-        return self.head()
-
-    def _stage_only(self, paths: Sequence[str]) -> None:
         self.run("reset", "-q")
         self.run("add", "-A", "--", *paths)
+        self.run("commit", "--no-verify", "-m", with_trailer(message))
+        return self.head()
+
+    def revert(self, sha: str) -> str:
+        """Revert ``sha`` with our own message (so it carries the trailer)."""
+        self.run("revert", "--no-commit", sha)
+        self.run("commit", "--no-verify", "-m", with_trailer(f'Revert "{self.subject(sha)}"'))
+        return self.head()
 
 
 def with_trailer(message: str) -> str:
@@ -80,14 +74,13 @@ def with_trailer(message: str) -> str:
     return f"{message.rstrip()}\n\n{CO_AUTHOR}\n"
 
 
-def _parse_porcelain_z(out: str) -> list[str]:
-    paths: list[str] = []
-    entries = iter(out.split("\0"))
-    for entry in entries:
-        if not entry:
-            continue
-        status, path = entry[:2], entry[3:]
-        paths.append(path)
-        if "R" in status or "C" in status:
-            paths.append(next(entries))
-    return paths
+def parse_porcelain_z(out: str) -> list[str]:
+    """Paths from ``git status --porcelain -z``; a rename's source follows its target."""
+    return list(_porcelain_paths(iter(out.split("\0"))))
+
+
+def _porcelain_paths(entries: Iterator[str]) -> Iterator[str]:
+    for entry in filter(None, entries):
+        yield entry[3:]
+        if RENAME_CODES & set(entry[:2]):
+            yield next(entries)

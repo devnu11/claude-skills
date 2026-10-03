@@ -11,29 +11,15 @@ import re
 from functools import cache
 from pathlib import Path
 
+GLOB_TOKENS = {"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}
+_TOKEN = re.compile(r"\*\*/|\*\*|\*|\?|[^*?]+")
+
 
 @cache
 def glob_to_regex(glob: str) -> re.Pattern[str]:
     """Compile one glob (without a leading ``!``) to an anchored regex."""
-    out: list[str] = []
-    i = 0
-    while i < len(glob):
-        if glob.startswith("**/", i):
-            out.append("(?:.*/)?")
-            i += 3
-        elif glob.startswith("**", i):
-            out.append(".*")
-            i += 2
-        elif glob[i] == "*":
-            out.append("[^/]*")
-            i += 1
-        elif glob[i] == "?":
-            out.append("[^/]")
-            i += 1
-        else:
-            out.append(re.escape(glob[i]))
-            i += 1
-    return re.compile("".join(out) + r"\Z")
+    parts = (GLOB_TOKENS.get(t) or re.escape(t) for t in _TOKEN.findall(glob))
+    return re.compile("".join(parts) + r"\Z")
 
 
 def matches(path: str, globs: list[str]) -> bool:
@@ -49,13 +35,15 @@ def literal_root(glob: str) -> str:
     return "" if any(c in first for c in "*?[") else first
 
 
-def repo_relative(repo: Path, raw: str, cwd: Path | None = None) -> str | None:
-    """Resolve ``raw`` against ``cwd`` (default ``repo``) and express it relative
-    to ``repo``. Returns ``None`` when the path lies outside the repo."""
-    base = cwd or repo
+def resolve_in(base: Path, raw: str) -> Path:
+    """``raw`` (absolute, ``~``-relative or relative to ``base``) as a resolved path."""
     candidate = Path(raw).expanduser()
-    resolved = (candidate if candidate.is_absolute() else base / candidate).resolve()
+    return (candidate if candidate.is_absolute() else base / candidate).resolve()
+
+
+def repo_relative(repo: Path, path: Path) -> str | None:
+    """``path`` relative to ``repo`` as POSIX, or ``None`` when outside the repo."""
     try:
-        return resolved.relative_to(repo.resolve()).as_posix()
+        return path.relative_to(repo.resolve()).as_posix()
     except ValueError:
         return None

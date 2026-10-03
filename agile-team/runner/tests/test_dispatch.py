@@ -2,18 +2,21 @@
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from agile_team import dispatch, gates, sandbox
 from agile_team.config import Delivery
-from agile_team.state import STOP_FILE, ModelOverride
+from agile_team.dispatch import StepRequest
+from agile_team.gates import StoryStatus, Verdict
+from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
 from .conftest import FakeQuery, FakeRunner, git, handoff
 
 
 def run(rt, role, brief="go", story=None):
-    return asyncio.run(rt.run_role(role, brief, story))
+    return asyncio.run(rt.run_role(StepRequest(role, brief, story)))
 
 
 def open_story(rt, step="design", **kw):
@@ -34,7 +37,7 @@ def test_collect_without_result_message() -> None:
         yield AssistantMessage(content=[TextBlock(text="only text")], model="m")
         yield AssistantMessage(content=[], model="m")
 
-    result = asyncio.run(dispatch.collect(fake, "p", None))
+    result = asyncio.run(dispatch.collect(fake, SimpleNamespace(prompt="p", options=None)))
     assert (result.text, result.cost) == ("only text", 0.0)
 
 
@@ -59,9 +62,9 @@ def test_refusals(make_runtime, configured: Path) -> None:
     rt.state.manager_due.append("sprint start")
     assert "manager review due" in run(rt, "architect")["reason"]
     rt.state.manager_due.clear()
-    rt.state.status, rt.state.cadence = "sprint-end", "sprint"
+    rt.state.status, rt.state.cadence = RunStatus.SPRINT_END, "sprint"
     assert "the run is sprint-end" in run(rt, "architect")["reason"]
-    rt.state.status = "running"
+    rt.state.status = RunStatus.RUNNING
     rt.config.run_dir.mkdir(parents=True, exist_ok=True)
     (rt.config.run_dir / STOP_FILE).touch()
     assert "stop was requested" in run(rt, "architect")["reason"]
@@ -84,7 +87,7 @@ def test_story_commits_feat_then_fixup(make_runtime, configured: Path) -> None:
     assert first["gate"]["now_at"] == "tests"
     q.action = write(configured, "tests/test_todo.py")
     second = run(rt, "unit-tester", story="s1")
-    assert second["gate"]["passed"] and second["gate"]["now_at"] == "implement"
+    assert second["gate"]["verdict"] is Verdict.PASS and second["gate"]["now_at"] == "implement"
     log = git(configured, "log", "--format=%s", "-2").splitlines()
     assert log == ["fixup! feat(s1): Add todo", "feat(s1): Add todo"]
     assert rt.state.stories["s1"].commit == first["commit"]
@@ -106,7 +109,7 @@ def test_developer_bash_write_to_tests_is_quarantined(make_runtime, configured: 
     )
     assert log[2] == "chore(team): quarantine out-of-scope changes by developer-cli"
     assert rt.git.is_clean() and not (configured / "tests/x").exists()
-    assert report["gate"]["passed"]
+    assert report["gate"]["verdict"] is Verdict.PASS
 
 
 def test_failed_gate_bounces_and_caps(make_runtime) -> None:
@@ -115,21 +118,22 @@ def test_failed_gate_bounces_and_caps(make_runtime) -> None:
     for _ in range(3):
         rt.state.stories["s1"].step = "review"
         report = run(rt, "code-reviewer", story="s1")
-    assert report["gate"]["needs_manager"]
+    assert report["gate"]["story_status"] is StoryStatus.NEEDS_MANAGER
     rt.state.stories["s1"].step = "review"
     assert "round cap" in run(rt, "code-reviewer", story="s1")["reason"]
 
 
 def test_manager_rules_on_capped_story(make_runtime) -> None:
     rt = make_runtime(FakeQuery(handoff("done", ruling="revise_design")))
-    open_story(rt, "implement", rounds=3, needs_manager=True)
+    open_story(rt, "implement", rounds=3, status=StoryStatus.NEEDS_MANAGER)
     rt.state.manager_due.append("round cap")
     rt.state.overrides["developer"] = ModelOverride("opus", "high", "stuck")
+    rt.state.unreviewed.append("developer")
     report = run(rt, "manager", story="s1")
     assert report["status"] == "done"
     s = rt.state.stories["s1"]
-    assert (s.step, s.needs_manager, s.rounds) == ("design", False, 0)
-    assert rt.state.manager_due == [] and rt.state.overrides["developer"].reviewed
+    assert (s.step, s.status, s.rounds) == ("design", StoryStatus.ACTIVE, 0)
+    assert rt.state.manager_due == [] and rt.state.unreviewed == []
     prompt = rt.query_fn.calls[0]["prompt"]
     assert "unreviewed_overrides" in prompt and "stuck" in prompt
 
@@ -152,7 +156,7 @@ def test_budget_checkpoint_queues_manager(make_runtime) -> None:
 def test_model_override_applies(make_runtime) -> None:
     q = FakeQuery()
     rt = make_runtime(q)
-    rt.state.overrides["architect"] = ModelOverride("haiku", "low", "cheap", reviewed=True)
+    rt.state.overrides["architect"] = ModelOverride("haiku", "low", "cheap")
     run(rt, "architect")
     assert q.calls[0]["options"].model == "haiku"
 
@@ -166,7 +170,7 @@ def test_customer_proxy_runs_in_sandbox(make_runtime, configured: Path) -> None:
     assert opts.cwd.endswith(".team/run/customer/cli")
     assert '"denyRead"' in opts.settings
     assert "How the customer reaches the product" in q.calls[0]["prompt"]
-    assert report["gate"]["now_at"] == "done"
+    assert report["gate"]["story_status"] is StoryStatus.DONE
 
 
 def test_customer_proxy_without_delivery(make_runtime) -> None:
@@ -194,7 +198,7 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
 
     def fake_prepare(config, delivery):
         p = sandbox.Prepared(
-            delivery, sandbox.DELIVERY_KINDS["web"], config.run_dir, config.run_dir, {}
+            delivery, sandbox.DELIVERY_KINDS["web"], config.repo, config.run_dir, config.run_dir
         )
         p.stop = lambda: stopped.append(True)  # type: ignore[method-assign]
         return p
@@ -223,10 +227,8 @@ def test_shell_runner(tmp_path: Path) -> None:
         ("running", "sprint", False),
     ],
 )
-def test_run_halted(make_runtime, status, cadence, halted) -> None:
-    rt = make_runtime()
-    rt.state.status, rt.state.cadence = status, cadence
-    assert rt.run_halted() is halted
+def test_run_halted(status, cadence, halted) -> None:
+    assert RunState(cadence=cadence, status=RunStatus(status)).halted() is halted
 
 
 def test_po_story_edits_committed_before_next_role(make_runtime, configured: Path) -> None:
@@ -281,3 +283,12 @@ def test_roles_get_secret_denials(make_runtime, tmp_path: Path) -> None:
     run(rt, "architect")
     assert "secrets" in q.calls[0]["options"].settings
     assert rt.scope_for(rt.book.resolve("developer")).secrets == [tmp_path / "secrets"]
+
+
+def test_story_blocked_on_open_question(make_runtime) -> None:
+    from agile_team.relay import Note
+
+    rt = make_runtime()
+    open_story(rt)
+    rt.relay.post(Note("question", "DB?", ["s1"]))
+    assert "waiting on an answer" in run(rt, "architect", story="s1")["reason"]

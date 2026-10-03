@@ -13,6 +13,11 @@ import pytest
 from agile_team import config as cfg
 from agile_team import guard, sandbox
 from agile_team.config import Delivery
+from agile_team.guard import Scope, ToolCall
+
+
+def use(scope: Scope, name: str, tool_input: dict) -> str | None:
+    return guard.check_tool_use(scope, ToolCall(name, tool_input))
 
 
 def load(configured: Path, *deliveries: Delivery) -> cfg.Config:
@@ -25,7 +30,7 @@ def load(configured: Path, *deliveries: Delivery) -> cfg.Config:
 def test_package_installs_and_runs(configured: Path) -> None:
     script = "mkdir -p {sandbox}/bin && printf '#!/bin/sh\\necho todo-ok\\n' > {sandbox}/bin/todo"
     d = Delivery("cli", "package", prepare=script + " && chmod +x {sandbox}/bin/todo", bin=["bin"])
-    p = sandbox.prepare(load(configured, d), d)
+    p = sandbox.Preparer().prepare(load(configured, d), d)
     out = subprocess.run(
         "todo", shell=True, env=p.env, cwd=p.workdir, capture_output=True, text=True
     )
@@ -37,7 +42,7 @@ def test_package_installs_and_runs(configured: Path) -> None:
 def test_script_copies_and_runs(configured: Path) -> None:
     (configured / "tool.sh").write_text("echo script-ok\n")
     d = Delivery("s", "script", prepare="cp {repo}/tool.sh {sandbox}/")
-    p = sandbox.prepare(load(configured, d), d)
+    p = sandbox.Preparer().prepare(load(configured, d), d)
     out = subprocess.run(["sh", "tool.sh"], cwd=p.workdir, capture_output=True, text=True)
     assert out.stdout.strip() == "script-ok"
 
@@ -45,7 +50,7 @@ def test_script_copies_and_runs(configured: Path) -> None:
 def test_prepare_failure(configured: Path) -> None:
     d = Delivery("bad", "package", prepare="exit 3")
     with pytest.raises(sandbox.SandboxError, match="prepare"):
-        sandbox.prepare(load(configured, d), d)
+        sandbox.Preparer().prepare(load(configured, d), d)
 
 
 def test_prepare_recreates_sandbox(configured: Path) -> None:
@@ -54,7 +59,7 @@ def test_prepare_recreates_sandbox(configured: Path) -> None:
     stale = configured / ".team/run/customer/cli/stale"
     stale.parent.mkdir(parents=True)
     stale.write_text("x")
-    sandbox.prepare(c, d)
+    sandbox.Preparer().prepare(c, d)
     assert not stale.exists()
 
 
@@ -70,12 +75,12 @@ def test_web_starts_in_background_and_stops(configured: Path) -> None:
     d = Delivery(
         "ui", "web", prepare=f"exec {sys.executable} -m http.server {port} -b 127.0.0.1", url=url
     )
-    p = sandbox.prepare(load(configured, d), d)
+    p = sandbox.Preparer().prepare(load(configured, d), d)
     try:
         body = _fetch(url)
         assert body is not None
         assert url in p.guidance()
-        assert sandbox.mcp_servers(p)["playwright"]["command"] == "npx"
+        assert p.mcp_servers()["playwright"]["command"] == "npx"
     finally:
         p.stop()
     assert p.process.poll() is not None
@@ -109,6 +114,7 @@ def test_stop_escalates_to_sigkill(monkeypatch) -> None:
         sandbox.DELIVERY_KINDS["web"],
         Path("."),
         Path("."),
+        Path("."),
         process=Stubborn(),
     )  # type: ignore[arg-type]
     p.stop()
@@ -126,7 +132,7 @@ def test_stop_ignores_vanished_group(monkeypatch) -> None:
 def test_web_stop_kills_child_processes(configured: Path) -> None:
     pidfile = configured / "child.pid"
     d = Delivery("ui", "web", prepare=f"sleep 300 & echo $! > {pidfile}; wait")
-    p = sandbox.prepare(load(configured, d), d)
+    p = sandbox.Preparer().prepare(load(configured, d), d)
     for _ in range(50):
         if pidfile.exists() and pidfile.read_text().strip():
             break
@@ -152,27 +158,27 @@ def _alive(pid: int) -> bool:
 def test_delivery_name_cannot_escape(configured: Path) -> None:
     d = Delivery("../../..", "package")
     with pytest.raises(sandbox.SandboxError, match="must match"):
-        sandbox.prepare(load(configured, d), d)
+        sandbox.Preparer().prepare(load(configured, d), d)
     assert (configured / "src/app.py").exists()
 
 
 def test_library_consumer_project(configured: Path) -> None:
     d = Delivery("lib", "library", prepare="touch {sandbox}/built.whl")
     c = load(configured, d)
-    p = sandbox.prepare(c, d)
+    p = sandbox.Preparer().prepare(c, d)
     assert p.workdir == p.root / "consumer" and p.workdir.is_dir()
     assert (p.root / "built.whl").exists()
-    scope = sandbox.proxy_scope(c, p, [])
-    assert guard.check_tool_use(scope, "Write", {"file_path": "example.py"}) is None
-    assert guard.check_tool_use(scope, "Write", {"file_path": str(configured / "src/x.py")})
-    assert sandbox.mcp_servers(p) == {}
+    scope = sandbox.proxy_scope(c, p)
+    assert use(scope, "Write", {"file_path": "example.py"}) is None
+    assert use(scope, "Write", {"file_path": str(configured / "src/x.py")})
+    assert p.mcp_servers() == {}
 
 
 def test_harness_allows_only_listed_commands(configured: Path) -> None:
     d = Delivery("hw", "harness", commands=["drvctl", "vmrun"])
     c = load(configured, d)
-    p = sandbox.prepare(c, d, runner=lambda *a: 0)
-    scope = sandbox.proxy_scope(c, p, [])
+    p = sandbox.Preparer(runner=lambda *a: 0).prepare(c, d)
+    scope = sandbox.proxy_scope(c, p)
     assert scope.bash_allowed == ["drvctl", "vmrun"]
     assert guard.check_bash(scope, "drvctl status; vmrun list") is None
     assert guard.check_bash(scope, "cat /etc/passwd")
@@ -182,13 +188,13 @@ def test_harness_allows_only_listed_commands(configured: Path) -> None:
 def test_web_bash_is_curl_only(configured: Path) -> None:
     d = Delivery("ui", "web", url="http://x")
     c = load(configured, d)
-    p = sandbox.prepare(c, d)
-    assert sandbox.proxy_scope(c, p, []).bash_allowed == ["curl"]
+    p = sandbox.Preparer().prepare(c, d)
+    assert sandbox.proxy_scope(c, p).bash_allowed == ["curl"]
 
 
 def test_manual_has_no_shell(configured: Path) -> None:
     d = Delivery("hw", "manual")
-    p = sandbox.prepare(load(configured, d), d)
+    p = sandbox.Preparer().prepare(load(configured, d), d)
     assert p.kind.tools == ("Write",)
     assert "acceptance script" in p.guidance()
 
@@ -201,14 +207,11 @@ def test_unknown_kind(configured: Path) -> None:
 def test_proxy_cannot_read_source(configured: Path) -> None:
     d = Delivery("cli", "package")
     c = load(configured, d)
-    p = sandbox.prepare(c, d)
-    scope = sandbox.proxy_scope(c, p, [".team/acceptance/**"])
-    assert guard.check_tool_use(scope, "Read", {"file_path": str(configured / "src/app.py")})
-    assert guard.check_tool_use(scope, "Bash", {"command": "cat ../../src/x"})
-    assert (
-        guard.check_tool_use(scope, "Read", {"file_path": str(configured / "docs/customer/a.md")})
-        is None
-    )
+    p = sandbox.Preparer().prepare(c, d)
+    scope = sandbox.proxy_scope(c, p)
+    assert use(scope, "Read", {"file_path": str(configured / "src/app.py")})
+    assert use(scope, "Bash", {"command": "cat ../../src/x"})
+    assert use(scope, "Read", {"file_path": str(configured / "docs/customer/a.md")}) is None
     assert scope.bash_forbidden == ["src", "tests"]
 
 
@@ -220,7 +223,7 @@ def test_forbidden_roots_default(tmp_path: Path) -> None:
 def test_os_sandbox_settings(configured: Path) -> None:
     d = Delivery("cli", "package")
     c = load(configured, d)
-    p = sandbox.prepare(c, d)
+    p = sandbox.Preparer().prepare(c, d)
     s = sandbox.os_sandbox_settings(c, p)
     repo = str(configured.resolve())
     assert s["sandbox"]["filesystem"]["denyRead"] == [repo]
@@ -228,11 +231,15 @@ def test_os_sandbox_settings(configured: Path) -> None:
     assert f"Read(/{repo}/src/**)" in s["permissions"]["deny"]
 
 
-def test_sandbox_env(tmp_path: Path) -> None:
-    env = sandbox.sandbox_env(Delivery("x", "package", bin=["b"]), tmp_path, {"PATH": "/usr/bin"})
-    assert env["PATH"].startswith(str(tmp_path / "b"))
-    assert sandbox.sandbox_env(Delivery("x", "package"), tmp_path, {})["PATH"] == ""
+def test_sandbox_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin")
+    env = sandbox.sandbox_env(Delivery("x", "package", bin=["b"]), tmp_path)
+    assert env["PATH"] == os.pathsep.join([str(tmp_path / "b"), "/usr/bin"])
+    monkeypatch.delenv("PATH")
+    assert sandbox.sandbox_env(Delivery("x", "package"), tmp_path)["PATH"] == ""
 
 
-def test_run_shell(tmp_path: Path) -> None:
-    assert sandbox.run_shell("exit 2", tmp_path, {}) == 2
+def test_run_shell(configured: Path) -> None:
+    d = Delivery("cli", "package")
+    p = sandbox.Preparer().prepare(load(configured, d), d)
+    assert sandbox.run_shell("exit 2", p) == 2

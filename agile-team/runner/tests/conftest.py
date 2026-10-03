@@ -130,6 +130,7 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
         checks = gates.Checks(
             config.toolchain.commands, config.gates.coverage, runner or FakeRunner()
         )
+        pipeline = gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
         return Runtime(
             config=config,
             book=RoleBook.for_repo(configured, config.roles),
@@ -139,7 +140,7 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
             state=RunState(),
             env={"ANTHROPIC_API_KEY": "k"},
             query_fn=query or FakeQuery(),
-            checks=checks,
+            pipeline=pipeline,
             **kw,
         )
 

@@ -11,6 +11,7 @@ from agile_team import onboard
 from .conftest import git
 
 PRESETS = onboard.load_presets()
+RECONFIGURE = onboard.WriteMode.RECONFIGURE
 
 
 @pytest.mark.parametrize(
@@ -34,16 +35,15 @@ def test_detect_nothing(tmp_path: Path) -> None:
 
 def test_presets_validate(tmp_path: Path) -> None:
     for name, preset in PRESETS.items():
-        data = onboard.build_config(name, preset, onboard.Answers(name, preset["delivery"]))
-        assert cfg.validate(cfg.from_raw(tmp_path, data), set(), {"package"}) == []
+        data = onboard.build_config(preset, onboard.Answers(name, preset["delivery"]))
+        known = cfg.Known(set(), {"package"})
+        assert cfg.validate(cfg.from_raw(tmp_path, data), known) == []
 
 
 def test_build_config_web_and_script() -> None:
-    web = onboard.build_config(
-        "node", PRESETS["node"], onboard.Answers("node", "web", url="http://x")
-    )
+    web = onboard.build_config(PRESETS["node"], onboard.Answers("node", "web", url="http://x"))
     assert web["delivery"][0]["url"] == "http://x"
-    script = onboard.build_config("python", PRESETS["python"], onboard.Answers("python", "script"))
+    script = onboard.build_config(PRESETS["python"], onboard.Answers("python", "script"))
     assert script["delivery"][0]["bin"] == ["venv/bin"]
 
 
@@ -62,8 +62,8 @@ def test_gitignore_lines() -> None:
 def test_ensure_lines(tmp_path: Path) -> None:
     f = tmp_path / ".gitignore"
     f.write_text("node_modules")
-    assert onboard.ensure_lines(f, [".team/run/"])
-    assert not onboard.ensure_lines(f, [".team/run/"])
+    onboard.ensure_lines(f, [".team/run/"])
+    onboard.ensure_lines(f, [".team/run/"])
     assert f.read_text() == "node_modules\n# agile-team\n.team/run/\n"
     new = tmp_path / "new"
     onboard.ensure_lines(new, ["a"])
@@ -95,7 +95,7 @@ def test_reconfigure_keeps_edits(repo: Path) -> None:
     path.write_text(tomli_w.dumps(data))
     (repo / onboard.CHARTER).write_text("my charter")
     git(repo, "commit", "-qam", "edit")
-    onboard.onboard(repo, onboard.Answers("python", "package", budget_usd=99), reconfigure=True)
+    onboard.onboard(repo, onboard.Answers("python", "package", budget_usd=99, mode=RECONFIGURE))
     c = cfg.load(repo)
     assert c.toolchain.commands["test"] == "make test"
     assert c.gates.round_cap == 3
@@ -105,7 +105,7 @@ def test_reconfigure_keeps_edits(repo: Path) -> None:
 
 def test_reconfigure_no_change(repo: Path) -> None:
     onboard.onboard(repo, onboard.Answers("python", "package"))
-    assert onboard.onboard(repo, onboard.Answers("python", "package"), reconfigure=True) is None
+    assert onboard.onboard(repo, onboard.Answers("python", "package", mode=RECONFIGURE)) is None
 
 
 def test_ignored_artifacts_keep_roles_tracked(repo: Path) -> None:

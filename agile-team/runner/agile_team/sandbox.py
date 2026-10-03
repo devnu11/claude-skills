@@ -16,6 +16,7 @@ import signal
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -26,12 +27,33 @@ from .paths import literal_root
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 STORIES_GLOB = ".team/stories/**"
-NOTES_GLOB = ".team/acceptance/**"
 PLAYWRIGHT = {"type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest", "--headless"]}
 
 
 class SandboxError(Exception):
     """The prepare step failed or the delivery is unusable."""
+
+
+class Start(StrEnum):
+    """Whether the prepare command blocks or keeps running (a server) during the step."""
+
+    FOREGROUND = "foreground"
+    BACKGROUND = "background"
+
+
+class Workdir(StrEnum):
+    """Where the Proxy works: the sandbox itself, or an empty consumer project in it."""
+
+    SANDBOX = "sandbox"
+    CONSUMER = "consumer"
+
+
+class Shell(StrEnum):
+    """Which commands the Proxy's Bash may start."""
+
+    ANY = "any"
+    CURL = "curl"
+    LISTED = "listed"
 
 
 @dataclass(frozen=True)
@@ -40,10 +62,10 @@ class DeliveryKind:
 
     tools: tuple[str, ...]
     guidance: str
-    background: bool = False
-    browser: bool = False
-    consumer: bool = False
-    allowlist: tuple[str, ...] | None = None
+    start: Start = Start.FOREGROUND
+    workdir: Workdir = Workdir.SANDBOX
+    shell: Shell = Shell.ANY
+    mcp: tuple[str, ...] = ()
 
 
 DELIVERY_KINDS: dict[str, DeliveryKind] = {
@@ -61,20 +83,20 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
         tools=("Bash", "Write"),
         guidance="The product is a running web app at {url}. Use the browser tools as a "
         "customer would; `curl` is available for API checks.",
-        background=True,
-        browser=True,
-        allowlist=("curl",),
+        start=Start.BACKGROUND,
+        shell=Shell.CURL,
+        mcp=("playwright",),
     ),
     "library": DeliveryKind(
         tools=("Bash", "Read", "Grep", "Glob", "Write", "Edit"),
         guidance="Your working directory is an empty consumer project that depends on the "
         "library. Write small programs from the customer docs and run them.",
-        consumer=True,
+        workdir=Workdir.CONSUMER,
     ),
     "harness": DeliveryKind(
         tools=("Bash", "Write"),
         guidance="DevOps prepared a harness. Only these commands are available: {commands}.",
-        allowlist=(),
+        shell=Shell.LISTED,
     ),
     "manual": DeliveryKind(
         tools=("Write",),
@@ -82,14 +104,7 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
         "acceptance script a human can follow, with the expected result of each step.",
     ),
 }
-
-Runner = Callable[[str, Path, dict[str, str]], int]
-Popen = Callable[..., subprocess.Popen[bytes]]
-
-
-def run_shell(command: str, cwd: Path, env: dict[str, str]) -> int:
-    """Default prepare runner: a blocking shell command."""
-    return subprocess.run(command, shell=True, cwd=cwd, env=env, check=False).returncode
+MCP_SERVERS = {"playwright": PLAYWRIGHT}
 
 
 @dataclass
@@ -98,6 +113,7 @@ class Prepared:
 
     delivery: Delivery
     kind: DeliveryKind
+    repo: Path
     root: Path
     workdir: Path
     env: dict[str, str] = field(default_factory=dict)
@@ -116,10 +132,33 @@ class Prepared:
         commands = ", ".join(self.delivery.commands) or "none"
         return self.kind.guidance.format(url=self.delivery.url, commands=commands)
 
+    def expand(self, command: str) -> str:
+        """Fill ``{repo}`` and ``{sandbox}`` in a prepare command."""
+        return command.replace("{repo}", str(self.repo)).replace("{sandbox}", str(self.root))
+
+    def bash_allowed(self) -> list[str] | None:
+        """The Proxy's Bash allowlist, or ``None`` for any command."""
+        lists = {Shell.CURL: ["curl"], Shell.LISTED: list(self.delivery.commands)}
+        return lists.get(self.kind.shell)
+
+    def mcp_servers(self) -> dict[str, Any]:
+        """MCP servers the Proxy needs (the browser for web deliveries)."""
+        return {name: dict(MCP_SERVERS[name]) for name in self.kind.mcp}
+
 
 def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(os.getpgid(process.pid), sig)
+
+
+Runner = Callable[[str, Prepared], int]
+Popen = Callable[..., subprocess.Popen[bytes]]
+
+
+def run_shell(command: str, prepared: Prepared) -> int:
+    """Default prepare runner: a blocking shell command in the repo."""
+    proc = subprocess.run(command, shell=True, cwd=prepared.repo, env=prepared.env, check=False)
+    return proc.returncode
 
 
 def kind_of(delivery: Delivery) -> DeliveryKind:
@@ -137,18 +176,11 @@ def fresh_dir(path: Path) -> Path:
     return path
 
 
-def expand(command: str, repo: Path, sandbox: Path) -> str:
-    """Fill ``{repo}`` and ``{sandbox}`` in a prepare command."""
-    return command.replace("{repo}", str(repo)).replace("{sandbox}", str(sandbox))
-
-
-def sandbox_env(
-    delivery: Delivery, root: Path, base: dict[str, str] | None = None
-) -> dict[str, str]:
-    """``base`` (default: os.environ) with the delivery's ``bin`` dirs prepended to PATH."""
-    env = dict(os.environ if base is None else base)
-    extra = [str(root / b) for b in delivery.bin]
-    env["PATH"] = os.pathsep.join([*extra, env.get("PATH", "")]) if extra else env.get("PATH", "")
+def sandbox_env(delivery: Delivery, root: Path) -> dict[str, str]:
+    """The current environment with the delivery's ``bin`` dirs prepended to PATH."""
+    env = dict(os.environ)
+    path = [str(root / b) for b in delivery.bin] + [env.get("PATH", "")]
+    env["PATH"] = os.pathsep.join(p for p in path if p)
     return env
 
 
@@ -159,26 +191,35 @@ def sandbox_root(config: Config, delivery: Delivery) -> Path:
     return config.run_dir / CUSTOMER_DIR / delivery.name
 
 
-def prepare(
-    config: Config,
-    delivery: Delivery,
-    runner: Runner = run_shell,
-    popen: Popen = subprocess.Popen,
-) -> Prepared:
-    """Create a clean sandbox and run the delivery's prepare step."""
+@dataclass
+class Preparer:
+    """Builds sandboxes; the runner and popen are injectable for tests."""
+
+    runner: Runner = run_shell
+    popen: Popen = subprocess.Popen
+
+    def prepare(self, config: Config, delivery: Delivery) -> Prepared:
+        """Create a clean sandbox and run the delivery's prepare step."""
+        prepared = layout(config, delivery)
+        if delivery.prepare:
+            self._launch(prepared, prepared.expand(delivery.prepare))
+        return prepared
+
+    def _launch(self, prepared: Prepared, command: str) -> None:
+        if prepared.kind.start is Start.BACKGROUND:
+            prepared.process = self.popen(
+                command, shell=True, cwd=prepared.repo, env=prepared.env, start_new_session=True
+            )
+        elif self.runner(command, prepared) != 0:
+            raise SandboxError(f"prepare for delivery {prepared.delivery.name!r} failed: {command}")
+
+
+def layout(config: Config, delivery: Delivery) -> Prepared:
+    """Wipe and recreate the delivery's sandbox (and consumer project, if any)."""
     kind = kind_of(delivery)
     root = fresh_dir(sandbox_root(config, delivery))
-    workdir = fresh_dir(root / "consumer") if kind.consumer else root
-    prepared = Prepared(delivery, kind, root, workdir, sandbox_env(delivery, root))
-    if delivery.prepare:
-        command = expand(delivery.prepare, config.repo, root)
-        if kind.background:
-            prepared.process = popen(
-                command, shell=True, cwd=config.repo, env=prepared.env, start_new_session=True
-            )
-        elif runner(command, config.repo, prepared.env) != 0:
-            raise SandboxError(f"prepare for delivery {delivery.name!r} failed: {command}")
-    return prepared
+    workdir = fresh_dir(root / "consumer") if kind.workdir is Workdir.CONSUMER else root
+    return Prepared(delivery, kind, config.repo, root, workdir, sandbox_env(delivery, root))
 
 
 def _rel(config: Config, path: Path) -> str:
@@ -197,19 +238,16 @@ def forbidden_roots(config: Config) -> list[str]:
     return sorted({r for r in map(literal_root, globs) if r})
 
 
-def proxy_scope(config: Config, prepared: Prepared, write: list[str]) -> Scope:
-    """Guard scope for a Customer Proxy step in ``prepared``."""
-    allow = prepared.kind.allowlist
-    if allow is not None and not allow:
-        allow = tuple(prepared.delivery.commands)
+def proxy_scope(config: Config, prepared: Prepared) -> Scope:
+    """Guard scope for a Customer Proxy step in ``prepared`` (sandbox writes only)."""
     return Scope(
         role="customer-proxy",
         repo=config.repo,
-        write=[*write, f"{_rel(config, prepared.root)}/**"],
+        write=[f"{_rel(config, prepared.root)}/**"],
         read=proxy_read_globs(config, prepared),
         cwd=prepared.workdir,
         bash_forbidden=forbidden_roots(config) or ["src"],
-        bash_allowed=list(allow) if allow is not None else None,
+        bash_allowed=prepared.bash_allowed(),
     )
 
 
@@ -220,20 +258,18 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
     the hook and glob layers do not depend on it.
     """
     repo = config.repo.resolve()
-    allowed = [str(prepared.root.resolve()), str(repo / ".team/stories")]
-    allowed.append(str(repo / config.team.docs_dir / "customer"))
-    deny_rules = [f"Read(/{repo}/{root}/**)" for root in forbidden_roots(config)]
     return {
         "sandbox": {
             "enabled": True,
             "autoAllowBashIfSandboxed": True,
             "allowUnsandboxedCommands": False,
-            "filesystem": {"denyRead": [str(repo)], "allowRead": allowed},
+            "filesystem": {"denyRead": [str(repo)], "allowRead": _allowed_reads(config, prepared)},
         },
-        "permissions": {"deny": deny_rules},
+        "permissions": {"deny": [f"Read(/{repo}/{r}/**)" for r in forbidden_roots(config)]},
     }
 
 
-def mcp_servers(prepared: Prepared) -> dict[str, Any]:
-    """Browser MCP for web deliveries; nothing otherwise."""
-    return {"playwright": dict(PLAYWRIGHT)} if prepared.kind.browser else {}
+def _allowed_reads(config: Config, prepared: Prepared) -> list[str]:
+    repo = config.repo.resolve()
+    customer_docs = repo / config.team.docs_dir / "customer"
+    return [str(prepared.root.resolve()), str(repo / ".team/stories"), str(customer_docs)]

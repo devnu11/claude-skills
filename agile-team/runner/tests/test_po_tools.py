@@ -4,7 +4,8 @@ import asyncio
 import json
 
 from agile_team import po_tools
-from agile_team.po_tools import Tools
+from agile_team.po_tools import Start, StartMode, Tools
+from agile_team.state import RunStatus
 
 from .conftest import FakeQuery
 
@@ -93,7 +94,7 @@ def test_mcp_server_and_names() -> None:
 def test_run_po_records_cost_and_session(make_runtime) -> None:
     q = FakeQuery("All done.", cost=0.5)
     rt = make_runtime(q)
-    result = asyncio.run(po_tools.run_po(rt, "Build a todo CLI"))
+    result = asyncio.run(po_tools.run_po(rt, Start("Build a todo CLI")))
     assert result.text == "All done."
     opts = q.calls[0]["options"]
     assert opts.model == "opus" and "team" in opts.mcp_servers
@@ -107,9 +108,9 @@ def test_run_po_resume_and_onboard(make_runtime) -> None:
     q = FakeQuery("ok")
     rt = make_runtime(q)
     rt.state.po_session = "old"
-    asyncio.run(po_tools.run_po(rt, "", resume=True))
+    asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
     assert q.calls[0]["options"].resume == "old"
     assert q.calls[0]["prompt"].startswith("Resume")
-    rt.state.status = "done"
-    asyncio.run(po_tools.run_po(rt, "t", onboard=True))
+    rt.state.status = RunStatus.DONE
+    asyncio.run(po_tools.run_po(rt, Start("t", StartMode.ONBOARD)))
     assert "onboarding sprint" in q.calls[1]["prompt"]

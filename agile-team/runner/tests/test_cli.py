@@ -1,12 +1,14 @@
 """CLI wiring for every subcommand."""
 
 import json
+from functools import partial
 from pathlib import Path
 
 import pytest
-from agile_team import cli
+from agile_team import cli, preflight
 from agile_team import config as cfg
-from agile_team.relay import Relay
+from agile_team.dispatch import StepRequest
+from agile_team.relay import Note, Relay
 from agile_team.state import PID_FILE, STOP_FILE
 
 from .conftest import FakeQuery
@@ -58,9 +60,14 @@ def test_config_missing(tmp_path: Path, capsys) -> None:
 def test_addendum_reaches_architect_prompt(configured: Path, key_home: Path) -> None:
     (configured / ".team/roles").mkdir(parents=True)
     (configured / ".team/roles/architect.md").write_text("Prefer hexagonal architecture.")
-    rt = cli.make_runtime(configured, key_home, FakeQuery())
-    plan = rt.plan("architect", "b", None)
+    rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
+    plan = rt.plan(StepRequest("architect", "b"))
     assert "Prefer hexagonal architecture." in plan.options.system_prompt
+
+
+def any_tool(monkeypatch) -> None:
+    """Pretend every toolchain executable is on PATH."""
+    monkeypatch.setattr(cli, "Preflight", partial(preflight.Preflight, which=lambda e: e))
 
 
 def start_args(repo: Path, home: Path, *extra: str):
@@ -70,7 +77,7 @@ def start_args(repo: Path, home: Path, *extra: str):
 
 
 def test_start_runs_po(configured: Path, key_home: Path, capsys, monkeypatch) -> None:
-    monkeypatch.setattr("agile_team.preflight.shutil.which", lambda e: e)
+    any_tool(monkeypatch)
     q = FakeQuery("PO finished")
     args = start_args(configured, key_home, "--task", "todo app", "--cadence", "until-blocker")
     assert cli.cmd_start(args, q) == 0
@@ -88,7 +95,7 @@ def test_start_refuses_dirty_tree(configured: Path, key_home: Path) -> None:
 
 
 def test_start_needs_task(configured: Path, key_home: Path, monkeypatch) -> None:
-    monkeypatch.setattr("agile_team.preflight.shutil.which", lambda e: e)
+    any_tool(monkeypatch)
     with pytest.raises(cli.CliError, match="--task"):
         cli.cmd_start(start_args(configured, key_home), FakeQuery())
 
@@ -102,7 +109,7 @@ def test_start_via_main_reports_missing_key(configured: Path, tmp_path: Path, ca
 
 def test_status_answer_stop(configured: Path, capsys) -> None:
     run_dir = configured / ".team/run"
-    Relay(run_dir).post("question", "DB?", ["s1"])
+    Relay(run_dir).post(Note("question", "DB?", ["s1"]))
     assert run("--repo", str(configured), "status") == 0
     status = json.loads(capsys.readouterr().out)
     assert status["open_questions"][0]["id"] == "m1" and not status["running"]
@@ -126,7 +133,7 @@ def test_keyboard_interrupt(monkeypatch, configured: Path) -> None:
     def boom(_args):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(cli, "cmd_status", boom)
+    monkeypatch.setattr(cli, "status_report", boom)
     assert run("--repo", str(configured), "status") == 130
 
 
@@ -150,5 +157,5 @@ def test_init_refuses_dirty_tree(repo: Path, capsys) -> None:
 
 
 def test_make_runtime_lists_secrets(configured: Path, key_home: Path) -> None:
-    rt = cli.make_runtime(configured, key_home, FakeQuery())
+    rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
     assert key_home / "secrets" in rt.secrets
