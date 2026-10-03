@@ -7,7 +7,7 @@
 
 set -eu
 
-REPO=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
