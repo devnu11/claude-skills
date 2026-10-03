@@ -7,7 +7,28 @@
 
 set -eu
 
-REPO=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+# Print where the symlink $1 points, as a path usable from the current
+# directory. readlink gives relative targets relative to the link itself.
+follow_link() {
+	target=$(readlink "$1")
+	case "$target" in
+		/*) printf '%s\n' "$target" ;;
+		*) printf '%s\n' "$(dirname -- "$1")/$target" ;;
+	esac
+}
+
+# Print the absolute directory holding the file at $1, after following any
+# chain of symlinks to it. Directory symlinks along the way are kept, matching
+# plain `pwd`. Avoids readlink -f, which older macOS lacks.
+real_dir() {
+	path=$1
+	while [ -L "$path" ]; do
+		path=$(follow_link "$path")
+	done
+	CDPATH='' cd -- "$(dirname -- "$path")" && pwd
+}
+
+REPO=$(real_dir "$0")
 DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
