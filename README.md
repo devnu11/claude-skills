@@ -19,6 +19,21 @@ The `name` in the frontmatter should match the directory name, and the
 `description` is what Claude matches against to decide whether a skill is
 relevant — write it as "use this when…", listing concrete trigger phrases.
 
+## Skills
+
+| Skill | What it does |
+|---|---|
+| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Scribe…) billed to the repo's own API key. The interactive session only relays the Product Owner's questions. Runner: [`agile-team/runner`](agile-team/runner) (Python Agent SDK, `uv`); protocol: [`reference/protocol.md`](agile-team/reference/protocol.md). |
+| [`example-skill`](example-skill/SKILL.md) | Template showing the file format. |
+
+`agile-team` needs [uv](https://docs.astral.sh/uv/) and an Anthropic API key
+(per repo in `.team/run/api-key`, or `~/secrets/anthropic-api-key`, mode 600).
+The runner installs its own dependencies on first use. Its tests:
+
+```sh
+cd agile-team/runner && uv run pytest --cov
+```
+
 ## Install
 
 Claude Code reads personal skills from `~/.claude/skills/<skill-name>/`. The

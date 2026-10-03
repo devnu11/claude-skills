@@ -1,0 +1,64 @@
+# Stack presets for `agile-team init`. DATA ONLY: add a stack by adding a table.
+#
+# markers   files whose presence selects the preset (first preset with a match wins)
+# delivery  likely delivery kind; [<name>.web] markers in package.json upgrade it to "web"
+# commands  test / coverage / lint / static; coverage must print a total percentage
+# globs     source / tests / e2e / ci, repo-relative, gitignore-style
+
+[python]
+markers = ["pyproject.toml", "setup.py", "setup.cfg"]
+delivery = "package"
+pragma = "# pragma: no cover"
+prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
+bin = ["venv/bin"]
+
+[python.commands]
+test = "uv run pytest"
+coverage = "uv run pytest --cov --cov-report=term"
+lint = "uv run ruff check ."
+static = "uv run ruff format --check ."
+
+[python.globs]
+source = ["src/**", "*.py", "!tests/**"]
+tests = ["tests/**", "!tests/e2e/**"]
+e2e = ["tests/e2e/**"]
+ci = [".github/workflows/**", "Makefile", "pyproject.toml", "uv.lock", "noxfile.py", "tox.ini"]
+
+[node]
+markers = ["package.json"]
+delivery = "package"
+web_dependencies = ["next", "react", "vue", "svelte", "@angular/core", "express", "vite", "astro"]
+pragma = "/* istanbul ignore next */"
+prepare = "npm pack --pack-destination {sandbox} && npm i -g --prefix {sandbox}/prefix {sandbox}/*.tgz"
+bin = ["prefix/bin"]
+
+[node.commands]
+test = "npm test --silent"
+coverage = "npx c8 --reporter=text-summary npm test --silent"
+lint = "npx eslint ."
+static = "npx tsc --noEmit"
+
+[node.globs]
+source = ["src/**", "lib/**", "!**/*.test.*", "!**/*.spec.*", "!e2e/**"]
+tests = ["**/*.test.*", "**/*.spec.*", "test/**", "!e2e/**"]
+e2e = ["e2e/**"]
+ci = [".github/workflows/**", "package.json", "package-lock.json", "tsconfig.json", "Makefile"]
+
+[rust]
+markers = ["Cargo.toml"]
+delivery = "package"
+pragma = "#[cfg_attr(coverage_nightly, coverage(off))]"
+prepare = "cargo install --path {repo} --root {sandbox}/prefix"
+bin = ["prefix/bin"]
+
+[rust.commands]
+test = "cargo test"
+coverage = "cargo llvm-cov --summary-only"
+lint = "cargo clippy -- -D warnings"
+static = "cargo fmt --check"
+
+[rust.globs]
+source = ["src/**", "!src/**/tests.rs"]
+tests = ["tests/**", "src/**/tests.rs", "!tests/e2e/**"]
+e2e = ["tests/e2e/**"]
+ci = [".github/workflows/**", "Cargo.toml", "Cargo.lock", "Makefile"]
