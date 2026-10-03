@@ -45,7 +45,14 @@ add_skill() {
 
 # Run install.sh against DEST. stdout goes to $WORK/out, stderr to $WORK/err.
 run_install() {
-	CLAUDE_SKILLS_DIR="$DEST" sh "$REPO/install.sh" "$@" >"$WORK/out" 2>"$WORK/err"
+	run_install_via "$REPO/install.sh" "$@"
+}
+
+# Like run_install, but runs the script at path $1 (e.g. a symlink to it).
+run_install_via() {
+	script=$1
+	shift
+	CLAUDE_SKILLS_DIR="$DEST" sh "$script" "$@" >"$WORK/out" 2>"$WORK/err"
 }
 
 # One line per entry in DEST: inode, name, and link target (or "-" for
@@ -181,6 +188,24 @@ test_leaves_foreign_entries_alone() {
 	run_install || fail "exit $?"
 	[ -d "$DEST/synced" ] || fail "synced/ removed"
 	[ -L "$DEST/foreign" ] || fail "foreign dangling link pruned"
+}
+
+test_runs_through_absolute_symlink() {
+	mkdir -p "$WORK/bin"
+	ln -s "$REPO/install.sh" "$WORK/bin/install-skills"
+	run_install_via "$WORK/bin/install-skills" || fail "exit $?"
+	assert_linked alpha
+	assert_linked beta
+	assert_contains "$WORK/out" "in $REPO ->"
+}
+
+test_runs_through_relative_symlink_chain() {
+	mkdir -p "$WORK/bin" "$WORK/lib"
+	ln -s ../repo/install.sh "$WORK/lib/install.sh"
+	ln -s ../lib/install.sh "$WORK/bin/install-skills"
+	run_install_via "$WORK/bin/install-skills" || fail "exit $?"
+	assert_linked alpha
+	assert_linked beta
 }
 
 # --- runner -------------------------------------------------------------
