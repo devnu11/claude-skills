@@ -27,6 +27,7 @@ from .git_ops import Git
 from .ledger import Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
 from .preflight import Preflight
+from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Relay, RelayError
 from .roles import ResolvedRole, RoleBook, RoleError, expand_globs
 
@@ -137,22 +138,25 @@ def check_config(config: config_mod.Config) -> list[str]:
     """Static config problems plus every role's resolution and glob expansion."""
     book = RoleBook.for_repo(config.repo, config.roles)
     known = config_mod.Known(book.names(), set(sandbox.DELIVERY_KINDS))
-    return config_mod.validate(config, known) + _role_problems(book, config.placeholders())
+    return config_mod.validate(config, known) + _role_problems(book, config)
 
 
-def _role_problems(book: RoleBook, values: dict[str, list[str]]) -> list[str]:
+def _role_problems(book: RoleBook, config: config_mod.Config) -> list[str]:
     problems = []
     for name in sorted(book.names()):
         try:
-            _expand_role(book.resolve(name), values)
+            _check_role(book.resolve(name), config)
         except RoleError as exc:
             problems.append(f"role {name}: {exc}")
     return problems
 
 
-def _expand_role(role: ResolvedRole, values: dict[str, list[str]]) -> None:
+def _check_role(role: ResolvedRole, config: config_mod.Config) -> None:
+    values = config.placeholders()
     expand_globs(role.write, values)
     expand_globs(role.read, values)
+    if role.provider not in {DEFAULT_PROVIDER, *config.providers}:
+        raise RoleError(f"unknown provider {role.provider!r}; add [providers.{role.provider}]")
 
 
 # ----- start ---------------------------------------------------------------

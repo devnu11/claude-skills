@@ -25,12 +25,23 @@ from typing import Any
 
 import yaml
 
+from .providers import DEFAULT as DEFAULT_PROVIDER
+
 BUILTIN_DIR = Path(__file__).parent / "roles"
 SHARED = "_shared"
 REPO_ROLES = ".team/roles"
 CHARTER = ".team/CLAUDE.md"
 BRIEFS = ".team/briefs"
-OVERRIDABLE = ("model", "effort", "tools", "write", "read", "enabled", "description")
+OVERRIDABLE = (
+    "model",
+    "effort",
+    "provider",
+    "tools",
+    "write",
+    "read",
+    "enabled",
+    "description",
+)
 FRONTMATTER_KEYS = frozenset({*OVERRIDABLE, "extends"})
 HANDOFF_STATUSES = ("done", "changes_requested", "blocked", "failed")
 RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate")
@@ -56,6 +67,7 @@ class RoleSpec:
     body: str = ""
     model: str | None = None
     effort: str | None = None
+    provider: str | None = None
     tools: list[str] | None = None
     write: list[str] | None = None
     read: list[str] | None = None
@@ -72,6 +84,7 @@ class ResolvedRole:
     body: str
     model: str
     effort: str
+    provider: str = DEFAULT_PROVIDER
     tools: list[str] = field(default_factory=list)
     write: list[str] = field(default_factory=list)
     read: list[str] = field(default_factory=list)
@@ -214,6 +227,7 @@ def _concrete(spec: RoleSpec) -> ResolvedRole:
         body=spec.body,
         model=spec.model,
         effort=spec.effort,
+        provider=spec.provider or DEFAULT_PROVIDER,
         tools=list(spec.tools or []),
         write=list(spec.write or []),
         read=list(spec.read or ["**"]),

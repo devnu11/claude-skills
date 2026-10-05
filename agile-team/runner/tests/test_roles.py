@@ -168,3 +168,11 @@ def test_enabled_names(tmp_path: Path) -> None:
     real = RoleBook.for_repo(tmp_path, {"integration-tester": {"enabled": False}})
     names = real.enabled_names()
     assert "integration-tester" not in names and "developer" in names
+
+
+def test_provider_defaults_and_overrides() -> None:
+    b = RoleBook(dict(BUILTIN), {}, {"child": {"provider": "local", "model": "qwen3-coder"}})
+    assert b.resolve("base").provider == "anthropic"
+    assert b.resolve("child").provider == "local"
+    assert b.resolve("child", {"provider": "anthropic", "model": "sonnet"}).provider == "anthropic"
+    assert roles.parse_role("x", "---\nprovider: local\n---\n").provider == "local"
