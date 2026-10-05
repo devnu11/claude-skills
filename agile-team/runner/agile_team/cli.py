@@ -28,6 +28,7 @@ from .ledger import Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
 from .preflight import Preflight
 from .providers import DEFAULT as DEFAULT_PROVIDER
+from .providers import Providers
 from .relay import Relay, RelayError
 from .roles import ResolvedRole, RoleBook, RoleError, expand_globs
 
@@ -183,6 +184,7 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         state=state_mod.load(config.run_dir),
         env=keys.child_env(keys.read_key(locations.resolve().path)),
         secrets=locations.secret_paths(),
+        providers=Providers(config.providers, os.environ),
         query_fn=query_fn,
         pipeline=make_pipeline(config),
     )

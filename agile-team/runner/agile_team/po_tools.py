@@ -224,7 +224,7 @@ class PoRun:
     async def run(self) -> StepResult:
         plan = po_plan(self.runtime, self.start)
         self._set_status(RunStatus.RUNNING)
-        result = await collect(self.runtime.query_fn, plan)
+        result = self.runtime.priced(plan, await collect(self.runtime.query_fn, plan))
         self.runtime.settle_po()
         self._record(plan.role.model, result)
         return result
