@@ -92,3 +92,23 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
     ]:
         assert needle in text, needle
     assert "dev-y" not in text
+
+
+def test_providers_load_and_validate(tmp_path: Path) -> None:
+    raw = {
+        "providers": {
+            "local": {"base_url": "http://localhost:11434", "extra": 1},
+            "anthropic": {"base_url": "https://x"},
+            "odd": {"base_url": "ftp://x", "kind": "codex", "billing": "maybe"},
+        },
+    }
+    c = cfg.from_raw(tmp_path, raw)
+    assert c.providers["local"].name == "local"
+    assert c.providers["local"].billing == "free"
+    problems = [p for p in cfg.validate(c, KNOWN) if p.startswith("providers.")]
+    assert problems == [
+        "providers.anthropic is built in; pick another name",
+        "providers.odd kind must be one of ('anthropic',)",
+        "providers.odd billing must be one of ('reported', 'free')",
+        "providers.odd base_url must be an http(s) URL",
+    ]

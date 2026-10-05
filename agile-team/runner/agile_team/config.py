@@ -14,6 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .providers import DEFAULT as DEFAULT_PROVIDER
+from .providers import Billing, Provider, ProviderKind
+
 CONFIG_NAME = ".agile-team.toml"
 TEAM_DIR = ".team"
 RUN_DIR = ".team/run"
@@ -91,6 +94,7 @@ class Config:
     gates: Gates = field(default_factory=Gates)
     deliveries: list[Delivery] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    providers: dict[str, Provider] = field(default_factory=dict)
 
     @property
     def run_dir(self) -> Path:
@@ -134,6 +138,7 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         gates=_gates(raw.get("gates", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
         roles=dict(raw.get("roles", {})),
+        providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
     )
 
 
@@ -162,6 +167,11 @@ def _gates(raw: dict[str, Any]) -> Gates:
 
 def _delivery(raw: dict[str, Any]) -> Delivery:
     return Delivery(**{k: v for k, v in raw.items() if k in Delivery.__dataclass_fields__})
+
+
+def _provider(name: str, raw: dict[str, Any]) -> Provider:
+    fields = {k: v for k, v in raw.items() if k in Provider.__dataclass_fields__}
+    return Provider(**{**fields, "name": name})
 
 
 @dataclass(frozen=True)
@@ -199,6 +209,12 @@ DELIVERY_RULES: tuple[Rule, ...] = (
     (lambda d: d.kind != "web" or bool(d.url), "(web) needs a url"),
     (lambda d: d.kind != "harness" or bool(d.commands), "(harness) needs commands"),
 )
+PROVIDER_RULES: tuple[Rule, ...] = (
+    (lambda p: p.name != DEFAULT_PROVIDER, "is built in; pick another name"),
+    (lambda p: p.kind in set(ProviderKind), f"kind must be one of {tuple(map(str, ProviderKind))}"),
+    (lambda p: p.billing in set(Billing), f"billing must be one of {tuple(map(str, Billing))}"),
+    (lambda p: p.base_url.startswith(("http://", "https://")), "base_url must be an http(s) URL"),
+)
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 REPEATED_DELIVERY = "delivery name {name!r} is repeated"
 MISSING_ROLE = "roles.{name} is unknown; set extends or add .team/roles/{name}.md"
@@ -218,7 +234,13 @@ def validate(config: Config, known: Known) -> list[str]:
         *broken(GATE_RULES, config.gates),
         *_validate_deliveries(config.deliveries, known.delivery_kinds),
         *_validate_roles(config.roles, known.roles),
+        *_validate_providers(config.providers),
     ]
+
+
+def _validate_providers(providers: dict[str, Provider]) -> list[str]:
+    problems = {p.name: broken(PROVIDER_RULES, p) for p in providers.values()}
+    return [f"providers.{name} {m}" for name, messages in problems.items() for m in messages]
 
 
 def _validate_deliveries(deliveries: list[Delivery], kinds: set[str]) -> list[str]:
