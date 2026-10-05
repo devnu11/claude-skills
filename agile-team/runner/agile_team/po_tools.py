@@ -18,6 +18,7 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .gates import StoryState
 from .ledger import Entry, budget_status
+from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .state import ModelOverride, RunStatus
 
@@ -118,7 +119,9 @@ class Tools:
     def _record_override(self, args: dict[str, Any]) -> None:
         """Store the override and queue it for the Manager's review."""
         state, role = self.runtime.state, args["role"]
-        state.overrides[role] = ModelOverride(args["model"], args["effort"], args["reason"])
+        state.overrides[role] = ModelOverride(
+            args["model"], args["effort"], args["reason"], args["provider"]
+        )
         state.unreviewed.append(role)
         state.manager_due.append(f"review model override for {role}")
         self.runtime.save()
@@ -126,6 +129,8 @@ class Tools:
     def _override_refusal(self, args: dict[str, Any]) -> str | None:
         if args["role"] not in self.runtime.book.names():
             return f"unknown role {args['role']!r}"
+        if args["provider"] not in self.runtime.providers.names():
+            return f"unknown provider {args['provider']!r}"
         return None if args.get("reason") else "a reason is required"
 
     async def story_status(self, _args: dict[str, Any]) -> dict[str, Any]:
@@ -160,8 +165,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "wait_for_answers": ("Wait for answers to question ids.", {"ids": list, "timeout_s": int}),
     "budget_status": ("Spend so far against the soft budget.", {}),
     "set_role_model": (
-        "Override a role's model/effort with a logged reason.",
-        {"role": str, "model": str, "effort": str, "reason": str},
+        "Override a role's provider/model/effort with a logged reason.",
+        {"role": str, "provider": str, "model": str, "effort": str, "reason": str},
     ),
     "story_status": ("Pipeline position of every story.", {}),
 }
@@ -190,11 +195,17 @@ def first_prompt(runtime: Runtime, start: Start) -> str:
     if resume_session(runtime, start):
         return "Resume the run from state."
     mode = StartMode.DELIVERY if start.mode is StartMode.RESUME else start.mode
-    roles = ", ".join(runtime.book.enabled_names())
+    roles = ", ".join(role_label(runtime, name) for name in runtime.book.enabled_names())
     return (
         f"Mode: {mode}\nCadence: {runtime.state.cadence}\nRoles available: {roles}\n\n"
         f"Task from the human:\n{start.task}"
     )
+
+
+def role_label(runtime: Runtime, name: str) -> str:
+    """``name``, plus its provider and model when it is not on Anthropic."""
+    role = runtime.resolve(name)
+    return name if role.provider == DEFAULT_PROVIDER else f"{name} ({role.provider}: {role.model})"
 
 
 def po_plan(runtime: Runtime, start: Start) -> Plan:

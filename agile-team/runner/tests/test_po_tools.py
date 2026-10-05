@@ -5,6 +5,7 @@ import json
 
 from agile_team import po_tools
 from agile_team.po_tools import Start, StartMode, Tools
+from agile_team.providers import Provider, Providers
 from agile_team.state import RunStatus
 
 from .conftest import FakeQuery
@@ -60,28 +61,29 @@ def test_wait_times_out(make_runtime) -> None:
     assert call(t.wait_for_answers({"ids": ["m1"], "timeout_s": 10})) == {}
 
 
+OVERRIDE = {
+    "role": "developer",
+    "provider": "anthropic",
+    "model": "opus",
+    "effort": "high",
+    "reason": "hard",
+}
+
+
 def test_budget_and_set_role_model(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
     assert call(t.budget({}))["budget_usd"] == 10.0
     assert (
-        call(t.set_role_model({"role": "x", "model": "m", "effort": "e", "reason": "r"}))["status"]
-        == "refused"
-    )
-    assert (
-        "reason"
-        in call(
-            t.set_role_model({"role": "developer", "model": "opus", "effort": "high", "reason": ""})
-        )["reason"]
-    )
-    assert (
         call(
             t.set_role_model(
-                {"role": "developer", "model": "opus", "effort": "high", "reason": "hard"}
+                {"role": "x", "provider": "anthropic", "model": "m", "effort": "e", "reason": "r"}
             )
         )["status"]
-        == "set"
+        == "refused"
     )
+    assert "reason" in call(t.set_role_model({**OVERRIDE, "reason": ""}))["reason"]
+    assert call(t.set_role_model(OVERRIDE))["status"] == "set"
     assert rt.state.overrides["developer"].model == "opus"
     assert "review model override for developer" in rt.state.manager_due
 
@@ -114,3 +116,15 @@ def test_run_po_resume_and_onboard(make_runtime) -> None:
     rt.state.status = RunStatus.DONE
     asyncio.run(po_tools.run_po(rt, Start("t", StartMode.ONBOARD)))
     assert "onboarding sprint" in q.calls[1]["prompt"]
+
+
+def test_set_role_model_moves_a_role_between_providers(make_runtime) -> None:
+    rt = make_runtime(providers=Providers({"local": Provider("local", "http://localhost:11434")}))
+    rt.book.config_roles["scribe"] = {"provider": "local", "model": "qwen3-coder"}
+    assert "scribe (local: qwen3-coder)" in po_tools.first_prompt(rt, Start("t"))
+    t = Tools(rt)
+    ghost = call(t.set_role_model({**OVERRIDE, "role": "scribe", "provider": "ghost"}))
+    assert ghost["reason"] == "unknown provider 'ghost'"
+    call(t.set_role_model({**OVERRIDE, "role": "scribe", "model": "sonnet"}))
+    assert rt.resolve("scribe").provider == "anthropic"
+    assert rt.resolve("scribe").model == "sonnet"

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .gates import StoryState, StoryStatus
+from .providers import DEFAULT as DEFAULT_PROVIDER
 
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
@@ -32,6 +33,7 @@ class ModelOverride:
     model: str
     effort: str
     reason: str
+    provider: str = DEFAULT_PROVIDER
 
 
 @dataclass
@@ -50,7 +52,7 @@ class RunState:
     def runtime_overrides(self, role: str) -> dict[str, Any]:
         """Fields from a PO model override for ``role``, if any."""
         o = self.overrides.get(role)
-        return {"model": o.model, "effort": o.effort} if o else {}
+        return {"model": o.model, "effort": o.effort, "provider": o.provider} if o else {}
 
     def halted(self) -> bool:
         """``done``/``blocked`` always halt; ``sprint-end`` halts only the sprint cadence."""
