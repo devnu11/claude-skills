@@ -23,7 +23,7 @@ relevant — write it as "use this when…", listing concrete trigger phrases.
 
 | Skill | What it does |
 |---|---|
-| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Scribe…) billed to the repo's own API key. The interactive session only relays the Product Owner's questions. Runner: [`agile-team/runner`](agile-team/runner) (Python Agent SDK, `uv`); protocol: [`reference/protocol.md`](agile-team/reference/protocol.md). |
+| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Scribe…) billed to the repo's own API key. Individual roles can run on a local or other Anthropic-compatible model. The interactive session only relays the Product Owner's questions. Runner: [`agile-team/runner`](agile-team/runner) (Python Agent SDK, `uv`); protocol: [`reference/protocol.md`](agile-team/reference/protocol.md). |
 | [`example-skill`](example-skill/SKILL.md) | Template showing the file format. |
 
 `agile-team` needs [uv](https://docs.astral.sh/uv/) and an Anthropic API key

@@ -32,7 +32,11 @@ command fails.
    ignored), docs dir, key file location (or fall back to
    `~/secrets/anthropic-api-key`), soft budget in USD, default cadence. Run
    `$AT init --preset … --delivery … [--url …] --docs-dir … --artifacts …
-   --key-file … --budget … --cadence …`. Then `$AT config check`. For a repo
+   --key-file … --budget … --cadence …`. Then ask whether any roles should run
+   on a local or other Anthropic-compatible model. If so, add
+   `[providers.<name>]` and `[roles.<role>]` `provider`/`model` to the config
+   (see "Providers" in the protocol) and commit it as
+   `chore(team): configure providers`. Then `$AT config check`. For a repo
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
    run until a blocker (`until-blocker`)?
