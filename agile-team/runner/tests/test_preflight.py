@@ -6,6 +6,7 @@ from pathlib import Path
 from agile_team import config as cfg
 from agile_team import preflight
 from agile_team.git_ops import Git
+from agile_team.providers import Provider
 
 
 def check(repo: Path, home: Path, which=lambda e: e) -> preflight.Preflight:
@@ -56,3 +57,30 @@ def test_toolchain_missing(configured: Path, key_home: Path) -> None:
 
 def test_run_all(configured: Path, key_home: Path) -> None:
     assert check(configured, key_home).run_all() == []
+
+
+def with_providers(repo: Path, home: Path, roles: dict) -> preflight.Preflight:
+    pf = check(repo, home)
+    pf.config.providers = {
+        "local": Provider("local", "http://localhost:11434"),
+        "proxy": Provider("proxy", "https://proxy.example", token_env="PROXY_TOKEN"),
+        "unused": Provider("unused", "http://down.example"),
+    }
+    pf.config.roles = roles
+    pf.probe = lambda url: url != "http://localhost:11434"
+    pf.environ = {}
+    return pf
+
+
+def test_providers_checked_only_when_a_role_uses_them(configured: Path, key_home: Path) -> None:
+    roles = {"scribe": {"provider": "local"}, "devops": {"provider": "proxy"}}
+    assert with_providers(configured, key_home, roles).providers() == [
+        "providers.local: nothing answers at http://localhost:11434",
+        "providers.proxy: $PROXY_TOKEN is not set",
+    ]
+    assert with_providers(configured, key_home, {}).providers() == []
+
+
+def test_providers_skip_a_broken_role(configured: Path, key_home: Path) -> None:
+    roles = {"ghost": {}}
+    assert with_providers(configured, key_home, roles).providers() == []
