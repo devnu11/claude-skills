@@ -14,5 +14,9 @@ def test_round_trip(tmp_path: Path) -> None:
     state.save(tmp_path / "run", st)
     back = state.load(tmp_path / "run")
     assert back.stories["s1"].rounds == 1
-    assert back.runtime_overrides("developer") == {"model": "opus", "effort": "high"}
+    assert back.runtime_overrides("developer") == {
+        "model": "opus",
+        "effort": "high",
+        "provider": "anthropic",
+    }
     assert back.runtime_overrides("architect") == {}

@@ -6,15 +6,18 @@ at once instead of stopping at the first.
 
 from __future__ import annotations
 
+import os
 import shlex
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import keys
 from .config import Config
 from .git_ops import Git
+from .providers import Probe, Provider, reachable
+from .roles import RoleBook, RoleError
 
 Which = Callable[[str], str | None]
 
@@ -33,10 +36,12 @@ class Preflight:
     git: Git
     home: Path
     which: Which = field(default=shutil.which)
+    probe: Probe = field(default=reachable)
+    environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
 
     def run_all(self) -> list[str]:
         """All preflight failures; empty means the run may start."""
-        return self.clean_tree() + self.key() + self.toolchain()
+        return self.clean_tree() + self.key() + self.toolchain() + self.providers()
 
     def clean_tree(self) -> list[str]:
         changed = self.git.changed_paths()
@@ -68,3 +73,24 @@ class Preflight:
             for name, exe in sorted(exes.items())
             if exe and self.which(exe) is None
         ]
+
+    def providers(self) -> list[str]:
+        """Every provider an enabled role uses has its token and answers at its URL."""
+        table = self.config.providers
+        used = [table[name] for name in sorted(self.used_providers()) if name in table]
+        return [failure for provider in used for failure in self.provider_problems(provider)]
+
+    def used_providers(self) -> set[str]:
+        book = RoleBook.for_repo(self.config.repo, self.config.roles)
+        try:
+            return {book.resolve(name).provider for name in book.enabled_names()}
+        except RoleError:
+            return set()  # `config check` reports the broken role
+
+    def provider_problems(self, provider: Provider) -> list[str]:
+        failures = []
+        if provider.token_env and not self.environ.get(provider.token_env):
+            failures.append(f"providers.{provider.name}: ${provider.token_env} is not set")
+        if not self.probe(provider.base_url):
+            failures.append(f"providers.{provider.name}: nothing answers at {provider.base_url}")
+        return failures

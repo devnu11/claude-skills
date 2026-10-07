@@ -8,6 +8,7 @@ import pytest
 from agile_team import cli, preflight
 from agile_team import config as cfg
 from agile_team.dispatch import StepRequest
+from agile_team.providers import Provider
 from agile_team.relay import Note, Relay
 from agile_team.state import PID_FILE, STOP_FILE
 
@@ -147,6 +148,14 @@ def test_check_config_flags_bad_glob(configured: Path) -> None:
     c = cfg.load(configured)
     c.roles["developer"] = {"write": ["{nope}"]}
     assert any("placeholder" in p for p in cli.check_config(c))
+
+
+def test_check_config_flags_unknown_provider(configured: Path) -> None:
+    c = cfg.load(configured)
+    c.roles["scribe"] = {"provider": "local"}
+    assert "role scribe: unknown provider 'local'; add [providers.local]" in cli.check_config(c)
+    c.providers["local"] = Provider("local", "http://localhost:11434")
+    assert cli.check_config(c) == []
 
 
 def test_init_refuses_dirty_tree(repo: Path, capsys) -> None:

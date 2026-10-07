@@ -9,6 +9,7 @@ from agile_team import dispatch, gates, sandbox
 from agile_team.config import Delivery
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus, Verdict
+from agile_team.providers import Provider, Providers
 from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
@@ -171,6 +172,35 @@ def test_customer_proxy_runs_in_sandbox(make_runtime, configured: Path) -> None:
     assert '"denyRead"' in opts.settings
     assert "How the customer reaches the product" in q.calls[0]["prompt"]
     assert report["gate"]["story_status"] is StoryStatus.DONE
+
+
+LOCAL = Providers({"local": Provider("local", "http://localhost:11434")})
+
+
+def local_runtime(make_runtime, q, role):
+    rt = make_runtime(q, providers=LOCAL)
+    rt.book.config_roles[role] = {"provider": "local", "model": "qwen3-coder"}
+    return rt
+
+
+def test_local_provider_role_uses_endpoint_and_costs_nothing(make_runtime) -> None:
+    q = FakeQuery(cost=0.7)
+    report = run(local_runtime(make_runtime, q, "scribe"), "scribe")
+    env = q.calls[0]["options"].env
+    assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
+    assert env["ANTHROPIC_API_KEY"] == ""
+    assert q.calls[0]["options"].model == "qwen3-coder"
+    assert report["cost_usd"] == 0
+
+
+def test_local_provider_reaches_the_customer_sandbox(make_runtime) -> None:
+    q = FakeQuery()
+    rt = local_runtime(make_runtime, q, "customer-proxy")
+    open_story(rt, "acceptance")
+    run(rt, "customer-proxy", story="s1")
+    env = q.calls[0]["options"].env
+    assert (env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_API_KEY"]) == ("http://localhost:11434", "")
+    assert "PATH" in env
 
 
 def test_customer_proxy_without_delivery(make_runtime) -> None:

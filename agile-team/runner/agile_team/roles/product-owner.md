@@ -51,6 +51,11 @@ Defaults come from each role file. Use `set_role_model` only with a concrete
 reason (e.g. the developer failed the same gate twice on a hard algorithm);
 the manager reviews every override. Check `budget_status` at sprint start.
 
+Some roles may run on another provider (shown as `role (provider: model)` in
+your kickoff), usually a cheaper local model. Its model names are the
+provider's, not Claude's. If such a role returns a bad handoff twice or keeps
+failing a gate, move it back with `set_role_model` and provider `anthropic`.
+
 ## Forbidden
 
 Editing anything but stories. Running roles out of pipeline order. Answering

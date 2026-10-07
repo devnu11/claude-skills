@@ -85,6 +85,15 @@ enabled = false                # disable a role
 model = "opus"                 # override any frontmatter field
 [roles.developer-embedded]
 extends = "developer"          # add a role without a file
+[roles.scribe]
+provider = "local"             # run on a [providers.*] endpoint (see Providers)
+model = "qwen3-coder"          # that provider's model name
+
+[providers.local]              # any name but "anthropic", which is built in
+base_url = "http://localhost:11434"
+kind = "anthropic"             # the only kind so far; see Providers
+token_env = ""                 # env var holding its token; empty sends a placeholder
+billing = "free"               # free (ledgered as 0) | reported (Claude-priced)
 ```
 
 Stories pick a delivery with `open_story(…, delivery="cli")`; the default is
@@ -98,6 +107,7 @@ Built-ins live in `runner/agile_team/roles/`. Frontmatter is data:
 name: unit-tester
 model: sonnet          # CLI alias: opus | sonnet | haiku, or a full model id
 effort: medium         # low | medium | high | xhigh | max
+provider: anthropic    # default; or a [providers.<name>] from the config
 tools: [Read, Grep, Glob, Write, Edit, Bash]
 write: ["{tests}"]     # !glob excludes; {placeholders} from [toolchain.globs]
 read: ["**"]
@@ -110,6 +120,41 @@ role's prompt; **with** frontmatter it replaces the built-in (or adds a role).
 
 System prompt order: `_shared` → role chain bodies → repo addendum →
 `.team/CLAUDE.md` → `.team/briefs/<role>.md` → file scope.
+
+## Providers
+
+A role's `provider` picks the endpoint its step talks to. Every provider so far
+has a **Claude front end**: the step still runs in Claude Code, with the same
+tools, guard hooks, sandbox and handoff, and only the model behind the
+Anthropic Messages API changes. Ollama, a LiteLLM proxy or any other
+Anthropic-compatible server works. For a provider other than `anthropic`, the
+step's environment gets:
+
+- `ANTHROPIC_BASE_URL` set to `base_url`;
+- `ANTHROPIC_AUTH_TOKEN` set from `token_env`;
+- `ANTHROPIC_API_KEY` blanked, so the project key never leaves for that endpoint;
+- Claude Code's default and subagent model variables pinned to the role's
+  `model`.
+
+`billing` controls the ledger. With `free`, the step is recorded at $0 and does
+not count towards the soft budget. With `reported`, the step keeps
+`total_cost_usd`, which Claude Code prices at Claude rates.
+
+Preflight probes `base_url` and checks `token_env` for every provider that an
+enabled role uses. The PO's kickoff lists each such role as
+`role (provider: model)`. `set_role_model` takes a provider, so the PO can move
+a struggling role back to `anthropic`.
+
+Which roles suit a local model: Scribe, Code Quality Czar and DevOps; Unit and
+Integration Tester are worth a try. Keep PO, Architect, Code Reviewer and
+Manager on Claude. Weak tool use mostly shows up as bad handoffs, which bounce
+and cost a PO turn.
+
+**Other vendors.** `kind` names the harness. Supporting another vendor's agent
+CLI (Codex, Gemini, …) would mean adding a `ProviderKind` and a dispatch path
+that runs that CLI in place of `query()`. That path would lose the PreToolUse
+guard and keep only the post-step diff audit and quarantine. Role files would
+not change.
 
 ## Handoff block
 

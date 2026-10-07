@@ -14,7 +14,7 @@ import json
 import subprocess
 import tomllib
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +40,7 @@ from .gates import (
 )
 from .git_ops import Git, GitError
 from .ledger import Budget, Entry, Ledger
+from .providers import Providers
 from .relay import Note, Relay
 from .roles import (
     Handoff,
@@ -228,6 +229,7 @@ class Runtime:
     pipeline: Pipeline
     prepare_fn: PrepareFn = field(default_factory=lambda: sandbox.Preparer().prepare)
     secrets: list[Path] = field(default_factory=list)
+    providers: Providers = field(default_factory=Providers)
 
     def save(self) -> None:
         state_mod.save(self.config.run_dir, self.state)
@@ -313,7 +315,7 @@ class Runtime:
         plan.prompt = self.user_prompt(plan)
         note = scope_note(plan.scope.write, plan.scope.read)
         plan.launch.system_prompt = self.book.system_prompt(plan.role, note)
-        plan.launch.env = plan.launch.env or self.env
+        plan.launch.env = {**(plan.launch.env or self.env), **self.providers.env_for(plan.role)}
         plan.launch.settings = with_secret_denials(plan.launch.settings, self.secrets)
         return plan
 
@@ -354,9 +356,14 @@ class Runtime:
 
     async def _execute(self, plan: Plan) -> StepResult:
         try:
-            return await collect(self.query_fn, plan)
+            result = await collect(self.query_fn, plan)
         finally:
             plan.stop()
+        return self.priced(plan, result)
+
+    def priced(self, plan: Plan, result: StepResult) -> StepResult:
+        """``result`` with the cost its role's provider bills."""
+        return replace(result, cost=self.providers.cost_of(plan.role, result.cost))
 
     def settle_po(self) -> dict[str, str | None]:
         """Commit the PO's own story edits so the next role starts on a clean tree."""
