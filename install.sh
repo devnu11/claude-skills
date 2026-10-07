@@ -1,9 +1,11 @@
 #!/bin/sh
 # Symlink every skill in this repo into ~/.claude/skills/.
 #
-# Only touches symlinks that point back into this repo: skills synced from the
-# Anthropic account (~/.claude/skills/synced/) and hand-made skill directories
-# are left alone.
+# Only ever removes symlinks, never files or directories: skills synced from
+# the Anthropic account (~/.claude/skills/synced/) and hand-made skill
+# directories are left alone. A symlink named like a skill here is repointed at
+# it, wherever it pointed before; every removal logs the old target, so a
+# replaced link can be recreated by hand.
 
 set -eu
 
@@ -57,7 +59,7 @@ for skill in "$REPO"/*/; do
 			printf 'ok       %s\n' "$name"
 			continue
 		fi
-		printf 'relink   %s\n' "$name"
+		printf 'relink   %s (was -> %s)\n' "$name" "$current"
 		run rm -f "$target"
 	elif [ -e "$target" ]; then
 		printf 'SKIP     %s (exists and is not a symlink)\n' "$name" >&2
@@ -77,7 +79,7 @@ for target in "$DEST"/*; do
 		*) continue ;;          # not ours; leave it
 	esac
 	[ -f "$dest/SKILL.md" ] && continue
-	printf 'prune    %s\n' "$(basename "$target")"
+	printf 'prune    %s (was -> %s)\n' "$(basename "$target")" "$dest"
 	run rm -f "$target"
 done
 
