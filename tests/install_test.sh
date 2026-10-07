@@ -153,7 +153,7 @@ test_relinks_link_pointing_elsewhere() {
 	ln -s "$WORK/old/alpha" "$DEST/alpha"
 	run_install || fail "exit $?"
 	assert_linked alpha
-	assert_contains "$WORK/out" 'relink   alpha'
+	assert_contains "$WORK/out" "relink   alpha (was -> $WORK/old/alpha)"
 }
 
 test_skips_real_directory_in_the_way() {
@@ -171,7 +171,7 @@ test_prunes_link_to_deleted_skill() {
 	run_install || fail "exit $?"
 	assert_absent beta
 	assert_linked alpha
-	assert_contains "$WORK/out" 'prune    beta'
+	assert_contains "$WORK/out" "prune    beta (was -> $REPO/beta)"
 }
 
 test_prunes_link_when_only_skill_md_is_gone() {

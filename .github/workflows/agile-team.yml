@@ -1,0 +1,31 @@
+name: agile-team runner
+
+on:
+  push:
+    branches: [main]
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml"]
+  pull_request:
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml"]
+
+defaults:
+  run:
+    working-directory: agile-team/runner
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --dev
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest --cov
