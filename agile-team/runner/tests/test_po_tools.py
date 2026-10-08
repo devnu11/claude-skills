@@ -21,6 +21,8 @@ def test_open_story_and_status(make_runtime) -> None:
     assert call(t.open_story({"id": "s1", "title": "Add"}))["status"] == "refused"
     status = call(t.story_status({}))
     assert status["stories"]["s1"]["delivery"] == "cli"
+    opened = t.runtime.events.events()
+    assert len(opened) == 1 and opened[0].data == {"title": "Add", "step": "design"}
     assert "developer" in status["roles"]
 
 
@@ -28,6 +30,7 @@ def test_start_sprint_requires_manager(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
     assert call(t.start_sprint({"goal": "MVP"}))["sprint"] == 1
+    assert rt.events.events()[0].data == {"sprint": 1, "goal": "MVP", "stories": []}
     assert "manager review due" in call(t.run_role({"role": "architect", "brief": "b"}))["reason"]
     assert call(t.run_role({"role": "manager", "brief": "b", "story": ""}))["status"] == "done"
     assert rt.state.manager_due == []
@@ -86,6 +89,7 @@ def test_budget_and_set_role_model(make_runtime) -> None:
     assert call(t.set_role_model(OVERRIDE))["status"] == "set"
     assert rt.state.overrides["developer"].model == "opus"
     assert "review model override for developer" in rt.state.manager_due
+    assert rt.events.events()[-1].data["reason"] == OVERRIDE["reason"]
 
 
 def test_mcp_server_and_names() -> None:

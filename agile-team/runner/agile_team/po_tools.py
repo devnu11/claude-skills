@@ -16,6 +16,7 @@ from typing import Any
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
+from .events import Event, EventKind
 from .gates import StoryState
 from .ledger import Entry, budget_status
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -69,6 +70,9 @@ class Tools:
         first = rt.pipeline.first()
         rt.state.stories[sid] = StoryState(sid, args["title"], first, delivery=args.get("delivery"))
         rt.save()
+        rt.events.emit(
+            Event(EventKind.STORY_OPENED, PO, sid, {"title": args["title"], "step": first})
+        )
         return text_result({"status": "opened", "step": first})
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -77,6 +81,8 @@ class Tools:
         state.status = RunStatus.RUNNING
         state.manager_due.append(f"sprint {state.sprint} start: {args.get('goal', '')}")
         self.runtime.save()
+        data = {"sprint": state.sprint, "goal": args.get("goal", ""), "stories": []}
+        self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
         return text_result({"sprint": state.sprint, "next": "run the manager"})
 
     async def ask_user(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -125,6 +131,7 @@ class Tools:
         state.unreviewed.append(role)
         state.manager_due.append(f"review model override for {role}")
         self.runtime.save()
+        self.runtime.events.emit(Event(EventKind.OVERRIDE, PO, None, dict(args)))
 
     def _override_refusal(self, args: dict[str, Any]) -> str | None:
         if args["role"] not in self.runtime.book.names():
