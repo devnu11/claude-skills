@@ -16,7 +16,7 @@ Run from the target repo root, or pass `--repo PATH`.
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). |
-| `status` | JSON: run status, stories and their pipeline step, open questions, spend. |
+| `status` | JSON: run status, current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner. |
 
@@ -205,6 +205,27 @@ A failed gate or `changes_requested` moves the story back and adds a round. At
 
 The Manager must also run after `start_sprint`, after any `set_role_model`,
 and when spend crosses each `manager_every_pct` checkpoint.
+
+## Backlog and sprints
+
+Each story in `state.json` has `sprint`: the number of the sprint it is
+committed to, or `null` when it is in the backlog.
+
+- `open_story` puts a story in the backlog.
+- `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
+  `N+1` with exactly the listed stories. Unfinished stories it does not list
+  go back to the backlog. Done stories never move; they keep the sprint they
+  finished in. It refuses an empty list or unknown ids (`unknown stories: s7;
+  open them with open_story first`) and changes nothing when it refuses.
+- The `sprint-start` event carries `{"sprint", "goal", "stories"}`.
+- `run_role` on a backlog story is refused: `story sN is in the backlog; add
+  it to a sprint`. The status refusals (done, blocked, round cap) come first.
+  `manager`, `scribe` and story-less steps are not affected.
+- A story is in at most one sprint. To carry it over or add it mid-sprint,
+  list it in the next `start_sprint`, which queues the Manager again.
+- `state.json` from before backlogs existed loads every story into the
+  backlog. Step, rounds, status and commit are kept. On resume, the PO starts
+  a sprint with the stories to continue.
 
 ## Enforcement
 

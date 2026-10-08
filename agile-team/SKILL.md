@@ -53,7 +53,8 @@ command fails.
    to the human verbatim, with a one-line summary above it. For `question`
    entries, include the id.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`.
-8. When the runner exits, show `$AT status` (stories, spend) and the new
+8. When the runner exits, show `$AT status` (stories with their sprint, where
+   `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
    intentional; do not squash them unless the human asks.
 
