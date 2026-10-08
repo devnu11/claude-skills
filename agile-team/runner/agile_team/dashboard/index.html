@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agile-team dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f0efec;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+  --accent: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --good-ink: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+    --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --good-ink: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+  --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --good-ink: #0ca30c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button { font: inherit; color: inherit; }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+
+/* header */
+header { border-bottom: 1px solid var(--border); background: var(--surface); }
+.head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 14px 0 10px; }
+.brand { font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
+.brand small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.task { flex: 1 1 320px; color: var(--ink-2); min-width: 0; }
+.head-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.meter { min-width: 220px; }
+.meter-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.meter-top b { color: var(--ink); font-weight: 600; }
+.meter-bar { position: relative; height: 6px; background: var(--surface-2); border-radius: 3px; margin-top: 4px; }
+.meter-fill { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 3px; }
+.meter-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--surface); }
+.status-row { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; align-items: center; }
+
+/* pills */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; white-space: nowrap; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--ink);
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.tone-good { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.tone-good .dot, .tone-good .ico { background: var(--good); color: var(--good); }
+.tone-warning { background: color-mix(in srgb, var(--warning) 20%, var(--surface)); }
+.tone-warning .dot { background: var(--warning); }
+.tone-serious { background: color-mix(in srgb, var(--serious) 18%, var(--surface)); }
+.tone-serious .dot { background: var(--serious); }
+.tone-critical { background: color-mix(in srgb, var(--critical) 16%, var(--surface)); }
+.tone-critical .dot { background: var(--critical); }
+.tone-accent { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.tone-accent .dot { background: var(--accent); }
+.live .dot { animation: blink 2s infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+.ctl { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.ctl:hover { background: var(--surface-2); }
+
+/* tabs */
+nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav button {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 9px 12px 8px;
+  cursor: pointer; color: var(--ink-2); font-weight: 500; white-space: nowrap;
+}
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+nav .count { margin-left: 6px; font-size: 11.5px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+nav .count.hot { background: color-mix(in srgb, var(--warning) 30%, var(--surface)); color: var(--ink); }
+main.wrap { padding-top: 18px; padding-bottom: 40px; }
+section[hidden] { display: none; }
+
+/* cards & layout */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card h2 { font-size: 13.5px; font-weight: 600; margin: 0 0 2px; }
+.card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+.grid-flow { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.stack { display: grid; gap: 16px; }
+@media (max-width: 1000px) { .grid-flow, .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* flow */
+#flow { overflow-x: auto; }
+.flow svg { width: 100%; min-width: 640px; height: auto; display: block; }
+.node rect.box { fill: var(--surface); stroke: var(--axis); stroke-width: 1; }
+.node.idle rect.box { stroke: var(--grid); }
+.node.idle text { opacity: .55; }
+.node.active rect.box { stroke: var(--accent); stroke-width: 2; }
+.node text.name { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.node text.meta { font-size: 11px; fill: var(--muted); }
+.node text.flag { font-size: 11px; font-weight: 600; fill: var(--ink); }
+.halo { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .5; animation: halo 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes halo { from { transform: scale(1); opacity: .55; } to { transform: scale(1.18, 1.5); opacity: 0; } }
+.edge { fill: none; stroke-linecap: round; }
+.edge.brief { stroke: var(--ink-2); opacity: .45; }
+.edge.hand { stroke: var(--s1); opacity: .75; }
+.edge.human { stroke: var(--s2); opacity: .8; }
+.edge.zero { opacity: .12; stroke-dasharray: 0; }
+.pulse { fill: var(--accent); }
+.pulse.back { fill: var(--s1); }
+.pulse.human { fill: var(--s2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+
+/* timeline */
+.tl-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
+.timeline { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow-y: auto; }
+.timeline li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
+.timeline li.new { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } }
+.timeline time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.lane { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12.5px; }
+.who { font-weight: 600; }
+.arrow { color: var(--muted); }
+.story-chip { font-size: 11.5px; padding: 0 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+.tl-body { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; white-space: pre-line; }
+.tl-meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+
+/* board */
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.col { background: var(--surface-2); border-radius: 10px; padding: 8px; min-height: 160px; }
+.col h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); margin: 2px 4px 8px; display: flex; justify-content: space-between; }
+.col h3 span { color: var(--muted); font-weight: 500; }
+.col.backlog { background: transparent; border: 1px dashed var(--axis); }
+.story { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; }
+.story.working { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.story .sid { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.story .title { font-weight: 550; margin: 1px 0 6px; }
+.story .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.rounds { display: inline-flex; gap: 3px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.rounds i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--axis); }
+.rounds i.on { background: var(--serious); border-color: var(--serious); }
+.req-chip { font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--ink-2); }
+
+/* stats */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile .label { font-size: 12px; color: var(--ink-2); }
+.tile .value { font-size: 26px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; }
+.tile .note { font-size: 12px; color: var(--muted); }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart text.ink { fill: var(--ink); font-weight: 600; }
+.chart text.ink2 { fill: var(--ink-2); }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .budget { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 4 3; }
+.chart .line { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; }
+.chart .cross { stroke: var(--axis); stroke-width: 1; }
+.chart .hit { fill: transparent; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll-x { overflow-x: auto; }
+details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; margin-top: 10px; }
+.tip {
+  position: fixed; pointer-events: none; z-index: 10; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 300px; display: none;
+}
+.tip b { font-weight: 600; }
+.tip .k { color: var(--muted); }
+
+/* questions */
+.q { border-top: 1px solid var(--grid); padding: 12px 0; }
+.q:first-of-type { border-top: 0; padding-top: 4px; }
+.q-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.q-text { margin: 6px 0; font-size: 14px; }
+.q-cmd { display: flex; gap: 6px; align-items: center; }
+.q-cmd code { background: var(--surface-2); padding: 3px 7px; border-radius: 5px; overflow-x: auto; white-space: nowrap; max-width: 100%; }
+.empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
+/* requirements */
+.matrix th.req { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 600; white-space: nowrap; padding: 6px 4px; text-align: left; }
+.matrix td.cell { text-align: center; width: 34px; }
+.matrix .mark { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--s1); }
+.matrix tr.story-row td { background: var(--surface-2); font-weight: 600; font-size: 12px; }
+.req { border-top: 1px solid var(--grid); padding: 12px 0; }
+.req:first-of-type { border-top: 0; padding-top: 2px; }
+.req-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.req-head .id { font-weight: 650; }
+.req-text { color: var(--ink-2); margin: 4px 0 6px; }
+.hist { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--grid); font-size: 12.5px; }
+.hist li { margin: 4px 0; }
+.hist .when { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .halo, .live .dot, .timeline li.new { animation: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">agile-team<small id="sprint-label"></small></div>
+      <div class="task" id="task"></div>
+      <div class="head-right">
+        <div class="meter" id="meter"></div>
+        <button class="ctl" id="theme" title="Theme">◐</button>
+      </div>
+    </div>
+    <div class="status-row" id="status-row"></div>
+    <nav role="tablist" id="tabs"></nav>
+  </div>
+</header>
+<main class="wrap">
+  <section id="tab-flow">
+    <div class="grid-flow">
+      <div class="card flow">
+        <h2>Information flow</h2>
+        <p class="sub">Briefs from the Product Owner, handoffs back, and questions to you. Line weight is message count.</p>
+        <div id="flow"></div>
+        <div class="legend">
+          <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
+          <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
+          <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
+          <span><i style="background:var(--accent);height:10px;width:10px;border-radius:50%"></i>message in flight</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Activity</h2>
+        <div class="tl-tools"><select id="tl-filter" aria-label="Filter by story"></select></div>
+        <ol class="timeline" id="timeline"></ol>
+      </div>
+    </div>
+  </section>
+  <section id="tab-board" hidden>
+    <div class="board" id="board"></div>
+  </section>
+  <section id="tab-tokens" hidden>
+    <div class="stack">
+      <div class="tiles" id="tiles"></div>
+      <div class="grid-2">
+        <div class="card chart"><h2>Spend over time</h2><p class="sub">Gridlines are the Manager's budget checkpoints.</p><div id="spend"></div></div>
+        <div class="card chart"><h2>Tokens by role</h2><div class="legend" id="mix-legend" style="margin:0 0 8px"></div><div id="mix"></div></div>
+      </div>
+      <div class="card">
+        <h2>By role</h2>
+        <div class="scroll-x" id="role-table"></div>
+        <details><summary>By story</summary><div class="scroll-x" id="story-table"></div></details>
+      </div>
+    </div>
+  </section>
+  <section id="tab-questions" hidden>
+    <div class="grid-2">
+      <div class="card"><h2>Waiting on you</h2><p class="sub">Questions the Product Owner asked. Each blocks only the stories it names.</p><div id="q-open"></div></div>
+      <div class="card"><h2>Raised in role handoffs</h2><p class="sub">Open questions roles reported to the PO. The PO decides which reach you.</p><div id="q-raised"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><details><summary id="q-done-summary">Answered</summary><div id="q-done"></div></details></div>
+  </section>
+  <section id="tab-requirements" hidden>
+    <div class="stack">
+      <div class="tiles" id="req-tiles"></div>
+      <div class="card"><h2>Traceability</h2><p class="sub">Every acceptance criterion must be covered by an active requirement before a story leaves design.</p><div class="scroll-x" id="matrix"></div></div>
+      <div class="card"><h2>Requirements</h2><div id="reqs"></div></div>
+    </div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+"use strict";
+
+// ----- constants ------------------------------------------------------------
+
+const PO = "product-owner";
+const TABS = [
+  ["flow", "Flow"], ["board", "Board"], ["tokens", "Tokens"],
+  ["questions", "Questions"], ["requirements", "Requirements"],
+];
+const RING_ORDER = [
+  "architect", "unit-tester", "developer", "quality-czar", "code-reviewer",
+  "integration-tester", "customer-proxy", "devops", "scribe", "manager",
+];
+const STATUS_TONE = {
+  done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
+  pass: "good", bounce: "serious", hold: "warning",
+  running: "accent", idle: "", "sprint-end": "good", active: "",
+  needs_manager: "serious",
+};
+const TOKEN_KINDS = [
+  ["input", "Input", "--s1"], ["output", "Output", "--s2"],
+  ["cache_creation", "Cache write", "--s3"], ["cache_read", "Cache read", "--s4"],
+];
+const PARAMS = new URLSearchParams(location.search);
+const MOCK = PARAMS.has("mock") || location.protocol === "file:";
+
+// ----- helpers --------------------------------------------------------------
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const sum = (xs, f = (x) => x) => xs.reduce((a, x) => a + f(x), 0);
+const sumTok = (t) => t ? t.input + t.output + t.cache_read + t.cache_creation : 0;
+const fmt = {
+  usd: (n) => "$" + n.toFixed(2),
+  tok: (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n),
+  pct: (n) => Math.round(n) + "%",
+  time: (at) => new Date(at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+  ago(at, now) {
+    const s = Math.max(0, now - at);
+    if (s < 60) return "just now";
+    return s < 3600 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
+  },
+};
+const pill = (text, tone = "", dot = true) =>
+  `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
+const storyChip = (id) => id ? `<span class="story-chip">${esc(id)}</span>` : "";
+const short = (role) => role === PO ? "PO" : role;
+
+// ----- derived model ----------------------------------------------------------
+
+/** The snapshot as it stood at `cursor` (mock replay); the live snapshot as is. */
+function asOf(snap, cursor) {
+  if (cursor === Infinity) return snap;
+  const upto = (x) => x.at <= cursor;
+  const events = snap.events.filter(upto);
+  const stories = replayStories(snap.stories, events);
+  const capped = stories.filter((s) => s.status === "needs_manager");
+  return {
+    ...snap, generated_at: cursor, events, stories,
+    run: { ...snap.run, sprint: stories.some((s) => s.sprint) ? 1 : 0,
+           manager_due: capped.map((s) => `story ${s.id} hit the round cap`) },
+    ledger: snap.ledger.filter(upto),
+    messages: snap.messages.filter(upto),
+    answers: snap.answers.filter(upto),
+    requirements: snap.requirements
+      .map((r) => ({ ...r, history: r.history.filter(upto) }))
+      .filter((r) => r.history.length),
+  };
+}
+
+function replayStories(stories, events) {
+  const sprint = events.find((e) => e.kind === "sprint-start");
+  const members = new Set(sprint ? sprint.data.stories : []);
+  const pos = {};
+  for (const e of events) {
+    if (e.kind === "story-opened") pos[e.story] = { step: e.data.step, status: "active", rounds: 0 };
+    if (e.kind === "gate" && pos[e.story]) {
+      Object.assign(pos[e.story], { step: e.data.now_at, status: e.data.story_status, rounds: e.data.rounds });
+    }
+  }
+  return stories.filter((s) => pos[s.id])
+    .map((s) => ({ ...s, ...pos[s.id], sprint: members.has(s.id) ? sprint.data.sprint : null }));
+}
+
+/** The step that has started but not yet handed off, if any. */
+function activeStep(events) {
+  const open = new Map();
+  for (const e of events) {
+    const key = e.role + "|" + (e.story ?? "");
+    if (e.kind === "step-start") open.set(key, e);
+    if (e.kind === "step-end") open.delete(key);
+  }
+  return [...open.values()].pop() ?? null;
+}
+
+/** Per-role message counts, bounces and tokens for the flow diagram. */
+function flowStats(view) {
+  const roles = {};
+  const r = (n) => (roles[n] ??= { briefs: 0, handoffs: 0, bounced: 0, stuck: 0, tokens: 0 });
+  let lastEnd = null;
+  for (const e of view.events) {
+    if (e.kind === "step-start") r(e.role).briefs++;
+    if (e.kind === "step-end") {
+      lastEnd = e;
+      r(e.role).handoffs++;
+      if (e.data.status === "blocked" || e.data.status === "failed") r(e.role).stuck++;
+    }
+    if (e.kind === "gate" && e.data.verdict === "bounce" && lastEnd) r(lastEnd.role).bounced++;
+  }
+  for (const l of view.ledger) r(l.role).tokens += sumTok(l.tokens);
+  return roles;
+}
+
+function openQuestions(view) {
+  const answered = new Set(view.answers.map((a) => a.id));
+  return view.messages.filter((m) => m.kind === "question" && !answered.has(m.id));
+}
+
+function raisedQuestions(view) {
+  return view.events
+    .filter((e) => e.kind === "step-end" && e.data.open_questions?.length)
+    .flatMap((e) => e.data.open_questions.map((text) => ({ text, role: e.role, story: e.story, at: e.at })));
+}
+
+/** Each acceptance criterion with the active requirements that cover it. */
+function coverage(view) {
+  const by = {};
+  for (const r of view.requirements) {
+    if (r.status !== "active") continue;
+    for (const ref of r.covers) (by[ref] ??= []).push(r.id);
+  }
+  return view.stories.flatMap((s) => s.acceptance.map((ac) =>
+    ({ story: s, ac, reqs: by[`${s.id}/${ac.id}`] ?? [] })));
+}
+
+/** How serious an uncovered criterion is, given where its story stands. */
+function gapTone(view, story) {
+  if (!story.sprint) return "";
+  const pastDesign = story.status === "done" || view.pipeline.indexOf(story.step) > 0;
+  return pastDesign ? "serious" : "warning";
+}
+
+const roleInfo = (view, name) =>
+  view.roles.find((r) => r.name === name) ?? { name, model: "?", provider: "anthropic" };
+
+// ----- header -----------------------------------------------------------------
+
+function renderHeader(view) {
+  $("#sprint-label").textContent = view.run.sprint ? ` · sprint ${view.run.sprint}` : " · backlog";
+  $("#task").textContent = view.run.task;
+  renderMeter(view);
+  renderStatusRow(view);
+  renderTabs(view);
+}
+
+function renderMeter(view) {
+  const spent = sum(view.ledger, (l) => l.cost_usd), budget = view.run.budget_usd;
+  const pct = budget ? Math.min(100, (100 * spent) / budget) : 0;
+  const ticks = [];
+  for (let p = view.run.manager_every_pct; p < 100; p += view.run.manager_every_pct) {
+    ticks.push(`<span class="meter-tick" style="left:${p}%"></span>`);
+  }
+  $("#meter").innerHTML = `
+    <div class="meter-top"><span><b>${fmt.usd(spent)}</b> of ${fmt.usd(budget)}</span><span>${fmt.pct(pct)}</span></div>
+    <div class="meter-bar" title="Ticks mark Manager budget checkpoints">
+      <span class="meter-fill" style="width:${pct}%"></span>${ticks.join("")}</div>`;
+}
+
+function renderStatusRow(view) {
+  const act = activeStep(view.events), now = view.generated_at;
+  const parts = [connectionPill(), pill(view.run.status, STATUS_TONE[view.run.status] ?? "")];
+  if (act) parts.push(pill(`▶ ${short(act.role)}${act.story ? " on " + act.story : ""} · ${fmt.ago(act.at, now)}`, "accent"));
+  const open = openQuestions(view).length;
+  if (open) parts.push(pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning"));
+  for (const why of view.run.manager_due ?? []) parts.push(pill(`⚑ manager due: ${why}`, "serious"));
+  if (MOCK) parts.push(mockControls());
+  $("#status-row").innerHTML = parts.join("");
+}
+
+function renderTabs(view) {
+  const counts = {
+    questions: [openQuestions(view).length, true],
+    requirements: [coverage(view).filter((c) => !c.reqs.length && c.story.sprint).length, true],
+    board: [view.stories.length, false],
+  };
+  $("#tabs").innerHTML = TABS.map(([id, label]) => {
+    const [n, hot] = counts[id] ?? [0, false];
+    const badge = n ? `<span class="count ${hot ? "hot" : ""}">${n}</span>` : "";
+    return `<button role="tab" data-tab="${id}" aria-selected="${id === ui.tab}">${label}${badge}</button>`;
+  }).join("");
+}
+
+// ----- flow -------------------------------------------------------------------
+
+const FLOW = { w: 820, h: 560, po: { x: 410, y: 300 }, human: { x: 410, y: 44 }, node: { w: 156, h: 46 } };
+
+function ringRoles(view) {
+  const rank = (n) => {
+    const i = RING_ORDER.findIndex((p) => n === p || n.startsWith(p + "-"));
+    return i < 0 ? RING_ORDER.length : i;
+  };
+  return view.roles.map((r) => r.name).filter((n) => n !== PO).sort((a, b) => rank(a) - rank(b));
+}
+
+function ringPositions(names) {
+  const a0 = -38, a1 = 218, n = Math.max(2, names.length);
+  return Object.fromEntries(names.map((name, i) => {
+    const a = ((a0 + ((a1 - a0) * i) / (n - 1)) * Math.PI) / 180;
+    return [name, { x: FLOW.po.x + 320 * Math.cos(a), y: FLOW.po.y + 205 * Math.sin(a) }];
+  }));
+}
+
+/** A gently curved path from box `a` to box `b`, trimmed to their edges. */
+function edgePath(a, b, bend) {
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+  const trim = (pad) => Math.min((FLOW.node.w / 2 + pad) / Math.abs(ux || 1e-9), (FLOW.node.h / 2 + pad) / Math.abs(uy || 1e-9));
+  const s = { x: a.x + ux * trim(2), y: a.y + uy * trim(2) };
+  const e = { x: b.x - ux * trim(6), y: b.y - uy * trim(6) };
+  const c = { x: (s.x + e.x) / 2 - uy * bend, y: (s.y + e.y) / 2 + ux * bend };
+  return `M${s.x.toFixed(1)},${s.y.toFixed(1)} Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${e.x.toFixed(1)},${e.y.toFixed(1)}`;
+}
+
+const weight = (n, max) => n ? 1.2 + 4 * Math.sqrt(n / Math.max(1, max)) : 1;
+
+function flowEdges(view, stats, pos) {
+  const max = Math.max(1, ...Object.values(stats).map((s) => s.briefs));
+  const edge = (id, cls, d, n, label) =>
+    `<path id="${id}" class="edge ${cls} ${n ? "" : "zero"}" d="${d}" stroke-width="${weight(n, max)}"
+       marker-end="url(#arrow-${cls})"><title>${esc(label)}</title></path>`;
+  const roleEdges = Object.entries(pos).flatMap(([name, p]) => {
+    const s = stats[name] ?? { briefs: 0, handoffs: 0 };
+    return [
+      edge(`p-brief-${name}`, "brief", edgePath(FLOW.po, p, 14), s.briefs, `${s.briefs} briefs to ${name}`),
+      edge(`p-hand-${name}`, "hand", edgePath(p, FLOW.po, 14), s.handoffs, `${s.handoffs} handoffs from ${name}`),
+    ];
+  });
+  const asked = view.messages.length, answered = view.answers.length;
+  return [
+    ...roleEdges,
+    edge("p-ask", "human", edgePath(FLOW.po, FLOW.human, 14), asked, `${asked} messages to you`),
+    edge("p-answer", "human", edgePath(FLOW.human, FLOW.po, 14), answered, `${answered} answers from you`),
+  ].join("");
+}
+
+function flowNode({ x, y }, lines, cls, title) {
+  const { w, h } = FLOW.node;
+  const halo = cls.includes("active") ? `<rect class="halo" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="9"/>` : "";
+  const [name, meta, flag] = lines;
+  return `<g class="node ${cls}"><title>${esc(title)}</title>${halo}
+    <rect class="box" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="9"/>
+    <text class="name" x="${x}" y="${y - 4}" text-anchor="middle">${esc(name)}</text>
+    <text class="${flag ? "flag" : "meta"}" x="${x}" y="${y + 13}" text-anchor="middle">${esc(flag || meta)}</text></g>`;
+}
+
+function roleNode(view, name, p, stats, act) {
+  const s = stats[name], info = roleInfo(view, name);
+  const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
+  const meta = s ? `${info.model}${local} · ${fmt.tok(s.tokens)}` : `${info.model}${local}`;
+  const flag = s?.bounced ? `↩ ${s.bounced} bounced · ${s.handoffs} handoffs` : "";
+  const cls = act?.role === name ? "active" : s ? "" : "idle";
+  const title = s
+    ? `${name} (${info.provider}: ${info.model})\n${s.briefs} briefs, ${s.handoffs} handoffs, ${s.bounced} bounced, ${s.stuck} blocked/failed\n${fmt.tok(s.tokens)} tokens`
+    : `${name}: not run yet`;
+  return flowNode(p, [name, meta, flag], cls, title);
+}
+
+function renderFlow(view) {
+  const stats = flowStats(view), act = activeStep(view.events);
+  const pos = ringPositions(ringRoles(view));
+  const open = openQuestions(view).length;
+  const poTok = stats[PO]?.tokens ?? 0;
+  const nodes = [
+    flowNode(FLOW.po, ["Product Owner", `${roleInfo(view, PO).model} · ${fmt.tok(poTok)}`], act ? "" : "active", "Orchestrates every step"),
+    flowNode(FLOW.human, ["You (via liaison)", "", open ? `? ${open} waiting on you` : "no open questions"], "", "The human"),
+    ...Object.entries(pos).map(([n, p]) => roleNode(view, n, p, stats, act)),
+  ];
+  const marker = (cls, color) => `<marker id="arrow-${cls}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${color}"/></marker>`;
+  $("#flow").innerHTML = `<svg viewBox="0 0 ${FLOW.w} ${FLOW.h}" role="img" aria-label="Messages between the Product Owner, the roles and you">
+    <defs>${marker("brief", "var(--ink-2)")}${marker("hand", "var(--s1)")}${marker("human", "var(--s2)")}</defs>
+    <g>${flowEdges(view, stats, pos)}</g><g>${nodes.join("")}</g><g id="pulses"></g></svg>`;
+}
+
+const PULSE_PATH = {
+  "step-start": (e) => [`p-brief-${e.role}`, ""],
+  "step-end": (e) => [`p-hand-${e.role}`, "back"],
+  message: () => ["p-ask", "human"],
+  answer: () => ["p-answer", "human"],
+};
+
+/** Send a dot along the edge each new event travelled. */
+function pulse(events) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const layer = document.getElementById("pulses");
+  for (const e of events.slice(-4)) {
+    const [id, cls] = PULSE_PATH[e.kind]?.(e) ?? [];
+    if (!id || !document.getElementById(id)) continue;
+    layer.insertAdjacentHTML("beforeend",
+      `<circle class="pulse ${cls}" r="5"><animateMotion dur="0.9s" fill="freeze" begin="indefinite"><mpath href="#${id}"/></animateMotion></circle>`);
+    const dot = layer.lastElementChild;
+    dot.firstElementChild.beginElement();
+    setTimeout(() => dot.remove(), 1000);
+  }
+}
+
+// ----- timeline ---------------------------------------------------------------
+
+const TIMELINE = {
+  "step-start": (e) => ({ from: PO, to: e.role, what: "brief", body: e.data.brief }),
+  "step-end": (e) => ({
+    from: e.role, to: PO, what: e.data.status.replace("_", " "), tone: STATUS_TONE[e.data.status],
+    body: e.data.summary, meta: `${fmt.tok(sumTok(e.data.tokens))} tokens · ${fmt.usd(e.data.cost_usd)} · ${e.data.commit}`,
+  }),
+  gate: (e) => ({
+    from: "gate", to: null, what: `${e.data.step} → ${e.data.verdict === "bounce" ? "back to " : ""}${e.data.now_at}`,
+    tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
+    meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
+  }),
+  message: (e, ctx) => {
+    const m = ctx.messages[e.data.message];
+    return { from: PO, to: "you", what: `${m.kind} ${m.id}`, tone: m.kind === "question" ? "warning" : "", body: m.text };
+  },
+  answer: (e, ctx) => ({ from: "you", to: PO, what: `answer ${e.data.message}`, tone: "good", body: ctx.answers[e.data.message]?.text }),
+  "requirement-changed": (e) => ({
+    from: e.role, to: "requirements", what: `${e.data.id} ${e.data.change}`, tone: e.data.change === "added" ? "" : "serious",
+    body: e.data.reason, meta: e.data.affected_done_stories?.length ? `affects done: ${e.data.affected_done_stories.join(", ")}` : "",
+  }),
+  "story-opened": (e) => ({ from: PO, to: "backlog", what: "story opened", body: e.data.title }),
+  "sprint-start": (e) => ({ from: PO, to: `sprint ${e.data.sprint}`, what: "sprint start", body: `${e.data.goal}\nStories: ${e.data.stories.join(", ")}` }),
+};
+
+function renderTimeline(view, fresh) {
+  const ctx = {
+    messages: Object.fromEntries(view.messages.map((m) => [m.id, m])),
+    answers: Object.fromEntries(view.answers.map((a) => [a.id, a])),
+  };
+  renderTimelineFilter(view);
+  const rows = view.events.filter((e) => !ui.story || e.story === ui.story).slice(-120).reverse();
+  $("#timeline").innerHTML = rows.map((e) => timelineRow(e, ctx, fresh.has(e.id))).join("")
+    || `<li><span></span><span class="empty">Nothing yet.</span></li>`;
+}
+
+function timelineRow(e, ctx, isNew) {
+  const t = TIMELINE[e.kind]?.(e, ctx);
+  if (!t) return "";
+  const to = t.to ? `<span class="arrow">→</span><span class="who">${esc(short(t.to))}</span>` : "";
+  return `<li class="${isNew ? "new" : ""}"><time>${fmt.time(e.at)}</time><div>
+    <div class="lane"><span class="who">${esc(short(t.from))}</span>${to}${storyChip(e.story)}${pill(t.what, t.tone ?? "", !!t.tone)}</div>
+    ${t.body ? `<div class="tl-body">${esc(t.body)}</div>` : ""}
+    ${t.meta ? `<div class="tl-meta">${esc(t.meta)}</div>` : ""}</div></li>`;
+}
+
+function renderTimelineFilter(view) {
+  const opts = [`<option value="">All stories</option>`,
+    ...view.stories.map((s) => `<option value="${s.id}" ${ui.story === s.id ? "selected" : ""}>${esc(s.id)}: ${esc(s.title)}</option>`)];
+  $("#tl-filter").innerHTML = opts.join("");
+}
+
+// ----- board ------------------------------------------------------------------
+
+function boardColumns(view) {
+  const cols = [["backlog", "Backlog", (s) => !s.sprint && s.status !== "done"]];
+  for (const step of view.pipeline) cols.push([step, step, (s) => s.sprint && s.status !== "done" && s.step === step]);
+  cols.push(["done", "Done", (s) => s.status === "done"]);
+  return cols;
+}
+
+function renderBoard(view) {
+  const act = activeStep(view.events), blockers = blockedBy(view);
+  $("#board").innerHTML = boardColumns(view).map(([id, label, test]) => {
+    const cards = view.stories.filter(test);
+    return `<div class="col ${id}"><h3>${esc(label)}<span>${cards.length}</span></h3>
+      ${cards.map((s) => storyCard(view, s, act, blockers)).join("")}</div>`;
+  }).join("");
+}
+
+function blockedBy(view) {
+  const map = {};
+  for (const q of openQuestions(view)) for (const s of q.stories) (map[s] ??= []).push(q.id);
+  return map;
+}
+
+function storyCard(view, s, act, blockers) {
+  const working = act?.story === s.id;
+  const reqs = view.requirements.filter((r) => r.covers.some((c) => c.startsWith(s.id + "/"))).map((r) => r.id);
+  const covered = coverage(view).filter((c) => c.story.id === s.id);
+  const flags = [
+    working ? pill(`▶ ${act.role}`, "accent") : "",
+    s.status === "needs_manager" ? pill("⚑ needs manager", "serious") : "",
+    s.status === "blocked" ? pill("escalated", "critical") : "",
+    ...(blockers[s.id] ?? []).map((id) => pill(`? waiting on ${id}`, "warning")),
+  ].join("");
+  return `<div class="story ${working ? "working" : ""}">
+    <div class="sid">${esc(s.id)} · ${esc(s.delivery ?? "")}</div>
+    <div class="title">${esc(s.title)}</div>
+    ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
+    <div class="row">${rounds(s.rounds, view.run.round_cap)}
+      <span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span></div>
+    ${reqs.length ? `<div class="row" style="margin-top:6px">${reqs.map((r) => `<span class="req-chip">${r}</span>`).join("")}</div>` : ""}
+  </div>`;
+}
+
+function rounds(n, cap) {
+  const dots = Array.from({ length: cap }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("");
+  return `<span class="rounds" title="${n} of ${cap} rounds used">${dots} rounds</span>`;
+}
+
+// ----- tokens -----------------------------------------------------------------
+
+function totalsBy(ledger, key) {
+  const out = {};
+  for (const l of ledger) {
+    const k = l[key] ?? "(no story)";
+    const t = (out[k] ??= { steps: 0, cost: 0, model: l.model, input: 0, output: 0, cache_read: 0, cache_creation: 0 });
+    t.steps++; t.cost += l.cost_usd;
+    for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
+  }
+  return out;
+}
+
+function renderTokens(view) {
+  renderTiles(view);
+  renderSpend(view);
+  renderMix(view);
+  renderTables(view);
+}
+
+function renderTiles(view) {
+  const L = view.ledger, tok = sum(L, (l) => sumTok(l.tokens));
+  const read = sum(L, (l) => l.tokens.cache_read), prompt = sum(L, (l) => l.tokens.input + l.tokens.cache_read + l.tokens.cache_creation);
+  const spent = sum(L, (l) => l.cost_usd), budget = view.run.budget_usd;
+  const free = L.filter((l) => roleInfo(view, l.role).provider !== "anthropic");
+  const tile = (label, value, note) => `<div class="card tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
+  $("#tiles").innerHTML = [
+    tile("Spend", fmt.usd(spent), `${fmt.pct(budget ? (100 * spent) / budget : 0)} of ${fmt.usd(budget)} soft budget`),
+    tile("Tokens", fmt.tok(tok), `${fmt.tok(sum(L, (l) => l.tokens.output))} output`),
+    tile("Cache hit rate", fmt.pct(prompt ? (100 * read) / prompt : 0), "share of prompt tokens read from cache"),
+    tile("Steps", String(L.length), `${free.length} on local models (billed $0)`),
+  ].join("");
+}
+
+const SPEND = { w: 560, h: 240, l: 52, r: 64, t: 12, b: 26 };
+
+function renderSpend(view) {
+  const L = view.ledger;
+  if (!L.length) { $("#spend").innerHTML = `<p class="empty">No steps yet.</p>`; return; }
+  const budget = view.run.budget_usd, t0 = L[0].at, t1 = Math.max(view.generated_at, L.at(-1).at);
+  let acc = 0;
+  const pts = L.map((l) => ({ at: l.at, v: (acc += l.cost_usd), l }));
+  const ymax = Math.max(budget, acc) * 1.04;
+  const x = (t) => SPEND.l + ((t - t0) / Math.max(1, t1 - t0)) * (SPEND.w - SPEND.l - SPEND.r);
+  const y = (v) => SPEND.t + (1 - v / ymax) * (SPEND.h - SPEND.t - SPEND.b);
+  const step = [`M${x(t0)},${y(0)}`, ...pts.flatMap((p, i) => [`H${x(p.at)}`, `V${y(p.v)}`]), `H${x(t1)}`].join(" ");
+  const ticks = [];
+  for (let p = 0; p <= 100; p += view.run.manager_every_pct) {
+    const v = (budget * p) / 100, cls = p === 100 ? "budget" : p ? "gridline" : "baseline";
+    ticks.push(`<line class="${cls}" x1="${SPEND.l}" x2="${SPEND.w - SPEND.r}" y1="${y(v)}" y2="${y(v)}"/>
+      <text x="${SPEND.l - 6}" y="${y(v) + 4}" text-anchor="end">${fmt.usd(v).replace(".00", "")}</text>
+      ${p ? `<text x="${SPEND.w - SPEND.r + 6}" y="${y(v) + 4}">${p === 100 ? "budget" : p + "%"}</text>` : ""}`);
+  }
+  const last = pts.at(-1);
+  $("#spend").innerHTML = `<svg viewBox="0 0 ${SPEND.w} ${SPEND.h}" role="img" aria-label="Cumulative spend over time">
+    ${ticks.join("")}
+    <text x="${SPEND.l}" y="${SPEND.h - 6}">${fmt.time(t0)}</text>
+    <text x="${SPEND.w - SPEND.r}" y="${SPEND.h - 6}" text-anchor="end">${fmt.time(t1)}</text>
+    <path class="line" d="${step}"/>
+    <circle cx="${x(last.at)}" cy="${y(last.v)}" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+    <text class="ink" x="${x(last.at) - 6}" y="${y(last.v) - 10}" text-anchor="end">${fmt.usd(last.v)}</text>
+    <line class="cross" id="spend-cross" y1="${SPEND.t}" y2="${SPEND.h - SPEND.b}" visibility="hidden"/>
+    <rect class="hit" x="${SPEND.l}" y="0" width="${SPEND.w - SPEND.l - SPEND.r}" height="${SPEND.h}"/></svg>`;
+  hoverSpend(pts, x);
+}
+
+function hoverSpend(pts, x) {
+  const svg = $("#spend svg"), cross = $("#spend-cross");
+  svg.querySelector(".hit").addEventListener("mousemove", (ev) => {
+    const box = svg.getBoundingClientRect(), mx = ((ev.clientX - box.left) / box.width) * SPEND.w;
+    const p = pts.reduce((best, q) => Math.abs(x(q.at) - mx) < Math.abs(x(best.at) - mx) ? q : best);
+    cross.setAttribute("x1", x(p.at)); cross.setAttribute("x2", x(p.at)); cross.setAttribute("visibility", "visible");
+    showTip(ev, `<b>${fmt.usd(p.v)}</b> total at ${fmt.time(p.at)}<br><span class="k">${esc(p.l.role)}${p.l.story ? " · " + esc(p.l.story) : ""}</span> +${fmt.usd(p.l.cost_usd)}`);
+  });
+  svg.querySelector(".hit").addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+}
+
+const MIX = { w: 560, label: 128, right: 52, bar: 16, gap: 10 };
+
+function renderMix(view) {
+  const rows = Object.entries(totalsBy(view.ledger, "role"))
+    .map(([role, t]) => ({ role, t, total: sum(TOKEN_KINDS, ([k]) => t[k]) }))
+    .sort((a, b) => b.total - a.total);
+  $("#mix-legend").innerHTML = TOKEN_KINDS.map(([, label, v]) => `<span><i class="sw" style="background:var(${v})"></i>${label}</span>`).join("");
+  if (!rows.length) { $("#mix").innerHTML = `<p class="empty">No steps yet.</p>`; return; }
+  const max = rows[0].total, span = MIX.w - MIX.label - MIX.right;
+  const h = rows.length * (MIX.bar + MIX.gap);
+  const bars = rows.map((r, i) => mixRow(r, i, span / max)).join("");
+  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="Tokens by role">
+    <line class="baseline" x1="${MIX.label}" x2="${MIX.label}" y1="0" y2="${h - MIX.gap}"/>${bars}</svg>`;
+  for (const seg of document.querySelectorAll("#mix [data-tip]")) {
+    seg.addEventListener("mousemove", (ev) => showTip(ev, seg.dataset.tip));
+    seg.addEventListener("mouseleave", hideTip);
+  }
+}
+
+function mixRow({ role, t, total }, i, scale) {
+  const y = i * (MIX.bar + MIX.gap);
+  let x = MIX.label;
+  const segs = TOKEN_KINDS.map(([k, label, v], j) => {
+    const w = t[k] * scale, last = j === TOKEN_KINDS.length - 1;
+    const tip = `<b>${esc(role)}</b><br>${label}: ${fmt.tok(t[k])} <span class="k">(${fmt.pct((100 * t[k]) / total)})</span>`;
+    const shape = segment(x, y, Math.max(0, w - (last ? 0 : 2)), last);
+    x += w;
+    return `<path d="${shape}" fill="var(${v})" data-tip="${esc(tip)}"/>`;
+  }).join("");
+  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(role)}</text>${segs}
+    <text x="${x + 6}" y="${y + MIX.bar / 2 + 4}">${fmt.tok(total)}</text>`;
+}
+
+/** A bar segment; the data end of the last one gets 4px rounded corners. */
+function segment(x, y, w, roundEnd) {
+  const h = MIX.bar, r = roundEnd ? Math.min(4, w / 2) : 0;
+  return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
+}
+
+function renderTables(view) {
+  const head = (first) => `<tr><th>${first}</th><th>Model</th><th class="num">Steps</th>${TOKEN_KINDS.map(([, l]) => `<th class="num">${l}</th>`).join("")}<th class="num">Cost</th></tr>`;
+  const row = (name, t) => `<tr><td>${esc(name)}</td><td>${esc(t.model)}</td><td class="num">${t.steps}</td>${TOKEN_KINDS.map(([k]) => `<td class="num">${fmt.tok(t[k])}</td>`).join("")}<td class="num">${fmt.usd(t.cost)}</td></tr>`;
+  const table = (first, totals) => `<table>${head(first)}${Object.entries(totals).sort((a, b) => b[1].cost - a[1].cost).map(([n, t]) => row(n, t)).join("")}</table>`;
+  $("#role-table").innerHTML = table("Role", totalsBy(view.ledger, "role"));
+  $("#story-table").innerHTML = table("Story", totalsBy(view.ledger, "story")).replace(/<th>Model<\/th>/, "<th>Last model</th>");
+}
+
+// ----- questions --------------------------------------------------------------
+
+function renderQuestions(view) {
+  const now = view.generated_at, open = openQuestions(view);
+  $("#q-open").innerHTML = open.map((q) => `<div class="q">
+      <div class="q-head">${pill(q.id, "warning")}<span>open ${fmt.ago(q.at, now)}</span>${q.stories.length ? "blocks " + q.stories.map(storyChip).join(" ") : "blocks nothing"}</div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-cmd"><code>agile-team answer ${q.id} "…"</code><button class="ctl" data-copy='agile-team answer ${q.id} ""'>Copy</button></div>
+    </div>`).join("") || `<p class="empty">Nothing is waiting on you.</p>`;
+  $("#q-raised").innerHTML = raisedQuestions(view).reverse().map((q) => `<div class="q">
+      <div class="q-head"><span class="who" style="color:var(--ink)">${esc(q.role)}</span>${storyChip(q.story)}<span>${fmt.ago(q.at, now)} ago</span></div>
+      <div class="q-text">${esc(q.text)}</div></div>`).join("") || `<p class="empty">No role has raised a question.</p>`;
+  renderAnswered(view);
+}
+
+function renderAnswered(view) {
+  const answers = Object.fromEntries(view.answers.map((a) => [a.id, a]));
+  const done = view.messages.filter((m) => answers[m.id]);
+  $("#q-done-summary").textContent = `Answered (${done.length})`;
+  $("#q-done").innerHTML = done.map((q) => `<div class="q">
+      <div class="q-head">${pill(q.id, "good")}<span>${fmt.time(q.at)}</span></div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="tl-body"><b>You:</b> ${esc(answers[q.id].text)}</div></div>`).join("") || `<p class="empty">None yet.</p>`;
+}
+
+// ----- requirements -----------------------------------------------------------
+
+function renderRequirements(view) {
+  const cov = coverage(view), reqs = view.requirements;
+  const changes = sum(reqs, (r) => r.history.filter((h) => h.change !== "added").length);
+  const gaps = cov.filter((c) => !c.reqs.length && c.story.sprint);
+  const tile = (label, value, note) => `<div class="card tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
+  $("#req-tiles").innerHTML = [
+    tile("Active requirements", reqs.filter((r) => r.status === "active").length, `${reqs.filter((r) => r.status === "retired").length} retired`),
+    tile("Changes", changes, "after first being added"),
+    tile("Criteria traced", `${cov.filter((c) => c.reqs.length).length}/${cov.length}`, "acceptance criteria with a requirement"),
+    tile("Gaps in sprint", gaps.length, gaps.length ? "a story cannot leave design with a gap" : "every sprint criterion is traced"),
+  ].join("");
+  renderMatrix(view, cov);
+  renderReqList(view);
+}
+
+function renderMatrix(view, cov) {
+  const ids = view.requirements.map((r) => r.id);
+  const head = `<tr><th>Acceptance criterion</th>${ids.map((id) => `<th class="req">${id}</th>`).join("")}<th>Status</th></tr>`;
+  let rows = "", current = null;
+  for (const c of cov) {
+    if (c.story !== current) {
+      current = c.story;
+      const where = c.story.status === "done" ? "done" : c.story.sprint ? c.story.step : "backlog";
+      rows += `<tr class="story-row"><td colspan="${ids.length + 2}">${esc(c.story.id)} · ${esc(c.story.title)} <span style="font-weight:400;color:var(--muted)">(${esc(where)})</span></td></tr>`;
+    }
+    const cells = ids.map((id) => `<td class="cell">${c.reqs.includes(id) ? '<span class="mark" title="covers"></span>' : ""}</td>`).join("");
+    rows += `<tr><td><b>${c.ac.id}</b> ${esc(c.ac.text)}</td>${cells}<td>${coverageStatus(view, c)}</td></tr>`;
+  }
+  $("#matrix").innerHTML = `<table class="matrix">${head}${rows}</table>`;
+}
+
+function coverageStatus(view, c) {
+  if (c.reqs.length) return pill("traced", "good");
+  const tone = gapTone(view, c.story);
+  if (!tone) return `<span class="empty">not designed yet</span>`;
+  return pill(tone === "serious" ? "untraced past design" : "needs a requirement", tone);
+}
+
+function renderReqList(view) {
+  $("#reqs").innerHTML = view.requirements.map((r) => {
+    const changed = r.history.some((h) => h.change !== "added");
+    return `<div class="req"><div class="req-head"><span class="id">${r.id}</span><span>${esc(r.title)}</span>
+        ${pill(r.status, r.status === "active" ? "good" : "")}${changed ? pill(`changed ×${r.history.filter((h) => h.change !== "added").length}`, "serious") : ""}
+        ${r.covers.map((c) => `<span class="req-chip">${esc(c)}</span>`).join("")}</div>
+      <div class="req-text">${esc(r.text)}</div>
+      <ul class="hist">${r.history.map((h) => `<li><span class="when">${fmt.time(h.at)}</span> <b>${esc(h.change)}</b> by ${esc(h.role)} on ${esc(h.story)} · <span class="mono">${esc(h.sha)}</span><br>${esc(h.reason)}</li>`).join("")}</ul></div>`;
+  }).join("") || `<p class="empty">The Architect has not written any requirements yet.</p>`;
+}
+
+// ----- tooltip, tabs, theme ---------------------------------------------------
+
+function showTip(ev, html) {
+  const tip = $("#tip");
+  tip.innerHTML = html; tip.style.display = "block";
+  const x = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + "px"; tip.style.top = ev.clientY + 14 + "px";
+}
+const hideTip = () => { $("#tip").style.display = "none"; };
+
+const ui = { tab: (location.hash.slice(1) || "flow"), story: "", theme: "" };
+const RENDER = { flow: () => {}, board: renderBoard, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
+
+function showTab(id) {
+  ui.tab = TABS.some(([t]) => t === id) ? id : "flow";
+  history.replaceState(null, "", "#" + ui.tab);
+  for (const [t] of TABS) $("#tab-" + t).hidden = t !== ui.tab;
+  render();
+}
+
+const THEMES = ["", "light", "dark"];
+
+function applyTheme(theme) {
+  ui.theme = theme;
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  $("#theme").textContent = { "": "◐", light: "☀", dark: "☾" }[theme];
+}
+
+function cycleTheme() {
+  applyTheme(THEMES[(THEMES.indexOf(ui.theme) + 1) % THEMES.length]);
+  try { localStorage.setItem("agile-team-theme", ui.theme); } catch { /* storage may be blocked */ }
+}
+
+function restoreTheme() {
+  let saved = PARAMS.get("theme") ?? "";
+  try { saved ||= localStorage.getItem("agile-team-theme") ?? ""; } catch { /* storage may be blocked */ }
+  applyTheme(THEMES.includes(saved) ? saved : "");
+}
+
+document.addEventListener("click", (ev) => {
+  const tab = ev.target.closest("[data-tab]");
+  if (tab) showTab(tab.dataset.tab);
+  const copy = ev.target.closest("[data-copy]");
+  if (copy) navigator.clipboard?.writeText(copy.dataset.copy);
+  const act = ev.target.closest("[data-mock]");
+  if (act) mock[act.dataset.mock]();
+});
+$("#tl-filter").addEventListener("change", (ev) => { ui.story = ev.target.value; render(); });
+$("#theme").addEventListener("click", cycleTheme);
+
+// ----- data sources -----------------------------------------------------------
+
+const data = { snap: null, cursor: Infinity, seen: new Set(), conn: "connecting" };
+
+function render() {
+  if (!data.snap) return;
+  const view = asOf(data.snap, data.cursor);
+  const fresh = new Set(view.events.filter((e) => !data.seen.has(e.id)).map((e) => e.id));
+  const firstPaint = data.seen.size === 0;
+  renderHeader(view);
+  renderFlow(view);
+  renderTimeline(view, firstPaint ? new Set() : fresh);
+  RENDER[ui.tab](view);
+  if (!firstPaint) pulse(view.events.filter((e) => fresh.has(e.id)));
+  for (const id of fresh) data.seen.add(id);
+}
+
+function connectionPill() {
+  if (MOCK) return pill("mock data", "warning");
+  return data.conn === "live" ? `<span class="live">${pill("live", "good")}</span>` : pill(data.conn, "warning");
+}
+
+function connectLive() {
+  const es = new EventSource("api/stream");
+  es.onopen = () => { data.conn = "live"; render(); };
+  es.onmessage = (ev) => { data.snap = JSON.parse(ev.data); data.conn = "live"; render(); };
+  es.onerror = () => { data.conn = "reconnecting…"; render(); };
+}
+
+// Mock replay: start part-way through the fixture and reveal one event at a time.
+const mock = {
+  timer: null, i: 0, delay: 1800,
+  start() {
+    const n = data.snap.events.length, at = PARAMS.get("at");
+    mock.i = at === "end" ? n - 1 : at ? Math.min(n - 1, Number(at)) : Math.floor(n * 0.55);
+    mock.seek(); mock.play();
+  },
+  seek() { data.cursor = data.snap.events[mock.i]?.at ?? Infinity; render(); },
+  tick() {
+    if (mock.i >= data.snap.events.length - 1) return mock.pause();
+    mock.i++; mock.seek();
+  },
+  play() { clearInterval(mock.timer); mock.timer = setInterval(mock.tick, mock.delay); render(); },
+  pause() { clearInterval(mock.timer); mock.timer = null; render(); },
+  toggle() { mock.timer ? mock.pause() : mock.play(); },
+  restart() { data.seen.clear(); mock.i = 0; mock.seek(); mock.play(); },
+  faster() { mock.delay = mock.delay > 600 ? mock.delay / 2 : 1800; if (mock.timer) mock.play(); else render(); },
+};
+
+function mockControls() {
+  const n = data.snap.events.length;
+  return `<span class="pill">replay ${mock.i + 1}/${n}</span>
+    <button class="ctl" data-mock="toggle">${mock.timer ? "❚❚ pause" : "▶ play"}</button>
+    <button class="ctl" data-mock="faster">${(1800 / mock.delay).toFixed(0)}× speed</button>
+    <button class="ctl" data-mock="restart">⟲ restart</button>`;
+}
+
+async function boot() {
+  restoreTheme();
+  showTab(ui.tab);
+  if (!MOCK) {
+    const res = await fetch("api/snapshot");
+    data.snap = await res.json(); render();
+    return connectLive();
+  }
+  const res = await fetch("fixtures/snapshot.json");
+  data.snap = await res.json();
+  mock.start();
+}
+boot().catch((err) => {
+  $("#status-row").innerHTML = pill("could not load data: " + err.message, "critical");
+});
+</script>
+</body>
+</html>
