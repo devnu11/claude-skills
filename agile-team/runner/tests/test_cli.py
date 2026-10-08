@@ -120,6 +120,21 @@ def test_status_answer_stop(configured: Path, capsys) -> None:
     assert (run_dir / STOP_FILE).exists()
 
 
+def test_status_shows_story_sprints(configured: Path, capsys) -> None:
+    from agile_team import state as state_mod
+    from agile_team.gates import StoryState
+
+    st = state_mod.RunState(sprint=2)
+    st.stories["s1"] = StoryState("s1", "One", "design", sprint=2)
+    st.stories["s2"] = StoryState("s2", "Two", "design")
+    state_mod.save(configured / ".team/run", st)
+    assert run("--repo", str(configured), "status") == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["sprint"] == 2
+    assert status["stories"]["s1"]["sprint"] == 2
+    assert status["stories"]["s2"]["sprint"] is None
+
+
 def test_stop_now_signals(configured: Path) -> None:
     run_dir = configured / ".team/run"
     run_dir.mkdir(parents=True)
