@@ -113,6 +113,14 @@ def test_developer_bash_write_to_tests_is_quarantined(make_runtime, configured: 
     assert log[2] == "chore(team): quarantine out-of-scope changes by developer-cli"
     assert rt.git.is_clean() and not (configured / "tests/x").exists()
     assert report["gate"]["verdict"] is Verdict.PASS
+    events = rt.events.events()
+    assert [e.kind for e in events] == ["step-start", "quarantine", "step-end", "gate"]
+    assert {e.role for e in events[:3]} == {"developer-cli"} and events[0].story == "s1"
+    assert events[1].data["paths"] == ["tests/x"]
+    end = events[2].data
+    assert end["status"] == "done" and end["commit"] == report["commit"]
+    assert end["tokens"]["input"] == 100 and end["cost_usd"] == 0.1
+    assert events[3].data["now_at"] == "quality"
 
 
 def test_failed_gate_bounces_and_caps(make_runtime) -> None:
@@ -137,6 +145,11 @@ def test_manager_rules_on_capped_story(make_runtime) -> None:
     s = rt.state.stories["s1"]
     assert (s.step, s.status, s.rounds) == ("design", StoryStatus.ACTIVE, 0)
     assert rt.state.manager_due == [] and rt.state.unreviewed == []
+    ruling = rt.events.events()[-1]
+    assert ruling.kind == "ruling" and ruling.data == {
+        "ruling": "revise_design",
+        "now_at": "design",
+    }
     prompt = rt.query_fn.calls[0]["prompt"]
     assert "unreviewed_overrides" in prompt and "stuck" in prompt
 
@@ -147,6 +160,8 @@ def test_bad_handoff_bounces(make_runtime) -> None:
     report = run(rt, "code-reviewer", story="s1")
     assert report["status"] == "bad_handoff"
     assert rt.state.stories["s1"].rounds == 1
+    end = next(e for e in rt.events.events() if e.kind == "step-end")
+    assert end.data["status"] == "bad_handoff" and "handoff" in end.data["summary"]
     assert run(rt, "architect")["status"] == "bad_handoff"
 
 

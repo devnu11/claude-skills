@@ -14,7 +14,7 @@ import json
 import subprocess
 import tomllib
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 from . import guard, keys, sandbox
 from . import state as state_mod
 from .config import CONFIG_NAME, Config
+from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
     Outcome,
     Pipeline,
@@ -232,6 +233,16 @@ class Runtime:
     prepare_fn: PrepareFn = field(default_factory=lambda: sandbox.Preparer().prepare)
     secrets: list[Path] = field(default_factory=list)
     providers: Providers = field(default_factory=Providers)
+    events: EventLog = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.events = EventLog(self.config.run_dir / EVENTS)
+
+    def emit(self, kind: EventKind, plan: Plan | None = None, **data: Any) -> None:
+        """Log an event, attributed to ``plan``'s role and story when given."""
+        role = plan.role.name if plan else None
+        story = plan.story.id if plan and plan.story else None
+        self.events.emit(Event(kind, role, story, data))
 
     def save(self) -> None:
         state_mod.save(self.config.run_dir, self.state)
@@ -354,6 +365,7 @@ class Runtime:
             plan = self.plan(request)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
+        self.emit(EventKind.STEP_START, plan, brief=request.brief)
         return self.settle(plan, await self._execute(plan))
 
     async def _execute(self, plan: Plan) -> StepResult:
@@ -379,9 +391,18 @@ class Runtime:
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
         report |= self.settle_tree(plan)
+        self._emit_step_end(plan, parsed, result, report["commit"])
         report |= self._apply(plan, parsed)
         self.save()
         return report
+
+    def _emit_step_end(
+        self, plan: Plan, parsed: Handoff | HandoffError, result: StepResult, commit: str | None
+    ) -> None:
+        outcome = handoff_report(parsed) if isinstance(parsed, Handoff) else bad_handoff(parsed)
+        cost = round(result.cost, 4)
+        tokens = asdict(result.tokens)
+        self.emit(EventKind.STEP_END, plan, **outcome, tokens=tokens, cost_usd=cost, commit=commit)
 
     def _parse(self, plan: Plan) -> Handoff | HandoffError:
         try:
@@ -433,6 +454,8 @@ class Runtime:
         """Quarantine out-of-scope changes, then commit in-scope ones."""
         audit = restrict_config(guard.audit_step(self.git, plan.scope), self.git)
         quarantined = guard.quarantine(self.git, audit) if audit.out_of_scope else None
+        if quarantined:
+            self.emit(EventKind.QUARANTINE, plan, sha=quarantined, paths=audit.out_of_scope)
         commit = self.commit_step(plan, audit.in_scope) if audit.in_scope else None
         return {"commit": commit, "quarantine": quarantined}
 
@@ -457,7 +480,7 @@ class Runtime:
         step = story.step
         outcome = self.pipeline.evaluate(step, handoff)
         self.pipeline.advance(story, outcome)
-        return {
+        result = {
             "step": step,
             "verdict": outcome.verdict,
             "reason": outcome.reason,
@@ -465,6 +488,8 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
+        self.emit(EventKind.GATE, plan, **result)
+        return result
 
     def apply_manager(self, plan: Plan, handoff: Handoff) -> None:
         """A Manager step clears the review queue and rules on a capped story."""
@@ -473,6 +498,11 @@ class Runtime:
         story = plan.story
         if story and story.status is StoryStatus.NEEDS_MANAGER and handoff.ruling:
             self.pipeline.apply_ruling(story, handoff.ruling)
+            self.emit(EventKind.RULING, plan, ruling=handoff.ruling, now_at=story.step)
+
+
+def bad_handoff(error: HandoffError) -> dict[str, Any]:
+    return {"status": "bad_handoff", "summary": str(error), "open_questions": [], "next_role": None}
 
 
 def handoff_report(handoff: Handoff) -> dict[str, Any]:
