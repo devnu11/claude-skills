@@ -13,6 +13,7 @@ from itertools import takewhile
 from pathlib import Path
 
 GLOB_TOKENS = {"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}
+TOKEN_WILDCARDS = "*?[{"
 _TOKEN = re.compile(r"\*\*/|\*\*|\*|\?|[^*?]+")
 
 
@@ -39,7 +40,17 @@ def literal_root(glob: str) -> str:
 
 
 def _is_literal(segment: str) -> bool:
-    return not any(c in segment for c in "*?[")
+    return not any(c in segment for c in TOKEN_WILDCARDS)
+
+
+def has_wildcard(token: str) -> bool:
+    """True when a shell word holds a glob or brace character."""
+    return any(c in token for c in TOKEN_WILDCARDS)
+
+
+def token_prefix(token: str) -> str:
+    """The text of a shell word before its first wildcard character."""
+    return re.split(r"[*?\[{]", token, maxsplit=1)[0]
 
 
 def under_root(path: str, root: str) -> bool:
