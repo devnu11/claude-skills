@@ -45,6 +45,15 @@ rule, update in the same story:
 - `agile-team/SKILL.md` and the README row when the liaison or human sees
   the change.
 
+## Errors and halts
+
+- Do not catch broad exceptions inside the runner just to print them. An
+  unexpected error goes up to `cli._run` (or, inside a role step, to
+  `Runtime._step_failed`), which logs it to `crash.log` and records a halt.
+- Every halt goes through `Runtime.halt_run`. A new kind of stop is a new row
+  in `halt.HALTS`, and a new limit phrasing is a new row in
+  `halt.LIMIT_PATTERNS` (see ADR-001).
+
 ## Events and the dashboard contract
 
 - `dashboard/fixtures/snapshot.json` is the contract for what the dashboard

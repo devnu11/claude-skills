@@ -15,10 +15,10 @@ Run from the target repo root, or pass `--repo PATH`.
 | `config check` | Validate config, every role's resolution and glob placeholders. Exit 1 on problems. |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
-| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). With `--resume`, `--task` is optional and reaches the PO as "New from the human". |
-| `status` | JSON: run status, current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
+| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
-| `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner. |
+| `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 
 Preflight refuses to start when: the tree is dirty; with `auth = "api-key"`,
 no key file exists, the repo key file is not gitignored, or a key file is not
@@ -33,15 +33,66 @@ command's executable is missing; `config check` fails.
 {"id": "m3", "kind": "question", "text": "…", "stories": ["s2"], "at": 1730000000.0}
 ```
 
-`kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`. A
-`question` blocks only the stories it lists. A `manual` delivery's acceptance
-script arrives as a `question`; the answer is the human's test result.
+`kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`,
+`failed`, `stopped`. A `question` blocks only the stories it lists. A
+`manual` delivery's acceptance script arrives as a `question`; the answer is
+the human's test result. The runner itself posts `blocked`, `failed` or
+`stopped` when it halts (see "Run status and stops").
 
 `inbox.jsonl` holds `{"id", "text", "at"}` answers, written by `answer`.
 
 Other run files: `state.json` (resume state), `ledger.jsonl` (per-step cost),
-`runner.pid`, `stop`, `customer/<delivery>/` (Customer Proxy sandboxes),
-`api-key` (default key location).
+`runner.pid`, `stop`, `crash.log` (append-only tracebacks of every error the
+runner handled, each headed `--- <time> <ExceptionType>`),
+`customer/<delivery>/` (Customer Proxy sandboxes), `api-key` (default key
+location).
+
+## Run status and stops
+
+`state.json` `status` (shown by `status`):
+
+| Status | Set by | Meaning |
+|---|---|---|
+| `idle` | runner | The PO ended its turn normally. |
+| `running` | runner | The PO loop is running. Every `start` sets it, which clears any stop below. |
+| `sprint-end`, `done` | PO (`notify_user`) | The sprint or the whole task finished. |
+| `blocked` | PO (`notify_user`) or runner | Nothing can move without the human, or a usage limit was hit. |
+| `failed` | runner | The runner crashed. |
+| `stopped` | runner | `stop --now` (SIGTERM) ended the run. |
+
+`status_reason` says why the runner stopped (`null` otherwise). For example:
+`session limit, resets 2:20pm (America/Edmonton)`, `crashed: RuntimeError:
+boom` or `stopped by stop --now`. Older `state.json` files load with `null`.
+
+When the runner halts, it saves the status and reason, posts a note of the
+same kind to the outbox, appends the traceback to `crash.log`, prints **one**
+line to stderr (`agile-team start: <reason>; <advice>`) and exits:
+
+| Exit | Cause | Status | Advice in the note and line |
+|---|---|---|---|
+| 0 | the PO ended its turn | `idle`, or what the PO set | — |
+| 1 | CLI error or failed preflight | unchanged | the error |
+| 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
+| 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
+| 130 | Ctrl-C | unchanged | — |
+| 143 | `stop --now` (SIGTERM) | `stopped` | ``run `agile-team start --resume` to continue`` |
+
+- A limit is recognized from the SDK's error text by a pattern table. The
+  reset time is copied from that text (`resets 2:20pm (America/Edmonton)`).
+  The runner never sleeps or resumes by itself.
+- A limit inside a role step stops the run as well. The PO's `run_role`
+  returns `{"status": "halted", "reason": …}`, and every later `run_role` in
+  that process is refused (`the run is blocked (<reason>); end your turn`).
+  Other errors in a role step reach the PO as a tool error, as before, and
+  are logged to `crash.log`.
+- The first stop in a process wins. Only one note is posted, even when the PO
+  then hits the same limit.
+- `start --resume` sets `running` and clears `status_reason` before the PO's
+  first turn, so a limit stop never leaves the resumed PO refused. When the
+  PO's own query failed with an SDK error result (a limit included), its
+  session id is saved, so the resume continues that session.
+- A step cut off mid-way can leave uncommitted edits, and preflight then
+  refuses the dirty tree.
 
 ## `.agile-team.toml`
 
