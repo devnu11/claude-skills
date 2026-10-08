@@ -39,7 +39,7 @@ from .gates import (
     role_fits_step,
 )
 from .git_ops import Git, GitError
-from .ledger import Budget, Entry, Ledger
+from .ledger import Budget, Entry, Ledger, Tokens
 from .providers import Providers
 from .relay import Note, Relay
 from .roles import (
@@ -119,6 +119,7 @@ class StepResult:
     text: str
     cost: float
     session_id: str | None = None
+    tokens: Tokens = field(default_factory=Tokens)
 
 
 def build_options(plan: Plan) -> ClaudeAgentOptions:
@@ -142,14 +143,15 @@ def build_options(plan: Plan) -> ClaudeAgentOptions:
 
 
 async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
-    """Drain a query; keep the final text, cost and session id."""
+    """Drain a query; keep the final text, cost, tokens and session id."""
     last_text, result = "", None
     async for message in query_fn(prompt=plan.prompt, options=plan.options):
         last_text = _text_of(message) or last_text
         result = message if isinstance(message, ResultMessage) else result
     if result is None:
         return StepResult(last_text, 0.0)
-    return StepResult(result.result or last_text, result.total_cost_usd or 0.0, result.session_id)
+    cost, tokens = result.total_cost_usd or 0.0, Tokens.from_usage(result.usage)
+    return StepResult(result.result or last_text, cost, result.session_id, tokens)
 
 
 def _text_of(message: Any) -> str:
@@ -373,7 +375,7 @@ class Runtime:
     def settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         """Record cost, read the handoff, settle the tree, then gate; save state."""
         plan.text = result.text
-        self.record_cost(plan, result.cost)
+        self.record_cost(plan, result)
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
         report |= self.settle_tree(plan)
@@ -418,10 +420,11 @@ class Runtime:
         stories = [plan.story.id] if plan.story else []
         return {"question_id": self.relay.post(Note("question", plan.text, stories)).id}
 
-    def record_cost(self, plan: Plan, cost: float) -> None:
-        before = self.ledger.total()
+    def record_cost(self, plan: Plan, result: StepResult) -> None:
+        before, cost = self.ledger.total(), result.cost
         story_id = plan.story.id if plan.story else None
-        self.ledger.record(Entry(plan.role.name, plan.role.model, cost, story_id))
+        role = plan.role
+        self.ledger.record(Entry(role.name, role.model, cost, story_id, tokens=result.tokens))
         budget = Budget(self.config.team.budget_usd, self.config.team.manager_every_pct)
         if budget.checkpoint_crossed(before, before + cost):
             self.state.manager_due.append(f"budget checkpoint at ${before + cost:.2f}")

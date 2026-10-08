@@ -9,6 +9,7 @@ from agile_team import dispatch, gates, sandbox
 from agile_team.config import Delivery
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus, Verdict
+from agile_team.ledger import Tokens
 from agile_team.providers import Provider, Providers
 from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
@@ -77,6 +78,7 @@ def test_storyless_step_commits_chore(make_runtime, configured: Path) -> None:
     assert report["status"] == "done" and report["commit"]
     assert git(configured, "log", "-1", "--format=%s").strip() == "chore(team): architect step"
     assert rt.ledger.total() == pytest.approx(0.1)
+    assert rt.ledger.entries()[0].tokens == Tokens(100, 20, 300, 40)
 
 
 def test_story_commits_feat_then_fixup(make_runtime, configured: Path) -> None:
