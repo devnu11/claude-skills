@@ -3,7 +3,14 @@
 from pathlib import Path
 
 import pytest
-from agile_team.paths import glob_to_regex, literal_root, matches, repo_relative, resolve_in
+from agile_team.paths import (
+    glob_to_regex,
+    literal_root,
+    matches,
+    repo_relative,
+    resolve_in,
+    under_root,
+)
 
 
 @pytest.mark.parametrize(
@@ -35,10 +42,39 @@ def test_matches_with_only_negations_is_false() -> None:
 
 
 @pytest.mark.parametrize(
-    ("glob", "root"), [("src/**", "src"), ("!tests/**", "tests"), ("**/*.py", ""), ("*.py", "")]
+    ("glob", "root"),
+    [
+        ("src/**", "src"),
+        ("agile-team/runner/agile_team/**", "agile-team/runner/agile_team"),
+        ("agile-team/runner/tests/e2e/**", "agile-team/runner/tests/e2e"),
+        ("src/*.py", "src"),
+        ("src/foo*/bar", "src"),
+        ("src/[ab]/x", "src"),
+        ("src/pkg/main.py", "src/pkg/main.py"),
+        ("main.py", "main.py"),
+        ("src/", "src"),
+        ("**/*.py", ""),
+        ("*.py", ""),
+        ("!tests/e2e/**", ""),
+        ("!tests/**", ""),
+    ],
 )
 def test_literal_root(glob: str, root: str) -> None:
     assert literal_root(glob) == root
+
+
+@pytest.mark.parametrize(
+    ("path", "root", "expected"),
+    [
+        ("a", "a", True),
+        ("a/b", "a", True),
+        ("ab", "a", False),
+        ("a", "a/b", False),
+        ("agile-team", "agile-team/runner/agile_team", False),
+    ],
+)
+def test_under_root(path: str, root: str, expected: bool) -> None:
+    assert under_root(path, root) is expected
 
 
 def test_repo_relative(tmp_path: Path) -> None:
