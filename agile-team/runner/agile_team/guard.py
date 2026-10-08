@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .git_ops import Git
-from .paths import matches, repo_relative, resolve_in, under_root
+from .paths import has_wildcard, matches, repo_relative, resolve_in, token_prefix, under_root
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
@@ -208,8 +208,19 @@ def _names_repo(scope: Scope, token: str) -> bool:
 
 
 def _names_forbidden_root(scope: Scope, token: str) -> bool:
+    if has_wildcard(token):
+        return any(_glob_reaches(token, root) for root in scope.bash_forbidden)
     path = posixpath.normpath(token.lstrip("./"))
     return any(under_root(path, root) for root in scope.bash_forbidden)
+
+
+def _glob_reaches(token: str, root: str) -> bool:
+    """True when a wildcard token's literal prefix overlaps ``root`` either way.
+
+    An empty prefix (``*.txt``) is not an overlap: it names no path.
+    """
+    prefix = re.sub(r"/+", "/", token_prefix(token).lstrip("./"))
+    return bool(prefix) and (root.startswith(prefix) or under_root(prefix, root))
 
 
 def deny(reason: str) -> dict[str, Any]:
