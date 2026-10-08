@@ -140,24 +140,31 @@ class Handoff:
     ruling: str | None = None
 
 
-def parse_role(name: str, text: str) -> RoleSpec:
-    """Parse a role file. Without frontmatter the whole text is the body."""
+def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
+    """YAML frontmatter as a mapping (``None`` when absent) and the body after it."""
     match = _FRONTMATTER.match(text)
     if not match:
-        return RoleSpec(name=name, body=text.strip())
-    meta = _frontmatter(name, match.group(1))
-    values = {k: meta[k] for k in FRONTMATTER_KEYS if k in meta}
-    return RoleSpec(name=meta.get("name", name), body=match.group(2).strip(), **values)
-
-
-def _frontmatter(name: str, raw: str) -> dict[str, Any]:
-    meta = yaml.safe_load(raw) or {}
+        return None, text
+    meta = yaml.safe_load(match.group(1)) or {}
     if not isinstance(meta, dict):
         raise RoleError(f"{name}: frontmatter must be a mapping")
+    return meta, match.group(2)
+
+
+def parse_role(name: str, text: str) -> RoleSpec:
+    """Parse a role file. Without frontmatter the whole text is the body."""
+    meta, body = split_frontmatter(name, text)
+    if meta is None:
+        return RoleSpec(name=name, body=text.strip())
+    _check_keys(name, meta)
+    values = {k: meta[k] for k in FRONTMATTER_KEYS if k in meta}
+    return RoleSpec(name=meta.get("name", name), body=body.strip(), **values)
+
+
+def _check_keys(name: str, meta: dict[str, Any]) -> None:
     unknown = set(meta) - FRONTMATTER_KEYS - {"name"}
     if unknown:
         raise RoleError(f"{name}: unknown frontmatter keys {sorted(unknown)}")
-    return meta
 
 
 def has_frontmatter(text: str) -> bool:
