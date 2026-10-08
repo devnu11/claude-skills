@@ -36,7 +36,11 @@ command fails.
    on a local or other Anthropic-compatible model. If so, add
    `[providers.<name>]` and `[roles.<role>]` `provider`/`model` to the config
    (see "Providers" in the protocol) and commit it as
-   `chore(team): configure providers`. Then `$AT config check`. For a repo
+   `chore(team): configure providers`. Then `$AT config check`.
+   Tell the human where their own instructions go: `.team/roles/<role>.md`
+   for this repo (stubs were just created) and, for every repo,
+   `~/.config/agile-team/roles/` (offer `$AT roles scaffold --global`).
+   `_shared.md` applies to every role; `$AT roles list` shows what is active. For a repo
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
    run until a blocker (`until-blocker`)?

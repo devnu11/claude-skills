@@ -44,6 +44,14 @@ def git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+@pytest.fixture(autouse=True)
+def isolated_global_roles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the global role layer at a scratch dir so no test reads the real home."""
+    home = tmp_path / "agile-team-home"
+    monkeypatch.setenv("AGILE_TEAM_HOME", str(home))
+    return home / "roles"
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A git repo with one commit and ``.team/run/`` ignored."""

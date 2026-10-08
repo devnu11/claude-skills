@@ -77,7 +77,10 @@ def test_onboard_writes_and_commits(repo: Path) -> None:
     sha = onboard.onboard(repo, onboard.Answers("python", "package", budget_usd=5))
     assert sha
     assert git(repo, "log", "-1", "--format=%s").strip() == onboard.COMMIT_MESSAGE
-    assert (repo / onboard.CHARTER).is_file() and (repo / onboard.ROLES_KEEP).is_file()
+    assert (repo / onboard.CHARTER).is_file()
+    assert (repo / ".team/roles/_shared.md").is_file() and (
+        repo / ".team/roles/architect.md"
+    ).is_file()
     assert cfg.load(repo).team.budget_usd == 5
     assert git(repo, "status", "--porcelain") == ""
     with pytest.raises(FileExistsError):
@@ -111,7 +114,7 @@ def test_reconfigure_no_change(repo: Path) -> None:
 def test_ignored_artifacts_keep_roles_tracked(repo: Path) -> None:
     onboard.onboard(repo, onboard.Answers("python", "package", artifacts="ignored"))
     tracked = git(repo, "ls-files").split()
-    assert onboard.CHARTER in tracked and onboard.ROLES_KEEP in tracked
+    assert onboard.CHARTER in tracked and ".team/roles/developer.md" in tracked
 
 
 def test_unknown_preset(repo: Path) -> None:

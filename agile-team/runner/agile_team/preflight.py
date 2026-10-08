@@ -17,7 +17,7 @@ from . import keys
 from .config import Config
 from .git_ops import Git
 from .providers import Probe, Provider, reachable
-from .roles import RoleBook, RoleError
+from .roles import RoleBook, RoleError, user_roles_dir
 
 Which = Callable[[str], str | None]
 
@@ -81,7 +81,8 @@ class Preflight:
         return [failure for provider in used for failure in self.provider_problems(provider)]
 
     def used_providers(self) -> set[str]:
-        book = RoleBook.for_repo(self.config.repo, self.config.roles)
+        user_dir = user_roles_dir(self.home, self.environ)
+        book = RoleBook.for_repo(self.config.repo, self.config.roles, user_dir)
         try:
             return {book.resolve(name).provider for name in book.enabled_names()}
         except RoleError:

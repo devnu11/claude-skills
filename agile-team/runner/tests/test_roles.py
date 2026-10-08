@@ -176,3 +176,51 @@ def test_provider_defaults_and_overrides() -> None:
     assert b.resolve("child").provider == "local"
     assert b.resolve("child", {"provider": "anthropic", "model": "sonnet"}).provider == "anthropic"
     assert roles.parse_role("x", "---\nprovider: local\n---\n").provider == "local"
+
+
+def layered(user=None, repo_files=None) -> RoleBook:
+    return RoleBook(dict(BUILTIN), repo_files or {}, {}, Path(), user or {})
+
+
+def test_global_then_repo_addenda_without_comments() -> None:
+    b = layered({"base": "<!-- stub -->\nG"}, {"base": "R\n<!-- note -->"})
+    assert b.resolve("base").body == "BASE\n\nG\n\nR"
+    assert b.layers("base") == {"builtin": "base", "global": "addendum", "repo": "addendum"}
+
+
+def test_complete_files_repo_beats_global_beats_builtin() -> None:
+    glob = "---\nmodel: haiku\neffort: low\n---\nGLOBAL"
+    assert layered({"base": glob}).resolve("base").body == "GLOBAL"
+    repo = "---\nmodel: opus\neffort: max\n---\nREPO"
+    both = layered({"base": glob}, {"base": repo})
+    assert both.resolve("base").model == "opus" and both.layers("base")["global"] == "replace"
+    assert "extra" in layered({"extra": glob}).names()
+
+
+def test_stub_adds_nothing_and_shared_addendum_applies() -> None:
+    b = layered({"_shared": "Always be terse."}, {"base": "<!-- only a comment -->"})
+    assert b.resolve("base").body == "BASE" and b.layers("base")["repo"] == "stub"
+    assert b.shared_body() == "SHARED\n\nAlways be terse."
+    assert b.layers("nothing") == {"builtin": None, "global": None, "repo": None}
+
+
+def test_user_roles_dir(tmp_path: Path) -> None:
+    assert roles.user_roles_dir(tmp_path, {}) == tmp_path / ".config/agile-team/roles"
+    assert roles.user_roles_dir(tmp_path, {"AGILE_TEAM_HOME": "/x"}) == Path("/x/roles")
+
+
+def test_scaffold_writes_missing_stubs_only(tmp_path: Path) -> None:
+    real = RoleBook.for_repo(tmp_path, {})
+    target = tmp_path / "roles"
+    target.mkdir()
+    (target / "architect.md").write_text("mine")
+    created = real.scaffold(target, roles.Layer.GLOBAL)
+    names = {p.stem for p in created}
+    assert "_shared" in names and "developer" in names and "architect" not in names
+    stub = (target / "developer.md").read_text()
+    assert "global layer" in stub and "Write plain Markdown" in stub
+    assert (target / "architect.md").read_text() == "mine"
+    assert real.scaffold(target, roles.Layer.GLOBAL) == []
+    reloaded = RoleBook.for_repo(tmp_path, {}, target)
+    assert reloaded.resolve("developer").body == real.resolve("developer").body
+    assert reloaded.addendum("architect") == "mine"

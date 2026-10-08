@@ -19,12 +19,12 @@ import tomli_w
 
 from .config import CONFIG_NAME, DEFAULT_KEY_FILE, PIPELINE_STEPS, config_path
 from .git_ops import Git
+from .roles import REPO_ROLES, Layer, RoleBook
 
 CHARTER = ".team/CLAUDE.md"
-ROLES_KEEP = ".team/roles/.gitkeep"
 RUN_IGNORE = ".team/run/"
 COMMIT_MESSAGE = "chore(team): onboard agile team"
-ONBOARD_FILES = (CONFIG_NAME, ".gitignore", CHARTER, ROLES_KEEP)
+ONBOARD_FILES = (CONFIG_NAME, ".gitignore", CHARTER, REPO_ROLES)
 CHARTER_TEMPLATE = """\
 # Team charter
 
@@ -176,7 +176,7 @@ def onboard(repo: Path, answers: Answers) -> str | None:
     write_config(repo, answers)
     ensure_lines(repo / ".gitignore", gitignore_lines(answers.artifacts))
     write_if_missing(repo / CHARTER, CHARTER_TEMPLATE)
-    write_if_missing(repo / ROLES_KEEP, "")
+    RoleBook.for_repo(repo, {}).scaffold(repo / REPO_ROLES, Layer.REPO)
     return commit_onboarding(Git(repo))
 
 
