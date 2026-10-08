@@ -251,3 +251,162 @@ Removing a single story from a sprint without starting a new one, and story
 priority or ordering within the backlog, are both out of scope. So is
 dashboard rendering, which is s4/s5: the snapshot fixture already carries
 `stories[].sprint` and the `sprint-start` event's `stories`.
+
+---
+
+## s7: Customer Proxy forbidden roots in nested layouts (bug)
+
+Developer: **developer-cli** (runner Python: `paths.py`, `sandbox.py`,
+`guard.py`). The Architect has already updated `reference/protocol.md`
+(Enforcement) in this design step. `SKILL.md` and the README do not describe
+forbidden roots, so they do not change.
+
+### Root cause
+
+`paths.literal_root` keeps only the **first** path segment of a glob. In this
+repo, all four source/tests/e2e globs (`agile-team/runner/agile_team/**`,
+`…/scripts/**`, `…/tests/**`, `…/tests/e2e/**`) reduce to `agile-team`. This
+causes two failures:
+
+1. `guard._names_forbidden_root` compares only a Bash token's first segment,
+   so the bare CLI name `agile-team` is denied.
+2. `sandbox.os_sandbox_settings` emits `Read(/<repo>/agile-team/**)`, and that
+   deny rule overrides the `allowRead` for `agile-team/docs/customer/`.
+
+### Rules
+
+| # | Rule | AC |
+|---|---|---|
+| P1 | A glob's **literal root** is its leading `/`-separated segments up to (not including) the first segment that contains `*`, `?` or `[`, joined by `/`, with no trailing `/`. A fully literal glob is its own root, even when it names a file. | AC1 |
+| P2 | A glob starting with `!` has no root (`""`). A negation only narrows a set, so it never adds forbidden paths. A glob whose first segment holds a wildcard also has no root. | AC1 |
+| P3 | `forbidden_roots(config)` = the non-empty literal roots of every glob under `source`, `tests` and `e2e`, deduplicated. A root that lies under another root is dropped. The result is sorted. | AC1 |
+| P4 | A path is **under** a root when it equals the root or starts with `root + "/"`. `paths.under_root` is the single definition. The hook calls it, and the deny rules spell the same relation (P6). | AC1, AC2 |
+| P5 | A Bash token names a forbidden root when its normalized form is under a root. To normalize, strip leading `.` and `/` characters (as today), then apply `posixpath.normpath` (so `a//b` and `a/./b` become `a/b`, and `""` becomes `.`, which matches nothing). The `..` check runs first and is unchanged. | AC2 |
+| P6 | `os_sandbox_settings` emits two `permissions.deny` rules per root, in root order: `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`. (`<repo>` is absolute, so `/<repo>` gives Claude Code's `//abs` form, as today.) | AC1, AC3 |
+| P7 | The `or ["src"]` fallback stays in `proxy_scope` only. An empty `bash_forbidden` turns off **all** sandboxed Bash checks (`..`, repo paths), so the Proxy must never get one. The deny rules get no fallback: the OS sandbox's `denyRead` on the whole repo already covers that case. | AC2 |
+
+P3's nesting rule keeps flat layouts **byte-identical** to today. The python
+preset gives `src`, `tests` and `tests/e2e`, which collapse to
+`["src", "tests"]`. The node preset gives `["e2e", "lib", "src", "test"]` and
+rust gives `["src", "tests"]`. For a one-segment root, "under the root" is the
+same test as "first segment equals the root" (once any `..` token has been
+denied), so the hook is exactly as strict as before. Normalization matters
+only for deeper roots, where `a//b` would otherwise slip past the prefix test.
+
+### Worked examples
+
+| Glob | Literal root |
+|---|---|
+| `src/**` | `src` |
+| `agile-team/runner/agile_team/**` | `agile-team/runner/agile_team` |
+| `agile-team/runner/tests/e2e/**` | `agile-team/runner/tests/e2e` |
+| `src/*.py` | `src` |
+| `src/foo*/bar` | `src` |
+| `src/[ab]/x` | `src` |
+| `src/pkg/main.py` | `src/pkg/main.py` |
+| `main.py` | `main.py` |
+| `src/` | `src` |
+| `**/*.py`, `*.py` | `""` |
+| `!tests/e2e/**`, `!tests/**` | `""` |
+
+This repo's `forbidden_roots`: `["agile-team/runner/agile_team",
+"agile-team/runner/scripts", "agile-team/runner/tests"]` (`tests/e2e` is
+nested, so it is dropped).
+
+Bash tokens checked against those roots:
+
+| Token | Result | Why |
+|---|---|---|
+| `agile-team` (as in `agile-team status`, `which agile-team`) | allowed | not under any root |
+| `agile-team/docs/customer/x.md` | allowed | not under any root |
+| `agile-team/runner` | allowed | an ancestor, not under a root (see Known limits) |
+| `agile-team/runner/agile_team/cli.py` | denied | under `…/agile_team` |
+| `agile-team/runner/agile_team` | denied | equals the root |
+| `./agile-team/runner/tests` | denied | `./` stripped |
+| `agile-team/runner/tests/` | denied | normalized to the root |
+| `agile-team//runner/agile_team/x` | denied | `//` normalized |
+| `agile-team/./runner/scripts/x` | denied | `/./` normalized |
+| `agile-team/runner/testsuite` | allowed | `starts with root/` does not match a sibling name |
+
+### Changes by module
+
+#### `paths.py`
+
+| Function | Spec |
+|---|---|
+| `literal_root(glob: str) -> str` | P1 and P2. Docstring: "The wildcard-free leading path of a positive glob; `""` for a `!` glob or one that starts with a wildcard." Suggested: return `""` for `!`; otherwise `"/".join(takewhile(_is_literal, glob.split("/"))).rstrip("/")`. Keep the name: it is still the glob's root, just deeper. |
+| `_is_literal(segment: str) -> bool` | `True` when the segment has none of `*?[`. Use a module constant (`WILDCARDS = "*?["`) rather than repeating the string. |
+| `under_root(path: str, root: str) -> bool` (new, public) | P4: `path == root or path.startswith(f"{root}/")`. Docstring: "True when `path` is `root` or lies inside it." |
+
+#### `sandbox.py`
+
+- Add a constant `ROOT_GLOB_KEYS = ("source", "tests", "e2e")` (data over
+  inline tuples).
+- `forbidden_roots(config) -> list[str]`: P3. Docstring: "The outermost
+  literal roots of the source, tests and e2e globs; Bash may not name them,
+  and the Proxy may not Read under them."
+- New `_nested(root: str, roots: set[str]) -> bool`: `True` when another
+  root in `roots` contains `root` (`under_root(root, other)` for some
+  `other != root`).
+- New `_deny_reads(repo: Path, root: str) -> list[str]`: the two P6 rules.
+- `os_sandbox_settings`: `permissions.deny` becomes the flattened
+  `_deny_reads` of every forbidden root. Nothing else in the dict changes.
+- `proxy_scope`: unchanged (P7).
+- Import `under_root` alongside `literal_root`.
+
+#### `guard.py`
+
+- `_names_forbidden_root(scope, token)`: P5. Normalize with
+  `posixpath.normpath(token.lstrip("./"))`, then
+  `any(under_root(path, root) for root in scope.bash_forbidden)`. `posixpath`
+  is stdlib, so no new dependency. Import `under_root` from `.paths`.
+- `_token_forbidden` and `_names_repo` do not change.
+
+Every function stays under 8 lines, with at most 2 parameters and no flags.
+
+### Test checklist (for the Unit Tester)
+
+One contract change, which does not weaken any test:
+`test_paths.py::test_literal_root` currently expects `("!tests/**", "tests")`.
+Under P2 it becomes `("!tests/**", "")`. All other existing guard and sandbox
+assertions must stay as they are and pass. That includes
+`scope.bash_forbidden == ["src", "tests"]`, `ls ./tests` denied,
+`Read(/{repo}/src/**)` in the deny list and `forbidden_roots == []` for
+`**/*.py`.
+
+1. P1/P2: every row of the "Worked examples" glob table, parametrized.
+2. P4: `under_root` for `(a, a)` true, `(a/b, a)` true, `(ab, a)` false,
+   `(a, a/b)` false, `(agile-team, agile-team/runner/agile_team)` false.
+3. P3: a config with this repo's `[toolchain.globs]` (source, tests with the
+   `!` line, e2e) gives exactly the three roots above. The python preset
+   globs give `["src", "tests"]`. Duplicate globs give one root.
+4. P6: for this repo's globs, `permissions.deny` is exactly the six rules
+   (two per root, in root order) and does **not** contain
+   `Read(/<repo>/agile-team/**)`. `allowRead` still holds the customer docs
+   path.
+5. P5: every row of the Bash token table, through `guard.check_bash` on a
+   proxy `Scope` whose `bash_forbidden` is this repo's roots.
+6. Flat parity: with `["src", "tests"]`, `cat src/x`, `ls ./tests`,
+   `ls tests/` and `cat src//x` are denied, and `cat tests.txt` and
+   `ls srcfoo` are allowed.
+7. AC3 end to end through `sandbox.proxy_scope` on a config shaped like this
+   repo (`docs_dir = "agile-team/docs"`, its globs, a `package` delivery):
+   Read of `agile-team/docs/customer/x.md` is allowed, Read of
+   `agile-team/runner/agile_team/cli.py` is denied, Bash `agile-team status`
+   is allowed and Bash `cat agile-team/runner/tests/test_x.py` is denied.
+
+### Known limits (unchanged by s7, not in scope)
+
+The root check is a name tripwire, not the wall. The wall is: cwd is the
+sandbox (so relative paths resolve inside it), `..` and absolute repo paths
+are denied, and the OS sandbox denies reading the repo. So these still pass
+the hook, as they did before for any root deeper than one segment:
+
+- Ancestors of a root (`ls agile-team/runner`).
+- Wildcard tokens (`agile-team/runner/agile_*`).
+- Paths glued to an option (`--file=src/x`).
+- `~` or `$HOME` spellings of the repo path, which `_names_repo` does not
+  expand. This is worth a follow-up story.
+
+Deployment: a running runner keeps the old guard in memory. The fix applies
+after `stop` then `start --resume`.
