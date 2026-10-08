@@ -81,6 +81,9 @@ What the SDK (0.2.163) actually does:
   error text and decides what to do. Their tracebacks now also go to
   `crash.log`.
 - Ctrl-C (`KeyboardInterrupt`) is unchanged: exit 130, no halt record.
+- After a halt the PO's end-of-turn settle is skipped. Partial edits stay
+  uncommitted for the human (and s9), and they are not quarantined or
+  attributed to the PO.
 - A new phrasing of the limit message is a new row in `LIMIT_PATTERNS`. Until
   that row exists, the stop is recorded as `failed`, and the full text is in
   the reason and `crash.log`.

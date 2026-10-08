@@ -92,7 +92,9 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   PO's own query failed with an SDK error result (a limit included), its
   session id is saved, so the resume continues that session.
 - A step cut off mid-way can leave uncommitted edits, and preflight then
-  refuses the dirty tree.
+  refuses the dirty tree. After a halt the runner commits nothing more: the
+  cut-off step's edits and the PO's edits from that turn stay in the tree
+  for the human.
 
 ## `.agile-team.toml`
 

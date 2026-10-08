@@ -444,7 +444,7 @@ already updated `reference/protocol.md` ("Run status and stops"), `SKILL.md`
 |---|---|---|
 | H1 | Every handled halt has one kind (`HaltKind`: `limit`, `crash`, `sigterm`). The `HALTS` table maps each kind to its run status, relay note kind, exit code and advice (table below). No code branches on the kind outside these tables. | AC1, AC2 |
 | H2 | `classify(exc)` flattens `BaseExceptionGroup`s to their leaf exceptions. It then returns the first non-`None` result of `DETECTORS = (limit_halt, sigterm_halt, crash_halt)`. `crash_halt` always returns a halt. | AC2, AC3 |
-| H3 | `limit_halt`: the first row of `LIMIT_PATTERNS` whose regex `search`es (case-insensitive) `str(leaf)` for any leaf. The reason is `template.format(**match.groupdict())`, stripped. The reset text is copied from the match and never parsed or computed. | AC1, AC3 |
+| H3 | `limit_halt`: the first row of `LIMIT_PATTERNS` whose regex `search`es (case-insensitive) the leaf's message, for any leaf. The message is `str(leaf)` with the SDK's trailing ` (exit code: N)` removed (`EXIT_SUFFIX`, used only for limit matching; crash reasons keep it). The reason is `template.format(**match.groupdict())`, stripped. The reset text is copied from the match and never parsed or computed. It ends at a newline or a `;`, because the SDK joins `errors[]` with `"; "`. | AC1, AC3 |
 | H4 | `sigterm_halt`: any leaf is an `asyncio.CancelledError` → `Halt(SIGTERM, "stopped by stop --now")`. `crash_halt`: `Halt(CRASH, f"crashed: {Type}: {first line of str(leaf)}")`, using the first leaf. The line is cut to 200 characters. With an empty message the reason is `crashed: {Type}`. | AC2 |
 | H5 | **Role step.** `Runtime` wraps `_execute` in `except Exception`. Every caught exception is appended to `crash.log`. A limit (`limit_halt` is not `None`) → `halt_run`, then return the `halted` report to the PO (below). Anything else is re-raised unchanged, as today (the SDK hands its text to the PO). `CancelledError` is not an `Exception`, so it passes through to the top level. | AC1 |
 | H6 | **Top level.** `cli._run` wraps `asyncio.run(...)` in `except (Exception, asyncio.CancelledError)`. It appends the traceback to `crash.log`, calls `runtime.halt_run(classify(exc))`, prints the halt line and returns the kind's exit code. `KeyboardInterrupt` is not caught there and keeps exit 130. | AC1, AC2 |
@@ -456,6 +456,7 @@ already updated `reference/protocol.md` ("Run status and stops"), `SKILL.md`
 | H12 | **PO session on a PO-level error.** `PoRun._collect` catches `ResultError`, stores `exc.session_id or state.po_session` in `state.po_session`, saves, and re-raises. This way `start --resume` continues the session that hit the limit. | AC4 |
 | H13 | `RunState.status_reason: str \| None = None` is added as the **last** field. Older `state.json` files load with `None`. `status_report` emits `"status_reason"` directly after `"status"`. | AC5 |
 | H14 | `_run_refusal`'s halted text includes the reason when there is one: `the run is blocked (session limit, resets 2:20pm (America/Edmonton)); end your turn`. With no reason it is unchanged: `the run is blocked; end your turn`. | AC1 |
+| H15 | **No settle after a halt.** `PoRun._settle` calls `settle_po` only when `runtime.halted_by` is `None`. After a halt the tree is left as it is (the cut-off role's partial edits and the PO's edits from that turn): nothing is committed, quarantined or attributed. Steps that finished earlier in the turn were already settled one by one. `_record` (cost, session) still runs. | AC1 |
 
 ### The `HALTS` table (exact values, tests may assert them)
 
@@ -481,7 +482,7 @@ stay: 0 (ok), 1 (CLI error or preflight), 130 (Ctrl-C).
 
 | Regex (`re.IGNORECASE`) | Template | Example message → reason |
 |---|---|---|
-| `hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n]*\S)` | `{kind} limit, resets {reset}` | `You've hit your session limit · resets 2:20pm (America/Edmonton)` → `session limit, resets 2:20pm (America/Edmonton)` |
+| `hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n;]*[^\s;])` | `{kind} limit, resets {reset}` | `You've hit your session limit · resets 2:20pm (America/Edmonton)` → `session limit, resets 2:20pm (America/Edmonton)` |
 | `hit your (?P<kind>[\w ]+?) limit` | `{kind} limit` | `You've hit your weekly limit` → `weekly limit` |
 | `(?P<kind>usage) limit reached` | `{kind} limit reached` | `Claude AI usage limit reached\|1760000000` → `usage limit reached` |
 
@@ -525,6 +526,7 @@ and keep the traceback in `crash.log`."
 | `@dataclass(frozen=True) class Halt` | `kind: HaltKind`, `reason: str`. `rule` property → `HALTS[self.kind]`. `message() -> str` → `f"{self.reason}; {self.rule.advice}"`. |
 | `LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...]` | The table above, compiled at import. |
 | `leaves(exc) -> list[BaseException]` | `exc` itself, or the flattened leaves of a `BaseExceptionGroup` (recursive). |
+| `EXIT_SUFFIX`, `_message(leaf) -> str` | H3: `str(leaf)` without the trailing ` (exit code: N)`. |
 | `limit_halt(exc) -> Halt \| None` | H3. |
 | `sigterm_halt(exc) -> Halt \| None` | H4. |
 | `crash_halt(exc) -> Halt` | H4. |
@@ -582,7 +584,8 @@ string keeps `limit_halt` short.
 - `PoRun.run`: `self._set_status(RunStatus.RUNNING)` stays where it is,
   before the query (H11). `_set_status` now calls
   `state.mark(status)` and then `save()`. It replaces `await collect(...)`
-  with `await self._collect(plan)`.
+  with `await self._collect(plan)`, and `settle_po()` with `self._settle()`.
+- `PoRun._settle(self) -> None` (new): H15.
 - `PoRun._collect(self, plan) -> StepResult` (new): H12. Docstring: "Drain
   the PO's query. On an SDK error result, keep its session for resume."
   Import `ResultError` from `claude_agent_sdk`.
@@ -614,7 +617,9 @@ runner has already told the human."
 A new fake in `conftest.py`, `RaisingQuery(exc, before=1)`, yields `before`
 `AssistantMessage`s and then raises `exc`, so the error comes mid-stream
 (AC7). Build the limit error as the SDK does:
-`ResultError("Claude Code returned an error result: You've hit your session limit · resets 2:20pm (America/Edmonton)", data={"subtype": "success", "is_error": True, "session_id": "po-sess", "result": "You've hit your session limit · resets 2:20pm (America/Edmonton)", "total_cost_usd": 1.5})`.
+`ResultError("Claude Code returned an error result: You've hit your session limit · resets 2:20pm (America/Edmonton)", data={"subtype": "success", "is_error": True, "session_id": "po-sess", "result": "You've hit your session limit · resets 2:20pm (America/Edmonton)", "total_cost_usd": 1.5}, exit_code=1)`.
+The real SDK always passes `exit_code`, which appends ` (exit code: 1)` to
+`str(exc)`. Tests must not leave it out.
 
 1. H3: every row of the `LIMIT_PATTERNS` table, parametrized, through
    `halt.classify`. Also a `BaseExceptionGroup` wrapping the limit error
@@ -657,6 +662,13 @@ A new fake in `conftest.py`, `RaisingQuery(exc, before=1)`, yields `before`
     `status` (check the key order).
 12. H14: the refusal text without a reason is unchanged. Existing tests must
     still pass as they are.
+13. H3: the limit text with a trailing ` (exit code: 1)`, and `errors[]`
+    joined as `"<limit>; other error"` (and the reverse order), both give the
+    exact AC1 reason.
+14. H15: a halted role step writes one file inside the PO scope and one
+    outside it, then raises the limit, and the PO ends its turn normally.
+    Both files stay uncommitted, HEAD does not move, no `QUARANTINE` event is
+    emitted, and the story's step and rounds are unchanged.
 
 ### How s9 and s10 plug in (not in s8's scope)
 
@@ -667,7 +679,9 @@ A new fake in `conftest.py`, `RaisingQuery(exc, before=1)`, yields `before`
   SIGTERM). s9 adds one call there: when `state.in_flight` is set, save the
   tree as a commit, then revert it, and put the sha into `state` and into the
   note text. At the top level the call runs after `asyncio.run` has returned,
-  so the role's process is gone and the tree is quiet. Non-limit role-step
+  so the role's process is gone and the tree is quiet. H15 already makes sure
+  nothing settles the tree after a halt, so the save sees the step's edits
+  (and the PO's edits from that turn) as they were. Non-limit role-step
   exceptions that the PO keeps going after would need the same save in
   `_step_failed` before the re-raise. s9 decides that.
 - **s9, status for a dead run.** Derive `interrupted` in `status_report`
