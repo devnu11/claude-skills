@@ -1,4 +1,4 @@
-"""``agile-team`` command line: init | config check | start | status | answer | stop.
+"""``agile-team`` command line: init | config check | roles | start | status | answer | stop.
 
 Run from the target repo's root. Every subcommand returns an exit code; errors
 print ``agile-team <cmd>: <message>`` and return 1.
@@ -30,7 +30,15 @@ from .preflight import Preflight
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .providers import Providers
 from .relay import Relay, RelayError
-from .roles import ResolvedRole, RoleBook, RoleError, expand_globs
+from .roles import (
+    REPO_ROLES,
+    Layer,
+    ResolvedRole,
+    RoleBook,
+    RoleError,
+    expand_globs,
+    user_roles_dir,
+)
 
 LEDGER = "ledger.jsonl"
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
@@ -68,6 +76,11 @@ def default_query() -> QueryFn:
 
 def print_json(data: Any) -> None:
     print(json.dumps(data, indent=2))
+
+
+def role_book(config: config_mod.Config, home: Path) -> RoleBook:
+    """Built-in, global and repo roles; the global layer lives under ``home``."""
+    return RoleBook.for_repo(config.repo, config.roles, user_roles_dir(home, os.environ))
 
 
 def _load_config(repo: Path) -> config_mod.Config:
@@ -128,16 +141,17 @@ def answers_from(args: argparse.Namespace) -> onboard.Answers:
 
 
 def cmd_config_check(args: argparse.Namespace) -> int:
-    problems = check_config(_load_config(Path(args.repo)))
+    place = Place.of(args)
+    problems = check_config(_load_config(place.repo), place.home)
     for problem in problems:
         print(f"problem: {problem}")
     print("config ok" if not problems else f"{len(problems)} problem(s)")
     return 1 if problems else 0
 
 
-def check_config(config: config_mod.Config) -> list[str]:
+def check_config(config: config_mod.Config, home: Path) -> list[str]:
     """Static config problems plus every role's resolution and glob expansion."""
-    book = RoleBook.for_repo(config.repo, config.roles)
+    book = role_book(config, home)
     known = config_mod.Known(book.names(), set(sandbox.DELIVERY_KINDS))
     return config_mod.validate(config, known) + _role_problems(book, config)
 
@@ -160,6 +174,60 @@ def _check_role(role: ResolvedRole, config: config_mod.Config) -> None:
         raise RoleError(f"unknown provider {role.provider!r}; add [providers.{role.provider}]")
 
 
+# ----- roles ---------------------------------------------------------------
+
+
+def cmd_roles(args: argparse.Namespace) -> int:
+    return ROLE_ACTIONS[args.action](args)
+
+
+def _book(args: argparse.Namespace) -> RoleBook:
+    place = Place.of(args)
+    return role_book(_load_config(place.repo), place.home)
+
+
+def roles_list(args: argparse.Namespace) -> int:
+    """Print each role's layers and its resolved model, provider and scope."""
+    book = _book(args)
+    print_json({name: role_summary(book, name) for name in ["_shared", *sorted(book.names())]})
+    return 0
+
+
+def role_summary(book: RoleBook, name: str) -> dict[str, Any]:
+    summary: dict[str, Any] = {"layers": book.layers(name)}
+    if name == "_shared":
+        return summary
+    try:
+        role = book.resolve(name)
+    except RoleError as exc:
+        return summary | {"error": str(exc)}
+    keys = ("enabled", "provider", "model", "effort", "write")
+    return summary | {k: getattr(role, k) for k in keys}
+
+
+def roles_scaffold(args: argparse.Namespace) -> int:
+    """Write a commented stub for every role that has no file in the chosen layer yet."""
+    place = Place.of(args)
+    target = scaffold_dir(place, args.layer)
+    created = _book(args).scaffold(target, args.layer)
+    for path in created:
+        print(f"created {path}")
+    print(f"{len(created)} stub(s) in {target}" if created else f"nothing to add in {target}")
+    return 0
+
+
+def scaffold_dir(place: Place, layer: Layer) -> Path:
+    if layer is Layer.GLOBAL:
+        return user_roles_dir(place.home, os.environ)
+    return place.repo / REPO_ROLES
+
+
+ROLE_ACTIONS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "list": roles_list,
+    "scaffold": roles_scaffold,
+}
+
+
 # ----- start ---------------------------------------------------------------
 
 
@@ -177,7 +245,7 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
     locations = keys.KeyLocations(place.repo, config.team.key_file, place.home)
     return Runtime(
         config=config,
-        book=RoleBook.for_repo(place.repo, config.roles),
+        book=role_book(config, place.home),
         git=Git(place.repo),
         ledger=Ledger(config.run_dir / LEDGER),
         relay=Relay(config.run_dir),
@@ -208,7 +276,7 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:
-    failures = Preflight(config, Git(config.repo), home).run_all() + check_config(config)
+    failures = Preflight(config, Git(config.repo), home).run_all() + check_config(config, home)
     if failures:
         raise CliError("preflight failed:\n  " + "\n  ".join(failures))
 
@@ -326,6 +394,12 @@ START_ARGS: tuple[Arg, ...] = (
     (("--resume",), {"action": "store_const", "dest": "mode", "const": StartMode.RESUME,
                      "help": "continue the previous run"}),
 )  # fmt: skip
+ROLES_ARGS: tuple[Arg, ...] = (
+    (("action",), {"choices": sorted(ROLE_ACTIONS)}),
+    (("--global",), {"action": "store_const", "dest": "layer", "const": Layer.GLOBAL,
+                     "default": Layer.REPO,
+                     "help": "scaffold ~/.config/agile-team/roles instead of .team/roles"}),
+)  # fmt: skip
 STOP_ARGS: tuple[Arg, ...] = (
     (("--now",), {"action": "store_const", "dest": "stop", "const": StopMode.NOW,
                   "default": StopMode.AFTER_STEP, "help": "also SIGTERM the runner"}),
@@ -334,6 +408,7 @@ COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
             ((("action",), {"choices": ["check"]}),)),
+    Command("roles", "list role layers or scaffold instruction stubs", cmd_roles, ROLES_ARGS),
     Command("start", "run the team (blocks; run in the background)", cmd_start, START_ARGS),
     Command("status", "print run state as JSON", cmd_status),
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),

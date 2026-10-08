@@ -10,9 +10,11 @@ Run from the target repo root, or pass `--repo PATH`.
 | Command | What it does |
 |---|---|
 | `init --detect` | Print the detected stack preset, commands, globs and suggested delivery kind as JSON. No writes. |
-| `init --preset P --delivery K [--url U] [--docs-dir D] [--artifacts committed\|ignored] [--key-file F] [--budget USD] [--cadence sprint\|until-blocker]` | Phase A: write `.agile-team.toml`, `.gitignore` lines, `.team/CLAUDE.md`, `.team/roles/`; commit `chore(team): onboard agile team`. |
+| `init --preset P --delivery K [--url U] [--docs-dir D] [--artifacts committed\|ignored] [--key-file F] [--budget USD] [--cadence sprint\|until-blocker]` | Phase A: write `.agile-team.toml`, `.gitignore` lines, `.team/CLAUDE.md`, a stub per role in `.team/roles/`; commit `chore(team): onboard agile team`. |
 | `init … --reconfigure` | Re-run phase A; keeps every value already in the config and never overwrites the charter. |
 | `config check` | Validate config, every role's resolution and glob placeholders. Exit 1 on problems. |
+| `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
+| `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). |
 | `status` | JSON: run status, stories and their pipeline step, open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
@@ -115,11 +117,28 @@ extends: _shared       # or another role, e.g. developer-cli extends developer
 enabled: true
 ```
 
-Per repo: `.team/roles/<role>.md` **without** frontmatter is appended to that
-role's prompt; **with** frontmatter it replaces the built-in (or adds a role).
+### Your instructions: global and repo layers
 
-System prompt order: `_shared` → role chain bodies → repo addendum →
-`.team/CLAUDE.md` → `.team/briefs/<role>.md` → file scope.
+Two layers of human-written role files sit on top of the built-ins:
+
+| Layer | Directory | Applies to |
+|---|---|---|
+| global | `~/.config/agile-team/roles/` (`$AGILE_TEAM_HOME/roles/` when set) | every repo |
+| repo | `.team/roles/` | this repo |
+
+- `<role>.md` **without** frontmatter is an addendum, appended to the role's
+  prompt (global first, then repo). HTML comments are dropped, so a
+  scaffolded stub changes nothing until you write in it.
+- `<role>.md` **with** frontmatter replaces the role (or adds one). Repo beats
+  global beats built-in.
+- `_shared.md` addenda apply to every role.
+
+`roles scaffold` writes the stubs; `roles list` shows what each layer does.
+Global files can live in a dotfiles repo; the runner only reads them.
+
+System prompt order: `_shared` (+ `_shared` addenda) → role chain bodies →
+global addendum → repo addendum → `.team/CLAUDE.md` →
+`.team/briefs/<role>.md` → file scope.
 
 ## Providers
 

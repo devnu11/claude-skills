@@ -5,21 +5,27 @@ read/write globs) and whose body is the system prompt. Sources, lowest
 precedence first:
 
 1. built-in ``agile_team/roles/<name>.md``;
-2. a complete repo file ``.team/roles/<name>.md`` (one with frontmatter), which
-   replaces the built-in;
-3. a config-only role ``[roles.<name>]`` with ``extends``;
-4. ``[roles.<name>]`` field overrides in ``.agile-team.toml``;
-5. run-time model overrides set by the Product Owner.
+2. a complete global file ``~/.config/agile-team/roles/<name>.md`` (one with
+   frontmatter; ``$AGILE_TEAM_HOME/roles`` when set), which replaces the
+   built-in;
+3. a complete repo file ``.team/roles/<name>.md``, which replaces both;
+4. a config-only role ``[roles.<name>]`` with ``extends``;
+5. ``[roles.<name>]`` field overrides in ``.agile-team.toml``;
+6. run-time model overrides set by the Product Owner.
 
-A repo file *without* frontmatter is an addendum appended to the body.
+A global or repo file *without* frontmatter is an addendum appended to the
+body, global first. HTML comments in an addendum are dropped, so a scaffolded
+stub adds nothing until the human writes in it. ``_shared.md`` addenda apply
+to every role.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +36,8 @@ from .providers import DEFAULT as DEFAULT_PROVIDER
 BUILTIN_DIR = Path(__file__).parent / "roles"
 SHARED = "_shared"
 REPO_ROLES = ".team/roles"
+USER_ROLES = ".config/agile-team/roles"
+HOME_ENV = "AGILE_TEAM_HOME"
 CHARTER = ".team/CLAUDE.md"
 BRIEFS = ".team/briefs"
 OVERRIDABLE = (
@@ -49,6 +57,34 @@ RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate")
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 _HANDOFF = re.compile(r"```handoff\s*\n(.*?)\n```", re.DOTALL)
 _PLACEHOLDER = re.compile(r"\A(!?)\{(\w+)\}\Z")
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+STUB = """<!--
+{name}: your instructions for this role ({layer} layer).
+
+Write plain Markdown below this comment; it is appended to the role's
+built-in prompt. Layers apply in order: built-in, then global
+(~/.config/agile-team/roles/, or $AGILE_TEAM_HOME/roles/), then this repo
+(.team/roles/). To replace the role entirely, start the file with YAML
+frontmatter (---) instead. _shared.md applies to every role.
+This comment is ignored.
+
+Role: {description}
+-->
+"""
+
+
+class Layer(StrEnum):
+    """Where a human's role file lives."""
+
+    GLOBAL = "global"
+    REPO = "repo"
+
+
+def user_roles_dir(home: Path, env: Mapping[str, str]) -> Path:
+    """The global role layer: ``$AGILE_TEAM_HOME/roles`` or ``~/.config/agile-team/roles``."""
+    custom = env.get(HOME_ENV)
+    return Path(custom).expanduser() / "roles" if custom else home / USER_ROLES
 
 
 class RoleError(Exception):
@@ -128,6 +164,20 @@ def has_frontmatter(text: str) -> bool:
     return bool(_FRONTMATTER.match(text))
 
 
+def addendum_text(text: str) -> str:
+    """The part of a frontmatter-less file that is appended to a prompt."""
+    return "" if has_frontmatter(text) else _COMMENT.sub("", text).strip()
+
+
+def contribution(text: str | None) -> str | None:
+    """How one layer's file affects a role: ``replace``, ``addendum``, ``stub`` or nothing."""
+    if text is None:
+        return None
+    if has_frontmatter(text):
+        return "replace"
+    return "addendum" if addendum_text(text) else "stub"
+
+
 def load_dir(directory: Path) -> dict[str, str]:
     """Raw text of every ``*.md`` in ``directory``, keyed by stem."""
     if not directory.is_dir():
@@ -143,14 +193,25 @@ class RoleBook:
     repo_files: dict[str, str]
     config_roles: dict[str, dict[str, Any]]
     repo: Path = field(default_factory=Path)
+    user_files: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def for_repo(cls, repo: Path, config_roles: dict[str, dict[str, Any]]) -> RoleBook:
-        return cls(load_dir(BUILTIN_DIR), load_dir(repo / REPO_ROLES), config_roles, repo)
+    def for_repo(
+        cls, repo: Path, config_roles: dict[str, dict[str, Any]], user_dir: Path | None = None
+    ) -> RoleBook:
+        """Built-in, global (``user_dir``) and repo role files for ``repo``."""
+        user = load_dir(user_dir) if user_dir else {}
+        return cls(load_dir(BUILTIN_DIR), load_dir(repo / REPO_ROLES), config_roles, repo, user)
+
+    def _human_layers(self) -> tuple[dict[str, str], dict[str, str]]:
+        """Human-written files, highest precedence first."""
+        return self.repo_files, self.user_files
 
     def names(self) -> set[str]:
-        """Every role that can be resolved (built-in, repo files, config-only)."""
-        complete = {n for n, t in self.repo_files.items() if has_frontmatter(t)}
+        """Every role that can be resolved (built-in, global or repo files, config-only)."""
+        complete = {
+            n for files in self._human_layers() for n, t in files.items() if has_frontmatter(t)
+        }
         return (set(self.builtin) | complete | set(self.config_roles)) - {SHARED}
 
     def enabled_names(self) -> list[str]:
@@ -158,9 +219,10 @@ class RoleBook:
 
     def spec(self, name: str) -> RoleSpec:
         """The base spec for ``name`` before ``extends`` and overrides."""
-        repo_text = self.repo_files.get(name, "")
-        if has_frontmatter(repo_text):
-            return parse_role(name, repo_text)
+        texts = (files.get(name, "") for files in self._human_layers())
+        complete = next((t for t in texts if has_frontmatter(t)), None)
+        if complete:
+            return parse_role(name, complete)
         if name in self.builtin:
             return parse_role(name, self.builtin[name])
         return self._config_only(name)
@@ -183,8 +245,31 @@ class RoleBook:
         return list(reversed(specs))
 
     def addendum(self, name: str) -> str:
-        text = self.repo_files.get(name, "")
-        return "" if has_frontmatter(text) else text.strip()
+        """Global then repo addenda for ``name``, comments removed."""
+        texts = (files.get(name, "") for files in reversed(self._human_layers()))
+        return "\n\n".join(t for t in map(addendum_text, texts) if t)
+
+    def layers(self, name: str) -> dict[str, str | None]:
+        """What each layer contributes to ``name``."""
+        return {
+            "builtin": "base" if name in self.builtin else None,
+            Layer.GLOBAL: contribution(self.user_files.get(name)),
+            Layer.REPO: contribution(self.repo_files.get(name)),
+        }
+
+    def scaffold(self, directory: Path, layer: Layer) -> list[Path]:
+        """Write a stub for ``_shared`` and each enabled role lacking a file in ``directory``."""
+        missing = [
+            n for n in (SHARED, *self.enabled_names()) if not (directory / f"{n}.md").exists()
+        ]
+        directory.mkdir(parents=True, exist_ok=True)
+        for name in missing:
+            (directory / f"{name}.md").write_text(self._stub(name, layer))
+        return [directory / f"{n}.md" for n in missing]
+
+    def _stub(self, name: str, layer: Layer) -> str:
+        what = "rules every role follows" if name == SHARED else self.resolve(name).description
+        return STUB.format(name=name, layer=layer, description=what)
 
     def resolve(self, name: str, runtime: dict[str, Any] | None = None) -> ResolvedRole:
         """Merge the chain, config overrides and run-time overrides."""
@@ -195,7 +280,9 @@ class RoleBook:
         return _concrete(merged)
 
     def shared_body(self) -> str:
-        return parse_role(SHARED, self.builtin.get(SHARED, "")).body
+        """The built-in ``_shared`` body plus any human ``_shared`` addenda."""
+        base = parse_role(SHARED, self.builtin.get(SHARED, "")).body
+        return "\n\n".join(p for p in (base, self.addendum(SHARED)) if p)
 
     def system_prompt(self, role: ResolvedRole, scope: str) -> str:
         """``_shared`` + role chain + addendum + charter + Scribe brief + scope note."""
