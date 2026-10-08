@@ -60,6 +60,17 @@ class RunState:
             return True
         return self.status is RunStatus.SPRINT_END and self.cadence == "sprint"
 
+    def unknown_stories(self, ids: list[str]) -> list[str]:
+        """The ids that are not opened stories, in the order given."""
+        return [i for i in ids if i not in self.stories]
+
+    def begin_sprint(self, ids: list[str]) -> None:
+        """Open the next sprint holding exactly ``ids``; other unfinished stories go back."""
+        self.sprint += 1
+        for sid, story in self.stories.items():
+            if story.status != StoryStatus.DONE:
+                story.sprint = self.sprint if sid in ids else None
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
 
