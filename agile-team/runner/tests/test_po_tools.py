@@ -3,6 +3,7 @@
 import asyncio
 import json
 
+import pytest
 from agile_team import po_tools
 from agile_team.po_tools import Start, StartMode, Tools
 from agile_team.providers import Provider, Providers
@@ -26,14 +27,127 @@ def test_open_story_and_status(make_runtime) -> None:
     assert "developer" in status["roles"]
 
 
+def open_stories(t: Tools, *ids: str) -> None:
+    for sid in ids:
+        call(t.open_story({"id": sid, "title": sid}))
+
+
+def test_open_story_starts_in_backlog(make_runtime) -> None:
+    t = Tools(make_runtime())
+    open_stories(t, "s1")
+    assert t.runtime.state.stories["s1"].sprint is None
+    assert call(t.story_status({}))["stories"]["s1"]["sprint"] is None
+
+
 def test_start_sprint_requires_manager(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
-    assert call(t.start_sprint({"goal": "MVP"}))["sprint"] == 1
-    assert rt.events.events()[0].data == {"sprint": 1, "goal": "MVP", "stories": []}
+    open_stories(t, "s1")
+    out = call(t.start_sprint({"goal": "MVP", "stories": ["s1"]}))
+    assert out == {"sprint": 1, "stories": ["s1"], "next": "run the manager"}
+    event = rt.events.events()[-1]
+    assert event.data == {"sprint": 1, "goal": "MVP", "stories": ["s1"]}
+    assert rt.state.stories["s1"].sprint == 1
+    assert rt.state.manager_due == ["sprint 1 start: MVP (s1)"]
     assert "manager review due" in call(t.run_role({"role": "architect", "brief": "b"}))["reason"]
     assert call(t.run_role({"role": "manager", "brief": "b", "story": ""}))["status"] == "done"
     assert rt.state.manager_due == []
+
+
+def test_start_sprint_manager_due_lists_stories(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1", "s2")
+    call(t.start_sprint({"goal": "G", "stories": ["s1", "s2"]}))
+    assert rt.state.manager_due == ["sprint 1 start: G (s1, s2)"]
+
+
+def test_start_sprint_dedupes_ids(make_runtime) -> None:
+    t = Tools(make_runtime())
+    open_stories(t, "s1", "s2")
+    out = call(t.start_sprint({"goal": "G", "stories": ["s2", "s1", "s2"]}))
+    assert out["stories"] == ["s2", "s1"]
+    assert t.runtime.events.events()[-1].data["stories"] == ["s2", "s1"]
+
+
+def test_start_sprint_replaces_scope(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1", "s2", "s3")
+    call(t.start_sprint({"goal": "one", "stories": ["s1", "s2"]}))
+    rt.state.stories["s2"].status = "done"
+    out = call(t.start_sprint({"goal": "two", "stories": ["s3"]}))
+    assert out["sprint"] == 2
+    sprints = {k: v.sprint for k, v in rt.state.stories.items()}
+    assert sprints == {"s1": None, "s2": 1, "s3": 2}
+
+
+def test_start_sprint_carries_over_listed_story(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    call(t.start_sprint({"goal": "one", "stories": ["s1"]}))
+    call(t.start_sprint({"goal": "two", "stories": ["s1"]}))
+    assert rt.state.stories["s1"].sprint == 2
+
+
+def test_start_sprint_listing_done_story_leaves_it(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    call(t.start_sprint({"goal": "one", "stories": ["s1"]}))
+    rt.state.stories["s1"].status = "done"
+    call(t.start_sprint({"goal": "two", "stories": ["s1"]}))
+    assert rt.state.stories["s1"].sprint == 1
+
+
+def snapshot(rt) -> tuple:
+    state_file = rt.config.run_dir / "state.json"
+    text = state_file.read_text() if state_file.is_file() else None
+    return (rt.state.to_json(), text, len(rt.events.events()))
+
+
+@pytest.mark.parametrize(
+    ("args", "reason"),
+    [
+        ({"goal": "G"}, "no stories listed; pass the story ids this sprint commits to"),
+        (
+            {"goal": "G", "stories": []},
+            "no stories listed; pass the story ids this sprint commits to",
+        ),
+        (
+            {"goal": "G", "stories": ["s1", "s9", "s7"]},
+            "unknown stories: s9, s7; open them with open_story first",
+        ),
+    ],
+)
+def test_start_sprint_refusals_have_no_side_effects(make_runtime, args, reason) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    rt.save()
+    before = snapshot(rt)
+    out = call(t.start_sprint(args))
+    assert out == {"status": "refused", "reason": reason}
+    assert snapshot(rt) == before
+    assert rt.state.sprint == 0 and rt.state.manager_due == []
+    assert rt.state.stories["s1"].sprint is None
+
+
+def test_story_status_shows_sprint(make_runtime) -> None:
+    t = Tools(make_runtime())
+    open_stories(t, "s1", "s2")
+    call(t.start_sprint({"goal": "G", "stories": ["s1"]}))
+    status = call(t.story_status({}))
+    assert status["sprint"] == 1
+    assert status["stories"]["s1"]["sprint"] == 1
+    assert status["stories"]["s2"]["sprint"] is None
+
+
+def test_start_sprint_schema_takes_stories_list() -> None:
+    desc, schema = po_tools.SCHEMAS["start_sprint"]
+    assert schema == {"goal": str, "stories": list}
+    assert "backlog" in desc
 
 
 def test_ask_notify_and_wait(make_runtime) -> None:

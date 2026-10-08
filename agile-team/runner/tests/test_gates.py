@@ -15,6 +15,7 @@ STEPS = list(PIPELINE_STEPS)
 
 
 def story(step: str = "design", **kw) -> gates.StoryState:
+    kw.setdefault("sprint", 1)
     return gates.StoryState("s1", "Add todo", step, **kw)
 
 
@@ -151,3 +152,32 @@ def test_load_baseline(tmp_path: Path) -> None:
     (tmp_path / ".team").mkdir()
     (tmp_path / gates.BASELINE).write_text(json.dumps({"coverage": 70}))
     assert gates.load_baseline(tmp_path)["coverage"] == 70
+
+
+BACKLOG = "story s1 is in the backlog; add it to a sprint"
+
+
+def test_story_sprint_defaults_to_backlog() -> None:
+    assert gates.StoryState("s1", "Add", "design").sprint is None
+
+
+def test_backlog_refusal_for_story_bound_roles() -> None:
+    assert gates.dispatch_refusal("architect", story(sprint=None)) == BACKLOG
+    assert gates.dispatch_refusal("developer", story("implement", sprint=None)) == BACKLOG
+    assert gates.dispatch_refusal("developer", story("implement", sprint=2)) is None
+
+
+def test_backlog_refusal_ignored_for_ungated_and_storyless_roles() -> None:
+    assert gates.dispatch_refusal("manager", story(sprint=None)) is None
+    assert gates.dispatch_refusal("scribe", story(sprint=None)) is None
+    assert gates.dispatch_refusal("architect", None) is None
+
+
+def test_status_refusal_beats_backlog_refusal() -> None:
+    done = story(sprint=None, status=StoryStatus.DONE)
+    capped = story(sprint=None, status=StoryStatus.NEEDS_MANAGER)
+    assert "is done" in gates.dispatch_refusal("architect", done)
+    assert "round cap" in gates.dispatch_refusal("architect", capped)
+    assert "blocked" in gates.dispatch_refusal(
+        "architect", story(sprint=None, status=StoryStatus.BLOCKED)
+    )

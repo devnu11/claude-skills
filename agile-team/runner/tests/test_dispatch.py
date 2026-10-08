@@ -22,6 +22,7 @@ def run(rt, role, brief="go", story=None):
 
 
 def open_story(rt, step="design", **kw):
+    kw.setdefault("sprint", 1)
     rt.state.stories["s1"] = gates.StoryState("s1", "Add todo", step, **kw)
     return rt.state.stories["s1"]
 
@@ -339,3 +340,19 @@ def test_story_blocked_on_open_question(make_runtime) -> None:
     open_story(rt)
     rt.relay.post(Note("question", "DB?", ["s1"]))
     assert "waiting on an answer" in run(rt, "architect", story="s1")["reason"]
+
+
+def test_backlog_story_is_refused_for_story_bound_roles(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, sprint=None)
+    out = run(rt, "architect", story="s1")
+    assert out["status"] == "refused"
+    assert out["reason"] == "story s1 is in the backlog; add it to a sprint"
+
+
+def test_backlog_story_still_allows_manager_and_scribe(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, sprint=None)
+    for role in ("manager", "scribe"):
+        out = run(rt, role, story="s1")
+        assert "backlog" not in out.get("reason", "")
