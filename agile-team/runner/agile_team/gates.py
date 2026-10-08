@@ -64,6 +64,7 @@ class StoryState:
     status: StoryStatus = StoryStatus.ACTIVE
     commit: str | None = None
     delivery: str | None = None
+    sprint: int | None = None
 
 
 @dataclass
@@ -87,7 +88,7 @@ def dispatch_refusal(role: str, story: StoryState | None) -> str | None:
         return None
     if story is None:
         return None if role in STORYLESS_ROLES else f"{role} only runs on a story; open_story"
-    return _status_refusal(story) or _step_refusal(role, story)
+    return _status_refusal(story) or _backlog_refusal(story) or _step_refusal(role, story)
 
 
 def _status_refusal(story: StoryState) -> str | None:
@@ -98,6 +99,12 @@ def _status_refusal(story: StoryState) -> str | None:
     }
     reason = reasons.get(story.status)
     return f"story {story.id} {reason}" if reason else None
+
+
+def _backlog_refusal(story: StoryState) -> str | None:
+    if story.sprint is not None:
+        return None
+    return f"story {story.id} is in the backlog; add it to a sprint"
 
 
 def _step_refusal(role: str, story: StoryState) -> str | None:

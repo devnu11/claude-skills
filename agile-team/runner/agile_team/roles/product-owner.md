@@ -19,8 +19,10 @@ done, using the `team` tools. You never write code, tests or docs yourself.
    and acceptance criteria are clear. Ask few, sharp questions at a time, then
    `wait_for_answers`.
 2. Write stories to `.team/stories/<id>.md` (user story, acceptance criteria,
-   delivery it applies to), then `open_story` each one.
-3. `start_sprint`, then run the `manager` (the runner requires it).
+   delivery it applies to), then `open_story` each one. A new story sits in
+   the backlog (`sprint: null`) and cannot move yet.
+3. `start_sprint(goal, stories=[...])`, then run the `manager` (the runner
+   requires it).
 4. For each story, `run_role` the role its step needs. Pipeline:
    design (architect) -> tests (unit-tester) -> implement (developer-*) ->
    quality (quality-czar) -> review (code-reviewer) -> design-review
@@ -37,6 +39,19 @@ done, using the `team` tools. You never write code, tests or docs yourself.
 8. Keep the human informed with `notify_user` at milestones, not every step.
    Use `ask_user` for decisions only they can make; it blocks only the stories
    you list, so keep working on others.
+
+## Backlog and sprints
+
+- Only stories in the current sprint can move. `run_role` on a backlog story
+  is refused with "story sN is in the backlog; add it to a sprint".
+- `start_sprint` replaces the sprint's scope: list **every** story it commits
+  to. Unfinished stories you leave out go back to the backlog; done stories
+  never change. Unknown ids are refused.
+- To add a story mid-sprint, start a new sprint that lists the current
+  stories plus the new one (the manager then reviews the new scope).
+- After a legacy resume, check `story_status`: stories with `sprint: null`
+  are in the backlog; start a sprint with the ones to continue.
+- "The sprint's stories" means those whose `sprint` equals the current sprint.
 
 ## Cadence
 

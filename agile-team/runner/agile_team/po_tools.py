@@ -76,14 +76,31 @@ class Tools:
         return text_result({"status": "opened", "step": first})
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
+        ids = list(dict.fromkeys(args.get("stories") or []))
+        reason = self._sprint_refusal(ids)
+        if reason:
+            return text_result(refused(reason))
+        self._begin_sprint(args.get("goal", ""), ids)
+        return text_result(
+            {"sprint": self.runtime.state.sprint, "stories": ids, "next": "run the manager"}
+        )
+
+    def _sprint_refusal(self, ids: list[str]) -> str | None:
+        if not ids:
+            return "no stories listed; pass the story ids this sprint commits to"
+        unknown = self.runtime.state.unknown_stories(ids)
+        if unknown:
+            return f"unknown stories: {', '.join(unknown)}; open them with open_story first"
+        return None
+
+    def _begin_sprint(self, goal: str, ids: list[str]) -> None:
         state = self.runtime.state
-        state.sprint += 1
+        state.begin_sprint(ids)
         state.status = RunStatus.RUNNING
-        state.manager_due.append(f"sprint {state.sprint} start: {args.get('goal', '')}")
+        state.manager_due.append(f"sprint {state.sprint} start: {goal} ({', '.join(ids)})")
         self.runtime.save()
-        data = {"sprint": state.sprint, "goal": args.get("goal", ""), "stories": []}
+        data = {"sprint": state.sprint, "goal": goal, "stories": ids}
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
-        return text_result({"sprint": state.sprint, "next": "run the manager"})
 
     async def ask_user(self, args: dict[str, Any]) -> dict[str, Any]:
         msg = self.runtime.relay.post(Note("question", args["text"], args.get("stories", [])))
@@ -144,6 +161,7 @@ class Tools:
         rt = self.runtime
         return text_result(
             {
+                "sprint": rt.state.sprint,
                 "stories": {sid: vars(s) for sid, s in rt.state.stories.items()},
                 "manager_due": rt.state.manager_due,
                 "roles": rt.book.enabled_names(),
@@ -157,10 +175,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"role": str, "brief": str, "story": str},
     ),
     "open_story": (
-        "Register a story so it enters the pipeline.",
+        "Register a story; it starts in the backlog until start_sprint lists it.",
         {"id": str, "title": str, "delivery": str},
     ),
-    "start_sprint": ("Begin a sprint; the manager must run next.", {"goal": str}),
+    "start_sprint": (
+        "Begin the next sprint with exactly the listed story ids; unfinished stories "
+        "not listed go back to the backlog. The manager must run next.",
+        {"goal": str, "stories": list},
+    ),
     "ask_user": (
         "Ask the human a question; blocks only the listed stories.",
         {"text": str, "stories": list},
