@@ -129,6 +129,7 @@ class Prepared:
                 _signal_group(self.process, signal.SIGKILL)
 
     def guidance(self) -> str:
+        """Prompt text telling the proxy how to reach this delivery."""
         commands = ", ".join(self.delivery.commands) or "none"
         return self.kind.guidance.format(url=self.delivery.url, commands=commands)
 
@@ -162,6 +163,7 @@ def run_shell(command: str, prepared: Prepared) -> int:
 
 
 def kind_of(delivery: Delivery) -> DeliveryKind:
+    """The registered kind for ``delivery`` (``SandboxError`` if unknown)."""
     try:
         return DELIVERY_KINDS[delivery.kind]
     except KeyError:
@@ -251,9 +253,15 @@ def proxy_scope(config: Config, prepared: Prepared) -> Scope:
         write=[f"{_rel(config, prepared.root)}/**"],
         read=proxy_read_globs(config, prepared),
         cwd=prepared.workdir,
-        bash_forbidden=forbidden_roots(config) or ["src"],
-        bash_allowed=prepared.bash_allowed(),
+        **_bash_limits(config, prepared),
     )
+
+
+def _bash_limits(config: Config, prepared: Prepared) -> dict[str, Any]:
+    return {
+        "bash_forbidden": forbidden_roots(config) or ["src"],
+        "bash_allowed": prepared.bash_allowed(),
+    }
 
 
 def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
@@ -264,13 +272,18 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
     """
     repo = config.repo.resolve()
     return {
-        "sandbox": {
-            "enabled": True,
-            "autoAllowBashIfSandboxed": True,
-            "allowUnsandboxedCommands": False,
-            "filesystem": {"denyRead": [str(repo)], "allowRead": _allowed_reads(config, prepared)},
-        },
+        "sandbox": _sandbox_section(config, prepared),
         "permissions": {"deny": [d for r in forbidden_roots(config) for d in _deny_reads(repo, r)]},
+    }
+
+
+def _sandbox_section(config: Config, prepared: Prepared) -> dict[str, Any]:
+    repo = config.repo.resolve()
+    return {
+        "enabled": True,
+        "autoAllowBashIfSandboxed": True,
+        "allowUnsandboxedCommands": False,
+        "filesystem": {"denyRead": [str(repo)], "allowRead": _allowed_reads(config, prepared)},
     }
 
 
