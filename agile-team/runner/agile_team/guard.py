@@ -17,6 +17,7 @@ Layers:
 
 from __future__ import annotations
 
+import posixpath
 import re
 import shlex
 from collections.abc import Awaitable, Callable
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .git_ops import Git
-from .paths import matches, repo_relative, resolve_in
+from .paths import matches, repo_relative, resolve_in, under_root
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
@@ -204,8 +205,8 @@ def _names_repo(scope: Scope, token: str) -> bool:
 
 
 def _names_forbidden_root(scope: Scope, token: str) -> bool:
-    head = token.lstrip("./").split("/", 1)[0]
-    return bool(head) and head in scope.bash_forbidden
+    path = posixpath.normpath(token.lstrip("./"))
+    return any(under_root(path, root) for root in scope.bash_forbidden)
 
 
 def deny(reason: str) -> dict[str, Any]:

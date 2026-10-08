@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from functools import cache
+from itertools import takewhile
 from pathlib import Path
 
 GLOB_TOKENS = {"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}
@@ -30,9 +31,20 @@ def matches(path: str, globs: list[str]) -> bool:
 
 
 def literal_root(glob: str) -> str:
-    """The leading path segment of a glob that holds no wildcard, or ``""``."""
-    first = glob.lstrip("!").split("/", 1)[0]
-    return "" if any(c in first for c in "*?[") else first
+    """The wildcard-free leading path of a positive glob; ``""`` for a ``!`` glob
+    or one that starts with a wildcard."""
+    if glob.startswith("!"):
+        return ""
+    return "/".join(takewhile(_is_literal, glob.split("/"))).rstrip("/")
+
+
+def _is_literal(segment: str) -> bool:
+    return not any(c in segment for c in "*?[")
+
+
+def under_root(path: str, root: str) -> bool:
+    """True when ``path`` is ``root`` or lies inside it."""
+    return path == root or path.startswith(f"{root}/")
 
 
 def resolve_in(base: Path, raw: str) -> Path:
