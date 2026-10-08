@@ -29,10 +29,11 @@ command fails.
 3. **Onboard if needed.** No `.agile-team.toml`? Run `$AT init --detect`, show
    the detected preset, commands and delivery kind, and ask the human to
    confirm or edit. Then ask: artifact policy (`.team/` and docs committed or
-   ignored), docs dir, key file location (or fall back to
-   `~/secrets/anthropic-api-key`), soft budget in USD, default cadence. Run
-   `$AT init --preset … --delivery … [--url …] --docs-dir … --artifacts …
-   --key-file … --budget … --cadence …`. Then ask whether any roles should run
+   ignored), docs dir, auth (`api-key` bills the repo's Console workspace;
+   `login` uses the human's Claude Code subscription), key file location for
+   `api-key` (or fall back to `~/secrets/anthropic-api-key`), soft budget in
+   USD, default cadence. Run `$AT init --preset … --delivery … [--url …]
+   --docs-dir … --artifacts … --auth … --key-file … --budget … --cadence …`. Then ask whether any roles should run
    on a local or other Anthropic-compatible model. If so, add
    `[providers.<name>]` and `[roles.<role>]` `provider`/`model` to the config
    (see "Providers" in the protocol) and commit it as
@@ -61,5 +62,6 @@ command fails.
 - **Never edit project files while the team is running.** Not even a typo.
 - Never answer a PO question on the human's behalf.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
-- The API key bills the repo's Console workspace, not the human's login. Never
-  print or copy the key.
+- With `auth = "api-key"` the key bills the repo's Console workspace, not the
+  human's login; with `login` the run uses their subscription. Never print or
+  copy a key.

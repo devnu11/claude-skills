@@ -195,3 +195,16 @@ def test_roles_scaffold_repo_and_global(
     assert "nothing to add" in capsys.readouterr().out
     assert run("--repo", str(configured), "roles", "scaffold", "--global") == 0
     assert (isolated_global_roles / "_shared.md").is_file()
+
+
+def test_login_auth_runtime_carries_no_key(configured: Path, tmp_path: Path) -> None:
+    path = configured / cfg.CONFIG_NAME
+    path.write_text(path.read_text().replace("[team]\n", '[team]\nauth = "login"\n'))
+    rt = cli.make_runtime(cli.Place(configured, tmp_path / "no-home"), FakeQuery())
+    assert "ANTHROPIC_API_KEY" not in rt.env
+
+
+def test_init_writes_auth(repo: Path) -> None:
+    args = ["--repo", str(repo), "init", "--preset", "python", "--delivery", "package"]
+    assert run(*args, "--auth", "login") == 0
+    assert cfg.load(repo).team.auth == "login"

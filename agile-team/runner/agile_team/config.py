@@ -22,6 +22,8 @@ TEAM_DIR = ".team"
 RUN_DIR = ".team/run"
 DEFAULT_KEY_FILE = ".team/run/api-key"
 CADENCES = ("sprint", "until-blocker")
+API_KEY_AUTH, LOGIN_AUTH = "api-key", "login"
+AUTH_MODES = (API_KEY_AUTH, LOGIN_AUTH)
 ARTIFACT_POLICIES = ("committed", "ignored")
 PIPELINE_STEPS = (
     "design",
@@ -82,6 +84,7 @@ class Team:
     cadence: str = "sprint"
     budget_usd: float = 20.0
     manager_every_pct: int = 25
+    auth: str = API_KEY_AUTH
 
 
 @dataclass
@@ -186,6 +189,7 @@ Rule = tuple[Callable[[Any], bool], str]
 
 TEAM_RULES: tuple[Rule, ...] = (
     (lambda t: t.cadence in CADENCES, f"team.cadence must be one of {CADENCES}"),
+    (lambda t: t.auth in AUTH_MODES, f"team.auth must be one of {AUTH_MODES}"),
     (
         lambda t: t.artifacts in ARTIFACT_POLICIES,
         f"team.artifacts must be one of {ARTIFACT_POLICIES}",

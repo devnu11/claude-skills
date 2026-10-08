@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import keys
-from .config import Config
+from .config import LOGIN_AUTH, Config
 from .git_ops import Git
 from .providers import Probe, Provider, reachable
 from .roles import RoleBook, RoleError, user_roles_dir
@@ -51,6 +51,16 @@ class Preflight:
         return [f"working tree is dirty ({shown}); commit or stash first"]
 
     def key(self) -> list[str]:
+        """Key-file checks, or for login auth, that no API key is inherited."""
+        return self.login() if self.config.team.auth == LOGIN_AUTH else self.key_file()
+
+    def login(self) -> list[str]:
+        """An inherited key would win over the login and bill a Console workspace."""
+        if self.environ.get(keys.ENV_VAR):
+            return [f"team.auth is login but ${keys.ENV_VAR} is set; unset it or use api-key"]
+        return []
+
+    def key_file(self) -> list[str]:
         """The key file exists, is mode 600, and is gitignored when inside the repo."""
         try:
             source = self.locations().resolve()

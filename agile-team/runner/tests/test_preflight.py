@@ -84,3 +84,15 @@ def test_providers_checked_only_when_a_role_uses_them(configured: Path, key_home
 def test_providers_skip_a_broken_role(configured: Path, key_home: Path) -> None:
     roles = {"ghost": {}}
     assert with_providers(configured, key_home, roles).providers() == []
+
+
+def test_login_auth_needs_no_key_but_refuses_an_inherited_one(
+    configured: Path, tmp_path: Path
+) -> None:
+    pre = check(configured, tmp_path / "no-home")
+    pre.config.team.auth = cfg.LOGIN_AUTH
+    pre.environ = {}
+    assert pre.key() == []
+    pre.environ = {"ANTHROPIC_API_KEY": "sk-x"}
+    [msg] = pre.key()
+    assert "team.auth is login" in msg
