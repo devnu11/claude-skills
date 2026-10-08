@@ -294,14 +294,7 @@ committed to, or `null` when it is in the backlog.
   dropped. A Bash token names a root when, after stripping leading `.` and `/`
   and normalizing (`a//b`, `a/./b` → `a/b`), it equals the root or starts with
   `root/`. So `agile-team status` and `cat agile-team/docs/customer/x.md` pass,
-  and `cat agile-team/runner/agile_team/cli.py` is denied. A token holding
-  `*`, `?`, `[` or `{` is a shell glob, so the hook takes the text before the
-  first wildcard character and denies the token when that prefix and a root
-  overlap in either direction (the root starts with the prefix, or the prefix
-  lies inside the root). `agile-team/runner/agile_*/x`, `agile-team/*/agile_team/x`,
-  `agile_team{,}`, `agile-team/**` and flat `s*/x` or `src*` are denied;
-  `agile-team/docs/*.md`, `agile-team/docs/customer/*` and `*.txt` (empty
-  prefix) pass. With no roots at
+  and `cat agile-team/runner/agile_team/cli.py` is denied. With no roots at
   all, the hook forbids `src`.
 - Every role: no writes under `.git/`; no Read/Grep/Glob/Write of the key
   files or `~/secrets/` (hook plus Claude Code `permissions.deny` rules); Bash
