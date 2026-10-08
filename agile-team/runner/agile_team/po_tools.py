@@ -26,6 +26,7 @@ from .state import ModelOverride, RunStatus
 SERVER = "team"
 POLL_S = 5.0
 DEFAULT_WAIT_S = 1800
+RESUME_NOTE = "Resume the run from state."
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -222,13 +223,18 @@ def resume_session(runtime: Runtime, start: Start) -> str | None:
 def first_prompt(runtime: Runtime, start: Start) -> str:
     """The PO's first user message: a resume note, or the kickoff."""
     if resume_session(runtime, start):
-        return "Resume the run from state."
+        return resume_prompt(start.task)
     mode = StartMode.DELIVERY if start.mode is StartMode.RESUME else start.mode
     roles = ", ".join(role_label(runtime, name) for name in runtime.book.enabled_names())
     return (
         f"Mode: {mode}\nCadence: {runtime.state.cadence}\nRoles available: {roles}\n\n"
         f"Task from the human:\n{start.task}"
     )
+
+
+def resume_prompt(message: str) -> str:
+    """The resume note, plus anything new the human said when resuming."""
+    return f"{RESUME_NOTE}\n\nNew from the human:\n{message}" if message else RESUME_NOTE
 
 
 def role_label(runtime: Runtime, name: str) -> str:
