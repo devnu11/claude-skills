@@ -67,7 +67,7 @@ def _pattern(regex: str) -> re.Pattern[str]:
 
 
 LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (_pattern(r"hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n]*\S)"),
+    (_pattern(r"hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n;]*[^\s;])"),
      "{kind} limit, resets {reset}"),
     (_pattern(r"hit your (?P<kind>[\w ]+?) limit"), "{kind} limit"),
     (_pattern(r"(?P<kind>usage) limit reached"), "{kind} limit reached"),
@@ -81,6 +81,14 @@ def leaves(exc: BaseException) -> list[BaseException]:
     return [leaf for inner in exc.exceptions for leaf in leaves(inner)]
 
 
+EXIT_SUFFIX = re.compile(r"\s*\(exit code: -?\d+\)\s*$")
+
+
+def _message(leaf: BaseException) -> str:
+    """``str(leaf)`` without the SDK's trailing ``(exit code: N)``."""
+    return EXIT_SUFFIX.sub("", str(leaf))
+
+
 def _limit_reason(text: str) -> str | None:
     for pattern, template in LIMIT_PATTERNS:
         match = pattern.search(text)
@@ -91,7 +99,7 @@ def _limit_reason(text: str) -> str | None:
 
 def limit_halt(exc: BaseException) -> Halt | None:
     """A ``limit`` halt when any leaf's message matches a limit pattern."""
-    reasons = (_limit_reason(str(leaf)) for leaf in leaves(exc))
+    reasons = (_limit_reason(_message(leaf)) for leaf in leaves(exc))
     reason = next((r for r in reasons if r), None)
     return Halt(HaltKind.LIMIT, reason) if reason else None
 

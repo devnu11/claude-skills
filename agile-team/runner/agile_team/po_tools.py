@@ -272,9 +272,14 @@ class PoRun:
         self.runtime.halted_by = None
         self._set_status(RunStatus.RUNNING)
         result = self.runtime.priced(plan, await self._collect(plan))
-        self.runtime.settle_po()
+        self._settle()
         self._record(plan.role.model, result)
         return result
+
+    def _settle(self) -> None:
+        """Commit the PO's work, unless the run halted: then leave the tree for the human."""
+        if not self.runtime.halted_by:
+            self.runtime.settle_po()
 
     async def _collect(self, plan: Plan) -> StepResult:
         """Drain the PO's query. On an SDK error result, keep its session for resume."""
