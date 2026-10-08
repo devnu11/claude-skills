@@ -22,7 +22,7 @@ from typing import Any
 
 from .config import Config, Delivery
 from .guard import Scope
-from .paths import literal_root
+from .paths import literal_root, under_root
 
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -233,9 +233,14 @@ def proxy_read_globs(config: Config, prepared: Prepared) -> list[str]:
 
 
 def forbidden_roots(config: Config) -> list[str]:
-    """Top-level directories holding source or tests, which Bash may not name."""
+    """The outermost directories holding source or tests, which Bash may not name."""
     globs = [g for key in ("source", "tests", "e2e") for g in config.toolchain.globs.get(key, [])]
-    return sorted({r for r in map(literal_root, globs) if r})
+    roots = {r for r in map(literal_root, globs) if r}
+    return sorted(r for r in roots if not any(o != r and under_root(r, o) for o in roots))
+
+
+def _deny_reads(repo: Path, root: str) -> list[str]:
+    return [f"Read(/{repo}/{root})", f"Read(/{repo}/{root}/**)"]
 
 
 def proxy_scope(config: Config, prepared: Prepared) -> Scope:
@@ -265,7 +270,7 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
             "allowUnsandboxedCommands": False,
             "filesystem": {"denyRead": [str(repo)], "allowRead": _allowed_reads(config, prepared)},
         },
-        "permissions": {"deny": [f"Read(/{repo}/{r}/**)" for r in forbidden_roots(config)]},
+        "permissions": {"deny": [d for r in forbidden_roots(config) for d in _deny_reads(repo, r)]},
     }
 
 
