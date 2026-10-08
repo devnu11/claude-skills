@@ -9,32 +9,28 @@ manager_every_pct = 25
 
 [toolchain]
 preset = "python"
-test = "uv run pytest"
-coverage = "uv run pytest --cov --cov-report=term"
-lint = "uv run ruff check ."
-static = "uv run ruff format --check ."
+test = "uv run --directory agile-team/runner pytest -q"
+coverage = "uv run --directory agile-team/runner pytest --cov --cov-report=term -q"
+lint = "uv run --directory agile-team/runner ruff check ."
+static = "uv run --directory agile-team/runner ruff format --check ."
 pragma = "# pragma: no cover"
 
 [toolchain.globs]
 source = [
-    "src/**",
-    "*.py",
-    "!tests/**",
+    "agile-team/runner/agile_team/**",
+    "agile-team/runner/scripts/**",
 ]
 tests = [
-    "tests/**",
-    "!tests/e2e/**",
+    "agile-team/runner/tests/**",
+    "!agile-team/runner/tests/e2e/**",
 ]
 e2e = [
-    "tests/e2e/**",
+    "agile-team/runner/tests/e2e/**",
 ]
 ci = [
     ".github/workflows/**",
-    "Makefile",
-    "pyproject.toml",
-    "uv.lock",
-    "noxfile.py",
-    "tox.ini",
+    "agile-team/runner/pyproject.toml",
+    "agile-team/runner/uv.lock",
 ]
 
 [gates]
@@ -52,11 +48,23 @@ steps = [
 ]
 
 [[delivery]]
-name = "main"
+name = "cli"
 kind = "package"
-prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
+prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}/agile-team/runner"
 bin = [
     "venv/bin",
 ]
 
-[roles]
+[[delivery]]
+name = "dashboard"
+kind = "web"
+prepare = "uv run --directory {repo}/agile-team/runner agile-team --repo {repo} dashboard --host 127.0.0.1 --port 8799 --no-open"
+url = "http://127.0.0.1:8799/"
+
+[roles.architect]
+write = [
+    "{docs}",
+    "agile-team/SKILL.md",
+    "agile-team/reference/**",
+    "README.md",
+]
