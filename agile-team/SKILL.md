@@ -59,6 +59,18 @@ command fails.
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
    intentional; do not squash them unless the human asks.
+9. **Stops.** If the runner stops on its own, it posts a final note, sets
+   `status` and `status_reason`, and prints one line saying what to do:
+   - `blocked` with a limit (e.g. "session limit, resets 2:20pm
+     (America/Edmonton)"; exit 75): tell the human the reset time. Do **not**
+     restart before the reset or schedule a restart yourself. Resume with
+     `$AT start --resume` only when the human says so.
+   - `failed` (exit 70): relay the note and show the last entry of
+     `.team/run/crash.log`. Ask the human whether to resume.
+   - `stopped` (exit 143): the run ended because of `stop --now`.
+   If `git status --porcelain` then shows changes, a step was cut off
+   mid-way. Show the changes to the human and ask what to do before resuming.
+   Do not stash or discard them on your own.
 
 ## Rules
 

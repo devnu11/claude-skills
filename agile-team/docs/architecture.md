@@ -10,9 +10,10 @@ implements against and a reviewer checks against.
 
 | Module | Owns | Talks to |
 |---|---|---|
-| `cli.py` | subcommands (`COMMANDS` table), `status_report` | config, state, relay, ledger, `po_tools.run_po` |
+| `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
 | `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the PO loop | `Runtime`, `RunState`, events, relay |
-| `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step | gates, guard, sandbox, git, ledger, state, events |
+| `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
+| `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
 | `gates.py` | `StoryState`, `Pipeline` (step machine), `dispatch_refusal`, command gates | roles (`Handoff`) |
 | `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
@@ -410,3 +411,283 @@ the hook, as they did before for any root deeper than one segment:
 
 Deployment: a running runner keeps the old guard in memory. The fix applies
 after `stop` then `start --resume`.
+
+---
+
+## s8: Clean stop on a usage limit, a crash or SIGTERM
+
+Developer: **developer-cli** (runner Python: new `halt.py`, `cli.py`,
+`dispatch.py`, `po_tools.py`, `state.py`, `relay.py`, plus the built-in
+`roles/product-owner.md`). Decision record:
+[`adr/ADR-001-clean-halt.md`](adr/ADR-001-clean-halt.md). The Architect has
+already updated `reference/protocol.md` ("Run status and stops"), `SKILL.md`
+(step 9), the README row, `guidelines.md` ("Errors and halts") and
+`customer/stops-and-resume.md` in this design step.
+
+### What the SDK gives us (checked in `claude_agent_sdk` 0.2.163)
+
+- A limit arrives as `claude_agent_sdk.ResultError` (a `ProcessError`
+  subclass, exported from the package root). `str(exc)` is
+  `"Claude Code returned an error result: You've hit your session limit · resets 2:20pm (America/Edmonton)"`.
+  It also has `.session_id`, `.result`, `.errors` and `.data` (the raw result
+  payload, which includes `total_cost_usd` and `usage`). Just before raising,
+  the SDK yields the same payload as a `ResultMessage(is_error=True)`.
+- There is no limit-specific type or code, so detection matches the message
+  text (H3).
+- An exception inside `run_role` (an SDK MCP tool handler) is caught by the
+  SDK and handed to the PO as an `isError` tool result. It does **not** reach
+  `cli._run`, so the role-step path must catch the exception itself (H5).
+
+### Rules
+
+| # | Rule | AC |
+|---|---|---|
+| H1 | Every handled halt has one kind (`HaltKind`: `limit`, `crash`, `sigterm`). The `HALTS` table maps each kind to its run status, relay note kind, exit code and advice (table below). No code branches on the kind outside these tables. | AC1, AC2 |
+| H2 | `classify(exc)` flattens `BaseExceptionGroup`s to their leaf exceptions. It then returns the first non-`None` result of `DETECTORS = (limit_halt, sigterm_halt, crash_halt)`. `crash_halt` always returns a halt. | AC2, AC3 |
+| H3 | `limit_halt`: the first row of `LIMIT_PATTERNS` whose regex `search`es (case-insensitive) `str(leaf)` for any leaf. The reason is `template.format(**match.groupdict())`, stripped. The reset text is copied from the match and never parsed or computed. | AC1, AC3 |
+| H4 | `sigterm_halt`: any leaf is an `asyncio.CancelledError` → `Halt(SIGTERM, "stopped by stop --now")`. `crash_halt`: `Halt(CRASH, f"crashed: {Type}: {first line of str(leaf)}")`, using the first leaf. The line is cut to 200 characters. With an empty message the reason is `crashed: {Type}`. | AC2 |
+| H5 | **Role step.** `Runtime` wraps `_execute` in `except Exception`. Every caught exception is appended to `crash.log`. A limit (`limit_halt` is not `None`) → `halt_run`, then return the `halted` report to the PO (below). Anything else is re-raised unchanged, as today (the SDK hands its text to the PO). `CancelledError` is not an `Exception`, so it passes through to the top level. | AC1 |
+| H6 | **Top level.** `cli._run` wraps `asyncio.run(...)` in `except (Exception, asyncio.CancelledError)`. It appends the traceback to `crash.log`, calls `runtime.halt_run(classify(exc))`, prints the halt line and returns the kind's exit code. `KeyboardInterrupt` is not caught there and keeps exit 130. | AC1, AC2 |
+| H7 | **PO ended normally after a role-step halt.** If `runtime.halted_by` is set when `run_po` returns, `_run` prints the PO's text, then re-asserts the halt with `halt_run`, prints the halt line and returns its exit code. Otherwise it prints the text and returns 0, as today. | AC1 |
+| H8 | `Runtime.halt_run(found) -> Halt`: the **first** halt in a process wins (`halted_by`). Every call sets `state.status` and `state.status_reason` from the winning halt and saves, so a later status write by a PO tool cannot hide it. The relay note is posted only on the first call. | AC1, AC2 |
+| H9 | **SIGTERM.** Inside the event loop, `cli` installs `loop.add_signal_handler(signal.SIGTERM, task.cancel)` for the PO's main task. Cancellation unwinds `collect`, the SDK's subprocesses and `plan.stop()`. `asyncio.run` then raises `CancelledError`, and H6 handles it. `pid_file`'s `finally` removes `runner.pid`. | AC2 |
+| H10 | `crash.log` (`.team/run/crash.log`) is append-only. Each entry is a header line `--- <YYYY-mm-dd HH:MM:SS> <ExceptionType>` followed by `traceback.format_exception(exc)`. Nothing else prints a traceback. | AC2 |
+| H11 | **Resume.** `PoRun.run` calls `state.mark(RunStatus.RUNNING)` (no reason) before the PO's query starts. This clears `blocked`/`failed`/`stopped` and the stored reason, so `_run_refusal` does not refuse the resumed PO. `PoRun._record` sets `IDLE` only when the status is still `running`, and leaves any other status and its reason alone. | AC4 |
+| H12 | **PO session on a PO-level error.** `PoRun._collect` catches `ResultError`, stores `exc.session_id or state.po_session` in `state.po_session`, saves, and re-raises. This way `start --resume` continues the session that hit the limit. | AC4 |
+| H13 | `RunState.status_reason: str \| None = None` is added as the **last** field. Older `state.json` files load with `None`. `status_report` emits `"status_reason"` directly after `"status"`. | AC5 |
+| H14 | `_run_refusal`'s halted text includes the reason when there is one: `the run is blocked (session limit, resets 2:20pm (America/Edmonton)); end your turn`. With no reason it is unchanged: `the run is blocked; end your turn`. | AC1 |
+
+### The `HALTS` table (exact values, tests may assert them)
+
+| Kind | Status | Note kind | Exit | Advice |
+|---|---|---|---|---|
+| `limit` | `blocked` | `blocked` | 75 | ``run `agile-team start --resume` after the reset`` |
+| `crash` | `failed` | `failed` | 70 | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
+| `sigterm` | `stopped` | `stopped` | 143 | ``run `agile-team start --resume` to continue`` |
+
+`Halt.message()` = `f"{reason}; {advice}"`. It is the relay note's text. The
+printed line is `f"agile-team start: {message}"` on **stderr**, which matches
+the CLI's existing error format. Example (limit):
+
+```text
+agile-team start: session limit, resets 2:20pm (America/Edmonton); run `agile-team start --resume` after the reset
+```
+
+The exit codes are 75 = `EX_TEMPFAIL` (try again later), 70 =
+`EX_SOFTWARE` (internal error) and 143 = 128 + SIGTERM. The existing codes
+stay: 0 (ok), 1 (CLI error or preflight), 130 (Ctrl-C).
+
+### The `LIMIT_PATTERNS` table (start with these rows; a new phrasing is a new row)
+
+| Regex (`re.IGNORECASE`) | Template | Example message → reason |
+|---|---|---|
+| `hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n]*\S)` | `{kind} limit, resets {reset}` | `You've hit your session limit · resets 2:20pm (America/Edmonton)` → `session limit, resets 2:20pm (America/Edmonton)` |
+| `hit your (?P<kind>[\w ]+?) limit` | `{kind} limit` | `You've hit your weekly limit` → `weekly limit` |
+| `(?P<kind>usage) limit reached` | `{kind} limit reached` | `Claude AI usage limit reached\|1760000000` → `usage limit reached` |
+
+Row order matters: the reset row comes first. `·` (U+00B7) is not a word
+character, so `\W+` consumes ` · `.
+
+### Flow
+
+```mermaid
+sequenceDiagram
+  participant CLI as cli._run
+  participant PO as PoRun (PO query)
+  participant RT as Runtime.run_role
+  participant H as halt
+  CLI->>PO: asyncio.run(_po_until_sigterm)
+  PO->>RT: run_role (MCP tool)
+  RT->>RT: _execute raises ResultError
+  RT->>H: log_traceback, limit_halt
+  RT->>RT: halt_run → status blocked + reason, note
+  RT-->>PO: {"status": "halted", ...}
+  PO-->>CLI: next PO turn raises ResultError (same limit)
+  CLI->>H: log_traceback, classify
+  CLI->>RT: halt_run (first halt kept, status re-asserted)
+  CLI-->>CLI: print line to stderr, return 75
+```
+
+### Changes by module
+
+#### `halt.py` (new)
+
+Module docstring: "Why the runner stopped: turn an exception into a `Halt`,
+and keep the traceback in `crash.log`."
+
+| Name | Spec |
+|---|---|
+| `CRASH_LOG = "crash.log"` | File name under the run dir. |
+| `SIGTERM_REASON = "stopped by stop --now"` | |
+| `class HaltKind(StrEnum)` | `LIMIT = "limit"`, `CRASH = "crash"`, `SIGTERM = "sigterm"`. |
+| `@dataclass(frozen=True) class HaltRule` | `status: RunStatus`, `note_kind: str`, `exit_code: int`, `advice: str`. |
+| `HALTS: dict[HaltKind, HaltRule]` | The table above. |
+| `@dataclass(frozen=True) class Halt` | `kind: HaltKind`, `reason: str`. `rule` property → `HALTS[self.kind]`. `message() -> str` → `f"{self.reason}; {self.rule.advice}"`. |
+| `LIMIT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...]` | The table above, compiled at import. |
+| `leaves(exc) -> list[BaseException]` | `exc` itself, or the flattened leaves of a `BaseExceptionGroup` (recursive). |
+| `limit_halt(exc) -> Halt \| None` | H3. |
+| `sigterm_halt(exc) -> Halt \| None` | H4. |
+| `crash_halt(exc) -> Halt` | H4. |
+| `DETECTORS = (limit_halt, sigterm_halt, crash_halt)` | |
+| `classify(exc) -> Halt` | H2: `next(h for h in (d(exc) for d in DETECTORS) if h)`. |
+| `log_traceback(run_dir: Path, exc: BaseException) -> None` | H10. Creates `run_dir` if needed. Uses only `traceback` and `time` from the stdlib. |
+
+Keep each function at 8 lines or fewer. A private
+`_limit_reason(text: str) -> str | None` that tries the rows against one
+string keeps `limit_halt` short.
+
+#### `state.py`
+
+- `RunStatus`: add `FAILED = "failed"` and `STOPPED = "stopped"`. Docstring:
+  "`sprint-end`, `blocked` and `done` are set by the PO's `notify_user`.
+  `blocked`, `failed` and `stopped` are set by the runner when it halts (see
+  `halt.HALTS`)."
+- `RunState.status_reason: str | None = None`, last field (H13).
+- `RunState.mark(self, status: RunStatus, reason: str | None = None) -> None`:
+  sets both. Docstring: "Set the run status and why; no reason clears the
+  old one."
+- `halted()`: unchanged. `failed` and `stopped` only exist after the process
+  has exited, and the next start resets them (H11).
+
+#### `relay.py`
+
+- `KINDS` gains `"failed"` and `"stopped"`, in that order after `"done"`.
+
+#### `dispatch.py`
+
+- Import `from . import halt` and `Halt`. Add the field
+  `halted_by: Halt | None = field(default=None, init=False)` to `Runtime`.
+- `run_role`: the last line becomes `return await self._run_planned(plan)`.
+- `_run_planned(self, plan) -> dict[str, Any]` (new):
+  `try: result = await self._execute(plan)`,
+  `except Exception as exc: return self._step_failed(plan, exc)`, then
+  `return self.settle(plan, result)`. `_execute` is unchanged: its
+  `try/finally: plan.stop()` stays.
+- `_step_failed(self, plan, exc) -> dict[str, Any]` (new): H5.
+  `halt.log_traceback(...)`, `found = halt.limit_halt(exc)`. If `None`,
+  `raise exc`. Otherwise `self.halt_run(found)` and return
+  `halted_report(plan, found)`.
+- `halt_run(self, found: Halt) -> Halt` (new, public): H8. Docstring:
+  "Record the run's first halt (status, reason, liaison note); later calls
+  re-assert it." The note is `Note(rule.note_kind, halted_by.message())`
+  with no stories.
+- Module function `halted_report(plan, found) -> dict[str, Any]` (next to
+  `refused`):
+  `{"status": "halted", "role": plan.role.name, "reason": found.reason, "next": "the run is stopping; end your turn"}`.
+- `_run_refusal`: H14. A small helper `_halt_text(state) -> str` keeps it
+  short.
+
+#### `po_tools.py`
+
+- `PoRun.run`: `self._set_status(RunStatus.RUNNING)` stays where it is,
+  before the query (H11). `_set_status` now calls
+  `state.mark(status)` and then `save()`. It replaces `await collect(...)`
+  with `await self._collect(plan)`.
+- `PoRun._collect(self, plan) -> StepResult` (new): H12. Docstring: "Drain
+  the PO's query. On an SDK error result, keep its session for resume."
+  Import `ResultError` from `claude_agent_sdk`.
+- `PoRun._record`: H11. Record the ledger entry and `po_session` as today.
+  Then `if state.status is RunStatus.RUNNING: state.mark(RunStatus.IDLE)`.
+  Always save.
+- `notify_user` and `_begin_sprint` keep assigning `state.status` directly.
+  They do not touch `status_reason`, and H8 re-asserts any halt.
+
+#### `cli.py`
+
+| Function | Spec |
+|---|---|
+| `_run(runtime, start) -> int` | Inside `pid_file`, `try: result = asyncio.run(_po_until_sigterm(runtime, start))`, `except (Exception, asyncio.CancelledError) as exc: return _halt_exit(runtime, exc)`. After the `with`, `return _finish(runtime, result)`. |
+| `async _po_until_sigterm(runtime, start) -> StepResult` | H9: get the running loop and `asyncio.current_task()`, call `add_signal_handler(signal.SIGTERM, task.cancel)`, then `return await run_po(runtime, start)`. The loop removes the handler when `asyncio.run` closes it. Unix only, as is the runner. |
+| `_halt_exit(runtime, exc) -> int` | `halt.log_traceback(run_dir, exc)`, then `return _report(runtime.halt_run(halt.classify(exc)))`. |
+| `_finish(runtime, result) -> int` | H7: print `result.text`. If `runtime.halted_by`, `return _report(runtime.halt_run(runtime.halted_by))`. Otherwise return 0. |
+| `_report(found: Halt) -> int` | Print `f"agile-team start: {found.message()}"` to stderr and return `found.rule.exit_code`. |
+| `status_report` | Add `"status_reason": st.status_reason` right after `"status"`. |
+
+#### `roles/product-owner.md` (built-in; developer-cli edits it)
+
+Add to "How you work" step 5: "On `halted`, the run is stopping (for
+example, a usage limit). Make no more tool calls and end your turn. The
+runner has already told the human."
+
+### Test checklist (for the Unit Tester)
+
+A new fake in `conftest.py`, `RaisingQuery(exc, before=1)`, yields `before`
+`AssistantMessage`s and then raises `exc`, so the error comes mid-stream
+(AC7). Build the limit error as the SDK does:
+`ResultError("Claude Code returned an error result: You've hit your session limit · resets 2:20pm (America/Edmonton)", data={"subtype": "success", "is_error": True, "session_id": "po-sess", "result": "You've hit your session limit · resets 2:20pm (America/Edmonton)", "total_cost_usd": 1.5})`.
+
+1. H3: every row of the `LIMIT_PATTERNS` table, parametrized, through
+   `halt.classify`. Also a `BaseExceptionGroup` wrapping the limit error
+   classifies as `limit`.
+2. H4: `ValueError("boom\nmore")` gives `crashed: ValueError: boom`.
+   `ValueError()` gives `crashed: ValueError`. A 500-character message is cut
+   to 200 characters. `asyncio.CancelledError()` gives `sigterm`.
+3. AC1, PO path: `cli._run` with a PO `RaisingQuery(limit)` returns 75. State
+   has `blocked` and the reason
+   `session limit, resets 2:20pm (America/Edmonton)`, and `po_session ==
+   "po-sess"`. The outbox's last message is kind `blocked` with text
+   ``session limit, resets 2:20pm (America/Edmonton); run `agile-team start --resume` after the reset``.
+   Stderr is exactly the one line in the example. Stdout has no traceback.
+   `crash.log` holds the traceback. `runner.pid` is gone.
+4. AC1, role path: `Runtime.run_role` with a role `RaisingQuery(limit)`
+   returns the `halted` report. State is `blocked` with the reason, and there
+   is one `blocked` note. A second `run_role` is refused with
+   `the run is blocked (session limit, resets 2:20pm (America/Edmonton)); end your turn`.
+   `plan.stop()` still ran (use a prepared stub or a spy).
+5. AC1, both paths in one run: a role-step limit, then the PO's query raises
+   the same limit. Only one note is posted, and the exit code is 75.
+6. H7: a role-step limit, then a PO that ends normally. `_run` prints the PO
+   text and the halt line and returns 75. The status stays `blocked`, not
+   `idle`.
+7. H5: a role step raising `ValueError` propagates out of `run_role`
+   unchanged. The status is unchanged, no note is posted, and the traceback is
+   in `crash.log`.
+8. AC2: a PO `RaisingQuery(RuntimeError("boom"))` gives exit 70, status
+   `failed`, reason `crashed: RuntimeError: boom`, and a `failed` note.
+9. AC2 SIGTERM: a fake PO query whose `action` calls
+   `os.kill(os.getpid(), signal.SIGTERM)` and then awaits (for example
+   `await asyncio.sleep(10)`) gives exit 143, status `stopped`, reason
+   `stopped by stop --now`, a `stopped` note and no `runner.pid`.
+10. AC4: with state `blocked` plus a reason, `run_po` in resume mode with a
+    normal fake. The first role step is not refused. After the run the status
+    is `idle` and `status_reason is None`. Do the same from `failed` and
+    `stopped`.
+11. H13/AC5: `RunState.from_json` without `status_reason` gives `None`, and a
+    round trip keeps it. `cli.status_report` has `status_reason` right after
+    `status` (check the key order).
+12. H14: the refusal text without a reason is unchanged. Existing tests must
+    still pass as they are.
+
+### How s9 and s10 plug in (not in s8's scope)
+
+- **s9, in-flight step.** Record `state.in_flight = {role, story, brief}` in
+  `run_role` after `STEP_START`, before `_run_planned`. `settle` clears it.
+- **s9, saving an interrupted step's edits.** `Runtime.halt_run` is the
+  single place every halt passes through (role-step limit, top-level crash,
+  SIGTERM). s9 adds one call there: when `state.in_flight` is set, save the
+  tree as a commit, then revert it, and put the sha into `state` and into the
+  note text. At the top level the call runs after `asyncio.run` has returned,
+  so the role's process is gone and the tree is quiet. Non-limit role-step
+  exceptions that the PO keeps going after would need the same save in
+  `_step_failed` before the re-raise. s9 decides that.
+- **s9, status for a dead run.** Derive `interrupted` in `status_report`
+  from `running` plus a missing or dead pid. With s8, a handled stop never
+  leaves `running` behind. Only `kill -9` or a power loss does.
+- **s10, PO spend.** `PoRun._collect` is the PO's except-and-re-raise seam.
+  Widen it to `BaseException` and ledger the spend there. Sources: the
+  `ResultMessage(is_error=True)` that the SDK yields **before** raising, or
+  `ResultError.data["total_cost_usd"]` / `["usage"]`. For a role step, do
+  the same in `_step_failed`. `collect` must keep the last `ResultMessage` it
+  saw even when the iteration raises (for example, accumulate into an object
+  owned by the caller).
+
+### Known limits
+
+- Ctrl-C is unchanged: exit 130, the status is left `running` (s9 derives
+  `interrupted`).
+- A limit phrased in a way no `LIMIT_PATTERNS` row matches is recorded as
+  `failed`. The reason holds the message's first line, so the human still
+  sees it. Add a row.
+- If the SDK's subprocess cleanup itself hangs on cancellation, SIGTERM
+  waits for it. A second `stop --now` does not escalate (no SIGKILL). The
+  human can `kill -9`.
