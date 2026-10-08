@@ -52,7 +52,9 @@ command fails.
    (`tail -n +1 -F .team/run/outbox.jsonl`). For each new line, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
    entries, include the id.
-7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`.
+7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
+   something the PO did not ask for, stop the runner and resume with it:
+   `$AT stop`, then `$AT start --resume --task "<the human's words, verbatim>"`.
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are

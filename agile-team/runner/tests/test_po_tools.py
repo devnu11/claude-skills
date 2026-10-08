@@ -231,10 +231,12 @@ def test_run_po_resume_and_onboard(make_runtime) -> None:
     rt.state.po_session = "old"
     asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
     assert q.calls[0]["options"].resume == "old"
-    assert q.calls[0]["prompt"].startswith("Resume")
+    assert q.calls[0]["prompt"] == po_tools.RESUME_NOTE
+    asyncio.run(po_tools.run_po(rt, Start("Also fix X", StartMode.RESUME)))
+    assert q.calls[1]["prompt"].endswith("New from the human:\nAlso fix X")
     rt.state.status = RunStatus.DONE
     asyncio.run(po_tools.run_po(rt, Start("t", StartMode.ONBOARD)))
-    assert "onboarding sprint" in q.calls[1]["prompt"]
+    assert "onboarding sprint" in q.calls[2]["prompt"]
 
 
 def test_set_role_model_moves_a_role_between_providers(make_runtime) -> None:

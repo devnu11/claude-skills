@@ -15,7 +15,7 @@ Run from the target repo root, or pass `--repo PATH`.
 | `config check` | Validate config, every role's resolution and glob placeholders. Exit 1 on problems. |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
-| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). |
+| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). With `--resume`, `--task` is optional and reaches the PO as "New from the human". |
 | `status` | JSON: run status, current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner. |
