@@ -20,8 +20,9 @@ Run from the target repo root, or pass `--repo PATH`.
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner. |
 
-Preflight refuses to start when: the tree is dirty; no key file exists; the
-repo key file is not gitignored; a key file is not mode 600; a toolchain
+Preflight refuses to start when: the tree is dirty; with `auth = "api-key"`,
+no key file exists, the repo key file is not gitignored, or a key file is not
+mode 600; with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
 command's executable is missing; `config check` fails.
 
 ## Relay files (`.team/run/`, always gitignored)
@@ -49,6 +50,7 @@ Other run files: `state.json` (resume state), `ledger.jsonl` (per-step cost),
 docs_dir = "docs"
 artifacts = "committed"        # or "ignored"
 key_file = ".team/run/api-key" # falls back to ~/secrets/anthropic-api-key
+auth = "api-key"               # or "login": run on the human's Claude Code login
 cadence = "sprint"             # default; the liaison asks at every start
 budget_usd = 20.0              # soft budget, enforced by the Manager
 manager_every_pct = 25         # Manager checkpoint every N% of budget

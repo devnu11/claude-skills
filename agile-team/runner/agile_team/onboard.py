@@ -17,7 +17,7 @@ from typing import Any
 
 import tomli_w
 
-from .config import CONFIG_NAME, DEFAULT_KEY_FILE, PIPELINE_STEPS, config_path
+from .config import API_KEY_AUTH, CONFIG_NAME, DEFAULT_KEY_FILE, PIPELINE_STEPS, config_path
 from .git_ops import Git
 from .roles import REPO_ROLES, Layer, RoleBook
 
@@ -89,6 +89,7 @@ class Answers:
     budget_usd: float = 20.0
     cadence: str = "sprint"
     url: str = ""
+    auth: str = API_KEY_AUTH
     mode: WriteMode = WriteMode.CREATE
 
 
@@ -99,6 +100,7 @@ def build_config(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
             "docs_dir": answers.docs_dir,
             "artifacts": answers.artifacts,
             "key_file": answers.key_file,
+            "auth": answers.auth,
             "cadence": answers.cadence,
             "budget_usd": answers.budget_usd,
             "manager_every_pct": 25,

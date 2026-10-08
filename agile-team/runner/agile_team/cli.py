@@ -250,12 +250,19 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         ledger=Ledger(config.run_dir / LEDGER),
         relay=Relay(config.run_dir),
         state=state_mod.load(config.run_dir),
-        env=keys.child_env(keys.read_key(locations.resolve().path)),
+        env=auth_env(config, locations),
         secrets=locations.secret_paths(),
         providers=Providers(config.providers, os.environ),
         query_fn=query_fn,
         pipeline=make_pipeline(config),
     )
+
+
+def auth_env(config: config_mod.Config, locations: keys.KeyLocations) -> dict[str, str]:
+    """The key for api-key auth; nothing for login auth, so Claude Code uses its login."""
+    if config.team.auth == config_mod.LOGIN_AUTH:
+        return {}
+    return keys.child_env(keys.read_key(locations.resolve().path))
 
 
 def start_from(args: argparse.Namespace) -> Start:
@@ -380,6 +387,8 @@ INIT_ARGS: tuple[Arg, ...] = (
     (("--docs-dir",), {"default": "docs"}),
     (("--artifacts",), {"choices": config_mod.ARTIFACT_POLICIES, "default": "committed"}),
     (("--key-file",), {"default": config_mod.DEFAULT_KEY_FILE}),
+    (("--auth",), {"choices": config_mod.AUTH_MODES, "default": config_mod.API_KEY_AUTH,
+                   "help": "login: run on your Claude Code login instead of an API key"}),
     (("--budget",), {"dest": "budget_usd", "type": float, "default": 20.0}),
     (("--cadence",), {"choices": config_mod.CADENCES, "default": "sprint"}),
     (("--reconfigure",), {"action": "store_const", "dest": "mode",
