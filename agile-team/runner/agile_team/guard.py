@@ -60,10 +60,12 @@ class Scope:
 
     @property
     def base(self) -> Path:
+        """Directory relative paths resolve from: the step's cwd, else the repo."""
         return self.cwd or self.repo
 
     @property
     def reads_everything(self) -> bool:
+        """True when the scope places no restriction on reads."""
         return self.read == ["**"]
 
     def relative(self, raw: str) -> str | None:
@@ -85,6 +87,7 @@ class ToolCall:
 
     @property
     def path(self) -> str:
+        """The path argument of this call, or ``""`` when the tool has none."""
         return self.input.get(PATH_KEYS.get(self.name, ""), "") or ""
 
 
