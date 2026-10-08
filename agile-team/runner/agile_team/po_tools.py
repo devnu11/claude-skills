@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from claude_agent_sdk import create_sdk_mcp_server, tool
+from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
@@ -269,14 +269,25 @@ class PoRun:
 
     async def run(self) -> StepResult:
         plan = po_plan(self.runtime, self.start)
+        self.runtime.halted_by = None
         self._set_status(RunStatus.RUNNING)
-        result = self.runtime.priced(plan, await collect(self.runtime.query_fn, plan))
+        result = self.runtime.priced(plan, await self._collect(plan))
         self.runtime.settle_po()
         self._record(plan.role.model, result)
         return result
 
+    async def _collect(self, plan: Plan) -> StepResult:
+        """Drain the PO's query. On an SDK error result, keep its session for resume."""
+        try:
+            return await collect(self.runtime.query_fn, plan)
+        except ResultError as exc:
+            state = self.runtime.state
+            state.po_session = exc.session_id or state.po_session
+            self.runtime.save()
+            raise
+
     def _set_status(self, status: RunStatus) -> None:
-        self.runtime.state.status = status
+        self.runtime.state.mark(status)
         self.runtime.save()
 
     def _record(self, model: str, result: StepResult) -> None:
@@ -284,4 +295,6 @@ class PoRun:
         state = self.runtime.state
         self.runtime.ledger.record(Entry(PO, model, result.cost, tokens=result.tokens))
         state.po_session = result.session_id or state.po_session
-        self._set_status(RunStatus.IDLE if state.status is RunStatus.RUNNING else state.status)
+        if state.status is RunStatus.RUNNING:
+            state.mark(RunStatus.IDLE)
+        self.runtime.save()

@@ -13,7 +13,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-KINDS = ("question", "update", "sprint-end", "blocked", "done")
+KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped")
 OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"
 
