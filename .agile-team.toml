@@ -1,0 +1,62 @@
+[team]
+docs_dir = "agile-team/docs"
+artifacts = "committed"
+key_file = ".team/run/api-key"
+auth = "login"
+cadence = "until-blocker"
+budget_usd = 40.0
+manager_every_pct = 25
+
+[toolchain]
+preset = "python"
+test = "uv run pytest"
+coverage = "uv run pytest --cov --cov-report=term"
+lint = "uv run ruff check ."
+static = "uv run ruff format --check ."
+pragma = "# pragma: no cover"
+
+[toolchain.globs]
+source = [
+    "src/**",
+    "*.py",
+    "!tests/**",
+]
+tests = [
+    "tests/**",
+    "!tests/e2e/**",
+]
+e2e = [
+    "tests/e2e/**",
+]
+ci = [
+    ".github/workflows/**",
+    "Makefile",
+    "pyproject.toml",
+    "uv.lock",
+    "noxfile.py",
+    "tox.ini",
+]
+
+[gates]
+coverage = 95
+round_cap = 3
+steps = [
+    "design",
+    "tests",
+    "implement",
+    "quality",
+    "review",
+    "design-review",
+    "e2e",
+    "acceptance",
+]
+
+[[delivery]]
+name = "main"
+kind = "package"
+prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
+bin = [
+    "venv/bin",
+]
+
+[roles]
