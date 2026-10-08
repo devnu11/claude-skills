@@ -70,6 +70,14 @@ def configured(repo: Path) -> Path:
     return repo
 
 
+USAGE = {
+    "input_tokens": 100,
+    "output_tokens": 20,
+    "cache_read_input_tokens": 300,
+    "cache_creation_input_tokens": 40,
+}
+
+
 def result_message(text: str, cost: float = 0.1, session: str = "sess") -> ResultMessage:
     return ResultMessage(
         subtype="success",
@@ -79,6 +87,7 @@ def result_message(text: str, cost: float = 0.1, session: str = "sess") -> Resul
         num_turns=1,
         session_id=session,
         total_cost_usd=cost,
+        usage=USAGE,
         result=text,
     )
 

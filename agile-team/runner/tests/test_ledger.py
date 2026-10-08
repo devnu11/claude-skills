@@ -1,8 +1,9 @@
 """Cost ledger and budget checkpoints."""
 
+import json
 from pathlib import Path
 
-from agile_team.ledger import Budget, Entry, Ledger, budget_status
+from agile_team.ledger import Budget, Entry, Ledger, Tokens, budget_status
 
 
 def test_record_and_totals(tmp_path: Path) -> None:
@@ -30,3 +31,32 @@ def test_checkpoint_crossed() -> None:
     assert not budget.checkpoint_crossed(2.6, 4.9)
     assert budget.checkpoint_crossed(4.9, 10.1)
     assert not Budget(0, 25).checkpoint_crossed(0, 5)
+
+
+def test_tokens_from_usage_and_sum() -> None:
+    usage = {"input_tokens": 3, "output_tokens": 2, "cache_read_input_tokens": None}
+    tokens = Tokens.from_usage(usage) + Tokens(1, 1, 1, 1)
+    assert tokens == Tokens(4, 3, 1, 1)
+    assert tokens.total() == 9
+    assert Tokens.from_usage(None) == Tokens()
+
+
+def test_old_lines_without_tokens_still_load(tmp_path: Path) -> None:
+    path = tmp_path / "ledger.jsonl"
+    path.write_text(json.dumps({"role": "scribe", "model": "haiku", "cost_usd": 0.1}) + "\n")
+    assert Ledger(path).entries()[0].tokens == Tokens()
+
+
+def test_totals_group_cost_tokens_and_steps(tmp_path: Path) -> None:
+    led = Ledger(tmp_path / "ledger.jsonl")
+    led.record(Entry("developer", "sonnet", 1.0, "s1", tokens=Tokens(10, 5)))
+    led.record(Entry("developer", "sonnet", 0.5, "s2", tokens=Tokens(1, 1)))
+    by_role = led.totals("role")["developer"]
+    assert (by_role.cost_usd, by_role.tokens, by_role.steps) == (1.5, Tokens(11, 6), 2)
+    assert set(led.totals("story")) == {"s1", "s2"}
+    assert budget_status(led, 10)["tokens"] == {
+        "input": 11,
+        "output": 6,
+        "cache_read": 0,
+        "cache_creation": 0,
+    }

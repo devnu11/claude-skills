@@ -103,6 +103,7 @@ def test_run_po_records_cost_and_session(make_runtime) -> None:
     assert "mcp__team__ask_user" in opts.allowed_tools
     assert "Build a todo CLI" in q.calls[0]["prompt"] and "Cadence: sprint" in q.calls[0]["prompt"]
     assert rt.ledger.by_role() == {"product-owner": 0.5}
+    assert rt.ledger.entries()[0].tokens.total() == 460
     assert rt.state.po_session == "sess" and rt.state.status == "idle"
 
 
