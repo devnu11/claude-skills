@@ -17,13 +17,20 @@ PID_FILE = "runner.pid"
 
 
 class RunStatus(StrEnum):
-    """The run as a whole. The last three are set by the PO's ``notify_user``."""
+    """The run as a whole.
+
+    ``sprint-end``, ``blocked`` and ``done`` are set by the PO's ``notify_user``.
+    ``blocked``, ``failed`` and ``stopped`` are set by the runner when it halts
+    (see ``halt.HALTS``).
+    """
 
     IDLE = "idle"
     RUNNING = "running"
     SPRINT_END = "sprint-end"
     BLOCKED = "blocked"
     DONE = "done"
+    FAILED = "failed"
+    STOPPED = "stopped"
 
 
 @dataclass
@@ -48,6 +55,11 @@ class RunState:
     overrides: dict[str, ModelOverride] = field(default_factory=dict)
     unreviewed: list[str] = field(default_factory=list)
     manager_due: list[str] = field(default_factory=list)
+    status_reason: str | None = None
+
+    def mark(self, status: RunStatus, reason: str | None = None) -> None:
+        """Set the run status and why; no reason clears the old one."""
+        self.status, self.status_reason = status, reason
 
     def runtime_overrides(self, role: str) -> dict[str, Any]:
         """Fields from a PO model override for ``role``, if any."""

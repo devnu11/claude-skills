@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from . import config as config_mod
-from . import gates, keys, onboard, sandbox
+from . import gates, halt, keys, onboard, sandbox
 from . import state as state_mod
-from .dispatch import QueryFn, Runtime, shell_runner
+from .dispatch import QueryFn, Runtime, StepResult, shell_runner
 from .git_ops import Git
 from .ledger import Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
@@ -290,9 +290,36 @@ def _require_preflight(config: config_mod.Config, home: Path) -> None:
 
 def _run(runtime: Runtime, start: Start) -> int:
     with pid_file(runtime.config.run_dir):
-        result = asyncio.run(run_po(runtime, start))
+        try:
+            result = asyncio.run(_po_until_sigterm(runtime, start))
+        except (Exception, asyncio.CancelledError) as exc:
+            return _halt_exit(runtime, exc)
+    return _finish(runtime, result)
+
+
+async def _po_until_sigterm(runtime: Runtime, start: Start) -> StepResult:
+    """Run the PO as a task that SIGTERM (``stop --now``) cancels."""
+    task = asyncio.current_task()
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    return await run_po(runtime, start)
+
+
+def _halt_exit(runtime: Runtime, exc: BaseException) -> int:
+    halt.log_traceback(runtime.config.run_dir, exc)
+    return _report(runtime.halt_run(halt.classify(exc)))
+
+
+def _finish(runtime: Runtime, result: StepResult) -> int:
+    """Print the PO's text; exit with the halt's code if a role step halted the run."""
     print(result.text)
+    if runtime.halted_by:
+        return _report(runtime.halt_run(runtime.halted_by))
     return 0
+
+
+def _report(found: halt.Halt) -> int:
+    print(f"agile-team start: {found.message()}", file=sys.stderr)
+    return found.rule.exit_code
 
 
 @contextmanager
@@ -321,6 +348,7 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
     st = state_mod.load(config.run_dir)
     return {
         "status": st.status,
+        "status_reason": st.status_reason,
         "cadence": st.cadence,
         "sprint": st.sprint,
         "running": (config.run_dir / state_mod.PID_FILE).exists(),

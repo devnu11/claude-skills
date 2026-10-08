@@ -26,7 +26,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import guard, keys, sandbox
+from . import guard, halt, keys, sandbox
 from . import state as state_mod
 from .config import CONFIG_NAME, Config
 from .events import EVENTS, Event, EventKind, EventLog
@@ -40,6 +40,7 @@ from .gates import (
     role_fits_step,
 )
 from .git_ops import Git, GitError
+from .halt import Halt
 from .ledger import Budget, Entry, Ledger, Tokens
 from .providers import Providers
 from .relay import Note, Relay
@@ -217,6 +218,21 @@ def refused(reason: str) -> dict[str, Any]:
     return {"status": "refused", "reason": reason}
 
 
+def halted_report(plan: Plan, found: Halt) -> dict[str, Any]:
+    """The PO's report for a step cut short by a halt."""
+    return {
+        "status": "halted",
+        "role": plan.role.name,
+        "reason": found.reason,
+        "next": "the run is stopping; end your turn",
+    }
+
+
+def _halt_text(state: RunState) -> str:
+    reason = f" ({state.status_reason})" if state.status_reason else ""
+    return f"the run is {state.status}{reason}; end your turn"
+
+
 @dataclass
 class Runtime:
     """The live run: config, roles, git, ledger, relay, state and pipeline."""
@@ -234,6 +250,7 @@ class Runtime:
     secrets: list[Path] = field(default_factory=list)
     providers: Providers = field(default_factory=Providers)
     events: EventLog = field(init=False)
+    halted_by: Halt | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
@@ -270,7 +287,7 @@ class Runtime:
         if self.stop_requested():
             return "a stop was requested; end your turn"
         if self.state.halted():
-            return f"the run is {self.state.status}; end your turn"
+            return _halt_text(self.state)
         if self.state.manager_due and request.role != MANAGER:
             return "manager review due: " + "; ".join(self.state.manager_due)
         return None
@@ -366,7 +383,32 @@ class Runtime:
         except sandbox.SandboxError as exc:
             return refused(str(exc))
         self.emit(EventKind.STEP_START, plan, brief=request.brief)
-        return self.settle(plan, await self._execute(plan))
+        return await self._run_planned(plan)
+
+    async def _run_planned(self, plan: Plan) -> dict[str, Any]:
+        try:
+            result = await self._execute(plan)
+        except Exception as exc:
+            return self._step_failed(plan, exc)
+        return self.settle(plan, result)
+
+    def _step_failed(self, plan: Plan, exc: Exception) -> dict[str, Any]:
+        """A limit halts the run; any other error goes on to the PO unchanged."""
+        halt.log_traceback(self.config.run_dir, exc)
+        found = halt.limit_halt(exc)
+        if found is None:
+            raise exc
+        return halted_report(plan, self.halt_run(found))
+
+    def halt_run(self, found: Halt) -> Halt:
+        """Record the run's first halt (status, reason, liaison note); later calls re-assert it."""
+        first = self.halted_by is None
+        self.halted_by = self.halted_by or found
+        self.state.mark(self.halted_by.rule.status, self.halted_by.reason)
+        self.save()
+        if first:
+            self.relay.post(Note(self.halted_by.rule.note_kind, self.halted_by.message()))
+        return self.halted_by
 
     async def _execute(self, plan: Plan) -> StepResult:
         try:
