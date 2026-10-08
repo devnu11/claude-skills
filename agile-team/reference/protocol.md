@@ -231,8 +231,18 @@ committed to, or `null` when it is in the backlog.
 
 - PreToolUse hook: Write/Edit/NotebookEdit outside the role's write globs are
   denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox,
-  `.team/stories/` and `<docs>/customer/`; its Bash may not name source or test
-  directories, `..`, or repo paths outside the sandbox.
+  `.team/stories/` and `<docs>/customer/`; its Bash may not name a forbidden
+  root, `..`, or repo paths outside the sandbox.
+- Forbidden roots: for each positive glob in `[toolchain.globs]` `source`,
+  `tests` and `e2e`, the leading path segments before the first segment that
+  holds `*`, `?` or `[` (`agile-team/runner/agile_team/**` →
+  `agile-team/runner/agile_team`; `src/main.py` → `src/main.py`). `!` globs and
+  globs that start with a wildcard give none. A root nested in another root is
+  dropped. A Bash token names a root when, after stripping leading `.` and `/`
+  and normalizing (`a//b`, `a/./b` → `a/b`), it equals the root or starts with
+  `root/`. So `agile-team status` and `cat agile-team/docs/customer/x.md` pass,
+  and `cat agile-team/runner/agile_team/cli.py` is denied. With no roots at
+  all, the hook forbids `src`.
 - Every role: no writes under `.git/`; no Read/Grep/Glob/Write of the key
   files or `~/secrets/` (hook plus Claude Code `permissions.deny` rules); Bash
   may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
@@ -254,8 +264,11 @@ committed to, or `null` when it is in the backlog.
   `chore(team): product-owner step` before the next role runs. Nothing is
   autosquashed.
 - Proxy OS sandbox: Claude Code `sandbox.filesystem.denyRead` on the repo with
-  `allowRead` for the sandbox, stories and customer docs. Needs
-  bubblewrap (Linux) or Seatbelt (macOS); not verified end to end yet.
+  `allowRead` for the sandbox, stories and customer docs, plus
+  `permissions.deny` rules `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`
+  for each forbidden root, so the rules never cover `<docs>/customer/` unless a
+  source or test glob does. Needs bubblewrap (Linux) or Seatbelt (macOS); not
+  verified end to end yet.
 
 ## Delivery kinds
 
