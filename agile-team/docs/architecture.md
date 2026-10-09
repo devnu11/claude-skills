@@ -333,6 +333,7 @@ it are listed under Known limits.
 
 | # | Step | Rule |
 |---|---|---|
+| W0 | Join lines | Before any Bash check, for **every role**, delete each `\` followed by a newline from the command, the way bash and zsh do (review D2). shlex keeps it as a newline inside the word, so without W0 `agile_\⏎team` and `.\⏎.` get past W1, W2 and W6. W0 runs at the top of `guard.check_bash`, so the key-name, git and allowlist checks see the joined text too. It also deletes the pair inside single quotes, where the shell keeps it; that can only join a literal and over-deny. |
 | W1 | Unquote | Words come from `shlex.split`, which already removes quotes and `\`. If shlex can't parse the command, the fallback `command.split()` words have every `'`, `"` and `\` deleted. (Example: `cat "agile-team/runner/agile_team/cli.py" # it's` makes shlex fail.) |
 | W2 | Climb | Deny when a `/`-segment of the raw word is `..` (as today). Also deny when a segment **other than the last** holds `{` or `(`, or starts with `.` and holds `*`, `?` or `[`. Such a segment could expand to `..` or to text that contains `/`. |
 | W3 | Repo path | `_names_repo`, unchanged. |
@@ -397,9 +398,25 @@ denied on purpose; that is safe.
 | F | `cat s*/x`, `cat src*`, `cat */x`, `cat ?rc/x`, `cat [s]rc`, `cat {,}src` | deny | W6 |
 | F | `cat {,}src/x` | deny | W2 |
 | F | `echo {1..3}`, `ls [a-z]*` | deny (over-deny) | W6: a one-segment group or bracket matches the one-segment root |
+| N | `cat agile-team/runner/agile_\⏎team/cli.py`, `cat agile-team/runner/agile_team\⏎/cli.py`, `cat agile-team/run\⏎ner/agile_team/cli.py`, `cat agile-team/runner/tes\⏎ts/conftest.py`, `cat \⏎agile-team/runner/agile_team/cli.py` | deny | W0, W6 (review D2) |
+| N | `cat .\⏎./.\⏎./.\⏎./.\⏎./agile-team/runner/agile_team/cli.py`, `ls .\⏎.` | deny | W0, W2 (review D2) |
+| N | `cat agile-team/docs/customer/x\⏎.md` | allow | W0, W6 |
+| F | `cat s\⏎rc/x` | deny | W0, W6 (review D2) |
 
 (`\|` in the table is only Markdown escaping. The word under test is
-`agile-team/runner/(agile_team|x)/cli.py`; shlex keeps it as one word.)
+`agile-team/runner/(agile_team|x)/cli.py`; shlex keeps it as one word.
+`⏎` is a real newline character in the command string: in Python,
+`"cat agile-team/runner/agile_\\\nteam/cli.py"`.)
+
+W0 also covers every other role. Through `guard.check_tool_use` with a plain
+developer `Scope` (no Bash allowlist):
+
+| Command | Result | Check |
+|---|---|---|
+| `g\⏎it commit -m x` | deny | `_check_git` |
+| `git \⏎commit -m x`, `git pu\⏎sh` | deny | `_check_git` (now denied as `commit`/`push`, not by luck) |
+| `echo ANTHROPIC_API_\⏎KEY` | deny | `_check_secret_mention` |
+| `git st\⏎atus` | allow | `_check_git`: `status` is read-only |
 
 ### Changes by module
 
@@ -436,6 +453,13 @@ denied on purpose; that is safe.
 
 #### `guard.py`
 
+- `check_bash(scope, command)`: W0. Add the module constant
+  `LINE_CONTINUATION = "\\\n"` and make the first statement
+  `command = command.replace(LINE_CONTINUATION, "")`, before
+  `_SEGMENT_SPLIT` and every check. Do not put it in `_tokens`: the secret
+  check reads the raw `command`, and the segment split runs before
+  `_tokens`. Extend the docstring: "…after joining `\`-newline line
+  continuations as the shell does." Nothing else in W1-W6 changes.
 - `_tokens(command)`: W1. In the `ValueError` fallback, delete quote
   characters from each word:
   `[w.translate(UNQUOTE) for w in command.split()]`, with the module constant
@@ -486,6 +510,11 @@ assertions must stay as they are and pass. That includes
      to `*`, a mismatch, casefold).
    Also test that the W1 fallback deletes quotes, through `check_tool_use`
    with `cat "agile-team/runner/agile_team/cli.py" # it's`.
+   W0: the four D2 rows of the example table go in the same two tests (N
+   rows in `test_nested_bash_tokens`, the F row in
+   `test_flat_layout_parity`), one parametrized case per command. The
+   all-roles table under it goes in the general guard tests with a
+   developer `Scope`.
    This step must cover all of the new wildcard code. The developer can't
    write tests, so these lines are only covered by this step.
 6. Flat parity: with `["src", "tests"]`, `cat src/x`, `ls ./tests`,
