@@ -367,3 +367,28 @@ def test_resume_refuses_a_used_up_cost_cap(
     assert "$2.10 spent reaches the cost cap" in capsys.readouterr().err
     assert run(tmp_path, "resume", "j", "--max-cost", "5", "--foreground") == 0
     assert job.load().status is JobStatus.DONE
+
+
+def test_resume_now_wakes_a_waiting_supervisor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.WAITING)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    assert run(tmp_path, "resume", "j", "--now", "--max-resumes", "5") == 0
+    assert job.wake_requested()
+    assert job.load().bounds.max_resumes == 5
+    assert "resuming now" in capsys.readouterr().out
+
+
+def test_resume_without_now_points_at_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    make(tmp_path, JobStatus.WAITING).path(PID_FILE).write_text(str(os.getpid()))
+    assert run(tmp_path, "resume", "j") == 1
+    assert "use --now" in capsys.readouterr().err
+
+
+def test_resume_now_on_a_stopped_job_restarts_it(tmp_path: Path) -> None:
+    job = make(tmp_path)
+    assert run(tmp_path, "resume", "j", "--now", "--foreground") == 0
+    assert job.load().status is JobStatus.DONE

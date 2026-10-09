@@ -116,11 +116,19 @@ class Supervisor:
         self.job.event("wait", {"until": local(wake).isoformat(timespec="seconds")})
 
     def _sleep_until(self, wake: float) -> None:
-        """Sleep in ``SLICE`` steps, checking the stop file before each."""
-        while (left := wake - self.clock()) > 0:
+        """Sleep in ``SLICE`` steps, checking the stop and wake files before each."""
+        while (left := wake - self.clock()) > 0 and not self._woken():
             self._check_stop()
             self.sleep(min(SLICE, left))
         self._check_stop()
+
+    def _woken(self) -> bool:
+        """True once ``resume --now`` asked to cut the wait short; logs it once."""
+        if not self.job.wake_requested():
+            return False
+        self.job.clear_wake()
+        self.job.event("wake", {"by": "user"})
+        return True
 
     def _check_stop(self) -> None:
         if self.job.stop_requested():

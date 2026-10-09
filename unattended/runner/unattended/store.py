@@ -27,6 +27,7 @@ EVENTS_FILE = "events.jsonl"
 OUTPUT_FILE = "output.md"
 LOG_FILE = "output.log"
 STOP_FILE = "stop"
+WAKE_FILE = "wake"
 PID_FILE = "supervisor.pid"
 SUPERVISOR_LOG = "supervisor.log"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
@@ -166,6 +167,16 @@ class Job:
 
     def clear_stop(self) -> None:
         self.path(STOP_FILE).unlink(missing_ok=True)
+
+    def request_wake(self) -> None:
+        """Ask a waiting supervisor to resume now instead of at the reset."""
+        self.path(WAKE_FILE).touch()
+
+    def wake_requested(self) -> bool:
+        return self.path(WAKE_FILE).exists()
+
+    def clear_wake(self) -> None:
+        self.path(WAKE_FILE).unlink(missing_ok=True)
 
     def pid(self) -> int | None:
         """The live supervisor's pid, or None when none is running."""

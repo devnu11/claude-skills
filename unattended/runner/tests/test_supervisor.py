@@ -197,3 +197,21 @@ def test_budget_stop_ends_without_waiting(job: Job) -> None:
     assert status is JobStatus.LIMIT_REACHED
     assert (job.load().reason, job.load().cost) == ("cost cap reached mid-run", 2.0)
     assert clock.sleeps == []
+
+
+def test_wake_file_cuts_the_wait_short(job: Job) -> None:
+    clock = FakeClock()
+    script = Script(UNREADABLE, DONE)
+
+    def sleep(seconds: float) -> None:
+        clock.sleep(seconds)
+        if clock.now >= START + 60:
+            job.request_wake()
+
+    assert Supervisor(job, script, clock, sleep).run() is JobStatus.DONE
+    state = job.load()
+    assert (state.resumes, state.runs) == (1, 2)
+    assert clock.now == START + 60
+    assert not job.wake_requested()
+    events = [json.loads(line)["event"] for line in job.path(EVENTS_FILE).read_text().splitlines()]
+    assert events.count("wake") == 1
