@@ -899,6 +899,24 @@ in Python.
 | D13 | `default_host()` is `"127.0.0.1"` when `sys.platform == "win32"` and `"0.0.0.0"` otherwise. `--host` overrides it. `display_url(host, port)` uses `socket.gethostname()` in place of an all-interfaces host (`0.0.0.0`, `""`), so the URL opens from another machine. No auth. | AC5 |
 | D14 | CLI `dashboard [--host H] [--port 8765] [--no-open]`: binds first, then prints `dashboard: <url>` with `flush=True`, using the **bound** port (so `--port 0` prints the real one). Unless `--no-open` is given, it then opens the URL with `webbrowser.open`, then serves until interrupted. A bind failure exits 1 with `agile-team dashboard: cannot listen on H:P: <strerror>`. | AC5, AC6 |
 
+**Known gaps after s4 (accepted at review, `.team/reviews/s4.md`; not
+contract changes, candidates for a hardening story):**
+
+- D3/D6 do not cover well-formed but wrongly typed input. A REQ file with
+  `covers: 5`, or a ledger line with an unknown key, makes `build()` raise,
+  so `/api/snapshot` and every SSE reconnect fail until the file is fixed
+  (`covers: "REQ-1"` gives a list of characters). The fix, when taken: each
+  `SECTIONS` builder falls back to its empty value on error.
+- D12 ends the loop on `BrokenPipeError`/`ConnectionResetError` only. Other
+  disconnect errors (`ConnectionAbortedError` on Windows, `OSError` on macOS)
+  print a traceback to stderr; the thread still ends. `_stat` likewise
+  catches only `FileNotFoundError`. The fix: catch `OSError`.
+- D14 opens the printed hostname URL. Where the machine's own name doesn't
+  resolve locally, the browser tab fails; the human then opens
+  `http://localhost:<port>/` (see `customer/dashboard.md`).
+- `index.html` ships through the build backend's default package data; fine
+  under `uv run`, to be checked if the runner is ever built as a wheel.
+
 ### Section shapes (source → value)
 
 | Key | Source files | Value |
