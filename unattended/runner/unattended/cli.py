@@ -43,7 +43,7 @@ from .store import (
     JobStatus,
     Spec,
 )
-from .supervisor import STOP_REASON, Runner, Supervisor, install_sigterm
+from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 
 POLL = 5.0
 FOLLOW_POLL = 1.0
@@ -62,6 +62,13 @@ Sleep = Callable[[float], None]
 
 class CliError(Exception):
     """A user-facing failure; the message is printed as is."""
+
+
+class Timing(StrEnum):
+    """When ``resume`` restarts a job that is waiting for a reset."""
+
+    AT_RESET = "at-reset"
+    NOW = "now"
 
 
 class Launch(StrEnum):
@@ -364,6 +371,8 @@ def cmd_resume(args: argparse.Namespace) -> int:
     """Restart a stopped, limit-reached or orphaned job, optionally with new limits."""
     job = job_home(args).job(args.name)
     state = job.load()
+    if args.timing is Timing.NOW and state.status is JobStatus.WAITING and job.pid():
+        return _wake(job, args)
     _require_resumable(job, state)
     bounds = updated_bounds(state.bounds, args)
     _require_room(bounds, state.cost)
@@ -372,6 +381,15 @@ def cmd_resume(args: argparse.Namespace) -> int:
     job.clear_stop()
     job.event("resume", {"by": "user"})
     return LAUNCHERS[args.launch](job, args)
+
+
+def _wake(job: Job, args: argparse.Namespace) -> int:
+    """Cut a live supervisor's wait short, applying any new limits first."""
+    bounds = updated_bounds(job.load().bounds, args)
+    job.update(lambda st: setattr(st, "bounds", bounds))
+    job.request_wake()
+    print(f"job {job.name}: resuming now (within {int(SLICE)} s)")
+    return 0
 
 
 def _restart(state: JobState, bounds: Bounds) -> None:
@@ -384,6 +402,7 @@ def _require_resumable(job: Job, state: JobState) -> None:
     if state.status not in RESUMABLE and not orphaned:
         raise CliError(
             f"job is {state.status}; only stopped, limit-reached or orphaned jobs resume"
+            " (use --now to wake a waiting job)"
         )
 
 
@@ -469,7 +488,12 @@ START_ARGS: tuple[Arg, ...] = (
     *limit_args(10),
     LAUNCH_ARG,
 )  # fmt: skip
-RESUME_ARGS: tuple[Arg, ...] = (NAME_ARG, *limit_args(None), LAUNCH_ARG)
+NOW_ARG: Arg = (
+    ("--now",),
+    {"action": "store_const", "dest": "timing", "const": Timing.NOW, "default": Timing.AT_RESET,
+     "help": "wake a job that is waiting for a usage-limit reset"},
+)  # fmt: skip
+RESUME_ARGS: tuple[Arg, ...] = (NAME_ARG, *limit_args(None), NOW_ARG, LAUNCH_ARG)
 COMMANDS = (
     Command("start", "create a job and supervise it", cmd_start, START_ARGS, (SOURCE, DEADLINE)),
     Command("status", "print a job's state as JSON (all jobs without NAME)", cmd_status,

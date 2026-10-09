@@ -13,7 +13,7 @@ as `uv run --quiet --project ~/.claude/skills/unattended/runner unattended`.
 | `wait NAME` | Block until the job ends or its supervisor is gone, print it, and exit with its code. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor. With no supervisor alive, mark the job stopped. |
-| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--foreground]` | Restart a `stopped` or `limit-reached` job, or an orphaned one (not ended, no supervisor alive). Limits given replace the old ones; the rest are kept. |
+| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--now] [--foreground]` | Restart a `stopped` or `limit-reached` job, or an orphaned one (not ended, no supervisor alive). Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
 
 `supervise DIR` is internal: it is what the detached process runs.
 
@@ -59,7 +59,7 @@ unique within a home.
 | `output.md` | A prompt job's latest result text. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
-| `supervisor.pid`, `stop` | The live supervisor; a stop request. |
+| `supervisor.pid`, `stop`, `wake` | The live supervisor; a stop request; a request to end the wait now. |
 
 ### Statuses
 
@@ -80,7 +80,7 @@ loop:
   next_wake = reset + 3 min   # LIMIT; the fallback wait when no reset is readable
             = now + 1, 2, 4… min (cap 30)   # RATE_LIMITED, consecutive
   deadline <= next_wake, resumes >= max, or cost >= max -> limit-reached
-  status waiting; sleep in 30 s slices, checking the stop file
+  status waiting; sleep in 30 s slices, checking the stop and wake files
   resumes += 1; run again as a resume
 ```
 

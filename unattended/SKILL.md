@@ -39,6 +39,8 @@ Every flag, the job files, limit detection and the command contract are in
 `$UN stop NAME` stops a job. `$UN resume NAME [--max-resumes N] [--until …]
 [--max-cost …]` restarts a stopped or limit-reached job. It also restarts one
 whose supervisor died, for example after a reboot; `status` warns about those.
+`$UN resume NAME --now` wakes a job that is waiting for a reset, for when the
+limit has reset sooner than the message said.
 
 ## Rules
 
