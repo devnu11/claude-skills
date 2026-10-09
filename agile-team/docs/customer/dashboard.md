@@ -65,8 +65,14 @@ header switches between automatic, light and dark.
 - `agile-team dashboard: cannot listen on 0.0.0.0:8765: Address already in
   use`: a dashboard is probably already running. Open its URL, or start
   another one with `--port 0`.
+- The browser tab opened by the dashboard doesn't load: your machine's own
+  hostname may not resolve locally. Open `http://localhost:8765/` (with your
+  port) instead.
 - The page says "reconnecting…": the server has stopped. Start it again; the
-  page reconnects by itself.
+  page reconnects by itself. If the server is still running, check any
+  `REQ-*.md` file you edited by hand: `covers` must be a YAML list
+  (`covers: [...]`), not a single value. A wrongly typed field stops the page from loading
+  until it is fixed.
 - Requirements are empty: this repo has no `<docs>/requirements/REQ-*.md`
   files yet.
 - A change to `.agile-team.toml` or a role file doesn't show: restart the
