@@ -525,11 +525,18 @@ def test_the_manager_context_lists_disputes_since_its_last_review(make_runtime) 
     run(rt, "developer")
     rt.query_fn.text = handoff("done")
     run(rt, "manager")
-    first = rt.query_fn.calls[1]["prompt"]
+    # T9 puts the open dispute's line in every prompt on the story, the Manager's
+    # included, so only the runner-context list is checked for repeats.
+    first = context_of(rt.query_fn.calls[1]["prompt"])
     assert "test_disputes_since_last_review" in first and TEST_ID in first
     run(rt, "manager")
-    second = rt.query_fn.calls[2]["prompt"]
+    second = context_of(rt.query_fn.calls[2]["prompt"])
     assert "test_disputes_since_last_review" in second and TEST_ID not in second
+
+
+def context_of(prompt: str) -> str:
+    """The Manager prompt's "Runner context" JSON, without the story lines."""
+    return prompt.split("Runner context:", 1)[1]
 
 
 # ----- end to end through the router (item 6) ---------------------------------
