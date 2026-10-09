@@ -105,7 +105,7 @@ It never writes, and it never serves files by path.
 
 | Route | Returns |
 |---|---|
-| `GET /` | the dashboard page (`index.html`, packaged with the runner) |
+| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resource is `mermaid@11.4.1` from `cdn.jsdelivr.net`, for the Flow chart. |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes (checked once a second). Otherwise it sends a `: keepalive` comment every second. |
 | anything else | 404 (other methods: 501) |

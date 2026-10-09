@@ -46,12 +46,19 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
   status, and questions and answers between the PO and you, next to a
   timeline of recent events.
-- **Tokens:** spend by role, story and model, and cumulative spend over time.
+  The flowchart is drawn by Mermaid, which the page loads from
+  `cdn.jsdelivr.net`. Without internet access it shows the chart's source
+  text instead, and every other tab still works.
+- **Tokens:** spend by role, story or model (switch with the buttons above
+  the bars), and cumulative spend over time.
 - **Questions:** questions waiting for your answer (with the
   `agile-team answer` command to copy), and questions a role raised in its
   handoff.
 - **Requirements:** each requirement with its status, which acceptance
   criteria it covers, and its change history with the reasons.
+
+The page follows your system's light or dark setting. The ◐ button in the
+header switches between automatic, light and dark.
 
 ## Troubleshooting
 

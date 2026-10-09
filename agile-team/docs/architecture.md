@@ -1151,3 +1151,95 @@ poll_seconds=0.01)`)
   (its history remains in the events).
 - `/?mock` served by the server gets 404 for `fixtures/snapshot.json`. Mock
   replay is for opening `index.html` as a file.
+
+## s5: Dashboard live UI (tabs over the s4 snapshot)
+
+Developer: **developer-gui**, alone. It edits only
+`runner/agile_team/dashboard/index.html` and adds
+`tests/test_dashboard_ui.py`. s4's server, routes and snapshot contract
+(D1–D14, `fixtures/snapshot.json`) **do not change**. s5 needs no contract
+change. Before writing the charts, the developer loads the `dataviz` skill
+(AC5).
+
+The starting point is the approved mock (`index.html` at 626d4663). It
+already holds the tabs, CSS tokens, board, tokens, questions, requirements,
+timeline, mock replay and the live boot. Keep all of that. Only the
+differences below are s5 work. Each one is a rule a reviewer can check.
+
+### Rules
+
+| # | Rule | AC |
+|---|---|---|
+| U1 | **Boot.** Outside mock mode, `boot()` fetches `api/snapshot` (relative URL), checks `res.ok`, renders, then calls `connectLive()`. If the fetch fails or isn't ok, it does **not** show a fatal error. It sets `data.conn = "reconnecting…"` and still calls `connectLive()`, because the stream's first tick sends the full snapshot (D12). | AC1 |
+| U2 | **Stream and reconnect.** `connectLive()` opens `new EventSource("api/stream")`. `onopen` sets `conn = "live"` and resets the backoff to 1 s. `onmessage` parses the snapshot, normalizes it (U4) and renders it. A bad JSON payload is ignored: keep the last snapshot. `onerror` sets `conn = "reconnecting…"`. If `es.readyState === EventSource.CLOSED`, the browser has given up, so it closes `es`, waits `backoff` with `setTimeout(connectLive, backoff)`, and doubles the backoff up to 10 s. Otherwise it lets EventSource retry by itself. There is never more than one open EventSource. After a server restart, the first `data:` line brings a full snapshot, so no refetch is needed. | AC1 |
+| U3 | **Rendering.** Every pushed snapshot re-renders the header and the visible tab (`RENDER[ui.tab]`). `RENDER.flow` is `renderFlowTab` = `renderFlow` + `renderTimeline`, so Flow is no longer rendered while it is hidden (Mermaid lays out wrong in `display:none`). Each renderer call is wrapped by `safely(fn, view)`. A throw puts one `pill("render error: …", "critical")` in the status row, and the other panels and the stream keep going. `timelineRow` also catches errors per row and drops the row that threw. | AC1 |
+| U4 | **Empty state.** `normalize(snap)` gives every list key of D1 (`pipeline, roles, stories, requirements, events, ledger, messages, answers`) the default `[]` when it is missing or not an array. `run` gets `{}`, merged over `{status: "idle", sprint: 0, task: "", budget_usd: 0, manager_every_pct: 25, round_cap: 3, manager_due: []}`. `story.acceptance`, `requirement.covers` and `requirement.history` also default to `[]`. Every panel with no rows shows one `<p class="empty">` line instead of an empty table or chart. Optional fields render only when they are non-empty: `history[].sha` (it is `""` until s2), `story.delivery`, and a step-end's `data.commit`, `data.tokens` and `data.cost_usd`. | AC1, AC6 |
+| U5 | **Requirements empty state.** When `view.requirements` is empty, the Requirements tab shows only one card: "No requirements yet. The Architect writes them as `<docs>/requirements/REQ-NNN.md`." There are no tiles, no matrix and no gap pills. The tab badge is 0, and story cards hide "AC x/y traced". In this repo that is the expected state until s1 and s2 land. Once the list has one row, the mock's full view applies. | AC6 |
+| U6 | **Flow is Mermaid.** It replaces the mock's hand-drawn SVG ring and its pulse animation (`FLOW`, `ringPositions`, `edgePath`, `flowEdges`, `flowNode`, `roleNode`, `PULSE_PATH` and `pulse` are removed, along with the "message in flight" legend item). `MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs"` is loaded once, lazily, with dynamic `import()`. The page script stays a classic `<script>`. It calls `initialize({startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables})`, where the variables are read from the CSS tokens through `getComputedStyle` (`--surface`, `--ink`, `--axis`, `--accent`). | AC3, AC7 |
+| U7 | **Flow source.** `flowSource(view)` is a pure function that returns the Mermaid text: `flowchart TB`; the node `you(["You (via liaison)"])`; the node `po["Product Owner<br/>model · tokens"]`; and one node `r<i>` per `ringRoles(view)` role, labelled `name<br/>model · tokens`, plus `<br/>↩ n bounced` when it has bounces. Edges are added only for counts > 0, in this order: per role, `po -->│"n briefs"│ r<i>`, then `r<i> -->│"n handoffs"│ po`; then `po -->│"n messages"│ you` and `you -->│"n answers"│ po`. After the edges come `linkStyle <k> stroke-width:<weight(n,max)>px,stroke:<color>` (brief `--ink-2`, handoff `--s1`, human `--s2`, as literal colours). Then come `classDef active stroke:<accent>,stroke-width:3px` and `classDef idle opacity:0.55`, and `class` lines: the active step's role (`activeStep`) gets `active`, or `po` gets it when no step is open; roles with no stats get `idle`. Every label goes through `mmdText(s)`, which replaces `"` with `#quot;` and `<`/`>` with `#lt;`/`#gt;`. Node ids are generated, never role names. (`│` stands for `|` here.) | AC3 |
+| U8 | **Flow render.** `renderFlow` keys a memo on `source + theme`. If the key hasn't changed, it does nothing. Otherwise it calls `mermaid.render("flow-svg-<seq>", source)` and writes the SVG only if `seq` is still the latest (an async race guard). If the import or the render fails, `#flow` shows `<p class="empty">Flowchart unavailable (mermaid could not load).</p>` followed by `<pre>` with the source, and the timeline still renders. A theme change clears the memo. | AC3, AC7 |
+| U9 | **Timeline.** It is the mock's timeline, unchanged: the last 120 events, newest first, each row a lane `from → to`, plus a story filter. It sits beside the chart in `.grid-flow`. This is the swimlane AC3 asks for. | AC3 |
+| U10 | **Board.** It is the mock's board, unchanged: Backlog, one column per `pipeline` step, then Done. Cards show the rounds dots against `round_cap`, `⚑ needs manager`, `escalated` (`blocked`) and `? waiting on <qid>`. | AC4 |
+| U11 | **Tokens by role, story and model.** The "Tokens by role" card becomes "Tokens by", with a three-button segmented control (`data-group="role\|story\|model"`, `aria-pressed`) stored in `ui.group` (default `"role"`). `renderMix` becomes `renderBars(view)`, using `totalsBy(view.ledger, ui.group)`. The stacked bars, legend and tooltip stay as they are. A null story groups as `(no story)`. The cumulative chart (`renderSpend`) is unchanged. | AC5 |
+| U12 | **Questions.** Open relay questions are as in the mock. In each raised question's head, the bold role becomes the text `raised by <role>`. "Not yet asked" means `raisedQuestions` drops any question whose trimmed text equals the trimmed `text` of some message in `view.messages`. A question the PO reworded still shows (known limit). | AC6 |
+| U13 | **Themes.** The colours come only from the existing CSS tokens. The `prefers-color-scheme` media block and the ◐/☀/☾ override stay. No new hex colours go outside `:root` blocks. | AC7 |
+| U14 | **Outside URLs.** The only outside URL in the page is `MERMAID_URL`. There is no other `<script src>`, stylesheet, font or fetch to another origin, and there is no build step. | AC3, guidelines |
+
+### Data flow (browser side)
+
+```mermaid
+sequenceDiagram
+  participant P as index.html
+  participant S as s4 server
+  participant C as cdn.jsdelivr.net
+  P->>S: GET api/snapshot
+  S-->>P: snapshot → normalize → render header + visible tab
+  P->>S: EventSource api/stream
+  loop every change (D12)
+    S-->>P: data: snapshot → normalize → render
+  end
+  Note over P,S: error: CLOSED → retry after 1,2,4…10 s; else browser retries
+  P->>C: import(mermaid@11.4.1) once, on the first Flow render
+```
+
+### Test plan (`tests/test_dashboard_ui.py`, stdlib only, no new deps)
+
+Load the page with `resources.files("agile_team.dashboard").joinpath("index.html").read_text()`.
+This also proves the page ships as package data. Parse it with an
+`html.parser.HTMLParser` subclass that collects `id`s and `<script>` text.
+
+1. **Packaged.** The resource `is_file()`. s4's test 11 already checks
+   that `GET /` serves exactly these bytes.
+2. **Routes.** The script contains `fetch("api/snapshot")`,
+   `new EventSource("api/stream")` and `EventSource.CLOSED` (U1, U2).
+3. **One element per tab.** The ids include `tab-flow`, `tab-board`,
+   `tab-tokens`, `tab-questions` and `tab-requirements`, and also `tabs`,
+   `flow`, `timeline`, `board`, `spend`, `mix`, `q-open`, `q-raised`,
+   `matrix` and `reqs`.
+4. **Pinned Mermaid only (U14).** Every match of `https?://[^"'\s)]+` is
+   either the U6 `MERMAID_URL` or starts with `http://www.w3.org/`.
+   `mermaid@11.4.1` appears, and no other `mermaid@` version does.
+5. **Themes (U13).** The page contains `prefers-color-scheme: dark` and
+   `data-theme`.
+6. **Empty-state copy (U5).** The page contains the U5 sentence "No
+   requirements yet".
+7. **JS syntax (optional).** `@pytest.mark.skipif(shutil.which("node") is
+   None)`: write each inline script to `tmp_path/x.js` and run
+   `node --check` through `subprocess.run`. The return code must be 0.
+   Node is not a dependency, and coverage counts only `agile_team`, so the
+   skip doesn't change coverage.
+
+Manual check (Integration Tester / Customer Proxy): run `agile-team
+dashboard --port 0 --no-open`, open the URL and touch `.team/run/events.jsonl`.
+The page updates without a refresh. Then stop and restart the server on the
+same port: the pill goes "reconnecting…" and back to "live". Open `/?mock`
+from the file to replay the fixture through every tab.
+
+### Known limits
+
+- Without internet access the Flow chart shows its source text instead of
+  the diagram (U8). The other tabs work offline.
+- A dynamic `import()` can't carry Subresource Integrity. The pinned
+  version is the only control.
+- U12 matches by exact text, so a question the PO reworded still shows as
+  raised.
