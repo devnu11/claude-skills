@@ -38,6 +38,17 @@ def friction_since_review(events: list[Event]) -> list[dict[str, Any]]:
     return [_friction(e) for e in recent if e.kind is EventKind.STEP_END and e.data.get("friction")]
 
 
+def disputes_since_review(events: list[Event]) -> list[dict[str, Any]]:
+    """Test disputes raised since the Manager's last step."""
+    recent = events[_after_last_manager(events) :]
+    return [_dispute(e) for e in recent if e.kind is EventKind.TEST_DISPUTE]
+
+
+def _dispute(event: Event) -> dict[str, Any]:
+    keys = ("test", "rule", "rounds")
+    return {"story": event.story, "role": event.role, **{k: event.data[k] for k in keys}}
+
+
 def _after_last_manager(events: list[Event]) -> int:
     ends = [i for i, e in enumerate(events) if e.kind is EventKind.STEP_END and e.role == MANAGER]
     return ends[-1] + 1 if ends else 0

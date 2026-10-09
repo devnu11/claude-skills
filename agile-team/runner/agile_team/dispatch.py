@@ -39,10 +39,11 @@ from .gates import (
     Verdict,
     dispatch_refusal,
     role_fits_step,
+    ruling_refusal,
 )
 from .git_ops import Git, GitError
 from .halt import Halt
-from .insights import friction_since_review, spend_by_role
+from .insights import disputes_since_review, friction_since_review, spend_by_role
 from .ledger import Budget, Entry, Ledger, Tokens, budget_status
 from .providers import Providers
 from .relay import Note, Relay
@@ -52,6 +53,7 @@ from .roles import (
     ResolvedRole,
     RoleBook,
     expand_globs,
+    handoff_report,
     parse_handoff,
     scope_note,
 )
@@ -63,6 +65,7 @@ PO = "product-owner"
 MANAGER = "manager"
 SCRIBE = "scribe"
 ARCHITECT = "architect"
+GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE}
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
 SHELL_OPTS: dict[str, Any] = {
@@ -367,9 +370,7 @@ class Runtime:
 
     def user_prompt(self, plan: Plan) -> str:
         parts = [plan.prompt]
-        if plan.story:
-            s = plan.story
-            parts.append(f"Story {s.id}: {s.title} (step {s.step}, round {s.rounds})")
+        parts.extend(_story_lines(plan.story))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context())
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
@@ -387,6 +388,7 @@ class Runtime:
             "budget": budget_status(self.ledger, self.config.team.budget_usd),
             "spend_by_role": spend_by_role(self.ledger),
             "friction_since_last_review": friction_since_review(self.events.events()),
+            "test_disputes_since_last_review": disputes_since_review(self.events.events()),
             "pending_followups": self.state.followups,
         }
         return "Runner context:\n" + json.dumps(context, indent=2)
@@ -521,8 +523,7 @@ class Runtime:
     def _effects(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """The Manager rules; any other role on a story goes through its gate."""
         if plan.role.name == MANAGER:
-            self.apply_manager(plan, handoff)
-            return {}
+            return self.apply_manager(plan, handoff)
         effect = STORY_EFFECTS.get(plan.role.name)
         if effect and plan.story:
             effect(plan.story, handoff)
@@ -593,19 +594,44 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
-        self.emit(EventKind.GATE, plan, **result)
+        result |= _dispute_fields(outcome, story)
+        self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
         return result
 
-    def apply_manager(self, plan: Plan, handoff: Handoff) -> None:
-        """A Manager step clears the review queue and rules on a capped story."""
+    def apply_manager(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """A Manager step clears the review queue and rules on the story; reports the ruling."""
         self.state.manager_due.clear()
         self.state.unreviewed.clear()
         for role, question in handoff.followups.items():
             self.state.followups.setdefault(role, []).append(question)
-        story = plan.story
-        if story and story.status is StoryStatus.NEEDS_MANAGER and handoff.ruling:
-            self.pipeline.apply_ruling(story, handoff.ruling)
-            self.emit(EventKind.RULING, plan, ruling=handoff.ruling, now_at=story.step)
+        return self._rule(plan, handoff.ruling) if handoff.ruling else {}
+
+    def _rule(self, plan: Plan, ruling: str) -> dict[str, Any]:
+        why = ruling_refusal(plan.story)
+        if why:
+            return {"ruling": {"ruling": ruling, "applied": False, "why": why}}
+        self.pipeline.apply_ruling(plan.story, ruling)
+        now_at = plan.story.step
+        self.emit(EventKind.RULING, plan, ruling=ruling, now_at=now_at)
+        return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
+
+
+def _story_lines(story: StoryState | None) -> list[str]:
+    """The story line, and the open test dispute when there is one."""
+    if story is None:
+        return []
+    lines = [f"Story {story.id}: {story.title} (step {story.step}, round {story.rounds})"]
+    d = story.dispute
+    if d:
+        lines.append(f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}")
+    return ["\n".join(lines)]
+
+
+def _dispute_fields(outcome: Outcome, story: StoryState) -> dict[str, Any]:
+    if outcome.verdict is not Verdict.DISPUTE:
+        return {}
+    d = outcome.dispute
+    return {"test": d.test, "rule": d.rule, "disputes": story.disputes}
 
 
 def _capture_developer(story: StoryState, handoff: Handoff) -> None:
@@ -633,14 +659,4 @@ def bad_handoff(error: HandoffError) -> dict[str, Any]:
         "open_questions": [],
         "next_role": None,
         "friction": "",
-    }
-
-
-def handoff_report(handoff: Handoff) -> dict[str, Any]:
-    return {
-        "status": handoff.status,
-        "summary": handoff.summary,
-        "open_questions": handoff.open_questions,
-        "next_role": handoff.next_role,
-        "friction": handoff.friction,
     }

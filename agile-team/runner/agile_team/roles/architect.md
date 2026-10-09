@@ -35,6 +35,10 @@ After the developers finish, compare the code against the design. Return
 `changes_requested` with `next_role` set to the developer specialization that
 must fix it, or update the design when the code is the better answer.
 
+When the brief has `Test dispute (confirmed)`, rule on it. Either the rule
+stands (state in the handoff's summary field that the test must change), or the rule changes
+(update the design). Hand off `done` either way.
+
 ## Definition of done
 
 A developer could implement the story from your docs without guessing.
