@@ -247,3 +247,54 @@ def test_customer_proxy_never_builds_its_own_environment(tmp_path: Path) -> None
 def test_product_owner_knows_the_returned_status(tmp_path: Path) -> None:
     po = RoleBook.for_repo(tmp_path, {}).resolve("product-owner")
     assert "returned" in po.body
+
+
+# ----- s19: the handoff's developer field and the built-in PO/architect ----------
+
+
+def test_handoff_developer_defaults_to_none() -> None:
+    assert roles.parse_handoff('```handoff\n{"status": "done"}\n```').developer is None
+
+
+def test_handoff_developer_is_read() -> None:
+    text = '```handoff\n{"status": "done", "developer": "developer-cli"}\n```'
+    assert roles.parse_handoff(text).developer == "developer-cli"
+
+
+@pytest.mark.parametrize("value", ["null", '""'])
+def test_handoff_empty_developer_is_none(value: str) -> None:
+    text = f'```handoff\n{{"status": "done", "developer": {value}}}\n```'
+    assert roles.parse_handoff(text).developer is None
+
+
+@pytest.mark.parametrize("value", ["3", "[]", "true"])
+def test_handoff_developer_must_be_a_string(value: str) -> None:
+    text = f'```handoff\n{{"status": "done", "developer": {value}}}\n```'
+    with pytest.raises(roles.HandoffError, match="developer must be a role name"):
+        roles.parse_handoff(text)
+
+
+def test_product_owner_defaults_to_sonnet(tmp_path: Path) -> None:
+    po = RoleBook.for_repo(tmp_path, {}).resolve("product-owner")
+    assert po.model == "sonnet"
+    assert po.description == (
+        "Writes the stories, starts sprints and makes the team's judgement calls; "
+        "the only role that talks to the human."
+    )
+
+
+def test_product_owner_body_describes_the_split(tmp_path: Path) -> None:
+    body = RoleBook.for_repo(tmp_path, {}).resolve("product-owner").body
+    for text in ("continue_story", "set_developer", "standard brief", "judgement"):
+        assert text in body
+    assert "Run the `scribe` after each story" not in body
+    assert "Keep briefs short" not in body
+    assert "point at artifacts rather than restating them" in body
+    assert "the runner sends it back to e2e" in body
+
+
+def test_architect_names_the_developer_in_the_handoff(tmp_path: Path) -> None:
+    body = RoleBook.for_repo(tmp_path, {}).resolve("architect").body
+    assert '"developer": "developer-cli"' in body
+    assert "in your summary" not in body
+    assert "story index" in body

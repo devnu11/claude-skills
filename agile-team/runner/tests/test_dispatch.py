@@ -574,3 +574,214 @@ def test_web_proxy_keeps_read_to_rewrite_its_report(make_runtime) -> None:
     present(rt.config)
     run(rt, "customer-proxy", story="s1")
     assert "Read" in q.calls[0]["options"].tools
+
+
+# ----- s19: holds, previous step, scribe queue, developer pick -------------------
+
+
+class Raising:
+    """A fake query that raises ``exc`` when its stream starts."""
+
+    def __init__(self, exc: BaseException):
+        self.exc = exc
+
+    def __call__(self, *, prompt: str, options):
+        async def gen():
+            raise self.exc
+            yield  # pragma: no cover
+
+        return gen()
+
+
+def blocked(**extra):
+    return handoff("blocked", summary="need a db", **extra)
+
+
+def test_a_stopped_report_holds_the_story(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(blocked()))
+    s = open_story(rt)
+    report = run(rt, "architect", story="s1")
+    assert report["status"] == "blocked" and s.hold == "stopped"
+    assert dispatch.state_mod.load(rt.config.run_dir).stories["s1"].hold == "stopped"
+
+
+def test_several_triggers_join_into_the_hold(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(blocked(open_questions=["why?"])))
+    s = open_story(rt)
+    run(rt, "architect", story="s1")
+    assert s.hold == "stopped, questions"
+
+
+def test_a_clean_po_step_clears_the_hold(make_runtime) -> None:
+    rt = make_runtime(FakeQuery())
+    s = open_story(rt, hold="stopped", note="keep")
+    run(rt, "architect", story="s1")
+    assert s.hold is None
+
+
+def test_a_story_less_step_has_no_hold_to_set(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(blocked()))
+    report = run(rt, "architect")
+    assert report["status"] == "blocked"
+
+
+def test_a_refused_po_step_leaves_state_events_and_hold_alone(make_runtime) -> None:
+    rt = make_runtime()
+    s = open_story(rt, hold="stopped")
+    rt.save()
+    (rt.config.run_dir / STOP_FILE).write_text("")
+    before = (rt.state.to_json(), len(rt.events.events()))
+    assert run(rt, "architect", story="s1")["status"] == "refused"
+    assert (rt.state.to_json(), len(rt.events.events())) == before and s.hold == "stopped"
+
+
+def test_a_halted_step_does_not_touch_the_hold(make_runtime) -> None:
+    limit = RuntimeError("You've hit your session limit · resets 2pm (UTC)")
+    rt = make_runtime(Raising(limit))
+    s = open_story(rt, hold="stopped")
+    assert run(rt, "architect", story="s1")["status"] == "halted"
+    assert s.hold == "stopped" and s.previous is None
+
+
+def test_a_gated_step_records_the_previous_step(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", summary="designed")))
+    s = open_story(rt)
+    run(rt, "architect", story="s1")
+    assert s.previous == gates.PreviousStep("architect", "done", "designed", "pass", "", None)
+
+
+def test_a_bounce_is_recorded_with_its_reason_and_next_role(make_runtime) -> None:
+    text = handoff("changes_requested", summary="too long", next_role="developer-gui")
+    rt = make_runtime(FakeQuery(text))
+    s = open_story(rt, "review")
+    run(rt, "code-reviewer", story="s1")
+    prev = s.previous
+    assert (prev.role, prev.status, prev.summary) == (
+        "code-reviewer",
+        "changes_requested",
+        "too long",
+    )
+    assert (prev.verdict, prev.reason, prev.next_role) == ("bounce", "too long", "developer-gui")
+
+
+def test_a_bad_handoff_is_recorded_as_a_bounce(make_runtime) -> None:
+    rt = make_runtime(FakeQuery("no block"))
+    s = open_story(rt, "tests")
+    run(rt, "unit-tester", story="s1")
+    assert (s.previous.status, s.previous.verdict) == ("bad_handoff", "bounce")
+    assert s.previous.reason
+
+
+def test_a_return_is_recorded_as_the_previous_step(make_runtime) -> None:
+    rt = make_runtime()
+    s = open_story(rt, "acceptance")
+    run(rt, "customer-proxy", story="s1")
+    assert (s.previous.role, s.previous.status, s.previous.verdict) == (
+        "customer-proxy",
+        "returned",
+        "return",
+    )
+
+
+def test_ungated_roles_leave_previous_alone(make_runtime) -> None:
+    rt = make_runtime(FakeQuery("no block"))
+    keep = gates.PreviousStep("architect", "done")
+    s = open_story(rt, "review", status=StoryStatus.DONE, previous=keep)
+    run(rt, "scribe", story="s1")
+    assert s.previous is keep
+
+
+def test_note_step_ignores_reports_with_no_gate(make_runtime) -> None:
+    rt = make_runtime()
+    keep = gates.PreviousStep("architect", "done")
+    s = open_story(rt, previous=keep)
+    rt.note_step(s, {"role": "architect", "status": "done"})
+    assert s.previous is keep and s.hold is None
+
+
+def test_note_step_sets_and_clears_the_hold(make_runtime) -> None:
+    rt = make_runtime()
+    s = open_story(rt)
+    rt.note_step(s, {"role": "architect", "status": "refused", "reason": "r"})
+    assert s.hold == "refused"
+    rt.note_step(s, {"role": "architect", "status": "done"})
+    assert s.hold is None
+
+
+def test_note_step_removes_the_story_from_the_scribe_queue(make_runtime) -> None:
+    rt = make_runtime()
+    s = open_story(rt, "review", status=StoryStatus.DONE)
+    rt.state.scribe_due = ["s1", "s2"]
+    rt.note_step(s, {"role": "architect", "status": "done"})
+    assert rt.state.scribe_due == ["s1", "s2"]
+    rt.note_step(s, {"role": "scribe", "status": "bad_handoff", "reason": "r"})
+    assert rt.state.scribe_due == ["s2"]
+    rt.note_step(s, {"role": "scribe", "status": "done"})
+    assert rt.state.scribe_due == ["s2"]
+
+
+def test_a_story_reaching_done_queues_the_scribe(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, "review")
+    rt.pipeline.steps = ["review"]
+    run(rt, "code-reviewer", story="s1")
+    assert rt.state.stories["s1"].status is StoryStatus.DONE
+    assert rt.state.scribe_due == ["s1"]
+
+
+def test_a_story_that_is_not_done_is_not_queued(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, "design")
+    run(rt, "architect", story="s1")
+    assert rt.state.scribe_due == []
+
+
+def test_running_the_scribe_dequeues_it(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, "review", status=StoryStatus.DONE)
+    rt.state.scribe_due = ["s1"]
+    run(rt, "scribe", story="s1")
+    assert rt.state.scribe_due == []
+
+
+def test_the_architect_names_the_developer(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer="developer-cli")))
+    s = open_story(rt)
+    run(rt, "architect", story="s1")
+    assert s.developer == "developer-cli"
+
+
+@pytest.mark.parametrize("developer", [None, ""])
+def test_an_empty_developer_changes_nothing(make_runtime, developer) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer=developer)))
+    s = open_story(rt, developer="developer-api")
+    run(rt, "architect", story="s1")
+    assert s.developer == "developer-api"
+
+
+def test_another_roles_developer_field_is_ignored(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer="developer-gui")))
+    s = open_story(rt, "review")
+    run(rt, "code-reviewer", story="s1")
+    assert s.developer is None
+
+
+def test_an_architect_without_a_story_has_nowhere_to_put_it(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer="developer-cli")))
+    assert run(rt, "architect")["status"] == "done"
+
+
+def test_a_non_string_developer_is_a_bad_handoff(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer=3)))
+    s = open_story(rt)
+    report = run(rt, "architect", story="s1")
+    assert report["status"] == "bad_handoff" and "developer must be a role name" in report["reason"]
+    assert s.developer is None
+
+
+def test_the_step_end_event_shape_does_not_gain_a_developer(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(handoff("done", developer="developer-cli")))
+    open_story(rt)
+    run(rt, "architect", story="s1")
+    [end] = [e for e in rt.events.events() if e.kind == "step-end"]
+    assert "developer" not in end.data

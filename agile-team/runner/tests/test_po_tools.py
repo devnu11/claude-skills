@@ -5,6 +5,7 @@ import json
 
 import pytest
 from agile_team import po_tools
+from agile_team.gates import StoryStatus
 from agile_team.po_tools import Start, StartMode, Tools
 from agile_team.providers import Provider, Providers
 from agile_team.state import RunStatus
@@ -231,7 +232,9 @@ def test_run_po_resume_and_onboard(make_runtime) -> None:
     rt.state.po_session = "old"
     asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
     assert q.calls[0]["options"].resume == "old"
-    assert q.calls[0]["prompt"] == po_tools.RESUME_NOTE
+    first = q.calls[0]["prompt"]
+    assert first.startswith(po_tools.RESUME_NOTE + "\n\nThe runner needs you (sprint 0;")
+    assert "Nothing in sprint 0 can move." in first
     asyncio.run(po_tools.run_po(rt, Start("Also fix X", StartMode.RESUME)))
     assert q.calls[1]["prompt"].endswith("New from the human:\nAlso fix X")
     rt.state.status = RunStatus.DONE
@@ -249,3 +252,169 @@ def test_set_role_model_moves_a_role_between_providers(make_runtime) -> None:
     call(t.set_role_model({**OVERRIDE, "role": "scribe", "model": "sonnet"}))
     assert rt.resolve("scribe").provider == "anthropic"
     assert rt.resolve("scribe").model == "sonnet"
+
+
+# ----- s19: continue_story, set_developer, delivered ids, schemas ---------------
+
+
+def refusal_snapshot(t: Tools, tool: str, args: dict) -> dict:
+    before = snapshot(t.runtime)
+    out = call(getattr(t, tool)(args))
+    assert snapshot(t.runtime) == before
+    return out
+
+
+def test_continue_story_releases_the_hold_and_sets_the_note(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    story = rt.state.stories["s1"]
+    story.hold = "stopped"
+    out = call(t.continue_story({"story": "s1", "note": "use sqlite"}))
+    assert out == {"status": "continued", "story": "s1", "step": "design"}
+    assert story.hold is None and story.note == "use sqlite"
+    saved = json.loads((rt.config.run_dir / "state.json").read_text())
+    assert saved["stories"]["s1"]["note"] == "use sqlite"
+
+
+def test_continue_story_without_a_note_clears_the_old_one(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    rt.state.stories["s1"].note = "old"
+    call(t.continue_story({"story": "s1"}))
+    assert rt.state.stories["s1"].note == ""
+
+
+def test_continue_story_refusals_change_nothing(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1", "s2")
+    rt.state.stories["s2"].status = StoryStatus.DONE
+    rt.state.stories["s2"].hold = "x"
+    rt.save()
+    ghost = refusal_snapshot(t, "continue_story", {"story": "s9", "note": "n"})
+    assert ghost == {
+        "status": "refused",
+        "reason": "unknown story 's9'; open it with open_story",
+    }
+    done = refusal_snapshot(t, "continue_story", {"story": "s2", "note": "n"})
+    assert done == {"status": "refused", "reason": "story s2 is done"}
+
+
+def test_set_developer_records_the_choice(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    out = call(t.set_developer({"story": "s1", "role": "developer-gui"}))
+    assert out == {"status": "set", "story": "s1", "developer": "developer-gui"}
+    assert rt.state.stories["s1"].po_developer == "developer-gui"
+    assert (
+        json.loads((rt.config.run_dir / "state.json").read_text())["stories"]["s1"]["po_developer"]
+        == "developer-gui"
+    )
+    assert call(t.set_developer({"story": "s1", "role": "developer"}))["status"] == "set"
+
+
+@pytest.mark.parametrize(
+    ("args", "reason"),
+    [
+        ({"story": "s9", "role": "developer-gui"}, "unknown story 's9'; open it with open_story"),
+        ({"story": "s1", "role": "ghost"}, "unknown role 'ghost'"),
+        ({"story": "s1", "role": "architect"}, "architect is not a developer role"),
+    ],
+)
+def test_set_developer_refusals_change_nothing(make_runtime, args, reason) -> None:
+    t = Tools(make_runtime())
+    open_stories(t, "s1")
+    t.runtime.save()
+    out = refusal_snapshot(t, "set_developer", args)
+    assert out == {"status": "refused", "reason": reason}
+    assert t.runtime.state.stories["s1"].po_developer is None
+
+
+def test_story_status_serializes_the_new_story_fields(make_runtime) -> None:
+    from agile_team.gates import PreviousStep
+
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s1")
+    story = rt.state.stories["s1"]
+    story.previous = PreviousStep("code-reviewer", "changes_requested", "s", "bounce", "r", "x")
+    story.hold, story.developer = "stopped", "developer-cli"
+    out = call(t.story_status({}))["stories"]["s1"]
+    assert out["previous"]["role"] == "code-reviewer" and out["previous"]["next_role"] == "x"
+    assert (out["hold"], out["developer"], out["po_developer"], out["note"]) == (
+        "stopped",
+        "developer-cli",
+        None,
+        "",
+    )
+
+
+def test_wait_for_answers_marks_returned_answers_delivered(make_runtime) -> None:
+    rt = make_runtime()
+
+    async def sleep(_s: float) -> None:
+        rt.relay.answer("m1", "a")
+        rt.relay.answer("m2", "b")
+
+    t = Tools(rt, sleep=sleep)
+    call(t.ask_user({"text": "one"}))
+    call(t.ask_user({"text": "two"}))
+    rt.state.delivered = ["m0"]
+    assert call(t.wait_for_answers({"ids": ["m1", "m2"]})) == {"m1": "a", "m2": "b"}
+    assert rt.state.delivered == ["m0", "m1", "m2"]
+    assert json.loads((rt.config.run_dir / "state.json").read_text())["delivered"] == [
+        "m0",
+        "m1",
+        "m2",
+    ]
+    call(t.wait_for_answers({"ids": ["m1"]}))
+    assert rt.state.delivered == ["m0", "m1", "m2"]
+
+
+def test_wait_for_answers_that_time_out_deliver_nothing(make_runtime) -> None:
+    async def sleep(_s: float) -> None:
+        return None
+
+    rt = make_runtime()
+    t = Tools(rt, sleep=sleep)
+    call(t.ask_user({"text": "?"}))
+    rt.state.delivered = []
+    call(t.wait_for_answers({"ids": ["m1"], "timeout_s": 5}))
+    assert rt.state.delivered == []
+
+
+def test_new_tool_schemas_and_descriptions() -> None:
+    schemas = po_tools.SCHEMAS
+    assert schemas["continue_story"] == (
+        "Release a story the runner handed to you; your note is added to its next step's "
+        "standard brief.",
+        {"story": str, "note": str},
+    )
+    assert schemas["set_developer"] == (
+        "Choose the developer specialisation for a story's implement steps (overrides the "
+        "architect's pick).",
+        {"story": str, "role": str},
+    )
+    assert schemas["run_role"][0] == (
+        "Run one role step yourself with your own brief; the runner runs standard steps on "
+        "its own. Returns the handoff and gate."
+    )
+    names = po_tools.tool_names()
+    assert "mcp__team__continue_story" in names and "mcp__team__set_developer" in names
+
+
+def test_po_turn_is_a_frozen_pair() -> None:
+    turn = po_tools.PoTurn("hello", None)
+    assert (turn.prompt, turn.resume) == ("hello", None)
+    with pytest.raises(AttributeError):
+        turn.prompt = "x"  # type: ignore[misc]
+
+
+def test_po_plan_uses_the_turn(make_runtime) -> None:
+    rt = make_runtime()
+    plan = po_tools.po_plan(rt, po_tools.PoTurn("my prompt", "sess-9"))
+    assert plan.prompt == "my prompt" and plan.launch.resume == "sess-9"
+    assert "team" in plan.launch.mcp_servers
