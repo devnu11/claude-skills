@@ -30,7 +30,7 @@ as `uv run --quiet --project ~/.claude/skills/unattended/runner unattended`.
 | `--model M`, `--permission-mode P` | Passed to the Agent SDK. Prompt jobs only. With no `--permission-mode`, the user's settings decide. |
 | `--until T` \| `--for D` | Deadline: `21:00`, `9pm`, `tomorrow 9am`, `today 18:15`, ISO (`2026-10-10T09:00`), or a duration (`24h`, `90m`, `1h30m`, `2d`). |
 | `--max-resumes N` | Most automatic resumes; default 10. On `resume` it is the new total, not an increment. |
-| `--max-cost USD` | Stop resuming once the summed `total_cost_usd` reaches it. |
+| `--max-cost USD` | Cost cap on the summed `total_cost_usd`. Each prompt run gets what is left as the SDK's `max_budget_usd`, so the run stops itself at the cap. On `resume` it must leave room above what is spent. Command jobs report no cost. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
 | `--foreground` | Supervise in this process instead of detaching; for `run_in_background`. |
 
@@ -64,7 +64,8 @@ unique within a home.
 ### Statuses
 
 `running`, `waiting` (until `next_wake`), and the final ones: `done`, `failed`,
-`stopped` (by the user), `limit-reached` (deadline, resumes or cost). Each
+`stopped` (by the user), `limit-reached` (deadline, resumes or cost; a
+mid-run cost stop keeps the session, so `resume --max-cost` continues it). Each
 comes with a `reason`; `limit-reached` gives the last limit and the bound,
 e.g. `session limit, resets 7pm; used all 10 resumes`.
 
@@ -73,9 +74,9 @@ e.g. `session limit, resets 7pm; used all 10 resumes`.
 ```
 loop:
   stop file? -> stopped
-  outcome = run once          # DONE | LIMIT | RATE_LIMITED | FAILED
+  outcome = run once          # DONE | LIMIT | RATE_LIMITED | BUDGET | FAILED
   runs += 1, cost += run cost, append a run event
-  DONE / FAILED -> finish
+  DONE / FAILED -> finish; BUDGET -> limit-reached
   next_wake = reset + 3 min   # LIMIT; the fallback wait when no reset is readable
             = now + 1, 2, 4… min (cap 30)   # RATE_LIMITED, consecutive
   deadline <= next_wake, resumes >= max, or cost >= max -> limit-reached
@@ -108,13 +109,17 @@ to the local one, and the next occurrence after now is used.
 
 - **SDK call:** `claude_agent_sdk.query` with `setting_sources=["user",
   "project", "local"]`, so the job inherits the user's permissions and hooks.
-  It also gets `cwd`, `model`, `permission_mode`, `resume=<session_id>`, and
-  the auth environment.
+  It also gets `cwd`, `model`, `permission_mode`, `resume=<session_id>`, the
+  auth environment, and `max_budget_usd` set to `--max-cost` minus the cost so
+  far.
 - **Headless permissions:** no one can approve a tool, so the user's settings
   must already allow what the job needs. Use `--permission-mode` to override.
 - **Session id:** saved to `state.json` from the first message that carries
   one (the init message's `data["session_id"]`, or any message's
   `session_id`).
+- **Cost cap:** a result or `ResultError` with subtype `error_max_budget_usd`
+  is a `BUDGET` outcome. The CLI ends the run there; when exactly it checks
+  the budget (between turns or mid-response) is not verified.
 - **Limits:** a `ResultError` or `ProcessError`, or an error `ResultMessage`,
   whose text matches a limit pattern is a `LIMIT`. One matching a rate limit is
   `RATE_LIMITED`. Anything else is `FAILED` (`crashed: <Type>: <first line>`).
