@@ -278,21 +278,20 @@ causes two failures:
 
 | # | Rule | AC |
 |---|---|---|
-| P1 | A glob's **literal root** is its leading `/`-separated segments up to (not including) the first segment that contains `*`, `?` or `[`, joined by `/`, with no trailing `/`. A fully literal glob is its own root, even when it names a file. | AC1 |
+| P1 | A glob's **literal root** is its leading `/`-separated segments up to (not including) the first segment that contains `*`, `?`, `[` or `{`, joined by `/`, with no trailing `/`. A fully literal glob is its own root, even when it names a file. | AC1 |
 | P2 | A glob starting with `!` has no root (`""`). A negation only narrows a set, so it never adds forbidden paths. A glob whose first segment holds a wildcard also has no root. | AC1 |
 | P3 | `forbidden_roots(config)` = the non-empty literal roots of every glob under `source`, `tests` and `e2e`, deduplicated. A root that lies under another root is dropped. The result is sorted. | AC1 |
 | P4 | A path is **under** a root when it equals the root or starts with `root + "/"`. `paths.under_root` is the single definition. The hook calls it, and the deny rules spell the same relation (P6). | AC1, AC2 |
-| P5 | A Bash token names a forbidden root when its normalized form is under a root. To normalize, strip leading `.` and `/` characters (as today), then apply `posixpath.normpath` (so `a//b` and `a/./b` become `a/b`, and `""` becomes `.`, which matches nothing). The `..` check runs first and is unchanged. | AC2 |
+| P5 | A Bash word names a forbidden root under the **Bash word rule** (W1–W6 below). It is one rule for every word, literal or wildcard. | AC2, AC3 |
 | P6 | `os_sandbox_settings` emits two `permissions.deny` rules per root, in root order: `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`. (`<repo>` is absolute, so `/<repo>` gives Claude Code's `//abs` form, as today.) | AC1, AC3 |
 | P7 | The `or ["src"]` fallback stays in `proxy_scope` only. An empty `bash_forbidden` turns off **all** sandboxed Bash checks (`..`, repo paths), so the Proxy must never get one. The deny rules get no fallback: the OS sandbox's `denyRead` on the whole repo already covers that case. | AC2 |
 
 P3's nesting rule keeps flat layouts **byte-identical** to today. The python
 preset gives `src`, `tests` and `tests/e2e`, which collapse to
 `["src", "tests"]`. The node preset gives `["e2e", "lib", "src", "test"]` and
-rust gives `["src", "tests"]`. For a one-segment root, "under the root" is the
-same test as "first segment equals the root" (once any `..` token has been
-denied), so the hook is exactly as strict as before. Normalization matters
-only for deeper roots, where `a//b` would otherwise slip past the prefix test.
+rust gives `["src", "tests"]`. For flat roots, the Bash word rule is at least
+as strict as the old `head in roots` check. It also closes the old flat
+wildcard hole (review P5: `cat s*/x`).
 
 ### Worked examples
 
@@ -314,20 +313,87 @@ This repo's `forbidden_roots`: `["agile-team/runner/agile_team",
 "agile-team/runner/scripts", "agile-team/runner/tests"]` (`tests/e2e` is
 nested, so it is dropped).
 
-Bash tokens checked against those roots:
+### Bash word rule (revised after review round 3)
 
-| Token | Result | Why |
+This replaces the ae1a46a split into a literal branch and a wildcard branch
+(`has_wildcard`, `token_prefix`, `_glob_reaches`). Every word goes through
+the same steps.
+
+**Property (what the reviewer checks).** A Proxy Bash word is denied when
+the shell (bash or zsh, default options) could expand it to a forbidden root
+or a path under one, reading that path from the repo root. Over-denying is
+allowed. Any under-deny inside this property is a defect. The cases outside
+it are listed under Known limits.
+
+| # | Step | Rule |
 |---|---|---|
-| `agile-team` (as in `agile-team status`, `which agile-team`) | allowed | not under any root |
-| `agile-team/docs/customer/x.md` | allowed | not under any root |
-| `agile-team/runner` | allowed | an ancestor, not under a root (see Known limits) |
-| `agile-team/runner/agile_team/cli.py` | denied | under `…/agile_team` |
-| `agile-team/runner/agile_team` | denied | equals the root |
-| `./agile-team/runner/tests` | denied | `./` stripped |
-| `agile-team/runner/tests/` | denied | normalized to the root |
-| `agile-team//runner/agile_team/x` | denied | `//` normalized |
-| `agile-team/./runner/scripts/x` | denied | `/./` normalized |
-| `agile-team/runner/testsuite` | allowed | `starts with root/` does not match a sibling name |
+| W1 | Unquote | Words come from `shlex.split`, which already removes quotes and `\`. If shlex can't parse the command, the fallback `command.split()` words have every `'`, `"` and `\` deleted. (Example: `cat "agile-team/runner/agile_team/cli.py" # it's` makes shlex fail.) |
+| W2 | Climb | Deny when a `/`-segment of the raw word is `..` (as today). Also deny when a segment **other than the last** holds `{` or `(`, or starts with `.` and holds `*`, `?` or `[`. Such a segment could expand to `..` or to text that contains `/`. |
+| W3 | Repo path | `_names_repo`, unchanged. |
+| W4 | Normalise | `paths.normalise_token(word)` = `posixpath.normpath(word.lstrip("./"))`. This is the only normaliser, so `a//b`, `a/./b`, a leading `./` and a trailing `/` are handled the same way in every word (fixes review B1). The word and the roots are then compared after `casefold()`, because the default macOS filesystem ignores case. |
+| W5 | Cwd glob | A normalised word made only of `*` and `?` characters (`*`, `**`, `?`) passes. It names entries of the cwd, the same as `.`. |
+| W6 | Walk | Pair the word's segments with each root's segments, starting from the left. If the root runs out of segments first, the word **reaches** the root: deny. If the word runs out first, it names at most an ancestor: pass, the same as literal `agile-team/runner`. A word segment that holds `**` reaches the root (it can cross any number of segments). Any other segment is compared with the table below. A mismatch means the word does not reach that root. |
+
+How a word segment `w` is compared with a root segment `r` (both casefolded):
+
+| `w` holds | matches `r` when |
+|---|---|
+| `[`, `{` or `(` | always. W2 has already denied `{` and `(` in any segment but the last. |
+| none of those | `fnmatchcase(r, w.replace("?", "*"))`. For a literal segment this is plain equality. Widening `?` to `*` makes `scripts?` count as naming `scripts`. |
+
+Why this covers every case:
+
+- **Leading `*`, `?`, `[`, `{`, `(`**: segment 0 is compared like any other
+  segment (review B2). An empty literal prefix is no longer a special case.
+- **Braces, and zsh `(a|b)` groups**: one of these can contain `/` or produce
+  `..`. W2 therefore denies it outside the last segment. In the last segment it
+  can't span a `/`, so it matches any one segment.
+- **`**`** reaches the root (zsh `**/`, bash globstar).
+- **No mismatch can be undone later.** After W2, no expansion has `..` in a
+  segment before the last, because a glob only matches a leading `.` when the
+  pattern spells that `.` out. A last segment that expands to `..` names the
+  parent of a path that is not under any root. That parent is not under a root
+  either.
+- **Quotes** (W1). A quoted glob (`'agile_*'`) is treated as a glob, which can
+  only over-deny.
+
+Examples. N is this repo's roots (`agile-team/runner/{agile_team,scripts,tests}`).
+F is the flat roots `["src", "tests"]`. Each command is run through
+`guard.check_tool_use` with a Proxy `Scope`. Commands marked "over-deny" are
+denied on purpose; that is safe.
+
+| Roots | Command | Result | Step |
+|---|---|---|---|
+| N | `agile-team status`, `agile-team --help`, `which agile-team` | allow | W6: word runs out |
+| N | `cat agile-team/docs/customer/x.md`, `ls agile-team/runner`, `cat agile-team/runner/testsuite` | allow | W6 |
+| N | `cat agile-team/docs/*.md`, `cat agile-team/docs/customer/*`, `cat agile-team/docs/customer/{a,b}.md` | allow | W6: `docs` ≠ `runner` |
+| N | `cat agile-team/README*`, `ls agile-team/*`, `cat .team/stories/*` | allow | W6 (`agile-team/*` names only ancestors; ae1a46a denied it) |
+| N | `cat *.txt`, `cat ./*.txt`, `echo {1..3}` | allow | W6: word runs out |
+| N | `ls *`, `ls ?`, `ls **` | allow | W5 |
+| N | `cat agile-team/runner/agile_team/cli.py`, `cat agile-team/runner/agile_team`, `ls ./agile-team/runner/tests`, `ls agile-team/runner/tests/` | deny | W6 |
+| N | `cat agile-team//runner/agile_team/x`, `cat agile-team/./runner/scripts/x`, `cat 'agile-team/runner/agile_team'/cli.py` | deny | W4, W6 |
+| N | `cat agile-team/runner/agile_*/cli.py`, `cat agile-team/runner/agile_tea?/x`, `cat agile-team/runner/agile_tea[m]/x` | deny | W6 |
+| N | `cat agile-team/*/agile_team/x`, `ls agile-team/**`, `cat agile-team/**/cli.py`, `cat agile-team/runner/*` | deny | W6 |
+| N | `cat agile-team/runner/agile_team{,}/x`, `cat agile-team/runner/{agile_team,x}/cli.py` | deny | W2 |
+| N | `cat agile-team/runner/tests/*`, `cat agile-team/runner/scripts?`, `cat a*/runner/agile_team/x`, `cat agile-team/run*/agile_team/x` | deny | W6 |
+| N | `cat ./agile-team/runner/agile_*/x`, `cat agile-team//runner/agile_*/x`, `cat .//agile-team/runner/agile_*` | deny | W4, W6 |
+| N | `cat 'agile-team/runner/agile_'*/cli.py`, `cat agile-team/runner/agile_\*/x` (over-deny) | deny | W1, W6 |
+| N | `cat agile-team/./runner/agile_*/cli.py`, `cat agile-team/runner/./agile_*/cli.py`, `cat ./agile-team/./runner/agile_t*/cli.py` | deny | W4, W6 (review B1) |
+| N | `cat {,}agile-team/runner/agile_team/cli.py` | deny | W2 (review B2) |
+| N | `cat */runner/agile_team/cli.py`, `cat */*/agile_*/cli.py`, `cat ?gile-team/runner/agile_team/cli.py`, `cat [a]gile-team/runner/agile_team/x` | deny | W6 (review B2) |
+| N | `cat {agile-team/runner,x}/agile_team/cli.py`, `cat agile-team/docs/{..,x}/runner/agile_team/cli.py`, `cat agile-team/docs/.*/runner/agile_team/cli.py` | deny | W2 |
+| N | `cat agile-team/runner/(agile_team\|x)/cli.py`, `cat agile-team/runner/agile_tea(m)` | deny | W2, W6 (zsh) |
+| N | `cat AGILE-TEAM/runner/agile_team/cli.py` | deny | W4 casefold |
+| N | `cat "agile-team/runner/agile_team/cli.py" # it's` | deny | W1 fallback |
+| N | `cat {docs,x}/a.md`, `ls **/*.md`, `cat .*/x`, `cat agile-team/runner/agile_tea[x]/y` | deny (over-deny) | W2, W6 |
+| F | `ls *`, `ls ?`, `cat *.txt`, `cat tests.txt`, `ls srcfoo`, `ls .*` | allow | W5, W6 |
+| F | `cat src/x`, `ls ./tests`, `ls tests/`, `cat src//x`, `cat SRC/x` | deny | W4, W6 |
+| F | `cat s*/x`, `cat src*`, `cat */x`, `cat ?rc/x`, `cat [s]rc`, `cat {,}src` | deny | W6 |
+| F | `cat {,}src/x` | deny | W2 |
+| F | `echo {1..3}`, `ls [a-z]*` | deny (over-deny) | W6: a one-segment group or bracket matches the one-segment root |
+
+(`\|` in the table is only Markdown escaping. The word under test is
+`agile-team/runner/(agile_team|x)/cli.py`; shlex keeps it as one word.)
 
 ### Changes by module
 
@@ -336,8 +402,15 @@ Bash tokens checked against those roots:
 | Function | Spec |
 |---|---|
 | `literal_root(glob: str) -> str` | P1 and P2. Docstring: "The wildcard-free leading path of a positive glob; `""` for a `!` glob or one that starts with a wildcard." Suggested: return `""` for `!`; otherwise `"/".join(takewhile(_is_literal, glob.split("/"))).rstrip("/")`. Keep the name: it is still the glob's root, just deeper. |
-| `_is_literal(segment: str) -> bool` | `True` when the segment has none of `*?[`. Use a module constant (`WILDCARDS = "*?["`) rather than repeating the string. |
-| `under_root(path: str, root: str) -> bool` (new, public) | P4: `path == root or path.startswith(f"{root}/")`. Docstring: "True when `path` is `root` or lies inside it." |
+| `_is_literal(segment: str) -> bool` | `True` when the segment has none of `TOKEN_WILDCARDS` (`*?[{`, as in ae1a46a). |
+| `under_root(path: str, root: str) -> bool` (new, public) | P4: `path == root or path.startswith(f"{root}/")`. Docstring: "True when `path` is `root` or lies inside it." The Bash check no longer uses it, but `sandbox._nested` still does. |
+| `has_wildcard`, `token_prefix` | Delete them; nothing calls them any more. `TOKEN_WILDCARDS` stays, used only by `_is_literal`. |
+| `GROUP_CHARS = "{("`, `ANY_SEGMENT = "[{("`, `GLOB_CHARS = "*?["` | Data for W2 and the segment table. |
+| `normalise_token(token: str) -> str` | W4: `posixpath.normpath(token.lstrip("./"))`. Docstring: "A shell word as a repo-relative path: leading `.`/`/` stripped, `//` and `/./` collapsed." |
+| `could_climb(token: str) -> bool` | W2, on the raw word. Docstring: "True when a segment of the word could expand to `..` or span a `/`." |
+| `reaches(token: str, root: str) -> bool` | W4 to W6. Normalise and casefold, apply the W5 exemption, then `_walk(word_segments, root_segments)`. Docstring: "True when the shell could expand the word to `root` or a path under it." |
+| `_walk(word: list[str], root: list[str]) -> bool` | W6. Recursive or a loop, under 8 lines. Order of checks: root empty → `True`; word empty → `False`; `"**" in word[0]` → `True`; then `_segment_matches(word[0], root[0]) and _walk(word[1:], root[1:])`. |
+| `_segment_matches(segment: str, root_segment: str) -> bool` | The segment table: `any(c in segment for c in ANY_SEGMENT) or fnmatchcase(root_segment, segment.replace("?", "*"))`. `fnmatch` is stdlib. |
 
 #### `sandbox.py`
 
@@ -357,11 +430,20 @@ Bash tokens checked against those roots:
 
 #### `guard.py`
 
-- `_names_forbidden_root(scope, token)`: P5. Normalize with
-  `posixpath.normpath(token.lstrip("./"))`, then
-  `any(under_root(path, root) for root in scope.bash_forbidden)`. `posixpath`
-  is stdlib, so no new dependency. Import `under_root` from `.paths`.
-- `_token_forbidden` and `_names_repo` do not change.
+- `_tokens(command)`: W1. In the `ValueError` fallback, delete quote
+  characters from each word:
+  `[w.translate(UNQUOTE) for w in command.split()]`, with the module constant
+  `UNQUOTE = str.maketrans("", "", "'\"\\")`.
+- `_token_forbidden(scope, token)`: replace the inline `".." in
+  token.split("/")` with `could_climb(token)` (W2). Keep the order: climb,
+  then `_names_repo`, then `_names_forbidden_root`.
+- `_names_forbidden_root(scope, token)`:
+  `any(reaches(token, root) for root in scope.bash_forbidden)`. Delete the
+  branch on `has_wildcard`.
+- Delete `_glob_reaches`. Drop the imports that are no longer used:
+  `posixpath`, `has_wildcard`, `token_prefix` and `under_root`. `re` stays,
+  because `_SEGMENT_SPLIT` uses it.
+- `_names_repo` does not change.
 
 Every function stays under 8 lines, with at most 2 parameters and no flags.
 
@@ -385,8 +467,21 @@ assertions must stay as they are and pass. That includes
    (two per root, in root order) and does **not** contain
    `Read(/<repo>/agile-team/**)`. `allowRead` still holds the customer docs
    path.
-5. P5: every row of the Bash token table, through `guard.check_bash` on a
-   proxy `Scope` whose `bash_forbidden` is this repo's roots.
+5. P5: every row of the Bash word rule's example table, parametrized, through
+   `guard.check_tool_use` on a Proxy `Scope`. Put the N rows in
+   `test_nested_bash_tokens` and the F rows in `test_flat_layout_parity`.
+   Unit tests in `test_paths.py` cover each step on its own:
+   - `normalise_token`: `./a`, `a//b`, `a/./b`, `a/`, `""` → `.`.
+   - `could_climb`: true for `..` in any position, `{a,b}/x`, `x/(a|b)/y`
+     and `.*/x`. False for `{a,b}.md`, `x/{a,b}`, `.*`, `./x` and
+     `.team/x`.
+   - `reaches`: at least one row for each W5/W6 outcome (root runs out, word
+     runs out, `**`, a segment from the any-segment table row, a `?` widened
+     to `*`, a mismatch, casefold).
+   Also test that the W1 fallback deletes quotes, through `check_tool_use`
+   with `cat "agile-team/runner/agile_team/cli.py" # it's`.
+   This step must cover all of the new wildcard code. The developer can't
+   write tests, so these lines are only covered by this step.
 6. Flat parity: with `["src", "tests"]`, `cat src/x`, `ls ./tests`,
    `ls tests/` and `cat src//x` are denied, and `cat tests.txt` and
    `ls srcfoo` are allowed.
@@ -400,14 +495,20 @@ assertions must stay as they are and pass. That includes
 
 The root check is a name tripwire, not the wall. The wall is: cwd is the
 sandbox (so relative paths resolve inside it), `..` and absolute repo paths
-are denied, and the OS sandbox denies reading the repo. So these still pass
-the hook, as they did before for any root deeper than one segment:
+are denied, and the OS sandbox denies reading the repo. The Bash word rule's
+property only covers words read as paths from the repo root. These cases fall
+outside it and still pass the hook (backlog):
 
-- Ancestors of a root (`ls agile-team/runner`).
-- Wildcard tokens (`agile-team/runner/agile_*`).
-- Paths glued to an option (`--file=src/x`).
-- `~` or `$HOME` spellings of the repo path, which `_names_repo` does not
-  expand. This is worth a follow-up story.
+- Ancestors of a root, literal or glob (`ls agile-team/runner`,
+  `ls agile-team/*`).
+- Words glued to an option or a redirect (`--file=src/x`, `<src/x`)
+  (review P2).
+- Expansions the hook can't evaluate: `$VAR`, `$(…)`, backticks and `~`. This
+  includes wildcard spellings of the absolute repo path
+  (`/Users/*/code/claude-skills/…`) (review P1).
+- Changes of cwd: `cd` with no argument (home), `cd /`, `cd {..,}`. After one
+  of these, relative words no longer resolve from the sandbox (P1 family).
+- zsh `EXTENDED_GLOB` operators (`^`, `~`, `#`). The option is off by default.
 
 Deployment: a running runner keeps the old guard in memory. The fix applies
 after `stop` then `start --resume`.
