@@ -160,14 +160,25 @@ COMMENT_MARKER = "#"
 
 
 def _views(command: str) -> tuple[str, ...]:
-    """The joined view, plus the raw one when a ``#`` could hide a continuation.
+    """The W0-joined view, plus a comment-aware one when a ``#`` is present.
 
     Only a ``#`` comment can end in a backslash the shell does not join, so
-    without ``COMMENT_MARKER`` the joined view matches what the shell runs.
+    without ``COMMENT_MARKER`` the W0-joined view matches what the shell runs.
     """
     joined = LINE_CONTINUATION.sub(r"\1", command)
-    views = (joined, command) if COMMENT_MARKER in command else (joined,)
+    views = (joined, _join_outside_comments(command)) if COMMENT_MARKER in command else (joined,)
     return tuple(dict.fromkeys(views))
+
+
+def _join_outside_comments(command: str) -> str:
+    """``command`` with W0 continuations joined except on lines containing ``#``."""
+    return LINE_CONTINUATION.sub(lambda m: _join_unless_comment(m, command), command)
+
+
+def _join_unless_comment(match: re.Match[str], command: str) -> str:
+    """Drop the continuation, or keep it (and its newline) when its line has a ``#``."""
+    line = command[command.rfind("\n", 0, match.start()) + 1 : match.end()]
+    return match.group(0) if COMMENT_MARKER in line else match.group(1)
 
 
 def _check_view(scope: Scope, command: str) -> str | None:
