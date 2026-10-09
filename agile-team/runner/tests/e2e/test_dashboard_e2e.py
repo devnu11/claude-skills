@@ -112,3 +112,49 @@ def test_stops_cleanly_on_sigint(dash) -> None:
     proc, _, _ = dash
     proc.send_signal(2)
     assert proc.wait(timeout=10) in (0, -2, 130)
+
+
+def _index(url: str) -> str:
+    status, body = _get(url, "/")
+    assert status == 200
+    return body.decode()
+
+
+def test_index_is_packaged_file_with_five_tabs(dash) -> None:
+    _, url, _ = dash
+    shipped = (Path(events_mod.__file__).parent / "dashboard" / "index.html").read_text()
+    page = _index(url)
+    assert page == shipped
+    for tab in ("flow", "board", "tokens", "questions", "requirements"):
+        assert f'id="tab-{tab}"' in page
+        assert re.search(rf'\[\s*"{tab}"\s*,', page)
+
+
+def test_api_urls_are_relative_and_resolve(dash) -> None:
+    _, url, _ = dash
+    page = _index(url)
+    for path in ("api/snapshot", "api/stream"):
+        assert f'"{path}"' in page
+        assert f'"/{path}"' not in page
+    assert _get(url, "/api/snapshot")[0] == 200
+    conn = _conn(url)
+    conn.request("GET", "/api/stream")
+    resp = conn.getresponse()
+    assert resp.status == 200 and "text/event-stream" in resp.getheader("Content-Type")
+    conn.close()
+
+
+def test_only_outside_url_is_pinned_mermaid(dash) -> None:
+    _, url, _ = dash
+    urls = set(re.findall(r"https?://[^\s\"'`)<>]+", _index(url)))
+    urls -= {"http://www.w3.org/2000/svg"}
+    assert len(urls) == 1
+    (only,) = urls
+    assert re.fullmatch(r"https://cdn\.jsdelivr\.net/npm/mermaid@\d+\.\d+\.\d+/\S+", only)
+
+
+def test_event_edge_covers_flow_kinds(dash) -> None:
+    _, url, _ = dash
+    block = re.search(r"const EVENT_EDGE = \{(.*?)\n\};", _index(url), re.S).group(1)
+    keys = set(re.findall(r'^\s*"?([\w-]+)"?:', block, re.M))
+    assert {"step-start", "step-end", "message", "answer"} <= keys
