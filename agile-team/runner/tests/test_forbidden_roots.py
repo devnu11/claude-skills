@@ -57,7 +57,7 @@ def test_deny_rules_are_per_root_and_skip_docs(tmp_path: Path) -> None:
     c = nested_config(tmp_path)
     d = Delivery("cli", "package")
     c.deliveries = [d]
-    s = sandbox.os_sandbox_settings(c, sandbox.Preparer().prepare(c, d))
+    s = sandbox.os_sandbox_settings(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
     repo = str(tmp_path.resolve())
     expected = [
         rule for r in REPO_ROOTS for rule in (f"Read(/{repo}/{r})", f"Read(/{repo}/{r}/**)")
@@ -193,7 +193,7 @@ def test_proxy_end_to_end_in_nested_layout(tmp_path: Path) -> None:
     c = nested_config(tmp_path)
     d = Delivery("cli", "package")
     c.deliveries = [d]
-    scope = sandbox.proxy_scope(c, sandbox.Preparer().prepare(c, d))
+    scope = sandbox.proxy_scope(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
     read = lambda p: guard.check_tool_use(scope, ToolCall("Read", {"file_path": str(tmp_path / p)}))  # noqa: E731
     run = lambda cmd: guard.check_tool_use(scope, ToolCall("Bash", {"command": cmd}))  # noqa: E731
     assert read("agile-team/docs/customer/x.md") is None

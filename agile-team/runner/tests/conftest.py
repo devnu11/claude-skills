@@ -144,8 +144,15 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
 
     def build(query: Any = None, runner: FakeRunner | None = None, **kw: Any) -> Runtime:
         config = config_mod.load(configured)
+        from functools import partial
+
+        from agile_team import presentation
+
         checks = gates.Checks(
-            config.toolchain.commands, config.gates.coverage, runner or FakeRunner()
+            config.toolchain.commands,
+            config.gates.coverage,
+            runner or FakeRunner(),
+            presentation=partial(presentation.missing, config),
         )
         pipeline = gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
         return Runtime(
@@ -162,6 +169,20 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
         )
 
     return build
+
+
+GUIDE_TEXT = "Run `todo add milk`, then `todo list`: milk is listed.\n"
+
+
+def present(config: config_mod.Config, story_id: str = "s1", workspace: bool = True) -> Path:
+    """Write a complete presentation for ``story_id`` straight to disk (E1, E5)."""
+    source = config.run_dir / "presentation" / story_id
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "PRESENTATION.md").write_text(GUIDE_TEXT)
+    if workspace:
+        (source / "workspace").mkdir(exist_ok=True)
+        (source / "workspace" / "todo.txt").write_text("milk\n")
+    return source
 
 
 @pytest.fixture

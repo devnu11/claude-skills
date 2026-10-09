@@ -19,12 +19,15 @@ def story(step: str = "design", **kw) -> gates.StoryState:
     return gates.StoryState("s1", "Add todo", step, **kw)
 
 
-def checks(results=None, baseline=None) -> gates.Checks:
-    return gates.Checks({"test": "T", "coverage": "C"}, 95.0, FakeRunner(results), baseline)
+def checks(results=None, baseline=None, presentation=None) -> gates.Checks:
+    made = gates.Checks({"test": "T", "coverage": "C"}, 95.0, FakeRunner(results), baseline)
+    if presentation:
+        made.presentation = presentation
+    return made
 
 
-def pipeline(results=None, baseline=None, steps=STEPS) -> gates.Pipeline:
-    return gates.Pipeline(list(steps), 3, checks(results, baseline))
+def pipeline(results=None, baseline=None, steps=STEPS, presentation=None) -> gates.Pipeline:
+    return gates.Pipeline(list(steps), 3, checks(results, baseline, presentation))
 
 
 def test_role_fits_step() -> None:
@@ -111,40 +114,42 @@ def test_parse_coverage(out, pct) -> None:
 
 
 def test_tests_red_gate() -> None:
-    passed = pipeline({"T": (1, "")}).evaluate("tests", Handoff("done"))
+    passed = pipeline({"T": (1, "")}).evaluate(story("tests"), Handoff("done"))
     assert passed.verdict is Verdict.PASS
-    out = pipeline({"T": (0, "")}).evaluate("tests", Handoff("done"))
+    out = pipeline({"T": (0, "")}).evaluate(story("tests"), Handoff("done"))
     assert out.verdict is Verdict.BOUNCE and out.bounce_to == "tests"
     assert "failing test" in out.reason
 
 
 def test_green_gate() -> None:
     done = Handoff("done")
-    ok = pipeline({"T": (0, ""), "C": (0, "TOTAL 96%")}).evaluate("implement", done)
+    ok = pipeline({"T": (0, ""), "C": (0, "TOTAL 96%")}).evaluate(story("implement"), done)
     assert ok.verdict is Verdict.PASS
-    red = pipeline({"T": (1, "boom")}).evaluate("implement", done)
+    red = pipeline({"T": (1, "boom")}).evaluate(story("implement"), done)
     assert red.verdict is Verdict.BOUNCE and "boom" in red.reason
     assert red.bounce_to == "implement"
-    low = pipeline({"C": (0, "TOTAL 80%")}).evaluate("implement", done)
+    low = pipeline({"C": (0, "TOTAL 80%")}).evaluate(story("implement"), done)
     assert "below 95.0%" in low.reason
-    none = pipeline({"C": (0, "n/a")}).evaluate("implement", done)
+    none = pipeline({"C": (0, "n/a")}).evaluate(story("implement"), done)
     assert "could not read" in none.reason
 
 
 def test_baseline_lowers_requirement() -> None:
     assert checks(baseline=78.0).required_coverage() == 78.0
-    out = pipeline({"C": (0, "TOTAL 80%")}, baseline=78.0).evaluate("implement", Handoff("done"))
+    out = pipeline({"C": (0, "TOTAL 80%")}, baseline=78.0).evaluate(
+        story("implement"), Handoff("done")
+    )
     assert out.verdict is Verdict.PASS
 
 
 def test_handoff_gates() -> None:
     p = pipeline()
-    assert p.evaluate("review", Handoff("done")).verdict is Verdict.PASS
-    back = p.evaluate("review", Handoff("changes_requested", next_role="unit-tester"))
+    assert p.evaluate(story("review"), Handoff("done")).verdict is Verdict.PASS
+    back = p.evaluate(story("review"), Handoff("changes_requested", next_role="unit-tester"))
     assert back.bounce_to == "tests"
-    default = p.evaluate("review", Handoff("changes_requested"))
+    default = p.evaluate(story("review"), Handoff("changes_requested"))
     assert default.bounce_to == "implement" and default.reason == "changes requested"
-    assert p.evaluate("tests", Handoff("blocked", summary="?")).verdict is Verdict.HOLD
+    assert p.evaluate(story("tests"), Handoff("blocked", summary="?")).verdict is Verdict.HOLD
 
 
 def test_load_baseline(tmp_path: Path) -> None:
@@ -181,3 +186,102 @@ def test_status_refusal_beats_backlog_refusal() -> None:
     assert "blocked" in gates.dispatch_refusal(
         "architect", story(sprint=None, status=StoryStatus.BLOCKED)
     )
+
+
+# ----- s13: presentation gates (E4, E6) -------------------------------------
+
+REASON = "story s1 has no presentation: .team/run/presentation/s1/PRESENTATION.md is missing"
+
+
+def unpresented(_story) -> str:
+    return REASON
+
+
+def presented(_story) -> None:
+    return None
+
+
+def test_checks_default_presentation_is_complete() -> None:
+    assert checks().presentation(story("e2e")) is None
+
+
+def test_presented_passes_when_nothing_is_missing() -> None:
+    out = checks(presentation=presented).presented(story("e2e"))
+    assert out.verdict is Verdict.PASS and out.reason == "presentation ready"
+
+
+def test_presented_bounces_with_the_missing_reason() -> None:
+    out = checks(presentation=unpresented).presented(story("e2e"))
+    assert out.verdict is Verdict.BOUNCE and out.reason == REASON
+
+
+def test_e2e_done_without_presentation_bounces_to_e2e() -> None:
+    p = pipeline(presentation=unpresented)
+    s = story("e2e")
+    out = p.evaluate(s, Handoff("done"))
+    assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "e2e", REASON)
+    p.advance(s, out)
+    assert (s.step, s.rounds) == ("e2e", 1)
+
+
+def test_e2e_done_with_presentation_passes_to_acceptance() -> None:
+    p = pipeline(presentation=presented)
+    s = story("e2e")
+    assert p.evaluate(s, Handoff("done")).verdict is Verdict.PASS
+    p.advance(s, p.evaluate(s, Handoff("done")))
+    assert s.step == "acceptance"
+
+
+def test_e2e_done_without_acceptance_step_needs_no_presentation() -> None:
+    steps = [x for x in STEPS if x != "acceptance"]
+    p = pipeline(steps=steps, presentation=unpresented)
+    assert p.evaluate(story("e2e"), Handoff("done")).verdict is Verdict.PASS
+
+
+def test_e2e_changes_requested_still_bounces_to_the_named_role() -> None:
+    p = pipeline(presentation=unpresented)
+    out = p.evaluate(story("e2e"), Handoff("changes_requested", next_role="developer-cli"))
+    assert out.verdict is Verdict.BOUNCE and out.bounce_to == "implement"
+
+
+@pytest.mark.parametrize("status", ["blocked", "failed"])
+def test_e2e_stopped_handoffs_hold(status: str) -> None:
+    out = pipeline(presentation=unpresented).evaluate(story("e2e"), Handoff(status, summary="?"))
+    assert out.verdict is Verdict.HOLD
+
+
+def test_other_steps_do_not_consult_the_presentation() -> None:
+    p = pipeline(presentation=unpresented)
+    assert p.evaluate(story("review"), Handoff("done")).verdict is Verdict.PASS
+    assert p.evaluate(story("acceptance"), Handoff("done")).verdict is Verdict.PASS
+
+
+def test_return_verdict_value() -> None:
+    assert Verdict.RETURN == "return"
+
+
+def test_unpresented_returns_the_story_to_e2e() -> None:
+    out = pipeline(presentation=unpresented).unpresented(story("acceptance"))
+    assert out.verdict is Verdict.RETURN and out.bounce_to == "e2e"
+    assert out.reason == f"{REASON}; run the integration-tester on it"
+
+
+def test_unpresented_is_none_when_complete() -> None:
+    assert pipeline(presentation=presented).unpresented(story("acceptance")) is None
+
+
+def test_unpresented_is_none_without_an_e2e_step() -> None:
+    steps = [x for x in STEPS if x != "e2e"]
+    assert pipeline(steps=steps, presentation=unpresented).unpresented(story("acceptance")) is None
+
+
+def test_return_moves_back_without_counting_a_round() -> None:
+    s, p = story("acceptance", rounds=2), pipeline()
+    p.advance(s, gates.Outcome(Verdict.RETURN, "no presentation", "e2e"))
+    assert (s.step, s.rounds, s.status) == ("e2e", 2, StoryStatus.ACTIVE)
+
+
+def test_return_at_the_cap_does_not_escalate() -> None:
+    s, p = story("acceptance", rounds=2), pipeline()
+    p.advance(s, gates.Outcome(Verdict.RETURN, "x", "e2e"))
+    assert s.status is StoryStatus.ACTIVE

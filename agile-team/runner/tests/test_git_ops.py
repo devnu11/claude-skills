@@ -62,3 +62,28 @@ def test_error(repo: Path) -> None:
 
 def test_with_trailer() -> None:
     assert with_trailer("x\n\n") == f"x\n\n{CO_AUTHOR}\n"
+
+
+# ----- s13: is_repo (E11) ----------------------------------------------------
+
+
+@pytest.fixture
+def outside_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A plain directory that git cannot climb out of into any parent repo."""
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.resolve()))
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    return plain
+
+
+def test_is_repo_true_in_a_work_tree(repo: Path) -> None:
+    assert Git(repo).is_repo()
+    assert Git(repo / "src").is_repo()
+
+
+def test_is_repo_false_outside_git(outside_git: Path) -> None:
+    assert not Git(outside_git).is_repo()
+
+
+def test_is_repo_false_for_a_missing_directory(outside_git: Path) -> None:
+    assert not Git(outside_git / "nope").is_repo()
