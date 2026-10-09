@@ -104,24 +104,13 @@ section[hidden] { display: none; }
 
 /* flow */
 #flow { overflow-x: auto; }
-.flow svg { width: 100%; min-width: 640px; height: auto; display: block; }
-.node rect.box { fill: var(--surface); stroke: var(--axis); stroke-width: 1; }
-.node.idle rect.box { stroke: var(--grid); }
-.node.idle text { opacity: .55; }
-.node.active rect.box { stroke: var(--accent); stroke-width: 2; }
-.node text.name { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
-.node text.meta { font-size: 11px; fill: var(--muted); }
-.node text.flag { font-size: 11px; font-weight: 600; fill: var(--ink); }
-.halo { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .5; animation: halo 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
-@keyframes halo { from { transform: scale(1); opacity: .55; } to { transform: scale(1.18, 1.5); opacity: 0; } }
-.edge { fill: none; stroke-linecap: round; }
-.edge.brief { stroke: var(--ink-2); opacity: .45; }
-.edge.hand { stroke: var(--s1); opacity: .75; }
-.edge.human { stroke: var(--s2); opacity: .8; }
-.edge.zero { opacity: .12; stroke-dasharray: 0; }
-.pulse { fill: var(--accent); }
-.pulse.back { fill: var(--s1); }
-.pulse.human { fill: var(--s2); }
+.flow svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.flow pre { overflow-x: auto; font-size: 12px; }
+.seg { display: inline-flex; gap: 0; margin-bottom: 8px; }
+.seg button { border: 1px solid var(--border); background: var(--surface); padding: 2px 10px; cursor: pointer; font-size: 12px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
 .legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
 .legend .sw { width: 10px; height: 10px; border-radius: 2px; }
@@ -209,7 +198,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .hist { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--grid); font-size: 12.5px; }
 .hist li { margin: 4px 0; }
 .hist .when { color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .halo, .live .dot, .timeline li.new { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .live .dot, .timeline li.new { animation: none; } }
 </style>
 </head>
 <body>
@@ -238,7 +227,6 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
           <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
           <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
           <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
-          <span><i style="background:var(--accent);height:10px;width:10px;border-radius:50%"></i>message in flight</span>
         </div>
       </div>
       <div class="card">
@@ -256,7 +244,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
       <div class="tiles" id="tiles"></div>
       <div class="grid-2">
         <div class="card chart"><h2>Spend over time</h2><p class="sub">Gridlines are the Manager's budget checkpoints.</p><div id="spend"></div></div>
-        <div class="card chart"><h2>Tokens by role</h2><div class="legend" id="mix-legend" style="margin:0 0 8px"></div><div id="mix"></div></div>
+        <div class="card chart"><h2>Tokens by</h2><div class="seg" id="group" role="group" aria-label="Group tokens by"></div><div class="legend" id="mix-legend" style="margin:0 0 8px"></div><div id="mix"></div></div>
       </div>
       <div class="card">
         <h2>By role</h2>
@@ -275,7 +263,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
   <section id="tab-requirements" hidden>
     <div class="stack">
       <div class="tiles" id="req-tiles"></div>
-      <div class="card"><h2>Traceability</h2><p class="sub">Every acceptance criterion must be covered by an active requirement before a story leaves design.</p><div class="scroll-x" id="matrix"></div></div>
+      <div class="card" id="matrix-card"><h2>Traceability</h2><p class="sub">Every acceptance criterion must be covered by an active requirement before a story leaves design.</p><div class="scroll-x" id="matrix"></div></div>
       <div class="card"><h2>Requirements</h2><div id="reqs"></div></div>
     </div>
   </section>
@@ -331,6 +319,25 @@ const pill = (text, tone = "", dot = true) =>
   `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
 const storyChip = (id) => id ? `<span class="story-chip">${esc(id)}</span>` : "";
 const short = (role) => role === PO ? "PO" : role;
+
+// ----- empty states -----------------------------------------------------------
+
+const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers"];
+const RUN_DEFAULTS = {
+  status: "idle", sprint: 0, task: "", budget_usd: 0, manager_every_pct: 25, round_cap: 3, manager_due: [],
+};
+const list = (x) => (Array.isArray(x) ? x : []);
+
+/** Fill every missing section with its empty default so renderers never see undefined. */
+function normalize(snap) {
+  const out = { ...(snap ?? {}) };
+  for (const key of LIST_KEYS) out[key] = list(out[key]);
+  out.run = { ...RUN_DEFAULTS, ...(out.run && typeof out.run === "object" ? out.run : {}) };
+  out.generated_at ??= Date.now() / 1000;
+  out.stories = out.stories.map((s) => ({ ...s, acceptance: list(s.acceptance) }));
+  out.requirements = out.requirements.map((r) => ({ ...r, covers: list(r.covers), history: list(r.history) }));
+  return out;
+}
 
 // ----- derived model ----------------------------------------------------------
 
@@ -403,9 +410,11 @@ function openQuestions(view) {
 }
 
 function raisedQuestions(view) {
+  const asked = new Set(view.messages.map((m) => String(m.text ?? "").trim()));
   return view.events
     .filter((e) => e.kind === "step-end" && e.data.open_questions?.length)
-    .flatMap((e) => e.data.open_questions.map((text) => ({ text, role: e.role, story: e.story, at: e.at })));
+    .flatMap((e) => e.data.open_questions.map((text) => ({ text, role: e.role, story: e.story, at: e.at })))
+    .filter((q) => !asked.has(String(q.text).trim()));
 }
 
 /** Each acceptance criterion with the active requirements that cover it. */
@@ -466,7 +475,7 @@ function renderStatusRow(view) {
 function renderTabs(view) {
   const counts = {
     questions: [openQuestions(view).length, true],
-    requirements: [coverage(view).filter((c) => !c.reqs.length && c.story.sprint).length, true],
+    requirements: [view.requirements.length ? coverage(view).filter((c) => !c.reqs.length && c.story.sprint).length : 0, true],
     board: [view.stories.length, false],
   };
   $("#tabs").innerHTML = TABS.map(([id, label]) => {
@@ -476,9 +485,9 @@ function renderTabs(view) {
   }).join("");
 }
 
-// ----- flow -------------------------------------------------------------------
+// ----- flow (Mermaid) ---------------------------------------------------------
 
-const FLOW = { w: 820, h: 560, po: { x: 410, y: 300 }, human: { x: 410, y: 44 }, node: { w: 156, h: 46 } };
+const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
 
 function ringRoles(view) {
   const rank = (n) => {
@@ -488,113 +497,103 @@ function ringRoles(view) {
   return view.roles.map((r) => r.name).filter((n) => n !== PO).sort((a, b) => rank(a) - rank(b));
 }
 
-function ringPositions(names) {
-  const a0 = -38, a1 = 218, n = Math.max(2, names.length);
-  return Object.fromEntries(names.map((name, i) => {
-    const a = ((a0 + ((a1 - a0) * i) / (n - 1)) * Math.PI) / 180;
-    return [name, { x: FLOW.po.x + 320 * Math.cos(a), y: FLOW.po.y + 205 * Math.sin(a) }];
-  }));
-}
-
-/** A gently curved path from box `a` to box `b`, trimmed to their edges. */
-function edgePath(a, b, bend) {
-  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
-  const trim = (pad) => Math.min((FLOW.node.w / 2 + pad) / Math.abs(ux || 1e-9), (FLOW.node.h / 2 + pad) / Math.abs(uy || 1e-9));
-  const s = { x: a.x + ux * trim(2), y: a.y + uy * trim(2) };
-  const e = { x: b.x - ux * trim(6), y: b.y - uy * trim(6) };
-  const c = { x: (s.x + e.x) / 2 - uy * bend, y: (s.y + e.y) / 2 + ux * bend };
-  return `M${s.x.toFixed(1)},${s.y.toFixed(1)} Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${e.x.toFixed(1)},${e.y.toFixed(1)}`;
-}
-
 const weight = (n, max) => n ? 1.2 + 4 * Math.sqrt(n / Math.max(1, max)) : 1;
 
-function flowEdges(view, stats, pos) {
-  const max = Math.max(1, ...Object.values(stats).map((s) => s.briefs));
-  const edge = (id, cls, d, n, label) =>
-    `<path id="${id}" class="edge ${cls} ${n ? "" : "zero"}" d="${d}" stroke-width="${weight(n, max)}"
-       marker-end="url(#arrow-${cls})"><title>${esc(label)}</title></path>`;
-  const roleEdges = Object.entries(pos).flatMap(([name, p]) => {
-    const s = stats[name] ?? { briefs: 0, handoffs: 0 };
-    return [
-      edge(`p-brief-${name}`, "brief", edgePath(FLOW.po, p, 14), s.briefs, `${s.briefs} briefs to ${name}`),
-      edge(`p-hand-${name}`, "hand", edgePath(p, FLOW.po, 14), s.handoffs, `${s.handoffs} handoffs from ${name}`),
-    ];
-  });
-  const asked = view.messages.length, answered = view.answers.length;
-  return [
-    ...roleEdges,
-    edge("p-ask", "human", edgePath(FLOW.po, FLOW.human, 14), asked, `${asked} messages to you`),
-    edge("p-answer", "human", edgePath(FLOW.human, FLOW.po, 14), answered, `${answered} answers from you`),
-  ].join("");
-}
+/** Make a label safe inside a quoted Mermaid string. */
+const mmdText = (s) => String(s ?? "").replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
 
-function flowNode({ x, y }, lines, cls, title) {
-  const { w, h } = FLOW.node;
-  const halo = cls.includes("active") ? `<rect class="halo" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="9"/>` : "";
-  const [name, meta, flag] = lines;
-  return `<g class="node ${cls}"><title>${esc(title)}</title>${halo}
-    <rect class="box" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="9"/>
-    <text class="name" x="${x}" y="${y - 4}" text-anchor="middle">${esc(name)}</text>
-    <text class="${flag ? "flag" : "meta"}" x="${x}" y="${y + 13}" text-anchor="middle">${esc(flag || meta)}</text></g>`;
-}
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-function roleNode(view, name, p, stats, act) {
-  const s = stats[name], info = roleInfo(view, name);
+function nodeLabel(view, name, s) {
+  const info = roleInfo(view, name);
   const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
-  const meta = s ? `${info.model}${local} · ${fmt.tok(s.tokens)}` : `${info.model}${local}`;
-  const flag = s?.bounced ? `↩ ${s.bounced} bounced · ${s.handoffs} handoffs` : "";
-  const cls = act?.role === name ? "active" : s ? "" : "idle";
-  const title = s
-    ? `${name} (${info.provider}: ${info.model})\n${s.briefs} briefs, ${s.handoffs} handoffs, ${s.bounced} bounced, ${s.stuck} blocked/failed\n${fmt.tok(s.tokens)} tokens`
-    : `${name}: not run yet`;
-  return flowNode(p, [name, meta, flag], cls, title);
+  const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
+  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${fmt.tok(s?.tokens ?? 0)}${bounced}`;
 }
 
-function renderFlow(view) {
-  const stats = flowStats(view), act = activeStep(view.events);
-  const pos = ringPositions(ringRoles(view));
-  const open = openQuestions(view).length;
-  const poTok = stats[PO]?.tokens ?? 0;
-  const nodes = [
-    flowNode(FLOW.po, ["Product Owner", `${roleInfo(view, PO).model} · ${fmt.tok(poTok)}`], act ? "" : "active", "Orchestrates every step"),
-    flowNode(FLOW.human, ["You (via liaison)", "", open ? `? ${open} waiting on you` : "no open questions"], "", "The human"),
-    ...Object.entries(pos).map(([n, p]) => roleNode(view, n, p, stats, act)),
-  ];
-  const marker = (cls, color) => `<marker id="arrow-${cls}" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${color}"/></marker>`;
-  $("#flow").innerHTML = `<svg viewBox="0 0 ${FLOW.w} ${FLOW.h}" role="img" aria-label="Messages between the Product Owner, the roles and you">
-    <defs>${marker("brief", "var(--ink-2)")}${marker("hand", "var(--s1)")}${marker("human", "var(--s2)")}</defs>
-    <g>${flowEdges(view, stats, pos)}</g><g>${nodes.join("")}</g><g id="pulses"></g></svg>`;
+/** The labelled edges, in order: per role brief then handoff, then the human pair. */
+function flowEdgeList(view, stats, ids) {
+  const edges = [];
+  const add = (from, to, n, word, color) => { if (n > 0) edges.push({ from, to, n, label: `${n} ${word}`, color }); };
+  for (const [name, id] of ids) {
+    add("po", id, stats[name]?.briefs ?? 0, "briefs", cssVar("--ink-2"));
+    add(id, "po", stats[name]?.handoffs ?? 0, "handoffs", cssVar("--s1"));
+  }
+  add("po", "you", view.messages.length, "messages", cssVar("--s2"));
+  add("you", "po", view.answers.length, "answers", cssVar("--s2"));
+  return edges;
 }
 
-const PULSE_PATH = {
-  "step-start": (e) => [`p-brief-${e.role}`, ""],
-  "step-end": (e) => [`p-hand-${e.role}`, "back"],
-  message: () => ["p-ask", "human"],
-  answer: () => ["p-answer", "human"],
-};
+/** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
+function flowSource(view) {
+  const stats = flowStats(view), act = activeStep(view.events), names = ringRoles(view);
+  const ids = names.map((n, i) => [n, "r" + i]);
+  const lines = ["flowchart TB", `you(["You (via liaison)"])`,
+    `po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${fmt.tok(stats[PO]?.tokens ?? 0)}"]`];
+  for (const [n, id] of ids) lines.push(`${id}["${nodeLabel(view, n, stats[n])}"]`);
+  const edges = flowEdgeList(view, stats, ids), max = Math.max(1, ...edges.map((e) => e.n));
+  for (const e of edges) lines.push(`${e.from} -->|"${e.label}"| ${e.to}`);
+  edges.forEach((e, k) => lines.push(`linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`));
+  lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, "classDef idle opacity:0.55");
+  const active = act ? (ids.find(([n]) => n === act.role) ?? [])[1] : "po";
+  if (active) lines.push(`class ${active} active`);
+  for (const [n, id] of ids) if (!stats[n]) lines.push(`class ${id} idle`);
+  return lines.join("\n");
+}
 
-/** Send a dot along the edge each new event travelled. */
-function pulse(events) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const layer = document.getElementById("pulses");
-  for (const e of events.slice(-4)) {
-    const [id, cls] = PULSE_PATH[e.kind]?.(e) ?? [];
-    if (!id || !document.getElementById(id)) continue;
-    layer.insertAdjacentHTML("beforeend",
-      `<circle class="pulse ${cls}" r="5"><animateMotion dur="0.9s" fill="freeze" begin="indefinite"><mpath href="#${id}"/></animateMotion></circle>`);
-    const dot = layer.lastElementChild;
-    dot.firstElementChild.beginElement();
-    setTimeout(() => dot.remove(), 1000);
+let mermaidModule = null;
+const loadMermaid = () => (mermaidModule ??= import(MERMAID_URL).then((m) => m.default));
+
+const flowMemo = { key: "", seq: 0 };
+const themeVars = () => ({
+  background: cssVar("--surface"), primaryColor: cssVar("--surface"), primaryTextColor: cssVar("--ink"),
+  textColor: cssVar("--ink"), lineColor: cssVar("--axis"), primaryBorderColor: cssVar("--axis"),
+  edgeLabelBackground: cssVar("--surface"),
+});
+
+function flowUnavailable(source) {
+  $("#flow").innerHTML = `<p class="empty">Flowchart unavailable (mermaid could not load).</p><pre>${esc(source)}</pre>`;
+}
+
+async function drawFlow(source, vars, seq) {
+  try {
+    const mermaid = await loadMermaid();
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: vars });
+    const { svg } = await mermaid.render("flow-svg-" + seq, source);
+    if (seq === flowMemo.seq) $("#flow").innerHTML = svg;
+  } catch {
+    mermaidModule = null;
+    if (seq === flowMemo.seq) flowUnavailable(source);
   }
 }
 
+/** Redraw the chart only when its source or the theme colours changed. */
+function renderFlow(view) {
+  const source = flowSource(view), vars = themeVars();
+  const key = source + JSON.stringify(vars);
+  if (key === flowMemo.key) return;
+  flowMemo.key = key;
+  drawFlow(source, vars, ++flowMemo.seq);
+}
+
+function renderFlowTab(view) {
+  safely(renderFlow, view);
+  safely(renderTimeline, view);
+}
+
 // ----- timeline ---------------------------------------------------------------
+
+/** Tokens, cost and commit of a handoff; each part only when present. */
+function stepEndMeta(d) {
+  return [d.tokens ? `${fmt.tok(sumTok(d.tokens))} tokens` : "", d.cost_usd != null ? fmt.usd(d.cost_usd) : "", d.commit]
+    .filter(Boolean).join(" · ");
+}
 
 const TIMELINE = {
   "step-start": (e) => ({ from: PO, to: e.role, what: "brief", body: e.data.brief }),
   "step-end": (e) => ({
     from: e.role, to: PO, what: e.data.status.replace("_", " "), tone: STATUS_TONE[e.data.status],
-    body: e.data.summary, meta: `${fmt.tok(sumTok(e.data.tokens))} tokens · ${fmt.usd(e.data.cost_usd)} · ${e.data.commit}`,
+    body: e.data.summary, meta: stepEndMeta(e.data),
   }),
   gate: (e) => ({
     from: "gate", to: null, what: `${e.data.step} → ${e.data.verdict === "bounce" ? "back to " : ""}${e.data.now_at}`,
@@ -614,7 +613,8 @@ const TIMELINE = {
   "sprint-start": (e) => ({ from: PO, to: `sprint ${e.data.sprint}`, what: "sprint start", body: `${e.data.goal}\nStories: ${e.data.stories.join(", ")}` }),
 };
 
-function renderTimeline(view, fresh) {
+function renderTimeline(view) {
+  const fresh = data.fresh;
   const ctx = {
     messages: Object.fromEntries(view.messages.map((m) => [m.id, m])),
     answers: Object.fromEntries(view.answers.map((a) => [a.id, a])),
@@ -626,6 +626,10 @@ function renderTimeline(view, fresh) {
 }
 
 function timelineRow(e, ctx, isNew) {
+  try { return timelineRowHtml(e, ctx, isNew); } catch (err) { console.error(err); return ""; }
+}
+
+function timelineRowHtml(e, ctx, isNew) {
   const t = TIMELINE[e.kind]?.(e, ctx);
   if (!t) return "";
   const to = t.to ? `<span class="arrow">→</span><span class="who">${esc(short(t.to))}</span>` : "";
@@ -676,11 +680,11 @@ function storyCard(view, s, act, blockers) {
     ...(blockers[s.id] ?? []).map((id) => pill(`? waiting on ${id}`, "warning")),
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
-    <div class="sid">${esc(s.id)} · ${esc(s.delivery ?? "")}</div>
+    <div class="sid">${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}</div>
     <div class="title">${esc(s.title)}</div>
     ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
     <div class="row">${rounds(s.rounds, view.run.round_cap)}
-      <span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span></div>
+      ${view.requirements.length ? `<span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span>` : ""}</div>
     ${reqs.length ? `<div class="row" style="margin-top:6px">${reqs.map((r) => `<span class="req-chip">${r}</span>`).join("")}</div>` : ""}
   </div>`;
 }
@@ -706,7 +710,8 @@ function totalsBy(ledger, key) {
 function renderTokens(view) {
   renderTiles(view);
   renderSpend(view);
-  renderMix(view);
+  renderBars(view);
+  renderGroup();
   renderTables(view);
 }
 
@@ -769,8 +774,15 @@ function hoverSpend(pts, x) {
 
 const MIX = { w: 560, label: 128, right: 52, bar: 16, gap: 10 };
 
-function renderMix(view) {
-  const rows = Object.entries(totalsBy(view.ledger, "role"))
+const GROUPS = [["role", "Role"], ["story", "Story"], ["model", "Model"]];
+
+function renderGroup() {
+  $("#group").innerHTML = GROUPS.map(([k, label]) =>
+    `<button data-group="${k}" aria-pressed="${k === ui.group}">${label}</button>`).join("");
+}
+
+function renderBars(view) {
+  const rows = Object.entries(totalsBy(view.ledger, ui.group))
     .map(([role, t]) => ({ role, t, total: sum(TOKEN_KINDS, ([k]) => t[k]) }))
     .sort((a, b) => b.total - a.total);
   $("#mix-legend").innerHTML = TOKEN_KINDS.map(([, label, v]) => `<span><i class="sw" style="background:var(${v})"></i>${label}</span>`).join("");
@@ -778,7 +790,7 @@ function renderMix(view) {
   const max = rows[0].total, span = MIX.w - MIX.label - MIX.right;
   const h = rows.length * (MIX.bar + MIX.gap);
   const bars = rows.map((r, i) => mixRow(r, i, span / max)).join("");
-  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="Tokens by role">
+  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="Tokens by ${ui.group}">
     <line class="baseline" x1="${MIX.label}" x2="${MIX.label}" y1="0" y2="${h - MIX.gap}"/>${bars}</svg>`;
   for (const seg of document.querySelectorAll("#mix [data-tip]")) {
     seg.addEventListener("mousemove", (ev) => showTip(ev, seg.dataset.tip));
@@ -824,7 +836,7 @@ function renderQuestions(view) {
       <div class="q-cmd"><code>agile-team answer ${q.id} "…"</code><button class="ctl" data-copy='agile-team answer ${q.id} ""'>Copy</button></div>
     </div>`).join("") || `<p class="empty">Nothing is waiting on you.</p>`;
   $("#q-raised").innerHTML = raisedQuestions(view).reverse().map((q) => `<div class="q">
-      <div class="q-head"><span class="who" style="color:var(--ink)">${esc(q.role)}</span>${storyChip(q.story)}<span>${fmt.ago(q.at, now)} ago</span></div>
+      <div class="q-head"><span>raised by ${esc(q.role)}</span>${storyChip(q.story)}<span>${fmt.ago(q.at, now)} ago</span></div>
       <div class="q-text">${esc(q.text)}</div></div>`).join("") || `<p class="empty">No role has raised a question.</p>`;
   renderAnswered(view);
 }
@@ -841,7 +853,12 @@ function renderAnswered(view) {
 
 // ----- requirements -----------------------------------------------------------
 
+const REQ_EMPTY = "No requirements yet. The Architect writes them as <code>&lt;docs&gt;/requirements/REQ-NNN.md</code>.";
+
 function renderRequirements(view) {
+  const none = !view.requirements.length;
+  $("#req-tiles").hidden = $("#matrix-card").hidden = none;
+  if (none) { $("#reqs").innerHTML = `<p class="empty">${REQ_EMPTY}</p>`; return; }
   const cov = coverage(view), reqs = view.requirements;
   const changes = sum(reqs, (r) => r.history.filter((h) => h.change !== "added").length);
   const gaps = cov.filter((c) => !c.reqs.length && c.story.sprint);
@@ -886,7 +903,7 @@ function renderReqList(view) {
         ${pill(r.status, r.status === "active" ? "good" : "")}${changed ? pill(`changed ×${r.history.filter((h) => h.change !== "added").length}`, "serious") : ""}
         ${r.covers.map((c) => `<span class="req-chip">${esc(c)}</span>`).join("")}</div>
       <div class="req-text">${esc(r.text)}</div>
-      <ul class="hist">${r.history.map((h) => `<li><span class="when">${fmt.time(h.at)}</span> <b>${esc(h.change)}</b> by ${esc(h.role)} on ${esc(h.story)} · <span class="mono">${esc(h.sha)}</span><br>${esc(h.reason)}</li>`).join("")}</ul></div>`;
+      <ul class="hist">${r.history.map((h) => `<li><span class="when">${fmt.time(h.at)}</span> <b>${esc(h.change)}</b> by ${esc(h.role)} on ${esc(h.story)}${h.sha ? " · " : ""}${h.sha ? `<span class="mono">${esc(h.sha)}</span>` : ""}<br>${esc(h.reason)}</li>`).join("")}</ul></div>`;
   }).join("") || `<p class="empty">The Architect has not written any requirements yet.</p>`;
 }
 
@@ -900,8 +917,8 @@ function showTip(ev, html) {
 }
 const hideTip = () => { $("#tip").style.display = "none"; };
 
-const ui = { tab: (location.hash.slice(1) || "flow"), story: "", theme: "" };
-const RENDER = { flow: () => {}, board: renderBoard, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
+const ui = { tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role" };
+const RENDER = { flow: renderFlowTab, board: renderBoard, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 
 function showTab(id) {
   ui.tab = TABS.some(([t]) => t === id) ? id : "flow";
@@ -933,6 +950,8 @@ function restoreTheme() {
 document.addEventListener("click", (ev) => {
   const tab = ev.target.closest("[data-tab]");
   if (tab) showTab(tab.dataset.tab);
+  const group = ev.target.closest("[data-group]");
+  if (group) { ui.group = group.dataset.group; render(); }
   const copy = ev.target.closest("[data-copy]");
   if (copy) navigator.clipboard?.writeText(copy.dataset.copy);
   const act = ev.target.closest("[data-mock]");
@@ -943,18 +962,24 @@ $("#theme").addEventListener("click", cycleTheme);
 
 // ----- data sources -----------------------------------------------------------
 
-const data = { snap: null, cursor: Infinity, seen: new Set(), conn: "connecting" };
+const data = { snap: null, cursor: Infinity, seen: new Set(), conn: "connecting", fresh: new Set() };
+const LIVE = { source: null, backoff: 1000, maxBackoff: 10000 };
+
+/** Run one renderer; a throw becomes a status-row pill and nothing else stops. */
+function safely(fn, view) {
+  try { fn(view); } catch (err) {
+    console.error(err);
+    $("#status-row").insertAdjacentHTML("beforeend", pill("render error: " + err.message, "critical"));
+  }
+}
 
 function render() {
   if (!data.snap) return;
   const view = asOf(data.snap, data.cursor);
   const fresh = new Set(view.events.filter((e) => !data.seen.has(e.id)).map((e) => e.id));
-  const firstPaint = data.seen.size === 0;
-  renderHeader(view);
-  renderFlow(view);
-  renderTimeline(view, firstPaint ? new Set() : fresh);
-  RENDER[ui.tab](view);
-  if (!firstPaint) pulse(view.events.filter((e) => fresh.has(e.id)));
+  data.fresh = data.seen.size === 0 ? new Set() : fresh;
+  safely(renderHeader, view);
+  safely(RENDER[ui.tab], view);
   for (const id of fresh) data.seen.add(id);
 }
 
@@ -963,11 +988,31 @@ function connectionPill() {
   return data.conn === "live" ? `<span class="live">${pill("live", "good")}</span>` : pill(data.conn, "warning");
 }
 
+function onStreamMessage(ev) {
+  let snap;
+  try { snap = JSON.parse(ev.data); } catch { return; }
+  data.snap = normalize(snap);
+  data.conn = "live";
+  render();
+}
+
+function onStreamError() {
+  data.conn = "reconnecting…";
+  render();
+  if (LIVE.source.readyState !== EventSource.CLOSED) return;
+  LIVE.source.close();
+  setTimeout(connectLive, LIVE.backoff);
+  LIVE.backoff = Math.min(LIVE.backoff * 2, LIVE.maxBackoff);
+}
+
+/** Open the one EventSource; the first `data:` line is a full snapshot. */
 function connectLive() {
+  LIVE.source?.close();
   const es = new EventSource("api/stream");
-  es.onopen = () => { data.conn = "live"; render(); };
-  es.onmessage = (ev) => { data.snap = JSON.parse(ev.data); data.conn = "live"; render(); };
-  es.onerror = () => { data.conn = "reconnecting…"; render(); };
+  LIVE.source = es;
+  es.onopen = () => { LIVE.backoff = 1000; data.conn = "live"; render(); };
+  es.onmessage = onStreamMessage;
+  es.onerror = onStreamError;
 }
 
 // Mock replay: start part-way through the fixture and reveal one event at a time.
@@ -998,16 +1043,27 @@ function mockControls() {
     <button class="ctl" data-mock="restart">⟲ restart</button>`;
 }
 
+/** Paint the first snapshot, falling back to the stream if the fetch fails. */
+async function bootLive() {
+  data.snap = normalize({});
+  try {
+    const res = await fetch("api/snapshot");
+    if (!res.ok) throw new Error("snapshot " + res.status);
+    data.snap = normalize(await res.json());
+    data.conn = "live";
+  } catch {
+    data.conn = "reconnecting…";
+  }
+  render();
+  connectLive();
+}
+
 async function boot() {
   restoreTheme();
   showTab(ui.tab);
-  if (!MOCK) {
-    const res = await fetch("api/snapshot");
-    data.snap = await res.json(); render();
-    return connectLive();
-  }
+  if (!MOCK) return bootLive();
   const res = await fetch("fixtures/snapshot.json");
-  data.snap = await res.json();
+  data.snap = normalize(await res.json());
   mock.start();
 }
 boot().catch((err) => {
