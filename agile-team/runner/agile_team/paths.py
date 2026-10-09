@@ -7,13 +7,18 @@ relative to the repo root.
 
 from __future__ import annotations
 
+import posixpath
 import re
+from fnmatch import fnmatchcase
 from functools import cache
 from itertools import takewhile
 from pathlib import Path
 
 GLOB_TOKENS = {"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}
-TOKEN_WILDCARDS = "*?[{"
+GLOB_CHARS = "*?["
+GROUP_CHARS = "{("
+ANY_SEGMENT = "[{("
+TOKEN_WILDCARDS = GLOB_CHARS + "{"
 _TOKEN = re.compile(r"\*\*/|\*\*|\*|\?|[^*?]+")
 
 
@@ -43,14 +48,45 @@ def _is_literal(segment: str) -> bool:
     return not any(c in segment for c in TOKEN_WILDCARDS)
 
 
-def has_wildcard(token: str) -> bool:
-    """True when a shell word holds a glob or brace character."""
-    return any(c in token for c in TOKEN_WILDCARDS)
+def normalise_token(token: str) -> str:
+    """A shell word as a repo-relative path: leading ``.``/``/`` stripped, ``//``
+    and ``/./`` collapsed."""
+    return posixpath.normpath(token.lstrip("./"))
 
 
-def token_prefix(token: str) -> str:
-    """The text of a shell word before its first wildcard character."""
-    return re.split(r"[*?\[{]", token, maxsplit=1)[0]
+def could_climb(token: str) -> bool:
+    """True when a segment of the word could expand to ``..`` or span a ``/``."""
+    *inner, _last = segments = token.split("/")
+    return ".." in segments or any(_may_span(segment) for segment in inner)
+
+
+def _may_span(segment: str) -> bool:
+    dot_glob = segment.startswith(".") and any(c in segment for c in GLOB_CHARS)
+    return dot_glob or any(c in segment for c in GROUP_CHARS)
+
+
+def reaches(token: str, root: str) -> bool:
+    """True when the shell could expand the word to ``root`` or a path under it."""
+    word = normalise_token(token).casefold()
+    if re.fullmatch(r"[*?]+", word):
+        return False
+    return _walk(word.split("/"), root.casefold().split("/"))
+
+
+def _walk(word: list[str], root: list[str]) -> bool:
+    if not root:
+        return True
+    if not word:
+        return False
+    if "**" in word[0]:
+        return True
+    return _segment_matches(word[0], root[0]) and _walk(word[1:], root[1:])
+
+
+def _segment_matches(segment: str, root_segment: str) -> bool:
+    if any(c in segment for c in ANY_SEGMENT):
+        return True
+    return fnmatchcase(root_segment, segment.replace("?", "*"))
 
 
 def under_root(path: str, root: str) -> bool:
