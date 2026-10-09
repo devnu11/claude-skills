@@ -111,6 +111,12 @@ section[hidden] { display: none; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.node.live-halo { animation: halo 1.6s ease-in-out infinite; }
+@keyframes halo { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 7px var(--accent)); } }
+.flow-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+.flow-dot.back { fill: var(--s1); }
+.flow-dot.human { fill: var(--s2); }
+.edge-hit { filter: drop-shadow(0 0 4px var(--accent)); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
 .legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
 .legend .sw { width: 10px; height: 10px; border-radius: 2px; }
@@ -198,7 +204,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .hist { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--grid); font-size: 12.5px; }
 .hist li { margin: 4px 0; }
 .hist .when { color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .live .dot, .timeline li.new { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .live .dot, .timeline li.new { animation: none; } .node.live-halo { animation: none; filter: drop-shadow(0 0 5px var(--accent)); } }
 </style>
 </head>
 <body>
@@ -227,6 +233,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
           <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
           <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
           <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
+          <span><i class="sw" style="background:var(--accent);border-radius:50%"></i>live message (moving dot); glowing box = running now</span>
         </div>
       </div>
       <div class="card">
@@ -571,6 +578,19 @@ function flowGroupLines(view, stats, ids) {
   ]);
 }
 
+/** Mermaid node id of a role (`po` for the Product Owner); undefined when it has no node. */
+function roleNodeId(view, role) {
+  if (role === PO) return "po";
+  const i = ringRoles(view).indexOf(role);
+  return i < 0 ? undefined : "r" + i;
+}
+
+/** Node id of the running role, or of the PO when no step is open. */
+function activeNodeId(view) {
+  const act = activeStep(view.events);
+  return act ? roleNodeId(view, act.role) : "po";
+}
+
 /** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
 function flowSource(view) {
   const stats = flowStats(view), act = activeStep(view.events), names = ringRoles(view);
@@ -580,7 +600,7 @@ function flowSource(view) {
   for (const e of edges) lines.push(`${e.from} ${e.arrow}|"${e.label}"| ${e.to}`);
   edges.forEach((e, k) => lines.push(`linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`));
   lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, "classDef idle opacity:0.55");
-  const active = act ? (ids.find(([n]) => n === act.role) ?? [])[1] : "po";
+  const active = activeNodeId(view);
   if (active) lines.push(`class ${active} active`);
   for (const [n, id] of ids) if (!stats[n]) lines.push(`class ${id} idle`);
   return lines.join("\n");
@@ -589,7 +609,7 @@ function flowSource(view) {
 let mermaidModule = null;
 const loadMermaid = () => (mermaidModule ??= import(MERMAID_URL).then((m) => m.default));
 
-const flowMemo = { key: "", seq: 0 };
+const flowMemo = { key: "", seq: 0, drawn: 0 };
 const themeVars = () => ({
   background: cssVar("--surface"), primaryColor: cssVar("--surface"), primaryTextColor: cssVar("--ink"),
   textColor: cssVar("--ink"), lineColor: cssVar("--axis"), primaryBorderColor: cssVar("--axis"),
@@ -605,7 +625,7 @@ async function drawFlow(source, vars, seq) {
     const mermaid = await loadMermaid();
     mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: vars });
     const { svg } = await mermaid.render("flow-svg-" + seq, source);
-    if (seq === flowMemo.seq) $("#flow").innerHTML = svg;
+    if (seq === flowMemo.seq) { $("#flow").innerHTML = svg; flowMemo.drawn = seq; flushLive(); }
   } catch {
     mermaidModule = null;
     if (seq === flowMemo.seq) flowUnavailable(source);
@@ -616,12 +636,89 @@ async function drawFlow(source, vars, seq) {
 function renderFlow(view) {
   const source = flowSource(view), vars = themeVars();
   const key = source + JSON.stringify(vars);
-  if (key === flowMemo.key) return;
+  if (key === flowMemo.key) return flushLive();
   flowMemo.key = key;
   drawFlow(source, vars, ++flowMemo.seq);
 }
 
+// ----- live indication: travelling dots and the running-role halo -------------
+
+/** Latest view and the fresh events still waiting for a drawn chart. */
+const live = { view: null, queue: [] };
+const DOT_MS = 900, HIT_MS = 1200;
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** The chart's SVG, or null before it is drawn (or when Mermaid failed to load). */
+const flowSvg = () => document.querySelector("#flow svg");
+
+/** Which edge each event kind travels: [from, to, dot class] by node id; STEER is the PO's end. */
+const EVENT_EDGE = {
+  "step-start": (v, e) => [poEnd(e.role), roleNodeId(v, e.role), "brief"],
+  "step-end": (v, e) => [roleNodeId(v, e.role), poEnd(e.role), "back"],
+  message: () => [STEER, "you", "human"],
+  answer: () => ["you", STEER, "human"],
+};
+
+/** The drawn edge path between two node ids and whether it runs the other way (Mermaid's LS-/LE- classes). */
+function findEdge(from, to) {
+  const svg = flowSvg();
+  const pick = (a, b) => svg.querySelector(`path.LS-${a}.LE-${b}`);
+  const fwd = pick(from, to), back = fwd ? null : pick(to, from);
+  return fwd || back ? { path: fwd ?? back, reverse: !fwd } : null;
+}
+
+/** Move a dot along a path over DOT_MS, then remove it. */
+function runDot({ path, reverse }, cls) {
+  const len = path.getTotalLength(), t0 = performance.now();
+  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  dot.setAttribute("r", "5");
+  dot.setAttribute("class", "flow-dot " + cls);
+  path.parentNode.appendChild(dot);
+  const step = (now) => {
+    const f = Math.min(1, (now - t0) / DOT_MS), at = (reverse ? 1 - f : f) * len;
+    const p = path.getPointAtLength(at);
+    dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
+    f < 1 ? requestAnimationFrame(step) : dot.remove();
+  };
+  requestAnimationFrame(step);
+}
+
+/** Reduced motion: light the edge up briefly instead of moving a dot. */
+function hitEdge({ path }) {
+  path.classList.add("edge-hit");
+  setTimeout(() => path.classList.remove("edge-hit"), HIT_MS);
+}
+
+/** Show one event on its edge, quietly doing nothing if the edge is not drawn. */
+function showEvent(e) {
+  const [from, to, cls] = EVENT_EDGE[e.kind]?.(live.view, e) ?? [];
+  const edge = from && to ? findEdge(from, to) : null;
+  if (edge) reducedMotion() ? hitEdge(edge) : runDot(edge, cls);
+}
+
+/** The chart node group for a node id. */
+function flowNodeEl(id) {
+  const tail = new RegExp(`(^|-)flowchart-${id}-\\d+$`);
+  return [...flowSvg().querySelectorAll("g.node")].find((g) => tail.test(g.id));
+}
+
+/** Put the halo on the running role's node and take it off every other. */
+function markActive() {
+  flowSvg().querySelectorAll("g.node.live-halo").forEach((g) => g.classList.remove("live-halo"));
+  flowNodeEl(activeNodeId(live.view) ?? "")?.classList.add("live-halo");
+}
+
+/** Apply the halo and play queued events once the current chart is drawn; skipped if it is not. */
+function flushLive() {
+  if (!live.view || !flowSvg() || flowMemo.drawn !== flowMemo.seq) return;
+  const events = live.queue.splice(0);
+  safely(markActive, live.view);
+  events.slice(-6).forEach((e) => safely(showEvent, e));
+}
+
 function renderFlowTab(view) {
+  live.view = view;
+  live.queue.push(...view.events.filter((e) => data.fresh.has(e.id)));
   safely(renderFlow, view);
   safely(renderTimeline, view);
 }
