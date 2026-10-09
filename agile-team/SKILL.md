@@ -48,6 +48,13 @@ command fails.
 5. **Start in the background:**
    `$AT start --cadence <c> --task "<the human's task, verbatim>"`
    (add `--onboard` for the onboarding sprint, `--resume` to continue).
+   Next to it, also in the background, start the read-only dashboard:
+   `$AT dashboard` (add `--no-open` over SSH or when the human is on another
+   machine). It prints `dashboard: <url>`. Give the human that URL; it opens
+   from other machines on the network (on Windows it is local only). If the
+   port is taken, a dashboard is probably already running, so reuse its URL
+   or pass `--port 0`. Leave it running across resumes. It never changes
+   anything.
 6. **Watch** `.team/run/outbox.jsonl` with the Monitor tool
    (`tail -n +1 -F .team/run/outbox.jsonl`). For each new line, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
