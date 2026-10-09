@@ -2,16 +2,33 @@
 
 The runner (`agile-team/runner/agile_team/`) is the program that runs the team.
 The skill (`agile-team/SKILL.md`) only drives its CLI. This document covers the
-components, their boundaries and how data flows between them. The last
-sections are per-story designs. Each one is the contract a developer
-implements against and a reviewer checks against.
+components, their boundaries and how data flows between them. Per-story
+designs are the contract a developer implements against and a reviewer checks
+against.
+
+## Story designs
+
+From s19 on, each story's design is its own file, `design/<story>.md`, with
+one line here. Older designs are the sections at the end of this file.
+
+| Story | Design |
+|---|---|
+| s3 Backlog and sprint membership | [below](#s3-backlog-and-sprint-membership) |
+| s7 Customer Proxy forbidden roots in nested layouts | [below](#s7-customer-proxy-forbidden-roots-in-nested-layouts-bug) |
+| s8 Clean stop on a usage limit, a crash or SIGTERM | [below](#s8-clean-stop-on-a-usage-limit-a-crash-or-sigterm) |
+| s4 Dashboard backend | [below](#s4-dashboard-backend-snapshot-read-only-sse-server-cli) |
+| s5 Dashboard live UI | [below](#s5-dashboard-live-ui-tabs-over-the-s4-snapshot) |
+| s13 The team presents the product to the Customer Proxy | [below](#s13-the-team-presents-the-product-to-the-customer-proxy) |
+| s19 Routing in code: the runner drives, the PO judges | [design/s19.md](design/s19.md) |
 
 ## Components
 
 | Module | Owns | Talks to |
 |---|---|---|
 | `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
-| `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the PO loop | `Runtime`, `RunState`, events, relay |
+| `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19) | `Runtime`, `Router`, `RunState`, events, relay |
+| `router.py` | `Router`: picks the next step (Manager, Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, handover, gates, relay |
+| `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
 | `gates.py` | `StoryState`, `Pipeline` (step machine), `dispatch_refusal`, command gates | roles (`Handoff`) |
@@ -28,8 +45,11 @@ implements against and a reviewer checks against.
 ```mermaid
 flowchart LR
   liaison[[liaison / human]] -- answer, stop, status --> cli
-  cli -- start --> po[po_tools.PoRun]
-  po -- MCP tool calls --> tools[po_tools.Tools]
+  cli -- start --> po[po_tools.PoRun driver]
+  po -- PO turn: MCP tool calls --> tools[po_tools.Tools]
+  po -- router pass --> router[router.Router]
+  router -- run_role, standard brief --> rt
+  router -- hand-over --> po
   tools -- run_role --> rt[dispatch.Runtime]
   tools -- open_story / start_sprint --> st[(state.RunState)]
   rt -- refusal --> gates[gates.dispatch_refusal]
@@ -47,12 +67,15 @@ flowchart LR
 
 ### One role step
 
-1. The PO calls `run_role(role, brief, story)`.
+1. The router (s19, standard brief) or the PO (its own brief) calls
+   `Runtime.run_role(StepRequest(role, brief, story))`.
 2. `Runtime.refusal` runs `_run_refusal`, `_role_refusal` and `_story_refusal`
    in order. The first reason wins and goes back to the PO as
    `{"status": "refused", "reason": …}`. No side effects happen before this point.
 3. `plan` → `_execute` (a fresh `query()`) → `settle`: cost, handoff, quarantine
    and commit, gate, save.
+4. On a story, `note_step` records the hold (any `HANDOVERS` match) and the
+   previous gated step, which the next standard brief reads (s19).
 
 Rule: refusals are pure checks. Any state change happens only after every
 check has passed. This holds for every PO tool too.

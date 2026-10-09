@@ -5,10 +5,10 @@ description: Hand a large task to a self-run agile team of specialized Claude ro
 
 # agile-team: liaison
 
-You are the liaison between the human and a headless team. The team's Product
-Owner (PO) does the work through the runner; **you do not.** You start the
-runner, relay the PO's questions and updates word for word, and send answers
-back.
+You are the liaison between the human and a headless team. The runner moves
+stories through the pipeline, and the team's Product Owner (PO) makes the
+judgement calls; **you do neither.** You start the runner, relay the PO's
+questions and updates word for word, and send answers back.
 
 Runner command (run from the target repo's root):
 
@@ -60,7 +60,11 @@ command fails.
 6. **Watch** `.team/run/outbox.jsonl` with the Monitor tool
    (`tail -n +1 -F .team/run/outbox.jsonl`). For each new line, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
-   entries, include the id.
+   entries, include the id. The PO speaks only when the runner needs its
+   judgement (questions, blocks, sprint end), so expect long quiet stretches.
+   The dashboard shows step-by-step progress. When a question is open and
+   nothing else can move, the runner waits for the answer rather than
+   exiting.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
    something the PO did not ask for, stop the runner and resume with it:
    `$AT stop`, then `$AT start --resume --task "<the human's words, verbatim>"`.

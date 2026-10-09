@@ -15,8 +15,8 @@ Run from the target repo root, or pass `--repo PATH`.
 | `config check` | Validate config, every role's resolution and glob placeholders. Exit 1 on problems. |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
-| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the PO loop in the foreground (the liaison backgrounds it). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
+| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
@@ -38,7 +38,9 @@ command's executable is missing; `config check` fails.
 ```
 
 `kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`,
-`failed`, `stopped`. A `question` blocks only the stories it lists. A
+`failed`, `stopped`. A `question` blocks only the stories it lists. While a
+question is open and nothing else can move, the runner keeps running and
+waits for the answer. A
 `manual` delivery's acceptance script arrives as a `question`; the answer is
 the human's test result. The runner itself posts `blocked`, `failed` or
 `stopped` when it halts (see "Run status and stops").
@@ -59,8 +61,8 @@ runner handled, each headed `--- <time> <ExceptionType>`),
 
 | Status | Set by | Meaning |
 |---|---|---|
-| `idle` | runner | The PO ended its turn normally. |
-| `running` | runner | The PO loop is running. Every `start` sets it, which clears any stop below. |
+| `idle` | runner | The run ended normally: the PO ended its turn and nothing could move, or a stop took effect after a step. |
+| `running` | runner | The run is going (PO turns and router passes). Every `start` sets it, which clears any stop below. |
 | `sprint-end`, `done` | PO (`notify_user`) | The sprint or the whole task finished. |
 | `blocked` | PO (`notify_user`) or runner | Nothing can move without the human, or a usage limit was hit. |
 | `failed` | runner | The runner crashed. |
@@ -76,7 +78,7 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
 
 | Exit | Cause | Status | Advice in the note and line |
 |---|---|---|---|
-| 0 | the PO ended its turn | `idle`, or what the PO set | — |
+| 0 | the run ended (see "Routing") | `idle`, or what the PO set | — |
 | 1 | CLI error or failed preflight | unchanged | the error |
 | 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
 | 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
@@ -260,7 +262,7 @@ a struggling role back to `anthropic`.
 Which roles suit a local model: Scribe, Code Quality Czar and DevOps; Unit and
 Integration Tester are worth a try. Keep PO, Architect, Code Reviewer and
 Manager on Claude. Weak tool use mostly shows up as bad handoffs, which bounce
-and cost a PO turn.
+and count a round. At the round cap, the PO gets the story.
 
 **Other vendors.** `kind` names the harness. Supporting another vendor's agent
 CLI (Codex, Gemini, …) would mean adding a `ProviderKind` and a dispatch path
@@ -279,7 +281,10 @@ Every role ends with:
 ```
 ````
 
-`status`: `done`, `changes_requested`, `blocked`, `failed`. `friction` is
+`status`: `done`, `changes_requested`, `blocked`, `failed`. The Architect
+adds `"developer": "<role>"` (a string or `null`) to name the developer
+specialisation a story needs; the runner uses it for the implement step (see
+"Routing"). `friction` is
 optional: what slowed the step down or would make it cheaper. It is logged on
 the step-end event for the Manager. The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
@@ -315,8 +320,8 @@ A failed gate or `changes_requested` moves the story back and adds a round. At
 `blocked` and `failed` do not count a round. When `e2e` is enabled,
 `run_role(customer-proxy)` on a story with no complete presentation does not
 start the Proxy. The runner moves the story back to `e2e` **without** a round
-(gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The PO then runs
-the integration-tester.
+(gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The
+runner then runs the integration-tester itself.
 
 ## Presentation
 
@@ -341,7 +346,77 @@ to `integration-tester`).
   prompt quotes `PRESENTATION.md` and gives the copy's path.
 
 The Manager must also run after `start_sprint`, after any `set_role_model`,
-and when spend crosses each `manager_every_pct` checkpoint.
+and when spend crosses each `manager_every_pct` checkpoint. The runner runs it
+before any other step while one of these is due (see "Routing").
+
+## Routing: the runner drives, the PO judges
+
+`start` alternates **PO turns** with **router passes**. A PO turn resumes the
+PO's session with one prompt (the kickoff, the resume note or a hand-over)
+and lasts until the PO ends its turn. A router pass runs steps with no PO
+involved, in this order:
+
+1. the `manager`, story-less, while `manager_due` is not empty;
+2. the `scribe`, on each story that has just reached done (`scribe_due`);
+3. the next step of the first **movable** story. A movable story is in the
+   current sprint, `active` and not held, and no open question blocks it.
+
+The role for a story step is the first of these that fits the step: the PO's
+`set_developer` choice, the role a bounce named (`next_role`), the role that
+just bounced at this step, the Architect's `developer`, and finally the
+step's default role.
+
+Each step gets a **standard brief**. It lists the paths that exist from
+`.team/stories/<id>.md`, `<docs>/design/<id>.md` (else
+`<docs>/architecture.md`) and `.team/reviews/<id>.md`. It adds the previous
+step's role, status and summary; on a bounce or return,
+`Sent back to this step: <gate reason or reviewer summary>`; and any
+`continue_story` note from the PO.
+
+The pass ends at the first step whose report matches a row of the
+`HANDOVERS` table. The PO then gets every matching reason in one prompt:
+
+| Trigger | When |
+|---|---|
+| `refused` | the step was refused |
+| `error` | the step raised an error other than a limit (traceback in `crash.log`) |
+| `stopped` | the handoff is `blocked` or `failed` |
+| `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
+| `questions` | the handoff has `open_questions` |
+| `quarantine` | the step's out-of-scope changes were quarantined |
+| `round_cap` | the story reached the round cap |
+| `unroutable` | a bounce names a `next_role` that owns no pipeline step |
+
+The runner also hands over `human_message` (the inbox has answers the PO has
+not seen; they are listed by id with the question), `sprint_end` (every story
+in the sprint is done) and `stalled` (nothing can move; the reason for each
+story is listed). Gate bounces, `changes_requested` to a pipeline role, a
+gated role's malformed handoff and `returned` do **not** hand over. The
+runner passes their reasons on in the next standard brief.
+
+- A story named in a hand-over is **held** (`hold` in `status`): the router
+  skips it until the PO calls `continue_story(story, note)` or runs a step on
+  it with `run_role`.
+- PO tools added: `continue_story(story, note)` releases a held story and
+  adds `note` to its next brief. `set_developer(story, role)` picks the
+  developer for that story; it refuses an unknown role or one that is not a
+  developer.
+- When nothing can move but a question is open, the runner waits for an
+  answer (polling every 5 s, no timeout). `stop` ends the wait.
+- The run ends when a stop is requested, the run halts, the PO sets
+  `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
+  and the next pass finds only "sprint complete" or "nothing can move" without
+  running a step.
+- `start --resume` with no `--task` runs a router pass first. The PO gets a
+  turn only when that pass hands over; its prompt then starts with the resume
+  note.
+- Each hand-over is logged as a `handover` event:
+  `{"triggers": [...], "stories": [...], "steps": n}`.
+- `state.json` additions: per story `developer`, `po_developer`, `hold`,
+  `note`, `previous` (the last gated step: role, status, summary, verdict,
+  reason, next_role); run-level `scribe_due` and `delivered` (answer ids the
+  PO has seen). Older files load with these empty. On the first run after
+  the upgrade, every answer already in the inbox counts as seen.
 
 ## Backlog and sprints
 
@@ -361,8 +436,9 @@ committed to, or `null` when it is in the backlog.
 - A story is in at most one sprint. To carry it over or add it mid-sprint,
   list it in the next `start_sprint`, which queues the Manager again.
 - `state.json` from before backlogs existed loads every story into the
-  backlog. Step, rounds, status and commit are kept. On resume, the PO starts
-  a sprint with the stories to continue.
+  backlog. Step, rounds, status and commit are kept. On resume, the runner
+  tells the PO that nothing can move, and the PO starts a sprint with the
+  stories to continue.
 
 ## Enforcement
 
