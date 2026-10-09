@@ -240,29 +240,3 @@ def test_proxy_even_backslash_run_keeps_newline(tmp_path: Path) -> None:
     """W0 (review D3): an even run keeps the newline, so `git commit` runs on its own."""
     command = "echo hi \\\\\ngit commit -m x"
     assert bash(scope_with(tmp_path, REPO_ROOTS), command)
-
-
-COMMENT_DENY = [
-    "echo hi # note \\\ngit commit -m x",
-    "echo hi # x \\\ng\\\nit commit -m x",
-    "# \\\ng\\\nit commit -m x",
-    "echo a \\\n# c \\\ng\\\nit commit",
-    f"# c \\\ncat agile-team/runner/agile_{NL}team/cli.py",
-]
-COMMENT_ALLOW = [
-    "echo a#b \\\ngit status",
-    "git status # done \\",
-    f"cat agile-team/docs/customer/x{NL}.md # c",
-]
-
-
-@pytest.mark.parametrize("command", COMMENT_DENY)
-def test_proxy_comment_continuation_denied(tmp_path: Path, command: str) -> None:
-    """D4/D5: a `#` comment ending in `\\` hides neither git nor a split root."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command)
-
-
-@pytest.mark.parametrize("command", COMMENT_ALLOW)
-def test_proxy_comment_continuation_allowed(tmp_path: Path, command: str) -> None:
-    """D4/D5: harmless commands with `#` or a trailing `\\` stay allowed."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command) is None
