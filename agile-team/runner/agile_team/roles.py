@@ -138,6 +138,8 @@ class Handoff:
     open_questions: list[str] = field(default_factory=list)
     next_role: str | None = None
     ruling: str | None = None
+    friction: str = ""
+    followups: dict[str, str] = field(default_factory=dict)
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -377,7 +379,13 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
     (lambda d: isinstance(d.get("changed_files", []), list), "changed_files must be a list"),
     (lambda d: isinstance(d.get("open_questions", []), list), "open_questions must be a list"),
     (lambda d: d.get("ruling") in (None, *RULINGS), f"ruling must be one of {RULINGS}"),
+    (lambda d: isinstance(d.get("friction", ""), str), "friction must be a string"),
+    (lambda d: _str_map(d.get("followups", {})), "followups must map role names to questions"),
 )
+
+
+def _str_map(value: Any) -> bool:
+    return isinstance(value, dict) and all(isinstance(v, str) for v in value.values())
 
 
 def _handoff_from(data: Any) -> Handoff:
@@ -393,4 +401,6 @@ def _handoff_from(data: Any) -> Handoff:
         open_questions=[str(q) for q in data.get("open_questions", [])],
         next_role=data.get("next_role"),
         ruling=data.get("ruling"),
+        friction=data.get("friction", ""),
+        followups=dict(data.get("followups", {})),
     )

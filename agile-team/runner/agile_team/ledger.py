@@ -55,6 +55,7 @@ class Entry:
     story: str | None = None
     at: float = 0.0
     tokens: Tokens = field(default_factory=Tokens)
+    turns: int = 0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Entry:
@@ -69,11 +70,13 @@ class Totals:
     cost_usd: float = 0.0
     tokens: Tokens = field(default_factory=Tokens)
     steps: int = 0
+    turns: int = 0
 
     def add(self, entry: Entry) -> None:
         self.cost_usd += entry.cost_usd
         self.tokens += entry.tokens
         self.steps += 1
+        self.turns += entry.turns
 
 
 @dataclass

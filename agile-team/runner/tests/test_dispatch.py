@@ -356,3 +356,24 @@ def test_backlog_story_still_allows_manager_and_scribe(make_runtime) -> None:
     for role in ("manager", "scribe"):
         out = run(rt, role, story="s1")
         assert "backlog" not in out.get("reason", "")
+
+
+def test_manager_followups_reach_the_role_and_friction_is_logged(make_runtime) -> None:
+    q = FakeQuery(handoff("done", followups={"architect": "Why so many greps?"}))
+    rt = make_runtime(q)
+    rt.state.manager_due.append("checkpoint")
+    run(rt, "manager")
+    assert rt.state.followups == {"architect": ["Why so many greps?"]}
+    q.text = handoff("done", friction="No index of the docs; I grep each time.")
+    run(rt, "architect")
+    assert "## Questions from the Manager" in q.calls[1]["prompt"]
+    assert "Why so many greps?" in q.calls[1]["prompt"]
+    assert rt.state.followups == {}
+    end = [e for e in rt.events.events() if e.kind == "step-end"][-1]
+    assert end.data["friction"] == "No index of the docs; I grep each time."
+    rt.state.manager_due.append("checkpoint")
+    q.text = handoff("done")
+    run(rt, "manager")
+    context = q.calls[2]["prompt"]
+    assert "spend_by_role" in context and "No index of the docs" in context
+    assert rt.ledger.entries()[0].turns == 1
