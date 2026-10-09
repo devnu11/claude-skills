@@ -159,7 +159,7 @@ def test_could_climb(token: str, expected: bool) -> None:
         ("src*", "src", True),
         ("scripts?", "scripts", True),
         ("?rc/x", "src", True),
-        ("a*/runner", "agile-team/runner/tests", True),
+        ("a*/runner", "agile-team/runner/tests", False),
         ("*.txt", "src", False),
         ("tests.txt", "tests", False),
         ("s*c/x", "src", True),

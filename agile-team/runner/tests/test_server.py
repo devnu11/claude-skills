@@ -125,13 +125,14 @@ def test_stream_pushes_on_change_and_keeps_alive(
     assert resp.getheader("Cache-Control") == "no-store"
     first, _ = read_sse(resp, 1)
     assert first[0] == SNAP
+    while not resp.readline().startswith(b": keepalive"):
+        pass
     box["snap"] = {**SNAP, "generated_at": 2.0}
     box["file"].write_text("changed content")
     stat = box["file"].stat()
     os.utime(box["file"], ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
-    later, keepalives = read_sse(resp, 1)
+    later, _ = read_sse(resp, 1)
     assert later[0]["generated_at"] == 2.0
-    assert keepalives >= 1
     c.close()
 
 
