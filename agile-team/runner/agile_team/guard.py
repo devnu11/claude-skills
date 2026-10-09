@@ -38,6 +38,7 @@ SAFE_GIT = frozenset(
 NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
+LINE_CONTINUATION = "\\\n"
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
 UNQUOTE = str.maketrans("", "", "'\"\\")
 
@@ -144,7 +145,11 @@ def _check_pattern(scope: Scope, call: ToolCall) -> str | None:
 
 
 def check_bash(scope: Scope, command: str) -> str | None:
-    """Deny key mentions, write-side git, commands off the allowlist and forbidden paths."""
+    """Deny key mentions, write-side git, commands off the allowlist and forbidden paths.
+
+    Checks run after joining ``\\``-newline line continuations as the shell does.
+    """
+    command = command.replace(LINE_CONTINUATION, "")
     segments = [_tokens(s) for s in _SEGMENT_SPLIT.split(command)]
     checks = (
         lambda: _check_secret_mention(scope, command),
