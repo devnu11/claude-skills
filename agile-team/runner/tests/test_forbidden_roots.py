@@ -234,3 +234,9 @@ def test_nested_line_continuation_allowed(tmp_path: Path, command: str) -> None:
 def test_flat_line_continuation_denied(tmp_path: Path) -> None:
     assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat s{NL}rc/x")
     assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat tests.t{NL}xt") is None
+
+
+def test_proxy_even_backslash_run_keeps_newline(tmp_path: Path) -> None:
+    """W0 (review D3): an even run keeps the newline, so `git commit` runs on its own."""
+    command = "echo hi \\\\\ngit commit -m x"
+    assert bash(scope_with(tmp_path, REPO_ROOTS), command)

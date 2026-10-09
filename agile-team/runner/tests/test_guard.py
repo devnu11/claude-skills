@@ -181,3 +181,18 @@ def test_line_continuation_through_check_tool_use(tmp_path: Path) -> None:
     assert use(s, "Bash", {"command": "g\\\nit commit -m x"})
     assert use(s, "Bash", {"command": "echo ANTHROPIC_API_\\\nKEY"})
     assert use(s, "Bash", {"command": "git st\\\natus"}) is None
+
+
+@pytest.mark.parametrize(
+    ("command", "allowed"),
+    [
+        ("echo hi \\\\\ngit commit -m x", False),  # run of 2: even, newline kept
+        ("echo hi \\\\\\\\\ngit commit -m x", False),  # run of 4: even, newline kept
+        ("echo hi \\\\\\\ngit commit -m x", True),  # run of 3: odd, joined into one echo
+    ],
+)
+def test_even_backslash_run_is_not_a_continuation(
+    tmp_path: Path, command: str, allowed: bool
+) -> None:
+    """W0 (review D3): only a newline after an odd run of backslashes is joined."""
+    assert (use(dev_scope(tmp_path), "Bash", {"command": command}) is None) is allowed
