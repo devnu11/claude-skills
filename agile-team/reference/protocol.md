@@ -286,7 +286,11 @@ adds `"developer": "<role>"` (a string or `null`) to name the developer
 specialisation a story needs; the runner uses it for the implement step (see
 "Routing"). `friction` is
 optional: what slowed the step down or would make it cheaper. It is logged on
-the step-end event for the Manager. The Manager adds `"ruling"` (`rescope`,
+the step-end event for the Manager. A developer at `implement` may add
+`"dispute": {"test": "<test id, file path first>", "rule": "<design rule
+id>", "reason": "…"}` with status `changes_requested` when a test contradicts
+the design (see "Test disputes"). A dispute without `test` and `rule`, or
+with another status, is a malformed handoff. The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
 {"<role>": "<question>"}`. The runner appends each follow-up to that role's
 next brief under "Questions from the Manager" and clears it once the role
@@ -299,6 +303,20 @@ The Manager's runner context carries `budget` (spend, tokens), `spend_by_role`
 (steps, cost, cost per step, tokens and turns per step, most expensive first),
 `friction_since_last_review` (friction from step-ends since its last step) and
 `pending_followups`, beside the review reasons, overrides and capped stories.
+It also carries `test_disputes_since_last_review` (story, role, test, rule,
+rounds for each test dispute since its last step).
+
+### Rulings
+
+A ruling applies to the story that the Manager's step runs on, at any step
+and in any status (active, at the round cap, blocked). It moves the story
+(`rescope` → first step, `revise_design` → `design`, `escalate` → blocked)
+and resets its rounds and test disputes. The Manager's report carries
+`"ruling": {"ruling", "applied": true, "now_at"}`. When the ruling cannot
+apply, the report says why and the story does not change:
+`{"ruling", "applied": false, "why"}`. That happens when the step has no
+story (`a ruling needs a story; run the manager on that story`) or the story
+is done (`story sN is done; a ruling cannot move it`).
 Each ledger entry records the step's API `turns` alongside its tokens.
 
 ### The PO stays in its lane
@@ -315,13 +333,42 @@ implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 is enabled: a `done` handoff passes only with a complete presentation) →
 acceptance (customer-proxy).
 
-A failed gate or `changes_requested` moves the story back and adds a round. At
+A failed gate or `changes_requested` moves the story back and adds a round
+(a test dispute is the exception: see "Test disputes"). At
 `round_cap` the runner refuses every role but the Manager on that story.
 `blocked` and `failed` do not count a round. When `e2e` is enabled,
 `run_role(customer-proxy)` on a story with no complete presentation does not
 start the Proxy. The runner moves the story back to `e2e` **without** a round
 (gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The
 runner then runs the integration-tester itself.
+
+### Test disputes
+
+Developers cannot edit tests. When a test contradicts the design, the
+developer hands off `changes_requested` with a `dispute` (see "Handoff
+block"):
+
+1. The runner moves the story from `implement` to `tests` without running
+   the implement gate. It logs a `test-dispute` event (the gate fields plus
+   `test`, `rule` and `disputes`) instead of a `gate` event. The first
+   `round_cap` disputes on a story count no round, and each later one counts
+   a round. A Manager ruling resets the count.
+2. Every step on the story gets `Test dispute (raised|confirmed): <test>
+   contradicts <rule>: <reason>` in its prompt until the story is back at
+   `implement`.
+3. At `tests`, the unit-tester either fixes the test and hands off `done`,
+   or confirms it with `changes_requested` and `next_role: architect`. A
+   `done` passes only when the test file (the test id up to `::`) changed
+   since the dispute (`git diff`); otherwise it bounces and counts a round.
+   Confirming moves the story to `design`, counts a round and marks the
+   dispute `confirmed`. The red-tests gate does not run while a dispute is
+   open.
+4. The architect rules on a confirmed dispute (it keeps the rule or changes
+   the design) and hands off `done`. Back at `tests`, a `done` then passes
+   whether or not the test changed, and the story goes on to `implement`.
+
+A dispute is free only when the unit-tester upholds it. If the tester
+confirms the test, the developer's round is spent all the same.
 
 ## Presentation
 
@@ -386,6 +433,7 @@ The pass ends at the first step whose report matches a row of the
 | `quarantine` | the step's out-of-scope changes were quarantined |
 | `round_cap` | the story reached the round cap |
 | `unroutable` | a bounce names a `next_role` that owns no pipeline step |
+| `ruling_not_applied` | the Manager ruled but the ruling could not apply (see "Rulings") |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen; they are listed by id with the question), `sprint_end` (every story
@@ -414,7 +462,9 @@ runner passes their reasons on in the next standard brief.
   `{"triggers": [...], "stories": [...], "steps": n}`.
 - `state.json` additions: per story `developer`, `po_developer`, `hold`,
   `note`, `previous` (the last gated step: role, status, summary, verdict,
-  reason, next_role); run-level `scribe_due` and `delivered` (answer ids the
+  reason, next_role), `dispute` (the open test dispute: test, rule, reason,
+  base commit, stage `raised` or `confirmed`) and `disputes` (disputes since
+  the last ruling); run-level `scribe_due` and `delivered` (answer ids the
   PO has seen). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
 

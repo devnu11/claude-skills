@@ -20,6 +20,7 @@ one line here. Older designs are the sections at the end of this file.
 | s5 Dashboard live UI | [below](#s5-dashboard-live-ui-tabs-over-the-s4-snapshot) |
 | s13 The team presents the product to the Customer Proxy | [below](#s13-the-team-presents-the-product-to-the-customer-proxy) |
 | s19 Routing in code: the runner drives, the PO judges | [design/s19.md](design/s19.md) |
+| s11 Test disputes from implement back to tests; rulings at any step | [design/s11.md](design/s11.md) |
 
 ## Components
 
