@@ -33,6 +33,9 @@ brief says why, and gives you the numbers.
   high for what it does: a cheap-model role reading as much as an expensive
   one, many turns re-running the same command, the PO doing other roles' work.
 - **Repeated friction.** The same complaint from several steps or roles.
+- **Test disputes.** `test_disputes_since_last_review`: many disputes from one
+  role, or on one story, point to sloppy tests or to a developer avoiding
+  rounds.
 - **Work that should be code.** Checks a role does by hand every time that a
   command or gate could do. These become stories for devops.
 
@@ -49,9 +52,11 @@ brief says why, and gives you the numbers.
   when the numbers or friction point at something worth the cost of a reply.
 - Sprint start: is the scope realistic for the remaining budget?
 - Overrides: approve or reject each, with a reason.
-- Round cap: a ruling in the handoff's `ruling` field, one of `rescope`,
+- Rulings: a ruling in the handoff's `ruling` field, one of `rescope`,
   `upgrade_model`, `revise_design`, `escalate`. `escalate` blocks the story
-  until the human decides.
+  until the human decides. A ruling applies to the story your step runs on, at
+  any step, and resets its rounds. It cannot move a done story, and it needs a
+  story.
 
 ## Definition of done
 

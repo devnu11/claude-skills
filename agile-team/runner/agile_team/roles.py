@@ -128,6 +128,15 @@ class ResolvedRole:
     description: str = ""
 
 
+@dataclass(frozen=True)
+class Dispute:
+    """A developer's claim that ``test`` contradicts design rule ``rule``."""
+
+    test: str
+    rule: str
+    reason: str = ""
+
+
 @dataclass
 class Handoff:
     """The fixed summary every role ends with; the runner parses it for gates."""
@@ -141,6 +150,7 @@ class Handoff:
     friction: str = ""
     followups: dict[str, str] = field(default_factory=dict)
     developer: str | None = None
+    dispute: Dispute | None = None
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -386,7 +396,31 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
         lambda d: d.get("developer") is None or isinstance(d.get("developer"), str),
         "developer must be a role name",
     ),
+    (
+        lambda d: _dispute_form(d.get("dispute")),
+        "dispute needs a test id and a design rule",
+    ),
+    (
+        lambda d: d.get("dispute") is None or d.get("status") == "changes_requested",
+        "dispute needs status changes_requested",
+    ),
 )
+
+
+def _dispute_form(value: Any) -> bool:
+    if value is None:
+        return True
+    named = isinstance(value, dict) and all(_text(value.get(k)) for k in ("test", "rule"))
+    return named and isinstance(value.get("reason", ""), str)
+
+
+def _text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
+def _dispute_from(data: dict[str, Any], summary: str) -> Dispute | None:
+    d = data.get("dispute")
+    return Dispute(d["test"], d["rule"], d.get("reason") or summary) if d else None
 
 
 def _str_map(value: Any) -> bool:
@@ -409,4 +443,15 @@ def _handoff_from(data: Any) -> Handoff:
         friction=data.get("friction", ""),
         followups=dict(data.get("followups", {})),
         developer=data.get("developer") or None,
+        dispute=_dispute_from(data, str(data.get("summary", ""))),
     )
+
+
+def handoff_report(handoff: Handoff) -> dict[str, Any]:
+    return {
+        "status": handoff.status,
+        "summary": handoff.summary,
+        "open_questions": handoff.open_questions,
+        "next_role": handoff.next_role,
+        "friction": handoff.friction,
+    }

@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .gates import PreviousStep, StoryState, StoryStatus
+from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 STATE_FILE = "state.json"
@@ -99,13 +99,17 @@ class RunState:
         return cls(**data)
 
 
+NESTED = {"previous": PreviousStep, "dispute": OpenDispute}
+
+
 def _story(data: dict[str, Any]) -> StoryState:
     status = StoryStatus(data.get("status", StoryStatus.ACTIVE))
-    return StoryState(**{**data, "status": status, "previous": _previous(data.get("previous"))})
+    nested = {k: _nested(cls, data.get(k)) for k, cls in NESTED.items()}
+    return StoryState(**{**data, "status": status, **nested})
 
 
-def _previous(data: dict[str, Any] | None) -> PreviousStep | None:
-    return PreviousStep(**data) if data else None
+def _nested(cls: type, data: dict[str, Any] | None) -> Any:
+    return cls(**data) if data else None
 
 
 def load(run_dir: Path) -> RunState:

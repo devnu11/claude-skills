@@ -53,6 +53,9 @@ another role's work.
      say so in `continue_story(story, note)`, or ignore it.
    - **round cap**: `run_role` the `manager` on that story for a ruling, then
      act on it (`upgrade_model` -> `set_role_model`; `escalate` -> `ask_user`).
+     A ruling works at any step, so you may `run_role` the manager on a stuck
+     story before the cap.
+   - **ruling not applied**: run the manager on the story it meant, or drop it.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
    - **refused**: do what the reason says.

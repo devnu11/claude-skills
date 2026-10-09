@@ -742,6 +742,10 @@ const TIMELINE = {
     tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
   }),
+  "test-dispute": (e) => ({
+    from: e.role, to: "unit-tester", what: "test dispute: implement → tests", tone: "warning",
+    body: e.data.reason, meta: `dispute ${e.data.disputes}, round ${e.data.rounds}`,
+  }),
   message: (e, ctx) => {
     const m = ctx.messages[e.data.message];
     return { from: PO, to: "you", what: `${m.kind} ${m.id}`, tone: m.kind === "question" ? "warning" : "", body: m.text };

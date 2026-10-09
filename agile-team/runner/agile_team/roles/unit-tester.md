@@ -27,6 +27,15 @@ Specify the story's behaviour as unit tests before any implementation exists.
 
 Propose pragmas for existing untestable code instead of writing new tests.
 
+## A test dispute
+
+When the brief has `Test dispute (raised)`, compare the test with the design
+rule. If the test is wrong, fix it (and any other test with the same mistake)
+and hand off `done`; the runner checks that the test file changed. If the test
+is right, hand off `changes_requested` with `next_role: architect` and say why.
+When it says `(confirmed)`, the architect has ruled: follow the design, fix the
+test if the architect says so, and hand off `done`.
+
 ## Forbidden
 
 Editing production code.

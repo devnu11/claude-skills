@@ -30,6 +30,7 @@ class EventKind(StrEnum):
     OVERRIDE = "override"
     REQUIREMENT_CHANGED = "requirement-changed"
     HANDOVER = "handover"
+    TEST_DISPUTE = "test-dispute"
 
 
 @dataclass

@@ -35,6 +35,7 @@ class Trigger(StrEnum):
     HUMAN_MESSAGE = "human_message"
     SPRINT_END = "sprint_end"
     STALLED = "stalled"
+    RULING_NOT_APPLIED = "ruling_not_applied"
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,11 @@ HANDOVERS: tuple[Rule, ...] = (
         "{story}: {role} sent it back for {next_role}, which owns no pipeline step; "
         "brief {next_role} yourself, then continue_story",
     ),
+    Rule(
+        Trigger.RULING_NOT_APPLIED,
+        lambda r: (r.get("ruling") or {}).get("applied") is False,
+        "{story}: the manager's {ruling} ruling was not applied: {ruling_why}",
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -131,6 +137,9 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     """The text fields a line can use; ``""`` when the report lacks one."""
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
+    ruling = report.get("ruling") or {}
+    fields["ruling"] = str(ruling.get("ruling") or "")
+    fields["ruling_why"] = str(ruling.get("why") or "")
     return {**fields, "story": story_id or "run"}
 
 

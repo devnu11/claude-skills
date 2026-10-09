@@ -30,5 +30,19 @@ the story back to you if not.
 
 ## Forbidden
 
-Editing tests (they belong to the testers; ask through `open_questions` if a
-test is wrong). Adding dependencies without saying why in your summary.
+Editing tests (they belong to the testers; if a test contradicts the design,
+hand off a test dispute). Adding dependencies without saying why in your
+summary.
+
+## A test that contradicts the design
+
+If a test expects something the design rules out, do not work around it.
+Hand off `changes_requested` with a `dispute`, and the runner sends the
+story back to the unit-tester:
+`"dispute": {"test": "<test id as the runner prints it, file path first>",
+"rule": "<design rule id>", "reason": "<what the rule says and what the
+test expects>"}`.
+A dispute the unit-tester upholds costs no round. One it confirms costs a
+round, and only the first round_cap disputes on a story are free. Use it
+only when the test and the design disagree, not when your code fails a
+correct test.
