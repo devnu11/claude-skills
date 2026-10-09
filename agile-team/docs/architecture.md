@@ -333,7 +333,7 @@ it are listed under Known limits.
 
 | # | Step | Rule |
 |---|---|---|
-| W0 | Join lines | Before any Bash check, for **every role**, join line continuations the way bash and zsh do (review D2). A `\`-newline is a continuation only when the run of `\` before the newline has odd length: delete that last `\` and the newline, and keep the even part, which is escaped `\\` pairs (review D3; a plain replace turned `echo hi \\⏎git commit` into one command). shlex keeps it as a newline inside the word, so without W0 `agile_\⏎team` and `.\⏎.` get past W1, W2 and W6. W0 runs at the top of `guard.check_bash`, so the key-name, git and allowlist checks see the joined text too. It also deletes the pair inside single quotes, where the shell keeps it; that can only join a literal and over-deny. |
+| W0 | Join lines | Before any Bash check, for **every role**, join line continuations the way bash and zsh do (review D2). A `\`-newline is a continuation only when the run of `\` before the newline has odd length: delete that last `\` and the newline, and keep the even part, which is escaped `\\` pairs (review D3; a plain replace turned `echo hi \\⏎git commit` into one command). shlex keeps it as a newline inside the word, so without W0 `agile_\⏎team` and `.\⏎.` get past W1, W2 and W6. It also deletes the pair inside single quotes, where the shell keeps it; that can only join a literal and over-deny. **Comments (reviews D4, D5):** a `#` comment that ends in `\` does not continue in the shell, because a `\` inside a comment escapes nothing. So when the command holds `COMMENT_MARKER` (`#`), `guard.check_bash` checks a second, comment-aware view as well. It joins continuations the same way, except on a physical line that holds `#`, where the `\` and the newline stay. Every check (key name, git, allowlist, paths) runs on each view, and the command is denied if any view is denied. The comment-aware view can only split more than the shell does: a quoted or mid-word `#` adds a newline, which can only over-deny. Without a `#`, the joined view is exactly what the shell runs, so it is the only view. |
 | W1 | Unquote | Words come from `shlex.split`, which already removes quotes and `\`. If shlex can't parse the command, the fallback `command.split()` words have every `'`, `"` and `\` deleted. (Example: `cat "agile-team/runner/agile_team/cli.py" # it's` makes shlex fail.) |
 | W2 | Climb | Deny when a `/`-segment of the raw word is `..` (as today). Also deny when a segment **other than the last** holds `{` or `(`, or starts with `.` and holds `*`, `?` or `[`. Such a segment could expand to `..` or to text that contains `/`. |
 | W3 | Repo path | `_names_repo`, unchanged. |
@@ -403,6 +403,7 @@ denied on purpose; that is safe.
 | N | `cat agile-team/docs/customer/x\⏎.md` | allow | W0, W6 |
 | F | `cat s\⏎rc/x` | deny | W0, W6 (review D2) |
 | N | `echo hi \\⏎git commit -m x` | deny | W0 keeps the newline (even run), `_check_git` (review D3) |
+| N | `# x \⏎ca\⏎t agile-team/runner/agile_team/cli.py` | deny | W0 comment-aware view, W6 (review D5) |
 
 (`\|` in the table is only Markdown escaping. The word under test is
 `agile-team/runner/(agile_team|x)/cli.py`; shlex keeps it as one word.
@@ -422,6 +423,14 @@ developer `Scope` (no Bash allowlist):
 | `echo hi \\⏎git commit -m x` | deny | `_check_git`: run of 2 is even, so the newline stays and `git commit` is its own command (review D3) |
 | `echo hi \\\\⏎git commit -m x` | deny | `_check_git`: run of 4 is even, not joined (review D3) |
 | `echo hi \\\⏎git commit -m x` | allow | Run of 3 is odd, so it is joined to `echo hi \\git commit -m x`: one `echo` command, `git` is not a command (review D3) |
+| `echo hi # note \⏎git commit -m x` | deny | `_check_git` on the comment-aware view: the comment line keeps its newline (review D4) |
+| `echo hi # x \⏎g\⏎it commit -m x`, `# \⏎g\⏎it commit -m x`, `# a \⏎echo b # c \⏎g\⏎it commit -m x` | deny | `_check_git` on the comment-aware view: the comment lines stay apart, and `g\⏎it` is joined (review D5) |
+| `# c \⏎echo '#'; \⏎g\⏎it commit -m x` | deny | `_check_git`: a real comment plus a quoted `#` (review D5) |
+| `echo hi # x \␍⏎g\⏎it commit -m x` | deny | `_check_git`: CRLF on the comment line (review D5) |
+| `echo '#' \⏎git commit -m x` | deny (over-deny) | `_check_git` on the comment-aware view. The shell only echoes, because a quoted `#` is not a comment |
+| `# x \⏎g\⏎it status`, `echo a#b \⏎git status`, `git status # done \` | allow | Every view passes: `status` is read-only, and a trailing comment `\` has no next line |
+
+(`␍` is a carriage return: `"\\\r\n"` in Python.)
 
 ### Changes by module
 
@@ -458,13 +467,25 @@ developer `Scope` (no Bash allowlist):
 
 #### `guard.py`
 
-- `check_bash(scope, command)`: W0. Add the module constant
-  `LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")` and make the
-  first statement `command = LINE_CONTINUATION.sub(r"\1", command)`, before
-  `_SEGMENT_SPLIT` and every check. Do not put it in `_tokens`: the secret
-  check reads the raw `command`, and the segment split runs before
-  `_tokens`. Extend the docstring: "…after joining `\`-newline line
-  continuations as the shell does." Nothing else in W1-W6 changes.
+- `check_bash(scope, command)`: W0. It returns the first denial from
+  `_check_view(scope, view)` over `_views(command)`. `_check_view` holds the
+  former body: `_SEGMENT_SPLIT`, then the secret, git, allowlist and token
+  checks. Do not put the join in `_tokens`, because the secret check reads the
+  whole view and the segment split runs before `_tokens`. Module constants:
+  `LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")` and
+  `COMMENT_MARKER = "#"`.
+- `_views(command) -> tuple[str, ...]`: the W0-joined view
+  (`LINE_CONTINUATION.sub(r"\1", command)`). When `COMMENT_MARKER` is in the
+  command, it adds `_join_outside_comments(command)`. Duplicates are dropped
+  and order is kept (`dict.fromkeys`).
+- `_join_outside_comments(command)`: `LINE_CONTINUATION.sub` with
+  `_join_unless_comment` as the replacement. This reuses the single odd-run
+  rule rather than copying it.
+- `_join_unless_comment(match, command)`: the physical line runs from the
+  previous `\n` to the end of the match. If that line holds
+  `COMMENT_MARKER`, return `match.group(0)` (keep the continuation).
+  Otherwise return `group(1)` (the even-run prefix).
+- Nothing else in W1-W6 changes.
 - `_tokens(command)`: W1. In the `ValueError` fallback, delete quote
   characters from each word:
   `[w.translate(UNQUOTE) for w in command.split()]`, with the module constant
@@ -515,7 +536,7 @@ assertions must stay as they are and pass. That includes
      to `*`, a mismatch, casefold).
    Also test that the W1 fallback deletes quotes, through `check_tool_use`
    with `cat "agile-team/runner/agile_team/cli.py" # it's`.
-   W0: the four D2 rows and the D3 row of the example table go in the same
+   W0: the four D2 rows, the D3 row and the D5 row of the example table go in the same
    two tests (N rows in `test_nested_bash_tokens`, the F row in
    `test_flat_layout_parity`), one parametrized case per command. The
    all-roles table under it goes in the general guard tests with a

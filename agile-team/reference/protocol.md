@@ -323,8 +323,12 @@ committed to, or `null` when it is in the backlog.
 - Before any Bash check, for every role, the hook joins line continuations
   as bash and zsh do: a newline after an odd run of `\` is deleted along with
   the last `\`. After an even run (escaped `\\` pairs) the newline stays and
-  ends the command. So the key-name, git, allowlist and path checks all see
-  the command the shell will run.
+  ends the command. A `#` comment that ends in `\` does not continue in the
+  shell, so a command that holds `#` is also checked in a second view. In
+  that view, continuations are joined except on a line that holds `#`. The
+  key-name, git, allowlist and path checks run on every view, and a denial in
+  any view denies the command. A quoted `#` can over-deny, but no view
+  under-denies.
 - Forbidden roots: for each positive glob in `[toolchain.globs]` `source`,
   `tests` and `e2e`, the leading path segments before the first segment that
   holds `*`, `?`, `[` or `{` (`agile-team/runner/agile_team/**` →
