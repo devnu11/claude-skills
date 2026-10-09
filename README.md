@@ -25,7 +25,7 @@ The rules for developing skills here are in
 
 | Skill | What it does |
 |---|---|
-| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Manager, Scribe) while the interactive session acts as liaison. Stories move from a backlog through sprints and a gated pipeline. It runs on your Claude login or the repo's API key, and roles can use local models. `agile-team dashboard` serves a live view of the run. Details: [`reference/protocol.md`](agile-team/reference/protocol.md). |
+| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Manager, Scribe) while the interactive session acts as liaison. Stories move from a backlog through sprints and a gated pipeline, ending with the Integration Tester presenting each story to the Customer Proxy in a ready-made workspace. It runs on your Claude login or the repo's API key, and roles can use local models. `agile-team dashboard` serves a live view of the run. Details: [`reference/protocol.md`](agile-team/reference/protocol.md). |
 | [`unattended`](unattended/SKILL.md) | Runs a long or expensive prompt or command as a background job that waits out Claude usage limits and resumes itself, within a deadline, a resume count and a cost cap. It runs on your login or an API key, and it can wrap `agile-team start`. Details: [`reference/protocol.md`](unattended/reference/protocol.md). |
 | [`example-skill`](example-skill/SKILL.md) | Template showing the file format. |
 

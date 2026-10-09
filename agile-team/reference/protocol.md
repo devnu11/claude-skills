@@ -21,6 +21,9 @@ Run from the target repo root, or pass `--repo PATH`.
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
 
+`init` (without `--detect`) in a directory that is not a git work tree prints
+`agile-team init: not a git repository: <repo>; run git init first` and exits 1.
+
 Preflight refuses to start when: the tree is dirty; with `auth = "api-key"`,
 no key file exists, the repo key file is not gitignored, or a key file is not
 mode 600; with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
@@ -46,8 +49,9 @@ Other run files: `state.json` (resume state; `task` holds the last
 non-resume `start --task`, `""` in older files), `ledger.jsonl` (per-step cost),
 `runner.pid`, `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
-`customer/<delivery>/` (Customer Proxy sandboxes), `api-key` (default key
-location).
+`customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
+(what the Integration Tester presents to the Customer Proxy: see
+"Presentation"), `api-key` (default key location).
 
 ## Run status and stops
 
@@ -302,11 +306,39 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 design (architect) → tests (unit-tester; gate: test command **fails**) →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 `.team/baseline.json` coverage when old debt keeps the total lower) → quality
-→ review → design-review → e2e → acceptance (customer-proxy).
+→ review → design-review → e2e (integration-tester; gate when `acceptance`
+is enabled: a `done` handoff passes only with a complete presentation) →
+acceptance (customer-proxy).
 
 A failed gate or `changes_requested` moves the story back and adds a round. At
 `round_cap` the runner refuses every role but the Manager on that story.
-`blocked` and `failed` do not count a round.
+`blocked` and `failed` do not count a round. When `e2e` is enabled,
+`run_role(customer-proxy)` on a story with no complete presentation does not
+start the Proxy. The runner moves the story back to `e2e` **without** a round
+(gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The PO then runs
+the integration-tester.
+
+## Presentation
+
+The Integration Tester presents each story to the Customer Proxy; the Proxy
+never builds or repairs an environment (a broken one is `changes_requested`
+to `integration-tester`).
+
+- Before each integration-tester step the runner wipes
+  `.team/run/presentation/<story>/` and, for every delivery kind but
+  `manual`, creates `workspace/` in it as an empty git repo (`git init`).
+- The tester builds the workspace the way a customer would have it (for this
+  runner: `agile-team init` already run, plus the run files the ACs need),
+  writes `PRESENTATION.md` (what to try for each AC), and adds real
+  live-run output such as `agile-team status` as `live-status.json` when an
+  AC needs a live run.
+- Complete = `PRESENTATION.md` is not blank and, except for `manual`,
+  `workspace/` holds something besides `.git`. Otherwise the e2e gate
+  bounces with `story sN has no presentation: <path> is missing or empty`.
+- For the Proxy step the runner copies the dir to `<sandbox>/presentation/`
+  (symlinks kept as links) **before** the delivery's `prepare` runs, so a
+  `web` prepare can serve `{sandbox}/presentation/workspace`. The Proxy's
+  prompt quotes `PRESENTATION.md` and gives the copy's path.
 
 The Manager must also run after `start_sprint`, after any `set_role_model`,
 and when spend crosses each `manager_every_pct` checkpoint.
@@ -335,9 +367,11 @@ committed to, or `null` when it is in the backlog.
 ## Enforcement
 
 - PreToolUse hook: Write/Edit/NotebookEdit outside the role's write globs are
-  denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox,
-  `.team/stories/` and `<docs>/customer/`; its Bash may not name a forbidden
-  root, `..`, or repo paths outside the sandbox.
+  denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox
+  (which holds the presentation copy), `.team/stories/`, `.team/acceptance/`
+  (so it can read and rewrite its own report) and `<docs>/customer/`; its
+  Bash may not name a forbidden root, `..`, or repo paths outside the
+  sandbox. The Integration Tester may also write `.team/run/presentation/**`.
 - Before any Bash check, for every role, the hook joins line continuations
   as bash and zsh do: a newline after an odd run of `\` is deleted along with
   the last `\`. After an even run (escaped `\\` pairs) the newline stays and
@@ -402,7 +436,7 @@ committed to, or `null` when it is in the backlog.
   `chore(team): product-owner step` before the next role runs. Nothing is
   autosquashed.
 - Proxy OS sandbox: Claude Code `sandbox.filesystem.denyRead` on the repo with
-  `allowRead` for the sandbox, stories and customer docs, plus
+  `allowRead` for the sandbox, stories, `.team/acceptance` and customer docs, plus
   `permissions.deny` rules `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`
   for each forbidden root, so the rules never cover `<docs>/customer/` unless a
   source or test glob does. Needs bubblewrap (Linux) or Seatbelt (macOS); not
@@ -414,7 +448,10 @@ committed to, or `null` when it is in the backlog.
 |---|---|---|
 | `package` | build and install into `{sandbox}` | Bash, Read/Grep/Glob, Write; cwd = sandbox |
 | `script` | copy scripts and samples into `{sandbox}` | same as package |
-| `web` | start the server in the background; stopped after the step | Playwright MCP, Bash limited to `curl`, Write |
+| `web` | start the server in the background (it can serve `{sandbox}/presentation/workspace`); stopped after the step | Playwright MCP, Bash limited to `curl`, Read, Write |
 | `library` | build the package; Proxy works in `{sandbox}/consumer` | Bash, Read/Grep/Glob, Write/Edit |
-| `harness` | anything DevOps defines | Bash limited to `commands`, Write |
-| `manual` | nothing | Write; its acceptance script goes to the human as a question |
+| `harness` | anything DevOps defines | Bash limited to `commands`, Read, Write |
+| `manual` | nothing | Read, Write; its acceptance script goes to the human as a question |
+
+When the story has a presentation, every kind gets its copy in
+`{sandbox}/presentation/` before `prepare` runs. Every kind except `manual` has a `workspace/` in it.
