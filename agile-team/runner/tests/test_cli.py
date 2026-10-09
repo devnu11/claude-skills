@@ -223,3 +223,103 @@ def test_init_writes_auth(repo: Path) -> None:
     args = ["--repo", str(repo), "init", "--preset", "python", "--delivery", "package"]
     assert run(*args, "--auth", "login") == 0
     assert cfg.load(repo).team.auth == "login"
+
+
+# ----- dashboard (s4) ---------------------------------------------------------
+
+
+def dashboard_args(repo: Path, *extra: str):
+    return cli.build_parser().parse_args(["--repo", str(repo), "dashboard", *extra])
+
+
+def test_dashboard_parser_defaults() -> None:
+    args = cli.build_parser().parse_args(["dashboard"])
+    assert (args.host, args.port, args.browser) == (None, 8765, cli.Browser.OPEN)
+    args = cli.build_parser().parse_args(["dashboard", "--no-open", "--port", "0", "--host", "h"])
+    assert (args.host, args.port, args.browser) == ("h", 0, cli.Browser.SKIP)
+
+
+def test_dashboard_is_the_last_command() -> None:
+    assert cli.COMMANDS[-1].name == "dashboard"
+
+
+def test_dashboard_port_zero_prints_real_url_and_opens(configured: Path, capsys) -> None:
+    urls: list[str] = []
+    bound: list[int] = []
+
+    def serve(httpd) -> None:
+        bound.append(httpd.server_address[1])
+        httpd.server_close()
+
+    io = cli.DashboardIO(browse=urls.append, serve=serve)
+    args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0")
+    assert cli.cmd_dashboard(args, io) == 0
+    out = capsys.readouterr().out
+    assert bound[0] != 0
+    assert out == f"dashboard: http://127.0.0.1:{bound[0]}/\n"
+    assert urls == [f"http://127.0.0.1:{bound[0]}/"]
+
+
+def test_dashboard_no_open_skips_browser(configured: Path, capsys, monkeypatch) -> None:
+    import webbrowser
+
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url))
+    served: list[object] = []
+    io = cli.DashboardIO(browse=opened.append, serve=lambda s: (served.append(s), s.server_close()))
+    args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0", "--no-open")
+    assert cli.cmd_dashboard(args, io) == 0
+    assert opened == [] and len(served) == 1
+    assert capsys.readouterr().out.startswith("dashboard: http://127.0.0.1:")
+
+
+def test_dashboard_default_io_is_real_webbrowser_and_serve() -> None:
+    import webbrowser
+
+    from agile_team.dashboard import server
+
+    io = cli.DashboardIO()
+    assert io.browse is webbrowser.open and io.serve is server.serve
+    assert io == cli.DEFAULT_IO
+
+
+def test_dashboard_default_host_on_windows(configured: Path, monkeypatch) -> None:
+    monkeypatch.setattr("sys.platform", "win32")
+    seen: list[tuple] = []
+    io = cli.DashboardIO(
+        browse=lambda u: None, serve=lambda s: (seen.append(s.server_address), s.server_close())
+    )
+    assert cli.cmd_dashboard(dashboard_args(configured, "--port", "0", "--no-open"), io) == 0
+    assert seen[0][0] == "127.0.0.1"
+
+
+def test_dashboard_port_in_use(configured: Path, capsys) -> None:
+    import socket
+
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        port = busy.getsockname()[1]
+        code = run(
+            "--repo", str(configured), "dashboard", "--host", "127.0.0.1",
+            "--port", str(port), "--no-open",
+        )  # fmt: skip
+    assert code == 1
+    err = capsys.readouterr().err
+    assert err.startswith(f"agile-team dashboard: cannot listen on 127.0.0.1:{port}:")
+
+
+def test_dashboard_needs_config(tmp_path: Path, capsys) -> None:
+    assert run("--repo", str(tmp_path), "dashboard", "--no-open") == 1
+    assert "not found" in capsys.readouterr().err
+
+
+def test_start_stores_task_but_resume_keeps_it(configured: Path, key_home: Path, monkeypatch):
+    from agile_team import state as state_mod
+
+    any_tool(monkeypatch)
+    run_dir = configured / ".team/run"
+    assert cli.cmd_start(start_args(configured, key_home, "--task", "todo app"), FakeQuery()) == 0
+    assert state_mod.load(run_dir).task == "todo app"
+    cli.cmd_start(start_args(configured, key_home, "--resume", "--task", "nudge"), FakeQuery())
+    assert state_mod.load(run_dir).task == "todo app"
