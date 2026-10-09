@@ -72,6 +72,13 @@ tests or designs yourself.
   are in the backlog; start a sprint with the ones to continue.
 - "The sprint's stories" means those whose `sprint` equals the current sprint.
 
+## Returned stories
+
+- `run_role(customer-proxy)` can return `status: returned`: the story had no
+  presentation and is back at `e2e` with no round counted. Run the
+  integration-tester on it, and say in the brief whether only the presentation
+  is missing.
+
 ## Cadence
 
 - `sprint`: when the sprint's stories are done or blocked, `notify_user` with

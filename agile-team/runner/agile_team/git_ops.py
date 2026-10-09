@@ -37,6 +37,10 @@ class Git:
             ["git", *args], cwd=self.repo, capture_output=True, text=True, check=False
         )
 
+    def is_repo(self) -> bool:
+        """True when ``repo`` is a directory inside a git work tree."""
+        return self.repo.is_dir() and self._exec("rev-parse", "--git-dir").returncode == 0
+
     def changed_paths(self) -> list[str]:
         """Paths with staged, unstaged or untracked changes (renames give both ends)."""
         out = self.run("status", "--porcelain=v1", "-z", "--untracked-files=all")

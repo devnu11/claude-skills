@@ -27,6 +27,7 @@ from .paths import literal_root, under_root
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 STORIES_GLOB = ".team/stories/**"
+ACCEPTANCE_DIR = ".team/acceptance"
 PLAYWRIGHT = {"type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest", "--headless"]}
 
 
@@ -80,7 +81,7 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
         "Run them as the customer docs describe; do not read their source.",
     ),
     "web": DeliveryKind(
-        tools=("Bash", "Write"),
+        tools=("Bash", "Read", "Write"),
         guidance="The product is a running web app at {url}. Use the browser tools as a "
         "customer would; `curl` is available for API checks.",
         start=Start.BACKGROUND,
@@ -94,12 +95,12 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
         workdir=Workdir.CONSUMER,
     ),
     "harness": DeliveryKind(
-        tools=("Bash", "Write"),
+        tools=("Bash", "Read", "Write"),
         guidance="DevOps prepared a harness. Only these commands are available: {commands}.",
         shell=Shell.LISTED,
     ),
     "manual": DeliveryKind(
-        tools=("Write",),
+        tools=("Read", "Write"),
         guidance="The team cannot reach this product. Write a numbered, step-by-step "
         "acceptance script a human can follow, with the expected result of each step.",
     ),
@@ -118,6 +119,7 @@ class Prepared:
     workdir: Path
     env: dict[str, str] = field(default_factory=dict)
     process: subprocess.Popen[bytes] | None = None
+    presentation: Path | None = None
 
     def stop(self) -> None:
         """Stop the background process and everything it spawned (its process group)."""
@@ -193,6 +195,14 @@ def sandbox_root(config: Config, delivery: Delivery) -> Path:
     return config.run_dir / CUSTOMER_DIR / delivery.name
 
 
+@dataclass(frozen=True)
+class Order:
+    """What to prepare: the delivery and, if any, the presentation to copy in."""
+
+    delivery: Delivery
+    presentation: Path | None = None
+
+
 @dataclass
 class Preparer:
     """Builds sandboxes; the runner and popen are injectable for tests."""
@@ -200,11 +210,12 @@ class Preparer:
     runner: Runner = run_shell
     popen: Popen = subprocess.Popen
 
-    def prepare(self, config: Config, delivery: Delivery) -> Prepared:
-        """Create a clean sandbox and run the delivery's prepare step."""
-        prepared = layout(config, delivery)
-        if delivery.prepare:
-            self._launch(prepared, prepared.expand(delivery.prepare))
+    def prepare(self, config: Config, order: Order) -> Prepared:
+        """Create a clean sandbox, copy the presentation in, then run the prepare step."""
+        prepared = layout(config, order.delivery)
+        _copy_presentation(prepared, order.presentation)
+        if order.delivery.prepare:
+            self._launch(prepared, prepared.expand(order.delivery.prepare))
         return prepared
 
     def _launch(self, prepared: Prepared, command: str) -> None:
@@ -214,6 +225,14 @@ class Preparer:
             )
         elif self.runner(command, prepared) != 0:
             raise SandboxError(f"prepare for delivery {prepared.delivery.name!r} failed: {command}")
+
+
+def _copy_presentation(prepared: Prepared, source: Path | None) -> None:
+    if source is None:
+        return
+    from . import presentation  # deferred: presentation imports this module
+
+    prepared.presentation = presentation.copy_into(source, prepared.root)
 
 
 def layout(config: Config, delivery: Delivery) -> Prepared:
@@ -229,9 +248,10 @@ def _rel(config: Config, path: Path) -> str:
 
 
 def proxy_read_globs(config: Config, prepared: Prepared) -> list[str]:
-    """The Proxy reads only its sandbox, the stories and the customer docs."""
+    """The Proxy reads only its sandbox, the stories, its reports and the customer docs."""
     docs = config.team.docs_dir.rstrip("/")
-    return [f"{_rel(config, prepared.root)}/**", STORIES_GLOB, f"{docs}/customer/**"]
+    sandbox_glob = f"{_rel(config, prepared.root)}/**"
+    return [sandbox_glob, STORIES_GLOB, f"{ACCEPTANCE_DIR}/**", f"{docs}/customer/**"]
 
 
 def forbidden_roots(config: Config) -> list[str]:
@@ -290,4 +310,5 @@ def _sandbox_section(config: Config, prepared: Prepared) -> dict[str, Any]:
 def _allowed_reads(config: Config, prepared: Prepared) -> list[str]:
     repo = config.repo.resolve()
     customer_docs = repo / config.team.docs_dir / "customer"
-    return [str(prepared.root.resolve()), str(repo / ".team/stories"), str(customer_docs)]
+    stories, acceptance = repo / ".team/stories", repo / ACCEPTANCE_DIR
+    return [str(prepared.root.resolve()), str(stories), str(acceptance), str(customer_docs)]

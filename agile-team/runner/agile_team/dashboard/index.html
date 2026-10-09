@@ -293,7 +293,7 @@ const RING_ORDER = [
 ];
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
-  pass: "good", bounce: "serious", hold: "warning",
+  pass: "good", bounce: "serious", hold: "warning", return: "warning",
   running: "accent", idle: "", "sprint-end": "good", active: "",
   needs_manager: "serious",
 };
@@ -738,7 +738,7 @@ const TIMELINE = {
     body: e.data.summary, meta: stepEndMeta(e.data),
   }),
   gate: (e) => ({
-    from: "gate", to: null, what: `${e.data.step} → ${e.data.verdict === "bounce" ? "back to " : ""}${e.data.now_at}`,
+    from: "gate", to: null, what: `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
     tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
   }),
