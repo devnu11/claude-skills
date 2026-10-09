@@ -288,14 +288,38 @@ committed to, or `null` when it is in the backlog.
   root, `..`, or repo paths outside the sandbox.
 - Forbidden roots: for each positive glob in `[toolchain.globs]` `source`,
   `tests` and `e2e`, the leading path segments before the first segment that
-  holds `*`, `?` or `[` (`agile-team/runner/agile_team/**` →
+  holds `*`, `?`, `[` or `{` (`agile-team/runner/agile_team/**` →
   `agile-team/runner/agile_team`; `src/main.py` → `src/main.py`). `!` globs and
   globs that start with a wildcard give none. A root nested in another root is
-  dropped. A Bash token names a root when, after stripping leading `.` and `/`
-  and normalizing (`a//b`, `a/./b` → `a/b`), it equals the root or starts with
-  `root/`. So `agile-team status` and `cat agile-team/docs/customer/x.md` pass,
-  and `cat agile-team/runner/agile_team/cli.py` is denied. With no roots at
-  all, the hook forbids `src`.
+  dropped. With no roots at all, the hook forbids `src`.
+- Proxy Bash words: the hook denies a word when the shell (bash or zsh) could
+  expand it to a forbidden root or a path under it, read from the repo root.
+  Over-denying is accepted. Literal and wildcard words go through the same
+  steps:
+  1. Words are unquoted by `shlex`. If shlex can't parse the command, the
+     whitespace-split words have `'`, `"` and `\` deleted.
+  2. Denied: a `..` segment anywhere. Also denied, in any segment except the
+     last: a `{` or `(`, or a leading `.` together with `*`, `?` or `[`. Such a
+     segment could climb (`..`) or span a `/`.
+  3. The word is normalized: leading `.` and `/` are stripped, `a//b` and
+     `a/./b` become `a/b`, a trailing `/` is dropped. It is then compared
+     without regard to case.
+  4. A word made only of `*` and `?` (`ls *`) passes.
+  5. The word's segments are paired with each root's segments, from the left.
+     The word is denied if the root runs out first, or if a `**` segment is
+     reached. It passes if the word runs out first (an ancestor) or if a pair
+     doesn't match. A segment with `[`, `{` or `(` matches any one segment.
+     Any other segment is matched with `fnmatch`, where `?` counts as `*`.
+
+  So `agile-team status`, `cat agile-team/docs/*.md` and `echo {1..3}` pass.
+  `cat agile-team/runner/agile_*/cli.py`, `cat */runner/agile_team/cli.py` and
+  `cat {,}agile-team/runner/agile_team/cli.py` are denied. With flat roots
+  (`src`), so are `cat src*` and `cat {,}src`, while `ls *` passes. Not
+  covered: `$VAR`, `$(…)`, `~`, a change of cwd (`cd`), and words glued to
+  `--opt=` or `<`.
+- The Proxy's Bash cwd is its sandbox, so a relative path such as
+  `cat agile-team/docs/customer/x.md` passes the hook but does not reach the
+  docs. The Proxy reads customer docs with the Read tool.
 - Every role: no writes under `.git/`; no Read/Grep/Glob/Write of the key
   files or `~/secrets/` (hook plus Claude Code `permissions.deny` rules); Bash
   may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
