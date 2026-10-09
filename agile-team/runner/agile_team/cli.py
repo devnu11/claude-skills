@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import json
 import os
 import signal
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config as config_mod
-from . import gates, halt, keys, onboard, sandbox
+from . import gates, halt, keys, onboard, presentation, sandbox
 from . import state as state_mod
 from .dashboard import server
 from .dashboard.server import DashboardServer
@@ -171,6 +172,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 
 def _require_init_inputs(repo: Path, args: argparse.Namespace) -> None:
+    if not Git(repo).is_repo():
+        raise CliError(f"not a git repository: {repo}; run git init first")
     if not Git(repo).is_clean():
         raise CliError("working tree is dirty; commit or stash first")
     if not args.preset or not args.delivery_kind:
@@ -280,7 +283,8 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     """The configured steps and round cap, with command gates run in the repo."""
     baseline = gates.load_baseline(config.repo).get("coverage")
     commands, threshold = config.toolchain.commands, config.gates.coverage
-    checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline)
+    missing = functools.partial(presentation.missing, config)
+    checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline, missing)
     return gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
 
 

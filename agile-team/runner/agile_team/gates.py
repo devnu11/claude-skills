@@ -46,11 +46,16 @@ class StoryStatus(StrEnum):
 
 
 class Verdict(StrEnum):
-    """A gate's result. ``HOLD`` stays put without counting a round (a block)."""
+    """A gate's result.
+
+    ``HOLD`` stays put without counting a round (a block). ``RETURN`` moves back
+    without counting a round (the team, not the product, missed a step).
+    """
 
     PASS = "pass"
     BOUNCE = "bounce"
     HOLD = "hold"
+    RETURN = "return"
 
 
 @dataclass
@@ -128,6 +133,10 @@ def load_baseline(repo: Path) -> dict[str, float]:
     return json.loads(path.read_text()) if path.is_file() else {}
 
 
+def _always_presented(_story: StoryState) -> str | None:
+    return None
+
+
 @dataclass
 class Checks:
     """Command-backed gates for one repo."""
@@ -136,6 +145,14 @@ class Checks:
     threshold: float
     run: CommandRunner
     baseline_coverage: float | None = None
+    presentation: Callable[[StoryState], str | None] = _always_presented
+
+    def presented(self, story: StoryState) -> Outcome:
+        """Pass when the story's presentation is complete, else bounce with why not."""
+        reason = self.presentation(story)
+        if reason is None:
+            return Outcome(Verdict.PASS, "presentation ready")
+        return Outcome(Verdict.BOUNCE, reason)
 
     def required_coverage(self) -> float:
         """Threshold, or the recorded baseline when old debt keeps the total below it."""
@@ -178,12 +195,12 @@ class Pipeline:
         """The first enabled step ``role`` owns."""
         return next((s for s in self.steps if role and role_fits_step(role, s)), None)
 
-    def evaluate(self, step: str, handoff: Handoff) -> Outcome:
-        """Gate result for the step a role just finished."""
+    def evaluate(self, story: StoryState, handoff: Handoff) -> Outcome:
+        """Gate result for the step a role just finished on ``story``."""
         if handoff.status in STOPPED_HANDOFFS:
             return Outcome(Verdict.HOLD, f"role reported {handoff.status}: {handoff.summary}")
-        gate = self._command_gate(step)
-        return _retry_here(gate(), step) if gate else self._handoff_outcome(handoff)
+        gate = self._command_gate(story.step) or self._done_gate(story, handoff)
+        return _retry_here(gate(), story.step) if gate else self._handoff_outcome(handoff)
 
     def _handoff_outcome(self, handoff: Handoff) -> Outcome:
         """Pass on ``done``; otherwise bounce to the step of the role it names."""
@@ -196,12 +213,32 @@ class Pipeline:
         gates = {"tests": self.checks.tests_red, "implement": self.checks.tests_green_and_covered}
         return gates.get(step)
 
+    def _done_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+        """The e2e presentation check, which applies only to a ``done`` handoff."""
+        applies = story.step == "e2e" and handoff.status == "done" and "acceptance" in self.steps
+        return (lambda: self.checks.presented(story)) if applies else None
+
+    def unpresented(self, story: StoryState) -> Outcome | None:
+        """A return to e2e when the Proxy would start without a presentation."""
+        if "e2e" not in self.steps:
+            return None
+        reason = self.checks.presentation(story)
+        if reason is None:
+            return None
+        return Outcome(Verdict.RETURN, f"{reason}; run the integration-tester on it", "e2e")
+
     def advance(self, story: StoryState, outcome: Outcome) -> None:
         """Move ``story`` forward on a pass, back (counting a round) on a bounce."""
-        if outcome.verdict is Verdict.PASS:
-            self._forward(story)
-        elif outcome.verdict is Verdict.BOUNCE:
-            self._bounce(story, outcome.bounce_to)
+        moves = {
+            Verdict.PASS: lambda: self._forward(story),
+            Verdict.BOUNCE: lambda: self._bounce(story, outcome.bounce_to),
+            Verdict.RETURN: lambda: self._return(story, outcome.bounce_to),
+        }
+        if outcome.verdict in moves:
+            moves[outcome.verdict]()
+
+    def _return(self, story: StoryState, target: str | None) -> None:
+        story.step = target or story.step
 
     def _forward(self, story: StoryState) -> None:
         i = self.steps.index(story.step)

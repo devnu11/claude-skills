@@ -26,9 +26,9 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import guard, halt, keys, sandbox
+from . import guard, halt, keys, presentation, sandbox
 from . import state as state_mod
-from .config import CONFIG_NAME, Config
+from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
     Outcome,
@@ -57,6 +57,7 @@ from .roles import (
 from .state import RunState
 
 PROXY = "customer-proxy"
+INTEGRATION_TESTER = "integration-tester"
 PO = "product-owner"
 MANAGER = "manager"
 DEVOPS_SECTIONS = ("toolchain", "delivery")
@@ -69,7 +70,7 @@ SHELL_OPTS: dict[str, Any] = {
 }
 
 QueryFn = Callable[..., AsyncIterator[Any]]
-PrepareFn = Callable[[Config, Any], sandbox.Prepared]
+PrepareFn = Callable[[Config, sandbox.Order], sandbox.Prepared]
 
 
 @dataclass
@@ -312,24 +313,33 @@ class Runtime:
         role = self.resolve(request.role)
         story = self.state.stories.get(request.story_id or "")
         plan = Plan(role, self.scope_for(role), story, request.brief)
-        if role.name == PROXY:
-            self._attach_delivery(plan)
+        setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
+        if role.name in setups:
+            setups[role.name](plan)
         return self.finish(plan)
+
+    def _lay_out_presentation(self, plan: Plan) -> None:
+        presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
 
     def _attach_delivery(self, plan: Plan) -> None:
         delivery = self.config.delivery(plan.story.delivery if plan.story else None)
         if delivery is None:
             raise sandbox.SandboxError("no [[delivery]] is configured for the customer proxy")
-        plan.prepared = self.prepare_fn(self.config, delivery)
+        plan.prepared = self.prepare_fn(self.config, self._order(delivery, plan.story))
         role_writes, plan.scope = plan.scope.write, sandbox.proxy_scope(self.config, plan.prepared)
         plan.scope.write += role_writes
         self._fit_role_to_delivery(plan)
+
+    def _order(self, delivery: Delivery, story: StoryState | None) -> sandbox.Order:
+        source = presentation.source_dir(self.config, story.id) if story else None
+        return sandbox.Order(delivery, source if source and source.is_dir() else None)
 
     def _fit_role_to_delivery(self, plan: Plan) -> None:
         prepared = plan.prepared
         allowed = [t for t in plan.role.tools if t in prepared.kind.tools]
         plan.role.tools = allowed or list(prepared.kind.tools)
         plan.prompt += f"\n\n## How the customer reaches the product\n\n{prepared.guidance()}"
+        plan.prompt += f"\n\n{presentation.prompt_section(prepared.presentation)}".rstrip()
         plan.launch = self._sandbox_launch(prepared)
 
     def _sandbox_launch(self, prepared: sandbox.Prepared) -> Launch:
@@ -385,12 +395,26 @@ class Runtime:
         if reason:
             return refused(reason)
         self.settle_po()
+        returned = self._unpresented(request)
+        if returned:
+            return returned
         try:
             plan = self.plan(request)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
         self.emit(EventKind.STEP_START, plan, brief=request.brief)
         return await self._run_planned(plan)
+
+    def _unpresented(self, request: StepRequest) -> dict[str, Any] | None:
+        """Return a Proxy request on an unpresented story to e2e, billing nothing."""
+        story = self.state.stories.get(request.story_id or "")
+        outcome = self.pipeline.unpresented(story) if story and request.role == PROXY else None
+        if outcome is None:
+            return None
+        plan = Plan(self.resolve(request.role), self.scope_for(self.resolve(request.role)), story)
+        report = self._advance_and_log(plan, outcome)
+        self.save()
+        return {"status": "returned", "role": PROXY, "reason": outcome.reason, "gate": report}
 
     async def _run_planned(self, plan: Plan) -> dict[str, Any]:
         try:
@@ -529,9 +553,11 @@ class Runtime:
 
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Evaluate the story's current step gate and advance the story."""
+        return self._advance_and_log(plan, self.pipeline.evaluate(plan.story, handoff))
+
+    def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
-        outcome = self.pipeline.evaluate(step, handoff)
         self.pipeline.advance(story, outcome)
         result = {
             "step": step,
