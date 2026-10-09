@@ -323,3 +323,58 @@ def test_start_stores_task_but_resume_keeps_it(configured: Path, key_home: Path,
     assert state_mod.load(run_dir).task == "todo app"
     cli.cmd_start(start_args(configured, key_home, "--resume", "--task", "nudge"), FakeQuery())
     assert state_mod.load(run_dir).task == "todo app"
+
+
+# ----- s13: init outside git (E11) and the presentation check ----------------
+
+
+@pytest.fixture
+def plain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A directory outside any git work tree (git may not climb above it)."""
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.resolve()))
+    path = tmp_path / "plain"
+    path.mkdir()
+    return path
+
+
+INIT = ["init", "--preset", "python", "--delivery", "package"]
+
+
+def test_init_outside_git_prints_the_message_and_exits_1(plain: Path, capsys) -> None:
+    assert run("--repo", str(plain), *INIT) == 1
+    captured = capsys.readouterr()
+    expected = f"agile-team init: not a git repository: {plain}; run git init first\n"
+    assert captured.err == expected
+    assert "Traceback" not in captured.err and captured.out == ""
+    assert list(plain.iterdir()) == []
+
+
+def test_init_on_a_missing_path_prints_the_same_message(plain: Path, capsys) -> None:
+    missing = plain / "nope"
+    assert run("--repo", str(missing), *INIT) == 1
+    expected = f"agile-team init: not a git repository: {missing}; run git init first\n"
+    assert capsys.readouterr().err == expected
+
+
+def test_init_checks_git_before_the_answers(plain: Path, capsys) -> None:
+    assert run("--repo", str(plain), "init") == 1
+    err = capsys.readouterr().err
+    assert "not a git repository" in err and "--preset" not in err
+
+
+def test_init_detect_still_works_outside_git(plain: Path, capsys) -> None:
+    assert run("--repo", str(plain), "init", "--detect") == 0
+    assert "preset" in json.loads(capsys.readouterr().out)
+
+
+def test_pipeline_checks_the_story_presentation(configured: Path) -> None:
+    from agile_team.gates import StoryState
+
+    from .conftest import present
+
+    config = cfg.load(configured)
+    pipeline = cli.make_pipeline(config)
+    story = StoryState("s4", "T", "e2e", sprint=1)
+    assert "no presentation" in pipeline.checks.presentation(story)
+    present(config, "s4")
+    assert pipeline.checks.presentation(story) is None

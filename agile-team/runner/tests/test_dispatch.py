@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from agile_team import dispatch, gates, sandbox
+from agile_team import dispatch, gates, guard, sandbox
 from agile_team.config import Delivery
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus, Verdict
@@ -14,7 +14,7 @@ from agile_team.providers import Provider, Providers
 from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from .conftest import FakeQuery, FakeRunner, git, handoff
+from .conftest import GUIDE_TEXT, FakeQuery, FakeRunner, git, handoff, present
 
 
 def run(rt, role, brief="go", story=None):
@@ -184,6 +184,7 @@ def test_customer_proxy_runs_in_sandbox(make_runtime, configured: Path) -> None:
     q = FakeQuery()
     rt = make_runtime(q)
     open_story(rt, "acceptance")
+    present(rt.config)
     report = run(rt, "customer-proxy", story="s1")
     opts = q.calls[0]["options"]
     assert opts.cwd.endswith(".team/run/customer/cli")
@@ -215,6 +216,7 @@ def test_local_provider_reaches_the_customer_sandbox(make_runtime) -> None:
     q = FakeQuery()
     rt = local_runtime(make_runtime, q, "customer-proxy")
     open_story(rt, "acceptance")
+    present(rt.config)
     run(rt, "customer-proxy", story="s1")
     env = q.calls[0]["options"].env
     assert (env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_API_KEY"]) == ("http://localhost:11434", "")
@@ -225,6 +227,7 @@ def test_customer_proxy_without_delivery(make_runtime) -> None:
     rt = make_runtime()
     rt.config.deliveries = []
     open_story(rt, "acceptance")
+    present(rt.config, workspace=False)
     assert "no [[delivery]]" in run(rt, "customer-proxy", story="s1")["reason"]
 
 
@@ -233,6 +236,7 @@ def test_manual_acceptance_script_reaches_outbox(make_runtime) -> None:
     rt = make_runtime(FakeQuery(script))
     rt.config.deliveries = [Delivery("hw", "manual")]
     open_story(rt, "acceptance")
+    present(rt.config, workspace=False)
     report = run(rt, "customer-proxy", story="s1")
     [question] = rt.relay.open_questions()
     assert question.id == report["question_id"]
@@ -244,9 +248,13 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
     q = FakeQuery()
     stopped = []
 
-    def fake_prepare(config, delivery):
+    def fake_prepare(config, order):
         p = sandbox.Prepared(
-            delivery, sandbox.DELIVERY_KINDS["web"], config.repo, config.run_dir, config.run_dir
+            order.delivery,
+            sandbox.DELIVERY_KINDS["web"],
+            config.repo,
+            config.run_dir,
+            config.run_dir,
         )
         p.stop = lambda: stopped.append(True)  # type: ignore[method-assign]
         return p
@@ -254,6 +262,7 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
     rt = make_runtime(q, prepare_fn=fake_prepare)
     rt.config.deliveries = [Delivery("ui", "web", url="http://localhost:3000")]
     open_story(rt, "acceptance")
+    present(rt.config)
     run(rt, "customer-proxy", story="s1")
     opts = q.calls[0]["options"]
     assert "playwright" in opts.mcp_servers and "mcp__playwright" in opts.allowed_tools
@@ -377,3 +386,191 @@ def test_manager_followups_reach_the_role_and_friction_is_logged(make_runtime) -
     context = q.calls[2]["prompt"]
     assert "spend_by_role" in context and "No index of the docs" in context
     assert rt.ledger.entries()[0].turns == 1
+
+
+# ----- s13: presentation (E2, E4, E6, E7, E8, E9) ----------------------------
+
+
+def gate_events(rt):
+    return [e for e in rt.events.events() if e.kind == "gate"]
+
+
+def test_unpresented_story_returns_to_e2e_without_a_round(make_runtime) -> None:
+    q, prepared = FakeQuery(), []
+    rt = make_runtime(q, prepare_fn=lambda *a: prepared.append(a))
+    s = open_story(rt, "acceptance", rounds=1)
+    report = run(rt, "customer-proxy", story="s1")
+    assert (report["status"], report["role"]) == ("returned", "customer-proxy")
+    assert "no presentation" in report["reason"]
+    assert report["gate"]["verdict"] == "return" and report["gate"]["now_at"] == "e2e"
+    assert (s.step, s.rounds, s.status) == ("e2e", 1, StoryStatus.ACTIVE)
+    assert q.calls == [] and prepared == [] and rt.ledger.total() == 0
+
+
+def test_return_is_logged_and_saved(make_runtime, configured: Path) -> None:
+    rt = make_runtime()
+    open_story(rt, "acceptance")
+    run(rt, "customer-proxy", story="s1")
+    [event] = gate_events(rt)
+    assert (event.role, event.story) == ("customer-proxy", "s1")
+    assert event.data["verdict"] == "return" and event.data["now_at"] == "e2e"
+    from agile_team import state as state_mod
+
+    assert state_mod.load(rt.config.run_dir).stories["s1"].step == "e2e"
+
+
+def test_unpresented_return_comes_after_the_refusals(make_runtime) -> None:
+    rt = make_runtime()
+    open_story(rt, "acceptance", sprint=None)
+    assert run(rt, "customer-proxy", story="s1")["status"] == "refused"
+    open_story(rt, "acceptance", status=StoryStatus.DONE)
+    assert run(rt, "customer-proxy", story="s1")["status"] == "refused"
+    open_story(rt, "e2e")
+    assert run(rt, "customer-proxy", story="s1")["status"] == "refused"
+
+
+def test_returned_story_is_presented_then_reaches_acceptance(make_runtime) -> None:
+    def tester_builds() -> None:
+        present(rt.config)
+
+    rt = make_runtime(FakeQuery(action=tester_builds))
+    s = open_story(rt, "acceptance")
+    assert run(rt, "customer-proxy", story="s1")["status"] == "returned"
+    report = run(rt, "integration-tester", story="s1")
+    assert report["gate"]["verdict"] == "pass" and s.step == "acceptance" and s.rounds == 0
+
+
+def test_no_e2e_step_runs_the_proxy_as_today(make_runtime) -> None:
+    q = FakeQuery()
+    rt = make_runtime(q)
+    rt.pipeline.steps = [x for x in rt.pipeline.steps if x != "e2e"]
+    open_story(rt, "acceptance")
+    report = run(rt, "customer-proxy", story="s1")
+    assert report["status"] == "done" and len(q.calls) == 1
+    assert "What the team presents" not in q.calls[0]["prompt"]
+
+
+def test_proxy_gets_the_copy_and_the_guide_in_its_prompt(make_runtime) -> None:
+    q = FakeQuery()
+    rt = make_runtime(q)
+    open_story(rt, "acceptance")
+    present(rt.config)
+    run(rt, "customer-proxy", story="s1")
+    box = rt.config.run_dir / "customer/cli"
+    assert (box / "presentation/workspace/todo.txt").read_text() == "milk\n"
+    prompt = q.calls[0]["prompt"]
+    assert "## What the team presents" in prompt and str(box / "presentation") in prompt
+    assert GUIDE_TEXT.strip() in prompt
+    assert prompt.index("How the customer reaches") < prompt.index("What the team presents")
+
+
+def test_prepare_receives_the_order_with_the_presentation_source(make_runtime) -> None:
+    orders = []
+
+    def fake_prepare(config, order):
+        orders.append(order)
+        return sandbox.Preparer().prepare(config, order)
+
+    rt = make_runtime(FakeQuery(), prepare_fn=fake_prepare)
+    open_story(rt, "acceptance")
+    source = present(rt.config)
+    run(rt, "customer-proxy", story="s1")
+    assert orders[0].presentation == source and orders[0].delivery.name == "cli"
+
+
+def test_without_a_presentation_dir_the_order_carries_none(make_runtime) -> None:
+    orders = []
+
+    def fake_prepare(config, order):
+        orders.append(order)
+        return sandbox.Preparer().prepare(config, order)
+
+    rt = make_runtime(FakeQuery(), prepare_fn=fake_prepare)
+    rt.pipeline.steps = [x for x in rt.pipeline.steps if x != "e2e"]
+    open_story(rt, "acceptance")
+    run(rt, "customer-proxy", story="s1")
+    assert orders[0].presentation is None
+    assert not (rt.config.run_dir / "customer/cli/presentation").exists()
+
+
+def test_integration_tester_gets_a_fresh_presentation_to_fill(make_runtime) -> None:
+    seen = {}
+    rt = make_runtime()
+    source = present(rt.config)
+    (source / "stale.txt").write_text("old")
+
+    def build() -> None:
+        seen["stale"] = (source / "stale.txt").exists()
+        seen["git"] = (source / "workspace/.git").exists()
+        seen["old"] = (source / "PRESENTATION.md").exists()
+        present(rt.config)
+
+    rt.query_fn = FakeQuery(action=build)
+    s = open_story(rt, "e2e")
+    report = run(rt, "integration-tester", story="s1")
+    assert seen == {"stale": False, "git": True, "old": False}
+    assert report["gate"]["verdict"] == "pass" and s.step == "acceptance"
+
+
+def test_e2e_done_without_presentation_bounces_to_e2e(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(action=lambda: None))
+    s = open_story(rt, "e2e")
+    report = run(rt, "integration-tester", story="s1")
+    assert report["gate"]["verdict"] == "bounce" and "no presentation" in report["gate"]["reason"]
+    assert (s.step, s.rounds) == ("e2e", 1)
+
+
+def test_e2e_with_only_the_empty_workspace_bounces(make_runtime) -> None:
+    def guide_only() -> None:
+        (rt.config.run_dir / "presentation/s1/PRESENTATION.md").write_text(GUIDE_TEXT)
+
+    rt = make_runtime(FakeQuery(action=guide_only))
+    s = open_story(rt, "e2e")
+    report = run(rt, "integration-tester", story="s1")
+    assert "workspace is missing or empty" in report["gate"]["reason"] and s.rounds == 1
+
+
+def test_e2e_for_an_unsafe_story_id_is_refused_before_wiping(make_runtime) -> None:
+    q = FakeQuery()
+    rt = make_runtime(q)
+    (rt.config.run_dir / "x").mkdir(parents=True)
+    (rt.config.run_dir / "x/keep.txt").write_text("keep")
+    rt.state.stories["../x"] = gates.StoryState("../x", "Bad", "e2e", sprint=1)
+    report = run(rt, "integration-tester", story="../x")
+    assert report["status"] == "refused" and "must match" in report["reason"]
+    assert (rt.config.run_dir / "x/keep.txt").exists() and q.calls == []
+
+
+def test_integration_tester_may_write_the_presentation(make_runtime) -> None:
+    rt = make_runtime()
+    scope = rt.scope_for(rt.resolve("integration-tester"))
+    ok = [
+        ".team/run/presentation/s4/PRESENTATION.md",
+        ".team/run/presentation/s4/workspace/.team/run/state.json",
+        "tests/e2e/test_x.py",
+    ]
+    for path in ok:
+        assert guard.check_tool_use(scope, guard.ToolCall("Write", {"file_path": path})) is None
+    assert guard.check_tool_use(scope, guard.ToolCall("Write", {"file_path": "src/app.py"}))
+
+
+def test_other_roles_may_not_write_the_presentation(make_runtime) -> None:
+    rt = make_runtime()
+    scope = rt.scope_for(rt.resolve("developer-cli"))
+    path = ".team/run/presentation/s4/PRESENTATION.md"
+    assert guard.check_tool_use(scope, guard.ToolCall("Write", {"file_path": path}))
+
+
+def test_web_proxy_keeps_read_to_rewrite_its_report(make_runtime) -> None:
+    q = FakeQuery()
+
+    def fake_prepare(config, order):
+        kind = sandbox.DELIVERY_KINDS["web"]
+        return sandbox.Prepared(order.delivery, kind, config.repo, config.run_dir, config.run_dir)
+
+    rt = make_runtime(q, prepare_fn=fake_prepare)
+    rt.config.deliveries = [Delivery("ui", "web", url="http://x")]
+    open_story(rt, "acceptance")
+    present(rt.config)
+    run(rt, "customer-proxy", story="s1")
+    assert "Read" in q.calls[0]["options"].tools

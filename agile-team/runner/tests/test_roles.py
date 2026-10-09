@@ -226,3 +226,24 @@ def test_scaffold_writes_missing_stubs_only(tmp_path: Path) -> None:
     reloaded = RoleBook.for_repo(tmp_path, {}, target)
     assert reloaded.resolve("developer").body == real.resolve("developer").body
     assert reloaded.addendum("architect") == "mine"
+
+
+# ----- s13: the role rules state the handover (AC1, AC2, AC4, AC5) ----------
+
+
+def test_integration_tester_builds_the_presentation(tmp_path: Path) -> None:
+    tester = RoleBook.for_repo(tmp_path, {}).resolve("integration-tester")
+    assert ".team/run/presentation/**" in tester.write and "{e2e}" in tester.write
+    assert "PRESENTATION.md" in tester.body and "live-status.json" in tester.body
+
+
+def test_customer_proxy_never_builds_its_own_environment(tmp_path: Path) -> None:
+    proxy = RoleBook.for_repo(tmp_path, {}).resolve("customer-proxy")
+    assert "changes_requested" in proxy.body and "integration-tester" in proxy.body
+    assert "never build" in proxy.body
+    assert "Read it, then rewrite it" in proxy.body
+
+
+def test_product_owner_knows_the_returned_status(tmp_path: Path) -> None:
+    po = RoleBook.for_repo(tmp_path, {}).resolve("product-owner")
+    assert "returned" in po.body
