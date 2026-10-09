@@ -4,7 +4,7 @@ artifacts = "committed"
 key_file = ".team/run/api-key"
 auth = "login"
 cadence = "until-blocker"
-budget_usd = 60.0
+budget_usd = 100.0
 manager_every_pct = 25
 
 [toolchain]
