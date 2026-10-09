@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .gates import StoryState, StoryStatus
+from .gates import PreviousStep, StoryState, StoryStatus
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 STATE_FILE = "state.json"
@@ -58,6 +58,8 @@ class RunState:
     status_reason: str | None = None
     task: str = ""
     followups: dict[str, list[str]] = field(default_factory=dict)
+    scribe_due: list[str] = field(default_factory=list)
+    delivered: list[str] | None = None
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -98,7 +100,12 @@ class RunState:
 
 
 def _story(data: dict[str, Any]) -> StoryState:
-    return StoryState(**{**data, "status": StoryStatus(data.get("status", StoryStatus.ACTIVE))})
+    status = StoryStatus(data.get("status", StoryStatus.ACTIVE))
+    return StoryState(**{**data, "status": status, "previous": _previous(data.get("previous"))})
+
+
+def _previous(data: dict[str, Any] | None) -> PreviousStep | None:
+    return PreviousStep(**data) if data else None
 
 
 def load(run_dir: Path) -> RunState:

@@ -29,6 +29,7 @@ class EventKind(StrEnum):
     SPRINT_START = "sprint-start"
     OVERRIDE = "override"
     REQUIREMENT_CHANGED = "requirement-changed"
+    HANDOVER = "handover"
 
 
 @dataclass

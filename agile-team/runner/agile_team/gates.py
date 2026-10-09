@@ -59,6 +59,18 @@ class Verdict(StrEnum):
 
 
 @dataclass
+class PreviousStep:
+    """The last gated step on a story: who ran, what they reported and how the gate ruled."""
+
+    role: str
+    status: str
+    summary: str = ""
+    verdict: str = ""
+    reason: str = ""
+    next_role: str | None = None
+
+
+@dataclass
 class StoryState:
     """One story's position in the pipeline."""
 
@@ -70,6 +82,11 @@ class StoryState:
     commit: str | None = None
     delivery: str | None = None
     sprint: int | None = None
+    developer: str | None = None
+    po_developer: str | None = None
+    hold: str | None = None
+    note: str = ""
+    previous: PreviousStep | None = None
 
 
 @dataclass
