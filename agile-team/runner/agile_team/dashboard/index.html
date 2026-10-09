@@ -511,28 +511,73 @@ function nodeLabel(view, name, s) {
   return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${fmt.tok(s?.tokens ?? 0)}${bounced}`;
 }
 
-/** The labelled edges, in order: per role brief then handoff, then the human pair. */
+const STEER = "grpSteering";
+/** Pipeline phase of each delivery role (prefix match); unlisted roles fall to Support. */
+const PHASE_ROLES = {
+  Design: ["architect"], Build: ["unit-tester", "developer"],
+  Verify: ["quality-czar", "code-reviewer", "integration-tester"],
+};
+/** Roles that sit beside the PO rather than in the delivery team. */
+const SIDE_ROLES = { "customer-proxy": "Customer", manager: "Steering" };
+const GROUP_ORDER = ["Customer", "Steering", "Design", "Build", "Verify", "Support"];
+
+/** The flow group a role belongs to. */
+function groupOf(name) {
+  if (SIDE_ROLES[name]) return SIDE_ROLES[name];
+  const hit = Object.entries(PHASE_ROLES).find(([, roles]) => roles.some((p) => name === p || name.startsWith(p + "-")));
+  return hit ? hit[0] : "Support";
+}
+
+/** Where the PO's edges attach: the Steering box, or the PO itself for the manager inside it. */
+const poEnd = (name) => (groupOf(name) === "Steering" ? "po" : STEER);
+
+/** One labelled edge; null when its count is zero. */
+const flowEdge = (from, to, n, word, color) =>
+  n > 0 ? { from, to, n, label: `${n} ${word}`, color, arrow: "-->" } : null;
+
+/**
+ * One two-way edge between a top-row node and the Steering box. Mermaid ranks nodes by edge
+ * direction and breaks opposite pairs arbitrarily, so a single `<-->` keeps the node above the PO.
+ */
+function twoWayEdge(from, sent, got) {
+  const parts = [sent, got].filter((p) => p.n > 0);
+  const n = parts.reduce((sum, p) => sum + p.n, 0);
+  const label = parts.map((p) => `${p.n} ${p.word}`).join(" · ");
+  return n ? { from, to: STEER, n, label, color: parts[0].color, arrow: "<-->" } : null;
+}
+
+/** The labelled edges: top-row nodes (you, customer proxy) first, then the delivery roles. */
 function flowEdgeList(view, stats, ids) {
   const edges = [];
-  const add = (from, to, n, word, color) => { if (n > 0) edges.push({ from, to, n, label: `${n} ${word}`, color }); };
   for (const [name, id] of ids) {
-    add("po", id, stats[name]?.briefs ?? 0, "briefs", cssVar("--ink-2"));
-    add(id, "po", stats[name]?.handoffs ?? 0, "handoffs", cssVar("--s1"));
+    const s = stats[name], briefs = s?.briefs ?? 0, handoffs = s?.handoffs ?? 0;
+    if (groupOf(name) === "Customer") {
+      edges.unshift(twoWayEdge(id, { n: handoffs, word: "handoffs", color: cssVar("--s1") }, { n: briefs, word: "briefs", color: cssVar("--s1") }));
+      continue;
+    }
+    edges.push(flowEdge(poEnd(name), id, briefs, "briefs", cssVar("--ink-2")), flowEdge(id, poEnd(name), handoffs, "handoffs", cssVar("--s1")));
   }
-  add("po", "you", view.messages.length, "messages", cssVar("--s2"));
-  add("you", "po", view.answers.length, "answers", cssVar("--s2"));
-  return edges;
+  const human = (n, word) => ({ n, word, color: cssVar("--s2") });
+  edges.unshift(twoWayEdge("you", human(view.answers.length, "answers"), human(view.messages.length, "messages")));
+  return edges.filter(Boolean);
+}
+
+/** Node declarations wrapped in one subgraph per group; empty groups are skipped. */
+function flowGroupLines(view, stats, ids) {
+  const groups = { Steering: [`po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${fmt.tok(stats[PO]?.tokens ?? 0)}"]`] };
+  for (const [n, id] of ids) (groups[groupOf(n)] ??= []).push(`${id}["${nodeLabel(view, n, stats[n])}"]`);
+  return GROUP_ORDER.filter((t) => groups[t]).flatMap((t) => [
+    `subgraph grp${t}["${t}"]`, ...(t === "Steering" ? ["direction LR"] : []), ...groups[t], "end",
+  ]);
 }
 
 /** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
 function flowSource(view) {
   const stats = flowStats(view), act = activeStep(view.events), names = ringRoles(view);
   const ids = names.map((n, i) => [n, "r" + i]);
-  const lines = ["flowchart TB", `you(["You (via liaison)"])`,
-    `po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${fmt.tok(stats[PO]?.tokens ?? 0)}"]`];
-  for (const [n, id] of ids) lines.push(`${id}["${nodeLabel(view, n, stats[n])}"]`);
+  const lines = ["flowchart TB", `you(["You (via liaison)"])`, ...flowGroupLines(view, stats, ids)];
   const edges = flowEdgeList(view, stats, ids), max = Math.max(1, ...edges.map((e) => e.n));
-  for (const e of edges) lines.push(`${e.from} -->|"${e.label}"| ${e.to}`);
+  for (const e of edges) lines.push(`${e.from} ${e.arrow}|"${e.label}"| ${e.to}`);
   edges.forEach((e, k) => lines.push(`linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`));
   lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, "classDef idle opacity:0.55");
   const active = act ? (ids.find(([n]) => n === act.role) ?? [])[1] : "po";
