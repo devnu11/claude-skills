@@ -44,9 +44,11 @@ whose supervisor died, for example after a reboot; `status` warns about those.
 
 - **Don't poll.** Use `wait` with `run_in_background`, not repeated `status`.
 - **Never print, log or echo the API key.** Only name its file.
-- **State the limits back before starting.** A run is never cut short:
-  `--max-cost` is checked after each run, so one run can overshoot it, and
-  the deadline is checked before each wait.
+- **State the limits back before starting.** A prompt run stops itself when
+  it reaches `--max-cost`. The job then ends `limit-reached` with its session
+  saved, and `resume NAME --max-cost <higher>` continues it. Commands report
+  no cost to `unattended`, so they must enforce their own budget. The deadline
+  never cuts a run short: it is checked before each wait.
 - Prompt jobs use the user's Claude Code settings. Headless, a tool those
   settings don't allow can't be approved by anyone, so allow what the job
   needs first, or pass `--permission-mode`.
