@@ -241,7 +241,7 @@ def test_manual_acceptance_script_reaches_outbox(make_runtime) -> None:
     [question] = rt.relay.open_questions()
     assert question.id == report["question_id"]
     assert "Plug in the device" in question.text and question.stories == ["s1"]
-    assert rt.query_fn.calls[0]["options"].tools == ["Write"]
+    assert rt.query_fn.calls[0]["options"].tools == ["Read", "Write"]
 
 
 def test_web_proxy_gets_browser(make_runtime) -> None:

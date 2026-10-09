@@ -26,6 +26,7 @@ def test_trigger_values_are_snake_case() -> None:
         "human_message",
         "sprint_end",
         "stalled",
+        "ruling_not_applied",
     ]
 
 
@@ -39,9 +40,16 @@ def test_table_rows_are_in_design_order() -> None:
         T.QUARANTINE,
         T.ROUND_CAP,
         T.UNROUTABLE,
+        T.RULING_NOT_APPLIED,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
+
+NOT_APPLIED = {
+    "ruling": "revise_design",
+    "applied": False,
+    "why": "story s1 is done; a ruling cannot move it",
+}
 
 ROWS = [
     (
@@ -100,6 +108,12 @@ ROWS = [
         "s1: code-reviewer sent it back for devops, which owns no pipeline step; "
         "brief devops yourself, then continue_story",
     ),
+    (
+        {"role": "manager", "ruling": NOT_APPLIED},
+        T.RULING_NOT_APPLIED,
+        "s1: the manager's revise_design ruling was not applied: "
+        "story s1 is done; a ruling cannot move it",
+    ),
 ]
 
 
@@ -131,6 +145,8 @@ def test_each_row_matches_and_formats(report, trigger, line) -> None:
         },
         {"status": "changes_requested", "role": "x", "next_role": "devops", "gate": gated("pass")},
         {"status": "done", "open_questions": [], "quarantine": None},
+        {"role": "manager", "ruling": {"ruling": "rescope", "applied": True, "now_at": "design"}},
+        {"role": "manager", "ruling": None},
         {},
     ],
 )
@@ -171,7 +187,18 @@ def test_a_report_can_match_several_rows_in_table_order() -> None:
 def test_report_fields_default_to_empty_and_name_the_run() -> None:
     fields = handover.report_fields({}, None)
     assert fields == dict.fromkeys(
-        ["role", "status", "summary", "reason", "questions", "quarantine", "next_role"], ""
+        [
+            "role",
+            "status",
+            "summary",
+            "reason",
+            "questions",
+            "quarantine",
+            "next_role",
+            "ruling",
+            "ruling_why",
+        ],
+        "",
     ) | {"story": "run"}
     full = {"role": "r", "open_questions": ["a", "b"], "quarantine": "q", "next_role": "n"}
     assert handover.report_fields(full, "s2") == fields | {
@@ -181,6 +208,13 @@ def test_report_fields_default_to_empty_and_name_the_run() -> None:
         "quarantine": "q",
         "next_role": "n",
     }
+
+
+def test_report_fields_read_the_ruling() -> None:
+    fields = handover.report_fields({"ruling": NOT_APPLIED}, "s1")
+    assert (fields["ruling"], fields["ruling_why"]) == ("revise_design", NOT_APPLIED["why"])
+    applied = {"ruling": {"ruling": "rescope", "applied": True, "now_at": "design"}}
+    assert handover.report_fields(applied, "s1")["ruling_why"] == ""
 
 
 def test_report_fields_turn_none_into_empty_strings() -> None:
