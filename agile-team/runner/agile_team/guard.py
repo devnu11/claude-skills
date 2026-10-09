@@ -17,7 +17,6 @@ Layers:
 
 from __future__ import annotations
 
-import posixpath
 import re
 import shlex
 from collections.abc import Awaitable, Callable
@@ -26,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .git_ops import Git
-from .paths import has_wildcard, matches, repo_relative, resolve_in, token_prefix, under_root
+from .paths import could_climb, matches, reaches, repo_relative, resolve_in
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
@@ -40,6 +39,7 @@ NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
+UNQUOTE = str.maketrans("", "", "'\"\\")
 
 # The SDK fixes the hook signature at (input, tool_use_id, context).
 Hook = Callable[[dict[str, Any], str | None, Any], Awaitable[dict[str, Any]]]
@@ -191,15 +191,14 @@ def _tokens(command: str) -> list[str]:
     try:
         return shlex.split(command)
     except ValueError:
-        return command.split()
+        return [w.translate(UNQUOTE) for w in command.split()]
 
 
 def _token_forbidden(scope: Scope, token: str) -> bool:
     """For a sandboxed role: climbing up, naming the repo, or naming a source root."""
     if not scope.bash_forbidden:
         return False
-    climbs = ".." in token.split("/")
-    return climbs or _names_repo(scope, token) or _names_forbidden_root(scope, token)
+    return could_climb(token) or _names_repo(scope, token) or _names_forbidden_root(scope, token)
 
 
 def _names_repo(scope: Scope, token: str) -> bool:
@@ -208,19 +207,7 @@ def _names_repo(scope: Scope, token: str) -> bool:
 
 
 def _names_forbidden_root(scope: Scope, token: str) -> bool:
-    if has_wildcard(token):
-        return any(_glob_reaches(token, root) for root in scope.bash_forbidden)
-    path = posixpath.normpath(token.lstrip("./"))
-    return any(under_root(path, root) for root in scope.bash_forbidden)
-
-
-def _glob_reaches(token: str, root: str) -> bool:
-    """True when a wildcard token's literal prefix overlaps ``root`` either way.
-
-    An empty prefix (``*.txt``) is not an overlap: it names no path.
-    """
-    prefix = re.sub(r"/+", "/", token_prefix(token).lstrip("./"))
-    return bool(prefix) and (root.startswith(prefix) or under_root(prefix, root))
+    return any(reaches(token, root) for root in scope.bash_forbidden)
 
 
 def deny(reason: str) -> dict[str, Any]:
