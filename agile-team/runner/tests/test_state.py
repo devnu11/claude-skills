@@ -80,3 +80,57 @@ def test_begin_sprint_never_moves_done_stories() -> None:
     st.begin_sprint(["s2", "s4", "s1"])
     sprints = {k: v.sprint for k, v in st.stories.items()}
     assert sprints == {"s1": 2, "s2": 1, "s3": None, "s4": None}
+
+
+# ----- s19: new story and run fields --------------------------------------------
+
+
+def test_new_fields_default_for_old_state_files() -> None:
+    from agile_team.gates import PreviousStep  # noqa: F401
+
+    legacy = {"stories": {"s1": {"id": "s1", "title": "t", "step": "design", "sprint": 1}}}
+    back = state.RunState.from_json(json.dumps(legacy))
+    s1 = back.stories["s1"]
+    assert (s1.developer, s1.po_developer, s1.hold, s1.note, s1.previous) == (
+        None,
+        None,
+        None,
+        "",
+        None,
+    )
+    assert back.scribe_due == [] and back.delivered is None
+
+
+def test_story_defaults_come_after_sprint() -> None:
+    s = StoryState(
+        "s1", "t", "design", 0, StoryStatus.ACTIVE, None, None, 1, "dev", "po", "held", "n"
+    )
+    assert (s.sprint, s.developer, s.po_developer, s.hold, s.note, s.previous) == (
+        1,
+        "dev",
+        "po",
+        "held",
+        "n",
+        None,
+    )
+
+
+def test_previous_step_round_trips_as_a_dataclass() -> None:
+    from agile_team.gates import PreviousStep
+
+    st = state.RunState(sprint=1, scribe_due=["s1"], delivered=["m1"])
+    prev = PreviousStep("code-reviewer", "changes_requested", "s", "bounce", "r", "developer-gui")
+    st.stories["s1"] = StoryState("s1", "t", "implement", sprint=1, previous=prev, hold="stopped")
+    st.stories["s2"] = StoryState("s2", "t", "design")
+    back = state.RunState.from_json(st.to_json())
+    assert back.stories["s1"].previous == prev
+    assert isinstance(back.stories["s1"].previous, PreviousStep)
+    assert back.stories["s2"].previous is None and back.stories["s1"].hold == "stopped"
+    assert back.scribe_due == ["s1"] and back.delivered == ["m1"]
+
+
+def test_previous_step_defaults() -> None:
+    from agile_team.gates import PreviousStep
+
+    p = PreviousStep("architect", "done")
+    assert (p.summary, p.verdict, p.reason, p.next_role) == ("", "", "", None)

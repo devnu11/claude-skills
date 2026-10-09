@@ -21,3 +21,8 @@ def test_emit_numbers_and_round_trips(tmp_path: Path) -> None:
     assert [e.id for e in events] == ["e1", "e2", "e3"]
     assert events[0].kind is EventKind.GATE and events[0].data == {"verdict": "pass"}
     assert events[1].at == 5.0
+
+
+def test_handover_event_kind() -> None:
+    assert EventKind.HANDOVER == "handover"
+    assert EventKind("handover") is EventKind.HANDOVER
