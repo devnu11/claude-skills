@@ -25,7 +25,9 @@ command fails.
 1. **Size the task.** If it is a few files or under an hour of work, *ask* the
    human whether you should just do it yourself instead. Do not decide alone.
 2. **Clean tree.** Run `git status --porcelain`. If anything shows, stop and
-   tell the human; the runner refuses a dirty tree.
+   tell the human; the runner refuses a dirty tree. Outside a git repo,
+   `init` stops with `not a git repository`; ask the human before you run
+   `git init`.
 3. **Onboard if needed.** No `.agile-team.toml`? Run `$AT init --detect`, show
    the detected preset, commands and delivery kind, and ask the human to
    confirm or edit. Then ask: artifact policy (`.team/` and docs committed or
@@ -65,7 +67,10 @@ command fails.
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
-   intentional; do not squash them unless the human asks.
+   intentional; do not squash them unless the human asks. Acceptance is
+   judged on what the Integration Tester presented to the Customer Proxy:
+   `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
+   Show these when the human asks how a story was accepted.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets
    `status` and `status_reason`, and prints one line saying what to do:
    - `blocked` with a limit (e.g. "session limit, resets 2:20pm
