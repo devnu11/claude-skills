@@ -45,7 +45,13 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   for the Manager.
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
   status, and questions and answers between the PO and you, next to a
-  timeline of recent events.
+  timeline of recent events. You and the customer proxy are in the top row.
+  The Steering box below them holds the Product Owner and the Manager.
+  Under Steering, the roles are grouped as Design, Build, Verify and
+  Support. While the run is live, the role that is working now pulses, and
+  each new brief, handoff, question or answer sends a dot along its arrow.
+  If your system asks for reduced motion, the role glows steadily and the
+  arrow lights up briefly instead.
   The flowchart is drawn by Mermaid, which the page loads from
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
