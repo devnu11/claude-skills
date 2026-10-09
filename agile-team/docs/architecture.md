@@ -333,7 +333,7 @@ it are listed under Known limits.
 
 | # | Step | Rule |
 |---|---|---|
-| W0 | Join lines | Before any Bash check, for **every role**, delete each `\` followed by a newline from the command, the way bash and zsh do (review D2). shlex keeps it as a newline inside the word, so without W0 `agile_\⏎team` and `.\⏎.` get past W1, W2 and W6. W0 runs at the top of `guard.check_bash`, so the key-name, git and allowlist checks see the joined text too. It also deletes the pair inside single quotes, where the shell keeps it; that can only join a literal and over-deny. |
+| W0 | Join lines | Before any Bash check, for **every role**, join line continuations the way bash and zsh do (review D2). A `\`-newline is a continuation only when the run of `\` before the newline has odd length: delete that last `\` and the newline, and keep the even part, which is escaped `\\` pairs (review D3; a plain replace turned `echo hi \\⏎git commit` into one command). shlex keeps it as a newline inside the word, so without W0 `agile_\⏎team` and `.\⏎.` get past W1, W2 and W6. W0 runs at the top of `guard.check_bash`, so the key-name, git and allowlist checks see the joined text too. It also deletes the pair inside single quotes, where the shell keeps it; that can only join a literal and over-deny. |
 | W1 | Unquote | Words come from `shlex.split`, which already removes quotes and `\`. If shlex can't parse the command, the fallback `command.split()` words have every `'`, `"` and `\` deleted. (Example: `cat "agile-team/runner/agile_team/cli.py" # it's` makes shlex fail.) |
 | W2 | Climb | Deny when a `/`-segment of the raw word is `..` (as today). Also deny when a segment **other than the last** holds `{` or `(`, or starts with `.` and holds `*`, `?` or `[`. Such a segment could expand to `..` or to text that contains `/`. |
 | W3 | Repo path | `_names_repo`, unchanged. |
@@ -402,11 +402,13 @@ denied on purpose; that is safe.
 | N | `cat .\⏎./.\⏎./.\⏎./.\⏎./agile-team/runner/agile_team/cli.py`, `ls .\⏎.` | deny | W0, W2 (review D2) |
 | N | `cat agile-team/docs/customer/x\⏎.md` | allow | W0, W6 |
 | F | `cat s\⏎rc/x` | deny | W0, W6 (review D2) |
+| N | `echo hi \\⏎git commit -m x` | deny | W0 keeps the newline (even run), `_check_git` (review D3) |
 
 (`\|` in the table is only Markdown escaping. The word under test is
 `agile-team/runner/(agile_team|x)/cli.py`; shlex keeps it as one word.
 `⏎` is a real newline character in the command string: in Python,
-`"cat agile-team/runner/agile_\\\nteam/cli.py"`.)
+`"cat agile-team/runner/agile_\\\nteam/cli.py"`. Every `\` in a command is a
+real backslash, so `echo hi \\⏎git` is `"echo hi \\\\\ngit"` in Python.)
 
 W0 also covers every other role. Through `guard.check_tool_use` with a plain
 developer `Scope` (no Bash allowlist):
@@ -417,6 +419,9 @@ developer `Scope` (no Bash allowlist):
 | `git \⏎commit -m x`, `git pu\⏎sh` | deny | `_check_git` (now denied as `commit`/`push`, not by luck) |
 | `echo ANTHROPIC_API_\⏎KEY` | deny | `_check_secret_mention` |
 | `git st\⏎atus` | allow | `_check_git`: `status` is read-only |
+| `echo hi \\⏎git commit -m x` | deny | `_check_git`: run of 2 is even, so the newline stays and `git commit` is its own command (review D3) |
+| `echo hi \\\\⏎git commit -m x` | deny | `_check_git`: run of 4 is even, not joined (review D3) |
+| `echo hi \\\⏎git commit -m x` | allow | Run of 3 is odd, so it is joined to `echo hi \\git commit -m x`: one `echo` command, `git` is not a command (review D3) |
 
 ### Changes by module
 
@@ -454,8 +459,8 @@ developer `Scope` (no Bash allowlist):
 #### `guard.py`
 
 - `check_bash(scope, command)`: W0. Add the module constant
-  `LINE_CONTINUATION = "\\\n"` and make the first statement
-  `command = command.replace(LINE_CONTINUATION, "")`, before
+  `LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")` and make the
+  first statement `command = LINE_CONTINUATION.sub(r"\1", command)`, before
   `_SEGMENT_SPLIT` and every check. Do not put it in `_tokens`: the secret
   check reads the raw `command`, and the segment split runs before
   `_tokens`. Extend the docstring: "…after joining `\`-newline line
@@ -510,8 +515,8 @@ assertions must stay as they are and pass. That includes
      to `*`, a mismatch, casefold).
    Also test that the W1 fallback deletes quotes, through `check_tool_use`
    with `cat "agile-team/runner/agile_team/cli.py" # it's`.
-   W0: the four D2 rows of the example table go in the same two tests (N
-   rows in `test_nested_bash_tokens`, the F row in
+   W0: the four D2 rows and the D3 row of the example table go in the same
+   two tests (N rows in `test_nested_bash_tokens`, the F row in
    `test_flat_layout_parity`), one parametrized case per command. The
    all-roles table under it goes in the general guard tests with a
    developer `Scope`.

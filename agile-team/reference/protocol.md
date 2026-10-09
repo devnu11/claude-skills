@@ -320,9 +320,11 @@ committed to, or `null` when it is in the backlog.
   denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox,
   `.team/stories/` and `<docs>/customer/`; its Bash may not name a forbidden
   root, `..`, or repo paths outside the sandbox.
-- Before any Bash check, for every role, the hook deletes each `\` followed
-  by a newline, as bash and zsh do, so the key-name, git, allowlist and path
-  checks all see the command the shell will run.
+- Before any Bash check, for every role, the hook joins line continuations
+  as bash and zsh do: a newline after an odd run of `\` is deleted along with
+  the last `\`. After an even run (escaped `\\` pairs) the newline stays and
+  ends the command. So the key-name, git, allowlist and path checks all see
+  the command the shell will run.
 - Forbidden roots: for each positive glob in `[toolchain.globs]` `source`,
   `tests` and `e2e`, the leading path segments before the first segment that
   holds `*`, `?`, `[` or `{` (`agile-team/runner/agile_team/**` →
