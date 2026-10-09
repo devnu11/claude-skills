@@ -38,6 +38,7 @@ addopts = "-q"
 [tool.coverage.run]
 source = ["unattended"]
 branch = true
+omit = ["unattended/__main__.py"]  # runs only in the detached supervisor
 
 [tool.coverage.report]
 fail_under = 95
