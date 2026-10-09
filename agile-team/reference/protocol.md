@@ -19,6 +19,7 @@ Run from the target repo root, or pass `--repo PATH`.
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step and `sprint` (`null` = backlog), open questions, spend. |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
+| `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
 
 Preflight refuses to start when: the tree is dirty; with `auth = "api-key"`,
 no key file exists, the repo key file is not gitignored, or a key file is not
@@ -41,7 +42,8 @@ the human's test result. The runner itself posts `blocked`, `failed` or
 
 `inbox.jsonl` holds `{"id", "text", "at"}` answers, written by `answer`.
 
-Other run files: `state.json` (resume state), `ledger.jsonl` (per-step cost),
+Other run files: `state.json` (resume state; `task` holds the last
+non-resume `start --task`, `""` in older files), `ledger.jsonl` (per-step cost),
 `runner.pid`, `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<delivery>/` (Customer Proxy sandboxes), `api-key` (default key
@@ -95,6 +97,38 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   refuses the dirty tree. After a halt the runner commits nothing more: the
   cut-off step's edits and the PO's edits from that turn stay in the tree
   for the human.
+
+## Dashboard
+
+`agile-team dashboard` is a read-only HTTP server (Python stdlib, no auth).
+It never writes, and it never serves files by path.
+
+| Route | Returns |
+|---|---|
+| `GET /` | the dashboard page (`index.html`, packaged with the runner) |
+| `GET /api/snapshot` | the snapshot as JSON |
+| `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes (checked once a second). Otherwise it sends a `: keepalive` comment every second. |
+| anything else | 404 (other methods: 501) |
+
+The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
+task, budget, Manager checkpoint percentage, round cap, `manager_due`),
+`pipeline` (enabled steps), `roles` (name, model, provider, with PO
+overrides applied), `stories` (state plus `opened_at` and the story file's
+`acceptance`), `requirements` (from `<docs>/requirements/REQ-*.md`, with
+`history` from `requirement-changed` events), `events` (`events.jsonl` plus
+outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`
+and `answers`. The contract is
+`runner/agile_team/dashboard/fixtures/snapshot.json`.
+
+Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
+outbox.jsonl, inbox.jsonl}`, `.team/stories/*.md` and
+`<docs>/requirements/REQ-*.md`. A missing file gives an empty section. A
+torn last line, which can appear while the runner is appending, is skipped.
+Role files and `.agile-team.toml` are read once, at start.
+
+Anyone who can reach the port can see the run (task, stories, questions and
+spend). It never shows keys. Use `--host 127.0.0.1` to keep it local to the
+machine.
 
 ## `.agile-team.toml`
 

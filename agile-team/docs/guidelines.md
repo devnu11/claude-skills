@@ -60,6 +60,17 @@ rule, update in the same story:
   renders. Event `data` shapes must match it.
 - New event kinds go in `events.EventKind`; never reuse a kind for a
   different shape.
+- The dashboard is read-only. `dashboard/snapshot.py` reads only the files
+  `watched_files` lists (plus the role book). It never writes, never runs git
+  and never reads key files. A new data source is a new entry there and in
+  the "Dashboard" section of `reference/protocol.md`.
+- Read JSONL that another process is appending to through
+  `snapshot.read_jsonl`, which skips torn and blank lines. `Ledger.entries`,
+  `Relay` and `EventLog` raise on a torn line, so they suit the runner,
+  which writes those files, but not readers running alongside it.
+- The server serves fixed routes (`server.ROUTES`) and never builds a file
+  path from a request. A new route is a new row there, documented in the
+  protocol.
 
 ## Quality bar
 

@@ -21,6 +21,8 @@ implements against and a reviewer checks against.
 | `ledger.py` | per-step cost, budget checkpoints | none |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox, key hygiene | git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |
+| `dashboard/snapshot.py` | `build(config, book)`: run files → one snapshot dict (read-only) | state, ledger, relay files, events file, story and requirement files, roles |
+| `dashboard/server.py` | read-only HTTP + SSE server (`ThreadingHTTPServer`), `default_host`, `display_url` | snapshot (through `Dashboard`) |
 
 ```mermaid
 flowchart LR
@@ -36,6 +38,10 @@ flowchart LR
   tools --> ev
   tools --> relay[(outbox / inbox)]
   relay --> liaison
+  ev -. read only .-> dash[dashboard server]
+  st -. read only .-> dash
+  relay -. read only .-> dash
+  dash -- SSE snapshot --> browser[[human's browser]]
 ```
 
 ### One role step
@@ -806,3 +812,342 @@ The real SDK always passes `exit_code`, which appends ` (exit code: 1)` to
 - If the SDK's subprocess cleanup itself hangs on cancellation, SIGTERM
   waits for it. A second `stop --now` does not escalate (no SIGKILL). The
   human can `kill -9`.
+
+---
+
+## s4: Dashboard backend (snapshot, read-only SSE server, CLI)
+
+Developer: **developer-api**, alone, in one step. The work is runner Python:
+new `dashboard/__init__.py`, `dashboard/snapshot.py`, `dashboard/server.py`,
+plus small edits to `cli.py`, `config.py`, `ledger.py` and `state.py`. Every
+developer specialization has the same write scope (`{source}`), so the CLI
+row needs no second developer. The Architect has already updated
+`reference/protocol.md` (CLI row, "Dashboard"), `SKILL.md` (step 5), the
+README row, `guidelines.md` ("Dashboard") and `customer/dashboard.md` in this
+design step. `index.html` is s5's and does not change here.
+
+### The contract is the fixture, not the AC's section names
+
+`dashboard/fixtures/snapshot.json` is the contract (AC3). It holds **raw**
+sections, and the approved UI (`index.html`) derives the board, flow, tokens
+and questions views from them in the browser. `build()` therefore returns the
+fixture's ten top-level keys. AC1 and AC2 name views, and each one maps onto
+those keys like this:
+
+| AC view | Snapshot keys it comes from | Derived in `index.html` by |
+|---|---|---|
+| `run` | `run`, `pipeline`, `roles` | `renderHeader` |
+| `board` | `stories` (`sprint: null` = backlog column; `step`, `status`, `rounds`), `pipeline` (the enabled steps = columns), `run.round_cap` | `renderBoard` |
+| `flow` | `events` (briefs = `step-start`, handoffs = `step-end` by status, PO↔human = `message`/`answer`), `ledger` (tokens per role) | `flowStats`, `activeStep`, timeline (last 120 events) |
+| `tokens` | `ledger` (by role, story, model; `at` for cumulative) | `totalsBy`, cumulative chart |
+| `questions` | `messages` + `answers` (open relay questions), `step-end` `data.open_questions` (raised by a role) | `openQuestions`, `raisedQuestions` |
+| `requirements` | `requirements` (status, covers, history), `stories[].acceptance` | `coverage`, `renderRequirements` |
+
+The reviewer checks AC1 and AC2 through this table. No aggregation happens
+in Python.
+
+### Rules
+
+| # | Rule | AC |
+|---|---|---|
+| D1 | `build(config, book) -> dict` returns exactly the keys `generated_at, run, pipeline, roles, stories, requirements, events, ledger, messages, answers`, in that order, with the shapes in the section table below. After a JSON round trip, the value types match the fixture. | AC1, AC3 |
+| D2 | `build` only **reads** the files in the source table (`watched_files(config)` plus the role files already loaded into `book`). It never writes, never runs git, never touches the network and never reads key files. Pure apart from `time.time()` and file reads. | AC1, AC4 |
+| D3 | A missing file or directory gives an empty section (`[]`) or the default (`RunState()`). A blank JSONL line, or one that does not parse as a JSON object, is skipped. The runner appends while the server reads, so a torn last line is normal. | AC1 |
+| D4 | `roles`: every name in `book.names()`, sorted, resolved with `state.runtime_overrides(name)`, so a PO model override shows up. Disabled roles are left out. A role that raises `RoleError` is left out, not an error. | AC1 |
+| D5 | `stories`: one row per `state.stories` entry, in state order. `opened_at` is the `at` of that story's first `story-opened` event (`None` if there is none). `acceptance` comes from the `acceptance` list in the frontmatter of `.team/stories/<id>.md`. If the file is missing, has no frontmatter or doesn't parse, it is `[]`. | AC1, AC2 |
+| D6 | `requirements`: one row per `<docs>/requirements/REQ-*.md`, sorted by file name. The frontmatter gives `id` (default: the file stem), `title` (`""`), `status` (`"active"`), `covers` (`[]`). `text` is the body, stripped. `history` is that id's `requirement-changed` events in log order, each `{at, change, reason, role, story, sha}`, where `sha = data.get("sha", "")`. A file that doesn't parse still gets a row, with defaults and empty `text`, so the human can see it is broken. | AC1, AC2 |
+| D7 | `events`: the `events.jsonl` objects as written (no `EventKind` parsing, so unknown kinds pass through). Each outbox message is merged in as `{"id": "out-<mid>", "at", "kind": "message", "role": "product-owner", "story": None, "data": {"message": "<mid>"}}`, and each inbox answer as `{"id": "in-<mid>", "at", "kind": "answer", "role": None, "story": None, "data": {"message": "<mid>"}}`. The result is sorted by `at` (stable). All events are kept; the UI shows the last 120. | AC2 |
+| D8 | `ledger`: each `ledger.jsonl` line through `Entry.from_dict` then `asdict`, so lines written before token accounting get zero tokens. `messages` and `answers`: the outbox and inbox objects as written. | AC2 |
+| D9 | `run`: `{status, sprint, cadence, task, budget_usd, manager_every_pct, round_cap, manager_due}` from `state` (`status` as its string value), `config.team` and `config.gates.round_cap`. `pipeline` = `list(config.gates.steps)`. `generated_at` = `time.time()`. | AC1 |
+| D10 | `RunState.task: str = ""` is a new **last** field. `start` without `--resume` stores its `--task` there. `start --resume` leaves it unchanged, because its `--task` is a message to the PO, not the run's task. Older `state.json` files load with `""`. | AC1 |
+| D11 | Server routes, matched on `urlsplit(path).path` **exactly**: `GET /` → `index.html` from package data; `GET /api/snapshot` → the snapshot JSON; `GET /api/stream` → SSE. Every other path is 404 (`/index.html`, `/api/snapshot/`, `/fixtures/snapshot.json` and `/.team/...` included). The server has no `do_POST`, `do_PUT` and so on, so other methods get the stdlib's 501. No file path is ever built from the request. | AC4 |
+| D12 | SSE: each tick computes `fingerprint(watched())`. On the first tick, and whenever the fingerprint has changed since the last tick, it sends `data: <snapshot JSON on one line>\n\n`. On every other tick it sends the keepalive comment `: keepalive\n\n`. It then sleeps `poll_seconds` (1.0, injectable). The loop ends when a write raises `BrokenPipeError` or `ConnectionResetError`. | AC4 |
+| D13 | `default_host()` is `"127.0.0.1"` when `sys.platform == "win32"` and `"0.0.0.0"` otherwise. `--host` overrides it. `display_url(host, port)` uses `socket.gethostname()` in place of an all-interfaces host (`0.0.0.0`, `""`), so the URL opens from another machine. No auth. | AC5 |
+| D14 | CLI `dashboard [--host H] [--port 8765] [--no-open]`: binds first, then prints `dashboard: <url>` with `flush=True`, using the **bound** port (so `--port 0` prints the real one). Unless `--no-open` is given, it then opens the URL with `webbrowser.open`, then serves until interrupted. A bind failure exits 1 with `agile-team dashboard: cannot listen on H:P: <strerror>`. | AC5, AC6 |
+
+### Section shapes (source → value)
+
+| Key | Source files | Value |
+|---|---|---|
+| `generated_at` | none | `float` |
+| `run` | `state.json`, `.agile-team.toml` | object (D9) |
+| `pipeline` | `.agile-team.toml` | `[str]` |
+| `roles` | role files (via `book`), `state.json` overrides | `[{name, model, provider}]` |
+| `stories` | `state.json`, `events.jsonl`, `.team/stories/<id>.md` | `[{id, title, sprint: int\|null, delivery: str, step, status, rounds: int, opened_at: float\|null, acceptance: [{id, text}]}]`. `delivery` is `story.delivery or ""`. |
+| `requirements` | `<docs>/requirements/REQ-*.md`, `events.jsonl` | `[{id, title, status, covers: [str], text, history: [{at, change, reason, role, story, sha}]}]` |
+| `events` | `events.jsonl`, `outbox.jsonl`, `inbox.jsonl` | `[{id, at, kind, role, story, data}]` |
+| `ledger` | `ledger.jsonl` | `[{role, model, cost_usd, story, at, tokens: {input, output, cache_read, cache_creation}}]` |
+| `messages` | `outbox.jsonl` | `[{id, kind, text, stories, at}]` |
+| `answers` | `inbox.jsonl` | `[{id, text, at}]` |
+
+### How s1 and s2 plug in (not built yet)
+
+- **s1** defines the story and requirement file formats. D5 and D6 read only
+  the keys the fixture needs, through `roles.split_frontmatter` (PyYAML is
+  already a dependency). If s1's parser lands in `requirements.py`, s1 may
+  swap `_frontmatter` for it. Paths come from `Config.stories_dir` and
+  `Config.requirements_dir` (new here), and s1 should use them too.
+- **s2** says git trailers are the durable history and that there is no
+  extra store (s2 AC3). The dashboard reads no git, so the
+  `requirement-changed` event **is** the requirements log for the dashboard.
+  Until s2 puts `sha` into that event's `data`, `history[].sha` is `""`. s2
+  should add it there: one key, and the event keeps its other fields.
+- Until s1 and s2 land, `requirements` is `[]` in this repo, and AC1 allows
+  that.
+
+### Data flow
+
+```mermaid
+sequenceDiagram
+  participant B as browser (index.html)
+  participant H as server.Handler (thread per request)
+  participant D as Dashboard
+  participant S as snapshot.build
+  participant F as run files
+  B->>H: GET /
+  H-->>B: index.html (package data)
+  B->>H: GET /api/snapshot
+  H->>D: snapshot()
+  D->>S: build(config, book)
+  S->>F: read state, events, ledger, outbox, inbox, stories, REQs
+  H-->>B: 200 JSON
+  B->>H: GET /api/stream (EventSource)
+  loop every poll_seconds
+    H->>D: watched() → fingerprint
+    alt first tick or changed
+      H-->>B: data: {snapshot}
+    else unchanged
+      H-->>B: : keepalive
+    end
+  end
+```
+
+### Changes by module
+
+#### `config.py`
+
+| Name | Spec |
+|---|---|
+| `STORIES_DIR = ".team/stories"`, `REQUIREMENTS_DIR = "requirements"` | Constants. |
+| `Config.stories_dir` (property) | `self.repo / STORIES_DIR`. Docstring: "Where story files live." |
+| `Config.requirements_dir` (property) | `self.repo / self.team.docs_dir / REQUIREMENTS_DIR`. Docstring: "Where `REQ-NNN.md` files live." |
+
+#### `ledger.py`
+
+- Add `LEDGER = "ledger.jsonl"` (moved from `cli.py`). `cli.py` imports it
+  from `ledger`, so `cli.LEDGER` keeps working.
+
+#### `state.py`
+
+- `RunState.task: str = ""`, the **last** field, after `status_reason` (D10).
+  No other change: `from_json` fills it in through the default.
+
+#### `dashboard/__init__.py` (new)
+
+Module docstring only: "Read-only live dashboard: snapshot builder and
+server." This makes `dashboard` a package, so `importlib.resources` finds
+`index.html`. Hatch already ships every file under `agile_team/`.
+
+#### `dashboard/snapshot.py` (new)
+
+Module docstring: "Turn the run's files into the one JSON snapshot the
+dashboard renders. Read-only; the contract is `fixtures/snapshot.json`."
+
+| Name | Spec |
+|---|---|
+| `RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX)` | Imported names from `state`, `events`, `ledger` and `relay`. |
+| `@dataclass(frozen=True) class RunFiles` | `config: Config`, `book: RoleBook`, `state: RunState`, `events: list[dict]` (raw `events.jsonl`). Docstring: "The inputs one snapshot reads, loaded once." |
+| `RunFiles.load(config, book)` (classmethod) | `state_mod.load(config.run_dir)`, `read_jsonl(config.run_dir / EVENTS)`. |
+| `SECTIONS: dict[str, Callable[[RunFiles], Any]]` | The ten keys in D1 order → `_generated_at`, `_run`, `_pipeline`, `_roles`, `_stories`, `_requirements`, `_events`, `_ledger`, `_messages`, `_answers`. |
+| `build(config, book) -> dict[str, Any]` | `files = RunFiles.load(config, book)`; `return {key: section(files) for key, section in SECTIONS.items()}`. Docstring names the fixture as the contract. AC1 reads `build(config)`. The role book is the second argument because resolving roles needs the global layer under the home dir, which `Config` doesn't carry. |
+| `watched_files(config) -> list[Path]` | `[run_dir / n for n in RUN_FILES]` + `sorted(stories_dir.glob("*.md"))` + `sorted(requirements_dir.glob("REQ-*.md"))`. Missing ones included (the fingerprint skips them). |
+| `read_jsonl(path) -> list[dict]` | D3. `[]` when the file is missing. Uses a helper `_parse_line(line) -> dict \| None` that returns `None` for blank lines, `json.JSONDecodeError` and non-dict values. |
+| `_generated_at(files)`, `_pipeline(files)`, `_run(files)` | D9. |
+| `_roles(files)` / `_role(files, name) -> dict \| None` | D4. `_role` catches `RoleError` only. |
+| `_stories(files)` / `_story(files, story) -> dict` | D5. `_story` spreads the fields listed in the shape table (not `asdict`, which would add `commit`). |
+| `_opened_at(events, story_id) -> float \| None` | D5: `next((e["at"] for e in events if …), None)`. |
+| `_acceptance(config, story_id) -> list[dict]` | D5. Each item is `{"id": str(a.get("id", "")), "text": str(a.get("text", ""))}`, and only dict items are kept. |
+| `_frontmatter(path) -> tuple[dict, str]` | `({}, "")` for a missing file. Otherwise `roles.split_frontmatter(path.name, text)` with `None` meta → `{}`. Catches `yaml.YAMLError` and `RoleError` only and returns `({}, "")`. |
+| `_requirements(files)` / `_requirement(path, history) -> dict` | D6. `history` is the dict from `_history`. |
+| `_history(events) -> dict[str, list[dict]]` | D6. Only `kind == "requirement-changed"`, grouped by `data["id"]`. |
+| `_events(files)` | D7: `sorted([*files.events, *map(_message_event, outbox), *map(_answer_event, inbox)], key=lambda e: e["at"])`. |
+| `_message_event(message)`, `_answer_event(answer)` | D7 shapes. |
+| `_ledger(files)`, `_messages(files)`, `_answers(files)` | D8. |
+
+Every function stays at 8 lines or fewer with at most 2 parameters. Comment
+the torn-line pitfall in `read_jsonl`.
+
+#### `dashboard/server.py` (new)
+
+Module docstring: "Read-only dashboard server: `/`, `/api/snapshot` and an
+SSE stream, stdlib only. Never serves a directory."
+
+| Name | Spec |
+|---|---|
+| `POLL_SECONDS = 1.0`, `DEFAULT_PORT = 8765` | |
+| `KEEPALIVE = b": keepalive\n\n"` | |
+| `HOSTS = {"win32": "127.0.0.1"}`, `ALL_INTERFACES = {"0.0.0.0", ""}` | Data for D13. |
+| `INDEX = resources.files(__package__) / "index.html"` | Package data, read per request with `read_bytes()`. |
+| `@dataclass(frozen=True) class Dashboard` | `snapshot: Callable[[], dict[str, Any]]`, `watched: Callable[[], list[Path]]`, `poll_seconds: float = POLL_SECONDS`. Docstring: "What the server shows and how often the stream polls." |
+| `Dashboard.for_run(config, book)` (classmethod) | `cls(partial(snapshot.build, config, book), partial(snapshot.watched_files, config))`. |
+| `fingerprint(paths) -> tuple[tuple[str, int, int], ...]` | `(str(p), st_mtime_ns, st_size)` for each existing path. A missing file is skipped (`FileNotFoundError` only). Docstring: "Changes when a watched file appears, disappears or is written." |
+| `class DashboardServer(ThreadingHTTPServer)` | `__init__(self, address, app: Dashboard)` stores `self.app` and calls `super().__init__(address, Handler)`. `daemon_threads = True` (already the stdlib default; state it). |
+| `class Handler(BaseHTTPRequestHandler)` | `do_GET(self)`: `ROUTES.get(urlsplit(self.path).path, _not_found)(self)`. `log_message` is a no-op (docstring: "Quiet: the dashboard runs in the background."). |
+| `ROUTES: dict[str, Callable[[Handler], None]]` | `{"/": _index, "/api/snapshot": _snapshot, "/api/stream": _stream}` (D11). |
+| `class Body(NamedTuple)` | `content_type: str`, `data: bytes`. |
+| `_send(handler, body: Body) -> None` | 200, `Content-Type`, `Content-Length`, `Cache-Control: no-store`, then write. |
+| `_index(handler)` | `_send(handler, Body("text/html; charset=utf-8", INDEX.read_bytes()))`. |
+| `_snapshot(handler)` | `_send(handler, Body("application/json", json.dumps(app.snapshot()).encode()))`. |
+| `_not_found(handler)` | `handler.send_error(404)`. |
+| `_stream(handler)` | 200 with `Content-Type: text/event-stream` and `Cache-Control: no-store`, `end_headers()`, then `try: _pump(handler.wfile, handler.server.app)` `except (BrokenPipeError, ConnectionResetError): return`. |
+| `_pump(out: BinaryIO, app: Dashboard) -> None` | D12 loop. `last = None`; each tick: `now = fingerprint(app.watched())`, write `sse_data(app.snapshot())` if `now != last`, else `KEEPALIVE`; `out.flush()`; `last = now`; `time.sleep(app.poll_seconds)`. |
+| `sse_data(snap) -> bytes` | `f"data: {json.dumps(snap)}\n\n".encode()`. `json.dumps` without `indent` never emits a raw newline. |
+| `default_host() -> str` | `HOSTS.get(sys.platform, "0.0.0.0")` (D13). |
+| `display_url(host, port) -> str` | `f"http://{name}:{port}/"`, where `name` is `socket.gethostname()` if `host in ALL_INTERFACES`, else `host`. |
+| `serve(server) -> None` | `with server: server.serve_forever()`. Ctrl-C propagates; `cli.main` already maps it to 130. |
+
+HTTP/1.0 (the stdlib default) is fine for SSE: the stream has no
+`Content-Length` and ends when the connection closes. Pass the stream as
+`handler.wfile` to `_pump`, so a unit test can drive `_pump` with a fake
+writer.
+
+#### `cli.py`
+
+| Name | Spec |
+|---|---|
+| `class Browser(StrEnum)` | `OPEN = "open"`, `SKIP = "skip"` (no boolean flag; like `StopMode`). |
+| `@dataclass(frozen=True) class DashboardIO` | `browse: Callable[[str], object] = webbrowser.open`, `serve: Callable[[DashboardServer], None] = server.serve`. Docstring: "Side effects of `dashboard`, swappable in tests." Module constant `DEFAULT_IO = DashboardIO()` (ruff B008 forbids calling it in a default argument). |
+| `DASHBOARD_ARGS` | `--host` (default `None`, help "address to bind (default: all interfaces; 127.0.0.1 on Windows)"), `--port` (`type=int`, default `server.DEFAULT_PORT`), `--no-open` (`store_const`, `dest="browser"`, `const=Browser.SKIP`, `default=Browser.OPEN`, help "do not open a browser"). |
+| `COMMANDS` row | `Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)", cmd_dashboard, DASHBOARD_ARGS)`, after `stop`. |
+| `cmd_dashboard(args, io: DashboardIO = DEFAULT_IO) -> int` | `httpd = _dashboard_server(args)`; `url = server.display_url(*httpd.server_address[:2])`; `print(f"dashboard: {url}", flush=True)`; `if args.browser is Browser.OPEN: io.browse(url)`; `io.serve(httpd)`; `return 0`. Docstring: "Serve the read-only dashboard until interrupted." |
+| `_dashboard_server(args) -> DashboardServer` | `place = Place.of(args)`, `config = _load_config(place.repo)`, `app = server.Dashboard.for_run(config, role_book(config, place.home))`, `address = (args.host or server.default_host(), args.port)`. Construct `DashboardServer(address, app)`; on `OSError as exc`, raise `CliError(f"cannot listen on {address[0]}:{address[1]}: {exc.strerror}")`. |
+| `_record_task(state, start) -> None` | D10: `if start.mode is not StartMode.RESUME: state.task = start.task`. `cmd_start` calls it after the cadence line. `PoRun.run`'s status save persists it. |
+| module docstring | Add `dashboard` to the first line's command list. |
+
+`flush=True` matters: the liaison runs this in the background with stdout
+going to a file. `serve_forever` blocks, so an unflushed URL never shows up.
+
+### Test checklist (for the Unit Tester)
+
+Put the new tests in `tests/test_snapshot.py`, `tests/test_server.py` and
+`tests/test_cli.py`. Use the `configured` fixture's repo and a
+`RoleBook.for_repo(repo, config.roles, tmp_path / "no-global")`. The
+autouse `AGILE_TEAM_HOME` fixture already isolates the home dir.
+
+**Snapshot**
+
+1. **Fixture shape (AC3).** A helper `write_run(repo, fixture)` turns the
+   fixture back into run files:
+   - `.agile-team.toml`: `budget_usd = 20.0`, `manager_every_pct = 25`,
+     `round_cap = 3`, the fixture's `pipeline` as `gates.steps`.
+   - `state.json`: `run` fields, plus stories without `opened_at` and
+     `acceptance`.
+   - `events.jsonl`: the fixture events except kinds `message` and `answer`.
+   - `ledger.jsonl`, `outbox.jsonl` (= `messages`) and `inbox.jsonl` (=
+     `answers`).
+   - `.team/stories/<id>.md`: frontmatter `id`, `title`, `acceptance`.
+   - `<docs>/requirements/<id>.md`: frontmatter `id`, `title`, `status`,
+     `covers`, and the `text` as the body.
+
+   Then assert `shape(json.loads(json.dumps(build(config, book)))) ==
+   shape(fixture)`. `shape` maps a dict to `{k: shape(v)}`, a list to the
+   `frozenset` of `json.dumps(shape(item), sort_keys=True)` over its items,
+   and a scalar to `type(v).__name__`. This way `int` vs `float` and `null`
+   vs `str` count, and a list's mixed item shapes (stories with
+   `sprint: 1` and `sprint: null`) must all appear. Also assert some exact
+   values: `stories[*].acceptance`, `requirements` (`history` equal apart
+   from `sha == ""`), `ledger`, `messages`, `answers` and `pipeline` equal
+   the fixture's, and the top-level key order equals D1.
+2. **Empty (AC1).** Config only, with no run files, story dir or
+   requirements dir. All ten keys are present. `stories`, `requirements`,
+   `events`, `ledger`, `messages` and `answers` are `[]`. `run` is
+   `{"status": "idle", "sprint": 0, "task": "", "manager_due": [], …}`.
+   `roles` is not empty (built-ins). Nothing is raised.
+3. **Torn lines (D3).** `events.jsonl`, `ledger.jsonl` and `outbox.jsonl`
+   each hold one good line, one blank line, a `[1]` line and a truncated
+   `{"kind": "ga`. Each section has exactly the one good item.
+4. **Ledger (D8).** A line without `tokens` gives four zero counts.
+5. **Stories (D5).** No story file gives `acceptance == []`. Bad YAML
+   frontmatter gives `[]`. No `story-opened` event gives
+   `opened_at is None`. `delivery None` gives `""`. `commit` is not a key.
+6. **Requirements (D6).** A file without frontmatter gets `id` = stem,
+   `status` `"active"` and `text` = body. Bad YAML gives a row with
+   defaults. History collects only that id's `requirement-changed` events,
+   in order. `data.sha` is used when present, otherwise `""`.
+7. **Roles (D4).** A state override (`architect` → `haiku`) shows in
+   `roles`. `[roles.integration-tester] enabled = false` drops it. A
+   config-only role extending an unknown role is dropped, with no error.
+8. **Events (D7).** Outbox and inbox items are merged by `at` between log
+   events, with ids `out-m1` / `in-m1` and the D7 shapes. Unknown event
+   kinds pass through.
+9. **`watched_files`.** It lists the five run files (present or not), the
+   story `*.md` files and the `REQ-*.md` files, and nothing else (for
+   example, not `api-key`).
+10. **D10.** `RunState.from_json` without `task` gives `""`. `cmd_start`
+    (non-resume) stores `--task`. `--resume --task X` keeps the old task.
+
+**Server** (`DashboardServer(("127.0.0.1", 0), app)` with `serve_forever`
+in a daemon thread, `shutdown()` + `server_close()` in the fixture's
+teardown; `app = Dashboard(lambda: box["snap"], lambda: [watched_file],
+poll_seconds=0.01)`)
+
+11. `GET /` and `GET /?mock`: 200, `text/html`, and the body equals the
+    package's `index.html` bytes.
+12. `GET /api/snapshot`: 200, `application/json`, and the body parses to
+    `box["snap"]`.
+13. **404 (D11, no directory serving).** Parametrize over `/index.html`,
+    `/api`, `/api/snapshot/`, `/api/stream/x`, `/fixtures/snapshot.json`,
+    `/dashboard/`, `/.team/run/state.json`, `/../.team/run/api-key` and
+    `/%2e%2e/api-key`. Send the raw path with `http.client` so it is not
+    normalised. Also: `POST /` gives 501.
+14. **SSE change push (D12).** Open `/api/stream` with `http.client` and a
+    socket timeout of about 2 s. The headers have `text/event-stream`. The
+    first `data:` line equals the snapshot. Then change `box["snap"]` and
+    rewrite the watched file with different content, bumping its mtime with
+    `os.utime(..., ns=…)`. Within the timeout, a later `data:` line carries
+    the new snapshot, and at least one `: keepalive` line has arrived.
+15. **`_pump` unit.** A fake writer that raises `BrokenPipeError` on its
+    second `write` makes `_stream`'s handling end cleanly. Drive `_stream`
+    with a stub handler (`wfile`, `server.app`, `send_response`,
+    `send_header` and `end_headers` recorders), or test `_pump` raising and
+    `_stream` returning. Do the same with `ConnectionResetError`.
+16. `fingerprint`: a missing path is skipped. The result changes when a
+    file's size or `mtime_ns` changes and when a file appears.
+17. **D13.** `default_host()` with `sys.platform` monkeypatched to `"win32"`
+    gives `127.0.0.1`, and with `"linux"` or `"darwin"` gives `0.0.0.0`.
+    `display_url("0.0.0.0", 8765)` with `socket.gethostname` monkeypatched
+    to `labbox` gives `http://labbox:8765/`. `display_url("127.0.0.1", 9)`
+    gives `http://127.0.0.1:9/`.
+18. `serve` returns after `shutdown()` is called from another thread.
+
+**CLI**
+
+19. Parser: `dashboard` defaults to `host None`, `port 8765`,
+    `browser OPEN`. `--no-open` gives `SKIP`.
+20. **AC6 `--port 0`.** `main`-level or `cmd_dashboard(args, DashboardIO(browse=urls.append, serve=lambda s: s.server_close()))`
+    with `--host 127.0.0.1 --port 0` returns 0. Stdout is exactly
+    `dashboard: http://127.0.0.1:<p>/` with `p != 0`, and `urls == [that
+    url]`. With `--no-open`, `urls == []`.
+21. Default host: with `sys.platform` monkeypatched to `"win32"` and no
+    `--host`, the bound address is `127.0.0.1`.
+22. Port in use: bind a socket on `127.0.0.1:<p>`, then `main([... ,
+    "dashboard", "--host", "127.0.0.1", "--port", str(p), "--no-open"])`
+    returns 1. Stderr starts with `agile-team dashboard: cannot listen on
+    127.0.0.1:<p>:`.
+23. No `.agile-team.toml`: exit 1 with the existing config error.
+
+### Known limits (accepted for lab use)
+
+- No auth and no TLS. Anyone on the network who can reach the port sees the
+  run: task, stories, questions and spend, but never keys. On Windows the
+  default host is localhost.
+- Each snapshot re-reads every file, and the stream sends the whole snapshot
+  on each change. That is fine at the size of a run. Paging or deltas are
+  out of scope.
+- Role files and `.agile-team.toml` are read once at start, so a config or
+  role edit needs a dashboard restart. Model overrides from the PO do show
+  live (D4).
+- A requirement retired by deleting its file disappears from `requirements`
+  (its history remains in the events).
+- `/?mock` served by the server gets 404 for `fixtures/snapshot.json`. Mock
+  replay is for opening `index.html` as a file.
