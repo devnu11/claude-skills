@@ -45,6 +45,18 @@ rule, update in the same story:
 - `agile-team/SKILL.md` and the README row when the liaison or human sees
   the change.
 
+## Routing (s19)
+
+- The router decides who runs next, and its decisions are data:
+  `router.PICKERS` (what kind of work comes first), `router.ROLE_HINTS`
+  (which role takes a story step), `router.BRIEF_PATHS` (what a standard
+  brief points at), and `handover.HANDOVERS` (when the PO is needed). A new
+  reason to call the PO is a new `HANDOVERS` row, not an `if` in the router.
+- Briefs point at files; they never paste a file's contents. The one
+  exception is the gate's reason on a bounce.
+- A new per-story design goes in `docs/design/<story>.md`, with one line in
+  `architecture.md`'s story index.
+
 ## Errors and halts
 
 - Do not catch broad exceptions inside the runner just to print them. An
