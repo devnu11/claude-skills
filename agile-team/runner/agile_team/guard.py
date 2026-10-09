@@ -148,9 +148,20 @@ def _check_pattern(scope: Scope, call: ToolCall) -> str | None:
 def check_bash(scope: Scope, command: str) -> str | None:
     """Deny key mentions, write-side git, commands off the allowlist and forbidden paths.
 
-    Checks run after joining ``\\``-newline line continuations as the shell does.
+    Checks run on both the raw command and the one with ``\\``-newline
+    continuations joined; a denial in either view denies (a ``#`` comment
+    ends in a backslash without continuing, so the views can disagree).
     """
-    command = LINE_CONTINUATION.sub(r"\1", command)
+    denials = (_check_view(scope, view) for view in _views(command))
+    return next((reason for reason in denials if reason), None)
+
+
+def _views(command: str) -> tuple[str, ...]:
+    """The raw command and its line-continuation-joined form, deduplicated."""
+    return tuple(dict.fromkeys((command, LINE_CONTINUATION.sub(r"\1", command))))
+
+
+def _check_view(scope: Scope, command: str) -> str | None:
     segments = [_tokens(s) for s in _SEGMENT_SPLIT.split(command)]
     checks = (
         lambda: _check_secret_mention(scope, command),
