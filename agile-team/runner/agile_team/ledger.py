@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+LEDGER = "ledger.jsonl"
 USAGE_KEYS = {
     "input": "input_tokens",
     "output": "output_tokens",

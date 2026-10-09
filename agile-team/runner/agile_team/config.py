@@ -20,6 +20,8 @@ from .providers import Billing, Provider, ProviderKind
 CONFIG_NAME = ".agile-team.toml"
 TEAM_DIR = ".team"
 RUN_DIR = ".team/run"
+STORIES_DIR = ".team/stories"
+REQUIREMENTS_DIR = "requirements"
 DEFAULT_KEY_FILE = ".team/run/api-key"
 CADENCES = ("sprint", "until-blocker")
 API_KEY_AUTH, LOGIN_AUTH = "api-key", "login"
@@ -102,6 +104,16 @@ class Config:
     @property
     def run_dir(self) -> Path:
         return self.repo / RUN_DIR
+
+    @property
+    def stories_dir(self) -> Path:
+        """Where story files live."""
+        return self.repo / STORIES_DIR
+
+    @property
+    def requirements_dir(self) -> Path:
+        """Where ``REQ-NNN.md`` files live."""
+        return self.repo / self.team.docs_dir / REQUIREMENTS_DIR
 
     def placeholders(self) -> dict[str, list[str]]:
         """Values for ``{name}`` placeholders in role glob lists."""

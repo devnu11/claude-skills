@@ -12,6 +12,7 @@ import json
 import os
 import signal
 import sys
+import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
@@ -22,9 +23,11 @@ from typing import Any
 from . import config as config_mod
 from . import gates, halt, keys, onboard, sandbox
 from . import state as state_mod
+from .dashboard import server
+from .dashboard.server import DashboardServer
 from .dispatch import QueryFn, Runtime, StepResult, shell_runner
 from .git_ops import Git
-from .ledger import Ledger, budget_status
+from .ledger import LEDGER, Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
 from .preflight import Preflight
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -40,7 +43,6 @@ from .roles import (
     user_roles_dir,
 )
 
-LEDGER = "ledger.jsonl"
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
 Kill = Callable[[int, int], None]
 
@@ -54,6 +56,24 @@ class StopMode(StrEnum):
 
     AFTER_STEP = "after-step"
     NOW = "now"
+
+
+class Browser(StrEnum):
+    """Whether ``dashboard`` opens a browser tab."""
+
+    OPEN = "open"
+    SKIP = "skip"
+
+
+@dataclass(frozen=True)
+class DashboardIO:
+    """Side effects of ``dashboard``, swappable in tests."""
+
+    browse: Callable[[str], object] = webbrowser.open
+    serve: Callable[[DashboardServer], None] = server.serve
+
+
+DEFAULT_IO = DashboardIO()
 
 
 @dataclass(frozen=True)
@@ -88,6 +108,31 @@ def _load_config(repo: Path) -> config_mod.Config:
         return config_mod.load(repo)
     except config_mod.ConfigError as exc:
         raise CliError(str(exc)) from exc
+
+
+# ----- dashboard ---------------------------------------------------------
+
+
+def cmd_dashboard(args: argparse.Namespace, io: DashboardIO = DEFAULT_IO) -> int:
+    """Serve the read-only dashboard until interrupted."""
+    httpd = _dashboard_server(args)
+    url = server.display_url(*httpd.server_address[:2])
+    print(f"dashboard: {url}", flush=True)
+    if args.browser is Browser.OPEN:
+        io.browse(url)
+    io.serve(httpd)
+    return 0
+
+
+def _dashboard_server(args: argparse.Namespace) -> DashboardServer:
+    place = Place.of(args)
+    config = _load_config(place.repo)
+    app = server.Dashboard.for_run(config, role_book(config, place.home))
+    address = (args.host or server.default_host(), args.port)
+    try:
+        return DashboardServer(address, app)
+    except OSError as exc:
+        raise CliError(f"cannot listen on {address[0]}:{address[1]}: {exc.strerror}") from exc
 
 
 # ----- init --------------------------------------------------------------
@@ -279,7 +324,14 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     _require_preflight(config, place.home)
     runtime = make_runtime(place, query_fn or default_query())
     runtime.state.cadence = args.cadence or config.team.cadence
+    _record_task(runtime.state, start)
     return _run(runtime, start)
+
+
+def _record_task(state: state_mod.RunState, start: Start) -> None:
+    """Remember the run's task; a resume's ``--task`` is only a message to the PO."""
+    if start.mode is not StartMode.RESUME:
+        state.task = start.task
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:
@@ -441,6 +493,13 @@ STOP_ARGS: tuple[Arg, ...] = (
     (("--now",), {"action": "store_const", "dest": "stop", "const": StopMode.NOW,
                   "default": StopMode.AFTER_STEP, "help": "also SIGTERM the runner"}),
 )  # fmt: skip
+DASHBOARD_ARGS: tuple[Arg, ...] = (
+    (("--host",), {"default": None,
+                   "help": "address to bind (default: all interfaces; 127.0.0.1 on Windows)"}),
+    (("--port",), {"type": int, "default": server.DEFAULT_PORT}),
+    (("--no-open",), {"action": "store_const", "dest": "browser", "const": Browser.SKIP,
+                      "default": Browser.OPEN, "help": "do not open a browser"}),
+)  # fmt: skip
 COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
@@ -450,6 +509,8 @@ COMMANDS = (
     Command("status", "print run state as JSON", cmd_status),
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
+    Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)",
+            cmd_dashboard, DASHBOARD_ARGS),
 )  # fmt: skip
 
 
