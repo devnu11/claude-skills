@@ -155,3 +155,32 @@ def test_text_of_ignores_other_messages() -> None:
     assert prompt_job.text_of(init()) == ""
     assert prompt_job.session_of(said("x")) == "s1"
     assert prompt_job.session_of(object()) is None
+
+
+def budget_result() -> ResultMessage:
+    return ResultMessage(
+        prompt_job.BUDGET_SUBTYPE, 1, 1, True, 4, "s1", total_cost_usd=1.5, usage=USAGE
+    )
+
+
+def test_options_pass_what_is_left_of_the_cost_cap(job: Job) -> None:
+    fake = FakeQuery([result()])
+    PromptJob(job, {}, fake).run_once()
+    assert fake.calls[0]["options"].max_budget_usd is None
+    job.update(lambda st: (setattr(st.bounds, "max_cost", 5.0), setattr(st, "cost", 3.5)))
+    PromptJob(job, {}, fake).run_once()
+    assert fake.calls[1]["options"].max_budget_usd == 1.5
+
+
+def test_budget_result_becomes_budget(job: Job) -> None:
+    outcome = PromptJob(job, {}, FakeQuery([init(), budget_result()])).run_once()
+    assert outcome == Outcome(OutcomeKind.BUDGET, prompt_job.BUDGET_REASON, Metrics(1.5, 4, USAGE))
+
+
+def test_budget_error_becomes_budget(job: Job) -> None:
+    error = ResultError(
+        "Claude Code returned an error result: budget", {"subtype": "error_max_budget_usd"}
+    )
+    outcome = PromptJob(job, {}, FakeQuery([init()], error)).run_once()
+    assert outcome.kind is OutcomeKind.BUDGET
+    assert job.load().session_id == "s1"

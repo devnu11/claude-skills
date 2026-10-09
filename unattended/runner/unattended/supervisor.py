@@ -1,10 +1,11 @@
 """The supervisor loop: run the job, then finish, or wait for the reset and resume.
 
-A usage limit waits until the stated reset plus three minutes (or the fallback
-wait); a rate limit backs off 1, 2, 4… minutes up to 30. Before waiting, the
-job's bounds (deadline, resumes, cost) may end it as ``limit-reached``. A stop
-(the stop file, SIGTERM or Ctrl-C) raises ``StopRequested`` and ends it as
-``stopped``.
+A run that spends what is left of the cost cap ends the job as
+``limit-reached`` at once. A usage limit waits until the stated reset plus
+three minutes (or the fallback wait); a rate limit backs off 1, 2, 4… minutes
+up to 30. Before waiting, the job's bounds (deadline, resumes, cost) may end
+it as ``limit-reached``. A stop (the stop file, SIGTERM or Ctrl-C) raises
+``StopRequested`` and ends it as ``stopped``.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ STOP_REASON = "stopped by the user"
 FINAL: dict[OutcomeKind, JobStatus] = {
     OutcomeKind.DONE: JobStatus.DONE,
     OutcomeKind.FAILED: JobStatus.FAILED,
+    OutcomeKind.BUDGET: JobStatus.LIMIT_REACHED,
 }
 
 
