@@ -152,6 +152,8 @@ def test_parse_handoff_takes_last_block() -> None:
         ('```handoff\n{"status": "meh"}\n```', "status"),
         ('```handoff\n{"status": "done", "changed_files": "a"}\n```', "changed_files"),
         ('```handoff\n{"status": "done", "ruling": "fire"}\n```', "ruling"),
+        ('```handoff\n{"status": "done", "friction": 3}\n```', "friction"),
+        ('```handoff\n{"status": "done", "followups": {"dev": 1}}\n```', "followups"),
     ],
 )
 def test_malformed_handoff_rejected(text: str, match: str) -> None:

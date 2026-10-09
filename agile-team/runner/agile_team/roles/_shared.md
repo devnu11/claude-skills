@@ -34,7 +34,8 @@ JSON. The runner parses it; a missing or malformed block fails your step.
   "summary": "one or two sentences on what you did or found",
   "changed_files": ["path", "..."],
   "open_questions": ["anything only the human can answer"],
-  "next_role": "the role you recommend runs next, or null"
+  "next_role": "the role you recommend runs next, or null",
+  "friction": "what slowed you down or would have made this step cheaper; empty if nothing"
 }
 ```
 
@@ -43,3 +44,8 @@ JSON. The runner parses it; a missing or malformed block fails your step.
   the role that should fix it.
 - `blocked`: you cannot proceed without an answer; put it in `open_questions`.
 - `failed`: something broke that you could not fix; say what in `summary`.
+- `friction`: one or two sentences the Manager reads to improve how the team
+  works, e.g. "re-ran the full suite three times to find one failing test; a
+  `--last-failed` command would help" or "the brief restated the review, I
+  only needed its path". Leave it empty when the step went smoothly. If your
+  brief has "Questions from the Manager", answer them here.

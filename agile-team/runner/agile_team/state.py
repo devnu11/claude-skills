@@ -57,6 +57,7 @@ class RunState:
     manager_due: list[str] = field(default_factory=list)
     status_reason: str | None = None
     task: str = ""
+    followups: dict[str, list[str]] = field(default_factory=dict)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""

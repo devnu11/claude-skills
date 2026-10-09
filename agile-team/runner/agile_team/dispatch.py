@@ -41,7 +41,8 @@ from .gates import (
 )
 from .git_ops import Git, GitError
 from .halt import Halt
-from .ledger import Budget, Entry, Ledger, Tokens
+from .insights import friction_since_review, spend_by_role
+from .ledger import Budget, Entry, Ledger, Tokens, budget_status
 from .providers import Providers
 from .relay import Note, Relay
 from .roles import (
@@ -122,6 +123,7 @@ class StepResult:
     cost: float
     session_id: str | None = None
     tokens: Tokens = field(default_factory=Tokens)
+    turns: int = 0
 
 
 def build_options(plan: Plan) -> ClaudeAgentOptions:
@@ -153,7 +155,7 @@ async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
     if result is None:
         return StepResult(last_text, 0.0)
     cost, tokens = result.total_cost_usd or 0.0, Tokens.from_usage(result.usage)
-    return StepResult(result.result or last_text, cost, result.session_id, tokens)
+    return StepResult(result.result or last_text, cost, result.session_id, tokens, result.num_turns)
 
 
 def _text_of(message: Any) -> str:
@@ -356,7 +358,8 @@ class Runtime:
             parts.append(f"Story {s.id}: {s.title} (step {s.step}, round {s.rounds})")
         if plan.role.name == MANAGER:
             parts.append(self._manager_context())
-        return "\n\n".join(parts)
+        parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
+        return "\n\n".join(p for p in parts if p)
 
     def _manager_context(self) -> str:
         overrides = {r: vars(self.state.overrides[r]) for r in self.state.unreviewed}
@@ -367,6 +370,10 @@ class Runtime:
             "review_reasons": self.state.manager_due,
             "unreviewed_overrides": overrides,
             "stories_at_round_cap": capped,
+            "budget": budget_status(self.ledger, self.config.team.budget_usd),
+            "spend_by_role": spend_by_role(self.ledger),
+            "friction_since_last_review": friction_since_review(self.events.events()),
+            "pending_followups": self.state.followups,
         }
         return "Runner context:\n" + json.dumps(context, indent=2)
 
@@ -459,6 +466,7 @@ class Runtime:
         if isinstance(parsed, HandoffError):
             self._bounce(plan, str(parsed))
             return {"status": "bad_handoff", "reason": str(parsed)}
+        self.state.followups.pop(plan.role.name, None)
         return {
             **handoff_report(parsed),
             **self._effects(plan, parsed),
@@ -487,7 +495,10 @@ class Runtime:
         before, cost = self.ledger.total(), result.cost
         story_id = plan.story.id if plan.story else None
         role = plan.role
-        self.ledger.record(Entry(role.name, role.model, cost, story_id, tokens=result.tokens))
+        entry = Entry(
+            role.name, role.model, cost, story_id, tokens=result.tokens, turns=result.turns
+        )
+        self.ledger.record(entry)
         budget = Budget(self.config.team.budget_usd, self.config.team.manager_every_pct)
         if budget.checkpoint_crossed(before, before + cost):
             self.state.manager_due.append(f"budget checkpoint at ${before + cost:.2f}")
@@ -537,14 +548,30 @@ class Runtime:
         """A Manager step clears the review queue and rules on a capped story."""
         self.state.manager_due.clear()
         self.state.unreviewed.clear()
+        for role, question in handoff.followups.items():
+            self.state.followups.setdefault(role, []).append(question)
         story = plan.story
         if story and story.status is StoryStatus.NEEDS_MANAGER and handoff.ruling:
             self.pipeline.apply_ruling(story, handoff.ruling)
             self.emit(EventKind.RULING, plan, ruling=handoff.ruling, now_at=story.step)
 
 
+def followup_section(questions: list[str]) -> str:
+    """The Manager's pending questions for a role, answered in its handoff's ``friction``."""
+    if not questions:
+        return ""
+    asked = "\n".join(f"- {q}" for q in questions)
+    return f"## Questions from the Manager\n\n{asked}\n\nAnswer them in your handoff's `friction`."
+
+
 def bad_handoff(error: HandoffError) -> dict[str, Any]:
-    return {"status": "bad_handoff", "summary": str(error), "open_questions": [], "next_role": None}
+    return {
+        "status": "bad_handoff",
+        "summary": str(error),
+        "open_questions": [],
+        "next_role": None,
+        "friction": "",
+    }
 
 
 def handoff_report(handoff: Handoff) -> dict[str, Any]:
@@ -553,4 +580,5 @@ def handoff_report(handoff: Handoff) -> dict[str, Any]:
         "summary": handoff.summary,
         "open_questions": handoff.open_questions,
         "next_role": handoff.next_role,
+        "friction": handoff.friction,
     }

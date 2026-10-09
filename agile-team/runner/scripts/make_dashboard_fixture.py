@@ -73,7 +73,15 @@ def charge(role, story, at):
     tok = tokens(role)
     c = cost(model, tok)
     ledger.append(
-        {"at": at, "role": role, "model": model, "story": story, "cost_usd": c, "tokens": tok}
+        {
+            "at": at,
+            "role": role,
+            "model": model,
+            "story": story,
+            "cost_usd": c,
+            "tokens": tok,
+            "turns": rng.randint(4, 40),
+        }
     )
     return tok, c
 

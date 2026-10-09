@@ -271,13 +271,31 @@ Every role ends with:
 ````
 ```handoff
 {"status": "done", "summary": "…", "changed_files": [], "open_questions": [],
- "next_role": null}
+ "next_role": null, "friction": ""}
 ```
 ````
 
-`status`: `done`, `changes_requested`, `blocked`, `failed`. The Manager adds
-`"ruling"`: `rescope`, `upgrade_model`, `revise_design`, `escalate`. A missing
-or malformed block fails the step (and counts a round).
+`status`: `done`, `changes_requested`, `blocked`, `failed`. `friction` is
+optional: what slowed the step down or would make it cheaper. It is logged on
+the step-end event for the Manager. The Manager adds `"ruling"` (`rescope`,
+`upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
+{"<role>": "<question>"}`. The runner appends each follow-up to that role's
+next brief under "Questions from the Manager" and clears it once the role
+hands off; the answer comes back in that role's `friction`. A missing or
+malformed block fails the step (and counts a round).
+
+### What the Manager sees
+
+The Manager's runner context carries `budget` (spend, tokens), `spend_by_role`
+(steps, cost, cost per step, tokens and turns per step, most expensive first),
+`friction_since_last_review` (friction from step-ends since its last step) and
+`pending_followups`, beside the review reasons, overrides and capped stories.
+Each ledger entry records the step's API `turns` alongside its tokens.
+
+### The PO stays in its lane
+
+The PO may read only `.team/**` and the docs directory, so it cannot read
+source or tests. Diagnosis goes to the architect, reviewer or devops.
 
 ## Pipeline and gates
 

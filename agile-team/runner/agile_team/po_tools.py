@@ -298,7 +298,8 @@ class PoRun:
     def _record(self, model: str, result: StepResult) -> None:
         """Ledger the PO's cost, keep its session for resume, and mark the run idle."""
         state = self.runtime.state
-        self.runtime.ledger.record(Entry(PO, model, result.cost, tokens=result.tokens))
+        entry = Entry(PO, model, result.cost, tokens=result.tokens, turns=result.turns)
+        self.runtime.ledger.record(entry)
         state.po_session = result.session_id or state.po_session
         if state.status is RunStatus.RUNNING:
             state.mark(RunStatus.IDLE)
