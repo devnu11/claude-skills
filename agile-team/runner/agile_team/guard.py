@@ -156,9 +156,18 @@ def check_bash(scope: Scope, command: str) -> str | None:
     return next((reason for reason in denials if reason), None)
 
 
+COMMENT_MARKER = "#"
+
+
 def _views(command: str) -> tuple[str, ...]:
-    """The raw command and its line-continuation-joined form, deduplicated."""
-    return tuple(dict.fromkeys((command, LINE_CONTINUATION.sub(r"\1", command))))
+    """The joined view, plus the raw one when a ``#`` could hide a continuation.
+
+    Only a ``#`` comment can end in a backslash the shell does not join, so
+    without ``COMMENT_MARKER`` the joined view matches what the shell runs.
+    """
+    joined = LINE_CONTINUATION.sub(r"\1", command)
+    views = (joined, command) if COMMENT_MARKER in command else (joined,)
+    return tuple(dict.fromkeys(views))
 
 
 def _check_view(scope: Scope, command: str) -> str | None:
