@@ -1,0 +1,31 @@
+name: unattended runner
+
+on:
+  push:
+    branches: [main]
+    paths: ["unattended/**", ".github/workflows/unattended.yml"]
+  pull_request:
+    paths: ["unattended/**", ".github/workflows/unattended.yml"]
+
+defaults:
+  run:
+    working-directory: unattended/runner
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --dev
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest --cov
