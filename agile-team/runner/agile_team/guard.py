@@ -38,7 +38,8 @@ SAFE_GIT = frozenset(
 NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
-LINE_CONTINUATION = "\\\n"
+# A backslash-newline continues the line only when preceded by an odd run of backslashes.
+LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
 UNQUOTE = str.maketrans("", "", "'\"\\")
 
@@ -149,7 +150,7 @@ def check_bash(scope: Scope, command: str) -> str | None:
 
     Checks run after joining ``\\``-newline line continuations as the shell does.
     """
-    command = command.replace(LINE_CONTINUATION, "")
+    command = LINE_CONTINUATION.sub(r"\1", command)
     segments = [_tokens(s) for s in _SEGMENT_SPLIT.split(command)]
     checks = (
         lambda: _check_secret_mention(scope, command),
