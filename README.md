@@ -11,29 +11,28 @@ One directory per skill, each containing a `SKILL.md` with YAML frontmatter:
 ```
 <skill-name>/
 	SKILL.md          # name + description frontmatter, then the instructions
-	reference.md      # optional supporting files the skill can point Claude at
-	scripts/          # optional helper scripts
+	reference/        # optional detail SKILL.md points Claude at
+	runner/           # optional Python helper (a uv project with its own tests)
 ```
 
 The `name` in the frontmatter should match the directory name, and the
 `description` is what Claude matches against to decide whether a skill is
 relevant — write it as "use this when…", listing concrete trigger phrases.
+The rules for developing skills here are in
+[`.claude/CLAUDE.md`](.claude/CLAUDE.md).
 
 ## Skills
 
 | Skill | What it does |
 |---|---|
-| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Scribe…) billed to the repo's own API key. Individual roles can run on a local or other Anthropic-compatible model. Stories wait in a backlog until the Product Owner commits them to a sprint, and only sprint work moves. A usage limit, a crash or `stop --now` stops the runner cleanly with a saved status, a reason (for example, when the limit resets) and a note for the human; `start --resume` continues. `agile-team dashboard` serves a read-only live dashboard (board, flow of briefs and handoffs, token spend, open questions, requirements) that other machines on the network can open. The interactive session only relays the Product Owner's questions. Runner: [`agile-team/runner`](agile-team/runner) (Python Agent SDK, `uv`); protocol: [`reference/protocol.md`](agile-team/reference/protocol.md). |
-| [`unattended`](unattended/SKILL.md) | Runs a long or expensive prompt or command as a background job. When the job hits a Claude usage limit, it saves its session, waits for the reset and resumes itself. A deadline, a maximum number of resumes and a cost cap stop it. Prompt jobs inherit your Claude Code settings and run on your login or an API key. A command signals a limit by exiting 75, which is what `agile-team start` already does. `unattended wait` blocks until the job ends, so a Claude session can be notified. Runner: [`unattended/runner`](unattended/runner) (Python Agent SDK, `uv`); protocol: [`reference/protocol.md`](unattended/reference/protocol.md). |
+| [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Manager, Scribe) while the interactive session acts as liaison. Stories move from a backlog through sprints and a gated pipeline. It runs on your Claude login or the repo's API key, and roles can use local models. `agile-team dashboard` serves a live view of the run. Details: [`reference/protocol.md`](agile-team/reference/protocol.md). |
+| [`unattended`](unattended/SKILL.md) | Runs a long or expensive prompt or command as a background job that waits out Claude usage limits and resumes itself, within a deadline, a resume count and a cost cap. It runs on your login or an API key, and it can wrap `agile-team start`. Details: [`reference/protocol.md`](unattended/reference/protocol.md). |
 | [`example-skill`](example-skill/SKILL.md) | Template showing the file format. |
 
-`agile-team` needs [uv](https://docs.astral.sh/uv/) and an Anthropic API key
-(per repo in `.team/run/api-key`, or `~/secrets/anthropic-api-key`, mode 600).
-The runner installs its own dependencies on first use. Its tests:
-
-```sh
-cd agile-team/runner && uv run pytest --cov
-```
+Both skills need [uv](https://docs.astral.sh/uv/); their runners install their
+own dependencies on first use. They run on your Claude Code login, or on an
+API key from a key file (agile-team: `.team/run/api-key`; both:
+`~/secrets/anthropic-api-key`, mode 600).
 
 ## Install
 
@@ -66,13 +65,16 @@ the `.chezmoiexternal.toml.tmpl` and `run_after_link-claude-skills.sh.tmpl` in
 ## Tests
 
 ```sh
-sh tests/install_test.sh
+sh tests/install_test.sh                         # install.sh
+(cd agile-team/runner && uv run pytest --cov)    # agile-team runner
+(cd unattended/runner && uv run pytest --cov)    # unattended runner
 ```
 
-Covers linking, idempotency (a second run changes nothing), `--dry-run`,
-relinking, pruning, and leaving `synced/` and foreign links alone. Each test
-works in a scratch directory, never the real `~/.claude/skills`. CI runs it on
-Linux (dash) and macOS (bash 3.2 as `/bin/sh`), plus shellcheck.
+The install tests cover linking, idempotency (a second run changes nothing),
+`--dry-run`, relinking, pruning, and leaving `synced/` and foreign links alone.
+Each works in a scratch directory, never the real `~/.claude/skills`. CI runs
+them on Linux (dash) and macOS (bash 3.2 as `/bin/sh`), plus shellcheck. Each
+runner has its own CI workflow (ruff, and pytest with coverage of 95% or more).
 
 ## Writing a skill
 
