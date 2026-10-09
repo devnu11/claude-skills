@@ -200,3 +200,37 @@ def test_proxy_end_to_end_in_nested_layout(tmp_path: Path) -> None:
     assert read("agile-team/runner/agile_team/cli.py")
     assert run("agile-team status") is None
     assert run("cat agile-team/runner/tests/test_x.py")
+
+
+NL = "\\\n"  # a backslash followed by a real newline: a line continuation (W0)
+CONTINUATION_DENY = [
+    f"cat agile-team/runner/agile_{NL}team/cli.py",
+    f"cat agile-team/runner/agile_team{NL}/cli.py",
+    f"cat agile-team/run{NL}ner/agile_team/cli.py",
+    f"cat agile-team/runner/tes{NL}ts/conftest.py",
+    f"cat {NL}agile-team/runner/agile_team/cli.py",
+    f"cat .{NL}./.{NL}./.{NL}./.{NL}./agile-team/runner/agile_team/cli.py",
+    f"ls .{NL}.",
+]
+CONTINUATION_ALLOW = [
+    f"cat agile-team/docs/customer/x{NL}.md",
+    f"cat agile-team/docs/customer/{NL}x.md",
+    f"agile-team{NL} status",
+]
+
+
+@pytest.mark.parametrize("command", CONTINUATION_DENY)
+def test_nested_line_continuation_denied(tmp_path: Path, command: str) -> None:
+    """W0 joins `\\`-newline before W1-W6, so a split word cannot hide a root or `..`."""
+    assert bash(scope_with(tmp_path, REPO_ROOTS), command)
+
+
+@pytest.mark.parametrize("command", CONTINUATION_ALLOW)
+def test_nested_line_continuation_allowed(tmp_path: Path, command: str) -> None:
+    """W0 must not over-deny a joined word that stays outside every root."""
+    assert bash(scope_with(tmp_path, REPO_ROOTS), command) is None
+
+
+def test_flat_line_continuation_denied(tmp_path: Path) -> None:
+    assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat s{NL}rc/x")
+    assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat tests.t{NL}xt") is None
