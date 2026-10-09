@@ -49,11 +49,6 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   The flowchart is drawn by Mermaid, which the page loads from
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
-  The chart also shows what is happening now: the box of the role that is
-  running glows (the Product Owner's when no step is open), and each new
-  brief, handoff, question or answer sends a small dot along its line. If
-  your system asks for reduced motion, the glow is a steady highlight and
-  the line lights up briefly instead of a dot moving.
 - **Tokens:** spend by role, story or model (switch with the buttons above
   the bars), and cumulative spend over time.
 - **Questions:** questions waiting for your answer (with the
