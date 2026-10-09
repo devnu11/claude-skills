@@ -140,6 +140,7 @@ class Handoff:
     ruling: str | None = None
     friction: str = ""
     followups: dict[str, str] = field(default_factory=dict)
+    developer: str | None = None
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -381,6 +382,10 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
     (lambda d: d.get("ruling") in (None, *RULINGS), f"ruling must be one of {RULINGS}"),
     (lambda d: isinstance(d.get("friction", ""), str), "friction must be a string"),
     (lambda d: _str_map(d.get("followups", {})), "followups must map role names to questions"),
+    (
+        lambda d: d.get("developer") is None or isinstance(d.get("developer"), str),
+        "developer must be a role name",
+    ),
 )
 
 
@@ -403,4 +408,5 @@ def _handoff_from(data: Any) -> Handoff:
         ruling=data.get("ruling"),
         friction=data.get("friction", ""),
         followups=dict(data.get("followups", {})),
+        developer=data.get("developer") or None,
     )

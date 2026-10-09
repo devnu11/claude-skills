@@ -26,11 +26,12 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import guard, halt, keys, presentation, sandbox
+from . import guard, halt, handover, keys, presentation, sandbox
 from . import state as state_mod
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
+    UNGATED_ROLES,
     Outcome,
     Pipeline,
     StoryState,
@@ -60,6 +61,9 @@ PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = "product-owner"
 MANAGER = "manager"
+SCRIBE = "scribe"
+ARCHITECT = "architect"
+NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
 SHELL_OPTS: dict[str, Any] = {
     "shell": True,
@@ -395,15 +399,32 @@ class Runtime:
         if reason:
             return refused(reason)
         self.settle_po()
-        returned = self._unpresented(request)
-        if returned:
-            return returned
+        report = self._unpresented(request) or await self._plan_and_run(request)
+        self._note_if_ran(request, report)
+        return report
+
+    def _note_if_ran(self, request: StepRequest, report: dict[str, Any]) -> None:
+        story = self.state.stories.get(request.story_id or "")
+        if story and report["status"] not in NOT_NOTED:
+            self.note_step(story, report)
+
+    async def _plan_and_run(self, request: StepRequest) -> dict[str, Any]:
         try:
             plan = self.plan(request)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
         self.emit(EventKind.STEP_START, plan, brief=request.brief)
         return await self._run_planned(plan)
+
+    def note_step(self, story: StoryState, report: dict[str, Any]) -> None:
+        """Record a story step: its hold, its gated previous step and the scribe queue."""
+        story.hold = handover.hold_reason(report)
+        previous = handover.previous_step(report)
+        if previous and report.get("role") not in UNGATED_ROLES:
+            story.previous = previous
+        if report.get("role") == SCRIBE and story.id in self.state.scribe_due:
+            self.state.scribe_due.remove(story.id)
+        self.save()
 
     def _unpresented(self, request: StepRequest) -> dict[str, Any] | None:
         """Return a Proxy request on an unpresented story to e2e, billing nothing."""
@@ -502,6 +523,9 @@ class Runtime:
         if plan.role.name == MANAGER:
             self.apply_manager(plan, handoff)
             return {}
+        effect = STORY_EFFECTS.get(plan.role.name)
+        if effect and plan.story:
+            effect(plan.story, handoff)
         return {"gate": self.gate(plan, handoff)} if plan.story else {}
 
     def _bounce(self, plan: Plan, reason: str) -> None:
@@ -559,6 +583,8 @@ class Runtime:
         story = plan.story
         step = story.step
         self.pipeline.advance(story, outcome)
+        if story.status is StoryStatus.DONE and story.id not in self.state.scribe_due:
+            self.state.scribe_due.append(story.id)
         result = {
             "step": step,
             "verdict": outcome.verdict,
@@ -580,6 +606,16 @@ class Runtime:
         if story and story.status is StoryStatus.NEEDS_MANAGER and handoff.ruling:
             self.pipeline.apply_ruling(story, handoff.ruling)
             self.emit(EventKind.RULING, plan, ruling=handoff.ruling, now_at=story.step)
+
+
+def _capture_developer(story: StoryState, handoff: Handoff) -> None:
+    """The architect's pick of developer specialisation for the story."""
+    story.developer = handoff.developer or story.developer
+
+
+STORY_EFFECTS: dict[str, Callable[[StoryState, Handoff], None]] = {
+    ARCHITECT: _capture_developer,
+}
 
 
 def followup_section(questions: list[str]) -> str:
