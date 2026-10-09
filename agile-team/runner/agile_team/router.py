@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, ClassVar
 
 from . import halt, handover
 from .config import Config
@@ -186,7 +186,11 @@ class Router:
     def _briefed(self, role: str, story: StoryState) -> Work:
         return Work(role, story, standard_brief(self.runtime.config, Work(role, story, "")))
 
-    PICKERS = (_manager_work, _scribe_work, _story_work)
+    PICKERS: ClassVar[tuple[Callable[[Router], Work | None], ...]] = (
+        _manager_work,
+        _scribe_work,
+        _story_work,
+    )
 
     def next_work(self) -> Work | None:
         """The first step due: the Manager, then a Scribe, then a movable story."""
