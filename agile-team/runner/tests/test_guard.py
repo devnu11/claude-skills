@@ -152,3 +152,32 @@ def test_no_writes_inside_git(tmp_path: Path) -> None:
 )
 def test_only_read_only_git(tmp_path: Path, command: str, allowed: bool) -> None:
     assert (guard.check_bash(Scope("developer", tmp_path, ["**"]), command) is None) is allowed
+
+
+@pytest.mark.parametrize(
+    ("command", "allowed"),
+    [
+        ("g\\\nit commit -m x", False),
+        ("git \\\ncommit -m x", False),
+        ("git pu\\\nsh", False),
+        ("git st\\\natus", True),
+        ("git \\\nstatus", True),
+    ],
+)
+def test_line_continuation_joined_for_git(tmp_path: Path, command: str, allowed: bool) -> None:
+    """W0: every role's git check sees the command the shell runs."""
+    assert (guard.check_bash(Scope("developer", tmp_path, ["**"]), command) is None) is allowed
+
+
+def test_line_continuation_joined_for_key_name(tmp_path: Path) -> None:
+    s = secret_scope(tmp_path)
+    assert guard.check_bash(s, "echo ANTHROPIC_API_\\\nKEY")
+    assert guard.check_bash(s, "echo $ANTHROPIC_API_\\\nKEY")
+    assert guard.check_bash(s, "echo hello\\\n world") is None
+
+
+def test_line_continuation_through_check_tool_use(tmp_path: Path) -> None:
+    s = dev_scope(tmp_path)
+    assert use(s, "Bash", {"command": "g\\\nit commit -m x"})
+    assert use(s, "Bash", {"command": "echo ANTHROPIC_API_\\\nKEY"})
+    assert use(s, "Bash", {"command": "git st\\\natus"}) is None
