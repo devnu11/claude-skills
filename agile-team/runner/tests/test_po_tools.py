@@ -218,7 +218,7 @@ def test_run_po_records_cost_and_session(make_runtime) -> None:
     result = asyncio.run(po_tools.run_po(rt, Start("Build a todo CLI")))
     assert result.text == "All done."
     opts = q.calls[0]["options"]
-    assert opts.model == "opus" and "team" in opts.mcp_servers
+    assert opts.model == "sonnet" and "team" in opts.mcp_servers
     assert "mcp__team__ask_user" in opts.allowed_tools
     assert "Build a todo CLI" in q.calls[0]["prompt"] and "Cadence: sprint" in q.calls[0]["prompt"]
     assert rt.ledger.by_role() == {"product-owner": 0.5}

@@ -491,6 +491,7 @@ def test_a_review_bounce_goes_to_the_named_developer_with_the_reason(make_runtim
     rt = build(make_runtime, script, steps=["implement", "review"])
     add_story(rt, "s1", "implement")
     write_file(rt, ".team/reviews/s1.md")
+    rt.git.commit([".team/reviews/s1.md"], "docs: review")  # settle quarantines untracked files
     drive(rt)
     assert step_roles(rt)[:4] == ["developer", "code-reviewer", "developer-gui", "code-reviewer"]
     text = script.prompts["developer-gui"][0]
@@ -581,9 +582,9 @@ def test_the_note_is_cleared_after_the_step_runs(make_runtime) -> None:
 
 def test_a_refused_router_step_keeps_the_note_and_holds_the_story(make_runtime) -> None:
     rt = build(make_runtime, Script(), steps=["design", "implement"])
-    story = add_story(rt, step="implement", note="remember X", po_developer="ghost")
+    story = add_story(rt, step="implement", note="remember X", po_developer="developer-ghost")
     p = advance(rt)
-    assert p.kinds == [T.REFUSED] and "unknown role 'ghost'" in p.lines[0]
+    assert p.kinds == [T.REFUSED] and "unknown role 'developer-ghost'" in p.lines[0]
     assert story.note == "remember X" and story.hold == "refused"
 
 
