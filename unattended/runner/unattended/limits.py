@@ -28,6 +28,7 @@ class OutcomeKind(StrEnum):
     DONE = "done"
     LIMIT = "limit"
     RATE_LIMITED = "rate-limited"
+    BUDGET = "budget"
     FAILED = "failed"
 
 
@@ -237,6 +238,10 @@ class Bounds:
     deadline: float | None = None
     max_resumes: int = DEFAULT_MAX_RESUMES
     max_cost: float | None = None
+
+    def budget_left(self, spent: float) -> float | None:
+        """USD the next run may spend, or None without a cost cap."""
+        return None if self.max_cost is None else max(self.max_cost - spent, 0.0)
 
     def stop_reason(self, progress: Progress) -> str | None:
         """Why the job must not resume, or None when it may."""

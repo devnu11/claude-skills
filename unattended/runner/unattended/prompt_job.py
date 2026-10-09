@@ -26,6 +26,9 @@ from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
 from .store import OUTPUT_FILE, Job, JobState
 
 SETTING_SOURCES: list[Any] = ["user", "project", "local"]
+# The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
+BUDGET_SUBTYPE = "error_max_budget_usd"
+BUDGET_REASON = "cost cap reached mid-run; resume with a higher --max-cost to continue"
 QueryFn = Callable[..., AsyncIterator[Any]]
 
 
@@ -35,7 +38,7 @@ def prompt_for(state: JobState) -> str:
 
 
 def options_for(state: JobState, env: Mapping[str, str]) -> ClaudeAgentOptions:
-    """SDK options: the user's settings, the job's cwd and model, and its session."""
+    """SDK options: the user's settings, cwd, model, session and what is left of the cost cap."""
     spec = state.spec
     return ClaudeAgentOptions(
         cwd=spec.cwd,
@@ -44,6 +47,7 @@ def options_for(state: JobState, env: Mapping[str, str]) -> ClaudeAgentOptions:
         setting_sources=SETTING_SOURCES,
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
         env=dict(env),
+        max_budget_usd=state.bounds.budget_left(state.cost),
     )
 
 
@@ -91,16 +95,24 @@ class Drain:
     def output(self) -> str:
         return (self.result.result if self.result else None) or self.text
 
+    def budget_spent(self, found: list[BaseException]) -> bool:
+        """True when the result or an exception says the run's budget ran out."""
+        return any(getattr(x, "subtype", None) == BUDGET_SUBTYPE for x in [self.result, *found])
+
     def finished(self) -> Outcome:
         """``DONE``, unless the result itself is an error."""
         metrics = metrics_of(self.result)
+        if self.budget_spent([]):
+            return Outcome(OutcomeKind.BUDGET, BUDGET_REASON, metrics)
         if self.result and self.result.is_error:
             return _with(classify(self.result.result or "error result"), metrics)
         return Outcome(OutcomeKind.DONE, metrics=metrics)
 
     def failed(self, exc: Exception) -> Outcome:
-        """A limit, rate limit or failure read from the exception's messages."""
+        """A budget stop, limit, rate limit or failure read from the exception."""
         found = leaves(exc)
+        if self.budget_spent(found):
+            return Outcome(OutcomeKind.BUDGET, BUDGET_REASON, metrics_of(self.result))
         outcome = classify("\n".join(strip_exit_suffix(str(leaf)) for leaf in found))
         if outcome.kind is OutcomeKind.FAILED:
             outcome = Outcome(outcome.kind, f"crashed: {type(found[0]).__name__}: {outcome.reason}")

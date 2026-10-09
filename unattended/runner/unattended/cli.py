@@ -366,7 +366,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     state = job.load()
     _require_resumable(job, state)
     bounds = updated_bounds(state.bounds, args)
-    _require_open_deadline(bounds)
+    _require_room(bounds, state.cost)
     require_auth(state.spec, Path(args.home))
     job.update(lambda st: _restart(st, bounds))
     job.clear_stop()
@@ -387,9 +387,12 @@ def _require_resumable(job: Job, state: JobState) -> None:
         )
 
 
-def _require_open_deadline(bounds: Bounds) -> None:
+def _require_room(bounds: Bounds, spent: float) -> None:
+    """Refuse a resume whose deadline has passed or whose cost cap is used up."""
     if bounds.deadline is not None:
         _future(bounds.deadline, time.time())
+    if bounds.budget_left(spent) == 0.0:
+        raise CliError(f"${spent:.2f} spent reaches the cost cap; give a higher --max-cost")
 
 
 # ----- parser ----------------------------------------------------------------------

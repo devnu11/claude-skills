@@ -191,3 +191,9 @@ def test_bounds_cost_reached() -> None:
 
 def test_local_is_aware() -> None:
     assert limits.local(0.0).tzinfo is not None
+
+
+def test_budget_left() -> None:
+    assert Bounds().budget_left(5.0) is None
+    assert Bounds(max_cost=2.0).budget_left(0.5) == 1.5
+    assert Bounds(max_cost=2.0).budget_left(2.5) == 0.0

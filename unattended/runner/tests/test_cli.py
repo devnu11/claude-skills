@@ -356,3 +356,14 @@ def test_keyboard_interrupt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(cli, "job_home", interrupt)
     assert run(tmp_path, "list") == 130
+
+
+def test_resume_refuses_a_used_up_cost_cap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.LIMIT_REACHED)
+    job.update(lambda st: (setattr(st.bounds, "max_cost", 2.0), setattr(st, "cost", 2.1)))
+    assert run(tmp_path, "resume", "j") == 1
+    assert "$2.10 spent reaches the cost cap" in capsys.readouterr().err
+    assert run(tmp_path, "resume", "j", "--max-cost", "5", "--foreground") == 0
+    assert job.load().status is JobStatus.DONE

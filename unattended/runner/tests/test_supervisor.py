@@ -189,3 +189,11 @@ def test_sigterm_raises_stop_requested() -> None:
             os.kill(os.getpid(), signal.SIGTERM)
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+def test_budget_stop_ends_without_waiting(job: Job) -> None:
+    budget = Outcome(OutcomeKind.BUDGET, "cost cap reached mid-run", Metrics(cost=2.0))
+    status, clock = supervise(job, Script(budget))
+    assert status is JobStatus.LIMIT_REACHED
+    assert (job.load().reason, job.load().cost) == ("cost cap reached mid-run", 2.0)
+    assert clock.sleeps == []
