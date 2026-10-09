@@ -67,23 +67,90 @@ def test_deny_rules_are_per_root_and_skip_docs(tmp_path: Path) -> None:
     assert str(Path(repo) / "agile-team/docs/customer") in s["sandbox"]["filesystem"]["allowRead"]
 
 
-@pytest.mark.parametrize(
-    ("token", "allowed"),
-    [
-        ("agile-team", True),
-        ("agile-team/docs/customer/x.md", True),
-        ("agile-team/runner", True),
-        ("agile-team/runner/agile_team/cli.py", False),
-        ("agile-team/runner/agile_team", False),
-        ("./agile-team/runner/tests", False),
-        ("agile-team/runner/tests/", False),
-        ("agile-team//runner/agile_team/x", False),
-        ("agile-team/./runner/scripts/x", False),
-        ("agile-team/runner/testsuite", True),
-    ],
-)
-def test_nested_bash_tokens(tmp_path: Path, token: str, allowed: bool) -> None:
-    assert (bash(scope_with(tmp_path, REPO_ROOTS), f"cat {token}") is None) is allowed
+NESTED_ALLOW = [
+    "cat agile-team",
+    "cat agile-team/runner",
+    "cat agile-team/runner/testsuite",
+    "agile-team status",
+    "agile-team --help",
+    "which agile-team",
+    "cat agile-team/docs/customer/x.md",
+    "cat agile-team/docs/*.md",
+    "cat agile-team/docs/customer/*",
+    "cat agile-team/docs/customer/{a,b}.md",
+    "cat agile-team/README*",
+    "ls agile-team/*",
+    "cat .team/stories/*",
+    "cat *.txt",
+    "cat ./*.txt",
+    "echo {1..3}",
+    "ls *",
+    "ls ?",
+    "ls **",
+    'cat "agile-team/docs/x.md" # it\'s',
+]
+NESTED_DENY = [
+    # literal words (W4, W6)
+    "cat agile-team/runner/agile_team/cli.py",
+    "cat agile-team/runner/agile_team",
+    "ls ./agile-team/runner/tests",
+    "ls agile-team/runner/tests/",
+    "cat agile-team//runner/agile_team/x",
+    "cat agile-team/./runner/scripts/x",
+    "cat 'agile-team/runner/agile_team'/cli.py",
+    "cat AGILE-TEAM/runner/agile_team/cli.py",
+    # fallback when shlex cannot parse (W1)
+    'cat "agile-team/runner/agile_team/cli.py" # it\'s',
+    # wildcards (D1)
+    "cat agile-team/runner/agile_*/cli.py",
+    "cat agile-team/runner/agile_tea?/x",
+    "cat agile-team/runner/agile_tea[m]/x",
+    "cat agile-team/*/agile_team/x",
+    "ls agile-team/**",
+    "cat agile-team/**/cli.py",
+    "cat agile-team/runner/*",
+    "cat agile-team/runner/tests/*",
+    "cat agile-team/runner/scripts?",
+    "cat a*/runner/agile_team/x",
+    "cat agile-team/run*/agile_team/x",
+    # braces and groups (W2)
+    "cat agile-team/runner/agile_team{,}/x",
+    "cat agile-team/runner/{agile_team,x}/cli.py",
+    "cat {agile-team/runner,x}/agile_team/cli.py",
+    "cat agile-team/docs/{..,x}/runner/agile_team/cli.py",
+    "cat agile-team/docs/.*/runner/agile_team/cli.py",
+    "cat agile-team/runner/(agile_team|x)/cli.py",
+    "cat agile-team/runner/agile_tea(m)",
+    # normalisation before wildcards (B1)
+    "cat ./agile-team/runner/agile_*/x",
+    "cat agile-team//runner/agile_*/x",
+    "cat .//agile-team/runner/agile_*",
+    "cat agile-team/./runner/agile_*/cli.py",
+    "cat agile-team/runner/./agile_*/cli.py",
+    "cat ./agile-team/./runner/agile_t*/cli.py",
+    # quoted and escaped globs (W1)
+    "cat 'agile-team/runner/agile_'*/cli.py",
+    "cat agile-team/runner/agile_\\*/x",
+    # leading wildcards and braces (B2)
+    "cat {,}agile-team/runner/agile_team/cli.py",
+    "cat */runner/agile_team/cli.py",
+    "cat */*/agile_*/cli.py",
+    "cat ?gile-team/runner/agile_team/cli.py",
+    "cat [a]gile-team/runner/agile_team/x",
+    # deliberate over-denies
+    "cat {docs,x}/a.md",
+    "ls **/*.md",
+    "cat .*/x",
+    "cat agile-team/runner/agile_tea[x]/y",
+]
+
+
+NESTED_CASES = [(c, True) for c in NESTED_ALLOW] + [(c, False) for c in NESTED_DENY]
+
+
+@pytest.mark.parametrize(("command", "allowed"), NESTED_CASES)
+def test_nested_bash_tokens(tmp_path: Path, command: str, allowed: bool) -> None:
+    assert (bash(scope_with(tmp_path, REPO_ROOTS), command) is None) is allowed
 
 
 def test_bare_cli_commands_allowed(tmp_path: Path) -> None:
@@ -102,6 +169,20 @@ def test_bare_cli_commands_allowed(tmp_path: Path) -> None:
         ("cat src//x", False),
         ("cat tests.txt", True),
         ("ls srcfoo", True),
+        ("ls *", True),
+        ("ls ?", True),
+        ("cat *.txt", True),
+        ("ls .*", True),
+        ("cat SRC/x", False),
+        ("cat s*/x", False),
+        ("cat src*", False),
+        ("cat */x", False),
+        ("cat ?rc/x", False),
+        ("cat [s]rc", False),
+        ("cat {,}src", False),
+        ("cat {,}src/x", False),
+        ("echo {1..3}", False),
+        ("ls [a-z]*", False),
     ],
 )
 def test_flat_layout_parity(tmp_path: Path, command: str, allowed: bool) -> None:
