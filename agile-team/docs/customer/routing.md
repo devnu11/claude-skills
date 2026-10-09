@@ -15,6 +15,8 @@ The **Product Owner** (PO) is called in only when a judgement is needed:
 - a story keeps bouncing and reaches the round cap;
 - a reviewer sends work to a role that has no pipeline step (for example
   DevOps);
+- the Manager made a ruling that could not apply (for example on a done
+  story);
 - you answered a question;
 - the sprint is complete, or nothing can move.
 
@@ -53,3 +55,25 @@ run spends far less on the PO than before.
 The code reviewer sent s19 back to `developer-cli`. The runner starts
 `developer-cli` again with the review file and the reason, without waiting
 for the PO.
+
+## When a test contradicts the design
+
+Developers may not edit tests. If a test expects something the design rules
+out, the developer names the test and the design rule in its handoff, and
+the runner sends the story back to the unit-tester. You don't need to fix
+the test yourself.
+
+- The unit-tester fixes the test, and the story goes back to the developer.
+  This costs no round.
+- If the unit-tester thinks the test is right, the architect decides. That
+  costs a round, the same as a failed gate.
+- A story gets at most `round_cap` free disputes. Later ones count a round,
+  so a story can't loop between developer and tester forever.
+
+The dashboard's timeline shows each one as a **test dispute**, and
+`agile-team status` shows the open one under the story's `"dispute"`.
+
+The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
+`escalate`) work at any step, not only at the round cap. A ruling that can't
+apply, such as one on a done story, is reported to the PO. It is never
+silently dropped.
