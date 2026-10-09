@@ -659,10 +659,10 @@ const EVENT_EDGE = {
   answer: () => ["you", STEER, "human"],
 };
 
-/** The drawn edge path between two node ids and whether it runs the other way (Mermaid's LS-/LE- classes). */
+/** The drawn edge path between two node ids and whether it runs the other way (Mermaid 11 ids: [prefix-]L_<from>_<to>_<n>). */
 function findEdge(from, to) {
-  const svg = flowSvg();
-  const pick = (a, b) => svg.querySelector(`path.LS-${a}.LE-${b}`);
+  const paths = [...flowSvg().querySelectorAll("path.flowchart-link")];
+  const pick = (a, b) => paths.find((p) => new RegExp(`(^|-)L_${a}_${b}_\\d+$`).test(p.id));
   const fwd = pick(from, to), back = fwd ? null : pick(to, from);
   return fwd || back ? { path: fwd ?? back, reverse: !fwd } : null;
 }
@@ -783,7 +783,7 @@ function timelineRowHtml(e, ctx, isNew) {
 
 function renderTimelineFilter(view) {
   const opts = [`<option value="">All stories</option>`,
-    ...view.stories.map((s) => `<option value="${s.id}" ${ui.story === s.id ? "selected" : ""}>${esc(s.id)}: ${esc(s.title)}</option>`)];
+    ...view.stories.map((s) => `<option value="${esc(s.id)}" ${ui.story === s.id ? "selected" : ""}>${esc(s.id)}: ${esc(s.title)}</option>`)];
   $("#tl-filter").innerHTML = opts.join("");
 }
 
@@ -800,7 +800,7 @@ function renderBoard(view) {
   const act = activeStep(view.events), blockers = blockedBy(view);
   $("#board").innerHTML = boardColumns(view).map(([id, label, test]) => {
     const cards = view.stories.filter(test);
-    return `<div class="col ${id}"><h3>${esc(label)}<span>${cards.length}</span></h3>
+    return `<div class="col ${esc(id)}"><h3>${esc(label)}<span>${cards.length}</span></h3>
       ${cards.map((s) => storyCard(view, s, act, blockers)).join("")}</div>`;
   }).join("");
 }
@@ -827,7 +827,7 @@ function storyCard(view, s, act, blockers) {
     ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
     <div class="row">${rounds(s.rounds, view.run.round_cap)}
       ${view.requirements.length ? `<span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span>` : ""}</div>
-    ${reqs.length ? `<div class="row" style="margin-top:6px">${reqs.map((r) => `<span class="req-chip">${r}</span>`).join("")}</div>` : ""}
+    ${reqs.length ? `<div class="row" style="margin-top:6px">${reqs.map((r) => `<span class="req-chip">${esc(r)}</span>`).join("")}</div>` : ""}
   </div>`;
 }
 
@@ -975,7 +975,7 @@ function renderQuestions(view) {
   $("#q-open").innerHTML = open.map((q) => `<div class="q">
       <div class="q-head">${pill(q.id, "warning")}<span>open ${fmt.ago(q.at, now)}</span>${q.stories.length ? "blocks " + q.stories.map(storyChip).join(" ") : "blocks nothing"}</div>
       <div class="q-text">${esc(q.text)}</div>
-      <div class="q-cmd"><code>agile-team answer ${q.id} "…"</code><button class="ctl" data-copy='agile-team answer ${q.id} ""'>Copy</button></div>
+      <div class="q-cmd"><code>agile-team answer ${esc(q.id)} "…"</code><button class="ctl" data-copy='agile-team answer ${esc(q.id)} ""'>Copy</button></div>
     </div>`).join("") || `<p class="empty">Nothing is waiting on you.</p>`;
   $("#q-raised").innerHTML = raisedQuestions(view).reverse().map((q) => `<div class="q">
       <div class="q-head"><span>raised by ${esc(q.role)}</span>${storyChip(q.story)}<span>${fmt.ago(q.at, now)} ago</span></div>
@@ -1017,7 +1017,7 @@ function renderRequirements(view) {
 
 function renderMatrix(view, cov) {
   const ids = view.requirements.map((r) => r.id);
-  const head = `<tr><th>Acceptance criterion</th>${ids.map((id) => `<th class="req">${id}</th>`).join("")}<th>Status</th></tr>`;
+  const head = `<tr><th>Acceptance criterion</th>${ids.map((id) => `<th class="req">${esc(id)}</th>`).join("")}<th>Status</th></tr>`;
   let rows = "", current = null;
   for (const c of cov) {
     if (c.story !== current) {
@@ -1026,7 +1026,7 @@ function renderMatrix(view, cov) {
       rows += `<tr class="story-row"><td colspan="${ids.length + 2}">${esc(c.story.id)} · ${esc(c.story.title)} <span style="font-weight:400;color:var(--muted)">(${esc(where)})</span></td></tr>`;
     }
     const cells = ids.map((id) => `<td class="cell">${c.reqs.includes(id) ? '<span class="mark" title="covers"></span>' : ""}</td>`).join("");
-    rows += `<tr><td><b>${c.ac.id}</b> ${esc(c.ac.text)}</td>${cells}<td>${coverageStatus(view, c)}</td></tr>`;
+    rows += `<tr><td><b>${esc(c.ac.id)}</b> ${esc(c.ac.text)}</td>${cells}<td>${coverageStatus(view, c)}</td></tr>`;
   }
   $("#matrix").innerHTML = `<table class="matrix">${head}${rows}</table>`;
 }
@@ -1041,7 +1041,7 @@ function coverageStatus(view, c) {
 function renderReqList(view) {
   $("#reqs").innerHTML = view.requirements.map((r) => {
     const changed = r.history.some((h) => h.change !== "added");
-    return `<div class="req"><div class="req-head"><span class="id">${r.id}</span><span>${esc(r.title)}</span>
+    return `<div class="req"><div class="req-head"><span class="id">${esc(r.id)}</span><span>${esc(r.title)}</span>
         ${pill(r.status, r.status === "active" ? "good" : "")}${changed ? pill(`changed ×${r.history.filter((h) => h.change !== "added").length}`, "serious") : ""}
         ${r.covers.map((c) => `<span class="req-chip">${esc(c)}</span>`).join("")}</div>
       <div class="req-text">${esc(r.text)}</div>
