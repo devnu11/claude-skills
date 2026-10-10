@@ -1,6 +1,6 @@
 # ADR-004: Ledger each PO query's own cost, not the session's running total
 
-Status: proposed (s25). Date: 2026-10-10. Design: [`../design/s25.md`](../design/s25.md).
+Status: accepted (s25). Date: 2026-10-10. Design: [`../design/s25.md`](../design/s25.md).
 Follows up the open question in
 [ADR-003](ADR-003-lean-context.md#the-pos-ledger-cost-looks-cumulative-across-resumes).
 
