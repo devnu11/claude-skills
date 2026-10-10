@@ -83,7 +83,7 @@ SHELL_OPTS: dict[str, Any] = {
 }
 
 QueryFn = Callable[..., AsyncIterator[Any]]
-PrepareFn = Callable[[Config, sandbox.Order], sandbox.Prepared]
+PrepareFn = sandbox.PrepareFn
 
 
 @dataclass
@@ -359,9 +359,13 @@ class Runtime:
         story = self.state.stories.get(request.story_id or "")
         plan = Plan(role, self.scope_for(role), story, request.brief)
         setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
-        if role.name in setups:
-            setups[role.name](plan)
-        return self.finish(plan)
+        try:
+            if role.name in setups:
+                setups[role.name](plan)
+            return self.finish(plan)
+        except Exception:
+            plan.stop()
+            raise
 
     def _lay_out_presentation(self, plan: Plan) -> None:
         presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
@@ -376,8 +380,7 @@ class Runtime:
         self._fit_role_to_delivery(plan)
 
     def _order(self, delivery: Delivery, story: StoryState | None) -> sandbox.Order:
-        source = presentation.source_dir(self.config, story.id) if story else None
-        return sandbox.Order(delivery, source if source and source.is_dir() else None)
+        return sandbox.Order(delivery, presentation.presented_source(self.config, story))
 
     def _fit_role_to_delivery(self, plan: Plan) -> None:
         prepared = plan.prepared
@@ -452,6 +455,8 @@ class Runtime:
     async def _plan_and_run(self, request: StepRequest) -> dict[str, Any]:
         try:
             plan = self.plan(request)
+        except sandbox.NotUp as exc:
+            return self._not_up(request, exc)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
         self.emit(EventKind.STEP_START, plan, brief=request.brief)
@@ -471,10 +476,19 @@ class Runtime:
         """Return a Proxy request on an unpresented story to e2e, billing nothing."""
         story = self.state.stories.get(request.story_id or "")
         outcome = self.pipeline.unpresented(story) if story and request.role == PROXY else None
-        if outcome is None:
-            return None
-        plan = Plan(self.resolve(request.role), self.scope_for(self.resolve(request.role)), story)
-        report = self._advance_and_log(plan, outcome)
+        return self._returned(request, outcome) if outcome else None
+
+    def _not_up(self, request: StepRequest, exc: sandbox.NotUp) -> dict[str, Any]:
+        """Return the story to e2e when its service did not start; refuse without an e2e step."""
+        outcome = self.pipeline.return_to_e2e(str(exc))
+        if outcome is None or request.story_id not in self.state.stories:
+            return refused(str(exc))
+        return self._returned(request, outcome)
+
+    def _returned(self, request: StepRequest, outcome: Outcome) -> dict[str, Any]:
+        role = self.resolve(request.role)
+        story = self.state.stories[request.story_id or ""]
+        report = self._advance_and_log(Plan(role, self.scope_for(role), story), outcome)
         self.save()
         return {"status": "returned", "role": PROXY, "reason": outcome.reason, "gate": report}
 

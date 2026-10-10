@@ -9,16 +9,21 @@ build the three read-blocking layers (tool globs, Bash hook, OS sandbox).
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
+import time
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 from .config import Config, Delivery
 from .guard import Scope
@@ -28,11 +33,27 @@ CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 STORIES_GLOB = ".team/stories/**"
 ACCEPTANCE_DIR = ".team/acceptance"
+DEFAULT_PORTS = {"http": 80, "https": 443}
+PROBE_ATTEMPTS = 120
+PROBE_EVERY_S = 0.25
+PROBE_TIMEOUT_S = 2
+STOP_WAIT_S = 10
+LOG_TAIL_LINES = 20
+PID_SUFFIX = ".pid"
+LOG_SUFFIX = ".log"
 PLAYWRIGHT = {"type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest", "--headless"]}
 
 
 class SandboxError(Exception):
     """The prepare step failed or the delivery is unusable."""
+
+
+class NotUp(SandboxError):
+    """The delivery's service did not come up and answer."""
+
+
+class PortBusy(SandboxError):
+    """The delivery's port is taken by a process the runner did not start."""
 
 
 class Start(StrEnum):
@@ -122,13 +143,31 @@ class Prepared:
     presentation: Path | None = None
 
     def stop(self) -> None:
-        """Stop the background process and everything it spawned (its process group)."""
+        """Stop the background process and its process group, and drop the pid file."""
         if self.process and self.process.poll() is None:
             _signal_group(self.process, signal.SIGTERM)
             try:
-                self.process.wait(timeout=10)
+                self.process.wait(timeout=STOP_WAIT_S)
             except subprocess.TimeoutExpired:
                 _signal_group(self.process, signal.SIGKILL)
+        self.pid_file().unlink(missing_ok=True)
+
+    def pid_file(self) -> Path:
+        """Where the service's process group id is kept, beside the sandbox."""
+        return _beside(self.root, PID_SUFFIX)
+
+    def log_file(self) -> Path:
+        """Where the service's output goes, beside the sandbox."""
+        return _beside(self.root, LOG_SUFFIX)
+
+    def address(self) -> tuple[str, int | str]:
+        """The delivery url's host and port (the scheme's default port; ``""`` without a url)."""
+        parts = urlsplit(self.delivery.url)
+        return parts.hostname or "", parts.port or DEFAULT_PORTS.get(parts.scheme, "")
+
+    def probe_url(self) -> str:
+        """The url that must answer for the service to count as up."""
+        return urljoin(self.delivery.url, self.delivery.probe)
 
     def guidance(self) -> str:
         """Prompt text telling the proxy how to reach this delivery."""
@@ -136,8 +175,15 @@ class Prepared:
         return self.kind.guidance.format(url=self.delivery.url, commands=commands)
 
     def expand(self, command: str) -> str:
-        """Fill ``{repo}`` and ``{sandbox}`` in a prepare command."""
-        return command.replace("{repo}", str(self.repo)).replace("{sandbox}", str(self.root))
+        """Fill ``{repo}``, ``{sandbox}`` (absolute), ``{host}`` and ``{port}`` in a command."""
+        for key, value in self._placeholders().items():
+            command = command.replace(key, value)
+        return command
+
+    def _placeholders(self) -> dict[str, str]:
+        host, port = self.address()
+        paths = {"{repo}": self.repo.resolve(), "{sandbox}": self.root.resolve()}
+        return {**{k: str(v) for k, v in paths.items()}, "{host}": host, "{port}": str(port)}
 
     def bash_allowed(self) -> list[str] | None:
         """The Proxy's Bash allowlist, or ``None`` for any command."""
@@ -152,6 +198,60 @@ class Prepared:
 def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(os.getpgid(process.pid), sig)
+
+
+def _beside(root: Path, suffix: str) -> Path:
+    return root.parent / f"{root.name}{suffix}"
+
+
+def _group_leader(pid: int) -> bool:
+    try:
+        return os.getpgid(pid) == pid
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
+def _end_group(pgid: int) -> None:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pgid, signal.SIGTERM)
+        deadline = time.monotonic() + STOP_WAIT_S
+        while time.monotonic() < deadline:
+            os.killpg(pgid, 0)
+            time.sleep(0.05)
+        os.killpg(pgid, signal.SIGKILL)
+
+
+def stop_stale(root: Path) -> None:
+    """End a service an earlier step left (by its pid file) and delete the file."""
+    pid_file = _beside(root, PID_SUFFIX)
+    with contextlib.suppress(OSError, ValueError):
+        pid = int(pid_file.read_text().strip())
+        if _group_leader(pid):
+            _end_group(pid)
+    pid_file.unlink(missing_ok=True)
+
+
+def http_answers(url: str) -> bool:
+    """True when ``GET url`` returns 200 (and valid JSON, if it says it is JSON)."""
+    try:
+        with urllib.request.urlopen(url, timeout=PROBE_TIMEOUT_S) as response:
+            body = response.read()
+            if response.status != 200:
+                return False
+            if response.headers.get_content_type() == "application/json":
+                json.loads(body)
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def port_in_use(host: str, port: int) -> bool:
+    """True when something accepts a TCP connection on ``host:port``."""
+    try:
+        socket.create_connection((host, port), timeout=1).close()
+    except OSError:
+        return False
+    return True
 
 
 Runner = Callable[[str, Prepared], int]
@@ -203,28 +303,89 @@ class Order:
     presentation: Path | None = None
 
 
+PrepareFn = Callable[[Config, "Order"], Prepared]
+
+
 @dataclass
 class Preparer:
-    """Builds sandboxes; the runner and popen are injectable for tests."""
+    """Builds sandboxes; the runner, popen, probe and clock are injectable for tests."""
 
     runner: Runner = run_shell
     popen: Popen = subprocess.Popen
+    probe: Callable[[str], bool] = http_answers
+    listening: Callable[[str, int], bool] = port_in_use
+    sleep: Callable[[float], None] = time.sleep
+    attempts: int = PROBE_ATTEMPTS
 
     def prepare(self, config: Config, order: Order) -> Prepared:
-        """Create a clean sandbox, copy the presentation in, then run the prepare step."""
+        """Replace any stale service, lay out the sandbox, copy the presentation, then start."""
+        stop_stale(sandbox_root(config, order.delivery))
         prepared = layout(config, order.delivery)
         _copy_presentation(prepared, order.presentation)
-        if order.delivery.prepare:
-            self._launch(prepared, prepared.expand(order.delivery.prepare))
+        launches = {Start.BACKGROUND: self._serve, Start.FOREGROUND: self._run_blocking}
+        launches[prepared.kind.start](prepared, order.delivery.prepare)
         return prepared
 
-    def _launch(self, prepared: Prepared, command: str) -> None:
-        if prepared.kind.start is Start.BACKGROUND:
-            prepared.process = self.popen(
-                command, shell=True, cwd=prepared.repo, env=prepared.env, start_new_session=True
-            )
-        elif self.runner(command, prepared) != 0:
+    def _run_blocking(self, prepared: Prepared, prepare: str) -> None:
+        command = prepared.expand(prepare)
+        if prepare and self.runner(command, prepared) != 0:
             raise SandboxError(f"prepare for delivery {prepared.delivery.name!r} failed: {command}")
+
+    def _serve(self, prepared: Prepared, prepare: str) -> None:
+        if prepare:
+            self._start(prepared, prepare)
+        self._await_answer(prepared)
+
+    def _start(self, prepared: Prepared, command: str) -> None:
+        self._refuse_busy(prepared)
+        with prepared.log_file().open("wb") as log:
+            prepared.process = self.popen(
+                prepared.expand(command),
+                shell=True,
+                cwd=prepared.repo,
+                env=prepared.env,
+                start_new_session=True,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+            )
+        prepared.pid_file().write_text(str(prepared.process.pid))
+
+    def _refuse_busy(self, prepared: Prepared) -> None:
+        host, port = prepared.address()
+        if host and port and self.listening(host, int(port)):
+            raise PortBusy(
+                f"delivery {prepared.delivery.name!r} cannot start: {host}:{port} is already in "
+                "use by a process the runner did not start; stop it or change the delivery's url"
+            )
+
+    def _await_answer(self, prepared: Prepared) -> None:
+        for attempt in range(self.attempts):
+            if self.probe(prepared.probe_url()):
+                return
+            if prepared.process and prepared.process.poll() is not None:
+                break
+            if attempt + 1 < self.attempts:
+                self.sleep(PROBE_EVERY_S)
+        prepared.stop()
+        raise NotUp(self._not_up_reason(prepared))
+
+    def _not_up_reason(self, prepared: Prepared) -> str:
+        name, url = prepared.delivery.name, prepared.probe_url()
+        tail = _log_tail(prepared.log_file())
+        code = prepared.process.poll() if prepared.process else None
+        if code is None:
+            waited = f"{self.attempts * PROBE_EVERY_S:g}"
+            return f"delivery {name!r} did not answer {url} within {waited}s. Last output:\n{tail}"
+        return (
+            f"delivery {name!r} did not start: the start command exited with code {code} "
+            f"before {url} answered. Last output:\n{tail}"
+        )
+
+
+def _log_tail(path: Path) -> str:
+    text = path.read_bytes().decode(errors="replace") if path.is_file() else ""
+    lines = text.splitlines()[-LOG_TAIL_LINES:]
+    return "\n".join(lines) if lines else "(no output)"
 
 
 def _copy_presentation(prepared: Prepared, source: Path | None) -> None:

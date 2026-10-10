@@ -90,7 +90,9 @@ another role's work.
 
 ## Returned stories
 
-A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself.
+A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself. `returned` also comes when the delivery's service did not start for the Proxy; the reason holds its output.
+
+A `gate_hold` hand-over means the gate could not run for an environment reason (e.g. the delivery's port is in use by another process). Tell the human, and `continue_story` once it is fixed.
 
 ## Cadence
 

@@ -6,12 +6,13 @@ Where it lives, what it must hold, and the copy into the Proxy's sandbox.
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
 from . import sandbox
 from .config import Config
-from .gates import StoryState
+from .gates import READY, Outcome, StoryState, Verdict
 from .git_ops import Git
 
 PRESENTATION_DIR = "presentation"
@@ -26,14 +27,30 @@ class Need(StrEnum):
     GUIDE_ONLY = "guide-only"
 
 
-PRESENTATIONS: dict[str, Need] = {
-    "package": Need.WORKSPACE,
-    "script": Need.WORKSPACE,
-    "web": Need.WORKSPACE,
-    "library": Need.WORKSPACE,
-    "harness": Need.WORKSPACE,
-    "manual": Need.GUIDE_ONLY,
+class Check(StrEnum):
+    """How "presentation ready" is checked: files only, or files plus a live service."""
+
+    FILES = "files"
+    SERVICE = "service"
+
+
+@dataclass(frozen=True)
+class Recipe:
+    """One row of ``PRESENTATIONS``: what to hand over and how to check it."""
+
+    need: Need
+    check: Check = Check.FILES
+
+
+PRESENTATIONS: dict[str, Recipe] = {
+    "package": Recipe(Need.WORKSPACE),
+    "script": Recipe(Need.WORKSPACE),
+    "web": Recipe(Need.WORKSPACE, Check.SERVICE),
+    "library": Recipe(Need.WORKSPACE),
+    "harness": Recipe(Need.WORKSPACE),
+    "manual": Recipe(Need.GUIDE_ONLY),
 }
+TRIAL_VERDICTS = {sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
 
 
 def source_dir(config: Config, story_id: str) -> Path:
@@ -41,10 +58,42 @@ def source_dir(config: Config, story_id: str) -> Path:
     return config.run_dir / PRESENTATION_DIR / story_id
 
 
-def need_of(config: Config, story: StoryState) -> Need:
-    """What the story's delivery needs presented (guide only when none is configured)."""
+def recipe_of(config: Config, story: StoryState) -> Recipe:
+    """The story's delivery recipe (guide only when none is configured)."""
     delivery = config.delivery(story.delivery)
-    return PRESENTATIONS[delivery.kind] if delivery else Need.GUIDE_ONLY
+    return PRESENTATIONS[delivery.kind] if delivery else Recipe(Need.GUIDE_ONLY)
+
+
+def presented_source(config: Config, story: StoryState | None) -> Path | None:
+    """The story's presentation dir when it exists, else ``None``."""
+    if story is None:
+        return None
+    source = source_dir(config, story.id)
+    return source if source.is_dir() else None
+
+
+@dataclass
+class Trial:
+    """Starts a story's service from its presentation, as the Proxy will get it, and probes it."""
+
+    config: Config
+    prepare: sandbox.PrepareFn = field(default_factory=lambda: sandbox.Preparer().prepare)
+
+    def liveness(self, story: StoryState) -> Outcome:
+        """Pass a file-only delivery; for a service, start it, probe it and stop it."""
+        delivery = self.config.delivery(story.delivery)
+        if delivery is None or recipe_of(self.config, story).check is Check.FILES:
+            return Outcome(Verdict.PASS, READY)
+        return self._try(sandbox.Order(delivery, presented_source(self.config, story)), story)
+
+    def _try(self, order: sandbox.Order, story: StoryState) -> Outcome:
+        try:
+            prepared = self.prepare(self.config, order)
+        except (sandbox.NotUp, sandbox.PortBusy) as exc:
+            reason = f"story {story.id} presentation is not up: {exc}"
+            return Outcome(TRIAL_VERDICTS[type(exc)], reason)
+        prepared.stop()
+        return Outcome(Verdict.PASS, f"{READY}; {prepared.probe_url()} answered")
 
 
 def lay_out(config: Config, story: StoryState) -> Path:
@@ -52,7 +101,7 @@ def lay_out(config: Config, story: StoryState) -> Path:
     if not sandbox.SAFE_NAME.fullmatch(story.id):
         raise sandbox.SandboxError(f"story id {story.id!r} must match {sandbox.SAFE_NAME.pattern}")
     source = sandbox.fresh_dir(source_dir(config, story.id))
-    if need_of(config, story) is Need.WORKSPACE:
+    if recipe_of(config, story).need is Need.WORKSPACE:
         _init_workspace(source / WORKSPACE)
     return source
 
@@ -68,7 +117,7 @@ def missing(config: Config, story: StoryState) -> str | None:
     source = source_dir(config, story.id)
     if not _guide_written(source):
         return _reason(config, source / GUIDE, story)
-    if need_of(config, story) is Need.WORKSPACE and not _has_content(source / WORKSPACE):
+    if recipe_of(config, story).need is Need.WORKSPACE and not _has_content(source / WORKSPACE):
         return _reason(config, source / WORKSPACE, story)
     return None
 

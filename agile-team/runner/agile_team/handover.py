@@ -27,6 +27,7 @@ class Trigger(StrEnum):
     REFUSED = "refused"
     ERROR = "error"
     STOPPED = "stopped"
+    GATE_HOLD = "gate_hold"
     BAD_HANDOFF = "bad_handoff"
     QUESTIONS = "questions"
     QUARANTINE = "quarantine"
@@ -62,6 +63,11 @@ def _bad_ungated(report: dict) -> bool:
     return report.get("status") == "bad_handoff" and report.get("role") in UNGATED_ROLES
 
 
+def _gate_held(report: dict) -> bool:
+    stopped = report.get("status") in STOPPED_HANDOFFS
+    return _gate(report).get("verdict") == "hold" and not stopped
+
+
 HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.REFUSED,
@@ -77,6 +83,11 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.STOPPED,
         lambda r: r.get("status") in STOPPED_HANDOFFS,
         "{story}: {role} reported {status}: {summary}",
+    ),
+    Rule(
+        Trigger.GATE_HOLD,
+        _gate_held,
+        "{story}: {role}'s gate is on hold: {gate_reason}; fix it, then continue_story",
     ),
     Rule(Trigger.BAD_HANDOFF, _bad_ungated, "{story}: {role} gave no valid handoff: {reason}"),
     Rule(
@@ -138,6 +149,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
     ruling = report.get("ruling") or {}
+    fields["gate_reason"] = str(_gate(report).get("reason") or "")
     fields["ruling"] = str(ruling.get("ruling") or "")
     fields["ruling_why"] = str(ruling.get("why") or "")
     return {**fields, "story": story_id or "run"}

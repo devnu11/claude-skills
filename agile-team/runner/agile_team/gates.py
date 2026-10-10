@@ -196,6 +196,13 @@ def _always_presented(_story: StoryState) -> str | None:
     return None
 
 
+READY = "presentation ready"
+
+
+def _always_live(_story: StoryState) -> Outcome:
+    return Outcome(Verdict.PASS, READY)
+
+
 @dataclass
 class Checks:
     """Command-backed gates for one repo."""
@@ -205,12 +212,13 @@ class Checks:
     run: CommandRunner
     baseline_coverage: float | None = None
     presentation: Callable[[StoryState], str | None] = _always_presented
+    liveness: Callable[[StoryState], Outcome] = _always_live
 
     def presented(self, story: StoryState) -> Outcome:
-        """Pass when the story's presentation is complete, else bounce with why not."""
+        """Bounce on missing files; otherwise the liveness check decides."""
         reason = self.presentation(story)
         if reason is None:
-            return Outcome(Verdict.PASS, "presentation ready")
+            return self.liveness(story)
         return Outcome(Verdict.BOUNCE, reason)
 
     def head(self) -> str:
@@ -316,10 +324,12 @@ class Pipeline:
 
     def unpresented(self, story: StoryState) -> Outcome | None:
         """A return to e2e when the Proxy would start without a presentation."""
-        if "e2e" not in self.steps:
-            return None
         reason = self.checks.presentation(story)
-        if reason is None:
+        return self.return_to_e2e(reason) if reason else None
+
+    def return_to_e2e(self, reason: str) -> Outcome | None:
+        """A no-round return to e2e, or ``None`` when the pipeline has no e2e step."""
+        if "e2e" not in self.steps:
             return None
         return Outcome(Verdict.RETURN, f"{reason}; run the integration-tester on it", "e2e")
 

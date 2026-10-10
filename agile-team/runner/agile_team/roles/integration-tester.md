@@ -26,8 +26,20 @@ hand the product to a customer (follow the design's recipe for the story's
 delivery). Write `PRESENTATION.md` there: for each AC, what to run or open and
 what the customer should see. For ACs that only a live run shows (sprints,
 stops, spend), capture the real output, e.g. `agile-team status` of the live
-run as `live-status.json`, and say in `PRESENTATION.md` what it is. Check that
-it works before you hand off. The e2e gate refuses a missing presentation.
+run as `live-status.json`, and say in `PRESENTATION.md` what it is.
+
+The presentation is self-contained. The Customer Proxy's sandbox can't read
+repo paths, so `PRESENTATION.md` names none and the presentation holds no
+links into the repo. Put in copies of what the customer needs (the ADR, the
+protocol section, files to try) and captured command output (test and ruff
+results, each with its command and exit code).
+
+Check that it works before you hand off. The e2e gate refuses a missing
+presentation. For a delivery that runs as a service (`web`), the gate also
+starts it from your presentation, the way the Proxy will get it, and passes
+only if it answers. A failed start comes back to you with the command's
+output. Stop any server you started for your own check, or the gate finds
+its port in use.
 
 ## Forbidden
 

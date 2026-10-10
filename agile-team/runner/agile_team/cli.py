@@ -86,7 +86,12 @@ class Place:
 
     @classmethod
     def of(cls, args: argparse.Namespace) -> Place:
-        return cls(Path(args.repo), Path(args.home))
+        return cls(repo_of(args), Path(args.home))
+
+
+def repo_of(args: argparse.Namespace) -> Path:
+    """The ``--repo`` path, resolved once so every derived path is absolute."""
+    return Path(args.repo).resolve()
 
 
 def default_query() -> QueryFn:
@@ -141,7 +146,7 @@ def _dashboard_server(args: argparse.Namespace) -> DashboardServer:
 
 def cmd_detect(args: argparse.Namespace) -> int:
     """Print the detected preset and what it would configure."""
-    print_json(detection(Path(args.repo), onboard.load_presets()))
+    print_json(detection(repo_of(args), onboard.load_presets()))
     return 0
 
 
@@ -161,7 +166,7 @@ def detection(repo: Path, presets: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Phase A onboarding: write the config, charter and ignores, then commit."""
-    repo = Path(args.repo)
+    repo = repo_of(args)
     _require_init_inputs(repo, args)
     try:
         sha = onboard.onboard(repo, answers_from(args))
@@ -284,7 +289,8 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     baseline = gates.load_baseline(config.repo).get("coverage")
     commands, threshold = config.toolchain.commands, config.gates.coverage
     missing = functools.partial(presentation.missing, config)
-    checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline, missing)
+    live = presentation.Trial(config).liveness
+    checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline, missing, live)
     return gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
 
 
@@ -395,7 +401,7 @@ def pid_file(run_dir: Path) -> Iterator[None]:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    print_json(status_report(_load_config(Path(args.repo))))
+    print_json(status_report(_load_config(repo_of(args))))
     return 0
 
 
@@ -416,7 +422,7 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
 
 
 def cmd_answer(args: argparse.Namespace) -> int:
-    config = _load_config(Path(args.repo))
+    config = _load_config(repo_of(args))
     try:
         Relay(config.run_dir).answer(args.id, args.text)
     except RelayError as exc:
@@ -427,7 +433,7 @@ def cmd_answer(args: argparse.Namespace) -> int:
 
 def cmd_stop(args: argparse.Namespace, kill: Kill = os.kill) -> int:
     """Ask the runner to stop after its step; ``--now`` also signals it."""
-    pid = _request_stop(Path(args.repo)) / state_mod.PID_FILE
+    pid = _request_stop(repo_of(args)) / state_mod.PID_FILE
     if args.stop is StopMode.NOW and pid.is_file():
         kill(int(pid.read_text()), signal.SIGTERM)
         print("stop requested; runner signalled")

@@ -66,7 +66,10 @@ class Gates:
 
 @dataclass
 class Delivery:
-    """One way a customer reaches the product (see ``sandbox.DELIVERY_KINDS``)."""
+    """One way a customer reaches the product (see ``sandbox.DELIVERY_KINDS``).
+
+    ``probe``: path joined to ``url`` that must answer 200 before a service counts as up.
+    """
 
     name: str
     kind: str
@@ -74,6 +77,7 @@ class Delivery:
     url: str = ""
     commands: list[str] = field(default_factory=list)
     bin: list[str] = field(default_factory=list)
+    probe: str = ""
 
 
 @dataclass

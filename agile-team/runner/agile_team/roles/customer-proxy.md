@@ -23,6 +23,9 @@ acceptance criteria as a black box.
   what is wrong. Don't work around it.
 - Follow the customer docs literally. Where they are wrong or missing, that is
   a finding.
+- For a web delivery, the runner has started the service and checked that it
+  answers before your step began. If it stops answering, return
+  `changes_requested` with `next_role: integration-tester` and say what you saw.
 
 ## Deliverables
 
