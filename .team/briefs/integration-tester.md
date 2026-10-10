@@ -1,6 +1,15 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
+
+## s19: Runner drives the fixed pipeline automatically
+
+The runner now drives sprint stories through the pipeline automatically (design → implement → review → acceptance → scribe). The PO is called only for judgement (hand-overs). This means:
+- **Your scope unchanged:** Your e2e steps (acceptance, e2e gate) stay in the pipeline. You are called the same way (standard brief, step request).
+- **No more mid-pipeline PO calls:** Steps move continuously between your gate and the next step. If a step bounces or hands over, the PO gets control; otherwise the router carries on.
+- **Integration test cases:** Your e2e tests should verify the full pipeline runs to completion (all steps, all rolls, all gates) without manual PO intervention for routing. A fake PO that yields only `done` handoffs should show every story reaching `DONE` with the scribe running.
+
+See ADR-0009 and `agile-team/docs/design/s19.md` for the new architecture.
 
 ## Your mission: prepare the presentation for the Customer Proxy (s13)
 

@@ -1,8 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
 
 ## Key design decisions
+
+**Routing in code — runner drives the pipeline (s19):** The fixed pipeline (design → implement → review → acceptance) is now code-driven. New modules `router.py` and `handover.py` define the advance loop, work pickers (Manager, Scribe, movable stories), standard brief paths, hand-over triggers, and previous-step recording. Role selection follows rule R3: PO override, bounce's next_role, previous retry role, architect's pick, fallback. The architect names each story's developer specialisation via a `"developer"` field in the handoff (e.g., `"developer": "developer-cli"`); the runner uses it for implement steps. PO now runs only for judgement (hand-overs). ADR-0009 and `agile-team/docs/design/s19.md` document the two-layer architecture.
 
 **Team presents product in ready-made environment (s13):** The runner enforces the handoff in three layers:
 1. **Presentation structure** (E1–E2): `.team/run/presentation/<story>/` with `PRESENTATION.md`, `workspace/`, and optional files. Runner wipes and creates workspace before Integration Tester step.

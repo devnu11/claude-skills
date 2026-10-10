@@ -1,8 +1,20 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
 
 ## Design decisions to verify
+
+**Routing in code — hand-over triggers as data (s19):** Verify that the router and hand-over logic are data-driven:
+- `handover.HANDOVERS` table is the single source of truth for when to hand over (no branching outside it)
+- Table rows match in order; when multiple rows match, all triggers are handed over
+- `BRIEF_PATHS` table and `standard_brief()` apply the same logic to every step (story, design, review paths checked in order; previous/note lines added only when applicable)
+- `ROLE_HINTS` tuple defines role selection order (R3); `step_role()` applies it and always finds a role (fallback to `developer`)
+- `Router.PICKERS` tuple defines work order: Manager, Scribe, movable story (rule R2); `next_work()` returns the first non-None
+- `Router.advance()` loop respects stop/halt at entry and after each turn; `_ended()` is the only halt check
+- `_scribable()` allows unheld stories or `DONE` stories (D1 fix); R12 blocking by open questions still applies to done stories
+- `note_step()` sets holds from the report's trigger names; `continue_story` refuses done stories (by design)
+- Rules R1–R18 are well-covered by tests (design's test checklist section 7); verify coverage claim
+- See ADR-0009 for the full strategy.
 
 **Team presents product in ready-made environment (s13):** Verify that the handoff is enforced in code:
 - `presentation.py` has single source-of-truth functions: `lay_out()` (wipes, creates workspace, git init), `missing()` (exact reason strings), `copy_into()` (symlinks preserved), `prompt_section()` (heading + path + guide)

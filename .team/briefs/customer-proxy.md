@@ -1,6 +1,12 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
+
+## s19: Runner calls you automatically from the pipeline
+
+The runner now automatically calls your acceptance step when a story completes review (no PO mediation). Your step is called with a standard brief (story file, design, review, previous handoff). The same goes for all other steps: the router drives them. You will see the PO only if a hand-over trigger matches (open questions, blocked story, quarantine, etc.). Otherwise, the runner carries on.
+
+See ADR-0009 for the routing architecture.
 
 ## The team presents the product, not the environment (s13)
 

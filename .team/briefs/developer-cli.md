@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
 
 See `developer.md` for the base conventions.
+
+## Routing in code — runner drives the pipeline (s19)
+
+Implemented router passes and hand-over triggers. New modules: `router.py` (advance loop, work pickers, standard brief), `handover.py` (HANDOVERS table, hand-over prompt, previous-step). Modified: `po_tools.py` (PoRun driver), `dispatch.py` (note_step, story effects), `gates.py` (PreviousStep), `state.py` (scribe_due, delivered), `roles.py` (developer field). Built-in roles: `roles/product-owner.md` (Sonnet, judgement only), `roles/architect.md` (developer field docs). Coverage 99% (router, handover at 100%), all tests pass. See ADR-0009 and `agile-team/docs/design/s19.md`.
 
 ## CLI-specific context
 

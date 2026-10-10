@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s13 done)
+**Last updated:** 2026-10-10 (s19 done)
 
 ## Process constraint: developer cannot edit tests
 
@@ -9,6 +9,26 @@ The developer role cannot write to `tests/unit/` or `tests/conftest.py`. The run
 **Your responsibility:** Before finishing, re-read every test expectation against the actual design delivered. If a test passes but doesn't match what the developer built, update the test (not the feature). Ask the developer for clarification only if the design itself is ambiguous.
 
 This is your checkpoint; no other role will catch it. Coverage, ruff, and the AC are necessary but not sufficient.
+
+## s19: Routing in code – test notes
+
+Code review passed with one blocking defect (D1: done stories with holds were not scribed) found and fixed in round 2. Final coverage 99% (router and handover at 100%), all 964 tests pass.
+
+Design's test checklist (section 7 of `agile-team/docs/design/s19.md`) calls for 12 areas:
+1. **Automatic advance** (AC1): one `run_po` runs architect through pipeline to done, scribe, then hands `SPRINT_END` to PO; assert step order and PO query count (2).
+2. **Standard brief** (AC1, AC3): each BRIEF_PATHS case (design file/architecture fallback, review present/absent), previous with/without summary, bounce/return verdicts, pass suppresses "Sent back", note line, scribe and Manager headings.
+3. **Hand-over triggers** (AC2): parametrized test per HANDOVERS row; multi-match gives all in order; clean `done` gives none. Router: `HUMAN_MESSAGE`, `SPRINT_END`, `STALLED` cases, wait (R8), quiet end (R9), round cap.
+4. **Holds** (R6): report → hold, router skips held story, `continue_story` clears hold and note, PO step clears hold, refused PO step leaves state untouched.
+5. **Bounce briefs** (AC3): `changes_requested` with `next_role: developer-gui` → next step runs that role with "Sent back" line. Red gate → same developer reruns with test tail.
+6. **Specialisation choice** (AC4): parametrized over ROLE_HINTS; `po_developer` beats bounce, bounce beats architect pick, retry keeps `previous.role`. Architect sets `story.developer`, other roles do not. Bad `developer` field is a bad handoff. Three `set_developer` refusals.
+7. **Automatic Scribe and Manager** (AC5): done story queues `scribe_due`, router runs scribe next with scribe heading. Scribe entry cleared on bad handoff (which hands over). Done story blocked by open question is skipped until answered. Held done story is scribed (D1 fix: `_scribable` allows unheld or DONE). `manager_due` makes router run manager story-less before any story step.
+8. **Driver ends** (R10): stop file, limit halt in router step (no PO turn, exit 75), `notify_user` sprint-end (each end the run). Status ends `idle` only when still `running`.
+9. **Errors** (R18): step raises RuntimeError → `error` report, crash logged, story held. Limit halts (not Exception), so not caught.
+10. **State** (R16, legacy): old state.json loads with new fields defaulting to None/[]. `previous` round-trips. `delivered=None` → every existing answer id (old answers never handed over).
+11. **Event** (R17): each hand-over turn preceded by one `handover` event with correct trigger/story/step counts.
+12. **Coverage ≥95%** (target 100%), `ruff check` and `ruff format` clean (AC7).
+
+Pitfall for round-trip tests (previous, delivered, scribe_due): nested dataclasses and lists; use `NESTED` dict to deserialize.
 
 ## s13: Team presents product in ready-made environment – test notes
 

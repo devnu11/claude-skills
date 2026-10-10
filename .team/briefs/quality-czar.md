@@ -1,6 +1,14 @@
 # Quality Czar: Current context and conventions
 
-**Last updated:** 2026-10-09 (s7, s3)
+**Last updated:** 2026-10-10 (s19 done)
+
+## Process improvements from s19
+
+**Routing in code (s19):** The fixed pipeline is now driven by code, not PO tool calls. This enforces two discipline measures:
+1. **Hand-over triggers as data:** The `HANDOVERS` table is the single source of truth; no branching outside it. This makes it auditable and testable.
+2. **Standard briefs:** Every step gets the same brief structure (story, design, review, previous handoff, bounce reason). This prevents ad-hoc brief variance.
+
+Review focuses on whether the table is complete (no hand-over reason missing) and brief paths are correct (story, design, review files exist when expected). See ADR-0009 for the architecture.
 
 ## Quality gates affected by s7 and s3
 

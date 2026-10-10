@@ -1,6 +1,12 @@
 # Developer: Current context and conventions
 
-**Last updated:** 2026-10-09 (s7, s3)
+**Last updated:** 2026-10-10 (s19 done)
+
+## s19: Runner calls you automatically with a standard brief
+
+The runner now automatically calls each developer step with a standard brief that includes story, design, review, previous handoff (if returning), and bounce reason (if bounced). You will not see the PO except in rare cases where a step hands over (open questions, blocked, round cap). The architect names your specialisation (e.g., `developer-cli`, `developer-gui`) in a `"developer"` field; the PO can override it per story with `set_developer`.
+
+See ADR-0009 for the routing architecture.
 
 ## Process: you cannot edit tests
 
