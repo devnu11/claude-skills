@@ -274,7 +274,10 @@ def test_prepare_with_a_relative_repo_still_gives_absolute_paths(
 
 
 def test_prepare_runs_a_real_service_with_pid_and_log(config: cfg.Config) -> None:
-    """L6: output reaches the log; wait for it, since prepare returns before the shell echoes."""
+    """L6: output reaches the log; wait for it before stop().
+
+    prepare returns before the shell echoes, so stopping at once could leave the log empty.
+    """
     d = Delivery("ui", "web", prepare="echo hello; exec sleep 60", url=URL)
     config.deliveries = [d]
     made = Preparer(probe=Probe(), listening=lambda _h, _p: False, sleep=lambda _s: None)
