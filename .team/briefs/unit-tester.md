@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s8 done)
+**Last updated:** 2026-10-10 (s13 done)
 
 ## Process constraint: developer cannot edit tests
 
@@ -9,6 +9,24 @@ The developer role cannot write to `tests/unit/` or `tests/conftest.py`. The run
 **Your responsibility:** Before finishing, re-read every test expectation against the actual design delivered. If a test passes but doesn't match what the developer built, update the test (not the feature). Ask the developer for clarification only if the design itself is ambiguous.
 
 This is your checkpoint; no other role will catch it. Coverage, ruff, and the AC are necessary but not sufficient.
+
+## s13: Team presents product in ready-made environment – test notes
+
+Code review passed with no defects. Unit coverage for s13 is at 100%; overall stays at or above 95%.
+
+Key test constructs and expectations:
+
+| Aspect | Test cases | Notes |
+|--------|-----------|-------|
+| **E2: lay_out** | Wipes old dir, creates workspace with .git for kinds that need it, manual has no workspace, refuses `../x` before touching anything | Pitfall: pytest's `tmp_path` may be inside a git repo; use `GIT_CEILING_DIRECTORIES` |
+| **E5: missing** | No dir, blank guide, guide but no workspace, workspace with only .git, complete, manual with guide only, no delivery (guide only) | Exact reason strings match design; guide checked before workspace |
+| **E4: e2e done gate** | Bounce to e2e on missing, pass to acceptance on complete, `changes_requested` still bounces to named role, no acceptance step → pass without check | Rounds increment on bounce; gate checks only when acceptance step exists |
+| **E6: Proxy unpresented** | Story returns to e2e (no round, no status change) on missing, gate event emitted with `verdict: "return"`, no prepare call, story stays at acceptance if complete | Refusals (backlog, done, blocked) come first; return applies only at acceptance |
+| **E7: copy_into** | `shutil.copytree(symlinks=True)`, symlink stays a symlink, copy asserted inside fake runner before prepare | Symlink does not escape s7 guards (Read resolves to real path) |
+| **E8: prompt_section** | With presentation: heading + path line + rule line + guide text; without: empty string | No unguarded read on stale dir (follow-up: handle FileNotFoundError gracefully) |
+| **E9: Proxy read scope** | Can Read `.team/acceptance/s8.md`, denied `agile-team/runner/agile_team/cli.py`, read globs + allowed reads have new entries, `web`, `harness`, `manual` kinds have Read tool | Scope intersection: role has Read, kind has Read → tool available |
+| **E11: init outside git** | `main(["--repo", str(tmp_path), "init", …])` outside git returns 1, stderr is exact `agile-team init: not a git repository: <tmp_path>; run git init first` | Use `GIT_CEILING_DIRECTORIES`; also test missing path |
+| **Integration-tester write scope** | Can write `.team/run/presentation/s4/PRESENTATION.md`, denied other roles | Role scope Check |
 
 ## s8: Clean halt – test notes
 

@@ -1,8 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-10 (s8 done)
+**Last updated:** 2026-10-10 (s13 done)
 
 ## Key design decisions
+
+**Team presents product in ready-made environment (s13):** The runner enforces the handoff in three layers:
+1. **Presentation structure** (E1–E2): `.team/run/presentation/<story>/` with `PRESENTATION.md`, `workspace/`, and optional files. Runner wipes and creates workspace before Integration Tester step.
+2. **e2e gate** (E4–E5): checks completeness (guide non-blank, workspace non-empty) before acceptance. Incomplete → bounce to e2e with round +1.
+3. **Proxy precondition** (E6): missing presentation → return to e2e with `Verdict.RETURN` (no round, no cost). Copy presentation to sandbox (E7) before prepare. Proxy gets Proxy prompt section (E8) with absolute path and guide quoted in full. Proxy can read/write own report (E9). Init outside git prints error and exits 1 (E11).
+
+Five related changes:
+- `presentation.py`: single definitions for lay_out, missing, copy_into, prompt_section
+- `gates.py`: `Verdict.RETURN` + e2e done gate checks presentation
+- `dispatch.py`: per-role setup (tester lays out, proxy receives copy), Proxy precondition returns on missing
+- `sandbox.py`: `Order` holds presentation source, `Preparer` copies before launching, Proxy read scope includes `.team/acceptance/**`
+- `cli.py`, `git_ops.py`: init error handling (no traceback)
+
+Impact: s4, s5, s8 (legacy, at acceptance) return to e2e on missing presentation (no round), tester builds presentation, gate passes, Proxy accepts. Same pattern scales to harness, manual, library, web kinds. ADR-0008 documents the strategy.
 
 **Clean halt on limits, crashes, SIGTERM (s8):** Data-driven halt handling via `HALTS` table (kind → status, note_kind, exit_code, advice) and `LIMIT_PATTERNS` table (regex, template). `classify()` returns the detected halt; first halt wins in a process. Partial edits left uncommitted so human can see what was in progress. Exit codes: 75 (EX_TEMPFAIL limit), 70 (EX_SOFTWARE crash), 143 (SIGTERM). s9 will save interrupted step edits as a commit; s10 will record partial cost. ADR-0007 documents the strategy.
 
@@ -16,4 +30,6 @@
 
 ## What you own
 
-Review whether step sequences, gate checks, and role boundaries remain sound. The Unit Tester and Integration Tester are critical checkpoints; ensure they have clear design context in handoffs. s8 introduces `halt_run()` as a new entrypoint for both role-step limits (dispatch) and top-level exceptions (cli); verify the boundary is clean.
+Review whether step sequences, gate checks, role boundaries and scope handoffs remain sound. The Unit Tester and Integration Tester are critical checkpoints; ensure they have clear design context in handoffs.
+
+s13 introduces the presentation mechanism as a new entrypoint between the Integration Tester and Proxy; verify the boundary is clean (runner wipes and creates, tester builds, gate checks, proxy copies and uses). Ensure the `Verdict.RETURN` verdict does not escape its design scope (e2e → acceptance return only, no round counted).

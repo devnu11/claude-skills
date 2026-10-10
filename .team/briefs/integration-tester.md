@@ -1,14 +1,41 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s8 done)
+**Last updated:** 2026-10-10 (s13 done)
 
-## Write scope: tests/e2e only
+## Your mission: prepare the presentation for the Customer Proxy (s13)
 
-Your writes are limited to `tests/e2e/`. Regression rows for unit-level code failures must either:
-- Go into `tests/e2e/` if the failure shows up in end-to-end tests, or
-- Wait for the Unit Tester to add them to `tests/unit/`
+For each e2e step, the runner creates an empty `.team/run/presentation/<story>/` directory with a fresh `workspace/`. Your job is to fill it with what the Customer Proxy will judge the product on:
 
-Do not attempt to edit unit tests; the runner enforces this. When you find a unit-level bug, document it clearly in your handoff so the Unit Tester can add appropriate coverage.
+1. **Build the workspace:** Follow the recipe for your story's delivery kind (see table below)
+2. **Write PRESENTATION.md:** For each acceptance criterion, describe what to try and what the customer should see
+3. **Capture live-run output:** For ACs that only show in a live run (sprints, stops, spend), capture `agile-team status` or other output as JSON
+4. **Check before handoff:** Run the commands you document; verify the output matches what you wrote
+
+The e2e gate will check that PRESENTATION.md exists and is non-blank, and that workspace/ is non-empty. A missing or incomplete presentation bounces to e2e with a round increment.
+
+## Presentation recipes by delivery kind
+
+Build the workspace the way a customer would have it after following the team's install and setup docs. The absolute path to your presentation dir is in the runner's output.
+
+| Delivery kind | Recipe |
+|---|---|
+| **cli** (package) | Run `agile-team --repo <presentation-path>/workspace init --preset python --delivery package`. Then write any state files the ACs need into `workspace/.team/run/` (e.g., `state.json` with sprints or a blocked status, `outbox.jsonl` note, `crash.log` entry). For live-run ACs, capture: `agile-team --repo <presentation-path>/workspace status > <presentation-path>/live-status.json`. Before handing off: `agile-team --repo <presentation-path>/workspace status` should print the state you meant to show. |
+| **dashboard** (web) | Run `agile-team --repo <presentation-path>/workspace init --preset python --delivery package`. Then add sample run files: `state.json`, `events.jsonl`, `ledger.jsonl`, `outbox.jsonl`, `inbox.jsonl` in `workspace/.team/run/`, chosen so every AC's feature shows (tabs, sprints, a bounce, a question, spend). Before handing off: `agile-team --repo <presentation-path>/workspace dashboard --no-open --port 0` prints a URL; `curl <url>api/snapshot` returns data (then stop the server). |
+| **library** | A sample consumer project that uses the library, set up and tested by the customer | reference next to the empty `consumer/` project, which stays cwd |
+| **harness** | Sample inputs for the listed commands | through the listed commands |
+| **manual** | Only PRESENTATION.md (no workspace needed); it is the human's starting point | quoted in the prompt |
+| **script** | Sample inputs the scripts run on | same as **cli** (work in workspace/) |
+| **package** | A project set up the way a customer has it after following install docs | same as **cli** (cwd stays sandbox) |
+
+## Write scope: tests/e2e and presentation only
+
+Your writes are limited to:
+- `tests/e2e/`: integration test files (for e2e regression tests and acceptance manual checklist)
+- `.team/run/presentation/<story>/`: the presentation (PRESENTATION.md, workspace, live-status.json, etc.)
+
+The runner enforces this. When you find a unit-level bug:
+- Add a regression test to `tests/e2e/` if it shows up in e2e, or
+- Document it clearly for the Unit Tester if it's unit-level; they will add it to `tests/unit/`
 
 ## s8: Clean halt – mandatory e2e regression tests
 

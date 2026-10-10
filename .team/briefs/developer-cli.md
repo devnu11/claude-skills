@@ -1,10 +1,18 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s8 done)
+**Last updated:** 2026-10-10 (s13 done)
 
 See `developer.md` for the base conventions.
 
 ## CLI-specific context
+
+**Team presents product in ready-made environment (s13):** New modules and changes:
+- `presentation.py` (new): presentation directory structure, completeness check, sandbox copy, Proxy prompt section
+- `gates.py`: `Verdict.RETURN` (moves back without counting round), e2e done gate checks presentation completeness
+- `dispatch.py`: per-role setup (Integration Tester lays out presentation, Proxy receives copy), Proxy precondition returns on missing presentation
+- `sandbox.py`: `Order` dataclass holds presentation source, `Preparer.prepare` copies before launching, Proxy read scope includes `.team/acceptance/**`
+- `cli.py`, `git_ops.py`: init error handling outside git (no traceback, proper message)
+- See ADR-0008 for the architecture.
 
 **Clean halt on limits, crashes, SIGTERM (s8):** New modules and changes:
 - `halt.py`: exception → `Halt` (kind, reason); `HALTS` and `LIMIT_PATTERNS` tables; `classify()` detector chain

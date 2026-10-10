@@ -1,8 +1,19 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s8 done)
+**Last updated:** 2026-10-10 (s13 done)
 
 ## Design decisions to verify
+
+**Team presents product in ready-made environment (s13):** Verify that the handoff is enforced in code:
+- `presentation.py` has single source-of-truth functions: `lay_out()` (wipes, creates workspace, git init), `missing()` (exact reason strings), `copy_into()` (symlinks preserved), `prompt_section()` (heading + path + guide)
+- e2e `done` gate checks presentation completeness via `Pipeline._done_gate()` (only when acceptance step exists)
+- Proxy precondition checks via `Pipeline.unpresented()` returns story to e2e with `Verdict.RETURN` (no round, no cost)
+- Sandbox copy runs via `Preparer.prepare()` → `_copy_presentation()` after wipe, before prepare launch (E7 order)
+- Proxy read globs and allowed reads add `.team/acceptance/**` and `<repo>/.team/acceptance` (report access)
+- Proxy write scope unchanged: sandbox + `.team/acceptance/**`; `Read` added to `web`, `harness`, `manual` tools
+- `git init` outside git: `Git.is_repo()` probes, `_require_init_inputs()` checks first, raises `CliError` with exact message (no traceback)
+- Story id safety checked in `lay_out()` before wiping (refuses unsafe id with `SandboxError`)
+- See ADR-0008 for the full strategy.
 
 **Clean halt on limits, crashes, SIGTERM (s8):** Verify that halt handling is data-driven:
 - `HALTS` table (kind → status, note_kind, exit_code, advice) with no code branches outside it

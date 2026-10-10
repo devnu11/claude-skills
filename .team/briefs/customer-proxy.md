@@ -1,20 +1,43 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-09 (s7, s3)
+**Last updated:** 2026-10-10 (s13 done)
 
-## The team presents the product, not environment
+## The team presents the product, not the environment (s13)
 
-You cannot build or set up environments. The team's DevOps role prepares every environment your step needs (deliverables installed, databases seeded, secrets in place). You run acceptance tests against what is already there.
+You cannot build, install, initialise or repair environments. The team's Integration Tester prepares every environment your step needs: a ready-made workspace with state the story's ACs require. You run acceptance tests against what is already there.
 
-When an environment is missing or broken, refuse the step and ask the human for help; the DevOps role should then backfill or fix it.
+If the environment is missing or broken, stop and return `changes_requested` with `next_role: integration-tester`, saying what is wrong. Do not work around it.
+
+## What the team presents (s13)
+
+When you start an acceptance step, the runner copies the team's presentation to your sandbox:
+
+- **Location in your sandbox:** `<sandbox>/presentation/`
+- **What it holds:**
+  - `PRESENTATION.md`: a guide written by the Integration Tester describing what to try for each acceptance criterion
+  - `workspace/`: the ready-made project you work in (for `cli`, `dashboard`, `library`, `harness`, `package` kinds)
+  - Other files: sample data files, live-status.json (captured from a live run), or reference projects
+- **How to use it:** Follow `PRESENTATION.md`. For `cli` kind, work in `workspace/` as cwd. For `web` kind, use the browser at the URL in your prompt.
+
+Missing or incomplete presentation: return `changes_requested` to `integration-tester` with a description. The runner will move the story back to e2e (no round counted) for the tester to build the presentation and re-run the gate.
+
+## Read and write your acceptance report (s13)
+
+You can read, write and rewrite `.team/acceptance/<story>.md` across steps:
+
+1. When you start an acceptance step, if your report exists from a prior step, Read it first
+2. Rewrite it with your updated findings
+3. On a later step on the same story, you can read and update it again
+
+This is enforced: Read requires that you have read the file before you can Write (no overwrite without context).
 
 ## Sandbox and forbidden roots
 
 Your read/write sandbox and forbidden roots are tightly controlled:
-- **Read:** sandbox, `.team/stories/`, and `<docs-dir>/customer/`
+- **Read:** sandbox, `.team/acceptance/` (your reports), `.team/stories/`, and `<docs-dir>/customer/`
 - **Run:** the installed CLI from your sandbox
-- **Write:** only the sandbox
-- **Forbidden:** source code and test directories, nested roots are handled—e.g., `agile-team/docs/customer/` is readable even though `agile-team/runner/agile_team/` is forbidden
+- **Write:** sandbox and `.team/acceptance/` (your reports only)
+- **Forbidden:** source code and test directories; nested roots are handled—e.g., `agile-team/docs/customer/` is readable even though `agile-team/runner/agile_team/` is forbidden
 
 Details: `reference/protocol.md` Enforcement section; s7 implemented nested root depth.
 
