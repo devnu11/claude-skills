@@ -370,7 +370,7 @@ function asOf(snap, cursor) {
 
 function replayStories(stories, events) {
   const sprint = events.find((e) => e.kind === "sprint-start");
-  const members = new Set(sprint ? sprint.data.stories : []);
+  const members = new Set(sprint?.data?.stories ?? []);
   const pos = {};
   for (const e of events) {
     if (e.kind === "story-opened") pos[e.story] = { step: e.data.step, status: "active", rounds: 0 };
@@ -734,7 +734,7 @@ function stepEndMeta(d) {
 const TIMELINE = {
   "step-start": (e) => ({ from: PO, to: e.role, what: "brief", body: e.data.brief }),
   "step-end": (e) => ({
-    from: e.role, to: PO, what: e.data.status.replace("_", " "), tone: STATUS_TONE[e.data.status],
+    from: e.role, to: PO, what: (e.data.status ?? "done").replace("_", " "), tone: STATUS_TONE[e.data.status],
     body: e.data.summary, meta: stepEndMeta(e.data),
   }),
   gate: (e) => ({
@@ -756,7 +756,10 @@ const TIMELINE = {
     body: e.data.reason, meta: e.data.affected_done_stories?.length ? `affects done: ${e.data.affected_done_stories.join(", ")}` : "",
   }),
   "story-opened": (e) => ({ from: PO, to: "backlog", what: "story opened", body: e.data.title }),
-  "sprint-start": (e) => ({ from: PO, to: `sprint ${e.data.sprint}`, what: "sprint start", body: `${e.data.goal}\nStories: ${e.data.stories.join(", ")}` }),
+  "sprint-start": (e) => ({
+    from: PO, to: e.data.sprint != null ? `sprint ${e.data.sprint}` : "sprint", what: "sprint start",
+    body: [e.data.goal, e.data.stories?.length ? `Stories: ${e.data.stories.join(", ")}` : ""].filter(Boolean).join("\n"),
+  }),
 };
 
 function renderTimeline(view) {
