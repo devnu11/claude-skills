@@ -81,6 +81,11 @@ command fails.
    before the Proxy ran; its output is in
    `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
    in use means another process holds the delivery's port. Tell the human.
+   When the same setback repeats on a story, the runner stops the loop and
+   runs the Manager on it (`needs manager · repeat` on the dashboard). An
+   `update` note that starts `Runner fault on sN` means no role can fix it:
+   the runner itself (a prepare line, a gate) needs fixing. Relay it; the
+   story stays blocked while the PO plans the fix.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets
    `status` and `status_reason`, and prints one line saying what to do:
    - `blocked` with a limit (e.g. "session limit, resets 2:20pm

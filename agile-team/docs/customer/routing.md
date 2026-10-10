@@ -13,6 +13,8 @@ The **Product Owner** (PO) is called in only when a judgement is needed:
 - a role asks a question, or reports that it is blocked or has failed;
 - a step crashed, or changed files outside its scope;
 - a story keeps bouncing and reaches the round cap;
+- the Manager finds that a repeated setback is the runner's fault, or
+  belongs to a role with no pipeline step;
 - a reviewer sends work to a role that has no pipeline step (for example
   DevOps);
 - the Manager made a ruling that could not apply (for example on a done
@@ -78,6 +80,34 @@ The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
 apply, such as one on a done story, is reported to the PO. It is never
 silently dropped. The PO can then clear the done story's hold with
 `continue_story`. A done story's hold never stops its Scribe step.
+
+## When a story keeps coming back for the same reason
+
+If a story is sent back or held twice in a row for the same reason, the
+runner stops the loop. It does not send the story round again, and the
+repeat costs no round. "The same reason" ignores details that change from
+run to run: ids, numbers, times, ports and paths. So `nothing is listening
+at 127.0.0.1:8799` and `… at 127.0.0.1:8800` count as the same. The number
+of repeats is `repeat` under `[gates]` in `.agile-team.toml` (default 2).
+
+The runner then runs the Manager on the story. The Manager gets the
+repeated reason, every step and role involved, and the last output. It
+decides whose fault the loop is:
+
+- **a role in the pipeline**: the story goes to that role's step;
+- **another role, such as DevOps**: the PO briefs that role;
+- **the runner itself**, for example a delivery's start command that
+  always fails: the story is blocked, and you get a note that starts
+  `Runner fault on sN`. The PO plans the fix.
+
+On the dashboard such a story shows **needs manager · repeat** with the
+reason. The timeline shows the escalation and the Manager's verdict.
+`agile-team status` shows `"repeated"` (the reason) and `"streak"` (the
+setbacks so far) on the story.
+
+Apart from those details, two reasons must match word for word. A role
+that describes the same problem in different words gives two reasons; the
+round cap catches those.
 
 ## When a story comes back to tests with its code done
 

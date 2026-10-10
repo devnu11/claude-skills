@@ -120,8 +120,10 @@ It never writes, and it never serves files by path.
 The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
 task, budget, Manager checkpoint percentage, round cap, `manager_due`),
 `pipeline` (enabled steps), `roles` (name, model, provider, with PO
-overrides applied), `stories` (state plus `opened_at` and the story file's
-`acceptance`), `requirements` (from `<docs>/requirements/REQ-*.md`, with
+overrides applied), `stories` (state plus `opened_at`, `repeated` and the
+story file's `acceptance`; the board shows a repeated story as `needs
+manager · repeat` with its reason, and the timeline shows `escalation` and
+`fault` events), `requirements` (from `<docs>/requirements/REQ-*.md`, with
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
 outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`
 and `answers`. The contract is
@@ -169,6 +171,7 @@ ci = [".github/workflows/**"]
 [gates]
 coverage = 95
 round_cap = 3
+repeat = 2                     # the same setback this many times in a row escalates to the Manager
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
@@ -302,7 +305,10 @@ with another status, is a malformed handoff. The unit-tester may add
 `"tests": "changed"` or `"tests": "confirmed"` when a story is back at
 `tests` with its code in (see "Back at tests with the code in"). The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
-{"<role>": "<question>"}`. The runner appends each follow-up to that role's
+{"<role>": "<question>"}`. On a story escalated for a repeated setback it
+must add `"fault": "<role>"` or `"fault": "runner"` (see "Repeated
+setbacks"); a `fault` that is not a non-empty string is a malformed
+handoff. The runner appends each follow-up to that role's
 next brief under "Questions from the Manager" and clears it once the role
 hands off; the answer comes back in that role's `friction`. A missing or
 malformed block fails the step (and counts a round).
@@ -316,7 +322,9 @@ The Manager's runner context carries `budget` (spend, tokens), `spend_by_role`
 since its last step) and `pending_followups`, beside the review reasons,
 overrides and capped stories. It also carries
 `test_disputes_since_last_review` (story, role, test, rule, rounds for each
-test dispute since its last step). The Manager raises every role in
+test dispute since its last step). When it runs on a story escalated for a
+repeated setback, it also carries `repeated_setback` (see "Repeated
+setbacks"), and `stories_at_round_cap` leaves that story out. The Manager raises every role in
 `long_running_roles` as friction in its summary, with one proposal: split
 the step, change the brief, or change the tools.
 
@@ -330,7 +338,9 @@ and resets its rounds and test disputes. The Manager's report carries
 apply, the report says why and the story does not change:
 `{"ruling", "applied": false, "why"}`. That happens when the step has no
 story (`a ruling needs a story; run the manager on that story`) or the story
-is done (`story sN is done; a ruling cannot move it`).
+is done (`story sN is done; a ruling cannot move it`). On a repeated
+setback the `fault` applies first and a ruling in the same handoff then
+wins; see "Repeated setbacks".
 
 ### Ledger cost
 
@@ -400,7 +410,8 @@ for a `web` delivery, a service that starts from it and answers its probe)
 → acceptance (customer-proxy).
 
 A failed gate or `changes_requested` moves the story back and adds a round
-(a test dispute is the exception: see "Test disputes"). At
+(a test dispute is the exception: see "Test disputes"; the same setback
+twice in a row escalates instead: see "Repeated setbacks"). At
 `round_cap` the runner refuses every role but the Manager on that story.
 `blocked` and `failed` do not count a round. When `e2e` is enabled,
 `run_role(customer-proxy)` on a story with no complete presentation does not
@@ -409,6 +420,70 @@ start the Proxy. The runner moves the story back to `e2e` **without** a round
 same happens when a `web` delivery's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
+
+### Repeated setbacks
+
+A **setback** is a gate outcome that sends a story back or holds it:
+`bounce`, `return` or `hold`, including a gated role's malformed handoff
+(which now logs a `gate` event like any bounce). Passes and test disputes
+are not setbacks. For each setback the runner records, on the story's
+`streak` in `state.json`: step, step sent to, role, verdict, `author`
+(`role` when the reason is a role's handoff, `runner` when the runner's own
+gate, return or hold wrote it), the reason, the event id and a **key**:
+
+`<step>><to_step> <normalised reason>`
+
+The reason is lowercased and passed through a table of patterns
+(`loops.NORMALISE`): date-times and clock times → `<time>`, URLs → `<url>`,
+`host:port` → `<host>`, anything with a `/` → `<path>`, ids such as `s4` or
+`e451` → `<id>`, commit shas → `<sha>`, other numbers → `<n>`, runs of
+whitespace → one space. So `nothing is listening at 127.0.0.1:8799` and
+`nothing is listening at 127.0.0.1:8800` share a key. Two different failing
+tests do not.
+
+- A setback with the same key as the last one extends the streak, and a
+  different key restarts it at 1. A pass in between does not reset it, so a
+  ping-pong between two steps still counts. A Manager ruling or fault
+  clears it.
+- When the streak would reach `[gates] repeat` (default 2, at least 2), the
+  runner does **not** send the story round again. The gate verdict becomes
+  `escalate`: the story stays at its step, gets no round, becomes
+  `needs_manager`, and `repeated` holds the full reason. The gate event is
+  an `escalation` event: the gate fields plus `key`, `author`, `count` and
+  `history` (the earlier setbacks' event ids). Every setback's `gate` event
+  carries `key`, `author`, `count` and `history` too.
+- An escalation is not a hand-over. The router's next step is the
+  `manager` **on that story**, with a brief that starts `Story sN hit the
+  same setback N times in a row…` and a `repeated_setback` entry in the
+  runner context: the reason verbatim (the last gate or job output), key,
+  count, author, the history (roles, steps, verdicts, reasons, event ids)
+  and the story's `gate`, `step-end`, `test-dispute`, `escalation`,
+  `ruling` and `fault` events since the first setback. If the escalating
+  step also handed over (questions, blocked), the PO gets the story first,
+  and the Manager runs after `continue_story`.
+- While a story is escalated, `run_role` of any gated role on it is
+  refused: `story sN repeated a setback (<key>); the manager rules on it
+  first`.
+- The Manager names the owner of the fault with `"fault"`:
+
+  | `fault` | Effect |
+  |---|---|
+  | a role with an enabled step | the story goes to that role's step, `active` |
+  | another known role (e.g. `devops`) | `active`, step kept; the PO gets `off_pipeline_fault` and briefs that role |
+  | `runner` | `blocked`; flagged as a runner fault in the `fault` event (`kind: "runner"`); the runner posts an `update` note to the human naming the story and reason, and the PO gets `runner_fault` |
+
+  A fault resets the story's rounds and disputes and clears `streak` and
+  `repeated`, so the loop costs no role a round. A `ruling` in the same
+  handoff applies after the fault and wins. A missing or unknown fault
+  changes nothing (not even a ruling), and the PO gets `fault_not_applied`.
+  The Manager's report carries `"fault": {"fault", "kind", "applied",
+  "reason", "now_at"}` (or `"why"`), and a `fault` event logs `{fault, kind,
+  reason, now_at}`.
+- The next standard brief on the story says `The same setback repeated, so
+  the manager ruled on it: <reason>`. The Manager's `followups` tell the
+  fault role what to fix.
+- Role prose seldom repeats word for word, so two summaries saying the same
+  thing differently are two keys. The round cap still applies to them.
 
 ### Back at tests with the code in
 
@@ -525,8 +600,11 @@ and lasts until the PO ends its turn. A router pass runs steps with no PO
 involved, in this order:
 
 1. the `manager`, story-less, while `manager_due` is not empty;
-2. the `scribe`, on each story that has just reached done (`scribe_due`);
-3. the next step of the first **movable** story. A movable story is in the
+2. the `manager` on a story escalated for a repeated setback (in the
+   current sprint, not held, not blocked by a question; see "Repeated
+   setbacks");
+3. the `scribe`, on each story that has just reached done (`scribe_due`);
+4. the next step of the first **movable** story. A movable story is in the
    current sprint, `active` and not held, and no open question blocks it.
 
 The role for a story step is the first of these that fits the step: the PO's
@@ -553,16 +631,21 @@ The pass ends at the first step whose report matches a row of the
 | `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
-| `round_cap` | the story reached the round cap |
+| `round_cap` | the story reached the round cap (not an `escalate` verdict) |
 | `unroutable` | a bounce names a `next_role` that owns no pipeline step |
 | `ruling_not_applied` | the Manager ruled but the ruling could not apply (see "Rulings") |
+| `runner_fault` | the Manager put a repeated setback on the runner; the story is blocked and the human was told |
+| `off_pipeline_fault` | the Manager put a repeated setback on a role with no pipeline step; brief it, then `continue_story` |
+| `fault_not_applied` | the Manager ruled on a repeated setback without a valid `fault` |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen; they are listed by id with the question), `sprint_end` (every story
 in the sprint is done) and `stalled` (nothing can move; the reason for each
 story is listed). Gate bounces, `changes_requested` to a pipeline role, a
 gated role's malformed handoff and `returned` do **not** hand over. The
-runner passes their reasons on in the next standard brief.
+runner passes their reasons on in the next standard brief. An `escalate`
+verdict does not hand over either: the runner runs the Manager on the
+story.
 
 - A story named in a hand-over is **held** (`hold` in `status`): the router
   skips it until the PO calls `continue_story(story, note)` or runs a step on
@@ -589,7 +672,9 @@ runner passes their reasons on in the next standard brief.
   `note`, `previous` (the last gated step: role, status, summary, verdict,
   reason, next_role), `dispute` (the open test dispute: test, rule, reason,
   base commit, stage `raised` or `confirmed`), `disputes` (disputes since
-  the last ruling) and `implemented` (implement-gate passes); run-level `scribe_due` and `delivered` (answer ids the
+  the last ruling), `implemented` (implement-gate passes), `streak` (the
+  setbacks since the key last changed) and `repeated` (the repeated reason
+  while escalated, else `null`); run-level `scribe_due` and `delivered` (answer ids the
   PO has seen). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
 

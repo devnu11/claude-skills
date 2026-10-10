@@ -25,6 +25,7 @@ one line here. Older designs are the sections at the end of this file.
 | s25 Ledger each PO query's own cost, not the resumed session's running total | [design/s25.md](design/s25.md) |
 | s26 A presentation must start the delivery; "presentation ready" means up and answering | [design/s26.md](design/s26.md) |
 | s24 Tests gate accepts code from an earlier pass; a hold on a done story can be cleared | [design/s24.md](design/s24.md) |
+| s27 A repeated setback escalates to the Manager instead of looping | [design/s27.md](design/s27.md) |
 
 ## Components
 
@@ -33,11 +34,12 @@ one line here. Older designs are the sections at the end of this file.
 | `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
 | `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19); renews the PO's session at boundaries (s23) | `Runtime`, `Router`, `RunState`, events, relay, po_session |
 | `po_session.py` | renewal texts, `RenewPath`, the open-question carry-over and `.team/po/handoff.md` I/O (s23) | relay |
-| `router.py` | `Router`: picks the next step (Manager, Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, handover, gates, relay |
+| `router.py` | `Router`: picks the next step (Manager, the Manager on a repeated setback (s27), Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, handover, gates, relay |
 | `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
-| `gates.py` | `StoryState`, `Pipeline` (step machine), `dispatch_refusal`, command gates | roles (`Handoff`) |
+| `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27), `dispatch_refusal`, command gates | roles (`Handoff`), loops |
+| `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
 | `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
 | `relay.py` | outbox/inbox with the liaison | none |
