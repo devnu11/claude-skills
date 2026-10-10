@@ -444,7 +444,8 @@ runner passes their reasons on in the next standard brief.
 
 - A story named in a hand-over is **held** (`hold` in `status`): the router
   skips it until the PO calls `continue_story(story, note)` or runs a step on
-  it with `run_role`.
+  it with `run_role`. A done story never moves again, so its hold does not
+  stop its Scribe; the Scribe runs after the PO's turn.
 - PO tools added: `continue_story(story, note)` releases a held story and
   adds `note` to its next brief. `set_developer(story, role)` picks the
   developer for that story; it refuses an unknown role or one that is not a
