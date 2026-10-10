@@ -1,6 +1,14 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s25 done)
+
+## Corrected cost accounting (s25)
+
+The ledger now shows each PO query's **actual** cost (delta from previous running total in the same session), not the inflated running total. Starting s25, `budget_status.spent_usd` is accurate.
+
+**For old ledger entries:** PO entries before line 196 in `.team/run/ledger.jsonl` were overcounted. The true PO spend up to that point is $20.98, not $277.91. **Subtract $256.93** from any budget report that includes those entries. See ADR-004 (one-off correction section) for the evidence. Future entries are not rewritten; the correction is one-time.
+
+**For checkpoints:** Checkpoints that fired in the inflated period are now moot. The PO is currently at ~$21, well under the $300 budget.
 
 ## Monitoring long-running roles (s23)
 

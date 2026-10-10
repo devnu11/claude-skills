@@ -1,8 +1,21 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s25 done)
 
 See `developer.md` for the base conventions.
+
+## Cost delta tracking — PO sessions and ledger entries (s25)
+
+The PO resumes one session, query after query. `ResultMessage.total_cost_usd` is a running total for the session, not per-query cost. The runner now ledgers only the **delta** from the previous query's running total. Key classes and methods:
+
+- `SessionCost(session, reported)`: holds the last raw running total for one session.
+- `SessionCost.own_cost(resumed, reported)`: returns `reported - base` (or `reported` if counter restarted or fresh session).
+- `Ledger.last_cost(role)`: the last ledgered cost for a role (for legacy seed when state.json predates s25).
+- `RunState.po_cost`: persisted `SessionCost | None`, loaded from state.json.
+- `PoRun._own_cost()`: takes the delta, updates `po_cost`, returns modified result (does not save).
+- `PoRun._seed_cost()`: seeds from old ledger if `po_cost` is None.
+
+The provider rule applies after the delta, so a PO on `billing = "free"` stores the raw running total but ledgers 0.0. See ADR-004 and `agile-team/docs/design/s25.md` for rules C1–C9.
 
 ## Context reduction: Read little, no connectors (s23)
 

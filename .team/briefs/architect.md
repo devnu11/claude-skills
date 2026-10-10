@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s25 done)
 
 ## Context reduction — focused design files (s23)
 
@@ -12,6 +12,8 @@ Move designs out of the 1600-line `architecture.md` into focused per-story files
 This lets Unit Testers and Developers read only what they need. Expect Unit Tester context per turn to drop under 60k tokens (s19 was 113.9k). See ADR-0011.
 
 ## Key design decisions
+
+**Ledger each PO query's own cost (s25):** The PO resumes one session, and `total_cost_usd` is a session running total. The ledger now records deltas: `own = reported − previous` for resumed sessions, full amount for fresh sessions. `SessionCost(session, reported)` and `SessionCost.own_cost()` compute the delta; `RunState.po_cost` persists it. Rules C1–C9 in `agile-team/docs/design/s25.md` govern the implementation; C6 handles legacy seeds. ADR-004 documents the finding, decision, and one-off correction ($256.93 for old entries).
 
 **Routing in code — runner drives the pipeline (s19):** The fixed pipeline (design → implement → review → acceptance) is now code-driven. The architect names each story's developer specialisation via a `"developer"` field in the handoff (e.g., `"developer": "developer-cli"`); the runner uses it for implement steps. ADR-0009 and `agile-team/docs/design/s19.md` document the architecture.
 

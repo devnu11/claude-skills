@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s25 done)
 
 ## Context reduction: work lean (s23)
 
@@ -12,6 +12,25 @@ Your session context is reduced by disabling Claude.ai connectors and following 
 - **Write lean:** Write test files in one go with `Write`, fix with `Edit`. See the design's test checklist for what to cover.
 
 Target context per turn: under 60k tokens (s19 was 113.9k). See ADR-0011.
+
+## s25: Cost delta tracking – test notes
+
+s25 fixed PO cost overcounting by ledgering only the delta from the previous running total per session. Key test cases (design checklist section 8):
+
+1. `SessionCost.own_cost()`: 7 cases (fresh, same-session delta, other session, equal, drop, default store, `None` mismatch).
+2. `Ledger.last_cost()`: role lookups, ignoring other roles' entries, empty ledger → 0.0.
+3. `RunState` round-trip: `po_cost` persists as `SessionCost`; missing key loads `None` (legacy files).
+4. **Resumed session deltas:** three PO turns reporting running totals 1.0, 1.5, 2.25 ledger as 1.0, 0.5, 0.75.
+5. **Across processes:** `po_cost` from saved state is used; new process with same session gets the delta.
+6. **Handoff renewal:** `po_cost` from old session, fresh session ID → entry is full amount.
+7. **Legacy seed (C6):** `po_cost = None`, `po_session = "old"`, ledger has PO entries → delta against last PO cost.
+8. **Drop (counter reset):** `po_cost` higher than reported → entry is just reported.
+9. **No result:** `ResultMessage` is None → `po_cost` unchanged, ledger 0.0.
+10. **Free provider:** `po_cost.reported` stores raw total; ledger entry is 0.0.
+11. **Checkpoint:** real spend (not running total) triggers checkpoint.
+12. **Role steps:** `resume=None` always; own cost equals reported cost.
+
+A contract change: tests that assert a resumed PO entry's cost must now use design rule C1. `conftest.FakeQuery` returns the same cost/session per call; for deltas, use a fake that returns a list `[1.0, 1.5, 2.25]`. See design section 7 "Test checklist".
 
 ## Process constraint: developer cannot edit tests
 

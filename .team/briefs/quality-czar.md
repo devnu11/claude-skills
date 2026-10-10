@@ -1,6 +1,10 @@
 # Quality Czar: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s25 done)
+
+## Test quality for s25: Cost delta tracking
+
+The Unit Tester contracts changed in s25. Tests that assert a resumed PO query's cost must now use design rule C1 (delta logic), not the old inflated running total. Spot-check that existing PO cost assertions are updated to the new contract (or are verifying fresh sessions where no delta applies). See `agile-team/docs/design/s25.md` section 7 and unit-tester brief for the full checklist.
 
 ## Process improvements from s19
 

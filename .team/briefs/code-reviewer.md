@@ -1,8 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s25 done)
 
 ## Design decisions to verify
+
+**Cost delta tracking (s25):** Verify that PO query costs are correctly deltas, not running totals:
+- `SessionCost.own_cost()` logic: `reported − previous` for resumed same session; full `reported` for fresh session or counter drop.
+- `RunState.po_cost` persists across queries and is saved with each ledger entry.
+- `PoRun._own_cost()`: takes delta before pricing, does not save (pair it with `_record`).
+- Legacy seed (C6): `po_cost = None` → look up last PO entry cost and session from ledger.
+- Role steps: `plan.options.resume is None`, own cost = reported cost (test pins this).
+- Readers unchanged (C8): dashboard, budget_status, checkpoint all read deltas from the ledger, no new field.
+- No rewrite: old entries stay as they were; ADR-004 gives the one-off correction.
+- See ADR-004 and `agile-team/docs/design/s25.md` for full spec.
 
 **Routing in code — hand-over triggers as data (s19):** Verify that the router and hand-over logic are data-driven:
 - `handover.HANDOVERS` table is the single source of truth for when to hand over (no branching outside it)
