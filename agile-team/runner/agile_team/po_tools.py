@@ -18,7 +18,7 @@ from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 from . import handover, po_session
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
-from .gates import StoryState, StoryStatus, role_fits_step
+from .gates import StoryState, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -142,8 +142,8 @@ class Tools:
     async def continue_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release a held story and pass the PO's note to its next step."""
         story, reason = self._story_for(args)
-        if story is None or story.status is StoryStatus.DONE:
-            return text_result(refused(reason or f"story {args['story']} is done"))
+        if story is None:
+            return text_result(refused(reason))
         story.hold, story.note = None, args.get("note", "")
         self.runtime.save()
         return text_result({"status": "continued", "story": story.id, "step": story.step})
@@ -240,8 +240,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"text": str, "kind": str, "stories": list},
     ),
     "continue_story": (
-        "Release a story the runner handed to you; your note is added to its next step's "
-        "standard brief.",
+        "Release a story the runner handed to you (a done story too, to clear its hold); "
+        "your note is added to its next step's standard brief.",
         {"story": str, "note": str},
     ),
     "set_developer": (

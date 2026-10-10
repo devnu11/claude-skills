@@ -8,6 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .config import PIPELINE_STEPS
 from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
 from .ledger import SessionCost
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -107,10 +108,18 @@ class RunState:
 NESTED = {"previous": PreviousStep, "dispute": OpenDispute}
 
 
+PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
+
+
+def _legacy_implemented(data: dict[str, Any]) -> int:
+    return int(data.get("step") in PAST_IMPLEMENT)
+
+
 def _story(data: dict[str, Any]) -> StoryState:
     status = StoryStatus(data.get("status", StoryStatus.ACTIVE))
     nested = {k: _nested(cls, data.get(k)) for k, cls in NESTED.items()}
-    return StoryState(**{**data, "status": status, **nested})
+    implemented = data.get("implemented", _legacy_implemented(data))
+    return StoryState(**{**data, "status": status, "implemented": implemented, **nested})
 
 
 def _nested(cls: type, data: dict[str, Any] | None) -> Any:

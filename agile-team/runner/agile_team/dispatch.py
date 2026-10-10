@@ -65,6 +65,12 @@ from .roles import (
 )
 from .state import RunState
 
+REWORK_BRIEF = (
+    "Code from an earlier pass is in, so the suite may already be green. "
+    'If it is once the tests are right, say so in your handoff: "tests": "changed" '
+    '(you changed tests for this story) or "tests": "confirmed" '
+    "(you checked the existing tests already cover it)."
+)
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = "product-owner"
@@ -684,14 +690,23 @@ class Runtime:
 
 
 def _story_lines(story: StoryState | None) -> list[str]:
-    """The story line, and the open test dispute when there is one."""
+    """The story line, the open test dispute, and the rework brief when they apply."""
     if story is None:
         return []
-    lines = [f"Story {story.id}: {story.title} (step {story.step}, round {story.rounds})"]
+    head = f"Story {story.id}: {story.title} (step {story.step}, round {story.rounds})"
+    return ["\n".join([head, *_dispute_lines(story), *_rework_lines(story)])]
+
+
+def _dispute_lines(story: StoryState) -> list[str]:
     d = story.dispute
-    if d:
-        lines.append(f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}")
-    return ["\n".join(lines)]
+    if not d:
+        return []
+    return [f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"]
+
+
+def _rework_lines(story: StoryState) -> list[str]:
+    reworked = story.step == "tests" and story.implemented > 0 and story.dispute is None
+    return [REWORK_BRIEF] if reworked else []
 
 
 def _dispute_fields(outcome: Outcome, story: StoryState) -> dict[str, Any]:

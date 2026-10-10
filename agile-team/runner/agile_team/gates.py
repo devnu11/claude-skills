@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from .roles import Dispute, Handoff
+from .roles import Dispute, Handoff, TestClaim
 
 STEP_ROLES = {
     "design": "architect",
@@ -35,6 +35,12 @@ BASELINE = ".team/baseline.json"
 HEAD_COMMAND = "git rev-parse HEAD"
 DIFF_COMMAND = "git diff --quiet {base} HEAD -- {path}"
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%")
+
+REWORK_UNCLAIMED = (
+    "tests pass on code from an earlier pass; write a failing test, "
+    'or hand off "tests": "changed" or "tests": "confirmed"'
+)
+REWORK_PASS = "tests pass on code from an earlier pass; tests {claim}"
 
 CommandRunner = Callable[[str], tuple[int, str]]
 
@@ -119,6 +125,7 @@ class StoryState:
     previous: PreviousStep | None = None
     dispute: OpenDispute | None = None
     disputes: int = 0
+    implemented: int = 0
 
 
 @dataclass
@@ -246,6 +253,15 @@ class Checks:
             return Outcome(Verdict.PASS)
         return Outcome(Verdict.BOUNCE, "tests pass before implementation; write a failing test")
 
+    def tests_reworked(self, claim: TestClaim | None) -> Outcome:
+        """Red passes; green passes only with a tests claim (code from an earlier pass)."""
+        red = self.tests_red()
+        if red.verdict is Verdict.PASS:
+            return red
+        if claim is None:
+            return Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED)
+        return Outcome(Verdict.PASS, REWORK_PASS.format(claim=claim))
+
     def tests_green_and_covered(self) -> Outcome:
         code, out = self.run(self.commands["test"])
         if code != 0:
@@ -287,6 +303,8 @@ class Pipeline:
     def _gate_for(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         if story.step == "tests" and story.dispute:
             return self._dispute_gate(story, handoff)
+        if story.step == "tests" and story.implemented:
+            return self._rework_gate(handoff)
         return self._command_gate(story.step) or self._done_gate(story, handoff)
 
     def _raises_dispute(self, story: StoryState, handoff: Handoff) -> bool:
@@ -305,6 +323,12 @@ class Pipeline:
         if handoff.status != "done":
             return None
         return lambda: self.checks.dispute_settled(story.dispute)
+
+    def _rework_gate(self, handoff: Handoff) -> Callable[[], Outcome] | None:
+        """On a reworked story a ``done`` at tests may be green if the tester says why."""
+        if handoff.status != "done":
+            return None
+        return lambda: self.checks.tests_reworked(handoff.tests)
 
     def _handoff_outcome(self, handoff: Handoff) -> Outcome:
         """Pass on ``done``; otherwise bounce to the step of the role it names."""
@@ -359,6 +383,7 @@ class Pipeline:
 
     def _forward(self, story: StoryState) -> None:
         i = self.steps.index(story.step)
+        story.implemented += story.step == "implement"
         if i + 1 == len(self.steps):
             story.status = StoryStatus.DONE
         else:

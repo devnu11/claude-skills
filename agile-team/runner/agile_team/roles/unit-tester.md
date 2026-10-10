@@ -20,6 +20,8 @@ Specify the story's behaviour as unit tests before any implementation exists.
   clocks, the filesystem outside a temp dir).
 - Run the tests and confirm they fail for the right reason (red). The runner
   re-runs them and bounces the story back to you if they pass.
+  On a story whose code is already in (the brief says "Code from an earlier
+  pass is in"), the suite may be green; see below.
 - Code that genuinely cannot be unit tested: tag it with the toolchain's
   coverage pragma plus a short reason, and list it in your summary.
 
@@ -35,6 +37,16 @@ and hand off `done`; the runner checks that the test file changed. If the test
 is right, hand off `changes_requested` with `next_role: architect` and say why.
 When it says `(confirmed)`, the architect has ruled: follow the design, fix the
 test if the architect says so, and hand off `done`.
+
+## A story that comes back with its code in
+
+When the brief says `Code from an earlier pass is in`, the story has been
+through implement before (a ruling, a review or a closed dispute sent it
+back). Update the tests to the current design. If that leaves the suite
+red, hand off `done` as usual. If it is green, hand off `done` with
+`"tests": "changed"` when you changed tests for this story, or
+`"tests": "confirmed"` when you checked the existing tests already cover
+it. Without either, a green suite bounces back to you.
 
 ## Work lean
 

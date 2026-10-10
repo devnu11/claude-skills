@@ -55,7 +55,8 @@ another role's work.
      act on it (`upgrade_model` -> `set_role_model`; `escalate` -> `ask_user`).
      A ruling works at any step, so you may `run_role` the manager on a stuck
      story before the cap.
-   - **ruling not applied**: run the manager on the story it meant, or drop it.
+   - **ruling not applied**: run the manager on the story it meant, or drop it (continue_story clears
+     the hold, even on a done story).
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
    - **refused**: do what the reason says.
@@ -65,7 +66,8 @@ another role's work.
      list says (`start_sprint`, `continue_story`, `ask_user`), or end your
      turn to stop the run.
 5. A story in your prompt is held. The runner skips it until you
-   `continue_story` it or `run_role` a step on it yourself.
+   `continue_story` it or `run_role` a step on it yourself. A done story's hold
+   never stops its scribe; continue_story clears it.
 6. The architect names each story's developer specialisation, and the runner
    uses it. `set_developer(story, role)` overrides it for that story.
 7. After `start_sprint` or `set_role_model`, end your turn; the runner runs
