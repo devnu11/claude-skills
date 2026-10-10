@@ -1,5 +1,8 @@
 """Run a command job once: exit 0 is done, 75 a usage limit, anything else a failure.
 
+A failure whose output names a network error (``ENOTFOUND``, "Can't reach the
+API server") is ``OFFLINE`` instead, so the supervisor waits for the network.
+
 75 is ``EX_TEMPFAIL``, which agile-team already exits with on a usage limit.
 The reset time comes from the last ``TAIL_LINES`` lines of output. Output is
 appended to ``output.log``. The command runs in its own process group, so
@@ -15,7 +18,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from .limits import LIMIT_PATTERNS, RESET_NOTE, Outcome, OutcomeKind, find_reason
+from .limits import (
+    LIMIT_PATTERNS,
+    NETWORK_PATTERNS,
+    RESET_NOTE,
+    Outcome,
+    OutcomeKind,
+    find_reason,
+)
 from .store import LOG_FILE, Job, JobState
 
 LIMIT_EXIT = 75
@@ -100,4 +110,11 @@ EXIT_OUTCOMES: dict[int, Callable[[str], Outcome]] = {
 def outcome_for(code: int, text: str) -> Outcome:
     """The outcome for an exit code and the output's tail."""
     handler = EXIT_OUTCOMES.get(code)
-    return handler(text) if handler else Outcome(OutcomeKind.FAILED, f"exit code {code}")
+    return handler(text) if handler else _failed(code, text)
+
+
+def _failed(code: int, text: str) -> Outcome:
+    offline = find_reason(NETWORK_PATTERNS, text)
+    if offline:
+        return Outcome(OutcomeKind.OFFLINE, f"{offline}, exit code {code}")
+    return Outcome(OutcomeKind.FAILED, f"exit code {code}")

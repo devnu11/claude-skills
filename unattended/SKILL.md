@@ -37,8 +37,15 @@ Every flag, the job files, limit detection and the command contract are in
    events: each run, wait and resume.
 
 `$UN stop NAME` stops a job. `$UN resume NAME [--max-resumes N] [--until …]
-[--max-cost …]` restarts a stopped or limit-reached job. It also restarts one
-whose supervisor died, for example after a reboot; `status` warns about those.
+[--max-cost …]` reruns any ended job (`done` and `failed` too), with the
+resume prompt or resume command. It also restarts one whose supervisor died,
+for example after a reboot; `status` warns about those.
+`$UN resume NAME --now` wakes a job that is waiting for a reset, for when the
+limit has reset sooner than the message said.
+
+A network failure doesn't end a job: the supervisor probes the API with a
+plain TCP connect every 30 s, which costs no tokens, and reruns once it
+answers.
 
 ## Rules
 
@@ -52,5 +59,8 @@ whose supervisor died, for example after a reboot; `status` warns about those.
 - Prompt jobs use the user's Claude Code settings. Headless, a tool those
   settings don't allow can't be approved by anyone, so allow what the job
   needs first, or pass `--permission-mode`.
+- **The machine stays awake** while a job runs or waits (`caffeinate` on
+  macOS, `systemd-inhibit` on Linux; none on Windows). Closing a laptop lid
+  still sleeps it. Pass `--allow-sleep` to let it idle-sleep.
 - Login auth refuses to start while `ANTHROPIC_API_KEY` is set; don't unset it
   for the user without asking.

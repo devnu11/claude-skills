@@ -64,6 +64,12 @@ def test_failure(make_job: MakeJob, workdir: Path) -> None:
     assert CommandJob(job, os.environ).run_once() == Outcome(OutcomeKind.FAILED, "exit code 3")
 
 
+def test_network_failure_is_offline() -> None:
+    text = "agile-team start: crashed: API Error: Can't reach the API server (ENOTFOUND)"
+    expected = Outcome(OutcomeKind.OFFLINE, "API server unreachable, exit code 70")
+    assert command_job.outcome_for(70, text) == expected
+
+
 @pytest.mark.parametrize(
     ("text", "reason"),
     [

@@ -11,8 +11,9 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import cli
+from unattended import awake, cli
 from unattended.auth import ENV_VAR
+from unattended.awake import SleepPolicy
 from unattended.prompt_job import PromptJob
 from unattended.store import (
     EVENTS_FILE,
@@ -80,7 +81,29 @@ def test_start_command_limit_then_resume(
     assert code == 0
     assert printed(capsys)["resumes"] == 1
     events = [json.loads(line)["event"] for line in home_job(tmp_path).path(EVENTS_FILE).open()]
-    assert events == ["start", "run", "wait", "resume", "run", "end"]
+    assert events == ["start", "keep-awake", "run", "wait", "resume", "run", "end"]
+
+
+def events_named(tmp_path: Path, name: str) -> list[dict[str, object]]:
+    lines = home_job(tmp_path).path(EVENTS_FILE).open()
+    return [event for event in map(json.loads, lines) if event["event"] == name]
+
+
+def test_start_keeps_the_machine_awake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawned: list[list[str]]
+) -> None:
+    monkeypatch.setattr(awake, "inhibitor", lambda pid: ["caffeinate", "-w", str(pid)])
+    assert run(tmp_path, "start", "j", "--command", "true", "--foreground") == 0
+    assert spawned == [["caffeinate", "-w", str(os.getpid())]]
+    assert events_named(tmp_path, "keep-awake")[0]["by"] == "caffeinate"
+
+
+def test_start_allow_sleep(tmp_path: Path, spawned: list[list[str]]) -> None:
+    argv = ["--command", "true", "--allow-sleep", "--foreground"]
+    assert run(tmp_path, "start", "j", *argv) == 0
+    assert spawned == []
+    assert events_named(tmp_path, "keep-awake") == []
+    assert home_job(tmp_path).load().spec.sleep is SleepPolicy.ALLOW
 
 
 def test_start_prompt_in_the_foreground(
@@ -322,12 +345,11 @@ def test_resume_an_orphan(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("status", [JobStatus.DONE, JobStatus.FAILED])
-def test_resume_refuses_an_ended_job(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], status: JobStatus
-) -> None:
-    make(tmp_path, status)
-    assert run(tmp_path, "resume", "j") == 1
-    assert f"job is {status}" in capsys.readouterr().err
+def test_resume_reruns_an_ended_job(tmp_path: Path, status: JobStatus) -> None:
+    job = make(tmp_path, status)
+    job.update(lambda st: setattr(st, "retries", 4))
+    assert run(tmp_path, "resume", "j", "--foreground") == 0
+    assert (job.load().status, job.load().retries) == (JobStatus.DONE, 0)
 
 
 def test_resume_refuses_a_running_job(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -366,4 +388,29 @@ def test_resume_refuses_a_used_up_cost_cap(
     assert run(tmp_path, "resume", "j") == 1
     assert "$2.10 spent reaches the cost cap" in capsys.readouterr().err
     assert run(tmp_path, "resume", "j", "--max-cost", "5", "--foreground") == 0
+    assert job.load().status is JobStatus.DONE
+
+
+def test_resume_now_wakes_a_waiting_supervisor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.WAITING)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    assert run(tmp_path, "resume", "j", "--now", "--max-resumes", "5") == 0
+    assert job.wake_requested()
+    assert job.load().bounds.max_resumes == 5
+    assert "resuming now" in capsys.readouterr().out
+
+
+def test_resume_without_now_points_at_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    make(tmp_path, JobStatus.WAITING).path(PID_FILE).write_text(str(os.getpid()))
+    assert run(tmp_path, "resume", "j") == 1
+    assert "use --now" in capsys.readouterr().err
+
+
+def test_resume_now_on_a_stopped_job_restarts_it(tmp_path: Path) -> None:
+    job = make(tmp_path)
+    assert run(tmp_path, "resume", "j", "--now", "--foreground") == 0
     assert job.load().status is JobStatus.DONE

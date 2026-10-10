@@ -24,6 +24,7 @@ from typing import Any, get_args
 from claude_agent_sdk.types import PermissionMode
 
 from .auth import Auth, AuthSetup
+from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .limits import Bounds, local, parse_duration, parse_until
 from .prompt_job import PromptJob
@@ -43,7 +44,7 @@ from .store import (
     JobStatus,
     Spec,
 )
-from .supervisor import STOP_REASON, Runner, Supervisor, install_sigterm
+from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 
 POLL = 5.0
 FOLLOW_POLL = 1.0
@@ -53,7 +54,6 @@ EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.LIMIT_REACHED: 75,
     JobStatus.STOPPED: 143,
 }
-RESUMABLE = frozenset({JobStatus.STOPPED, JobStatus.LIMIT_REACHED})
 OUTPUTS = {JobKind.PROMPT: OUTPUT_FILE, JobKind.COMMAND: LOG_FILE}
 LIVE_FILES = (EVENTS_FILE, LOG_FILE)
 Kill = Callable[[int, int], None]
@@ -62,6 +62,13 @@ Sleep = Callable[[float], None]
 
 class CliError(Exception):
     """A user-facing failure; the message is printed as is."""
+
+
+class Timing(StrEnum):
+    """When ``resume`` restarts a job that is waiting for a reset."""
+
+    AT_RESET = "at-reset"
+    NOW = "now"
 
 
 class Launch(StrEnum):
@@ -109,6 +116,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         model=args.model,
         permission_mode=args.permission_mode,
         fallback_wait=_duration(args.fallback_wait),
+        sleep=args.sleep,
     )
 
 
@@ -206,10 +214,17 @@ def run_supervisor(job: Job, home: Path) -> JobStatus:
     """Supervise ``job`` in this process; an unexpected error marks it failed."""
     install_sigterm()
     with job.pid_file():
+        hold_awake(job)
         try:
             return Supervisor(job, runner_for(job, home)).run()
         except Exception as exc:
             return _crashed(job, exc)
+
+
+def hold_awake(job: Job) -> None:
+    """Keep the machine awake for as long as this supervisor lives, unless the job allows sleep."""
+    if job.load().spec.sleep is SleepPolicy.PREVENT:
+        job.event("keep-awake", {"by": keep_awake(os.getpid())})
 
 
 def _crashed(job: Job, exc: Exception) -> JobStatus:
@@ -294,7 +309,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_wait(args: argparse.Namespace, sleep: Sleep = time.sleep) -> int:
+def cmd_wait(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
     """Block until the job ends (or its supervisor is gone); exit with its status code."""
     job = job_home(args).job(args.name)
     while running(job):
@@ -325,7 +340,7 @@ class Tail:
         sys.stdout.flush()
 
 
-def cmd_log(args: argparse.Namespace, sleep: Sleep = time.sleep) -> int:
+def cmd_log(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
     """Print the events and output; ``-f`` keeps printing until the job ends."""
     job = job_home(args).job(args.name)
     tail = Tail(job)
@@ -361,9 +376,11 @@ def _signal_or_mark(job: Job, kill: Kill) -> str:
 
 
 def cmd_resume(args: argparse.Namespace) -> int:
-    """Restart a stopped, limit-reached or orphaned job, optionally with new limits."""
+    """Restart an ended or orphaned job, optionally with new limits."""
     job = job_home(args).job(args.name)
     state = job.load()
+    if args.timing is Timing.NOW and state.status is JobStatus.WAITING and job.pid():
+        return _wake(job, args)
     _require_resumable(job, state)
     bounds = updated_bounds(state.bounds, args)
     _require_room(bounds, state.cost)
@@ -374,16 +391,24 @@ def cmd_resume(args: argparse.Namespace) -> int:
     return LAUNCHERS[args.launch](job, args)
 
 
+def _wake(job: Job, args: argparse.Namespace) -> int:
+    """Cut a live supervisor's wait short, applying any new limits first."""
+    bounds = updated_bounds(job.load().bounds, args)
+    job.update(lambda st: setattr(st, "bounds", bounds))
+    job.request_wake()
+    print(f"job {job.name}: resuming now (within {int(SLICE)} s)")
+    return 0
+
+
 def _restart(state: JobState, bounds: Bounds) -> None:
-    state.bounds = bounds
+    state.bounds, state.retries = bounds, 0
     state.mark(JobStatus.RUNNING)
 
 
 def _require_resumable(job: Job, state: JobState) -> None:
-    orphaned = state.status not in ENDED and job.pid() is None
-    if state.status not in RESUMABLE and not orphaned:
+    if state.status not in ENDED and job.pid() is not None:
         raise CliError(
-            f"job is {state.status}; only stopped, limit-reached or orphaned jobs resume"
+            f"job is {state.status} with a live supervisor; use --now to wake a waiting job"
         )
 
 
@@ -467,9 +492,17 @@ START_ARGS: tuple[Arg, ...] = (
                               "help": "default: your settings decide"}),
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
     *limit_args(10),
+    (("--allow-sleep",), {"action": "store_const", "dest": "sleep", "const": SleepPolicy.ALLOW,
+                          "default": SleepPolicy.PREVENT,
+                          "help": "let the machine idle-sleep (default: kept awake)"}),
     LAUNCH_ARG,
 )  # fmt: skip
-RESUME_ARGS: tuple[Arg, ...] = (NAME_ARG, *limit_args(None), LAUNCH_ARG)
+NOW_ARG: Arg = (
+    ("--now",),
+    {"action": "store_const", "dest": "timing", "const": Timing.NOW, "default": Timing.AT_RESET,
+     "help": "wake a job that is waiting for a usage-limit reset"},
+)  # fmt: skip
+RESUME_ARGS: tuple[Arg, ...] = (NAME_ARG, *limit_args(None), NOW_ARG, LAUNCH_ARG)
 COMMANDS = (
     Command("start", "create a job and supervise it", cmd_start, START_ARGS, (SOURCE, DEADLINE)),
     Command("status", "print a job's state as JSON (all jobs without NAME)", cmd_status,

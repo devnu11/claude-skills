@@ -39,6 +39,17 @@ def at(hour: int, minute: int = 0, day: int = 9) -> datetime:
         ("cannot open src/foo-429.ts", OutcomeKind.FAILED, "cannot open src/foo-429.ts"),
         ("HTTP 529 from the API", OutcomeKind.RATE_LIMITED, "rate limited (HTTP 529)"),
         ("", OutcomeKind.FAILED, "failed"),
+        (
+            "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)",
+            OutcomeKind.OFFLINE,
+            "API server unreachable",
+        ),
+        (
+            "getaddrinfo EAI_AGAIN api.anthropic.com",
+            OutcomeKind.OFFLINE,
+            "network error (EAI_AGAIN)",
+        ),
+        ("Connection error.", OutcomeKind.OFFLINE, "connection error"),
     ],
 )
 def test_classify(text: str, kind: OutcomeKind, reason: str) -> None:

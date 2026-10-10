@@ -6,9 +6,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from unattended import awake
 from unattended.store import Job, JobHome, JobKind, JobState, Spec
 
 MakeJob = Callable[[Spec], Job]
+
+
+@pytest.fixture(autouse=True)
+def spawned(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """Record keep-awake inhibitors instead of starting them."""
+    commands: list[list[str]] = []
+    monkeypatch.setattr(awake, "spawn", commands.append)
+    return commands
 
 
 @pytest.fixture
