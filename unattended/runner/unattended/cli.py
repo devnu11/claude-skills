@@ -54,7 +54,6 @@ EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.LIMIT_REACHED: 75,
     JobStatus.STOPPED: 143,
 }
-RESUMABLE = frozenset({JobStatus.STOPPED, JobStatus.LIMIT_REACHED})
 OUTPUTS = {JobKind.PROMPT: OUTPUT_FILE, JobKind.COMMAND: LOG_FILE}
 LIVE_FILES = (EVENTS_FILE, LOG_FILE)
 Kill = Callable[[int, int], None]
@@ -377,7 +376,7 @@ def _signal_or_mark(job: Job, kill: Kill) -> str:
 
 
 def cmd_resume(args: argparse.Namespace) -> int:
-    """Restart a stopped, limit-reached or orphaned job, optionally with new limits."""
+    """Restart an ended or orphaned job, optionally with new limits."""
     job = job_home(args).job(args.name)
     state = job.load()
     if args.timing is Timing.NOW and state.status is JobStatus.WAITING and job.pid():
@@ -402,16 +401,14 @@ def _wake(job: Job, args: argparse.Namespace) -> int:
 
 
 def _restart(state: JobState, bounds: Bounds) -> None:
-    state.bounds = bounds
+    state.bounds, state.retries = bounds, 0
     state.mark(JobStatus.RUNNING)
 
 
 def _require_resumable(job: Job, state: JobState) -> None:
-    orphaned = state.status not in ENDED and job.pid() is None
-    if state.status not in RESUMABLE and not orphaned:
+    if state.status not in ENDED and job.pid() is not None:
         raise CliError(
-            f"job is {state.status}; only stopped, limit-reached or orphaned jobs resume"
-            " (use --now to wake a waiting job)"
+            f"job is {state.status} with a live supervisor; use --now to wake a waiting job"
         )
 
 
