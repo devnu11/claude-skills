@@ -215,3 +215,71 @@ def test_wake_file_cuts_the_wait_short(job: Job) -> None:
     assert not job.wake_requested()
     events = [json.loads(line)["event"] for line in job.path(EVENTS_FILE).read_text().splitlines()]
     assert events.count("wake") == 1
+
+
+# ----- offline -----------------------------------------------------------------------
+
+OFFLINE = Outcome(OutcomeKind.OFFLINE, "API server unreachable")
+
+
+class Network:
+    """A probe that is down for ``down`` checks, then up; counts the checks."""
+
+    def __init__(self, down: int) -> None:
+        self.down, self.checks = down, 0
+
+    def __call__(self) -> bool:
+        self.checks += 1
+        return self.checks > self.down
+
+
+def offline_run(job: Job, script: Script, net: Network) -> tuple[JobStatus, FakeClock]:
+    clock = FakeClock()
+    return Supervisor(job, script, clock, clock.sleep, net).run(), clock
+
+
+def test_offline_waits_for_the_network_without_a_resume(job: Job) -> None:
+    status, clock = offline_run(job, Script(OFFLINE, DONE), Network(down=2))
+    state = job.load()
+    assert status is JobStatus.DONE
+    assert (state.runs, state.resumes, state.retries) == (2, 0, 0)
+    assert clock.sleeps == [supervisor.SLICE] * 3
+    assert events(job) == ["run", "offline", "online", "run", "end"]
+
+
+def test_offline_marks_the_job_waiting(job: Job) -> None:
+    seen: list[JobStatus] = []
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        seen.append(job.load().status)
+        clock.sleep(seconds)
+
+    Supervisor(job, Script(OFFLINE, DONE), clock, sleep, Network(down=0)).run()
+    assert seen == [JobStatus.WAITING]
+
+
+def test_offline_past_the_deadline_is_limit_reached(job: Job) -> None:
+    job.update(lambda st: setattr(st.bounds, "deadline", START + 90))
+    status, clock = offline_run(job, Script(OFFLINE), Network(down=99))
+    assert status is JobStatus.LIMIT_REACHED
+    assert job.load().reason == "API server unreachable; deadline passed offline"
+    assert clock.now == START + 90
+
+
+def test_offline_too_many_times_in_a_row_fails(job: Job) -> None:
+    script = Script(*[OFFLINE] * (supervisor.MAX_RECONNECTS + 1))
+    status, _ = offline_run(job, script, Network(down=0))
+    assert status is JobStatus.FAILED
+    assert job.load().reason.endswith(f"{supervisor.MAX_RECONNECTS} reconnects in a row")
+
+
+def test_stop_while_offline(job: Job) -> None:
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        clock.sleep(seconds)
+        job.request_stop()
+
+    status = Supervisor(job, Script(OFFLINE), clock, sleep, Network(down=99)).run()
+    assert status is JobStatus.STOPPED
