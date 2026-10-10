@@ -29,6 +29,7 @@ class OutcomeKind(StrEnum):
     LIMIT = "limit"
     RATE_LIMITED = "rate-limited"
     BUDGET = "budget"
+    OFFLINE = "offline"
     FAILED = "failed"
 
 
@@ -71,9 +72,16 @@ RATE_PATTERNS: Patterns = (
     (_pattern(r"rate.?limit"), "rate limited"),
     (_pattern(r"overloaded"), "API overloaded"),
 )
+NETWORK_PATTERNS: Patterns = (
+    (_pattern(r"can.t reach the API server"), "API server unreachable"),
+    (_pattern(r"\b(?P<code>ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH)\b"),
+     "network error ({code})"),
+    (_pattern(r"connection error"), "connection error"),
+)  # fmt: skip
 CLASSES: tuple[tuple[OutcomeKind, Patterns], ...] = (
     (OutcomeKind.LIMIT, LIMIT_PATTERNS),
     (OutcomeKind.RATE_LIMITED, RATE_PATTERNS),
+    (OutcomeKind.OFFLINE, NETWORK_PATTERNS),
 )
 EXIT_SUFFIX = re.compile(r"\s*\(exit code: -?\d+\)\s*$", re.MULTILINE)
 
@@ -93,7 +101,7 @@ def find_reason(patterns: Patterns, text: str) -> str | None:
 
 
 def classify(text: str) -> Outcome:
-    """A ``LIMIT`` or ``RATE_LIMITED`` outcome when ``text`` says so, else ``FAILED``."""
+    """The outcome ``text`` names (limit, rate limit or offline), else ``FAILED``."""
     for kind, patterns in CLASSES:
         reason = find_reason(patterns, text)
         if reason:
