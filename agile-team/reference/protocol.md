@@ -177,8 +177,10 @@ name = "cli"
 kind = "package"               # package | script | web | library | harness | manual
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
 bin = ["venv/bin"]             # prepended to the Proxy's PATH
-url = ""                       # web only
+url = ""                       # web only; its host and port fill {host} and {port}
+probe = ""                     # web only: path joined to url that must answer 200 (e.g. "api/snapshot")
 commands = []                  # harness only: the Proxy's Bash allowlist
+# prepare placeholders: {repo}, {sandbox} (absolute paths), {host}, {port} (from url)
 
 [roles.integration-tester]
 enabled = false                # disable a role
@@ -389,8 +391,9 @@ design (architect) → tests (unit-tester; gate: test command **fails**) →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 `.team/baseline.json` coverage when old debt keeps the total lower) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
-is enabled: a `done` handoff passes only with a complete presentation) →
-acceptance (customer-proxy).
+is enabled: a `done` handoff passes only with a complete presentation and,
+for a `web` delivery, a service that starts from it and answers its probe)
+→ acceptance (customer-proxy).
 
 A failed gate or `changes_requested` moves the story back and adds a round
 (a test dispute is the exception: see "Test disputes"). At
@@ -399,7 +402,9 @@ A failed gate or `changes_requested` moves the story back and adds a round
 `run_role(customer-proxy)` on a story with no complete presentation does not
 start the Proxy. The runner moves the story back to `e2e` **without** a round
 (gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The
-runner then runs the integration-tester itself.
+same happens when a `web` delivery's service does not come up for the Proxy
+(the reason holds its output). The runner then runs the integration-tester
+itself.
 
 ### Test disputes
 
@@ -443,18 +448,41 @@ to `integration-tester`).
   writes `PRESENTATION.md` (what to try for each AC), and adds real
   live-run output such as `agile-team status` as `live-status.json` when an
   AC needs a live run.
-- The presentation is self-contained. The Proxy reads only its sandbox, so
-  `PRESENTATION.md` never points to a repo path. Anything an AC cites (an
-  ADR, a doc section, test, coverage or lint output) goes into the
-  presentation as a verbatim copy or as captured output with its command and
-  exit code (for example `docs/` and `evidence/`).
+- The presentation is self-contained. The Proxy's sandbox can't read repo
+  paths, so `PRESENTATION.md` never names one and the presentation holds no
+  links into the repo. Anything an AC cites (an ADR, a protocol section,
+  files to try, test, coverage or ruff output) goes into the presentation
+  as a verbatim copy or as captured output with its command and exit code
+  (for example `docs/` and `evidence/`).
 - Complete = `PRESENTATION.md` is not blank and, except for `manual`,
   `workspace/` holds something besides `.git`. Otherwise the e2e gate
   bounces with `story sN has no presentation: <path> is missing or empty`.
+- **Up and answering** (s26). Each kind's row in `presentation.PRESENTATIONS`
+  says whether its check is `files` or `service`; only `web` is `service`.
+  For a service, once the files are complete, the e2e gate runs a trial: it
+  prepares the sandbox exactly as for the Proxy (presentation copied in),
+  starts the delivery's `prepare` in the background, and probes
+  `url` + `probe` every 0.25 s for up to 30 s. It passes (`presentation
+  ready; <url> answered`) only on HTTP 200 (and, for a JSON response, a
+  body that parses), then stops the service. A start that exits or never
+  answers bounces to `e2e` with a round:
+  `story sN presentation is not up: delivery '<name>' did not start: the start command exited with code <rc> before <url> answered. Last output: …`
+  (or `… did not answer <url> within 30s. …`), quoting the last 20 lines of
+  its output. A port that another process holds puts the gate on **hold**
+  (no round, the PO gets a `gate_hold` hand-over):
+  `delivery '<name>' cannot start: <host>:<port> is already in use by a process the runner did not start; stop it or change the delivery's url`.
 - For the Proxy step the runner copies the dir to `<sandbox>/presentation/`
   (symlinks kept as links) **before** the delivery's `prepare` runs, so a
-  `web` prepare can serve `{sandbox}/presentation/workspace`. The Proxy's
-  prompt quotes `PRESENTATION.md` and gives the copy's path.
+  `web` prepare can serve `{sandbox}/presentation/workspace`. A `web`
+  service is started and probed the same way before the Proxy starts. The
+  Proxy's prompt quotes `PRESENTATION.md` and gives the copy's absolute
+  path.
+- A service is never reused. Its process group id is in
+  `.team/run/customer/<delivery>.pid` and its output is in `<delivery>.log`
+  next to it. Before each start, the runner stops a group still named
+  there (left by an earlier step or a killed runner). It stops the service
+  when the Proxy's step ends (pass, fail, halt or crash) and deletes the pid
+  file. It never kills a process it did not start.
 
 The Manager must also run after `start_sprint`, after any `set_role_model`,
 and when spend crosses each `manager_every_pct` checkpoint. The runner runs it
@@ -492,6 +520,7 @@ The pass ends at the first step whose report matches a row of the
 | `refused` | the step was refused |
 | `error` | the step raised an error other than a limit (traceback in `crash.log`) |
 | `stopped` | the handoff is `blocked` or `failed` |
+| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` delivery's port is in use by another process); `continue_story` once it is fixed |
 | `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
@@ -672,7 +701,7 @@ committed to, or `null` when it is in the backlog.
 |---|---|---|
 | `package` | build and install into `{sandbox}` | Bash, Read/Grep/Glob, Write; cwd = sandbox |
 | `script` | copy scripts and samples into `{sandbox}` | same as package |
-| `web` | start the server in the background (it can serve `{sandbox}/presentation/workspace`); stopped after the step | Playwright MCP, Bash limited to `curl`, Read, Write |
+| `web` | start the server in the background (it can serve `{sandbox}/presentation/workspace`); the step waits until `url` + `probe` answers 200; stopped after the step | Playwright MCP, Bash limited to `curl`, Read, Write |
 | `library` | build the package; Proxy works in `{sandbox}/consumer` | Bash, Read/Grep/Glob, Write/Edit |
 | `harness` | anything DevOps defines | Bash limited to `commands`, Read, Write |
 | `manual` | nothing | Read, Write; its acceptance script goes to the human as a question |

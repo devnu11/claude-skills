@@ -76,7 +76,11 @@ command fails.
    after a story is done; it is expected. Acceptance is
    judged on what the Integration Tester presented to the Customer Proxy:
    `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
-   Show these when the human asks how a story was accepted.
+   Show these when the human asks how a story was accepted. For a `web`
+   delivery the runner started the service and checked that it answers
+   before the Proxy ran; its output is in
+   `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
+   in use means another process holds the delivery's port. Tell the human.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets
    `status` and `status_reason`, and prints one line saying what to do:
    - `blocked` with a limit (e.g. "session limit, resets 2:20pm
