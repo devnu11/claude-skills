@@ -72,6 +72,7 @@ def charge(role, story, at):
     model = ROLES[role][0]
     tok = tokens(role)
     c = cost(model, tok)
+    turns = rng.randint(4, 40)
     ledger.append(
         {
             "at": at,
@@ -80,16 +81,16 @@ def charge(role, story, at):
             "story": story,
             "cost_usd": c,
             "tokens": tok,
-            "turns": rng.randint(4, 40),
+            "turns": turns,
         }
     )
-    return tok, c
+    return tok, c, turns
 
 
 def step(role, story, brief, status="done", summary="", next_role=None, oq=(), **extra):
     ev("step-start", role, story, brief=brief)
     at = tick(90, 600)
-    tok, c = charge(role, story, at)
+    tok, c, turns = charge(role, story, at)
     events.append(
         {
             "id": f"e{len(events) + 1}",
@@ -104,6 +105,7 @@ def step(role, story, brief, status="done", summary="", next_role=None, oq=(), *
                 "open_questions": list(oq),
                 "tokens": tok,
                 "cost_usd": c,
+                "turns": turns,
                 "commit": f"{rng.getrandbits(28):07x}",
                 **extra,
             },
@@ -247,6 +249,7 @@ step(
     summary="Exported a report and opened it; AC1-AC3 met.",
 )
 gate("s1", "acceptance", "pass", "acceptance", 0, status="done")
+ev("po-session", "product-owner", None, path="compact", reasons=["s1 done"], pre_tokens=182000)
 step("scribe", None, "Record s1 decisions.", summary="ADR 0003: csv module over pandas.")
 po_turn()
 

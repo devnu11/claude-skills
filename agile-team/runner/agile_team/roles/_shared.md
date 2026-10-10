@@ -15,6 +15,23 @@ role's job only, then stop.
 - Match the repo's existing style and the charter's house rules.
 - Never weaken, skip or delete a test to make something pass.
 
+## Read little
+
+Every turn re-sends everything you have read so far, so early reads cost
+the most.
+
+- Find before you read: Grep (`-n`, content mode) for the names you need,
+  then Read only that range with `offset` and `limit`. Read a whole file
+  only when it is short or you need all of it.
+- Never `cat` or `sed` source files through Bash. Long output comes back as
+  a short preview, and you end up reading it twice.
+- Read each file once, and never re-run a command whose output you already
+  have.
+- Run checks quietly and keep the tail: only what you changed, fail fast,
+  e.g. `pytest -q -x --no-header <files> 2>&1 | tail -20`.
+- Your brief's design file is the contract. Read source only for what it
+  leaves open.
+
 ## Git etiquette
 
 - The runner commits for you after your step. Do not run `git commit`,

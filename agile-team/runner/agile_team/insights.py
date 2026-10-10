@@ -10,9 +10,12 @@ from __future__ import annotations
 from typing import Any
 
 from .events import Event, EventKind
-from .ledger import Ledger, Totals
+from .ledger import Entry, Ledger, Totals
 
 MANAGER = "manager"
+LONG_TURNS = 30
+RECENT = 3
+LONG_OF_RECENT = 2
 
 
 def spend_by_role(ledger: Ledger) -> dict[str, dict[str, Any]]:
@@ -28,7 +31,28 @@ def _role_view(t: Totals) -> dict[str, Any]:
         "cost_usd": round(t.cost_usd, 2),
         "cost_per_step": round(t.cost_usd / steps, 3),
         "tokens": t.tokens.total(),
-        "turns_per_step": round(t.turns / steps, 1),
+        "turns_per_step": round(t.turns_per_step(), 1),
+        "latest_turns": t.latest_turns,
+        "context_per_turn": t.context_per_turn(),
+    }
+
+
+def long_running_roles(ledger: Ledger) -> list[dict[str, Any]]:
+    """Roles whose recent measured steps often ran past ``LONG_TURNS`` turns."""
+    entries = [e for e in ledger.entries() if e.turns > 0]
+    totals = ledger.totals("role")
+    views = (_long_view(role, entries, totals) for role in sorted(totals))
+    return [
+        v for v in views if v and sum(t > LONG_TURNS for t in v["recent_turns"]) >= LONG_OF_RECENT
+    ]
+
+
+def _long_view(role: str, entries: list[Entry], totals: dict[str, Totals]) -> dict[str, Any]:
+    recent = [e.turns for e in entries if e.role == role][-RECENT:]
+    return {
+        "role": role,
+        "recent_turns": recent,
+        "context_per_turn": totals[role].context_per_turn(),
     }
 
 

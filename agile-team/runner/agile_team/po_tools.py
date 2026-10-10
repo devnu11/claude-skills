@@ -11,15 +11,16 @@ import json
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import handover
+from . import handover, po_session
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
 from .gates import StoryState, StoryStatus, role_fits_step
 from .ledger import Entry, budget_status
+from .po_session import RenewPath
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .router import Router
@@ -101,6 +102,7 @@ class Tools:
         state.begin_sprint(ids)
         state.status = RunStatus.RUNNING
         state.manager_due.append(f"sprint {state.sprint} start: {goal} ({', '.join(ids)})")
+        state.po_renew_due.append(f"sprint {state.sprint} start")
         self.runtime.save()
         data = {"sprint": state.sprint, "goal": goal, "stories": ids}
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
@@ -201,15 +203,17 @@ class Tools:
         return None if args.get("reason") else "a reason is required"
 
     async def story_status(self, _args: dict[str, Any]) -> dict[str, Any]:
-        rt = self.runtime
-        return text_result(
-            {
-                "sprint": rt.state.sprint,
-                "stories": {sid: asdict(s) for sid, s in rt.state.stories.items()},
-                "manager_due": rt.state.manager_due,
-                "roles": rt.book.enabled_names(),
-            }
-        )
+        return text_result(story_status_data(self.runtime))
+
+
+def story_status_data(runtime: Runtime) -> dict[str, Any]:
+    """What ``story_status`` reports: sprint, stories, review reasons, enabled roles."""
+    return {
+        "sprint": runtime.state.sprint,
+        "stories": {sid: asdict(s) for sid, s in runtime.state.stories.items()},
+        "manager_due": runtime.state.manager_due,
+        "roles": runtime.book.enabled_names(),
+    }
 
 
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
@@ -326,6 +330,7 @@ class PoRun:
     runtime: Runtime
     start: Start
     router: Router = field(init=False)
+    RENEWERS: ClassVar[dict[RenewPath, Callable[[PoRun, PoTurn], Awaitable[PoTurn]]]] = {}
 
     def __post_init__(self) -> None:
         self.router = Router(self.runtime)
@@ -344,9 +349,59 @@ class PoRun:
     async def _turns(self) -> StepResult:
         result, turn = StepResult("", 0.0), await self._opening()
         while turn:
+            turn = await self._renewed(turn)
             result = await self._turn(turn)
             turn = await self._after_po()
         return result
+
+    async def _renewed(self, turn: PoTurn) -> PoTurn:
+        state = self.runtime.state
+        if not state.po_renew_due:
+            return turn
+        if turn.resume is not None:
+            turn = await self.RENEWERS[RenewPath(state.po_renew_path)](self, turn)
+        state.po_renew_due.clear()
+        self.runtime.save()
+        return turn
+
+    async def _compact(self, turn: PoTurn) -> PoTurn:
+        state, relay = self.runtime.state, self.runtime.relay
+        result = await self._turn(PoTurn(po_session.COMPACT_PROMPT, turn.resume))
+        if result.compacted_from is None:
+            state.po_renew_path = RenewPath.HANDOFF.value
+            self.runtime.save()
+            return await self._handoff(turn)
+        self._renew_event(RenewPath.COMPACT, result.compacted_from)
+        return PoTurn(po_session.with_carry_over(relay, turn.prompt), state.po_session)
+
+    async def _handoff(self, turn: PoTurn) -> PoTurn:
+        repo, state = self.runtime.config.repo, self.runtime.state
+        po_session.clear_handoff(repo)
+        await self._turn(PoTurn(po_session.HANDOFF_PROMPT, turn.resume))
+        text = po_session.read_handoff(repo)
+        if not text:
+            self._renew_event(RenewPath.KEPT, None)
+            return PoTurn(
+                po_session.with_carry_over(self.runtime.relay, turn.prompt), state.po_session
+            )
+        self._renew_event(RenewPath.HANDOFF, None)
+        return PoTurn(self._fresh_prompt(text, turn), None)
+
+    def _fresh_prompt(self, handoff: str, turn: PoTurn) -> str:
+        rt = self.runtime
+        status = json.dumps(story_status_data(rt), indent=1)
+        parts = [
+            first_prompt(rt, Start(rt.state.task)),
+            po_session.fresh_lead(handoff, status),
+            po_session.carry_over(rt.relay),
+            turn.prompt,
+        ]
+        return "\n\n".join(p for p in parts if p)
+
+    def _renew_event(self, path: RenewPath, pre_tokens: int | None) -> None:
+        reasons = list(self.runtime.state.po_renew_due)
+        data = {"path": path.value, "reasons": reasons, "pre_tokens": pre_tokens}
+        self.runtime.events.emit(Event(EventKind.PO_SESSION, PO, None, data))
 
     async def _opening(self) -> PoTurn | None:
         session = resume_session(self.runtime, self.start)
@@ -403,3 +458,6 @@ class PoRun:
         self.runtime.ledger.record(entry)
         state.po_session = result.session_id or state.po_session
         self.runtime.save()
+
+
+PoRun.RENEWERS = {RenewPath.COMPACT: PoRun._compact, RenewPath.HANDOFF: PoRun._handoff}

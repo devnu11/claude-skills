@@ -44,6 +44,10 @@ class Tokens:
     def total(self) -> int:
         return sum(asdict(self).values())
 
+    def prompt(self) -> int:
+        """The context one step re-sent: input plus cache reads and creation."""
+        return self.input + self.cache_read + self.cache_creation
+
 
 @dataclass
 class Entry:
@@ -71,12 +75,30 @@ class Totals:
     tokens: Tokens = field(default_factory=Tokens)
     steps: int = 0
     turns: int = 0
+    measured: int = 0
+    measured_prompt: int = 0
+    latest_turns: int = 0
 
     def add(self, entry: Entry) -> None:
         self.cost_usd += entry.cost_usd
         self.tokens += entry.tokens
         self.steps += 1
         self.turns += entry.turns
+        if entry.turns > 0:
+            self._measure(entry)
+
+    def _measure(self, entry: Entry) -> None:
+        self.measured += 1
+        self.measured_prompt += entry.tokens.prompt()
+        self.latest_turns = entry.turns
+
+    def turns_per_step(self) -> float:
+        """Average turns over steps whose turns were recorded."""
+        return self.turns / self.measured if self.measured else 0.0
+
+    def context_per_turn(self) -> int:
+        """Average prompt tokens re-sent per turn, over measured steps."""
+        return round(self.measured_prompt / self.turns) if self.turns else 0
 
 
 @dataclass

@@ -727,7 +727,7 @@ function renderFlowTab(view) {
 
 /** Tokens, cost and commit of a handoff; each part only when present. */
 function stepEndMeta(d) {
-  return [d.tokens ? `${fmt.tok(sumTok(d.tokens))} tokens` : "", d.cost_usd != null ? fmt.usd(d.cost_usd) : "", d.commit]
+  return [d.turns ? `${d.turns} turns` : "", d.tokens ? `${fmt.tok(sumTok(d.tokens))} tokens` : "", d.cost_usd != null ? fmt.usd(d.cost_usd) : "", d.commit]
     .filter(Boolean).join(" · ");
 }
 
@@ -736,6 +736,10 @@ const TIMELINE = {
   "step-end": (e) => ({
     from: e.role, to: PO, what: (e.data.status ?? "done").replace("_", " "), tone: STATUS_TONE[e.data.status],
     body: e.data.summary, meta: stepEndMeta(e.data),
+  }),
+  "po-session": (e) => ({
+    from: PO, to: null, what: "session " + e.data.path, body: e.data.reasons.join(", "),
+    meta: e.data.pre_tokens ? fmt.tok(e.data.pre_tokens) + " before compaction" : "",
   }),
   gate: (e) => ({
     from: "gate", to: null, what: `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
@@ -849,8 +853,9 @@ function totalsBy(ledger, key) {
   const out = {};
   for (const l of ledger) {
     const k = l[key] ?? "(no story)";
-    const t = (out[k] ??= { steps: 0, cost: 0, model: l.model, input: 0, output: 0, cache_read: 0, cache_creation: 0 });
+    const t = (out[k] ??= { steps: 0, cost: 0, model: l.model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, measured: 0, measured_prompt: 0, latest: 0 });
     t.steps++; t.cost += l.cost_usd;
+    if (l.turns > 0) { t.turns += l.turns; t.measured++; t.measured_prompt += sumTok({ ...l.tokens, output: 0 }); t.latest = l.turns; }
     for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
   }
   return out;
@@ -967,9 +972,15 @@ function segment(x, y, w, roundEnd) {
   return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
 }
 
+/** Turns per step, latest turns and context re-sent per turn; "—" when unmeasured. */
+function turnCells(t) {
+  if (!t.measured) return `<td class="num">—</td><td class="num">—</td><td class="num">—</td>`;
+  return `<td class="num">${(t.turns / t.measured).toFixed(1)}</td><td class="num">${t.latest}</td><td class="num">${fmt.tok(t.measured_prompt / t.turns)}</td>`;
+}
+
 function renderTables(view) {
-  const head = (first) => `<tr><th>${first}</th><th>Model</th><th class="num">Steps</th>${TOKEN_KINDS.map(([, l]) => `<th class="num">${l}</th>`).join("")}<th class="num">Cost</th></tr>`;
-  const row = (name, t) => `<tr><td>${esc(name)}</td><td>${esc(t.model)}</td><td class="num">${t.steps}</td>${TOKEN_KINDS.map(([k]) => `<td class="num">${fmt.tok(t[k])}</td>`).join("")}<td class="num">${fmt.usd(t.cost)}</td></tr>`;
+  const head = (first) => `<tr><th>${first}</th><th>Model</th><th class="num">Steps</th>${TOKEN_KINDS.map(([, l]) => `<th class="num">${l}</th>`).join("")}<th class="num">Turns/step</th><th class="num">Last turns</th><th class="num">Context/turn</th><th class="num">Cost</th></tr>`;
+  const row = (name, t) => `<tr><td>${esc(name)}</td><td>${esc(t.model)}</td><td class="num">${t.steps}</td>${TOKEN_KINDS.map(([k]) => `<td class="num">${fmt.tok(t[k])}</td>`).join("")}${turnCells(t)}<td class="num">${fmt.usd(t.cost)}</td></tr>`;
   const table = (first, totals) => `<table>${head(first)}${Object.entries(totals).sort((a, b) => b[1].cost - a[1].cost).map(([n, t]) => row(n, t)).join("")}</table>`;
   $("#role-table").innerHTML = table("Role", totalsBy(view.ledger, "role"));
   $("#story-table").innerHTML = table("Story", totalsBy(view.ledger, "story")).replace(/<th>Model<\/th>/, "<th>Last model</th>");

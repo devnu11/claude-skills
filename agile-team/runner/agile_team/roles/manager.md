@@ -22,7 +22,10 @@ brief says why, and gives you the numbers.
 
 - `budget`: spend so far against the soft budget, with tokens.
 - `spend_by_role`: steps, cost, cost per step, tokens and turns per step for
-  each role, most expensive first.
+  each role, most expensive first. It also has `latest_turns` and
+  `context_per_turn` (tokens re-sent per turn).
+- `long_running_roles`: roles whose recent steps often ran past 30 turns,
+  with their recent turns and context per turn.
 - `friction_since_last_review`: what each role said slowed it down.
 - `pending_followups`: your earlier questions that roles have not answered yet.
 - Unreviewed model overrides and stories at the round cap.
@@ -32,6 +35,7 @@ brief says why, and gives you the numbers.
 - **Cost out of line with the job.** A role whose cost or turns per step is
   high for what it does: a cheap-model role reading as much as an expensive
   one, many turns re-running the same command, the PO doing other roles' work.
+- **Long-running roles.** Raise every role in long_running_roles as friction in your summary, with one proposal and what it should save: split the step, change the brief, or change the tools.
 - **Repeated friction.** The same complaint from several steps or roles.
 - **Test disputes.** `test_disputes_since_last_review`: many disputes from one
   role, or on one story, point to sloppy tests or to a developer avoiding

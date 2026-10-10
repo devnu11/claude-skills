@@ -23,6 +23,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     HookMatcher,
     ResultMessage,
+    SystemMessage,
     TextBlock,
 )
 
@@ -43,7 +44,12 @@ from .gates import (
 )
 from .git_ops import Git, GitError
 from .halt import Halt
-from .insights import disputes_since_review, friction_since_review, spend_by_role
+from .insights import (
+    disputes_since_review,
+    friction_since_review,
+    long_running_roles,
+    spend_by_role,
+)
 from .ledger import Budget, Entry, Ledger, Tokens, budget_status
 from .providers import Providers
 from .relay import Note, Relay
@@ -132,6 +138,10 @@ class StepResult:
     session_id: str | None = None
     tokens: Tokens = field(default_factory=Tokens)
     turns: int = 0
+    compacted_from: int | None = None
+
+
+ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
 def build_options(plan: Plan) -> ClaudeAgentOptions:
@@ -146,7 +156,8 @@ def build_options(plan: Plan) -> ClaudeAgentOptions:
         permission_mode="dontAsk",
         hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]},
         cwd=str(plan.scope.base),
-        env=launch.env,
+        env={**launch.env, **ISOLATION_ENV},
+        strict_mcp_config=True,
         setting_sources=[],
         mcp_servers=launch.mcp_servers,
         settings=json.dumps(launch.settings) if launch.settings else None,
@@ -154,16 +165,43 @@ def build_options(plan: Plan) -> ClaudeAgentOptions:
     )
 
 
+@dataclass
+class _Drain:
+    """Accumulates what ``collect`` keeps from a query's messages."""
+
+    last_text: str = ""
+    result: ResultMessage | None = None
+    compacted_from: int | None = None
+
+    def take(self, message: Any) -> None:
+        self.last_text = _text_of(message) or self.last_text
+        if isinstance(message, ResultMessage):
+            self.result = message
+        elif _is_boundary(message) and self.compacted_from is None:
+            self.compacted_from = int(message.data.get("compact_metadata", {}).get("pre_tokens", 0))
+
+    def step_result(self) -> StepResult:
+        result = self.result
+        if result is None:
+            return StepResult(self.last_text, 0.0, compacted_from=self.compacted_from)
+        tokens = Tokens.from_usage(result.usage)
+        text = result.result or self.last_text
+        cost = result.total_cost_usd or 0.0
+        return StepResult(
+            text, cost, result.session_id, tokens, result.num_turns, self.compacted_from
+        )
+
+
+def _is_boundary(message: Any) -> bool:
+    return isinstance(message, SystemMessage) and message.subtype == "compact_boundary"
+
+
 async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
-    """Drain a query; keep the final text, cost, tokens and session id."""
-    last_text, result = "", None
+    """Drain a query; keep the final text, cost, tokens, session id and compaction."""
+    drain = _Drain()
     async for message in query_fn(prompt=plan.prompt, options=plan.options):
-        last_text = _text_of(message) or last_text
-        result = message if isinstance(message, ResultMessage) else result
-    if result is None:
-        return StepResult(last_text, 0.0)
-    cost, tokens = result.total_cost_usd or 0.0, Tokens.from_usage(result.usage)
-    return StepResult(result.result or last_text, cost, result.session_id, tokens, result.num_turns)
+        drain.take(message)
+    return drain.step_result()
 
 
 def _text_of(message: Any) -> str:
@@ -387,6 +425,7 @@ class Runtime:
             "stories_at_round_cap": capped,
             "budget": budget_status(self.ledger, self.config.team.budget_usd),
             "spend_by_role": spend_by_role(self.ledger),
+            "long_running_roles": long_running_roles(self.ledger),
             "friction_since_last_review": friction_since_review(self.events.events()),
             "test_disputes_since_last_review": disputes_since_review(self.events.events()),
             "pending_followups": self.state.followups,
@@ -498,7 +537,15 @@ class Runtime:
         outcome = handoff_report(parsed) if isinstance(parsed, Handoff) else bad_handoff(parsed)
         cost = round(result.cost, 4)
         tokens = asdict(result.tokens)
-        self.emit(EventKind.STEP_END, plan, **outcome, tokens=tokens, cost_usd=cost, commit=commit)
+        self.emit(
+            EventKind.STEP_END,
+            plan,
+            **outcome,
+            tokens=tokens,
+            cost_usd=cost,
+            commit=commit,
+            turns=result.turns,
+        )
 
     def _parse(self, plan: Plan) -> Handoff | HandoffError:
         try:
@@ -580,12 +627,18 @@ class Runtime:
         """Evaluate the story's current step gate and advance the story."""
         return self._advance_and_log(plan, self.pipeline.evaluate(plan.story, handoff))
 
+    def _queue_done_renewal(self, story: Any) -> None:
+        reason = f"{story.id} done"
+        if story.status is StoryStatus.DONE and reason not in self.state.po_renew_due:
+            self.state.po_renew_due.append(reason)
+
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
         self.pipeline.advance(story, outcome)
         if story.status is StoryStatus.DONE and story.id not in self.state.scribe_due:
             self.state.scribe_due.append(story.id)
+        self._queue_done_renewal(story)
         result = {
             "step": step,
             "verdict": outcome.verdict,

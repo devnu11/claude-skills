@@ -31,6 +31,7 @@ class EventKind(StrEnum):
     REQUIREMENT_CHANGED = "requirement-changed"
     HANDOVER = "handover"
     TEST_DISPUTE = "test-dispute"
+    PO_SESSION = "po-session"
 
 
 @dataclass

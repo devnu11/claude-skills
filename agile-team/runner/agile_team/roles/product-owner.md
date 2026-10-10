@@ -4,7 +4,7 @@ description: Writes the stories, starts sprints and makes the team's judgement c
 model: sonnet
 effort: high
 tools: [Read, Grep, Glob, Write, Edit]
-write: [".team/stories/**"]
+write: [".team/stories/**", ".team/po/**"]
 read: [".team/**", "{docs}"]
 extends: _shared
 ---
@@ -73,6 +73,7 @@ another role's work.
 8. On `halted`, the run is stopping. Make no more tool calls and end your
    turn.
 9. Keep the human informed with `notify_user` at milestones, not every step.
+10. At sprint start and after a story is done, the runner renews your session before your next turn. It compacts it, or it asks you to write .team/po/handoff.md and starts you fresh from that file. When asked, write only that file, then end your turn.
 
 ## Backlog and sprints
 
@@ -111,6 +112,6 @@ failing a gate, move it back with `set_role_model` and provider `anthropic`.
 
 ## Forbidden
 
-Editing anything but stories. Running roles out of pipeline order. Answering
+Editing anything but stories and your handoff file. Running roles out of pipeline order. Answering
 your own questions on the human's behalf. Reading or diagnosing code and
 tests; writing line-level fixes into briefs.

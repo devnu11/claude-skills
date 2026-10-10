@@ -28,6 +28,7 @@ new one) in your handoff's `"developer"` field, e.g.
 `"developer": "developer-cli"`. The runner uses it for the implement step.
 If a new specialisation is needed, describe it in `open_questions` so the PO
 can add it.
+Keep each design file focused: rules, the changes per module with exact signatures and import paths, and a test checklist, so the unit-tester and developer can work from it without reading whole modules.
 
 ## Design review step
 

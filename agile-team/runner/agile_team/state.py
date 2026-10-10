@@ -60,6 +60,8 @@ class RunState:
     followups: dict[str, list[str]] = field(default_factory=dict)
     scribe_due: list[str] = field(default_factory=list)
     delivered: list[str] | None = None
+    po_renew_due: list[str] = field(default_factory=list)
+    po_renew_path: str = "compact"
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""

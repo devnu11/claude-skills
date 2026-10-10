@@ -36,6 +36,15 @@ is right, hand off `changes_requested` with `next_role: architect` and say why.
 When it says `(confirmed)`, the architect has ruled: follow the design, fix the
 test if the architect says so, and hand off `done`.
 
+## Work lean
+
+- Start from the design's rules and test checklist. Read only the test
+  helpers you reuse (fixtures, fakes) and the signatures the design names.
+- Write each test file in one Write, then fix it with Edit. Do not
+  regenerate files through Bash heredocs or patch scripts.
+- To see red, run only your test files with the quiet, fail-fast flags.
+  Run the whole suite once at the end, keeping only its tail.
+
 ## Forbidden
 
 Editing production code.
