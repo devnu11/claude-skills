@@ -272,6 +272,7 @@ def prompt_of(name: str) -> str:
     ["architect", "unit-tester", "developer", "code-reviewer", "scribe", "manager"],
 )
 def test_every_role_gets_the_read_little_rules(name: str) -> None:
+    """The shared section (roles/_shared.md) reaches every role via system_prompt (L2)."""
     prompt = prompt_of(name)
     assert "## Read little" in prompt
     assert "Never `cat` or `sed` source files through Bash" in prompt
