@@ -290,16 +290,24 @@ def test_continue_story_refusals_change_nothing(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
     open_stories(t, "s1", "s2")
-    rt.state.stories["s2"].status = StoryStatus.DONE
-    rt.state.stories["s2"].hold = "x"
-    rt.save()
     ghost = refusal_snapshot(t, "continue_story", {"story": "s9", "note": "n"})
     assert ghost == {
         "status": "refused",
         "reason": "unknown story 's9'; open it with open_story",
     }
-    done = refusal_snapshot(t, "continue_story", {"story": "s2", "note": "n"})
-    assert done == {"status": "refused", "reason": "story s2 is done"}
+
+
+def test_continue_story_clears_the_hold_on_a_done_story(make_runtime) -> None:
+    rt = make_runtime()
+    t = Tools(rt)
+    open_stories(t, "s2")
+    rt.state.stories["s2"].status = StoryStatus.DONE
+    rt.state.stories["s2"].hold = "ruling_not_applied"
+    rt.save()
+    out = call(t.continue_story({"story": "s2", "note": "dropped"}))
+    assert out == {"status": "continued", "story": "s2", "step": "design"}
+    s2 = rt.state.stories["s2"]
+    assert (s2.hold, s2.note, s2.status) == (None, "dropped", StoryStatus.DONE)
 
 
 def test_set_developer_records_the_choice(make_runtime) -> None:
