@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .auth import Auth
+from .awake import SleepPolicy
 from .limits import DEFAULT_FALLBACK, Bounds, Progress
 
 JOBS = Path(".claude/jobs")
@@ -74,6 +75,7 @@ class Spec:
     model: str | None = None
     permission_mode: str | None = None
     fallback_wait: float = DEFAULT_FALLBACK
+    sleep: SleepPolicy = SleepPolicy.PREVENT
 
 
 @dataclass
@@ -107,7 +109,10 @@ class JobState:
     def from_json(cls, text: str) -> JobState:
         data = json.loads(text)
         spec = data["spec"]
-        data["spec"] = Spec(**{**spec, "kind": JobKind(spec["kind"]), "auth": Auth(spec["auth"])})
+        enums = {"kind": JobKind(spec["kind"]), "auth": Auth(spec["auth"])}
+        data["spec"] = Spec(
+            **{**spec, **enums, "sleep": SleepPolicy(spec.get("sleep", SleepPolicy.PREVENT))}
+        )
         data["bounds"] = Bounds(**data["bounds"])
         data["status"] = JobStatus(data["status"])
         return cls(**data)

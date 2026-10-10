@@ -11,8 +11,9 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import cli
+from unattended import awake, cli
 from unattended.auth import ENV_VAR
+from unattended.awake import SleepPolicy
 from unattended.prompt_job import PromptJob
 from unattended.store import (
     EVENTS_FILE,
@@ -80,7 +81,29 @@ def test_start_command_limit_then_resume(
     assert code == 0
     assert printed(capsys)["resumes"] == 1
     events = [json.loads(line)["event"] for line in home_job(tmp_path).path(EVENTS_FILE).open()]
-    assert events == ["start", "run", "wait", "resume", "run", "end"]
+    assert events == ["start", "keep-awake", "run", "wait", "resume", "run", "end"]
+
+
+def events_named(tmp_path: Path, name: str) -> list[dict[str, object]]:
+    lines = home_job(tmp_path).path(EVENTS_FILE).open()
+    return [event for event in map(json.loads, lines) if event["event"] == name]
+
+
+def test_start_keeps_the_machine_awake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawned: list[list[str]]
+) -> None:
+    monkeypatch.setattr(awake, "inhibitor", lambda pid: ["caffeinate", "-w", str(pid)])
+    assert run(tmp_path, "start", "j", "--command", "true", "--foreground") == 0
+    assert spawned == [["caffeinate", "-w", str(os.getpid())]]
+    assert events_named(tmp_path, "keep-awake")[0]["by"] == "caffeinate"
+
+
+def test_start_allow_sleep(tmp_path: Path, spawned: list[list[str]]) -> None:
+    argv = ["--command", "true", "--allow-sleep", "--foreground"]
+    assert run(tmp_path, "start", "j", *argv) == 0
+    assert spawned == []
+    assert events_named(tmp_path, "keep-awake") == []
+    assert home_job(tmp_path).load().spec.sleep is SleepPolicy.ALLOW
 
 
 def test_start_prompt_in_the_foreground(

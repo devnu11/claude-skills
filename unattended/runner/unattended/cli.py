@@ -24,6 +24,7 @@ from typing import Any, get_args
 from claude_agent_sdk.types import PermissionMode
 
 from .auth import Auth, AuthSetup
+from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .limits import Bounds, local, parse_duration, parse_until
 from .prompt_job import PromptJob
@@ -116,6 +117,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         model=args.model,
         permission_mode=args.permission_mode,
         fallback_wait=_duration(args.fallback_wait),
+        sleep=args.sleep,
     )
 
 
@@ -213,10 +215,17 @@ def run_supervisor(job: Job, home: Path) -> JobStatus:
     """Supervise ``job`` in this process; an unexpected error marks it failed."""
     install_sigterm()
     with job.pid_file():
+        hold_awake(job)
         try:
             return Supervisor(job, runner_for(job, home)).run()
         except Exception as exc:
             return _crashed(job, exc)
+
+
+def hold_awake(job: Job) -> None:
+    """Keep the machine awake for as long as this supervisor lives, unless the job allows sleep."""
+    if job.load().spec.sleep is SleepPolicy.PREVENT:
+        job.event("keep-awake", {"by": keep_awake(os.getpid())})
 
 
 def _crashed(job: Job, exc: Exception) -> JobStatus:
@@ -301,7 +310,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_wait(args: argparse.Namespace, sleep: Sleep = time.sleep) -> int:
+def cmd_wait(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
     """Block until the job ends (or its supervisor is gone); exit with its status code."""
     job = job_home(args).job(args.name)
     while running(job):
@@ -332,7 +341,7 @@ class Tail:
         sys.stdout.flush()
 
 
-def cmd_log(args: argparse.Namespace, sleep: Sleep = time.sleep) -> int:
+def cmd_log(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
     """Print the events and output; ``-f`` keeps printing until the job ends."""
     job = job_home(args).job(args.name)
     tail = Tail(job)
@@ -486,6 +495,9 @@ START_ARGS: tuple[Arg, ...] = (
                               "help": "default: your settings decide"}),
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
     *limit_args(10),
+    (("--allow-sleep",), {"action": "store_const", "dest": "sleep", "const": SleepPolicy.ALLOW,
+                          "default": SleepPolicy.PREVENT,
+                          "help": "let the machine idle-sleep (default: kept awake)"}),
     LAUNCH_ARG,
 )  # fmt: skip
 NOW_ARG: Arg = (

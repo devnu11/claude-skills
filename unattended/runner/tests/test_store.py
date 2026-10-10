@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from unattended import store
 from unattended.auth import Auth
+from unattended.awake import SleepPolicy
 from unattended.limits import Bounds, Progress
 from unattended.store import Job, JobError, JobHome, JobKind, JobState, JobStatus, Spec
 
@@ -24,6 +25,12 @@ def test_state_round_trips() -> None:
     assert loaded == original
     assert isinstance(loaded.status, JobStatus)
     assert isinstance(loaded.spec.kind, JobKind)
+
+
+def test_state_without_sleep_keeps_the_machine_awake() -> None:
+    data = json.loads(state().to_json())
+    del data["spec"]["sleep"]
+    assert JobState.from_json(json.dumps(data)).spec.sleep is SleepPolicy.PREVENT
 
 
 def test_mark_clears_reason() -> None:
