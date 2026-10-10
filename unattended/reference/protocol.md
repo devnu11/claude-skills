@@ -27,6 +27,7 @@ as `uv run --quiet --project ~/.claude/skills/unattended/runner unattended`.
 | `--cwd D` | Directory the job runs in; default the current one. |
 | `--auth login\|api-key` | Default `login`. See [Auth](#auth). |
 | `--key-file F` | API key file for `api-key`; default `~/secrets/anthropic-api-key`. |
+| `--allow-sleep` | Let the machine idle-sleep. By default the supervisor keeps it awake; see [Keeping awake](#keeping-awake). |
 | `--model M`, `--permission-mode P` | Passed to the Agent SDK. Prompt jobs only. With no `--permission-mode`, the user's settings decide. |
 | `--until T` \| `--for D` | Deadline: `21:00`, `9pm`, `tomorrow 9am`, `today 18:15`, ISO (`2026-10-10T09:00`), or a duration (`24h`, `90m`, `1h30m`, `2d`). |
 | `--max-resumes N` | Most automatic resumes; default 10. On `resume` it is the new total, not an increment. |
@@ -54,8 +55,8 @@ unique within a home.
 
 | File | Holds |
 |---|---|
-| `state.json` | The job (written atomically): `spec`, `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`. |
-| `events.jsonl` | One line per event: `start`, `run` (outcome, reason, cost, turns, tokens), `wait` (until), `resume`, `end` (status, reason). |
+| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`. |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until), `resume`, `end` (status, reason). |
 | `output.md` | A prompt job's latest result text. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -91,6 +92,21 @@ resume command. A prompt job with no saved session yet runs its prompt again.
 SIGTERM (`stop`) and Ctrl-C unwind the current run. A command's process group
 gets SIGTERM, then SIGKILL after 30 s. The job ends `stopped`. An unexpected
 supervisor error ends it `failed` with the traceback in `supervisor.log`.
+
+## Keeping awake
+
+Unless the job was started with `--allow-sleep`, each supervisor starts an
+inhibitor on its own pid, which exits with the supervisor even after a crash,
+and logs a `keep-awake` event naming it:
+
+| Platform | Inhibitor |
+|---|---|
+| macOS | `caffeinate -i -w <pid>` (blocks idle sleep, not lid-close sleep) |
+| Linux | `systemd-inhibit --what=idle:sleep … tail --pid=<pid> -f /dev/null` |
+| Windows, or the tool not on `PATH` | none; the event says `"by": null` and the job runs anyway |
+
+A job asleep mid-run pauses; one asleep mid-wait resumes late, when the
+machine wakes.
 
 ## Limit detection
 

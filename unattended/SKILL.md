@@ -54,5 +54,8 @@ limit has reset sooner than the message said.
 - Prompt jobs use the user's Claude Code settings. Headless, a tool those
   settings don't allow can't be approved by anyone, so allow what the job
   needs first, or pass `--permission-mode`.
+- **The machine stays awake** while a job runs or waits (`caffeinate` on
+  macOS, `systemd-inhibit` on Linux; none on Windows). Closing a laptop lid
+  still sleeps it. Pass `--allow-sleep` to let it idle-sleep.
 - Login auth refuses to start while `ANTHROPIC_API_KEY` is set; don't unset it
   for the user without asking.
