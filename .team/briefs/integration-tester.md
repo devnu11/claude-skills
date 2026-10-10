@@ -1,6 +1,6 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s5 done)
+**Last updated:** 2026-10-10 (s8 done)
 
 ## Write scope: tests/e2e only
 
@@ -9,6 +9,14 @@ Your writes are limited to `tests/e2e/`. Regression rows for unit-level code fai
 - Wait for the Unit Tester to add them to `tests/unit/`
 
 Do not attempt to edit unit tests; the runner enforces this. When you find a unit-level bug, document it clearly in your handoff so the Unit Tester can add appropriate coverage.
+
+## s8: Clean halt – mandatory e2e regression tests
+
+Code review (round 2) deferred three test cases to your scope because they need the full harness (fake query_fn, scratch git repo):
+
+1. **D1 fixed:** Limit error reason strips ` (exit code: 1)`. Test: build a `ResultError` with `exit_code=1` (as the SDK does), include a trailing `errors` list, verify the exact AC1 reason (no exit code suffix, ends at semicolon if present).
+2. **D2 fixed:** After a role step halts with a limit, both uncommitted in-scope and out-of-scope edits stay as-is. Test: role writes one file inside PO scope and one outside, then raises limit. Verify both files are uncommitted, HEAD unchanged, no QUARANTINE event, story step/rounds unchanged.
+3. **Regression:** An empty limit error message. Test: a limit with no reset time or kind phrasing. Verify it classifies as a limit (not a crash) and reason is extracted (or defaulted).
 
 ## s5: Dashboard live UI – manual acceptance checklist
 

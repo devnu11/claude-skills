@@ -1,8 +1,16 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s5 done)
+**Last updated:** 2026-10-10 (s8 done)
 
 ## Design decisions to verify
+
+**Clean halt on limits, crashes, SIGTERM (s8):** Verify that halt handling is data-driven:
+- `HALTS` table (kind → status, note_kind, exit_code, advice) with no code branches outside it
+- `LIMIT_PATTERNS` table (regex, template) strips the SDK's ` (exit code: N)` suffix before matching; reset text copied from message, not computed
+- `classify()` uses a detector chain (limit_halt, sigterm_halt, crash_halt); first non-None wins
+- First halt recorded and re-asserted; later halts do not post a new note
+- `_settle()` skipped when `runtime.halted_by` is set (partial edits left uncommitted)
+- See ADR-0007 for the full strategy.
 
 **HTML escaping in dashboard (s5):** Every `${…}` that places a snapshot field into HTML must be wrapped with either `esc()` (for HTML) or `mmdText()` (for Mermaid labels). Grep for suspicious patterns: `${ *[a-z.-]+\}[^)]`, `innerHTML *=.*\$`, unquoted attributes. See ADR-0005 for the rule and safe patterns. Exception: values from code, not snapshots (regex matches, map results of escaped strings).
 

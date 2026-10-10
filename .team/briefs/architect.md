@@ -1,8 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-09 (s7, s3)
+**Last updated:** 2026-10-10 (s8 done)
 
 ## Key design decisions
+
+**Clean halt on limits, crashes, SIGTERM (s8):** Data-driven halt handling via `HALTS` table (kind → status, note_kind, exit_code, advice) and `LIMIT_PATTERNS` table (regex, template). `classify()` returns the detected halt; first halt wins in a process. Partial edits left uncommitted so human can see what was in progress. Exit codes: 75 (EX_TEMPFAIL limit), 70 (EX_SOFTWARE crash), 143 (SIGTERM). s9 will save interrupted step edits as a commit; s10 will record partial cost. ADR-0007 documents the strategy.
 
 **Dashboard live UI (s5):** Vanilla JS with EventSource for live updates, Mermaid 11.4.1 flowchart from CDN (lazy-loaded), CSS tokens for themes, defensive rendering with per-row error handling. Five ADRs (0002–0006) document the choices. This completes the frontend half of the dashboard; s4 provides the backend (snapshot, SSE server, CLI). Known gaps: no executable test for animated features (verified by hand in headless Chrome); follow-up story recommended.
 
@@ -14,4 +16,4 @@
 
 ## What you own
 
-Review whether step sequences, gate checks, and role boundaries remain sound. The Unit Tester and Integration Tester are critical checkpoints; ensure they have clear design context in handoffs.
+Review whether step sequences, gate checks, and role boundaries remain sound. The Unit Tester and Integration Tester are critical checkpoints; ensure they have clear design context in handoffs. s8 introduces `halt_run()` as a new entrypoint for both role-step limits (dispatch) and top-level exceptions (cli); verify the boundary is clean.
