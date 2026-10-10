@@ -266,9 +266,10 @@ enabled role uses. The PO's kickoff lists each such role as
 `role (provider: model)`. `set_role_model` takes a provider, so the PO can move
 a struggling role back to `anthropic`.
 
-Which roles suit a local model: Scribe, Code Quality Czar and DevOps; Unit and
-Integration Tester are worth a try. Keep PO, Architect, Code Reviewer and
-Manager on Claude. Weak tool use mostly shows up as bad handoffs, which bounce
+Which roles suit a local model: Scribe and Code Quality Czar; Unit and
+Integration Tester are worth a try. Keep PO, Architect, DevOps, Code Reviewer
+and Manager on Claude. DevOps runs on Opus at high effort, like the Architect,
+because the tooling and hooks it writes run around every other role. Weak tool use mostly shows up as bad handoffs, which bounce
 and count a round. At the round cap, the PO gets the story.
 
 **Other vendors.** `kind` names the harness. Supporting another vendor's agent

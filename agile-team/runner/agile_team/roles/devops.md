@@ -1,8 +1,8 @@
 ---
 name: devops
 description: Owns CI, build files, toolchain commands and the delivery prepare steps.
-model: sonnet
-effort: low
+model: opus
+effort: high
 tools: [Read, Grep, Glob, Write, Edit, Bash]
 write: ["{ci}", "{config}", ".team/baseline.json"]
 read: ["**"]
