@@ -230,15 +230,16 @@ def test_scribe_comes_before_stories(make_runtime) -> None:
 
 def test_scribe_skips_held_and_question_blocked_done_stories(make_runtime) -> None:
     rt = make_runtime()
-    held = add_story(rt, "s1", status=StoryStatus.DONE, hold="stopped")
+    add_story(rt, "s1", status=StoryStatus.DONE, hold="stopped")
     add_story(rt, "s2", status=StoryStatus.DONE)
-    rt.state.scribe_due = ["s1", "s2"]
+    add_story(rt, "s3", hold="stopped")
+    rt.state.scribe_due = ["s3", "s2", "s1"]
     rt.relay.post(Note("question", "Accept?", ["s2"]))
-    assert Router(rt).next_work() is None
-    held.hold = None
+    # R12: a hold on a done story is ignored; s3 (held, not done) and s2 (question) are skipped.
     assert Router(rt).next_work().story.id == "s1"
+    rt.state.scribe_due.remove("s1")
+    assert Router(rt).next_work() is None
     rt.relay.answer("m1", "yes")
-    held.hold = "x"
     assert Router(rt).next_work().story.id == "s2"
 
 
