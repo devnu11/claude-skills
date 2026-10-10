@@ -134,7 +134,9 @@ def test_stop_ignores_vanished_group(monkeypatch) -> None:
 def test_web_stop_kills_child_processes(configured: Path) -> None:
     pidfile = configured / "child.pid"
     d = Delivery("ui", "web", prepare=f"sleep 300 & echo $! > {pidfile}; wait")
-    p = sandbox.Preparer().prepare(load(configured, d), sandbox.Order(d))
+    p = sandbox.Preparer(probe=lambda _u: True, listening=lambda *_a: False).prepare(
+        load(configured, d), sandbox.Order(d)
+    )
     for _ in range(50):
         if pidfile.exists() and pidfile.read_text().strip():
             break
@@ -190,7 +192,7 @@ def test_harness_allows_only_listed_commands(configured: Path) -> None:
 def test_web_bash_is_curl_only(configured: Path) -> None:
     d = Delivery("ui", "web", url="http://x")
     c = load(configured, d)
-    p = sandbox.Preparer().prepare(c, sandbox.Order(d))
+    p = sandbox.Preparer(probe=lambda _u: True).prepare(c, sandbox.Order(d))
     assert sandbox.proxy_scope(c, p).bash_allowed == ["curl"]
 
 
@@ -277,9 +279,11 @@ def test_prepare_copies_the_presentation_before_a_background_start(configured: P
 
     def popen(_command, **kw):
         seen.append((c.run_dir / "customer/ui/presentation/workspace/todo.txt").exists())
-        return object()
+        return type("P", (), {"pid": 1, "poll": lambda self: None})()
 
-    sandbox.Preparer(popen=popen).prepare(c, sandbox.Order(d, present(c, "s1")))
+    sandbox.Preparer(popen=popen, probe=lambda _u: True, listening=lambda *_a: False).prepare(
+        c, sandbox.Order(d, present(c, "s1"))
+    )
     assert seen == [True]
 
 

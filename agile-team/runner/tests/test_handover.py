@@ -14,7 +14,9 @@ def gated(verdict="pass", **gate) -> dict:
 
 
 def test_trigger_values_are_snake_case() -> None:
-    assert [t.value for t in Trigger] == [
+    values = [t.value for t in Trigger]
+    assert "gate_hold" in values
+    assert [v for v in values if v != "gate_hold"] == [
         "refused",
         "error",
         "stopped",
@@ -35,6 +37,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.REFUSED,
         T.ERROR,
         T.STOPPED,
+        T.GATE_HOLD,
         T.BAD_HANDOFF,
         T.QUESTIONS,
         T.QUARANTINE,
@@ -197,6 +200,7 @@ def test_report_fields_default_to_empty_and_name_the_run() -> None:
             "next_role",
             "ruling",
             "ruling_why",
+            "gate_reason",
         ],
         "",
     ) | {"story": "run"}

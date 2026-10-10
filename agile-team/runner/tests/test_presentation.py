@@ -51,7 +51,7 @@ def test_need_values() -> None:
     ],
 )
 def test_presentation_table(kind: str, need: Need) -> None:
-    assert presentation.PRESENTATIONS[kind] is need
+    assert presentation.PRESENTATIONS[kind].need is need
 
 
 def test_table_covers_every_delivery_kind() -> None:
@@ -60,10 +60,10 @@ def test_table_covers_every_delivery_kind() -> None:
 
 def test_need_of_named_default_and_missing_delivery(config: cfg.Config) -> None:
     config.deliveries = [Delivery("cli", "package"), Delivery("hw", "manual")]
-    assert presentation.need_of(config, story_of()) is Need.WORKSPACE
-    assert presentation.need_of(config, story_of(delivery="hw")) is Need.GUIDE_ONLY
+    assert presentation.recipe_of(config, story_of()).need is Need.WORKSPACE
+    assert presentation.recipe_of(config, story_of(delivery="hw")).need is Need.GUIDE_ONLY
     config.deliveries = []
-    assert presentation.need_of(config, story_of()) is Need.GUIDE_ONLY
+    assert presentation.recipe_of(config, story_of()).need is Need.GUIDE_ONLY
 
 
 # ----- E5 -------------------------------------------------------------------
