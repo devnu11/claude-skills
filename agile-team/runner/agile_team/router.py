@@ -55,6 +55,11 @@ def _bounced(story: StoryState) -> bool:
     return bool(story.previous and story.previous.verdict == "bounce")
 
 
+def _scribable(story: StoryState) -> bool:
+    """A story the Scribe may run on: unheld, or done (its hold is the final step's)."""
+    return not story.hold or story.status is StoryStatus.DONE
+
+
 def _po_pick(story: StoryState) -> str | None:
     return story.po_developer
 
@@ -171,7 +176,7 @@ class Router:
         rt = self.runtime
         blocked = rt.relay.blocked_stories()
         ids = (i for i in rt.state.scribe_due if i in rt.state.stories and i not in blocked)
-        story = next((s for s in map(rt.state.stories.get, ids) if s and not s.hold), None)
+        story = next((s for s in map(rt.state.stories.get, ids) if s and _scribable(s)), None)
         return self._briefed(SCRIBE, story) if story else None
 
     def _story_work(self) -> Work | None:
