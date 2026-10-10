@@ -10,6 +10,7 @@ import signal
 import socket
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -280,10 +281,21 @@ def test_prepare_runs_a_real_service_with_pid_and_log(config: cfg.Config) -> Non
     try:
         assert p.process.poll() is None
         assert pid_file(config).read_text().strip() == str(os.getpgid(p.process.pid))
+        wait_for_log(log_file(config), "hello")
     finally:
         p.stop()
     assert not pid_file(config).exists()
     assert "hello" in log_file(config).read_text()
+
+
+def wait_for_log(path: Path, text: str, timeout: float = 5.0) -> None:
+    """Poll ``path`` until it contains ``text``; fail clearly on timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists() and text in path.read_text():
+            return
+        time.sleep(0.02)
+    pytest.fail(f"{text!r} not in {path} after {timeout}s")
 
 
 def test_the_log_is_truncated_at_each_start(config: cfg.Config) -> None:
