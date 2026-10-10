@@ -99,7 +99,10 @@ command fails.
 - **Never edit project files while the team is running.** Not even a typo.
   A test that contradicts the design is the team's to settle: the developer
   sends the story back to the unit-tester (a `test-dispute` on the
-  dashboard), and the Manager can rule on a stuck story at any step.
+  dashboard), and the Manager can rule on a stuck story at any step. A story
+  that comes back to `tests` with its code already in moves on by itself
+  once the unit-tester vouches for the tests, so never edit `state.json` to
+  move a story.
 - Never answer a PO question on the human's behalf.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
 - With `auth = "api-key"` the key bills the repo's Console workspace, not the

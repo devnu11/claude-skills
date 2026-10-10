@@ -76,4 +76,15 @@ The dashboard's timeline shows each one as a **test dispute**, and
 The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
 `escalate`) work at any step, not only at the round cap. A ruling that can't
 apply, such as one on a done story, is reported to the PO. It is never
-silently dropped.
+silently dropped. The PO can then clear the done story's hold with
+`continue_story`. A done story's hold never stops its Scribe step.
+
+## When a story comes back to tests with its code done
+
+A ruling or a review can send a story back to `tests` after its code is
+written. Its tests may then already pass. The unit-tester updates the tests
+to the current design and says in its handoff that it changed them or
+confirmed them. The story then moves on to the developer, with no manual
+step from you. `agile-team status` shows `"implemented"` on each story: how
+many times it has passed the implement gate. A story on its first pass
+(`"implemented": 0`) still needs a failing test first.

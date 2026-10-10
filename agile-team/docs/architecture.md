@@ -24,6 +24,7 @@ one line here. Older designs are the sections at the end of this file.
 | s23 Keep context small: PO session renewal, turns per step, leaner role sessions | [design/s23.md](design/s23.md) |
 | s25 Ledger each PO query's own cost, not the resumed session's running total | [design/s25.md](design/s25.md) |
 | s26 A presentation must start the delivery; "presentation ready" means up and answering | [design/s26.md](design/s26.md) |
+| s24 Tests gate accepts code from an earlier pass; a hold on a done story can be cleared | [design/s24.md](design/s24.md) |
 
 ## Components
 

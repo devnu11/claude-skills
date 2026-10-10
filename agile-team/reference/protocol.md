@@ -298,7 +298,9 @@ the step-end event for the Manager. A developer at `implement` may add
 `"dispute": {"test": "<test id, file path first>", "rule": "<design rule
 id>", "reason": "…"}` with status `changes_requested` when a test contradicts
 the design (see "Test disputes"). A dispute without `test` and `rule`, or
-with another status, is a malformed handoff. The Manager adds `"ruling"` (`rescope`,
+with another status, is a malformed handoff. The unit-tester may add
+`"tests": "changed"` or `"tests": "confirmed"` when a story is back at
+`tests` with its code in (see "Back at tests with the code in"). The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
 {"<role>": "<question>"}`. The runner appends each follow-up to that role's
 next brief under "Questions from the Manager" and clears it once the role
@@ -388,7 +390,8 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 
 ## Pipeline and gates
 
-design (architect) → tests (unit-tester; gate: test command **fails**) →
+design (architect) → tests (unit-tester; gate: test command **fails**, or
+see "Back at tests with the code in") →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 `.team/baseline.json` coverage when old debt keeps the total lower) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
@@ -406,6 +409,31 @@ start the Proxy. The runner moves the story back to `e2e` **without** a round
 same happens when a `web` delivery's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
+
+### Back at tests with the code in
+
+Each story counts how often it has passed the implement gate
+(`implemented` in `state.json`). A ruling, a review or a closed dispute can
+send a story back to `tests` after its code is in. Its suite may then be
+green already. In that case, with no dispute open and a `done` handoff:
+
+- A red suite passes, as on a first pass.
+- A green suite passes when the handoff says `"tests": "changed"` (the
+  unit-tester changed tests for the story) or `"tests": "confirmed"` (it
+  checked that the existing tests already cover it). The gate reason is
+  `tests pass on code from an earlier pass; tests <claim>`.
+- A green suite without a claim bounces back to `tests` with a round:
+  `tests pass on code from an earlier pass; write a failing test, or hand
+  off "tests": "changed" or "tests": "confirmed"`.
+- A `changes_requested` goes where its `next_role` points, as with an open
+  dispute.
+
+The unit-tester's prompt says `Code from an earlier pass is in…` while this
+applies. On a first pass (`implemented` is 0) the gate still needs a red
+suite, and a claim is ignored. An open dispute's own gate (below) takes
+precedence. Any other value of `tests` is a malformed handoff. A
+`state.json` written before s24 loads `implemented` as 1 for stories past
+`implement` and as 0 for the rest.
 
 ### Test disputes
 
@@ -539,9 +567,11 @@ runner passes their reasons on in the next standard brief.
 - A story named in a hand-over is **held** (`hold` in `status`): the router
   skips it until the PO calls `continue_story(story, note)` or runs a step on
   it with `run_role`. A done story never moves again, so its hold does not
-  stop its Scribe; the Scribe runs after the PO's turn.
-- PO tools added: `continue_story(story, note)` releases a held story and
-  adds `note` to its next brief. `set_developer(story, role)` picks the
+  stop its Scribe; the Scribe runs after the PO's turn. `continue_story`
+  clears a done story's hold too (for example after `ruling_not_applied`),
+  and its note reaches the Scribe's brief if the Scribe is still due.
+- PO tools added: `continue_story(story, note)` releases a held story (done
+  or not) and adds `note` to its next brief. `set_developer(story, role)` picks the
   developer for that story; it refuses an unknown role or one that is not a
   developer.
 - When nothing can move but a question is open, the runner waits for an
@@ -558,8 +588,8 @@ runner passes their reasons on in the next standard brief.
 - `state.json` additions: per story `developer`, `po_developer`, `hold`,
   `note`, `previous` (the last gated step: role, status, summary, verdict,
   reason, next_role), `dispute` (the open test dispute: test, rule, reason,
-  base commit, stage `raised` or `confirmed`) and `disputes` (disputes since
-  the last ruling); run-level `scribe_due` and `delivered` (answer ids the
+  base commit, stage `raised` or `confirmed`), `disputes` (disputes since
+  the last ruling) and `implemented` (implement-gate passes); run-level `scribe_due` and `delivered` (answer ids the
   PO has seen). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
 
