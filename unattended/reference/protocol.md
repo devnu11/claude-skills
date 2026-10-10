@@ -13,7 +13,7 @@ as `uv run --quiet --project ~/.claude/skills/unattended/runner unattended`.
 | `wait NAME` | Block until the job ends or its supervisor is gone, print it, and exit with its code. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor. With no supervisor alive, mark the job stopped. |
-| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--now] [--foreground]` | Restart a `stopped` or `limit-reached` job, or an orphaned one (not ended, no supervisor alive). Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
+| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
 
 `supervise DIR` is internal: it is what the detached process runs.
 
@@ -56,7 +56,7 @@ unique within a home.
 | File | Holds |
 |---|---|
 | `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until), `resume`, `end` (status, reason). |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until), `offline` (reason), `online`, `resume`, `end` (status, reason). |
 | `output.md` | A prompt job's latest result text. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -75,11 +75,14 @@ e.g. `session limit, resets 7pm; used all 10 resumes`.
 ```
 loop:
   stop file? -> stopped
-  outcome = run once          # DONE | LIMIT | RATE_LIMITED | BUDGET | FAILED
+  outcome = run once          # DONE | LIMIT | RATE_LIMITED | OFFLINE | BUDGET | FAILED
   runs += 1, cost += run cost, append a run event
   DONE / FAILED -> finish; BUDGET -> limit-reached
   next_wake = reset + 3 min   # LIMIT; the fallback wait when no reset is readable
             = now + 1, 2, 4… min (cap 30)   # RATE_LIMITED, consecutive
+  OFFLINE -> status waiting; every 30 s probe api.anthropic.com:443 (TCP, no tokens)
+             until it answers, then run again (not a resume); more than 10
+             in a row -> failed; deadline passes first -> limit-reached
   deadline <= next_wake, resumes >= max, or cost >= max -> limit-reached
   status waiting; sleep in 30 s slices, checking the stop and wake files
   resumes += 1; run again as a resume
@@ -117,7 +120,10 @@ The reason text is matched against these patterns, last match wins:
 - `usage limit reached`.
 
 The SDK's trailing ` (exit code: N)` is stripped first. A rate limit is an API
-error or HTTP status `429` or `529`, `rate limit` or `overloaded`. Reset times read are `resets 7:20pm
+error or HTTP status `429` or `529`, `rate limit` or `overloaded`. A network
+failure (`OFFLINE`) is `Can't reach the API server`, `ENOTFOUND`, `EAI_AGAIN`,
+`ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `ENETUNREACH` or `connection
+error`. Reset times read are `resets 7:20pm
 (America/Edmonton)`, `resets 2am` and `resets Oct 10, 5pm`. The zone defaults
 to the local one, and the next occurrence after now is used.
 
@@ -138,7 +144,7 @@ to the local one, and the next occurrence after now is used.
   the budget (between turns or mid-response) is not verified.
 - **Limits:** a `ResultError` or `ProcessError`, or an error `ResultMessage`,
   whose text matches a limit pattern is a `LIMIT`. One matching a rate limit is
-  `RATE_LIMITED`. Anything else is `FAILED` (`crashed: <Type>: <first line>`).
+  `RATE_LIMITED`, and one matching a network failure is `OFFLINE`. Anything else is `FAILED` (`crashed: <Type>: <first line>`).
 - **Output:** the result text goes to `output.md`. `total_cost_usd`, `usage`
   and `num_turns` go into the run event; cost is summed into `state.cost`. The
   cost of a login run is priced at API rates.
@@ -147,7 +153,8 @@ to the local one, and the next occurrence after now is used.
 
 - **Exit codes:** 0 means done. 75 (`EX_TEMPFAIL`, what `agile-team start`
   exits with on a usage limit) means a usage limit. Any other code means
-  failed.
+  failed, unless the output's last 50 lines name a network failure: then it
+  is `OFFLINE` (agile-team exits 70 on such a crash).
 - **Reset time:** read from the last 50 output lines. A line such as `resets
   7pm` is enough. Without one, the fallback wait applies.
 - **Shell:** the command runs with `sh -c` in `--cwd`, in its own process
