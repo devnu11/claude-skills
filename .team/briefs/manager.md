@@ -1,15 +1,16 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s23 done)
 
-## s19: Runner calls you automatically at gates (s19)
+## Monitoring long-running roles (s23)
 
-The runner now automatically calls you at sprint start, model overrides, and budget checkpoints—no PO mediation. Your step is story-less and gets a standard brief listing the reason (e.g., "Manager review due: sprint start"). You are called before any sprint story steps, so you set up budget and model decisions before the pipeline runs.
+Your context now includes `long_running_roles`: roles where 2 of the last 3 measured steps took 30+ turns. Raise every role in that list as friction in your summary:
 
-See ADR-0009 for the routing architecture.
+- **What it means:** The role's average context per turn is known (in `spend_by_role`). If it exceeds a reasonable threshold for that role's work, it's a cost signal.
+- **What to propose:** Split the step (design separately from implement), change the brief (give targeted focus), or change the tools (remove a blocker reading).
+
+Turn counts appear in the ledger and dashboard (`Turns/step`, `Context/turn` columns). This helps detect when context reduction measures (ADR-0011) are working.
 
 ## Backlog and sprints
 
-The Product Owner must call `start_sprint(goal, stories)` to move stories from the backlog into work. Manager runs after `start_sprint` and at other gates. Stories in the backlog cannot proceed; ensure the PO has explicitly committed them to a sprint before they reach critical steps.
-
-On resume, check which sprint is active and which stories are still pending.
+The PO calls `start_sprint(goal, stories)` to move stories from backlog into work. Manager runs after `start_sprint` and at other gates. On resume, check which sprint is active and which stories are pending.

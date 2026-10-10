@@ -1,12 +1,19 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s23 done)
 
 See `developer.md` for the base conventions.
 
-## Routing in code — runner drives the pipeline (s19)
+## Context reduction: Read little, no connectors (s23)
 
-Implemented router passes and hand-over triggers. New modules: `router.py` (advance loop, work pickers, standard brief), `handover.py` (HANDOVERS table, hand-over prompt, previous-step). Modified: `po_tools.py` (PoRun driver), `dispatch.py` (note_step, story effects), `gates.py` (PreviousStep), `state.py` (scribe_due, delivered), `roles.py` (developer field). Built-in roles: `roles/product-owner.md` (Sonnet, judgement only), `roles/architect.md` (developer field docs). Coverage 99% (router, handover at 100%), all tests pass. See ADR-0009 and `agile-team/docs/design/s19.md`.
+Your session has no Claude.ai connectors. Reduce re-sent context by being strategic with reads:
+
+- **Find before read:** Grep with `-n` and content mode to locate what you need, then `Read` with `offset` and `limit`.
+- **Design is your contract:** Each story has `docs/design/<id>.md` with rules, exact signatures, and modules to change. Read source only for what the design leaves open.
+- **Never double-read:** If you already read a file, use grep again instead of re-reading.
+- **Run quietly:** Test commands with `-q -x --no-header` flags; keep only the failures.
+
+See ADR-0011 for the context reduction strategy.
 
 ## CLI-specific context
 

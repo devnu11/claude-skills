@@ -1,14 +1,21 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s23 done)
+
+## Context reduction: work lean (s23)
+
+Your session context is reduced by disabling Claude.ai connectors and following guided reads:
+
+- **No connectors:** You cannot use Claude.ai integrations during your step (other roles don't either, except PO and Proxy). Focus on code.
+- **Start from design:** Each story has a focused `docs/design/<id>.md` with rules, exact signatures, and a test checklist. Read only helpers you reuse; read source only for what the design leaves open.
+- **Read little:** Find with Grep before reading. Use `Read` with `offset` and `limit` to target lines. Never `cat` long files; avoid double-reads. Run tests quietly and fail-fast.
+- **Write lean:** Write test files in one go with `Write`, fix with `Edit`. See the design's test checklist for what to cover.
+
+Target context per turn: under 60k tokens (s19 was 113.9k). See ADR-0011.
 
 ## Process constraint: developer cannot edit tests
 
-The developer role cannot write to `tests/unit/` or `tests/conftest.py`. The runner will not route feedback from failed test runs back to the developer.
-
-**Your responsibility:** Before finishing, re-read every test expectation against the actual design delivered. If a test passes but doesn't match what the developer built, update the test (not the feature). Ask the developer for clarification only if the design itself is ambiguous.
-
-This is your checkpoint; no other role will catch it. Coverage, ruff, and the AC are necessary but not sufficient.
+The developer role cannot write to `tests/unit/` or `tests/conftest.py`. Before finishing, verify every test matches the design. If a test passes but doesn't match what the developer built, update the test (not the feature).
 
 ## s19: Routing in code – test notes
 

@@ -1,27 +1,27 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s23 done)
 
-## Routing in code — PO judges only (s19)
+## Session renewal at sprint and story boundaries (s23)
 
-The runner now drives sprint stories through the fixed pipeline. You are called only for judgement. Key shift:
-- **Router passes:** Code picks the next work (Manager, Scribe, or a movable story), runs the step with a standard brief (story, design, review, previous handoff), and stops only when a hand-over trigger matches.
-- **Your hand-overs:** Open questions (answer with `ask_user`), held stories (release with `continue_story(story, note)`), blocked/failed (decide fix), quarantines (approve or ignore), round caps (escalate or upgrade model), unroutable bounces (run that role yourself), human messages, sprint end/stall.
-- **New tools:** `continue_story(story, note)` releases a held story and passes your note to its next step. `set_developer(story, role)` overrides the architect's specialisation pick. `wait_for_answers` is unchanged. `run_role` is now for non-standard steps only.
-- **Model:** Changed to Sonnet (from Opus). Judgement calls at a fifth the cost.
-- **Built-in brief:** `roles/product-owner.md` replaces its Mission and How You Work; describes your new workflow.
+At sprint start and when a story reaches `DONE`, the runner renews your session to keep context small. You'll experience one of three paths:
+
+- **Compact path (preferred):** The runner sends `/compact` with instructions. If the SDK detects it, history is dropped and you carry on in the same session with a brief carry-over (open questions only).
+- **Handoff fallback:** If `/compact` doesn't work, the runner asks you to write `.team/po/handoff.md` with open decisions, pending questions, what's next, and artifact links. Write nothing else, then end your turn. The runner deletes the file, starts you fresh with that handoff as context, and saves the new session id.
+- **Kept:** If handoff is blank or missing, the old session continues and you try again at the next boundary.
+
+**Never drop:** Open questions are always carried over from the inbox; they are re-handed over by the router if you don't answer. Renewal never affects `delivered` or pending human messages.
+
+See ADR-0010 for details.
 
 ## Backlog and sprint management
 
-Every story starts in the backlog (`sprint: null`). To move a story into active work, use `start_sprint(goal, stories)` to open a new sprint with named stories. Unknown story IDs are refused with guidance. Only sprint stories can proceed past opener; backlog stories are refused with "add it to a sprint". Legacy files load stories into the backlog. On resume after a story is done, check whether to start a new sprint with remaining work.
+Every story starts in the backlog (`sprint: null`). Use `start_sprint(goal, stories)` to move stories into active work. Only sprint stories can proceed past opener; backlog stories are refused with "add it to a sprint". On resume, check whether to start a new sprint with remaining work.
 
 ## Design and enforcement decisions documented in ADRs
 
+- **ADR-0010:** PO session renewal at sprint and story boundaries (s23); `/compact` vs. handoff fallback.
 - **ADR-0009:** Routing in code (s19); runner drives pipeline, PO judges.
-- **ADR-0008:** Team presents product in ready-made environment (s13); presentation copy, gate check, Proxy precondition.
-- **ADR-0007:** Clean halt on limits, crashes, SIGTERM (s8); HALTS and LIMIT_PATTERNS tables.
-- **ADR-0002 through 0006:** Dashboard live UI (s5); Vanilla JS, EventSource, Mermaid, CSS tokens, escaping.
-
-## What the human needs to know
-
-No roles edit `.team/adr/` or `.team/briefs/` except the PO's end-of-step handoff. Backstop critical roles (Unit Tester, Integration Tester, Customer Proxy) by reviewing their self-checks in their final handoffs.
+- **ADR-0008:** Team presents product in ready-made environment (s13).
+- **ADR-0007:** Clean halt on limits, crashes, SIGTERM (s8).
+- **ADR-0002–0006:** Dashboard live UI (s5).
