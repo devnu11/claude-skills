@@ -61,7 +61,11 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   recent step's turns) and **Context/turn** (how much context each turn
   re-sends on average), next to tokens and cost. A role whose Context/turn
   climbs is reading more than its job needs. Steps from before turns were
-  recorded show `—`.
+  recorded show `—`. Each Product Owner entry is what that one PO query
+  cost. In runs from before this fix, each PO entry also counted every
+  earlier PO query in the same session, so older PO spend reads too high.
+  ADR-004 in the skill's docs (`agile-team/docs/adr/ADR-004-po-cost-deltas.md`)
+  explains how to work out the correction to subtract.
 - **Questions:** questions waiting for your answer (with the
   `agile-team answer` command to copy), and questions a role raised in its
   handoff.

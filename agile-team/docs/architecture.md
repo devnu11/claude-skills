@@ -22,6 +22,7 @@ one line here. Older designs are the sections at the end of this file.
 | s19 Routing in code: the runner drives, the PO judges | [design/s19.md](design/s19.md) |
 | s11 Test disputes from implement back to tests; rulings at any step | [design/s11.md](design/s11.md) |
 | s23 Keep context small: PO session renewal, turns per step, leaner role sessions | [design/s23.md](design/s23.md) |
+| s25 Ledger each PO query's own cost, not the resumed session's running total | [design/s25.md](design/s25.md) |
 
 ## Components
 
@@ -38,7 +39,7 @@ one line here. Older designs are the sections at the end of this file.
 | `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
 | `relay.py` | outbox/inbox with the liaison | none |
-| `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints | none |
+| `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox, key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table): lay-out before e2e, completeness check, copy into the sandbox | sandbox, git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |

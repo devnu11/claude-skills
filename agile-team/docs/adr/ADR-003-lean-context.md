@@ -87,6 +87,10 @@ largest of any role. This story does not change cost accounting, but fresh
 PO sessions (decision 1) limit the error. Verifying and fixing it is an open
 question for the human.
 
+Update (s25): verified. `total_cost_usd` is a running total for the session.
+See [ADR-004](ADR-004-po-cost-deltas.md) for the evidence, the fix and the
+one-off correction.
+
 ## Decision
 
 1. **Renew the PO's session at boundaries.** At sprint start, and when a

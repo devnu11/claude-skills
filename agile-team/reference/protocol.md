@@ -48,7 +48,8 @@ the human's test result. The runner itself posts `blocked`, `failed` or
 `inbox.jsonl` holds `{"id", "text", "at"}` answers, written by `answer`.
 
 Other run files: `state.json` (resume state; `task` holds the last
-non-resume `start --task`, `""` in older files), `ledger.jsonl` (per-step cost),
+non-resume `start --task`, `""` in older files; `po_cost` holds the PO
+session's last running cost, see "Ledger cost"), `ledger.jsonl` (per-step cost),
 `runner.pid`, `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
@@ -255,7 +256,8 @@ step's environment gets:
 
 `billing` controls the ledger. With `free`, the step is recorded at $0 and does
 not count towards the soft budget. With `reported`, the step keeps
-`total_cost_usd`, which Claude Code prices at Claude rates.
+`total_cost_usd`, which Claude Code prices at Claude rates (for a resumed PO
+query, only its own share: see "Ledger cost").
 
 Preflight probes `base_url` and checks `token_env` for every provider that an
 enabled role uses. The PO's kickoff lists each such role as
@@ -324,6 +326,31 @@ apply, the report says why and the story does not change:
 `{"ruling", "applied": false, "why"}`. That happens when the step has no
 story (`a ruling needs a story; run the manager on that story`) or the story
 is done (`story sN is done; a ruling cannot move it`).
+
+### Ledger cost
+
+Each ledger entry's `cost_usd` is what that one query cost. Claude Code's
+`total_cost_usd` is a running total for the **session** (ADR-004 in the
+docs). A role step always starts a fresh session, so its figure is already
+its own. The PO resumes one session, so the runner ledgers only the
+difference:
+
+- `own = reported − base` when `reported ≥ base`, else `reported` (a drop
+  means the counter restarted). `base` is the running total last seen for
+  the session the query resumes, or `0` for a fresh session or a different
+  session.
+- `state.json` keeps `po_cost: {"session", "reported"}` with the raw
+  figure, so `start --resume` keeps the baseline. An older `state.json`
+  takes its baseline from the last PO ledger entry.
+- The provider's `billing` applies to the own cost. A query with no result
+  ledgers `0` and leaves `po_cost` as it was.
+- A PO query that is never ledgered (an error result) is still in the
+  next query's running total, so that query's difference pays for it.
+
+`budget_status`, `spend_by_role`, the budget checkpoints and the dashboard
+read the ledger, so they show real spend. Ledger lines are never rewritten.
+PO entries written before s25 are running totals. ADR-004 gives the one-off
+correction ($256.93 overcounted up to ledger line 196).
 
 ### Turns and context
 
