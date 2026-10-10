@@ -27,10 +27,12 @@ The rules for developing skills here are in
 |---|---|
 | [`agile-team`](agile-team/SKILL.md) | Hands a large task to a headless team of specialized Claude roles (Product Owner, Architect, Developers, Testers, Reviewer, DevOps, Customer Proxy, Manager, Scribe) while the interactive session acts as liaison. Stories move from a backlog through sprints and a gated pipeline that the runner routes by itself, calling the PO only for judgement (a developer can send a story back to the unit-tester when a test contradicts the design), and end with the Integration Tester presenting each story to the Customer Proxy in a ready-made workspace. It runs on your Claude login or the repo's API key, and roles can use local models. Each session's context is kept small: the PO's session is renewed at every sprint start and finished story, and no role loads your claude.ai connectors. `agile-team dashboard` serves a live view of the run, including turns and context per step. Details: [`reference/protocol.md`](agile-team/reference/protocol.md). |
 | [`unattended`](unattended/SKILL.md) | Runs a long or expensive prompt or command as a background job that waits out Claude usage limits and resumes itself, within a deadline, a resume count and a cost cap. It runs on your login or an API key, and it can wrap `agile-team start`. It waits out network failures without spending tokens and keeps the machine from idle-sleeping (`--allow-sleep` opts out). Details: [`reference/protocol.md`](unattended/reference/protocol.md). |
+| [`six-hats`](six-hats/SKILL.md) | Works through a decision or problem with de Bono's Six Thinking Hats, one hat at a time: Blue frames it and picks a sequence for the job (choose between options, judge one idea, solve a problem, generate ideas, quick check), then White, Red, Black, Yellow and Green, and Blue closes with a recommendation, the risks carried forward and the open questions. Runs solo or with the user adding points at each hat. Details: [`reference/hats.md`](six-hats/reference/hats.md), [`reference/sequences.md`](six-hats/reference/sequences.md). |
 | [`example-skill`](example-skill/SKILL.md) | Template showing the file format. |
 
-Both skills need [uv](https://docs.astral.sh/uv/); their runners install their
-own dependencies on first use. They run on your Claude Code login, or on an
+`agile-team` and `unattended` need [uv](https://docs.astral.sh/uv/); their
+runners install their own dependencies on first use. `six-hats` is
+instructions only. They run on your Claude Code login, or on an
 API key from a key file (agile-team: `.team/run/api-key`; both:
 `~/secrets/anthropic-api-key`, mode 600).
 
