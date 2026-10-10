@@ -263,7 +263,8 @@ def test_po_may_write_its_handoff(make_runtime) -> None:
 
 
 def prompt_of(name: str) -> str:
-    return resolved(name).body
+    book = roles.RoleBook.for_repo(Path("."), {})
+    return book.system_prompt(book.resolve(name), "")
 
 
 @pytest.mark.parametrize(

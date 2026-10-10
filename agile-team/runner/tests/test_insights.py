@@ -10,7 +10,7 @@ from agile_team.ledger import Entry, Ledger, Tokens
 def test_spend_by_role_sorted_with_per_step_figures(tmp_path: Path) -> None:
     led = Ledger(tmp_path / "ledger.jsonl")
     led.record(Entry("quality-czar", "haiku", 0.2, tokens=Tokens(1, 1, 98), turns=20))
-    led.record(Entry("architect", "opus", 1.5, tokens=Tokens(10, 10), turns=12))
+    led.record(Entry("architect", "opus", 1.5, tokens=Tokens(100, 10), turns=12))
     led.record(Entry("architect", "opus", 0.5, turns=8))
     view = spend_by_role(led)
     assert list(view) == ["architect", "quality-czar"]
@@ -18,8 +18,10 @@ def test_spend_by_role_sorted_with_per_step_figures(tmp_path: Path) -> None:
         "steps": 2,
         "cost_usd": 2.0,
         "cost_per_step": 1.0,
-        "tokens": 20,
+        "tokens": 110,
         "turns_per_step": 10.0,
+        "latest_turns": 8,
+        "context_per_turn": 5,
     }
     assert view["quality-czar"]["tokens"] == 100
 

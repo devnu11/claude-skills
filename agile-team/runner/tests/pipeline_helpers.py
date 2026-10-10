@@ -10,11 +10,14 @@ from typing import Any
 from agile_team import gates
 from agile_team.dispatch import Runtime
 from agile_team.po_tools import Start
-from claude_agent_sdk import AssistantMessage, TextBlock
+from claude_agent_sdk import AssistantMessage, SystemMessage, TextBlock
 
 from .conftest import handoff, result_message
 
 PO_ROLE = "product-owner"
+BOUNDARY = SystemMessage(
+    "compact_boundary", {"compact_metadata": {"trigger": "manual", "pre_tokens": 1000}}
+)
 
 
 class Script:
@@ -29,6 +32,8 @@ class Script:
         self.po = list(po or [])
         self.rt: Runtime | None = None
         self.calls: list[tuple[str, str]] = []
+        self.compacts: list[str] = []
+        self.answers_compact = True
 
     @property
     def po_prompts(self) -> list[str]:
@@ -43,8 +48,16 @@ class Script:
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
         role = PO_ROLE if options.mcp_servers else self.rt.events.events()[-1].role
+        if self.answers_compact and prompt.startswith("/compact"):
+            self.compacts.append(prompt)
+            return self._compact()
         self.calls.append((role, prompt))
         return self._gen(role)
+
+    async def _compact(self) -> AsyncIterator[Any]:
+        """A PO ``/compact`` answer: a boundary, then a result; not a PO turn."""
+        yield BOUNDARY
+        yield result_message("compacted")
 
     async def _gen(self, role: str) -> AsyncIterator[Any]:
         queue = self.po if role == PO_ROLE else self.replies.get(role, [])

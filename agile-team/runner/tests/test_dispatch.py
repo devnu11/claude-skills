@@ -51,7 +51,7 @@ def test_options_carry_role_settings(make_runtime) -> None:
     opts = q.calls[0]["options"]
     assert (opts.model, opts.effort, opts.permission_mode) == ("opus", "high", "dontAsk")
     assert "Bash" not in opts.tools
-    assert opts.env == {"ANTHROPIC_API_KEY": "k"}
+    assert opts.env == {"ANTHROPIC_API_KEY": "k", **dispatch.ISOLATION_ENV}
     assert opts.setting_sources == []
     assert "You may write: docs/**" in opts.system_prompt
     assert opts.hooks["PreToolUse"][0].hooks

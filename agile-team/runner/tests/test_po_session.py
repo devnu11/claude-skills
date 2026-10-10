@@ -344,6 +344,7 @@ def test_one_run_renews_before_the_hand_over(make_runtime) -> None:
     script = Script()
     rt = build(make_runtime, script, steps=["design"])
     fake.rt = script.rt = rt
+    script.answers_compact = False
     original = script._gen
 
     async def routed(role: str):
