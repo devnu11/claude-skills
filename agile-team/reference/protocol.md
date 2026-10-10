@@ -443,6 +443,11 @@ to `integration-tester`).
   writes `PRESENTATION.md` (what to try for each AC), and adds real
   live-run output such as `agile-team status` as `live-status.json` when an
   AC needs a live run.
+- The presentation is self-contained. The Proxy reads only its sandbox, so
+  `PRESENTATION.md` never points to a repo path. Anything an AC cites (an
+  ADR, a doc section, test, coverage or lint output) goes into the
+  presentation as a verbatim copy or as captured output with its command and
+  exit code (for example `docs/` and `evidence/`).
 - Complete = `PRESENTATION.md` is not blank and, except for `manual`,
   `workspace/` holds something besides `.git`. Otherwise the e2e gate
   bounces with `story sN has no presentation: <path> is missing or empty`.
