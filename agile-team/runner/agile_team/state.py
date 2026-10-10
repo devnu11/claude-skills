@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
+from .ledger import SessionCost
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 STATE_FILE = "state.json"
@@ -62,6 +63,7 @@ class RunState:
     delivered: list[str] | None = None
     po_renew_due: list[str] = field(default_factory=list)
     po_renew_path: str = "compact"
+    po_cost: SessionCost | None = None
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -98,6 +100,7 @@ class RunState:
         data["status"] = RunStatus(data.get("status", RunStatus.IDLE))
         data["stories"] = {k: _story(v) for k, v in data.get("stories", {}).items()}
         data["overrides"] = {k: ModelOverride(**v) for k, v in data.get("overrides", {}).items()}
+        data["po_cost"] = _nested(SessionCost, data.get("po_cost"))
         return cls(**data)
 
 

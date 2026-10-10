@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from typing import Any, ClassVar
 
@@ -19,7 +19,7 @@ from . import handover, po_session
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
 from .gates import StoryState, StoryStatus, role_fits_step
-from .ledger import Entry, budget_status
+from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
@@ -427,10 +427,26 @@ class PoRun:
 
     async def _turn(self, turn: PoTurn) -> StepResult:
         plan = po_plan(self.runtime, turn)
-        result = self.runtime.priced(plan, await self._collect(plan))
+        raw = await self._collect(plan)
+        result = self.runtime.priced(plan, self._own_cost(turn, raw))
         self._settle()
         self._record(plan.role.model, result)
         return result
+
+    def _own_cost(self, turn: PoTurn, raw: StepResult) -> StepResult:
+        """``raw`` with only this query's cost; remembers the session's running total."""
+        if raw.session_id is None:
+            return raw
+        state = self.runtime.state
+        known = state.po_cost or self._seed_cost()
+        own = known.own_cost(turn.resume, raw.cost)
+        state.po_cost = SessionCost(raw.session_id, raw.cost)
+        return replace(raw, cost=own)
+
+    def _seed_cost(self) -> SessionCost:
+        """The baseline for a state.json written before s25 (C6)."""
+        last = self.runtime.ledger.last_cost(PO)
+        return SessionCost(self.runtime.state.po_session, last)
 
     def _settle(self) -> None:
         """Commit the PO's work, unless the run halted: then leave the tree for the human."""

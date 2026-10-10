@@ -2,7 +2,8 @@
 
 Costs come from ``ResultMessage.total_cost_usd`` and tokens from its ``usage``.
 The soft budget is the config's ``team.budget_usd``; hard caps belong to the
-key's Console workspace.
+key's Console workspace. A resumed PO query records only its own share of the
+session's running total (``SessionCost``, ADR-004).
 """
 
 from __future__ import annotations
@@ -21,6 +22,23 @@ USAGE_KEYS = {
     "cache_read": "cache_read_input_tokens",
     "cache_creation": "cache_creation_input_tokens",
 }
+
+
+@dataclass
+class SessionCost:
+    """The running ``total_cost_usd`` Claude Code last reported for one session."""
+
+    session: str | None = None
+    reported: float = 0.0
+
+    def own_cost(self, resumed: str | None, reported: float) -> float:
+        """The part of ``reported`` that one query spent.
+
+        ``resumed`` is the session the query resumed (``None`` for a fresh one).
+        A fall below the stored figure means the counter restarted.
+        """
+        base = self.reported if resumed is not None and resumed == self.session else 0.0
+        return reported - base if reported >= base else reported
 
 
 @dataclass
@@ -129,6 +147,11 @@ class Ledger:
         for e in self.entries():
             groups[str(getattr(e, key))].add(e)
         return dict(groups)
+
+    def last_cost(self, role: str) -> float:
+        """The most recent cost ledgered for ``role``; 0.0 if it has none."""
+        costs = [e.cost_usd for e in self.entries() if e.role == role]
+        return costs[-1] if costs else 0.0
 
     def by_role(self) -> dict[str, float]:
         return {role: t.cost_usd for role, t in self.totals("role").items()}
