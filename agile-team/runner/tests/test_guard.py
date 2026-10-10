@@ -196,3 +196,22 @@ def test_even_backslash_run_is_not_a_continuation(
 ) -> None:
     """W0 (review D3): only a newline after an odd run of backslashes is joined."""
     assert (use(dev_scope(tmp_path), "Bash", {"command": command}) is None) is allowed
+
+
+@pytest.mark.parametrize(
+    ("command", "allowed"),
+    [
+        ("echo hi # note \\\ngit commit -m x", False),  # D4: comment ends in `\`, not joined
+        ("echo hi # x \\\ng\\\nit commit -m x", False),  # D5: continuation after the comment
+        ("# \\\ng\\\nit commit -m x", False),
+        ("echo a \\\nb \\\n# c \\\ng\\\nit commit", False),  # joins before the comment line
+        ("# c \\\necho '#'; \\\ng\\\nit commit", False),  # real comment plus a fake `#`
+        ("echo a#b \\\ngit status", True),  # mid-word `#` is no comment
+        ("echo a#b \\\ng\\\nit status", True),
+        ("git status # done \\", True),
+        ("g\\\nit commit -m x # done \\", False),
+    ],
+)
+def test_comment_aware_continuation(tmp_path: Path, command: str, allowed: bool) -> None:
+    """D4/D5: a `#` comment ending in `\\` is not a continuation, whatever follows it."""
+    assert (use(dev_scope(tmp_path), "Bash", {"command": command}) is None) is allowed
