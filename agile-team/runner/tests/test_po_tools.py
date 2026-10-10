@@ -397,8 +397,8 @@ def test_wait_for_answers_that_time_out_deliver_nothing(make_runtime) -> None:
 def test_new_tool_schemas_and_descriptions() -> None:
     schemas = po_tools.SCHEMAS
     assert schemas["continue_story"] == (
-        "Release a story the runner handed to you; your note is added to its next step's "
-        "standard brief.",
+        "Release a story the runner handed to you (a done story too, to clear its hold); "
+        "your note is added to its next step's standard brief.",
         {"story": str, "note": str},
     )
     assert schemas["set_developer"] == (

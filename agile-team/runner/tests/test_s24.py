@@ -15,6 +15,7 @@ from .conftest import FakeQuery, FakeRunner, handoff
 
 STEPS = list(PIPELINE_STEPS)
 RED = {"T": (1, "FAILED")}
+COVERED = {"C": (0, "TOTAL 100%")}
 UNCLAIMED = (
     "tests pass on code from an earlier pass; write a failing test, "
     'or hand off "tests": "changed" or "tests": "confirmed"'
@@ -69,10 +70,10 @@ def test_report_has_no_tests_key() -> None:
 
 def test_implement_pass_counts() -> None:
     st = story("implement")
-    settle(st, done())
+    settle(st, done(), COVERED)
     assert (st.implemented, st.step) == (1, "quality")
     st.step = "implement"
-    settle(st, done())
+    settle(st, done(), COVERED)
     assert st.implemented == 2
 
 
@@ -89,7 +90,7 @@ def test_other_steps_bounces_and_returns_do_not_count() -> None:
 
 def test_last_step_implement_counts_and_finishes() -> None:
     st = story("implement")
-    settle(st, done(), steps=["implement"])
+    settle(st, done(), COVERED, steps=["implement"])
     assert (st.implemented, st.status) == (1, StoryStatus.DONE)
 
 
@@ -173,10 +174,10 @@ def test_explicit_value_wins_and_round_trips() -> None:
 # ----- G7 ----------------------------------------------------------------------
 
 
-def prompt_at(make_runtime, step, **kw) -> str:
+def prompt_at(make_runtime, step, role="unit-tester", **kw) -> str:
     rt = make_runtime(FakeQuery(), runner=FakeRunner())
     rt.state.stories["s1"] = story(step, **kw)
-    asyncio.run(rt.run_role(StepRequest("unit-tester", "go", "s1")))
+    asyncio.run(rt.run_role(StepRequest(role, "go", "s1")))
     return rt.query_fn.calls[0]["prompt"]
 
 
@@ -188,7 +189,7 @@ def test_rework_brief_shows_on_reworked_tests(make_runtime) -> None:
 
 def test_no_rework_brief_on_first_pass_or_other_step(make_runtime) -> None:
     assert REWORK_BRIEF not in prompt_at(make_runtime, "tests")
-    assert REWORK_BRIEF not in prompt_at(make_runtime, "design", implemented=1)
+    assert REWORK_BRIEF not in prompt_at(make_runtime, "design", "architect", implemented=1)
 
 
 def test_dispute_replaces_rework_brief(make_runtime) -> None:
