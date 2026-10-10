@@ -71,7 +71,9 @@ command fails.
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
-   intentional; do not squash them unless the human asks. Acceptance is
+   intentional; do not squash them unless the human asks. A change to
+   `.team/po/handoff.md` is the PO renewing its session at a sprint start or
+   after a story is done; it is expected. Acceptance is
    judged on what the Integration Tester presented to the Customer Proxy:
    `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
    Show these when the human asks how a story was accepted.

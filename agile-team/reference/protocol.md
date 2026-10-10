@@ -124,7 +124,10 @@ overrides applied), `stories` (state plus `opened_at` and the story file's
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
 outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`
 and `answers`. The contract is
-`runner/agile_team/dashboard/fixtures/snapshot.json`.
+`runner/agile_team/dashboard/fixtures/snapshot.json`. The Tokens tab's role
+and story tables show turns per step, the latest step's turns and context
+per turn next to tokens and cost (see "Turns and context"). The timeline
+shows each step-end's turns and each `po-session` renewal.
 
 Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
 outbox.jsonl, inbox.jsonl}`, `.team/stories/*.md` and
@@ -300,11 +303,15 @@ malformed block fails the step (and counts a round).
 ### What the Manager sees
 
 The Manager's runner context carries `budget` (spend, tokens), `spend_by_role`
-(steps, cost, cost per step, tokens and turns per step, most expensive first),
-`friction_since_last_review` (friction from step-ends since its last step) and
-`pending_followups`, beside the review reasons, overrides and capped stories.
-It also carries `test_disputes_since_last_review` (story, role, test, rule,
-rounds for each test dispute since its last step).
+(steps, cost, cost per step, tokens, `turns_per_step`, `latest_turns` and
+`context_per_turn`, most expensive first; see "Turns and context"),
+`long_running_roles`, `friction_since_last_review` (friction from step-ends
+since its last step) and `pending_followups`, beside the review reasons,
+overrides and capped stories. It also carries
+`test_disputes_since_last_review` (story, role, test, rule, rounds for each
+test dispute since its last step). The Manager raises every role in
+`long_running_roles` as friction in its summary, with one proposal: split
+the step, change the brief, or change the tools.
 
 ### Rulings
 
@@ -317,7 +324,32 @@ apply, the report says why and the story does not change:
 `{"ruling", "applied": false, "why"}`. That happens when the step has no
 story (`a ruling needs a story; run the manager on that story`) or the story
 is done (`story sN is done; a ruling cannot move it`).
-Each ledger entry records the step's API `turns` alongside its tokens.
+
+### Turns and context
+
+Each ledger entry (`ledger.jsonl`, one per role step and per PO query)
+records the step's `turns` beside its tokens and cost. The `step-end` event
+carries `turns` too. Ledger lines written before turns were recorded count
+as steps but are left out of turn averages. Per role (and per story on the
+dashboard):
+
+| Field | Meaning |
+|---|---|
+| `turns_per_step` | turns ÷ steps that recorded turns |
+| `latest_turns` | the turns of the role's most recent such step |
+| `context_per_turn` | (input + cache read + cache write tokens) ÷ turns: the average context a turn re-sends |
+
+`long_running_roles` lists each role whose last 3 measured steps include at
+least 2 of more than 30 turns, with those turns and its `context_per_turn`.
+
+There is **no turn cap**: turns are reported, and no step is stopped for
+them. If a cap is ever added, the role gets one warning turn to write its
+handoff before the cap ends the step.
+
+Every query (role steps and the PO) runs with `strict_mcp_config` and
+`ENABLE_CLAUDEAI_MCP_SERVERS=false`. It loads only the MCP servers the
+runner passes (the PO's `team` tools, the Customer Proxy's sandbox servers),
+never the human's claude.ai connectors. Why: `docs/adr/ADR-003-lean-context.md`.
 
 ### The PO stays in its lane
 
@@ -468,6 +500,39 @@ runner passes their reasons on in the next standard brief.
   the last ruling); run-level `scribe_due` and `delivered` (answer ids the
   PO has seen). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
+
+## PO sessions
+
+The PO is the only role whose session lasts across turns. To keep it from
+growing for a whole sprint, the runner **renews** it at two boundaries:
+`start_sprint`, and a story reaching done. Each boundary adds a reason to
+`state.json` `po_renew_due`. Before the PO's next turn that resumes a
+session, the runner renews it once for all the reasons queued, then clears
+them:
+
+1. **Compact** (`po_renew_path: "compact"`, the default). One PO query on
+   the session with `/compact Keep only what your next turns need: open
+   decisions; pending questions with their ids and the stories they block;
+   what is next and why; paths to artifacts …`. It worked if the stream
+   holds a `compact_boundary` system message. The turn then goes on in the
+   same session.
+2. **Handoff** (fallback). If no boundary came back, `po_renew_path` becomes
+   `"handoff"` from then on (it is saved in `state.json`), and the runner deletes
+   `.team/po/handoff.md`. It then asks the PO to write that file (the same
+   list) and starts a **fresh** session. The fresh session's first prompt
+   holds the kickoff header (mode, cadence, roles, the task), the handoff,
+   the `story_status` JSON, the open questions and the prompt the turn was
+   going to send. The new session id is saved when that query ends. If the
+   PO writes no handoff, the old session goes on (`kept`).
+
+Neither path relies on the PO's memory for the human: every open question
+is listed again from the inbox (`- q3 (blocks s5): …`), and answers are
+handed over from `delivered` as before. Each renewal is logged as a
+`po-session` event: `{"path": "compact" | "handoff" | "kept", "reasons":
+[...], "pre_tokens": n | null}`. Renewal queries are ledgered as PO
+entries. A halt during a renewal keeps `po_renew_due`, so the next run
+renews again. The PO may write `.team/po/**`. Older `state.json` files load
+with no reasons and the `compact` path.
 
 ## Backlog and sprints
 

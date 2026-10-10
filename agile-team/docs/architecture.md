@@ -21,13 +21,15 @@ one line here. Older designs are the sections at the end of this file.
 | s13 The team presents the product to the Customer Proxy | [design/s13.md](design/s13.md) |
 | s19 Routing in code: the runner drives, the PO judges | [design/s19.md](design/s19.md) |
 | s11 Test disputes from implement back to tests; rulings at any step | [design/s11.md](design/s11.md) |
+| s23 Keep context small: PO session renewal, turns per step, leaner role sessions | [design/s23.md](design/s23.md) |
 
 ## Components
 
 | Module | Owns | Talks to |
 |---|---|---|
 | `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
-| `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19) | `Runtime`, `Router`, `RunState`, events, relay |
+| `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19); renews the PO's session at boundaries (s23) | `Runtime`, `Router`, `RunState`, events, relay, po_session |
+| `po_session.py` | renewal texts, `RenewPath`, the open-question carry-over and `.team/po/handoff.md` I/O (s23) | relay |
 | `router.py` | `Router`: picks the next step (Manager, Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, handover, gates, relay |
 | `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
@@ -36,7 +38,7 @@ one line here. Older designs are the sections at the end of this file.
 | `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
 | `relay.py` | outbox/inbox with the liaison | none |
-| `ledger.py` | per-step cost, budget checkpoints | none |
+| `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints | none |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox, key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table): lay-out before e2e, completeness check, copy into the sandbox | sandbox, git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |

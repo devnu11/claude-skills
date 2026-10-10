@@ -56,7 +56,12 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
 - **Tokens:** spend by role, story or model (switch with the buttons above
-  the bars), and cumulative spend over time.
+  the bars), and cumulative spend over time. The role and story tables also
+  show **Turns/step** (average turns per step), **Last turns** (the most
+  recent step's turns) and **Context/turn** (how much context each turn
+  re-sends on average), next to tokens and cost. A role whose Context/turn
+  climbs is reading more than its job needs. Steps from before turns were
+  recorded show `—`.
 - **Questions:** questions waiting for your answer (with the
   `agile-team answer` command to copy), and questions a role raised in its
   handoff.
