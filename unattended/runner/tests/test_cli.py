@@ -345,12 +345,11 @@ def test_resume_an_orphan(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("status", [JobStatus.DONE, JobStatus.FAILED])
-def test_resume_refuses_an_ended_job(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], status: JobStatus
-) -> None:
-    make(tmp_path, status)
-    assert run(tmp_path, "resume", "j") == 1
-    assert f"job is {status}" in capsys.readouterr().err
+def test_resume_reruns_an_ended_job(tmp_path: Path, status: JobStatus) -> None:
+    job = make(tmp_path, status)
+    job.update(lambda st: setattr(st, "retries", 4))
+    assert run(tmp_path, "resume", "j", "--foreground") == 0
+    assert (job.load().status, job.load().retries) == (JobStatus.DONE, 0)
 
 
 def test_resume_refuses_a_running_job(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
