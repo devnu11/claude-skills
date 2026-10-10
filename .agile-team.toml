@@ -58,8 +58,9 @@ bin = [
 [[delivery]]
 name = "dashboard"
 kind = "web"
-prepare = "uv run --directory {repo}/agile-team/runner agile-team --repo {sandbox}/presentation/workspace dashboard --host 127.0.0.1 --port 8799 --no-open"
+prepare = "uv run --directory {repo}/agile-team/runner agile-team --repo {sandbox}/presentation/workspace dashboard --host {host} --port {port} --no-open"
 url = "http://127.0.0.1:8799/"
+probe = "api/snapshot"
 
 [roles.architect]
 write = [
