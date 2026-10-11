@@ -158,3 +158,39 @@ def test_event_edge_covers_flow_kinds(dash) -> None:
     block = re.search(r"const EVENT_EDGE = \{(.*?)\n\};", _index(url), re.S).group(1)
     keys = set(re.findall(r'^\s*"?([\w-]+)"?:', block, re.M))
     assert {"step-start", "step-end", "message", "answer"} <= keys
+
+
+def _budget(url: str) -> float:
+    return json.loads(_get(url, "/api/snapshot")[1])["run"]["budget_usd"]
+
+
+def test_budget_follows_config_file_and_pushes(dash) -> None:
+    """s21 AC2: editing .agile-team.toml changes the snapshot and triggers an SSE push."""
+    _, url, _ = dash
+    toml = Path(_repo_of(dash)) / ".agile-team.toml"
+    conn = _conn(url, timeout=8)
+    conn.request("GET", "/api/stream")
+    resp = conn.getresponse()
+    assert b"data:" in resp.fp.readline()
+    old = _budget(url)
+    toml.write_text(re.sub(r"budget_usd = [\d.]+", "budget_usd = 4321.0", toml.read_text()))
+    deadline, seen = time.time() + 6, b""
+    while time.time() < deadline and b"4321" not in seen:
+        seen += resp.fp.readline()
+    conn.close()
+    assert b"4321" in seen
+    assert _budget(url) == 4321.0 != old
+
+
+def _repo_of(dash) -> Path:
+    return dash[2].parent.parent
+
+
+def test_index_toggle_only_on_tokens_chart_and_board_fits(dash) -> None:
+    """s21 AC1/AC3: one unit toggle, and the board columns shrink instead of scrolling."""
+    html = _index(dash[1])
+    assert html.count('id="unit"') == 1 and html.count("data-unit") >= 1
+    assert "ui.unit" in html
+    board = re.search(r"\.col \{([^}]*)\}", html).group(1)
+    assert "flex: 1 1 0" in board and "min-width: 0" in board
+    assert "overflow-x" not in re.search(r"\.board \{([^}]*)\}", html).group(1)
