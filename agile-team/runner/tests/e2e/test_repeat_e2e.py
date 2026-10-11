@@ -34,7 +34,7 @@ def test_same_reason_twice_escalates_to_the_manager_with_no_extra_round(make_run
     story = rt.state.stories["s1"]
     assert story.repeated is None and story.streak == [] and story.rounds == 0
     fault = [e for e in rt.events.events() if e.kind == "fault"]
-    assert fault and fault[0].data["kind"] == "pipeline" and story.step == "implement"
+    assert fault and fault[0].data["kind"] == "pipeline" and fault[0].data["now_at"] == "implement"
 
 
 def test_a_runner_fault_blocks_the_story_and_notes_the_human(make_runtime) -> None:

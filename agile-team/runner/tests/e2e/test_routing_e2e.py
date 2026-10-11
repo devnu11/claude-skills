@@ -10,6 +10,7 @@ from agile_team.po_tools import Tools
 from ..conftest import handoff
 from ..pipeline_helpers import (
     PO_ROLE,
+    PipelineRunner,
     Script,
     add_story,
     ask_and_answer,
@@ -69,9 +70,20 @@ def test_blocked_hands_over_and_continue_story_resumes_with_the_note(make_runtim
     assert rt.state.stories["s1"].status is StoryStatus.DONE
 
 
+class VariedFailures(PipelineRunner):
+    """Red gate whose output differs each time, so no reason repeats."""
+
+    def __call__(self, command: str) -> tuple[int, str]:
+        code, out = super().__call__(command)
+        return code, f"{out} {chr(97 + self.failures % 26) * 3}"
+
+
 def test_round_cap_hands_over_and_stops_routing_that_story(make_runtime) -> None:
     script = Script()
-    rt = build(make_runtime, script, steps=["implement", "review"], failures=99)
+    runner = VariedFailures(99)
+    rt = make_runtime(script, runner=runner)
+    script.rt = runner.rt = rt
+    rt.pipeline.steps = ["implement", "review"]
     rt.pipeline.cap = 2
     add_story(rt, "s1", "implement")
     drive(rt)
