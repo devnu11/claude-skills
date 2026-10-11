@@ -366,8 +366,9 @@ class Preparer:
                 break
             if attempt + 1 < self.attempts:
                 self.sleep(PROBE_EVERY_S)
+        reason = self._not_up_reason(prepared)  # before stop(): it sets a signal exit code
         prepared.stop()
-        raise NotUp(self._not_up_reason(prepared))
+        raise NotUp(reason)
 
     def _not_up_reason(self, prepared: Prepared) -> str:
         name, url = prepared.delivery.name, prepared.probe_url()
