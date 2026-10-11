@@ -64,7 +64,12 @@ command fails.
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
    The dashboard shows step-by-step progress. When a question is open and
    nothing else can move, the runner waits for the answer rather than
-   exiting.
+   exiting. **Order of work** is data, not prose: the PO sets it with
+   `prioritise`, `move_story` or the order of `start_sprint`'s list, and the
+   router follows it. When the human states an order ("s30 before s29"),
+   relay it to the PO. The board shows each story's `#position`. A story
+   that cannot move shows `⏸ <reason>` and what it waits on; it keeps its
+   place and runs once it is released.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
    something the PO did not ask for, stop the runner and resume with it:
    `$AT stop`, then `$AT start --resume --task "<the human's words, verbatim>"`.
@@ -82,7 +87,7 @@ command fails.
    `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
    in use means another process holds the delivery's port. Tell the human.
    When the same setback repeats on a story, the runner stops the loop and
-   runs the Manager on it (`needs manager · repeat` on the dashboard). It
+   runs the Manager on it (`⏸ manager` on the dashboard board). It
    does the same when a story bounces between the same two steps
    `[gates] backstop` times in a row (default 4) for any reasons (the
    timeline says `back and forth → needs manager`). An

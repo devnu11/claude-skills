@@ -37,6 +37,28 @@ Unfinished stories that the new sprint does not list go back to the backlog.
 To add a story halfway through, the PO starts a new sprint that lists it
 along with the stories still in progress.
 
+## The order of work
+
+The team works in an explicit order, not in the order stories were written.
+Tell the Product Owner the order you want ("gate fixes first: s24, s30, s26;
+then s37"). The PO records it, and the runner follows it:
+
+- The story highest in the order that can move goes next.
+- A story that is not in the order yet comes after the ones that are. Among
+  those, a story already under way goes before one not started.
+- A story waiting on something (your answer, the Manager, the round cap)
+  keeps its place and is skipped until it is released.
+
+On the dashboard's **Board**, every column lists stories in that order, and
+each card shows its position (`#1` is next). A waiting story shows
+`⏸ questions`, `⏸ manager`, `⏸ round cap`, `⏸ needs the human` or `⏸ held`,
+with a `waits on:` line naming the question (for example `m38: …`) or the
+reason. Each change to the order appears in the timeline as a **priority**
+row: who moved what, from which position to which, and why.
+
+`agile-team status` shows the stories in the order they were created. The
+Product Owner's `story_status` and the dashboard show the priority order.
+
 ## Resuming an older run
 
 If you resume (`start --resume`) a run that began before backlogs existed,

@@ -28,6 +28,7 @@ one line here. Older designs are the sections at the end of this file.
 | s27 A repeated setback escalates to the Manager instead of looping | [design/s27.md](design/s27.md) |
 | s29 Sync with upstream at sprint start; each sprint as a rebased, checked, stacked PR | [design/s29.md](design/s29.md) |
 | s9 Recover from an interrupted step: keep its edits, stop reporting a dead run as running | [design/s9.md](design/s9.md) |
+| s40 Story priority lives in code: an explicit order the PO sets, the router follows and the board shows, with holds marked | [design/s40.md](design/s40.md) |
 
 ## Components
 
@@ -36,7 +37,7 @@ one line here. Older designs are the sections at the end of this file.
 | `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
 | `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19); renews the PO's session at boundaries (s23) | `Runtime`, `Router`, `RunState`, events, relay, po_session |
 | `po_session.py` | renewal texts, `RenewPath`, the open-question carry-over and `.team/po/handoff.md` I/O (s23) | relay |
-| `router.py` | `Router`: picks the next step (the sprint boundary or its DevOps fix (s29), Manager, the Manager on a repeated setback (s27), Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, `BoundaryRunner`, handover, gates, relay |
+| `router.py` | `Router`: picks the next step (the sprint boundary or its DevOps fix (s29), Manager, the Manager on a repeated setback (s27), Scribe, the movable sprint story earliest in the priority ranking (s40)), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, `BoundaryRunner`, handover, gates, relay |
 | `boundary.py` | sprint boundary data and texts (s29): `Boundary`, `Failure`, `StackEntry`, `UpstreamState`, stages, fix briefs, the Manager's `repeated_boundary` view; no I/O | loops |
 | `boundary_runner.py` | `BoundaryRunner` (s29): runs one boundary stage per router tick (sync, check, review, push), opens fix steps, escalates repeats, finishes the boundary | `Runtime`, upstream, stack, fullcheck, relay, events |
 | `upstream.py` | the one narrow interface to the remote (s29): `Upstream` (fetch, merge in, leased push of review branches only) and the `Prs` protocol (`GhPrs` over `gh`, `NoPrs`) | git_ops |
@@ -49,7 +50,9 @@ one line here. Older designs are the sections at the end of this file.
 | `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
 | `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27), `dispatch_refusal`, command gates | roles (`Handoff`), loops |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
-| `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
+| `priority.py` | story priority (s40): `Priority` (the one ranking rule `key`, `ranked`, `queue`, `with_first`, `with_move`), refusals, `moves`; no I/O | gates (`StoryState`) |
+| `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |
+| `state.py` | `RunState` (with the PO's story `order`, s40) and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
 | `relay.py` | outbox/inbox with the liaison | none |
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |

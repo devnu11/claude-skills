@@ -100,8 +100,8 @@ decides whose fault the loop is:
   always fails: the story is blocked, and you get a note that starts
   `Runner fault on sN`. The PO plans the fix.
 
-On the dashboard such a story shows **needs manager · repeat** with the
-reason. The timeline shows the escalation and the Manager's verdict.
+On the dashboard's board such a story shows **⏸ manager**, with the
+repeated reason on its `waits on:` line. The timeline shows the escalation and the Manager's verdict.
 `agile-team status` shows `"repeated"` (the reason) and `"streak"` (the
 setbacks so far) on the story.
 

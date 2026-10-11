@@ -162,12 +162,19 @@ It never writes, and it never serves files by path.
 | anything else | 404 (other methods: 501) |
 
 The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
-task, budget, Manager checkpoint percentage, round cap, `manager_due`),
-`pipeline` (enabled steps), `roles` (name, model, provider, with PO
-overrides applied), `stories` (state plus `opened_at`, `repeated` and the
-story file's `acceptance`; the board shows a repeated story as `needs
-manager · repeat` with its reason, and the timeline shows `escalation` and
-`fault` events), `requirements` (from `<docs>/requirements/REQ-*.md`, with
+task, budget, Manager checkpoint percentage, round cap, `manager_due`,
+`order`: the priority queue), `pipeline` (enabled steps), `roles` (name,
+model, provider, with PO overrides applied), `stories` (in priority order;
+state plus `opened_at`, `repeated`, the story file's `acceptance`,
+`position`, `in_progress`, `hold` and `wait`: `{"reason", "on"}` or
+`null`). The board keeps that order in every column and shows each
+unfinished story's `#position`. A story that cannot move shows one pill,
+`⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
+`needs the human` (blocked, or an open question names it) or `held` (any
+other hold). Below the pill is a `waits on: …` line with the open question
+ids and texts, and the last step's summary or the repeated reason. The
+timeline shows `escalation`, `fault` and `priority` events. The remaining
+keys are `requirements` (from `<docs>/requirements/REQ-*.md`, with
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
 outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`,
 `answers` and `upstream` (remote, branch, team branch, push permission, the
@@ -676,8 +683,11 @@ involved, in this order:
    current sprint, not held, not blocked by a question; see "Repeated
    setbacks");
 3. the `scribe`, on each story that has just reached done (`scribe_due`);
-4. the next step of the first **movable** story. A movable story is in the
-   current sprint, `active` and not held, and no open question blocks it.
+4. the next step of the movable story that comes first in the **priority
+   ranking** (see "Story priority"). A movable story is in the current sprint,
+   `active` and not held, and no open question blocks it. A story that is not
+   movable keeps its place in the order and is skipped until it is released.
+   Step 2 also takes the escalated story that comes first in the ranking.
 
 The role for a story step is the first of these that fits the step: the PO's
 `set_developer` choice, the role a bounce named (`next_role`), the role that
@@ -756,7 +766,8 @@ story.
   row between one pair of steps), `repeated` (the repeated reason while
   escalated, else `null`), `escalated_by` (`repeat`, `backstop` or
   `null`) and `interrupted` (saved work from an interrupted step, offered to
-  the next step; see "Interrupted steps"); run-level `scribe_due`, `delivered` (answer ids the
+  the next step; see "Interrupted steps"); run-level `order` (the PO's
+  story order; see "Story priority"), `scribe_due`, `delivered` (answer ids the
   PO has seen), `goal` (the current sprint's goal), `boundary` and
   `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
@@ -818,6 +829,49 @@ committed to, or `null` when it is in the backlog.
 - `start_sprint` opens the sprint's **start boundary**, and it is refused
   while a boundary is pending (`sprint N <edge> boundary is still pending
   (…); finish it first`). See "Sprint boundaries".
+- The order in which `start_sprint` lists its stories is their priority (see
+  "Story priority").
+
+## Story priority
+
+`state.json` `order` is the PO's explicit list of story ids. It covers
+sprint stories and the backlog. One rule ranks every story. These keys are
+compared in turn:
+
+1. done stories come last;
+2. the story's index in `order`; stories not in `order` come after those
+   that are;
+3. among stories with no explicit place, a story **in progress** (past the
+   first pipeline step, or a step already ran on it) comes before one not
+   started. This limits work in progress;
+4. the id, with numbers compared as numbers (`s9` before `s10`).
+
+So an explicit place always beats in-progress. The unfinished stories in
+this ranking are the **queue**. A story's **position** is its place in the
+queue (1 = next). The router follows the ranking (see "Routing"). Holds,
+open questions, the round cap and blocks never change the order. A held
+story keeps its position and is skipped until it is released. A file
+without `order` loads with an empty list, which ranks by rules 3 and 4.
+
+PO tools:
+
+- `prioritise(stories, reason)` puts the listed ids first, in the order
+  given. Every other unfinished story keeps its order after them.
+- `move_story(story, position, reason)` moves one story to `position`.
+- `start_sprint(goal, stories)` puts the sprint's stories first, in the
+  order listed. Its reason is the goal.
+
+Each change saves the whole new queue as `order`. A story opened later has
+no explicit place until the PO gives it one. Refusals change nothing:
+`no stories listed; pass the story ids in the order to work on them`,
+`unknown stories: s7; open them with open_story first`, `done stories have
+no place in the order: s1`, and `position must be a whole number from 1 to
+N`. Each change is logged as a `priority` event (role `product-owner`;
+`story` is the moved story for a move):
+`{"change": "set" | "move" | "sprint", "order": [...], "moves": [{"story",
+"from", "to"}], "reason": "..."}`. `moves` lists only the stories whose
+position changed. `story_status` returns the stories in ranking order, with
+`order` set to the queue.
 
 ## Sprint boundaries: sync, full checks, review stack
 

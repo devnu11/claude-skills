@@ -40,9 +40,12 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 - **Header:** the run's status, sprint, task, spend against the budget, and
   the step that is running now.
-- **Board:** a backlog column, one column per pipeline step, and done. Each
-  card shows the story's rounds, plus a flag when it is blocked or waiting
-  for the Manager.
+- **Board:** a backlog column, one column per pipeline step, and done. Every
+  column lists stories in priority order, and each unfinished card shows its
+  position (`#1` runs next) and its rounds. A story that cannot move shows
+  `⏸ <reason>` (`questions`, `manager`, `round cap`, `needs the human` or
+  `held`) and a `waits on:` line. See
+  [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
   status, and questions and answers between the PO and you, next to a
   timeline of recent events. You and the customer proxy are in the top row.
