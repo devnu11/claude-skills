@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s21 done)
+**Last updated:** 2026-10-11 (s45 done)
+
+## s45: Crash log now captures exceptions with tracebacks
+
+Role steps that crash now write their tracebacks to `.team/run/crash.log` for diagnosis. Each crash goes to the log exactly once. This does not affect your acceptance testing; it is for the team to diagnose runner issues.
 
 ## s21: Dashboard features: toggle, live budget, Done column
 

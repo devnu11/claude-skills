@@ -1,8 +1,21 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s45 done)
 
 See `developer.md` for the base conventions.
+
+## s45: Crash logging, fault rulings on any story, blocked release
+
+Manager step crash fixed, crash log now captures all role-step exceptions, fault rulings work on any story, and `continue_story` blocks release of blocked stories. Key modules affected:
+
+- **`dispatch.py` (`Runtime`):** `run_role` wraps `_run_step`, catches and logs any exception exactly once (C1); `_run_planned` wraps `settle` (C2); `_step_failed` handles non-limit errors (C3); `_rulings` takes fault path when `handoff.fault` or `story.repeated` set (M1); `_rule_after_fault` applies fault then ruling (M5); `_fault_refusal` checks in order (M2); `_fault` reads reason before clear (M4). Helpers: `_names_fault`, `_unapplied_ruling`.
+- **`gates.py`:** `ruling_refusal(story, what)` parametrized; `setback_reason(story)` reads reason before clear; `continue_refusal(story)` blocks blocked-story release (B1); `Pipeline.apply_fault` clears hold (M3).
+- **`po_tools.py`:** `Tools.continue_story` applies `continue_refusal` after story lookup.
+- **`handover.py`:** M7 wording for `RUNNER_FAULT_NOTE`, `OFF_PIPELINE_FAULT`, `FAULT_NOT_APPLIED`.
+- **Role prompts:** `manager.md` on fault naming any story; `product-owner.md` on blocked-story refusal.
+- **Docs:** `reference/protocol.md` covers crash log (C1), fault path (M1–M6), continue_story (B1).
+
+See ADR-0023, design `agile-team/docs/design/s45.md` (rules C1–C4, M1–M7, B1–B2).
 
 ## s38: Budget correction and ceiling
 

@@ -1,6 +1,24 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s45 done)
+
+## s45: Fault rulings work on any story; report shows applied/unapplied
+
+Your fault rulings now work on any story that needs a fault (not just repeated bounces). Report shows whether each fault/ruling was applied and why if not. New hand-over: `fault_not_applied` for missing/unknown faults.
+
+**Fault path (M1):** Taken when `handoff.fault` is named OR `story.repeated` is set. Otherwise only `ruling` considered.
+
+**Applied fault (M3):** On any story, moves `step` to named role (or `runner`), sets `status` from fault kind, clears hold/rounds/disputes/dispute/streak/run/repeated/escalated_by.
+
+**Reason read early (M4):** Fault reason = repeated reason (if set), else last gate reason, else empty. Read before clearing repeated.
+
+**Ruling after fault (M5):** Only applied if fault applied; otherwise reported unapplied with `reason: "the fault was not applied, so the ruling was not either"`.
+
+**Report (M6):** `"fault": {applied, why, ...}` and/or `"ruling": {applied, why, ...}` show all decisions. Report goes in `run_role` result and hand-over lines.
+
+Example: s29 was escalated with `repeated` set. Without `repeated`, it is blocked from a runner fault escalated by unit-tester. Now you can rule on either: fault to a role moves it; fault to runner keeps it blocked; ruling wins if fault applied.
+
+See ADR-0023, design `agile-team/docs/design/s45.md` (rules M1–M7).
 
 ## s38: Corrected cost accounting and budget ceiling
 

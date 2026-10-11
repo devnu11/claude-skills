@@ -1,6 +1,18 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s45 done)
+
+## s45: Crash logging, fault rulings on any story, blocked release
+
+Three architectural decisions: crash logging pipeline, fault ruling extension, and blocked-story release safety.
+
+**Crash logging (C1–C4):** Single logging point in `Runtime.run_role` wraps `_run_step` in try/except. Every exception after refusal is logged to `crash.log` exactly once by `halt.log_traceback()`, then re-raised. Settle moves inside try in `_run_planned` (C2). Limits caught in `_step_failed`, logged there, converted to halted report (C3). Router and PO loop unchanged (C4). One entry per call; traceback included.
+
+**Fault ruling extension (M1–M7):** Fault path taken when `handoff.fault` is named OR `story.repeated` is set (M1). Same refusal checks for both (M2). Applied fault clears state uniformly (M3). Reason read before clearing repeated (M4). Ruling conditional on fault (M5). Report structure identical to dispatch (M6). Wording for runner/off-pipeline/not-applied faults (M7).
+
+**Blocked-story release (B1):** `continue_story` refused on blocked stories, regardless of hold. Reason tells PO to run Manager. Consequence: stories cannot silently stall when blocked by a runner fault or other escalation.
+
+Pattern: Three problems (crash logging, fault scope, release safety) from one sprint's incident (s29 held). Each is now enforced in code (not prompt). See ADR-0023, design `agile-team/docs/design/s45.md` (rules C1–C4, M1–M7, B1–B2).
 
 ## s37: Unattended wake time and reason sources
 

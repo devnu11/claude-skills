@@ -1,11 +1,12 @@
 # Scribe: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s45 done)
 
 ## Your mission: record decisions and refresh briefs
 
 After each completed story, create an ADR and refresh affected role briefs (under 30 lines each, no append). Recent stories and their ADRs:
 
+- **s45 (done):** Manager crash fixed; crash log captures tracebacks; fault rulings work on any story; blocked release blocked. **ADR-0023.** Affects: developer-cli, unit-tester, manager, product-owner, architect, customer-proxy.
 - **s38 (done):** Budget numbers and ceiling - status, dashboard and the budget check use the corrected ledger, and the ceiling halts the run. **ADR-007.** Affects: developer-cli, unit-tester, code-reviewer, product-owner, architect, manager.
 - **s37 (done):** Unattended wake time and reason sources. **ADR-0020.** Affects: developer-cli, unit-tester, code-reviewer, product-owner, architect.
 - **s29 (done):** Sync with upstream and deliver stacked PRs. **ADR-0015.** Affects: developer-cli, unit-tester, product-owner, manager, devops, architect, code-reviewer.

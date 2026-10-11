@@ -1,6 +1,18 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s21 done)
+**Last updated:** 2026-10-11 (s45 done)
+
+## s45: Crash logging, fault rulings, continue_story block
+
+Crash log now captures all role-step exceptions exactly once, faults work on any story, and blocked stories cannot be released. Test areas (design section 7, test_s45.py):
+
+1. **Crash log (AC3):** TypeError in `settle`, `_execute`, `plan` each gives one `crash.log` entry; through router and limit halt also log once; settle crash saves edits.
+2. **Manager step (AC2):** Real `Runtime.emit` path (no mock) with each fault/ruling case (pipeline/off_pipeline/runner, capped story/repeated); old signature fails with `TypeError`.
+3. **Faults on any story (AC5-AC6):** Blocked story with fault → moves, status changes, hold/rounds/disputes cleared; runner fault → stays blocked, held `runner_fault`; fault without story → `applied: false`; done story fault → `applied: false`; unknown fault → `applied: false` with new wording.
+4. **Ruling after fault (M5):** Unapplied fault → ruling also unapplied with `RULING_AFTER_FAULT`; applied fault → ruling merges and wins.
+5. **Continue_story blocked (AC7):** Blocked story (with or without hold) refused with `CONTINUE_BLOCKED`; active/done unchanged.
+
+Existing tests (`test_s27_backstop.py`, others) may need M7 wording updates (RUNNER_FAULT_NOTE, OFF_PIPELINE_FAULT, FAULT_NOT_APPLIED). Change expected strings only. See ADR-0023, design `agile-team/docs/design/s45.md`.
 
 ## s38: Corrected budget numbers and ceiling
 

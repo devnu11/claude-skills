@@ -1,6 +1,18 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s45 done)
+
+## s45: Manager crash fixed; blocked stories cannot be released; faults on any story
+
+Manager step crash fixed (emit signature), crash log now captures all exceptions, fault rulings work on any story (not just repeated ones), and `continue_story` is blocked for blocked stories.
+
+**Your changes:**
+- **Blocked-story release blocked (B1):** `continue_story` on a blocked story is now refused. Reason: the story cannot move while blocked (would stall). Run the manager on it with a `ruling` or `fault` to move it.
+- **Faults on any story (M1):** Manager can name a fault on any story: repeated bounces, escalations from round cap, runner faults from unit-tester escalate. The fault path taken when `handoff.fault` is named OR `story.repeated` is set.
+- **Report shows applied/unapplied (M6):** Every fault/ruling appears in the report with `applied: true|false` and `why` when false. New hand-over: `fault_not_applied` for missing/unknown faults.
+- **Crash log now has tracebacks (C1):** Any role-step exception is logged to `.team/run/crash.log` exactly once, with traceback. Previous crashes without logs can now be diagnosed.
+
+See ADR-0023, design `agile-team/docs/design/s45.md` (rules B1, M1, M6, C1).
 
 ## s38: Budget correction and the ceiling halts the run
 
