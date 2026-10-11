@@ -368,6 +368,19 @@ def test_a_service_that_never_answers_is_stopped_and_reported(config: cfg.Config
     assert not pid_file(config).exists()
 
 
+def test_a_real_hung_service_is_reported_as_not_answering_not_as_killed(
+    config: cfg.Config,
+) -> None:
+    """The runner's own SIGTERM must not turn a timeout into 'exited with code -15'."""
+    d = Delivery("ui", "web", prepare="exec sleep 60", url=URL, probe="api/snapshot")
+    made = Preparer(probe=Probe(None), listening=lambda _h, _p: False, sleep=lambda _s: None)
+    made.attempts = 2
+    with pytest.raises(NotUp) as info:
+        made.prepare(config, Order(d))
+    assert str(info.value).startswith(f"delivery 'ui' did not answer {PROBE_URL} within 0.5s.")
+    assert "exited with code" not in str(info.value)
+
+
 def test_empty_log_reads_no_output(config: cfg.Config, stopped) -> None:
     with pytest.raises(NotUp, match=r"Last output:\n\(no output\)"):
         preparer(FakePopen(FakeProcess(2)), Probe(None)).prepare(config, Order(DASHBOARD))
@@ -446,6 +459,8 @@ def serve(status: int, body: bytes, ctype: str) -> ThreadingHTTPServer:
         (200, b"not json", "application/json", False),
         (500, b'{"a": 1}', "application/json", False),
         (404, b"no", "text/plain", False),
+        (204, b"", "text/plain", False),
+        (201, b"{}", "application/json", False),
     ],
 )
 def test_http_answers(status: int, body: bytes, ctype: str, answers: bool) -> None:
@@ -470,6 +485,31 @@ def test_http_answers_is_false_for_a_bad_url() -> None:
 
 
 # ----- L7: stale services ---------------------------------------------------
+
+
+def test_a_stale_group_that_ignores_sigterm_is_killed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.2)
+    proc = subprocess.Popen(
+        ["sh", "-c", 'trap "" TERM; echo ready; exec sleep 60'],
+        start_new_session=True,
+        stdout=subprocess.PIPE,
+    )
+    try:
+        assert proc.stdout is not None
+        proc.stdout.readline()  # the trap is set once it says ready
+        root = tmp_path / "box"
+        pid_file_ = tmp_path / "box.pid"
+        pid_file_.write_text(str(proc.pid))
+        sandbox.stop_stale(root)
+        assert proc.wait(timeout=5) == -signal.SIGKILL
+        assert not pid_file_.exists()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        if proc.stdout:
+            proc.stdout.close()
 
 
 def reaped(process: subprocess.Popen) -> subprocess.Popen:
