@@ -194,6 +194,8 @@ class Router:
         work = self.next_work()
         if work:
             return await self._step(work)
+        if self.boundaries.open_end():
+            return None  # the boundary just opened is the next work; do not wait for it
         idle = self._idle()
         if idle is None:
             await self._wait()
@@ -330,9 +332,7 @@ class Router:
             return None
         return self._stalled([s for s in mine if s.status is not StoryStatus.DONE])
 
-    def _sprint_end(self) -> Pass | None:
-        if self.boundaries.open_end():
-            return None
+    def _sprint_end(self) -> Pass:
         state = self.runtime.state
         lines = [f"Sprint {state.sprint} is complete: every story in it is done."]
         if state.upstream.report:
