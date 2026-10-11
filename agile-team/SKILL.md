@@ -109,9 +109,17 @@ command fails.
    - `failed` (exit 70): relay the note and show the last entry of
      `.team/run/crash.log`. Ask the human whether to resume.
    - `stopped` (exit 143): the run ended because of `stop --now`.
-   If `git status --porcelain` then shows changes, a step was cut off
-   mid-way. Show the changes to the human and ask what to do before resuming.
-   Do not stash or discard them on your own.
+   A step cut off mid-way keeps its edits: the runner commits them as
+   `chore(team): interrupted step by <role> on <story>`, reverts that commit
+   at once, and names the sha in the note. The next step on the story is
+   offered the work, so you do nothing. **Never stash, discard or commit
+   files by hand.**
+   - `interrupted` in `$AT status` (`running: false`): the runner was killed
+     outright (kill -9, closed terminal, Ctrl-C). Tell the human. On their
+     word, `$AT start --resume` saves the leftover edits the same way and
+     carries on.
+   - If preflight still refuses a dirty tree, the changes have no
+     interrupted run behind them. Show them to the human and ask.
 
 ## Rules
 

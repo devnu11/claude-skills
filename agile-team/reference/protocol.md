@@ -24,7 +24,8 @@ Run from the target repo root, or pass `--repo PATH`.
 `init` (without `--detect`) in a directory that is not a git work tree prints
 `agile-team init: not a git repository: <repo>; run git init first` and exits 1.
 
-Preflight refuses to start when: the tree is dirty; with `auth = "api-key"`,
+Preflight refuses to start when: the tree is dirty (except after a kill, see
+"Interrupted steps"); with `auth = "api-key"`,
 no key file exists, the repo key file is not gitignored, or a key file is not
 mode 600; with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
 command's executable is missing; `config check` fails.
@@ -51,8 +52,11 @@ the human's test result. The runner itself posts `blocked`, `failed` or
 
 Other run files: `state.json` (resume state; `task` holds the last
 non-resume `start --task`, `""` in older files; `po_cost` holds the PO
-session's last running cost, see "Ledger cost"), `ledger.jsonl` (per-step cost),
-`runner.pid`, `stop`, `crash.log` (append-only tracebacks of every error the
+session's last running cost, see "Ledger cost"; `in_flight` the role step
+running now as `{role, story, brief}`, else `null`; `interrupted` the
+interrupted steps not yet shown to the PO, see "Interrupted steps"),
+`ledger.jsonl` (per-step cost), `runner.pid` (the live runner's pid; a
+stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
 (what the Integration Tester presents to the Customer Proxy: see
@@ -70,6 +74,10 @@ runner handled, each headed `--- <time> <ExceptionType>`),
 | `blocked` | PO (`notify_user`) or runner | Nothing can move without the human, or a usage limit was hit. |
 | `failed` | runner | The runner crashed. |
 | `stopped` | runner | `stop --now` (SIGTERM) ended the run. |
+| `interrupted` | derived by `status` and the dashboard, never stored | `state.json` says `running`, but `runner.pid` is missing or names a dead process: the runner was killed outright (`kill -9`, power loss, Ctrl-C). `running` is `false`. |
+
+`status` also shows `running` (a live process holds `runner.pid`),
+`in_flight` and `interrupted`.
 
 `status_reason` says why the runner stopped (`null` otherwise). For example:
 `session limit, resets 2:20pm (America/Edmonton)`, `crashed: RuntimeError:
@@ -102,10 +110,44 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   first turn, so a limit stop never leaves the resumed PO refused. When the
   PO's own query failed with an SDK error result (a limit included), its
   session id is saved, so the resume continues that session.
-- A step cut off mid-way can leave uncommitted edits, and preflight then
-  refuses the dirty tree. After a halt the runner commits nothing more: the
-  cut-off step's edits and the PO's edits from that turn stay in the tree
-  for the human.
+- A step cut off mid-way never leaves its edits in the tree (see
+  "Interrupted steps"). The halt note ends with
+  `; <role> on <story>'s edits are saved in <sha> (git cherry-pick -n <sha>)`.
+  The stderr line does not change.
+
+### Interrupted steps
+
+The runner records the role step in flight (`in_flight`: role, story,
+brief) when the step starts and clears it when the step settles. A step
+that ends without settling is **interrupted**. Its cause is one of:
+
+| Cause | When the edits are saved |
+|---|---|
+| `error` | at once, when a role step raises an error that is not a limit (the PO still gets the error text) |
+| `limit`, `crash`, `sigterm` | when the run halts (see the table above) |
+| `killed` | on `start --resume`, when `state.json` says `running` and `runner.pid` is missing or dead |
+
+Saving means: every changed path, in scope or not, goes into one commit
+`chore(team): interrupted step by <role> on <story>` (body `cause: <cause>`),
+which is reverted at once, so the tree is clean. With nothing in flight,
+the edits are the PO's own turn's (`by product-owner`). The sha is stored
+on the story (`interrupted`) and logged as a `step-interrupted` event
+(`{cause, commit, brief}`). A step with no edits records no sha.
+
+- The next prompt for **any** role on that story says so and offers the
+  work back (``git cherry-pick -n <sha>``). The offer is cleared when a step
+  on the story settles.
+- Every cause but `error` is also queued in `state.json` `interrupted`. The
+  PO's next opening prompt gets an `## Interrupted steps` section (role,
+  story, cause, sha, brief), and the queue is cleared. With pending
+  interrupted steps, `start --resume` without `--task` gives the PO a turn
+  before any router pass.
+- `start --resume` after a kill prints
+  `agile-team start: the last run was killed; <role> on <story>'s edits are saved in <sha> (reverted)`
+  before preflight. A dirty tree with no interrupted run behind it (any other
+  status, a live pid, or a plain `start`) is still refused.
+- If git fails while saving, the error goes to `crash.log`, the tree is
+  left as it is, and preflight refuses it on the next start.
 
 ## Dashboard
 
@@ -701,7 +743,8 @@ story.
   running a step.
 - `start --resume` with no `--task` runs a router pass first. The PO gets a
   turn only when that pass hands over; its prompt then starts with the resume
-  note.
+  note. Exception: with interrupted steps pending, the PO gets the first
+  turn (see "Interrupted steps").
 - Each hand-over is logged as a `handover` event:
   `{"triggers": [...], "stories": [...], "steps": n}`.
 - `state.json` additions: per story `developer`, `po_developer`, `hold`,
@@ -711,8 +754,9 @@ story.
   the last ruling), `implemented` (implement-gate passes), `streak` (the
   setbacks since the key last changed), `run` (the bounces and returns in a
   row between one pair of steps), `repeated` (the repeated reason while
-  escalated, else `null`) and `escalated_by` (`repeat`, `backstop` or
-  `null`); run-level `scribe_due`, `delivered` (answer ids the
+  escalated, else `null`), `escalated_by` (`repeat`, `backstop` or
+  `null`) and `interrupted` (saved work from an interrupted step, offered to
+  the next step; see "Interrupted steps"); run-level `scribe_due`, `delivered` (answer ids the
   PO has seen), `goal` (the current sprint's goal), `boundary` and
   `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.

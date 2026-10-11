@@ -65,6 +65,10 @@ rule, update in the same story:
 - Every halt goes through `Runtime.halt_run`. A new kind of stop is a new row
   in `halt.HALTS`, and a new limit phrasing is a new row in
   `halt.LIMIT_PATTERNS` (see ADR-001).
+- A step that ends without settling saves its edits through
+  `recovery.Salvager` (a reverted commit, ADR-006). Never leave a cut-off
+  step's edits in the tree, and never let `settle_po` quarantine them as the
+  PO's. A new way for a step to end early is a new `salvage.Cause`.
 
 ## Events and the dashboard contract
 

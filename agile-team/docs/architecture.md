@@ -27,6 +27,7 @@ one line here. Older designs are the sections at the end of this file.
 | s24 Tests gate accepts code from an earlier pass; a hold on a done story can be cleared | [design/s24.md](design/s24.md) |
 | s27 A repeated setback escalates to the Manager instead of looping | [design/s27.md](design/s27.md) |
 | s29 Sync with upstream at sprint start; each sprint as a rebased, checked, stacked PR | [design/s29.md](design/s29.md) |
+| s9 Recover from an interrupted step: keep its edits, stop reporting a dead run as running | [design/s9.md](design/s9.md) |
 
 ## Components
 
@@ -44,6 +45,8 @@ one line here. Older designs are the sections at the end of this file.
 | `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
+| `salvage.py` | a step cut short (s9): `Cause`, `InFlight`, `Interruption`; save the tree as a reverted commit; the note, brief and resume texts | git |
+| `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
 | `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27), `dispatch_refusal`, command gates | roles (`Handoff`), loops |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
 | `state.py` | `RunState` and `state.json` load/save | gates (`StoryState`) |
@@ -871,6 +874,9 @@ The real SDK always passes `exit_code`, which appends ` (exit code: 1)` to
     emitted, and the story's step and rounds are unchanged.
 
 ### How s9 and s10 plug in (not in s8's scope)
+
+s9 is now designed in [design/s9.md](design/s9.md). Its rule I5 supersedes
+H15: a halt saves the cut-off edits in a reverted commit.
 
 - **s9, in-flight step.** Record `state.in_flight = {role, story, brief}` in
   `run_role` after `STEP_START`, before `_run_planned`. `settle` clears it.
