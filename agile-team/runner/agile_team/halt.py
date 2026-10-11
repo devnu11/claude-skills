@@ -18,7 +18,13 @@ SIGTERM_REASON = "stopped by stop --now"
 REASON_LIMIT = 200
 RESUME = "run `agile-team start --resume`"
 BUDGET_REASON = "budget reached: spent ${spent:,.2f} of ${budget:,.2f}"
-BUDGET_ADVICE = f"raise team.budget_usd in .agile-team.toml and commit it, then {RESUME}"
+BUDGET_ADVICE = (
+    "raise team.budget_usd in .agile-team.toml and commit it, run "
+    f"`agile-team accept-checkout`, then {RESUME}"
+)
+CHECKOUT_ADVICE = (
+    f"put the checkout back, or keep it with `agile-team accept-checkout`, then {RESUME}"
+)
 
 
 class HaltKind(StrEnum):
@@ -28,6 +34,7 @@ class HaltKind(StrEnum):
     CRASH = "crash"
     SIGTERM = "sigterm"
     BUDGET = "budget"
+    CHECKOUT = "checkout"
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,7 @@ HALTS: dict[HaltKind, HaltRule] = {
     ),
     HaltKind.SIGTERM: HaltRule(RunStatus.STOPPED, "stopped", 143, f"{RESUME} to continue"),
     HaltKind.BUDGET: HaltRule(RunStatus.BLOCKED, "blocked", 77, BUDGET_ADVICE),
+    HaltKind.CHECKOUT: HaltRule(RunStatus.CHECKOUT_CHANGED, "question", 78, CHECKOUT_ADVICE),
 }
 
 

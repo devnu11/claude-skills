@@ -188,6 +188,8 @@ class Router:
         return Pass([], [], [], self.steps)
 
     async def _tick(self) -> Pass | None:
+        if self.runtime.checkout_moved():
+            return None
         news = self._news()
         if news:
             return self._deliver(news)

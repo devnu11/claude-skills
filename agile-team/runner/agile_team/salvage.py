@@ -36,6 +36,7 @@ class Cause(StrEnum):
     CRASH = "crash"
     SIGTERM = "sigterm"
     BUDGET = "budget"
+    CHECKOUT = "checkout"
     KILLED = "killed"
 
 

@@ -21,8 +21,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from . import checkout, gates, halt, keys, onboard, presentation, recovery, sandbox
 from . import config as config_mod
-from . import gates, halt, keys, onboard, presentation, recovery, sandbox
 from . import state as state_mod
 from .dashboard import server
 from .dashboard.server import DashboardServer
@@ -336,6 +336,9 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     """Preflight, then run the Product Owner loop in the foreground."""
     place, start = Place.of(args), start_from(args)
     config = _load_config(place.repo)
+    moved = checkout.Guard(config.run_dir, Git(config.repo)).on_start()
+    if moved:
+        return _report(moved)
     _recover(config, start)
     _require_preflight(config, place.home)
     runtime = make_runtime(place, query_fn or default_query())
@@ -438,6 +441,7 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
         "budget": budget_status(Ledger(config.run_dir / LEDGER), config.team.budget_usd),
         "boundary": asdict(st.boundary) if st.boundary else None,
         "upstream": asdict(st.upstream),
+        "checkout": asdict(st.checkout) if st.checkout else None,
     }
 
 
@@ -459,6 +463,19 @@ def cmd_stop(args: argparse.Namespace, kill: Kill = os.kill) -> int:
         print("stop requested; runner signalled")
         return 0
     print("stop requested; the team stops after the current step")
+    return 0
+
+
+def cmd_accept_checkout(args: argparse.Namespace) -> int:
+    """Keep the current branch and HEAD as the checkout the runner expects (s61)."""
+    config = _load_config(repo_of(args))
+    if state_mod.runner_alive(config.run_dir):
+        raise CliError("the runner is running; stop it first")
+    try:
+        record = checkout.Guard(config.run_dir, Git(config.repo)).accept()
+    except checkout.CheckoutError as exc:
+        raise CliError(str(exc)) from exc
+    print(f"accepted checkout {record.text()}")
     return 0
 
 
@@ -539,6 +556,8 @@ COMMANDS = (
     Command("status", "print run state as JSON", cmd_status),
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
+    Command("accept-checkout", "keep the current branch and HEAD after a checkout halt",
+            cmd_accept_checkout),
     Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)",
             cmd_dashboard, DASHBOARD_ARGS),
 )  # fmt: skip

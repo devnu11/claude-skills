@@ -7,6 +7,7 @@ every other role runs as a fresh query inside ``run_role``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field, replace
@@ -18,7 +19,18 @@ from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 from . import handover, po_session, priority, salvage
 from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
 from .boundary_runner import boundary_event
-from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
+from .checkout import CheckoutChanged
+from .dispatch import (
+    PO,
+    Launch,
+    Plan,
+    Runtime,
+    StepRequest,
+    StepResult,
+    collect,
+    halted_report,
+    refused,
+)
 from .events import Event, EventKind
 from .gates import StoryState, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
@@ -241,6 +253,9 @@ class Tools:
 
     async def pass_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Move a story stuck at tests on to the next step when the suite is green."""
+        moved = self.runtime.checkout_moved()
+        if moved:
+            return text_result(halted_report(PO, moved))
         story, reason = self._story_for(args)
         reason = reason or self._pass_refusal(story, args)
         if reason:
@@ -587,7 +602,7 @@ class PoRun:
         return PoTurn(lead + handover.prompt(found, state), state.po_session)
 
     async def _turn(self, turn: PoTurn) -> StepResult:
-        if self.runtime.halted_by:
+        if self.runtime.halted_by or self.runtime.checkout_moved():
             return StepResult("", 0.0)
         plan = po_plan(self.runtime, turn)
         raw = await self._collect(plan)
@@ -614,7 +629,8 @@ class PoRun:
     def _settle(self) -> None:
         """Commit the PO's work, unless the run halted: then leave the tree for the human."""
         if not self.runtime.halted_by:
-            self.runtime.settle_po()
+            with contextlib.suppress(CheckoutChanged):
+                self.runtime.settle_po()
 
     async def _collect(self, plan: Plan) -> StepResult:
         """Drain the PO's query. On an SDK error result, keep its session for resume."""

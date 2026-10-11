@@ -27,8 +27,9 @@ class RunStatus(StrEnum):
     """The run as a whole.
 
     ``sprint-end``, ``blocked`` and ``done`` are set by the PO's ``notify_user``.
-    ``blocked``, ``failed`` and ``stopped`` are set by the runner when it halts
-    (see ``halt.HALTS``). ``interrupted`` is derived by ``shown_status`` and never stored.
+    ``blocked``, ``failed``, ``stopped`` and ``checkout-changed`` are set by the runner
+    when it halts (see ``halt.HALTS``). ``interrupted`` is derived by ``shown_status``
+    and never stored.
     """
 
     IDLE = "idle"
@@ -39,6 +40,19 @@ class RunStatus(StrEnum):
     FAILED = "failed"
     STOPPED = "stopped"
     INTERRUPTED = "interrupted"
+    CHECKOUT_CHANGED = "checkout-changed"
+
+
+@dataclass
+class CheckoutRecord:
+    """The branch the runner runs on and the commit it expects there (s61)."""
+
+    branch: str
+    head: str
+
+    def text(self) -> str:
+        """``<branch> at <sha7>``."""
+        return f"{self.branch} at {self.head[:7]}"
 
 
 @dataclass
@@ -77,6 +91,7 @@ class RunState:
     order: list[str] = field(default_factory=list)
     in_flight: InFlight | None = None
     interrupted: list[Interruption] = field(default_factory=list)
+    checkout: CheckoutRecord | None = None
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -88,8 +103,8 @@ class RunState:
         return {"model": o.model, "effort": o.effort, "provider": o.provider} if o else {}
 
     def halted(self) -> bool:
-        """``done``/``blocked`` always halt; ``sprint-end`` halts only the sprint cadence."""
-        if self.status in (RunStatus.DONE, RunStatus.BLOCKED):
+        """``done``/``blocked``/``checkout-changed`` always halt; ``sprint-end`` only on sprints."""
+        if self.status in (RunStatus.DONE, RunStatus.BLOCKED, RunStatus.CHECKOUT_CHANGED):
             return True
         return self.status is RunStatus.SPRINT_END and self.cadence == "sprint"
 
@@ -127,6 +142,7 @@ class RunState:
         data["upstream"] = _upstream_state(data.get("upstream"))
         data["in_flight"] = _nested(InFlight, data.get("in_flight"))
         data["interrupted"] = [Interruption(**i) for i in data.get("interrupted", [])]
+        data["checkout"] = _nested(CheckoutRecord, data.get("checkout"))
         return cls(**data)
 
 

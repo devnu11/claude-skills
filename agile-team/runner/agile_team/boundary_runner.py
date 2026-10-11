@@ -231,6 +231,8 @@ class BoundaryRunner:
         if merge.outcome is MergeOutcome.CONFLICT:
             files = list(merge.files)
             return self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, files=files)
+        if merge.outcome is MergeOutcome.MERGED:
+            self.runtime.record_checkout()
         self._emit(b, Out(merge.outcome), **({"sha": merge.sha} if merge.sha else {}))
         self._advance(b)
 

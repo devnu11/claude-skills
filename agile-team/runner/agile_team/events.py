@@ -21,6 +21,7 @@ class EventKind(StrEnum):
     """What happened."""
 
     STEP_START = "step-start"
+    CHECKOUT = "checkout"
     STEP_END = "step-end"
     GATE = "gate"
     QUARANTINE = "quarantine"

@@ -27,10 +27,23 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import boundary, guard, halt, handover, keys, loops, presentation, recovery, salvage, sandbox
+from . import (
+    boundary,
+    checkout,
+    guard,
+    halt,
+    handover,
+    keys,
+    loops,
+    presentation,
+    recovery,
+    salvage,
+    sandbox,
+)
 from . import state as state_mod
 from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
+from .checkout import CheckoutChanged
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
@@ -293,11 +306,11 @@ def refused(reason: str) -> dict[str, Any]:
     return {"status": "refused", "reason": reason}
 
 
-def halted_report(plan: Plan, found: Halt) -> dict[str, Any]:
+def halted_report(role: str, found: Halt) -> dict[str, Any]:
     """The PO's report for a step cut short by a halt."""
     return {
         "status": "halted",
-        "role": plan.role.name,
+        "role": role,
         "reason": found.reason,
         "next": "the run is stopping; end your turn",
     }
@@ -531,6 +544,8 @@ class Runtime:
             return refused(reason)
         try:
             report = await self._run_step(request)
+        except CheckoutChanged as moved:
+            return halted_report(request.role, moved.halt)
         except Exception as exc:
             halt.log_traceback(self.config.run_dir, exc)
             raise
@@ -616,7 +631,7 @@ class Runtime:
             self.save_interrupted(Cause.ERROR)
             raise exc
         halt.log_traceback(self.config.run_dir, exc)
-        return halted_report(plan, self.halt_run(found))
+        return halted_report(plan.role.name, self.halt_run(found))
 
     def priority(self) -> Priority:
         """The story ranking: the PO's order over this run's pipeline."""
@@ -644,10 +659,35 @@ class Runtime:
         return self.halted_by
 
     def save_interrupted(self, cause: Cause) -> Interruption | None:
-        """Save a cut-off step's edits (or the PO's) in a reverted commit and record it."""
+        """Save a cut-off step's edits (or the PO's) in a reverted commit and record it.
+
+        Nothing is saved when the checkout moved (K5): the tree is not the team's.
+        """
+        if checkout.check(self.git, self.state.checkout) is not None:
+            return None
         saved = recovery.Salvager(self.git, self.config.run_dir).save(self.state, cause)
-        self.save()
+        self.record_checkout()
         return saved
+
+    def checkout_moved(self) -> Halt | None:
+        """K3/K4: halt the run when the checkout drifted; record it when unrecorded and matching."""
+        drift = checkout.check(self.git, self.state.checkout)
+        if drift is not None:
+            return self.halt_run(drift.halt())
+        if self.state.checkout is None:
+            self.record_checkout()
+        return None
+
+    def verify_checkout(self) -> None:
+        """``checkout_moved``, raising ``CheckoutChanged`` with the halt when it halted."""
+        moved = self.checkout_moved()
+        if moved is not None:
+            raise CheckoutChanged(moved)
+
+    def record_checkout(self) -> None:
+        """K1: expect the live branch and HEAD; call only after the runner's own git writes."""
+        self.state.checkout = checkout.recorded(self.git)
+        self.save()
 
     async def _execute(self, plan: Plan) -> StepResult:
         try:
@@ -753,11 +793,14 @@ class Runtime:
 
     def settle_tree(self, plan: Plan) -> dict[str, str | None]:
         """Quarantine out-of-scope changes, then commit in-scope ones."""
+        self.verify_checkout()
         audit = restrict_config(guard.audit_step(self.git, plan.scope), self.git)
         quarantined = guard.quarantine(self.git, audit) if audit.out_of_scope else None
         if quarantined:
             self.emit(EventKind.QUARANTINE, plan, sha=quarantined, paths=audit.out_of_scope)
         commit = self.commit_step(plan, audit.in_scope) if audit.in_scope else None
+        if commit or quarantined:
+            self.record_checkout()
         return {"commit": commit, "quarantine": quarantined}
 
     def commit_step(self, plan: Plan, paths: list[str]) -> str:
@@ -782,6 +825,7 @@ class Runtime:
 
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Evaluate the story's current step gate and advance the story."""
+        self.verify_checkout()
         return self._advance_and_log(plan, self.pipeline.evaluate(plan.story, handoff))
 
     def _queue_done_renewal(self, story: Any) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import halt, salvage
+from . import checkout, halt, salvage
 from . import state as state_mod
 from .events import EVENTS, Event, EventKind, EventLog
 from .git_ops import Git, GitError
@@ -48,5 +48,6 @@ def recover_killed(run_dir: Path, git: Git) -> Interruption | None:
     if state_mod.shown_status(run_dir, state) is not state_mod.RunStatus.INTERRUPTED:
         return None
     found = Salvager(git, run_dir).save(state, Cause.KILLED)
+    state.checkout = checkout.recorded(git)
     state_mod.save(run_dir, state)
     return found
