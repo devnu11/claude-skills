@@ -759,3 +759,44 @@ def test_a_limit_in_a_router_step_halts_without_another_po_turn(make_runtime, ca
     assert rt.state.status is RunStatus.BLOCKED
     assert handover_events(rt) == []
     assert cli._finish(rt, result) == 75
+
+
+# ----- s24 AC1: a ruling back to design does not strand the story ------------------
+
+
+class GreenRunner:
+    """Every gate command passes: the suite is green and coverage is full."""
+
+    def __call__(self, command: str) -> tuple[int, str]:
+        return 0, "TOTAL   10   0   100%" if "cov" in command else "ok"
+
+
+def reworked(make_runtime, unit_tester_replies):
+    script = Script({"unit-tester": unit_tester_replies})
+    runner = GreenRunner()
+    rt = make_runtime(script, runner=runner)
+    script.rt = rt
+    rt.pipeline.steps = ["design", "tests", "implement", "review"]
+    st = add_story(rt, "s1", "review", implemented=1)
+    rt.pipeline.apply_ruling(st, "revise_design")
+    return script, rt, st
+
+
+def test_a_story_revised_after_implement_runs_on_without_a_handover(make_runtime) -> None:
+    claim = '```handoff\n{"status": "done", "summary": "ok", "tests": "confirmed"}\n```'
+    _, rt, st = reworked(make_runtime, [claim])
+    drive(rt)
+    roles = step_roles(rt)
+    assert roles[:4] == ["architect", "unit-tester", "developer", "code-reviewer"]
+    assert st.status is StoryStatus.DONE and st.rounds == 0
+    assert len(handover_events(rt)) == 1  # only the sprint end
+
+
+def test_an_unclaimed_rework_bounces_once_with_the_reason(make_runtime) -> None:
+    claim = '```handoff\n{"status": "done", "summary": "ok", "tests": "changed"}\n```'
+    script, rt, st = reworked(make_runtime, [None, claim])
+    drive(rt)
+    assert step_roles(rt)[:4] == ["architect", "unit-tester", "unit-tester", "developer"]
+    retry = script.prompts["unit-tester"][1]
+    assert "- Sent back to this step: tests pass on code from an earlier pass" in retry
+    assert st.status is StoryStatus.DONE and len(handover_events(rt)) == 1

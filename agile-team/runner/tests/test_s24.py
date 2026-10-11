@@ -80,6 +80,7 @@ def test_implement_pass_counts() -> None:
 def test_other_steps_bounces_and_returns_do_not_count() -> None:
     st = story("design")
     settle(st, done())
+    assert (st.implemented, st.step) == (0, "tests")
     st = story("implement")
     settle(st, Handoff("changes_requested", summary="x", next_role="architect"))
     assert st.implemented == 0
@@ -216,3 +217,33 @@ def test_done_story_hold_clearing_note_and_no_movement(make_runtime) -> None:
     assert _scribable(st)
     res = asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
     assert "story s1 is done" in json.dumps(res)
+
+
+# ----- G1: disputes and rulings leave `implemented` alone ------------------------
+
+
+def test_a_dispute_verdict_leaves_implemented_alone() -> None:
+    st = story("implement", implemented=1)
+    p, _ = pipeline()
+    p.advance(st, gates.Outcome(Verdict.DISPUTE, "d", "unit-tester"))
+    assert st.implemented == 1
+
+
+@pytest.mark.parametrize("ruling", ["revise_design", "rescope", "escalate"])
+def test_rulings_leave_implemented_alone(ruling) -> None:
+    st = story("review", implemented=1, rounds=3)
+    pipeline()[0].apply_ruling(st, ruling)
+    assert st.implemented == 1
+
+
+# ----- G8: the hold clearing is saved ---------------------------------------------
+
+
+def test_clearing_a_done_story_hold_is_saved(make_runtime) -> None:
+    from agile_team.po_tools import Tools
+
+    rt = make_runtime(FakeQuery(), runner=FakeRunner())
+    rt.state.stories["s1"] = story("review", status=StoryStatus.DONE, hold="x")
+    asyncio.run(Tools(rt).continue_story({"story": "s1", "note": "n"}))
+    saved = json.loads((rt.config.run_dir / "state.json").read_text())
+    assert saved["stories"]["s1"]["hold"] is None and saved["stories"]["s1"]["note"] == "n"
