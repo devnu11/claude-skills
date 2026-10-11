@@ -440,7 +440,11 @@ def test_one_run_drives_a_story_to_done_and_ends_at_sprint_end(make_runtime) -> 
     events = handover_events(rt)
     assert len(events) == 1
     assert (events[0].role, events[0].story) == (PO_ROLE, None)
-    assert events[0].data == {"triggers": ["sprint_end"], "stories": [], "steps": 6}  # five role steps + the end boundary
+    assert events[0].data == {
+        "triggers": ["sprint_end"],
+        "stories": [],
+        "steps": 6,
+    }  # five role steps + the end boundary
 
 
 def test_the_scribe_step_is_story_bound_and_the_manager_is_not(make_runtime) -> None:

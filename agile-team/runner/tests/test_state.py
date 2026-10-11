@@ -166,3 +166,14 @@ def test_older_state_loads_with_no_boundary_and_empty_upstream() -> None:
     assert back.boundary is None and back.goal == ""
     assert back.upstream == bd.UpstreamState()
     assert back.upstream.push == "unasked" and back.upstream.closed == 0
+
+
+def test_order_round_trips_and_legacy_loads_empty(tmp_path: Path) -> None:
+    st = state.RunState(order=["s3", "s1"])
+    state.save(tmp_path, st)
+    assert state.load(tmp_path).order == ["s3", "s1"]
+    path = tmp_path / "state.json"
+    raw = json.loads(path.read_text())
+    del raw["order"]
+    path.write_text(json.dumps(raw))
+    assert state.load(tmp_path).order == []

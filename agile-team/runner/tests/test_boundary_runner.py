@@ -311,7 +311,9 @@ def test_end_adds_an_entry_builds_the_branch_and_asks_for_push_permission(
         ["s1"],
     )
     assert entry.start == rev(repo, "origin/main") and entry.check is bd.CheckState.PASS
-    assert git(repo, "rev-list", "--count", "origin/main..team/sprint-1").strip() == "3"  # feat + 2 setup
+    assert (
+        git(repo, "rev-list", "--count", "origin/main..team/sprint-1").strip() == "3"
+    )  # feat + 2 setup
     assert rev(repo, "agile-team") == head
     assert b.stage is Stage.PUSH and b.hold is BoundaryHold.PUSH_PERMISSION
     assert env.events()[-1].data["outcome"] == "held" and env.events()[-1].data["branches"] == [

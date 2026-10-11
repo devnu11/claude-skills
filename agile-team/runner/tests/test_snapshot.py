@@ -11,7 +11,7 @@ import tomli_w
 from agile_team import config as cfg
 from agile_team import state as state_mod
 from agile_team.dashboard import snapshot
-from agile_team.gates import StoryState, StoryStatus
+from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.roles import RoleBook
 from agile_team.state import ModelOverride, RunState, RunStatus
 
@@ -108,6 +108,17 @@ def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
         )
 
 
+def previous_from(wait: dict[str, Any] | None) -> PreviousStep | None:
+    """Rebuild ``previous`` from the last "role: summary" line of a wait's detail."""
+    if not wait or not wait["on"] or ": " not in wait["on"][-1]:
+        return None
+    role, summary = wait["on"][-1].split(": ", 1)
+    return PreviousStep(role, "done", summary) if role in ROLES_WITH_PREVIOUS else None
+
+
+ROLES_WITH_PREVIOUS = ("architect", "unit-tester", "developer", "reviewer", "integration-tester")
+
+
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
     config = make_config(root, steps=fixture["pipeline"])
@@ -122,6 +133,8 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             delivery=s["delivery"],
             sprint=s["sprint"],
             repeated=s.get("repeated"),
+            hold=s.get("hold"),
+            previous=previous_from(s.get("wait")),
         )
         for s in fixture["stories"]
     }
@@ -130,6 +143,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
         sprint=run["sprint"],
         status=RunStatus(run["status"]),
         stories=stories,
+        order=run["order"],
         manager_due=run["manager_due"],
         task=run["task"],
     )
@@ -299,10 +313,36 @@ def test_story_file_unparseable_gives_empty_acceptance(
     assert build(config, tmp_path)["stories"][0]["acceptance"] == []
 
 
-def test_stories_keep_state_order(config: cfg.Config, tmp_path: Path) -> None:
-    stories = {i: StoryState(i, i.upper(), "design") for i in ("s3", "s1", "s2")}
+def test_stories_are_in_ranking_order(config: cfg.Config, tmp_path: Path) -> None:
+    stories = {i: StoryState(i, i.upper(), "design") for i in ("s10", "s9", "s2")}
+    state_mod.save(config.run_dir, RunState(stories=stories, order=["s2"]))
+    snap = build(config, tmp_path)
+    assert [s["id"] for s in snap["stories"]] == ["s2", "s9", "s10"]
+    assert snap["run"]["order"] == ["s2", "s9", "s10"]
+    assert [s["position"] for s in snap["stories"]] == [1, 2, 3]
+
+
+def test_story_fields_for_progress_hold_and_done(config: cfg.Config, tmp_path: Path) -> None:
+    prev = PreviousStep("architect", "done", "Asked which")
+    stories = {
+        "s1": StoryState("s1", "A", "tests", status=StoryStatus.DONE),
+        "s2": StoryState("s2", "B", "tests", hold="questions", previous=prev),
+        "s3": StoryState("s3", "C", "design"),
+    }
     state_mod.save(config.run_dir, RunState(stories=stories))
-    assert [s["id"] for s in build(config, tmp_path)["stories"]] == ["s3", "s1", "s2"]
+    write_jsonl(config.run_dir / "outbox.jsonl", [
+        {"id": "m1", "kind": "question", "text": "Which DB?", "stories": ["s2"], "at": 1.0}
+    ])  # fmt: skip
+    by_id = {s["id"]: s for s in build(config, tmp_path)["stories"]}
+    assert by_id["s1"]["position"] is None and by_id["s1"]["wait"] is None
+    assert by_id["s2"]["position"] == 1 and by_id["s2"]["in_progress"] is True
+    assert by_id["s2"]["hold"] == "questions"
+    assert by_id["s2"]["wait"] == {
+        "reason": "questions",
+        "on": ["m1: Which DB?", "architect: Asked which"],
+    }
+    assert by_id["s3"]["in_progress"] is False and by_id["s3"]["hold"] is None
+    assert by_id["s3"]["wait"] is None
 
 
 # ----- 6. requirements (D6) --------------------------------------------------
