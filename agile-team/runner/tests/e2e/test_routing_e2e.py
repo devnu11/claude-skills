@@ -73,7 +73,6 @@ def test_round_cap_hands_over_and_stops_routing_that_story(make_runtime) -> None
     script = Script()
     rt = build(make_runtime, script, steps=["implement", "review"], failures=99)
     rt.pipeline.cap = 2
-    rt.pipeline.repeat = 99  # the same red gate each time; test the cap, not the repeat
     add_story(rt, "s1", "implement")
     drive(rt)
     assert step_roles(rt) == ["developer", "developer"]
