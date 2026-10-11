@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-10 (s24 done)
 
 ## Session renewal at sprint and story boundaries (s23)
 
@@ -13,6 +13,12 @@ At sprint start and when a story reaches `DONE`, the runner renews your session 
 **Never drop:** Open questions are always carried over from the inbox; they are re-handed over by the router if you don't answer. Renewal never affects `delivered` or pending human messages.
 
 See ADR-0010 for details.
+
+## s24: Clearing holds on done stories
+
+A done story may be held with `ruling_not_applied` (set by the manager when a ruling fails). You can now clear such holds with `continue_story(story, note)`. The done story's note reaches the Scribe's brief if the Scribe is still due, otherwise it is acknowledged. The story itself never moves (it is done); the hold just clears from the inbox.
+
+See ADR-0012 (rule G8, G9); `product-owner.md` role file.
 
 ## Backlog and sprint management
 

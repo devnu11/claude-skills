@@ -1,6 +1,12 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-10 (s24 done)
+
+## s24: Reworked stories and test claims
+
+When a story returns to `tests` with code from an earlier pass (ruling, review, or dispute), the brief says `Code from an earlier pass is in`. The suite may already be green. If so and you've updated tests, hand off `done` with `"tests": "changed"`. If existing tests already cover the new design, hand off `done` with `"tests": "confirmed"`. Without a claim, a green suite bounces once with `tests pass on code from an earlier pass; write a failing test, or hand off "tests": "changed" or "tests": "confirmed"`. On a first pass (no brief line), the old rule holds: green bounces with `tests pass before implementation; write a failing test`.
+
+See ADR-0012; design `agile-team/docs/design/s24.md` (rules G1–G9, unit-tester's role file).
 
 ## Context reduction: work lean (s23)
 

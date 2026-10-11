@@ -1,8 +1,20 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-10 (s24 done)
 
 See `developer.md` for the base conventions.
+
+## s24: Rework gate and hold clearing
+
+Stories coming back to `tests` after a ruling with code already in place now pass without bouncing. Key changes:
+
+- **`StoryState.implemented: int`** (G1): incremented at each `implement` gate pass, never reset. Legacy load: 1 past implement, 0 otherwise (G2).
+- **`Handoff.tests: "changed" | "confirmed" | None`** (G3): unit-tester claims either value; any other is malformed (`handoff tests must be one of ('changed', 'confirmed')`).
+- **Rework gate** (G4–G7): At `tests` with `implemented > 0`, no dispute, `done` handoff: red suite → pass; green + claim → pass with reason; green no claim → bounce `REWORK_UNCLAIMED`. First-pass (`implemented == 0`) still uses `tests_red`. Dispute (s11 T6) always wins. Brief includes `REWORK_BRIEF` when rework conditions apply.
+- **`Pipeline._forward`** (G1): increment `implemented` when passing `implement` before moving.
+- **`continue_story`** (G8): no longer refuses done stories; clears their hold.
+
+See ADR-0012 for decisions. Design: `agile-team/docs/design/s24.md` (rules G1–G9, modules, test checklist).
 
 ## Cost delta tracking — PO sessions and ledger entries (s25)
 
