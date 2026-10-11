@@ -34,6 +34,7 @@ class EventKind(StrEnum):
     PO_SESSION = "po-session"
     ESCALATION = "escalation"
     FAULT = "fault"
+    BOUNDARY = "boundary"
 
 
 @dataclass

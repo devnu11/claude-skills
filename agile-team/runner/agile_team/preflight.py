@@ -77,10 +77,11 @@ class Preflight:
 
     def toolchain(self) -> list[str]:
         """Every configured toolchain command's executable is on PATH."""
-        exes = {name: executable_of(cmd) for name, cmd in self.config.toolchain.commands.items()}
+        exes = {f"toolchain.{n}": c for n, c in self.config.toolchain.commands.items()}
+        exes |= {f"delivery.{d.name}.e2e": d.e2e for d in self.config.deliveries if d.e2e}
         return [
-            f"toolchain.{name}: `{exe}` not found on PATH"
-            for name, exe in sorted(exes.items())
+            f"{label}: `{exe}` not found on PATH"
+            for label, exe in sorted((k, executable_of(c)) for k, c in exes.items())
             if exe and self.which(exe) is None
         ]
 

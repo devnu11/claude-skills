@@ -27,8 +27,10 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import guard, halt, handover, keys, loops, presentation, sandbox
+from . import boundary, guard, halt, handover, keys, loops, presentation, sandbox
 from . import state as state_mod
+from .boundary import BoundaryHold, StepKind
+from .boundary_runner import boundary_data
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
@@ -64,7 +66,9 @@ from .roles import (
     parse_handoff,
     scope_note,
 )
+from .stack import REVIEW_DIR
 from .state import RunState
+from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
 
 REWORK_BRIEF = (
     "Code from an earlier pass is in, so the suite may already be green. "
@@ -88,6 +92,9 @@ RUNNER_FAULT_NOTE = (
 )
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
+BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
+FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
+FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
 SHELL_OPTS: dict[str, Any] = {
     "shell": True,
     "capture_output": True,
@@ -107,6 +114,7 @@ class StepRequest:
     role: str
     brief: str
     story_id: str | None = None
+    kind: StepKind = StepKind.ROLE
 
 
 @dataclass
@@ -311,11 +319,16 @@ class Runtime:
     prepare_fn: PrepareFn = field(default_factory=lambda: sandbox.Preparer().prepare)
     secrets: list[Path] = field(default_factory=list)
     providers: Providers = field(default_factory=Providers)
+    upstream: Upstream | None = None
+    prs: Prs = field(default_factory=lambda: NoPrs(NO_PR_SERVICE))
+    shell: Callable[[Path], Callable[[str], tuple[int, str]]] = shell_runner
     events: EventLog = field(init=False)
     halted_by: Halt | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
+        if self.upstream is None:
+            self.upstream = Upstream(self.git, self.config.upstream)
 
     def emit(self, kind: EventKind, plan: Plan | None = None, /, **data: Any) -> Event:
         """Log an event, attributed to ``plan``'s role and story when given."""
@@ -350,7 +363,7 @@ class Runtime:
             return "a stop was requested; end your turn"
         if self.state.halted():
             return _halt_text(self.state)
-        if self.state.manager_due and request.role != MANAGER:
+        if self.state.manager_due and request.role != MANAGER and request.kind not in FIX_KINDS_SET:
             return "manager review due: " + "; ".join(self.state.manager_due)
         return None
 
@@ -363,7 +376,19 @@ class Runtime:
             return f"unknown story {sid!r}; open it with open_story"
         if sid in self.relay.blocked_stories():
             return f"story {sid} is blocked waiting on an answer"
-        return dispatch_refusal(request.role, self.state.stories.get(sid or ""))
+        story = self.state.stories.get(sid or "")
+        return self._boundary_refusal(request.role, story) or dispatch_refusal(request.role, story)
+
+    def _boundary_refusal(self, role: str, story: StoryState | None) -> str | None:
+        """Sprint stories wait while a boundary is pending (the Manager and Scribe may run)."""
+        b = self.state.boundary
+        if b is None or story is None or story.sprint != self.state.sprint:
+            return None
+        if role in BOUNDARY_UNGATED:
+            return None
+        return boundary.BOUNDARY_REFUSAL.format(
+            sprint=b.sprint, edge=b.edge, stage=b.stage, held=boundary.held_text(b)
+        )
 
     # ----- planning ------------------------------------------------------
 
@@ -372,14 +397,33 @@ class Runtime:
         role = self.resolve(request.role)
         story = self.state.stories.get(request.story_id or "")
         plan = Plan(role, self.scope_for(role), story, request.brief)
-        setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
         try:
-            if role.name in setups:
-                setups[role.name](plan)
+            self._set_up(plan, request.kind)
             return self.finish(plan)
         except Exception:
             plan.stop()
             raise
+
+    def _set_up(self, plan: Plan, kind: StepKind) -> None:
+        setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
+        if plan.role.name in setups:
+            setups[plan.role.name](plan)
+        if kind in FIX_SETUPS:
+            FIX_SETUPS[kind](self, plan)
+
+    def _team_fix_scope(self, plan: Plan) -> None:
+        """A team-branch fix may also write source, tests and e2e tests."""
+        values = self.config.placeholders()
+        wanted = expand_globs(list(FIX_GLOBS), values)
+        plan.scope.write = [*plan.scope.write, *(g for g in wanted if not g.startswith("!"))]
+
+    def _review_fix_scope(self, plan: Plan) -> None:
+        """A conflict fix works in the review worktree and writes only the conflicting files."""
+        failure = self.state.boundary.failure if self.state.boundary else None
+        worktree = self.config.run_dir / REVIEW_DIR
+        read = expand_globs(plan.role.read, self.config.placeholders())
+        files = list(failure.files) if failure else []
+        plan.scope = guard.Scope(plan.role.name, worktree, files, read, secrets=self.secrets)
 
     def _lay_out_presentation(self, plan: Plan) -> None:
         presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
@@ -449,8 +493,15 @@ class Runtime:
             "test_disputes_since_last_review": disputes_since_review(self.events.events()),
             "pending_followups": self.state.followups,
             **self._repeated_context(story),
+            **self._boundary_context(),
         }
         return "Runner context:\n" + json.dumps(context, indent=2)
+
+    def _boundary_context(self) -> dict[str, Any]:
+        b = self.state.boundary
+        if b is None or b.escalated is None:
+            return {}
+        return {"repeated_boundary": boundary.manager_view(b, self.events.events())}
 
     def _repeated_context(self, story: StoryState | None) -> dict[str, Any]:
         if story is None or story.repeated is None:
@@ -706,7 +757,16 @@ class Runtime:
         self.state.unreviewed.clear()
         for role, question in handoff.followups.items():
             self.state.followups.setdefault(role, []).append(question)
-        return self._rulings(plan, handoff)
+        return {**self._rulings(plan, handoff), **self._boundary_review()}
+
+    def _boundary_review(self) -> dict[str, Any]:
+        """The Manager's review of an escalated boundary: mark it reviewed, report it."""
+        b = self.state.boundary
+        if b is None or b.hold is not BoundaryHold.ESCALATED:
+            return {}
+        b.hold = BoundaryHold.REVIEWED
+        data = boundary_data(self, b)
+        return {"boundary": {**data, "reason": b.escalated, "hold": b.hold, "reviewed": True}}
 
     def _rulings(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         if plan.story and plan.story.repeated is not None:
@@ -754,6 +814,12 @@ class Runtime:
         now_at = plan.story.step
         self.emit(EventKind.RULING, plan, ruling=ruling, now_at=now_at)
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
+
+
+FIX_SETUPS = {
+    StepKind.TEAM_FIX: Runtime._team_fix_scope,
+    StepKind.REVIEW_FIX: Runtime._review_fix_scope,
+}
 
 
 def _story_lines(story: StoryState | None) -> list[str]:
