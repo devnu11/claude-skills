@@ -77,6 +77,7 @@ def test_start_sprint_replaces_scope(make_runtime) -> None:
     open_stories(t, "s1", "s2", "s3")
     call(t.start_sprint({"goal": "one", "stories": ["s1", "s2"]}))
     rt.state.stories["s2"].status = "done"
+    rt.state.boundary = None  # sprint 1's start boundary has passed
     out = call(t.start_sprint({"goal": "two", "stories": ["s3"]}))
     assert out["sprint"] == 2
     sprints = {k: v.sprint for k, v in rt.state.stories.items()}
@@ -88,6 +89,7 @@ def test_start_sprint_carries_over_listed_story(make_runtime) -> None:
     t = Tools(rt)
     open_stories(t, "s1")
     call(t.start_sprint({"goal": "one", "stories": ["s1"]}))
+    rt.state.boundary = None  # sprint 1's start boundary has passed
     call(t.start_sprint({"goal": "two", "stories": ["s1"]}))
     assert rt.state.stories["s1"].sprint == 2
 

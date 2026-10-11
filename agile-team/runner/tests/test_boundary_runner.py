@@ -311,7 +311,7 @@ def test_end_adds_an_entry_builds_the_branch_and_asks_for_push_permission(
         ["s1"],
     )
     assert entry.start == rev(repo, "origin/main") and entry.check is bd.CheckState.PASS
-    assert git(repo, "rev-list", "--count", "origin/main..team/sprint-1").strip() == "1"
+    assert git(repo, "rev-list", "--count", "origin/main..team/sprint-1").strip() == "3"  # feat + 2 setup
     assert rev(repo, "agile-team") == head
     assert b.stage is Stage.PUSH and b.hold is BoundaryHold.PUSH_PERMISSION
     assert env.events()[-1].data["outcome"] == "held" and env.events()[-1].data["branches"] == [
@@ -450,7 +450,8 @@ def test_a_rebase_merged_sprint_is_dropped_at_the_next_start(
     sha = commit(repo, "one.txt")
     env.open(Edge.END)
     env.drive()
-    land_by_rebase(tmp_path, origin, [sha], repo)
+    picks = git(repo, "rev-list", "--reverse", f"origin/main..{sha}").split()  # setup + sha
+    land_by_rebase(tmp_path, origin, picks, repo)
     env.rt.state.sprint = 2
     env.open(Edge.START)
     env.drive()
@@ -463,7 +464,6 @@ def test_review_conflict_asks_devops_in_the_worktree_and_rerere_replays(
     env: Env, tmp_path: Path, origin: Path
 ) -> None:
     repo = env.rt.config.repo
-    env.rt.state.upstream.push = bd.Permission.YES
     sha = commit(repo, "base.txt", "mine\n", "feat: mine")
     land_upstream(tmp_path, origin, "base.txt", "theirs\n")
     git(repo, "fetch", "-q", "origin")

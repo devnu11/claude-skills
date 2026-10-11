@@ -440,7 +440,7 @@ def test_one_run_drives_a_story_to_done_and_ends_at_sprint_end(make_runtime) -> 
     events = handover_events(rt)
     assert len(events) == 1
     assert (events[0].role, events[0].story) == (PO_ROLE, None)
-    assert events[0].data == {"triggers": ["sprint_end"], "stories": [], "steps": 5}
+    assert events[0].data == {"triggers": ["sprint_end"], "stories": [], "steps": 6}  # five role steps + the end boundary
 
 
 def test_the_scribe_step_is_story_bound_and_the_manager_is_not(make_runtime) -> None:
@@ -644,7 +644,7 @@ def test_a_bad_scribe_handoff_still_clears_scribe_due(make_runtime) -> None:
     assert rt.state.scribe_due == []
     assert handover_events(rt)[0].data["triggers"] == ["bad_handoff"]
     assert "s1: scribe gave no valid handoff:" in script.po_prompts[1]
-    assert len(script.po_prompts) == 2
+    assert len(script.po_prompts) == 3  # bad handoff, then sprint end after the boundary
 
 
 def test_a_budget_checkpoint_runs_the_manager_before_the_next_step(make_runtime) -> None:
@@ -681,7 +681,7 @@ def test_a_bare_resume_runs_the_router_first(make_runtime) -> None:
     asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
     assert step_roles(rt) == ["architect", "scribe"]
     prompt = script.po_prompts[0]
-    assert prompt.startswith(RESUME_NOTE + "\n\nThe runner needs you (sprint 1; 2 steps")
+    assert prompt.startswith(RESUME_NOTE + "\n\nThe runner needs you (sprint 1; 3 steps")
     assert "Sprint 1 is complete" in prompt
     assert len(script.po_prompts) == 1
 
@@ -859,8 +859,15 @@ def test_a_held_boundary_waits_when_a_question_is_open(make_runtime) -> None:
     add_story(rt, "s1")
     rt.state.boundary = bd.Boundary(bd.Edge.START, 1, hold=bd.BoundaryHold.SYNC_CONFLICT)
     rt.relay.post(Note("question", "merge by hand?", ["s1"]))
-    p = advance(rt)
-    assert p.kinds != [T.STALLED]
+    slept = []
+
+    async def sleep(_s: float) -> None:
+        slept.append(_s)
+        rt.relay.answer("m1", "ok")
+
+    p = advance(rt, sleep)
+    assert slept == [5.0]
+    assert p.kinds == [T.HUMAN_MESSAGE]
 
 
 def test_stories_do_not_move_while_a_boundary_is_pending(make_runtime) -> None:
@@ -874,10 +881,15 @@ def test_stories_do_not_move_while_a_boundary_is_pending(make_runtime) -> None:
 
 
 def test_the_complete_sprint_opens_an_end_boundary_first(make_runtime) -> None:
-
     rt = make_runtime()
     add_story(rt, "s1", status=StoryStatus.DONE)
-    p = advance(rt)
+    slept = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    p = advance(rt, sleep)
+    assert slept == []  # opening the boundary is work to do, not a reason to wait
     assert rt.state.upstream.closed == 1 and rt.state.boundary is None
     assert p.steps == 1 and p.kinds == [T.SPRINT_END]
     [event] = [e for e in rt.events.events() if e.kind == "boundary"]
