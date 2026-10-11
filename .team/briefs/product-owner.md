@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
+
+## s9: Interrupted steps and recovery on resume
+
+When a step is cut short (error, limit, SIGTERM, kill -9), the runner saves its edits and offers them to the next step. On resume, your first prompt may hold an **Interrupted steps** section listing them. Key changes:
+
+- **On resume:** Your opening prompt may include `## Interrupted steps` with each cut-off step's role, story, brief, and `git cherry-pick -n <sha>` line. Run each step to handle it. For story steps, the runner offers the sha in the next brief on that story.
+- **After interrupt, before you run:** The status is `interrupted` (not `running`), and `agile-team status` shows `in_flight` (the step that was running) and `interrupted` (the list of cuts). Resume with `start --resume`, or if you need context, read `state.json`.
+- **Recovery after kill -9 or power loss:** `start --resume` detects a dead pid and saves the partial edits (cause `killed`), adding them to the interrupted section. The stderr line tells you the sha was saved.
+- **Note for stale pid:** If `runner.pid` points to a dead process from an old run, `status` ignores it (shows `interrupted` if status is `running`) or re-runs `start` clears it.
+
+See ADR-0017, design `agile-team/docs/design/s9.md` (rules I1–I15, exact strings).
 
 ## s40: Set and manage the story order
 

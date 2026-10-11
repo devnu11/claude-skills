@@ -1,6 +1,29 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
+
+## s9: Interrupted steps—save and offer edits, not stash them
+
+When a role step is cut short, the runner saves its edits in a commit + revert. On resume, the edits are offered to the next step on that story. Test coverage checklist (16 areas from design section 7):
+
+1. **In-flight tracking (I1–I2):** During a role step, `in_flight = {role, story, brief}` (brief is the request's brief, no runner additions). After `settle`, it is `None`. A refused step never sets it.
+2. **Save tree (I3, AC7):** Interrupted step with one in-scope and one out-of-scope file: both in commit, revert follows, tree clean, subject `chore(team): interrupted step by <label>`, no `QUARANTINE` event. `story.commit`, step, rounds unchanged.
+3. **Capture (I4):** No step in flight + clean tree → `None`. In flight + clean tree → interruption with `sha=None` (pending list, not story). No step in flight + dirty tree → `product-owner` with no story.
+4. **Limit halt (I5, AC2):** Note text = `message()` + suffix with sha from state; stderr unchanged. Second `halt_run` records nothing new.
+5. **Halt at top level (I5, SIGTERM, crash):** In-flight role set. Tree clean after exit. Cause `sigterm` or `crash`.
+6. **Error (I6):** Non-limit exception still propagates (s8 holds). Tree clean. Story has `interrupted` with cause `error`. `state.interrupted` empty.
+7. **Salvage robustness (I8):** `git.commit` raises → halt completes, tree dirty, `GitError` in `crash.log`, nothing recorded.
+8. **Resume after kill (I9, AC7, AC3):** State `running`, `in_flight` set, dead pid in `runner.pid` (and separately, no `runner.pid`), dirty tree. `start --resume` saves cause `killed`, preflight passes, stderr names sha.
+9. **Still refused (I9, AC7):** Dirty tree with status `idle`; `running` + live pid; `running` + dead pid + plain `start --task`. Each exits 1, no commit.
+10. **Offer in next brief (I10, AC8):** For each cause (error, limit, crash, sigterm, killed): next role on story gets exact offer with sha from `state.json`. After step settles, offer gone. Later interruption no sha keeps earlier offer.
+11. **Resume prompt (I11, AC4):** Session resumed, no `--task`, pending interruption → first query is PO turn (not router pass) with `## Interrupted steps` section, role, story, brief, cherry-pick line. `state.interrupted` empty after. With `--task`, section after "New from the human". No session → after `first_prompt`. Empty list → unchanged.
+12. **Liveness (I12, AC5):** `runner_pid` handles missing file, `"abc"`, `"0"`, `"-5"` → `None`. `pid_alive` maps `ProcessLookupError` → `False`, `PermissionError` → `True`. Monkeypatch `os.kill`.
+13. **Shown status (I13, AC5, AC7):** State `running` + dead pid → `"status": "interrupted"`, `"running": false`. State `running` + live pid → `"running": true`. Others pass through. `state.json` stays `running` (never stored).
+14. **Status keys (I14):** `status_report["in_flight"]` and `status_report["interrupted"]` right after `"running"`. Stories carry their `interrupted` field in `asdict`.
+15. **Legacy state (I15):** Load `state.json` without `in_flight`, `interrupted`, story `interrupted` → defaults to `None` / `[]`. Cause string round-trips via `Cause(cause)`.
+16. **Coverage ≥95% (currently 100%); ruff check and ruff format clean (AC7).**
+
+Contract changes: Fixture has `in_flight` and `interrupted` fields; `status_report` keys are new. See design checklist for exact strings and cause values. ADR-0017.
 
 ## s40: Story priority ranking and explicit order
 

@@ -1,6 +1,25 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
+
+## s9: Interrupted steps—edits saved and offered in next brief
+
+When a step is cut short, the runner saves its edits in a commit and reverts it. On resume, the runner offers the sha to the next step on that story via the brief. Your tests should verify the full cycle:
+
+- **Interrupted step with edits:** A role writes both in-scope and out-of-scope files, then gets interrupted (error, limit, SIGTERM, or kill -9). Both files are in the saved commit; out-of-scope ones are quarantined again on cherry-pick.
+- **Resume after interruption:** `start --resume` detects the in-flight step, saves it (cause matches the interrupt kind), and the resume prompt lists it with the sha. Status shows `interrupted: true, status: "interrupted"`.
+- **Offer in next brief:** The next role on that story gets the brief line `Interrupted work: …` with the exact `git cherry-pick -n <sha>` command. It remains until the story's step settles.
+- **Settlement clears the offer:** A clean settlement (any verdict) clears the interruption from that story; later steps do not see it.
+- **Live scenario (AC5 verified):** Stale `runner.pid` with state `running` and `in_flight` set → `agile-team status` reports `status: "interrupted"`, `running: false`, with `in_flight` and `interrupted` shown. No process behind it.
+
+Test areas from the design (checklist sections 2, 4, 5, 10, 11, 13):
+1. Halt flow captures edits and clears in-flight on settlement.
+2. Resume after kill detects stale pid and saves (cause `killed`).
+3. Next brief on story includes the offer (with sha from state, not memory).
+4. Status keys `in_flight`, `interrupted` appear in the report.
+5. Snapshot in mock mode shows `in_flight`, `interrupted` fields.
+
+See ADR-0017, design `agile-team/docs/design/s9.md` for exact strings and module changes.
 
 ## s40: Snapshot now includes priority and wait state
 

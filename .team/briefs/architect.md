@@ -1,6 +1,20 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
+
+## s9: Save interrupted steps in commits, not stashes
+
+When a step is cut short (error, limit, SIGTERM, kill -9), the runner now saves its edits in a commit and reverts it (not in a stash). The design decision (ADR-0017) covers the full rationale and flow; key architectural points:
+
+- **Commit + revert, not stash:** Edits stay reachable by sha forever; roles can reuse them with `git cherry-pick -n` (which they already know).
+- **State tracks in-flight steps:** `state.in_flight` records the role, story, and brief of a running step. On settlement, it clears. On crash, it tells the human what was cut short.
+- **Status shows liveness:** `shown_status()` returns `INTERRUPTED` when state says `RUNNING` but the pid is dead. Stale pids are harmless and ignored.
+- **Recovery on resume:** `start --resume` detects a dead pid and saves the edits (cause `killed`), then the resume prompt is the same as after any halt.
+- **Next brief offers the sha:** Until the step on a story settles, the brief includes `Interrupted work:` with the exact cherry-pick command. Settlement clears it.
+
+**Note:** AC6 (documentation update) is flagged as not checked. `reference/protocol.md` and `agile-team/SKILL.md` should document the new resume and status behaviour; `roles/product-owner.md` (built-in) is updated with the Interrupted steps section.
+
+See ADR-0017 for the decision; `agile-team/docs/design/s9.md` for rules I1–I15, modules, test checklist, exact strings.
 
 ## s40: Story priority is explicit and code-driven
 

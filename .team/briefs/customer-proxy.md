@@ -1,6 +1,21 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
+
+## s9: Interrupted steps—edits saved and offered to next role
+
+When a step is cut short (error, limit, SIGTERM, kill -9), the runner saves its edits in a commit and reverts it. On resume, the prompt offers the sha to the next role on that story. Your acceptance tests should verify the lifecycle:
+
+- **Status after interrupt:** When you start an acceptance step, `agile-team status` may show `status: "interrupted"` (instead of `running`). This means a prior step was cut short; edits are saved.
+- **Interrupted work in your prompt:** If an earlier step on the story was interrupted, your brief includes `Interrupted work:` with a `git cherry-pick -n <sha>` line. Reuse the edits if they are relevant; cherry-pick will quarantine out-of-scope files.
+- **Live AC5:** Verify that a stale `runner.pid` (dead process) is handled correctly: `status` reports `interrupted: true, running: false` with `in_flight` and `interrupted` data shown, not `running: true` with a dead pid.
+
+Your presentation should include a state file (e.g., captured from `agile-team status`) showing:
+1. `running: false, status: "interrupted"` when a step was cut short and the process is gone.
+2. `in_flight: {role, story, brief}` when a step is in progress.
+3. `interrupted: [{role, story, brief, cause, sha}, ...]` for the pending list.
+
+See ADR-0017, design `agile-team/docs/design/s9.md` (rules I13–I14 for status shape).
 
 ## s40: Board now shows story priority order and hold reasons
 

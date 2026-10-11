@@ -4,6 +4,19 @@
 
 ## Design decisions to verify
 
+**Interrupted steps saved in commits, not stashes (s9):** Verify that interrupted steps are recovered consistently:
+- `salvage.py`: `Cause` enum (ERROR, LIMIT, CRASH, SIGTERM, KILLED), `InFlight` and `Interruption` dataclasses, `save_tree()` commits all changed paths + reverts, `capture()` creates `Interruption` or `None`, `offer()` and `resume_section()` build exact text templates.
+- `recovery.py`: `Salvager` class with `save()` method calls `capture()`, records via `state.interrupt()`, emits `step-interrupted` event. `recover_killed()` loads state, checks `shown_status()`, salvages, saves state, returns interruption.
+- `state.py`: `in_flight: InFlight | None` (set on step start, cleared on settlement), `interrupted: list[Interruption]` (pending list), `runner_pid()`, `pid_alive()`, `runner_alive()` (pid liveness checks), `shown_status()` returns `INTERRUPTED` when `status==RUNNING` but pid is dead.
+- `dispatch.py`: `_take_off()` sets `in_flight` and emits `STEP_START`, `_land()` clears `in_flight` (supersedes direct emit), `save_interrupted()` is public, `halt_run()` calls `save_interrupted(Cause(kind.value))`, `_step_failed()` calls `save_interrupted(Cause.ERROR)` before re-raising.
+- `po_tools.py`: `_opening()` calls `_take_interrupted()` first, building `resume_section()` (head + items + tail), clears `state.interrupted`, joins with opening prompt.
+- `cli.py`: `_recover()` on `start --resume` detects `shown_status() == INTERRUPTED`, calls `recover_killed()`, prints sha to stderr if found.
+- Every halt saves: `halt_run`, `_step_failed` (non-limit error), `recover_killed` (kill -9). Tree clean; `in_flight` cleared. Brief offers sha until settlement clears it.
+- `story.interrupted: Interruption | None` persists the offer until settlement clears it.
+- Snapshot: `run.in_flight` and `run.interrupted` added, `STATUS_TONE["interrupted"] = "critical"`, `shown_status()` in snapshot builder.
+- Exact strings: `chore(team): interrupted step by {label}`, offer template, resume section (head, items, tail).
+- Rules I1–I15, test checklist (16 areas) in `agile-team/docs/design/s9.md`. See ADR-0017.
+
 **Story priority in code (s40):** Verify that priority is explicit, auditable, and data-driven:
 - `state.order: list[str]` persists the queue; legacy files load with `[]`.
 - `Priority.key()` = `(done, listed, not in_progress, natural(id))` is the single ranking rule. No creation order, no implicit ties.

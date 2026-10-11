@@ -1,8 +1,25 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s9 done, then s40 done)
 
 See `developer.md` for the base conventions.
+
+## s9: Recover from an interrupted step—keep its edits
+
+When a role step is cut short by an error, limit, SIGTERM, or kill signal, the runner now saves its edits in a commit and reverts it. On resume, the edits are offered to the next step on that story. Key modules:
+
+- **`salvage.py` (new):** `Cause` (enum), `InFlight` and `Interruption` dataclasses, `save_tree`, `capture`, `offer`, `resume_section` functions, `label` and note templates.
+- **`recovery.py` (new):** `Salvager` class with `save` method, `recover_killed` for resuming after a kill -9.
+- **`state.py`:** `RunStatus.INTERRUPTED`, `in_flight: InFlight | None`, `interrupted: list[Interruption]`, `runner_pid()`, `pid_alive()`, `runner_alive()`, `shown_status()` functions.
+- **`dispatch.py`:** `_take_off`, `_land` (track in-flight), `save_interrupted()` (public), `halt_note`, `_interrupted_lines`, `_story_lines` updated.
+- **`po_tools.py`:** `_opening` takes interrupted steps first, `_take_interrupted`, `_joined` helpers.
+- **`cli.py`:** `_recover` on `start --resume`, `status_report` includes `in_flight` and `interrupted`.
+- **`dashboard/snapshot.py`, `index.html`:** `shown_status` in snapshot, `STATUS_TONE` for `interrupted` status.
+- **`roles/product-owner.md` (built-in):** Documents the Interrupted steps section and cherry-pick guidance.
+
+See ADR-0017, design `agile-team/docs/design/s9.md` (rules I1–I15, modules, test checklist).
+
+**Note:** The e2e test `test_halted_role_step_leaves_tree_untouched` needs to be updated: s8's H15 (tree unchanged after halt) is superseded by I5 (tree clean, HEAD moved by two commits, edits in sha).
 
 ## s40: Story priority lives in code
 
