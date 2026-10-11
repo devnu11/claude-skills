@@ -104,7 +104,10 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   returns `{"status": "halted", "reason": …}`, and every later `run_role` in
   that process is refused (`the run is blocked (<reason>); end your turn`).
   Other errors in a role step reach the PO as a tool error, as before, and
-  are logged to `crash.log`.
+  are logged to `crash.log`. That includes an error after the role ran:
+  reading its handoff, gating, or applying a Manager ruling. `run_role`
+  logs every crash of a role step once. The router turns it into an
+  `error` hand-over.
 - The first stop in a process wins. Only one note is posted, even when the PO
   then hits the same limit.
 - `start --resume` sets `running` and clears `status_reason` before the PO's
@@ -378,7 +381,8 @@ with another status, is a malformed handoff. The unit-tester may add
 `upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
 {"<role>": "<question>"}`. On a story escalated for a repeated setback it
 must add `"fault": "<role>"` or `"fault": "runner"` (see "Repeated
-setbacks"); a `fault` that is not a non-empty string is a malformed
+setbacks"). It may name a fault on any other story it is run on too, for
+example a `blocked` story whose gate reason is a runner fault. A `fault` that is not a non-empty string is a malformed
 handoff. The runner appends each follow-up to that role's
 next brief under "Questions from the Manager" and clears it once the role
 hands off; the answer comes back in that role's `friction`. A missing or
@@ -583,13 +587,22 @@ tests do not.
   | another known role (e.g. `devops`) | `active`, step kept; the PO gets `off_pipeline_fault` and briefs that role |
   | `runner` | `blocked`; flagged as a runner fault in the `fault` event (`kind: "runner"`); the runner posts an `update` note to the human naming the story and reason, and the PO gets `runner_fault` |
 
-  A fault resets the story's rounds and disputes and clears `streak` and
-  `repeated`, so the loop costs no role a round. A `ruling` in the same
-  handoff applies after the fault and wins. A missing or unknown fault
-  changes nothing (not even a ruling), and the PO gets `fault_not_applied`.
-  The Manager's report carries `"fault": {"fault", "kind", "applied",
+  A fault resets the story's rounds and disputes, clears its open dispute,
+  hold, `streak` and `repeated`, so the loop costs no role a round. A
+  `ruling` in the same handoff applies after the fault and wins.
+- A fault works the same on a story that did **not** repeat a setback (s45),
+  for example a `blocked` or `needs_manager` story the PO runs the manager
+  on. Its `reason` is the story's last gate reason.
+- A fault is not applied if there is no story, the story is done, the fault
+  is missing (only on a repeated setback) or the role is unknown. Then
+  nothing changes, the PO gets `fault_not_applied` with the reason, and a
+  `ruling` in the same handoff is reported as not applied too (`the fault was
+  not applied, so the ruling was not either`, so `ruling_not_applied`).
+- The Manager's report carries `"fault": {"fault", "kind", "applied",
   "reason", "now_at"}` (or `"why"`), and a `fault` event logs `{fault, kind,
-  reason, now_at}`.
+  reason, now_at}`. Every fault or ruling the Manager names is in the report
+  with `applied` true or false. The PO's `run_role` result and the router's
+  hand-over carry the same report.
 - The next standard brief on the story says `The same setback repeated, so
   the manager ruled on it: <reason>`. The Manager's `followups` tell the
   fault role what to fix.
@@ -798,9 +811,9 @@ The pass ends at the first step whose report matches a row of the
 | `round_cap` | the story reached the round cap (not an `escalate` verdict) |
 | `unroutable` | a bounce names a `next_role` that owns no pipeline step |
 | `ruling_not_applied` | the Manager ruled but the ruling could not apply (see "Rulings") |
-| `runner_fault` | the Manager put a repeated setback on the runner; the story is blocked and the human was told |
-| `off_pipeline_fault` | the Manager put a repeated setback on a role with no pipeline step; brief it, then `continue_story` |
-| `fault_not_applied` | the Manager ruled on a repeated setback without a valid `fault` |
+| `runner_fault` | the Manager put a setback on the runner; the story is blocked and the human was told |
+| `off_pipeline_fault` | the Manager put a setback on a role with no pipeline step; brief it, then `continue_story` |
+| `fault_not_applied` | the Manager's `fault` was not applied (missing, unknown role, no story or a done story); the reason is in the line |
 | `sync_conflict` | merging upstream into the team branch at sprint start conflicts (files named; the merge was aborted) |
 | `push_permission` | the review branches are built and checked, and the human has not yet said whether the team may push |
 | `push_rejected` | a review branch push was refused (its remote branch moved) |
@@ -824,7 +837,10 @@ story.
   clears a done story's hold too (for example after `ruling_not_applied`),
   and its note reaches the Scribe's brief if the Scribe is still due.
 - PO tools added: `continue_story(story, note)` releases a held story (done
-  or not) and adds `note` to its next brief. `set_developer(story, role)` picks the
+  or not) and adds `note` to its next brief. It refuses a `blocked` story,
+  with or without a hold, because releasing it would leave the sprint
+  stalled (s45). Run the manager on that story with a ruling or a fault
+  instead. `set_developer(story, role)` picks the
   developer for that story; it refuses an unknown role or one that is not a
   developer. `pass_tests(story, reason)` (s30) moves a story stuck at
   `tests` on when the suite is green (see "Test disputes").
