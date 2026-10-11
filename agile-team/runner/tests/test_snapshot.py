@@ -510,6 +510,7 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
         run / "ledger.jsonl",
         run / "outbox.jsonl",
         run / "inbox.jsonl",
+        config.repo / cfg.CONFIG_NAME,
         config.stories_dir / "s1.md",
         config.stories_dir / "s2.md",
         config.requirements_dir / "REQ-001.md",
@@ -517,7 +518,7 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
 
 
 def test_watched_files_without_dirs(config: cfg.Config) -> None:
-    assert len(snapshot.watched_files(config)) == 5
+    assert len(snapshot.watched_files(config)) == 6
 
 
 # ----- 10. D10 / config / ledger constants -----------------------------------
@@ -615,3 +616,48 @@ def test_fixture_upstream_section_has_a_two_entry_stack_and_boundary_events() ->
     assert {(d["stage"], d["outcome"]) for d in events} >= {
         ("sync", "merged"), ("check", "fail"), ("check", "pass"), ("review", "built"), ("push", "held"),  # noqa: E501
     }  # fmt: skip
+
+
+# ----- s21: the config is re-read on every build (F5) --------------------------
+
+
+def rewrite_config(config: cfg.Config, steps: list[str], budget: float, cap: int) -> None:
+    raw = {
+        "team": {"docs_dir": "docs", "budget_usd": budget, "manager_every_pct": 25},
+        "gates": {"round_cap": cap, "steps": steps},
+    }
+    (config.repo / cfg.CONFIG_NAME).write_text(tomli_w.dumps(raw))
+
+
+def test_build_rereads_budget_and_round_cap(config: cfg.Config, tmp_path: Path) -> None:
+    book = book_for(config, tmp_path)
+    assert snapshot.build(config, book)["run"]["budget_usd"] == 20.0
+    rewrite_config(config, ["design", "tests", "implement"], 7.5, 5)
+    run = snapshot.build(config, book)["run"]
+    assert run["budget_usd"] == 7.5
+    assert run["round_cap"] == 5
+
+
+def test_build_rereads_pipeline(config: cfg.Config, tmp_path: Path) -> None:
+    book = book_for(config, tmp_path)
+    rewrite_config(config, ["design", "implement"], 20.0, 3)
+    assert snapshot.build(config, book)["pipeline"] == ["design", "implement"]
+
+
+@pytest.mark.parametrize("content", [None, "budget_usd = ", "[team\n"])
+def test_build_falls_back_when_file_missing_or_unparsable(
+    config: cfg.Config, tmp_path: Path, content: str | None
+) -> None:
+    book = book_for(config, tmp_path)
+    path = config.repo / cfg.CONFIG_NAME
+    if content is None:
+        path.unlink()
+    else:
+        path.write_text(content)
+    assert snapshot.fresh_config(config) is config
+    assert snapshot.build(config, book)["run"]["budget_usd"] == 20.0
+
+
+def test_fresh_config_returns_new_values(config: cfg.Config) -> None:
+    rewrite_config(config, ["design"], 3.0, 3)
+    assert snapshot.fresh_config(config).budget_usd == 3.0

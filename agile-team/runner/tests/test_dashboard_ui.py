@@ -238,3 +238,78 @@ def test_timeline_has_a_boundary_row_builder(script: str) -> None:
 def test_stack_card_escapes_its_strings(script: str) -> None:
     body = script[script.index("function renderStack") :][:2500]
     assert "esc(" in body
+
+
+# ----- s21: unit toggle, board layout ----------------------------------------
+
+
+def _rule(page: str, selector: str) -> str:
+    match = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", page)
+    assert match, f"no CSS rule for {selector}"
+    return match.group(1)
+
+
+def _func(script: str, name: str) -> str:
+    match = re.search(
+        rf"^(?:async )?function {name}\(.*?(?=^(?:async )?function |\Z)", script, re.S | re.M
+    )
+    assert match, f"no function {name}"
+    return match.group(0)
+
+
+def test_unit_toggle_wiring(parts: PageParts, script: str) -> None:
+    assert {"unit", "mix-title"} <= parts.ids
+    for text in (
+        "data-unit",
+        "ui.unit = unit.dataset.unit",
+        'closest("[data-unit]")',
+        'unit: "tokens"',
+    ):
+        assert text in script
+    assert re.search(r"UNITS\s*=\s*\{\s*tokens:", script)
+    assert re.search(r"\busd:", script)
+    for name in ("renderUnit", "barRows", "costRow", "costLegend", "tokenLegend"):
+        assert f"function {name}(" in script
+    assert "renderUnit()" in _func(script, "renderTokens")
+
+
+@pytest.mark.parametrize("name", ["renderSpend", "renderTiles", "renderTables", "renderHeader"])
+def test_unit_is_not_read_outside_the_mix_chart(script: str, name: str) -> None:
+    assert "ui.unit" not in _func(script, name)
+
+
+def test_unit_is_read_by_the_bars(script: str) -> None:
+    assert "ui.unit" in _func(script, "barRows") + _func(script, "renderBars")
+
+
+def test_unit_survives_live_updates(script: str) -> None:
+    for name in ("normalize", "connectLive", "render", "boot"):
+        body = _func(script, name)
+        assert "ui.unit =" not in body
+        assert not re.search(r"\bui\s*=", body)
+    assert script.count("ui.unit =") == 1
+
+
+def test_board_is_a_flex_row_without_sideways_scroll(page: str) -> None:
+    board = _rule(page, ".board")
+    assert "display: flex" in board
+    assert "overflow-x" not in board
+    assert "grid-auto-columns" not in board
+    assert "minmax(190px" not in page
+    col = _rule(page, ".col")
+    for text in ("flex: 1 1 0", "min-width: 0", "overflow: hidden"):
+        assert text in col
+
+
+def test_empty_columns_collapse_and_fit_1280(page: str, script: str) -> None:
+    empty = _rule(page, ".col.empty")
+    assert "flex: 0 0 44px" in empty
+    assert '" empty"' in _func(script, "renderBoard")
+    strip = int(re.search(r"flex: 0 0 (\d+)px", empty).group(1))  # type: ignore[union-attr]
+    gap = int(re.search(r"gap:\s*(\d+)px", _rule(page, ".board")).group(1))  # type: ignore[union-attr]
+    assert 10 * strip + 9 * gap <= 1280 - 2 * 16 - 16
+
+
+def test_cards_wrap(page: str) -> None:
+    assert "overflow-wrap: anywhere" in _rule(page, ".story")
+    assert "white-space: normal" in _rule(page, ".story .pill")

@@ -279,3 +279,21 @@ def test_dashboard_for_run_wires_build_and_watched(tmp_path: Path) -> None:
 def test_handler_log_is_silent(httpd: DashboardServer, capsys: pytest.CaptureFixture) -> None:
     fetch(httpd, "/api/snapshot").read()
     assert capsys.readouterr().err == ""
+
+
+def test_config_file_is_watched_and_budget_is_live(tmp_path: Path) -> None:
+    """s21 F5/F6: rewriting .agile-team.toml changes the fingerprint and the snapshot."""
+    from agile_team import config as cfg
+    from agile_team.roles import RoleBook
+
+    path = tmp_path / cfg.CONFIG_NAME
+    path.write_text("[team]\nbudget_usd = 20.0\n")
+    config = cfg.load(tmp_path)
+    app = Dashboard.for_run(config, RoleBook.for_repo(tmp_path, {}, tmp_path / "none"))
+    before = server.fingerprint(app.watched())
+    assert app.snapshot()["run"]["budget_usd"] == 20.0
+    path.write_text("[team]\nbudget_usd = 7.5\nmanager_every_pct = 30\n")
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+    assert server.fingerprint(app.watched()) != before
+    assert app.snapshot()["run"]["budget_usd"] == 7.5
