@@ -317,7 +317,7 @@ class Runtime:
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
 
-    def emit(self, kind: EventKind, plan: Plan | None = None, **data: Any) -> Event:
+    def emit(self, kind: EventKind, plan: Plan | None = None, /, **data: Any) -> Event:
         """Log an event, attributed to ``plan``'s role and story when given."""
         role = plan.role.name if plan else None
         story = plan.story.id if plan and plan.story else None
