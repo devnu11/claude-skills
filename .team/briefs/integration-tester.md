@@ -1,6 +1,17 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
+
+## s11: Test disputes in e2e flows
+
+Test disputes are a developer → tester → architect route for resolving test/design contradictions. Your e2e tests verify that:
+1. A developer's dispute at `implement` (test id, rule, reason) sends the story to `tests` with no bounce.
+2. Tester fixes the test (file changed, git diff exit 1) → story passes to `implement` (dispute cleared, no handover).
+3. Tester confirms the test (changes_requested, next_role: architect) → story goes to `design` (dispute stage confirmed), architect rules, goes back to `tests`, then `implement`.
+4. Free disputes: first `round_cap` disputes per story don't count rounds; later disputes cost 1 round each.
+5. Rulings apply at any step; unapplied ruling shows why in report (no-story, done story cases).
+
+See ADR-0018, design `agile-team/docs/design/s11.md` (test checklist section 7 covers end-to-end flows).
 
 ## s9: Interrupted steps—edits saved and offered in next brief
 

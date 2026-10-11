@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
 
 See `developer.md` for the base conventions.
 
@@ -88,6 +88,17 @@ Your session has no Claude.ai connectors. Reduce re-sent context by being strate
 - **Run quietly:** Test commands with `-q -x --no-header` flags; keep only the failures.
 
 See ADR-0011 for the context reduction strategy.
+
+## s11: Test disputes and rulings at any step
+
+Developers can now hand off from `implement` with a `dispute` (test id, rule id, reason) to send a story back to `tests` without counting a bounce. Free disputes: the first `round_cap` disputes on a story cost no round; later disputes cost one round each. Rulings apply at any step, not just at round cap, with clear feedback if they can't apply. Key modules affected:
+
+- **`roles.py`:** `Dispute` dataclass; `Handoff.dispute` field; `_handoff_from` builds dispute with reason fallback.
+- **`gates.py`:** `DisputeStage` enum, `OpenDispute` dataclass with git base commit; `StoryState.dispute`, `StoryState.disputes` fields; `Verdict.DISPUTE`, `_raises_dispute`, `_dispute_gate`, `_dispute` methods; `ruling_refusal(story)` for T10.
+- **`state.py`:** Nested load for `OpenDispute`.
+- **`dispatch.py`:** `GATE_EVENTS` table, `_advance_and_log` emits `test-dispute` events, `_story_lines` shows dispute in brief, `apply_manager` returns ruling report (applied/why), `_manager_context` adds `test_disputes_since_last_review`.
+
+Tests cover dispute route, free/capped/ruled disputes, ruling refusals (no story/done story), and e2e flows. See ADR-0018, design `agile-team/docs/design/s11.md`.
 
 ## s26: Liveness is data; absolute paths; service lifecycle
 

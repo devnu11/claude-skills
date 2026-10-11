@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
 
 ## s9: Interrupted steps—save and offer edits, not stash them
 
@@ -41,6 +41,15 @@ The router now ranks stories by an explicit priority order instead of creation o
 Fixture gains `order` key, story `position`/`in_progress`/`hold`/`wait` fields, and at least one held story with open question matching it. Timeline has one `priority` event with move.
 
 Contract changes: `story_status` returns `order` key, `story_status_data` iterates `ranked()`. `start_sprint` emits `priority` event after `sprint-start`. Tests bouncing a story twice need `repeat=2` config or change reasons. Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s40.md` (test checklist).
+
+## s11: Test dispute gate and test-dispute events
+
+When a developer hands off from `implement` with a `dispute`, the story goes to `tests` with `story.dispute` set. Your gate is now `checks.dispute_settled(dispute)` while it's open:
+- `done` + file changed (git diff exit 1) → pass to `implement` (dispute cleared)
+- `done` + file unchanged → bounce to `tests` (reason: "the disputed test file {file} has not changed…", round +1)
+- `changes_requested` + `next_role: architect` → move to `design`, set `dispute.stage = confirmed`, round +1
+
+Your brief line (T9): `Test dispute (raised): {test} contradicts {rule}: {reason}` while open, `(confirmed)` after architect is scheduled. Test coverage: dispute settled gate (exit codes 1/0/128), confirmed status, `changes_requested` → architect, unchanged file bounce reason exact, tests_red not called while dispute open. See ADR-0018, design `agile-team/docs/design/s11.md`.
 
 ## s29: Boundary runner tests (sync, rebuild, check, push, stacked PRs)
 

@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
+
+## s11: Test disputes in acceptance testing
+
+Your acceptance tests may encounter stories with open test disputes (developer claimed test contradicts design). The brief will show `Test dispute (raised): {test} contradicts {rule}: {reason}` or `(confirmed)` if the architect has ruled. This does not affect your testing; it just means the story's tests are under review at the same time. See ADR-0018, design `agile-team/docs/design/s11.md`.
 
 ## s9: Interrupted steps—edits saved and offered to next role
 

@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s11 done)
+
+## s11: Test disputes and rulings at any step
+
+Rulings now apply at any step, not just at round cap. Developers can hand off disputes (test contradicts design rule) and the story goes to `tests` instead of bouncing to `implement`. Free disputes: first `round_cap` per story cost no round; later disputes count rounds. Your context now includes `test_disputes_since_last_review` listing disputes since your last step. See ADR-0018, design `agile-team/docs/design/s11.md` (T10–T13).
 
 ## s29: Boundary escalation context
 

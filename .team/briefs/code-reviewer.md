@@ -1,8 +1,16 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s40 done)
+**Last updated:** 2026-10-11 (s11 done)
 
 ## Design decisions to verify
+
+**Test disputes and rulings at any step (s11):** Verify that the dispute mechanism is safe and rulings apply correctly:
+- `Dispute` and `OpenDispute` dataclasses: `test` (pytest id), `rule` (design rule id), `reason`, `base` (HEAD at dispute time), `stage` (raised/confirmed). Handoff validation: both test and rule are non-empty strings.
+- `Pipeline._raises_dispute()` checks only at `implement` with `tests` enabled; STOPPED_HANDOFFS checked first so blocked disputes still hold. `_dispute_gate()` at `tests`: settled (git diff exit 1, or confirmed) → pass; otherwise bounce with exact reason, round +1.
+- `_bounce()` sets `confirmed` before moving if leaving `tests` with `next_role: architect`. `advance` on DISPUTE: free while `disputes <= cap`, above cap use `_bounce()` (counts round). Close dispute when reaching `implement`.
+- `apply_ruling()` resets `rounds`, `disputes`, `dispute` together. `ruling_refusal()` rejects no story / done story with exact text; applied ruling emits `ruling` event and report (applied: true, now_at, ruling). Unapplied ruling emits no event, just report (applied: false, why).
+- Event: `TEST_DISPUTE` (not `gate`), with `verdict: "dispute"`, test, rule, disputes count, rounds. Dashboard TIMELINE row colors warning tone, body is reason, meta is count/round.
+- Test coverage: free/capped/ruled disputes, ruling refusals (all paths), e2e round-trip no bounce + no handover. See ADR-0018, design `agile-team/docs/design/s11.md`.
 
 **Interrupted steps saved in commits, not stashes (s9):** Verify that interrupted steps are recovered consistently:
 - `salvage.py`: `Cause` enum (ERROR, LIMIT, CRASH, SIGTERM, KILLED), `InFlight` and `Interruption` dataclasses, `save_tree()` commits all changed paths + reverts, `capture()` creates `Interruption` or `None`, `offer()` and `resume_section()` build exact text templates.

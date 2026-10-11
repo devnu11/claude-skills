@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
 
 ## s9: Save interrupted steps in commits, not stashes
 
@@ -29,6 +29,12 @@ Key architectural choices:
 - **Snapshot carries priority:** `run.order` = queue, stories in ranking order, each story has `position`, `in_progress`, `hold`, `wait` fields.
 
 This completes the move from implicit ordering (creation order, prose agreements) to explicit, auditable, code-driven priority. See ADR-0016, design `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2, D1–D5).
+
+## s11: Rule on confirmed test disputes
+
+When a story lands at `design` with `story.dispute` set and `dispute.stage = confirmed`, the tester has verified the test is correct (not a mistake). Your role: either the rule stands (test must change to match design) or the rule changes (design must be updated).
+
+Hand off `done` either way. The dispute clears and the story returns to `tests` (dispute cleared, no further round). Brief line (T9): `Test dispute (confirmed): {test} contradicts {rule}: {reason}`. See ADR-0018, design `agile-team/docs/design/s11.md` (T8, AC3).
 
 ## s29: Sync and stacked PR delivery
 

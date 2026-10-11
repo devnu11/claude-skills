@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s9 done, then s40 done)
+**Last updated:** 2026-10-11 (s11 done)
 
 ## s9: Interrupted steps and recovery on resume
 
@@ -25,6 +25,12 @@ You now have explicit tools to set the order the team works in. The router follo
 Held stories keep their position number. When released with `continue_story`, they run from their original position.
 
 See ADR-0016, design `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2).
+
+## s11: Ruling not applied hand-over and test disputes
+
+Rulings now work at any step. If a ruling cannot apply (no story, or story is done), the report shows why with no change to the story. New hand-over: **`ruling_not_applied`**: run the manager on the story it meant, or drop it.
+
+Developers can hand off disputes to send stories back to `tests` without bouncing. The tester fixes the test or confirms it (which escalates to architect). Free disputes bounded: first `round_cap` per story cost no round. Dispute details (test id, rule, reason) appear in the brief at every step while open. See ADR-0018, design `agile-team/docs/design/s11.md`.
 
 ## s29: Boundary hand-overs and permission
 
