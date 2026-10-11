@@ -70,6 +70,12 @@ rule, update in the same story:
   step's edits in the tree, and never let `settle_po` quarantine them as the
   PO's. A new way for a step to end early is a new `salvage.Cause`.
 
+- A shell command the runner runs for a gate or check goes through
+  `commands.shell_runner`: its own process group, a time limit, and the group
+  killed at the limit (s43). Never call `subprocess.run(..., timeout=...)`
+  with `shell=True` on a command that can start children. At the limit it
+  kills only the shell, then reads the pipe with no deadline and hangs.
+
 ## Events and the dashboard contract
 
 - `dashboard/fixtures/snapshot.json` is the contract for what the dashboard

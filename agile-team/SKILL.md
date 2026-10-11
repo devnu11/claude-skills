@@ -97,6 +97,10 @@ command fails.
    `update` note that starts `Runner fault on sN` means no role can fix it:
    the runner itself (a prepare line, a gate) needs fixing. Relay it; the
    story stays blocked while the PO plans the fix.
+   A gate command that runs past `[gates] command_timeout_s` (default
+   300 s) is killed along with everything it started, and the story
+   bounces. The reason names the hung test, so a hanging test costs
+   minutes and never stalls the run.
    **Sprint boundaries.** At each sprint start the runner merges
    `origin/main` into the team branch and runs the full checks. At each
    sprint end it builds a review branch per unmerged sprint

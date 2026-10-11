@@ -36,6 +36,7 @@ one line here. Older designs are the sections at the end of this file.
 | s45 Manager step: every role-step crash goes to `crash.log` once; a fault applies to any story and an unapplied fault or ruling is reported; `continue_story` refuses a blocked story | [design/s45.md](design/s45.md) |
 | s46 Tests gate accepts green tests when a developer's recorded commit is in the branch; Manager `advance` ruling (logged with its reason); dispute brief quotes the test output | [design/s46.md](design/s46.md) |
 | s47 A waiting run wakes on an answer (pinned by a driver test); `status_reason` and halt notes say what it waits on (`s40 waits on m42`) | [design/s47.md](design/s47.md) |
+| s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
 
 ## Components
 
@@ -56,6 +57,7 @@ one line here. Older designs are the sections at the end of this file.
 | `salvage.py` | a step cut short (s9): `Cause`, `InFlight`, `Interruption`; save the tree as a reverted commit; the note, brief and resume texts | git |
 | `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
 | `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27; `pass_tests`, s30), `dispatch_refusal`, command gates, the dispute gate (resolve and fingerprint at raise, compare at tests, s30) | roles (`Handoff`), loops, fingerprint |
+| `commands.py` | shell commands the runner runs (s43): `CommandShell`/`shell_runner` (own process group, `[gates] command_timeout_s`, group kill, `TIMED_OUT`), `HUNG_PATTERNS` and `hung_test` | none (stdlib) |
 | `fingerprint.py` | content fingerprints that ignore whitespace and comments (s30): `of`, `normalise`, `LINE_COMMENTS`; no I/O | none |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
 | `priority.py` | story priority (s40): `Priority` (the one ranking rule `key`, `ranked`, `queue`, `with_first`, `with_move`), refusals, `moves`; no I/O | gates (`StoryState`) |

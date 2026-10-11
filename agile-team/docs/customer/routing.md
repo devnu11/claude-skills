@@ -139,6 +139,42 @@ ordinary bounces reach the round cap first. The dashboard timeline shows
 **back and forth → needs manager**, and `agile-team status` shows the run
 under `"run"`.
 
+## When a test hangs
+
+The runner never waits on a gate command forever. Each command (tests,
+coverage, the full checks at sprint boundaries) has a time limit of
+`command_timeout_s` under `[gates]` in `.agile-team.toml`, 300 seconds by
+default. Raise it if your suite normally takes longer:
+
+```toml
+[gates]
+command_timeout_s = 600
+```
+
+At the limit the runner stops the command and everything it started, and
+nothing else. The story goes back to the same step, as with a failed gate,
+and the reason names the test that hung:
+
+```
+the command did not finish in time:
+…
+timed out after 300s, so the runner killed its process group: uv run pytest -q
+the hanging test: /repo/tests/test_router.py::test_waits_for_an_answer (line 872)
+```
+
+The runner finds the test in the stack dump the run printed. For a pytest
+suite, set a per-test timeout so there is always a dump. Better still, a
+hanging test then fails by itself in seconds, and the rest of the suite runs:
+
+```toml
+# pyproject.toml (pytest-timeout in your dev dependencies)
+[tool.pytest.ini_options]
+timeout = 30
+```
+
+Without one, pytest's built-in `faulthandler_timeout = 30` still prints a
+dump. With no dump at all, the reason gives the command and the limit.
+
 ## When a story comes back to tests with its code done
 
 A ruling or a review can send a story back to `tests` after its code is

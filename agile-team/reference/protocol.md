@@ -249,6 +249,7 @@ coverage = 95
 round_cap = 3
 repeat = 2                     # the same setback this many times in a row escalates to the Manager
 backstop = 4                   # this many bounces/returns in a row between two steps, any reasons, escalate too
+command_timeout_s = 300        # each gate/check command; at the limit its process group is killed and the gate bounces
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
@@ -555,6 +556,33 @@ start the Proxy. The runner moves the story back to `e2e` **without** a round
 same happens when a `web` delivery's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
+
+### Time limits
+
+Every command the runner runs for a gate has a time limit:
+`[gates] command_timeout_s`, 300 s by default. This covers the test and
+coverage commands, the dispute's test run, the gates' git lookups and the
+full checks at sprint boundaries. Each command gets the full limit. Each
+runs in its own process group with stdin at `/dev/null`. At the limit the
+runner kills that group (`SIGKILL`) and nothing else. It then reads what the
+group wrote, for at most 5 s more. The command counts as exit code 124.
+
+- At `tests` and `implement` a timeout **bounces** (the story stays at the
+  step and a round counts). The reason starts
+  `the command did not finish in time:` and ends with the output's tail. The
+  tail's last two lines are
+  `timed out after 300s, so the runner killed its process group: <command>`
+  and either `the hanging test: <file>::<test> (line N)` or a line saying no
+  test is named. At `tests` a timeout never counts as a failing test. A
+  `"tests"` claim does not pass it either.
+- The hung test is named from a stack frame in the output, in faulthandler's
+  format or the traceback format pytest-timeout prints. Set a per-test
+  timeout (pytest-timeout) or pytest's `faulthandler_timeout` below the gate
+  limit so there is a frame to find. This repo's runner suite uses
+  `pytest-timeout` with `timeout = 30`, so a hanging test fails by itself
+  and the suite goes on.
+- At a sprint boundary a timed-out check fails with `timed out`.
+- `[gates]` is human-owned: a role's edit to it is quarantined.
 
 ### Repeated setbacks
 
@@ -1172,6 +1200,12 @@ merge**.
   `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
   push. Only the runner pushes, and only review branches (see "Sprint
   boundaries").
+- Every role: Bash may not hold an open wait loop. A segment that starts
+  with `until` or `while` is denied unless some segment starts with
+  `timeout` or `gtimeout`. `while read …` and `while IFS= read …` (a loop
+  that ends with its input) and `for` loops pass. Run a suite in the
+  foreground, or give the wait a deadline (see the "Never wait without a
+  deadline" role rule).
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
