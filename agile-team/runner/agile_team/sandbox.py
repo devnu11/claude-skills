@@ -127,6 +127,8 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
     ),
 }
 MCP_SERVERS = {"playwright": PLAYWRIGHT}
+LOCAL_SERVICE_NETWORK: dict[str, Any] = {"allowLocalBinding": True}
+NETWORK_BY_START: dict[Start, dict[str, Any]] = {Start.BACKGROUND: LOCAL_SERVICE_NETWORK}
 
 
 @dataclass
@@ -447,10 +449,14 @@ def _bash_limits(config: Config, prepared: Prepared) -> dict[str, Any]:
 
 
 def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
-    """Claude Code settings: OS sandbox denies reading the repo except allowed paths.
+    """Claude Code settings for the Proxy's OS sandbox.
 
-    Not verified end to end in the spike (needs bubblewrap/Seatbelt on the host);
-    the hook and glob layers do not depend on it.
+    The sandbox denies reading the repo except the allowed paths and, for a
+    delivery that serves locally (``NETWORK_BY_START``), allows reaching it on
+    loopback. ``tests/e2e/test_proxy_sandbox_e2e.py`` runs the bundled claude
+    CLI with these settings on macOS (Seatbelt): a sandboxed ``curl`` gets 200
+    from a live local service, and exits 7 when the ``network`` key is removed.
+    The Linux (bubblewrap) sandbox is not verified end to end.
     """
     repo = config.repo.resolve()
     return {
@@ -466,7 +472,14 @@ def _sandbox_section(config: Config, prepared: Prepared) -> dict[str, Any]:
         "autoAllowBashIfSandboxed": True,
         "allowUnsandboxedCommands": False,
         "filesystem": {"denyRead": [str(repo)], "allowRead": _allowed_reads(config, prepared)},
+        **_network(prepared),
     }
+
+
+def _network(prepared: Prepared) -> dict[str, Any]:
+    """The ``network`` key for a delivery that serves locally; nothing for the rest."""
+    network = NETWORK_BY_START.get(prepared.kind.start)
+    return {"network": dict(network)} if network else {}
 
 
 def _allowed_reads(config: Config, prepared: Prepared) -> list[str]:
