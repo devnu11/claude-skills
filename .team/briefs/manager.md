@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
+
+## s46: Code facts in context; advance ruling moves stories forward
+
+Your context now carries `repeated_setback.code: {implemented, code_commits, code_in}`, showing whether the story's implementation is already in the branch (K6). New ruling: `advance` moves a story one enabled step forward, clearing loops and setting it active (A1). On a story with both fault and ruling, fault applies first; advance then moves it from the new step (A2). Advance is refused at the last step: `applied: false, why: "story {id} is at {step}, its last step; advance cannot mark it done"` (A3). Handoffs may carry `ruling_reason` (string, defaults to summary); ruling events log `{ruling, reason, now_at}` (A4). See ADR-0024, design `agile-team/docs/design/s46.md` (K6, A1–A4).
 
 ## s45: Fault rulings work on any story; report shows applied/unapplied
 

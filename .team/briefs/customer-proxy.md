@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
+
+## s46: Dispute brief now includes test output
+
+When a test dispute is open, the brief shows the test command output captured when the dispute was raised. This helps the acceptance tester see what failed and decide if the test or the design needs to change. The output line appears only if the command produced output; if the test passed, the line says so. See ADR-0024, design `agile-team/docs/design/s46.md` (D1–D3).
 
 ## s45: Crash log now captures exceptions with tracebacks
 

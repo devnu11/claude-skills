@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
+
+## s46: Code already in passes tests gate; advance ruling
+
+Code commits are recorded on every developer step and checked at the tests gate. When code is in the branch, the rework gate applies; no failing test needed. New `advance` ruling moves stories forward one step, clearing loops (A1–A3). Dispute output is captured and shown in briefs while open (D1–D3). Modules affected: `gates.py` (code_in, reworked, code_facts, dispute output), `roles.py` (advance ruling, ruling_reason field), `dispatch.py` (record commits, show output in brief, ruling event logs reason). Role files (`unit-tester.md`, `manager.md`) updated in follow-up s54. See ADR-0024, design `agile-team/docs/design/s46.md`.
 
 ## s45: Crash logging, fault rulings on any story, blocked release
 

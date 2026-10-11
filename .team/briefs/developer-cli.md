@@ -1,8 +1,18 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
 
 See `developer.md` for the base conventions.
+
+## s46: Code already in passes tests gate; advance ruling; dispute output
+
+Code commits are now recorded on every developer step (K1). At `tests`, if commits are in the branch, use rework gate instead of the red gate (K3). New `advance` ruling moves stories forward one step (A1). Disputes now capture test output and show it in briefs (D1–D3). Modules:
+
+- **`gates.py`:** `StoryState.code_commits: list[str]`, `Checks.code_in(story)`, `Checks.code_facts(story)`, `Checks.test_output(test)`, `OpenDispute.output: str`, `Pipeline.reworked(story)`, `Pipeline._move_for(story, ruling)`, `test_name()`, `excerpt()`.
+- **`roles.py`:** `RULINGS` gains `"advance"`, `Handoff.ruling_reason: str = ""`, validation for `ruling_reason`.
+- **`dispatch.py`:** `_record_code(plan, sha)`, `_rework_lines(story)`, `_story_lines(story, rework)` signature change, `_dispute_lines` appends output, ruling event logs `reason` field.
+
+See ADR-0024, design `agile-team/docs/design/s46.md` (rules K1–K6, A1–A4, D1–D3).
 
 ## s45: Crash logging, fault rulings on any story, blocked release
 

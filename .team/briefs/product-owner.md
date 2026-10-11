@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
+
+## s46: Advance ruling moves stories forward; code commits tracked
+
+You can now run the Manager with `"ruling": "advance"` to move a story one step forward, clearing its loops. This solves the problem of a story stuck at a gate no role can satisfy. The Manager sees whether the story's implementation is in the branch (`repeated_setback.code`), so they can decide whether to rule on it. Handoffs may carry `"ruling_reason": "<text>"` (string); it defaults to the summary and is logged in the `ruling` event. When calling the Manager on a stuck story, provide the reason for your ruling. See ADR-0024, design `agile-team/docs/design/s46.md` (A1–A4).
 
 ## s45: Manager crash fixed; blocked stories cannot be released; faults on any story
 

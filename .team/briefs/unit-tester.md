@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s45 done)
+**Last updated:** 2026-10-11 (s46 done)
+
+## s46: Rework gate when code is in; dispute output in brief
+
+Your gate at `tests` now checks whether code is already in the branch (K2, K3). If `implemented == 0` but a developer commit is an ancestor of HEAD, the story is reworked: green suite passes with `"tests": "confirmed"` claim, bounces without it. First-pass logic unchanged. While a dispute is open, your brief shows the test command output when it was raised (D2–D3), so you see what failed. Dispute brief adds a `Test dispute (…)` line with: test id, contradicted rule, reason. If output is set, the next line shows the command output. See ADR-0024, design `agile-team/docs/design/s46.md` (K3–K5, D1–D3, test checklist).
 
 ## s45: Crash logging, fault rulings, continue_story block
 
