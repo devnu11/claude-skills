@@ -76,6 +76,7 @@ def waiting_rt(make_runtime):
     add_story(rt, "s1", "implement")
     q(rt, "Which DB?", ["s1"])
     rt.state.delivered = []
+    rt.record_checkout()  # s61: else the first tick records it and saves once more
     return rt
 
 

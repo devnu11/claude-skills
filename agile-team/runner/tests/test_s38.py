@@ -29,7 +29,8 @@ PO = "product-owner"
 LATER = PO_DELTAS_FROM + 100.0
 REASON = "budget reached: spent $4.00 of $4.00"
 ADVICE = (
-    "raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume`"
+    "raise team.budget_usd in .agile-team.toml and commit it, "
+    "run `agile-team accept-checkout`, then run `agile-team start --resume`"
 )
 
 
@@ -374,6 +375,8 @@ def test_a_committed_raise_lets_resume_run(configured: Path, key_home: Path, mon
     from .conftest import git
 
     git(configured, "commit", "-qam", "raise budget")
+    accept = ["--repo", str(configured), "--home", str(key_home), "accept-checkout"]
+    assert cli.cmd_accept_checkout(cli.build_parser().parse_args(accept)) == 0
     q = Totals([5.0])
     assert start_resume(configured, key_home, q) == 0
     assert len(q.calls) >= 1

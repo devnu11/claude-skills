@@ -43,6 +43,12 @@ def commit_file(repo: Path, name: str = "foreign.txt") -> None:
     git(repo, "commit", "-q", "-m", f"foreign {name}")
 
 
+def write_design(repo: Path, text: str) -> None:
+    """Write the design file, creating ``docs/`` (the scratch repo has none)."""
+    (repo / DESIGN).parent.mkdir(exist_ok=True)
+    (repo / DESIGN).write_text(text)
+
+
 def detach(repo: Path) -> None:
     git(repo, "checkout", "-q", "--detach")
 
@@ -286,8 +292,7 @@ def test_a_move_during_the_step_halts_without_committing(make_runtime) -> None:
     holder: list = []
 
     def act() -> None:
-        (holder[0].config.repo / DESIGN).parent.mkdir(exist_ok=True)
-        (holder[0].config.repo / DESIGN).write_text("design\n")
+        write_design(holder[0].config.repo, "design\n")
         detach(holder[0].config.repo)
 
     rt = make_runtime(FakeQuery(cost=0.25, action=act))
@@ -306,7 +311,7 @@ def test_a_move_during_the_step_halts_without_committing(make_runtime) -> None:
 
 
 def test_a_move_between_commit_and_gate_halts_the_gate(make_runtime, monkeypatch) -> None:
-    rt = make_runtime(FakeQuery(action=lambda: (rt.config.repo / DESIGN).write_text("d\n")))
+    rt = make_runtime(FakeQuery(action=lambda: write_design(rt.config.repo, "d\n")))
     rt.state.sprint = 1
     add_story(rt, "s1", "design")
     rt.record_checkout()
@@ -347,7 +352,7 @@ def test_save_interrupted_on_a_match_saves_and_records(make_runtime) -> None:
 
 
 def test_a_normal_step_moves_the_record_to_its_commit(make_runtime) -> None:
-    rt = make_runtime(FakeQuery(action=lambda: (rt.config.repo / DESIGN).write_text("d\n")))
+    rt = make_runtime(FakeQuery(action=lambda: write_design(rt.config.repo, "d\n")))
     rt.record_checkout()
     old = rt.state.checkout.head
     report = step(rt)
@@ -409,7 +414,7 @@ def test_a_move_before_a_po_turn_means_no_po_query(make_runtime) -> None:
 
 def test_a_move_during_the_po_turn_halts_at_settle_with_no_commit(make_runtime) -> None:
     async def move(rt) -> None:
-        (rt.config.repo / DESIGN).write_text("po edit\n")
+        write_design(rt.config.repo, "po edit\n")
         detach(rt.config.repo)
 
     script = Script(po=[move])
@@ -433,25 +438,6 @@ def test_pass_tests_on_a_moved_checkout_runs_no_gate(make_runtime) -> None:
     report = json.loads(out["content"][0]["text"])
     assert report["status"] == "halted" and report["reason"].startswith(checkout.CHECKOUT_HEAD)
     assert runner.calls == [] and rt.state.stories["s1"].step == "tests"
-
-
-def test_a_sprint_start_merge_moves_the_record(tmp_path: Path, make_runtime) -> None:
-    from .s29_helpers import land_upstream, make_origin
-    from .test_boundary_runner import Env
-
-    origin, clone = make_origin(tmp_path)
-    assert clone.exists()
-    env = Env(make_runtime)
-    repo = env.rt.config.repo
-    land_upstream(tmp_path, origin, "theirs.txt")
-    env.rt.record_checkout()
-    old = env.rt.state.checkout.head
-    from agile_team import boundary as bd
-
-    env.open(bd.Edge.START)
-    env.drive()
-    assert env.outcomes()[0] == "merged"
-    assert env.rt.state.checkout.head == git(repo, "rev-parse", "HEAD").strip() != old
 
 
 def test_recover_killed_records_the_head_after_its_salvage(configured: Path) -> None:

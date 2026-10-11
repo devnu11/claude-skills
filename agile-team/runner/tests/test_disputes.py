@@ -706,6 +706,7 @@ def test_a_dispute_round_trip_costs_no_round_and_no_handover(make_runtime) -> No
 
     async def fix_test(rt) -> None:
         write_test_file(rt, NEW)
+        rt.record_checkout()  # s61: the shortcut commit is ours, not a foreign one
 
     script = Script({"developer": [dispute], "unit-tester": [fix_test]})
     rt = build(make_runtime, script, steps=["tests", "implement", "review"])

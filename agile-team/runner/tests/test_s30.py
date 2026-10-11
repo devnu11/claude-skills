@@ -28,6 +28,7 @@ def stuck_tools(make_runtime, exit_code=0, step="tests", **kw):
     rt.state.sprint = 1
     kw.setdefault("sprint", 1)
     rt.state.stories["s1"] = StoryState("s1", "Add", step, **kw)
+    rt.record_checkout()  # s61: the first check records it; snapshots start after that
     return Tools(rt), rt.state.stories["s1"], runner
 
 

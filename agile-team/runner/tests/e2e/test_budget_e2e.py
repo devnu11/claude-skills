@@ -54,6 +54,13 @@ def run(repo: Path, home: Path, q, capsys, *rest: str) -> tuple[int, str]:
     return code, capsys.readouterr().err
 
 
+def accept(repo: Path, home: Path, capsys) -> None:
+    """Keep the human's commit as the expected checkout (s61 K10)."""
+    capsys.readouterr()
+    assert cli.cmd_accept_checkout(argv(repo, home, "accept-checkout")) == 0
+    assert "accepted checkout main at " in capsys.readouterr().out
+
+
 def test_ac4_sequence(configured: Path, key_home: Path, capsys) -> None:
     set_budget(configured, 10.0)
     git(configured, "commit", "-q", "--allow-empty", "-am", "budget 10")
@@ -65,6 +72,7 @@ def test_ac4_sequence(configured: Path, key_home: Path, capsys) -> None:
 
     set_budget(configured, 4.0)
     git(configured, "commit", "-qam", "budget 4")
+    accept(configured, key_home, capsys)
     q = Totals([4.0])
     code, err = run(configured, key_home, q, capsys, "--task", "t2")
     st = status(configured, key_home, capsys)
@@ -87,6 +95,7 @@ def test_ac4_sequence(configured: Path, key_home: Path, capsys) -> None:
     assert q.calls == [] and st["status"] == "blocked"
 
     git(configured, "commit", "-qam", "raise budget")
+    accept(configured, key_home, capsys)
     q = Totals([5.0])
     code, err = run(configured, key_home, q, capsys, "--resume")
     st = status(configured, key_home, capsys)

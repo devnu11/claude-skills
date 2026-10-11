@@ -545,3 +545,16 @@ def test_due_is_none_without_a_boundary_and_a_boundary_step_otherwise(env: Env) 
     assert env.br.due() is None
     env.open(Edge.START)
     assert env.br.due() == bd.Due(StepKind.BOUNDARY, "runner", "")
+
+
+def test_a_sprint_start_merge_moves_the_checkout_record(
+    env: Env, tmp_path: Path, origin: Path
+) -> None:
+    """s61 K1: the runner's own sprint-start merge updates the recorded HEAD."""
+    land_upstream(tmp_path, origin, "theirs.txt")
+    env.rt.record_checkout()
+    old = env.rt.state.checkout.head
+    env.open(Edge.START)
+    env.drive()
+    assert env.outcomes()[0] == "merged"
+    assert env.rt.state.checkout.head == rev(env.rt.config.repo, "HEAD") != old

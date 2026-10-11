@@ -147,6 +147,7 @@ def test_halt_table_values() -> None:
         halt.HaltKind.CRASH: (RunStatus.FAILED, "failed", 70),
         halt.HaltKind.SIGTERM: (RunStatus.STOPPED, "stopped", 143),
         halt.HaltKind.BUDGET: (RunStatus.BLOCKED, "blocked", 77),
+        halt.HaltKind.CHECKOUT: (RunStatus.CHECKOUT_CHANGED, "question", 78),
     }
 
 
