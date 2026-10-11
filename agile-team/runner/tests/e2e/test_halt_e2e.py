@@ -78,6 +78,7 @@ class PoRunsRole:
         tools = Tools(rt)
         await tools.open_story({"id": "s1", "title": "S1"})
         await tools.start_sprint({"goal": "g", "stories": ["s1"]})
+        rt.state.boundary = None  # the sprint-start boundary (s29) is not under test here
         rt.state.manager_due.clear()  # skip the sprint-start manager review
         self.reports.append(await rt.run_role(StepRequest("architect", "design it", "s1")))
         yield result_message("PO text", session="po-sess")
