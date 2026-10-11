@@ -82,7 +82,5 @@ write = [
     "{docs}",
     "agile-team/SKILL.md",
     "agile-team/reference/**",
-    "unattended/SKILL.md",
-    "unattended/reference/**",
     "README.md",
 ]
