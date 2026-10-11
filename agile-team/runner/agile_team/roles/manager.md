@@ -76,6 +76,15 @@ delivery that never starts; `"author": "runner"` hints at this but does not
 prove it). Hand off `"fault"`, and optionally a `"ruling"`, which wins. Use
 `followups` to tell the fault role what to fix.
 
+## Naming a fault
+
+`"fault"` works on any story you are run on, not only a repeated one; for
+example a `blocked` or `needs_manager` story whose gate reason is a runner
+fault. An applied fault sends the story to the named role's step (`runner`
+blocks it), sets it `active` (or `blocked` for `runner`), and clears its hold,
+rounds, dispute and loop. A `ruling` in the same handoff is applied only after
+the fault was applied.
+
 ## Definition of done
 
 Every reason in the runner context is addressed, and anything out of line in

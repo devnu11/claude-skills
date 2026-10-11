@@ -20,7 +20,7 @@ from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission,
 from .boundary_runner import boundary_event
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
-from .gates import StoryState, role_fits_step
+from .gates import StoryState, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
 from .priority import Change, Placement, Reorder
@@ -232,7 +232,8 @@ class Tools:
     async def continue_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release a held story and pass the PO's note to its next step."""
         story, reason = self._story_for(args)
-        if story is None:
+        reason = reason or continue_refusal(story)  # type: ignore[arg-type]
+        if story is None or reason:
             return text_result(refused(reason))
         story.hold, story.note = None, args.get("note", "")
         self.runtime.save()

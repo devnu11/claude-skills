@@ -207,12 +207,32 @@ def role_fits_step(role: str, step: str) -> bool:
     return role == expected or (expected == "developer" and role.startswith("developer"))
 
 
-def ruling_refusal(story: StoryState | None) -> str | None:
-    """Why a Manager ruling cannot apply to ``story``, or ``None``."""
+def ruling_refusal(story: StoryState | None, what: str = "a ruling") -> str | None:
+    """Why a Manager ruling (or fault, ``what``) cannot apply to ``story``, or ``None``."""
     if story is None:
-        return "a ruling needs a story; run the manager on that story"
+        return f"{what} needs a story; run the manager on that story"
     if story.status is StoryStatus.DONE:
-        return f"story {story.id} is done; a ruling cannot move it"
+        return f"story {story.id} is done; {what} cannot move it"
+    return None
+
+
+def setback_reason(story: StoryState) -> str:
+    """The setback the Manager rules on: the repeated reason, else the last gate's reason."""
+    if story.repeated:
+        return story.repeated
+    return story.previous.reason if story.previous else ""
+
+
+CONTINUE_BLOCKED = (
+    "story {id} is blocked (escalated to the human); continue_story would leave it "
+    "stalled. Run the manager on {id} with a ruling or a fault to move it"
+)
+
+
+def continue_refusal(story: StoryState) -> str | None:
+    """Why ``continue_story`` may not release ``story``, or ``None``."""
+    if story.status is StoryStatus.BLOCKED:
+        return CONTINUE_BLOCKED.format(id=story.id)
     return None
 
 
@@ -504,6 +524,7 @@ class Pipeline:
         """Send the story to the role at fault (or block it for the runner) and clear its loop."""
         story.step = self.step_for_role(fault) or story.step
         story.status = FAULT_STATUS[self.fault_kind(fault)]
+        story.hold = None
         self._clear(story)
 
     def pass_tests_refusal(self, story: StoryState) -> str | None:

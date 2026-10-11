@@ -43,6 +43,7 @@ from .gates import (
     dispatch_refusal,
     role_fits_step,
     ruling_refusal,
+    setback_reason,
 )
 from .git_ops import Git, GitError
 from .halt import Halt
@@ -89,9 +90,10 @@ SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD})
 FAULT_MISSING = 'story {id} repeated a setback; name its fault: "fault": a role or "runner"'
 FAULT_UNKNOWN = 'unknown fault {fault!r}; name a role or "runner"'
 RUNNER_FAULT_NOTE = (
-    "Runner fault on {story}: the same setback repeated and no role can fix it: {reason}. "
+    "Runner fault on {story}: no role can fix this setback: {reason}. "
     "The manager says: {summary} The story is blocked until the runner is fixed."
 )
+RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
 BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
@@ -513,14 +515,23 @@ class Runtime:
     # ----- running -------------------------------------------------------
 
     async def run_role(self, request: StepRequest) -> dict[str, Any]:
-        """Run one role step end to end and return a report for the PO."""
+        """Run one role step end to end and return a report for the PO; log any crash."""
         reason = self.refusal(request)
         if reason:
             return refused(reason)
+        try:
+            report = await self._run_step(request)
+        except Exception as exc:
+            halt.log_traceback(self.config.run_dir, exc)
+            raise
+        self.enforce_ceiling()
+        return report
+
+    async def _run_step(self, request: StepRequest) -> dict[str, Any]:
+        """Settle the PO, return an unpresented request or run the planned step, then note it."""
         self.settle_po()
         report = self._unpresented(request) or await self._plan_and_run(request)
         self._note_if_ran(request, report)
-        self.enforce_ceiling()
         return report
 
     def _note_if_ran(self, request: StepRequest, report: dict[str, Any]) -> None:
@@ -584,18 +595,17 @@ class Runtime:
 
     async def _run_planned(self, plan: Plan) -> dict[str, Any]:
         try:
-            result = await self._execute(plan)
+            return self.settle(plan, await self._execute(plan))
         except Exception as exc:
             return self._step_failed(plan, exc)
-        return self.settle(plan, result)
 
     def _step_failed(self, plan: Plan, exc: Exception) -> dict[str, Any]:
-        """A limit halts the run; any other error goes on to the PO unchanged."""
-        halt.log_traceback(self.config.run_dir, exc)
+        """A limit halts the run (logged here); any other error is saved and re-raised."""
         found = halt.limit_halt(exc)
         if found is None:
             self.save_interrupted(Cause.ERROR)
             raise exc
+        halt.log_traceback(self.config.run_dir, exc)
         return halted_report(plan, self.halt_run(found))
 
     def priority(self) -> Priority:
@@ -803,18 +813,23 @@ class Runtime:
         return {"boundary": {**data, "reason": b.escalated, "hold": b.hold, "reviewed": True}}
 
     def _rulings(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
-        if plan.story and plan.story.repeated is not None:
-            return self._rule_repeat(plan, handoff)
+        if _names_fault(plan, handoff):
+            return self._rule_after_fault(plan, handoff)
         return self._rule(plan, handoff.ruling) if handoff.ruling else {}
 
-    def _rule_repeat(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
-        """Apply the fault the Manager named; a ruling then wins, but only after a fault applied."""
+    def _rule_after_fault(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """Apply the named fault; a ruling then wins, or is reported unapplied."""
         report = self._fault(plan, handoff)
-        if report["fault"]["applied"] and handoff.ruling:
-            report |= self._rule(plan, handoff.ruling)
-        return report
+        if not handoff.ruling:
+            return report
+        if report["fault"]["applied"]:
+            return report | self._rule(plan, handoff.ruling)
+        return report | _unapplied_ruling(handoff.ruling)
 
-    def _fault_refusal(self, story: StoryState, fault: str | None) -> str | None:
+    def _fault_refusal(self, story: StoryState | None, fault: str | None) -> str | None:
+        why = ruling_refusal(story, "a fault")
+        if why or story is None:
+            return why
         if not fault:
             return FAULT_MISSING.format(id=story.id)
         known = fault == "runner" or fault in self.book.names()
@@ -825,7 +840,7 @@ class Runtime:
         why = self._fault_refusal(story, fault)
         if why:
             return {"fault": {"fault": fault, "applied": False, "why": why}}
-        reason, kind = story.repeated, self.pipeline.fault_kind(fault)
+        reason, kind = setback_reason(story), self.pipeline.fault_kind(fault)
         self.pipeline.apply_fault(story, fault)
         report = {"fault": fault, "kind": kind, "reason": reason, "now_at": story.step}
         self.emit(EventKind.FAULT, plan, **report)
@@ -848,6 +863,16 @@ class Runtime:
         now_at = plan.story.step
         self.emit(EventKind.RULING, plan, ruling=ruling, now_at=now_at)
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
+
+
+def _names_fault(plan: Plan, handoff: Handoff) -> bool:
+    """The fault path applies: a fault is named or the story repeated a setback."""
+    return bool(handoff.fault or (plan.story and plan.story.repeated is not None))
+
+
+def _unapplied_ruling(ruling: str) -> dict[str, Any]:
+    """The report of a ruling held back because its fault did not apply."""
+    return {"ruling": {"ruling": ruling, "applied": False, "why": RULING_AFTER_FAULT}}
 
 
 FIX_SETUPS = {

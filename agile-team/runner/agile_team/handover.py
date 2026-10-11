@@ -159,13 +159,13 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.OFF_PIPELINE_FAULT,
         lambda r: _faulted(r, "off_pipeline"),
-        "{story}: the manager puts the repeated setback ({fault_reason}) on {fault}, which owns no "
+        "{story}: the manager puts the setback ({fault_reason}) on {fault}, which owns no "
         "pipeline step; brief {fault} yourself, then continue_story",
     ),
     Rule(
         Trigger.FAULT_NOT_APPLIED,
         lambda r: _fault(r).get("applied") is False,
-        "{story}: the manager's ruling on the repeated setback was not applied: {fault_why}; "
+        "{story}: the manager's fault ruling was not applied: {fault_why}; "
         "run the manager on {story} again",
     ),
     Rule(

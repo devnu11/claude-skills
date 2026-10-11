@@ -60,13 +60,15 @@ another role's work.
    - **runner fault**: tell the human what the note says, open a story for the
      runner fix (often devops or developer-cli), and once it is fixed run the
      manager on the blocked story with a ruling.
+   - **a blocked story**: `continue_story` refuses it. Run the manager on it with a
+     ruling or a fault.
    - **a story stuck at tests with a green suite** (for example a corrected
      disputed test the gate did not see, or a runner fault at tests):
      pass_tests(story, reason) moves it on. The runner checks the suite first,
      and the manager reviews it. Never edit state.json.
    - **repeated setback put on a role with no step**: `run_role` that role,
      then `continue_story`.
-   - **fault ruling not applied**: run the manager on the story again.
+   - **fault ruling not applied** (the reason says why): run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
    - **sync conflict** (sprint start): ask the human to merge upstream into
