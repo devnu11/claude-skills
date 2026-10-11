@@ -2,6 +2,7 @@
 
 import asyncio
 import functools
+import subprocess
 
 import pytest
 from agile_team import fingerprint, gates, roles
@@ -515,11 +516,15 @@ def write_test_file(rt, text=OLD) -> None:
     path = rt.config.repo / FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
+    # Committed: the developer step quarantines and reverts out-of-scope changes.
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "add", FILE], cwd=rt.config.repo, check=True)
+    subprocess.run(["git", *ident, "commit", "-qm", "test file"], cwd=rt.config.repo, check=True)
 
 
 def dispute_runtime(make_runtime, **kw):
     text = handoff("changes_requested", summary="why", dispute=DISPUTE_JSON)
-    rt = make_runtime(FakeQuery(text), runner=FakeRunner(RESULTS), **kw)
+    rt = make_runtime(FakeQuery(text), runner=FakeRunner(dict(RESULTS)), **kw)
     write_test_file(rt)
     open_story(rt)
     return rt
@@ -559,7 +564,7 @@ def test_a_dispute_does_not_run_the_implement_gate(make_runtime) -> None:
 
 
 def test_a_normal_gate_still_logs_a_gate_event(make_runtime) -> None:
-    rt = make_runtime(FakeQuery(), runner=FakeRunner(RESULTS))
+    rt = make_runtime(FakeQuery(), runner=FakeRunner(dict(RESULTS)))
     open_story(rt)
     run(rt, "developer")
     assert len(events_of(rt, "gate")) == 1 and events_of(rt, "test-dispute") == []
@@ -593,7 +598,7 @@ def test_the_dispute_line_follows_the_story_line(make_runtime) -> None:
 
 
 def test_a_story_without_a_dispute_has_no_dispute_line(make_runtime) -> None:
-    rt = make_runtime(FakeQuery(), runner=FakeRunner(RESULTS))
+    rt = make_runtime(FakeQuery(), runner=FakeRunner(dict(RESULTS)))
     open_story(rt)
     run(rt, "developer")
     assert "Test dispute" not in rt.query_fn.calls[0]["prompt"]
@@ -690,10 +695,15 @@ def context_of(prompt: str) -> str:
 
 def test_a_dispute_round_trip_costs_no_round_and_no_handover(make_runtime) -> None:
     dispute = handoff("changes_requested", summary="why", dispute=DISPUTE_JSON)
-    script = Script({"developer": [dispute]})
+
+    async def fix_test(rt) -> None:
+        write_test_file(rt, NEW)
+
+    script = Script({"developer": [dispute], "unit-tester": [fix_test]})
     rt = build(make_runtime, script, steps=["tests", "implement", "review"])
     rt.pipeline.checks.read = functools.partial(gates.read_repo_file, rt.config.repo)
-    rt.pipeline.checks.run.results[LS] = (0, FILE + "\n")  # type: ignore[attr-defined]
+    inner = rt.pipeline.checks.run
+    rt.pipeline.checks.run = lambda c: (0, FILE + "\n") if c == LS else inner(c)
     write_test_file(rt)
     add_story(rt, "s1", "implement")
     drive(rt)

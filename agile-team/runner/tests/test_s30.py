@@ -112,7 +112,7 @@ def test_the_event_carries_the_open_dispute_test(make_runtime) -> None:
     t, _, _ = stuck_tools(make_runtime, **STUCK["dispute"])
     call(t.pass_tests({"story": "s1", "reason": "fixed"}))
     [e] = [e for e in t.runtime.events.events() if e.kind == "tests-passed"]
-    assert (e.role, e.story) == ("po", "s1")
+    assert (e.role, e.story) == (po_tools.PO, "s1")
     assert e.data == {"from": "tests", "now_at": "implement", "reason": "fixed", "test": "t.py::a"}
 
 
