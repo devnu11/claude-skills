@@ -1,8 +1,16 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s21 done)
 
 ## Design decisions to verify
+
+**Dashboard fixes (s21):** Verify that the toggle, live config, and board layout work correctly:
+- **F1–F4:** Toggle between tokens and dollars; choice in `ui.unit` persists; only "Tokens by" chart reads it; bars sort by unit total, legend and title change (ADR-0021 context).
+- **F5–F6:** Each `snapshot.build()` re-reads config via `fresh_config()`; missing or unparsable file falls back to startup config; config file in `watched_files` triggers SSE push.
+- **F7–F9:** Board layout uses flexbox (`flex: 1 1 0; min-width: 0; overflow: hidden` per column); empty columns 44px strips with vertical headings; card text wraps (ADR-0022 context).
+- **Contract unchanged:** Server, CLI, config, snapshot fixture do not change. Role book built once at startup (docs_dir changes need restart).
+
+## Previous design decisions to verify
 
 **Budget correction and ceiling (s38):** Verify that ledger entries are corrected on read, the ceiling is enforced consistently, and the human can raise the budget:
 - **K1–K3:** `ledger.corrected()` walks legacy entries with `SessionCost`, turning running totals into own costs. `_own_share()` checks `at < PO_DELTAS_FROM`. Only `cost_usd` changes; other fields stay. Input never mutated.

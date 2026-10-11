@@ -1,6 +1,15 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s21 done)
+
+## s21: Dashboard features: toggle, live budget, Done column
+
+Three dashboard features shipped. Your manual testing verified all ACs; note the caveat:
+
+- **AC1 toggle:** Click "Tokens" or "Dollars" on the "Tokens by" chart; choice persists across live updates (do not refresh).
+- **AC2 live budget:** Edit `.agile-team.toml`, change `budget_usd`, save; within ~1s the header and Spend tile show new value.
+- **AC3 Done column:** At 1280px wide, board shows all columns (Backlog, 8 steps, Done) without scrolling; even with cards in every column.
+- **Caveat:** Board tested with empty columns only. Full-board integration test at 1280px (all columns with cards) is pending in a follow-up story.
 
 ## s11: Test disputes in acceptance testing
 

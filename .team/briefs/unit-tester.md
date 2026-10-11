@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s38 done)
+**Last updated:** 2026-10-11 (s21 done)
 
 ## s38: Corrected budget numbers and ceiling
 
@@ -15,6 +15,19 @@ Budget correction on read + ceiling halts run. Test coverage from design section
 7. **AC4 sequence:** through `cli.main([...])`, real config load, preflight runs. Below/reaches/over at start/raise+commit/resume without raise.
 
 Coverage ≥95%, ruff clean. See ADR-007, design `agile-team/docs/design/s38.md` test checklist.
+
+## s21: Dashboard fixes — toggle, live config, responsive board
+
+Dashboard page tests (`tests/test_dashboard_ui.py`), snapshot and server tests. Key test areas:
+
+1. **Fresh config (F5):** `test_build_rereads_budget_and_round_cap` rewrites `.agile-team.toml` with same `Config` object, asserts new values; `test_build_falls_back_when_file_missing_or_unparsable` covers missing, invalid TOML, and asserts `fresh is config` (fallback).
+2. **Watched files (F6):** `test_watched_files_lists_inputs_only` updated to expect config file at position 6; server test `test_config_file_is_watched_and_budget_is_live` bumps mtime, checks fingerprint and budget update.
+3. **UI toggle (F1):** Script holds `data-unit`, `ui.unit`, `UNITS` keys, `renderUnit`, `barRows`, `costRow`, `costLegend`, `tokenLegend` functions; click handler uses `closest("[data-unit]")` and calls `render()`.
+4. **Only that chart (F2):** Cut bodies of `renderSpend`, `renderTiles`, `renderTables`, `renderHeader` — none contain `ui.unit`; `renderBars` (or `barRows`) does.
+5. **Survives updates (F3):** `test_unit_survives_live_updates` greps `normalize`, `connectLive`, `render`, `boot` for no `ui.unit =` assignments; exactly one in click handler.
+6. **Board layout (F7–F9):** `.board` rule has `display: flex`, no `overflow-x`, no `190px`. `.col` has `flex: 1 1 0; min-width: 0; overflow: hidden`. `.col.empty` is `flex: 0 0 44px`. `.story` has `overflow-wrap: anywhere`. Test arithmetic: 10 empty × 44px + 9 gaps × 8px ≤ 1280 − padding.
+
+See ADR-0021, ADR-0022, design `agile-team/docs/design/s21.md` test checklist.
 
 ## s30: Dispute gate now checks content, not commits
 
