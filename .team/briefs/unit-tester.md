@@ -1,6 +1,25 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
+
+## s29: Boundary runner tests (sync, rebuild, check, push, stacked PRs)
+
+Sprint boundaries are runner steps that execute at start and end. Key test areas from the design checklist:
+
+1. **Skip conditions (U4):** No remote, empty remote, fetch fail, no target → one `skipped` event, no other stage.
+2. **Merge in (U5):** Upstream commit merges (HEAD moves), no commit on no new upstream, recompute all shas as ancestors, merge conflict → hold `sync_conflict`, tree unchanged, exact hand-over text.
+3. **Full checks (U7):** Order: lint, static, test, coverage, then e2e per delivery. Every check runs; none skipped. Coverage baseline applies. Reason format exact.
+4. **Team fix (U9–U11):** Fail on team branch → `failure` set, next work `devops` with brief quoting output. After done, `rounds==1`, check reruns, pass moves on.
+5. **Stack and rebuild (U6, U8, U15–U16):** Entries added at end, ranges drop merged entries. Cherry-pick loop handles real conflicts and empty picks. Rerere replays recorded resolutions. Bottom and top checked once each (skipped if `checked==head`).
+6. **Push (U17, U19):** Permission `unasked` → hold `push_permission`, branches listed, hand-over exact. Permission `no` → `local` report, done. Permission `yes` → branches pushed with lease, no team branch or main push.
+7. **PRs (U18):** Bottom created `ready` with base main, others `draft` with base = previous branch. Body has `STACKED_LINE` (not on bottom). Rerun edits only what differs. After bottom merges, next PR's base → main, mode → ready. Closed PR left alone with `CLOSED_NOTE`.
+8. **Finish (U22):** End boundary finishes with `done`, `closed==sprint`, report set. Sprint-end note includes `Review: <report>`. Start boundary without restack finishes after `check`.
+9. **Errors (U3):** Exception in stage → hold `error`, traceback in `crash.log`, `boundary_error` hand-over, `continue_boundary` reruns.
+10. **Permission tool (U20):** `set_push_permission("yes"|"no")` emits `boundary` event, clears hold, refused on other values.
+11. **Continue tool (U21):** `continue_boundary(note)` refuses on no boundary or unheld; clears hold, failure, streak/rounds on escalated/reviewed.
+12. **Dashboard (U25):** Snapshot has `upstream` shape (stack, boundary), fixture keys match builder, Review stack card renders from fixture, timeline has `boundary` rows.
+
+Contract changes: `start_sprint` opens a boundary (one step, event); sprint-end note lines may include `Review:`. See design `agile-team/docs/design/s29.md` (test checklist section) and ADR-0015.
 
 ## s24: Reworked stories and test claims
 

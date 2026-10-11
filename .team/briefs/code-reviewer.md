@@ -1,8 +1,20 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
 
 ## Design decisions to verify
+
+**Sync with upstream and stacked PRs (s29):** Verify that sprint boundaries are code (not prompt) and that all git and PR operations go through narrow interfaces:
+- Boundary steps (sync, check, review, push) are router-picked before sprint stories; they cannot be skipped by a prompt.
+- `Upstream.merge_in()` and `Upstream.push()` use `Git` with options; `Prs` is a protocol with `GhPrs` and `NoPrs` implementations.
+- Review branches are built once per boundary stage by cherry-picking in a worktree (`.team/run/review`), never edited by hand; every `git rerere` resolution is tested on a fresh rebuild.
+- The stack is kept in `state.upstream.stack` as `StackEntry` objects; merged entries are dropped by comparing picks against `git cherry-pick` logic (not by marking them).
+- Permission is asked once and stored in `state.upstream.push` (yes/no/unasked); the PO tool `set_push_permission()` is the only way to change it.
+- Dashboard snapshot gains `upstream` section with stack, boundary state, team branch, remote, and report.
+- Escalation context (U13) adds `repeated_boundary` to the Manager's context when the same failure repeats (integrates with s27 logic).
+- Rules U1–U27 and exact strings in `agile-team/docs/design/s29.md`; see ADR-0015.
+
+**Repeated setback escalation and backstop (s27):** Verify that loops are broken when a story bounces for the same reason or ping-pongs between two steps:
 
 **Repeated setback escalation and backstop (s27):** Verify that loops are broken when a story bounces for the same reason or ping-pongs between two steps:
 - `loops.NORMALISE` table (data-driven): regex patterns strip timestamps, URLs, host:port, paths, ids, shas, counts in order. Stored keys are recomputed on load (never trusted).

@@ -1,6 +1,19 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
+
+## s29: Sync and stacked PR delivery
+
+Sprint boundaries are now runner code: at start, the runner syncs by merging upstream main into the team branch (never rebasing it); at end, it rebuilds review branches in a scratch worktree by cherry-picking each sprint onto the latest main, verifies they work, and pushes them as a stacked PR per sprint. Only the bottom PR is ready for review (others are drafts); CI skips drafts. Permission to push is asked once. Conflict resolutions are recorded with git rerere and replayed.
+
+Key architectural choices:
+- **Team branch immutable:** Hashes recorded in state stay valid forever; only merges touch it.
+- **Review branches derived:** Cherry-picked fresh each time in a worktree; fixes land on the team branch, not the review branch.
+- **Boundary is code:** Sync, check, review, push are runner steps the PO can hold or continue; the router picks them before sprint stories.
+- **Escalation applies:** Same failure at a boundary repeats and goes to the Manager (via s27 logic).
+- **Narrow interfaces:** `Upstream` (git), `Prs` (gh), both testable with fakes; the runner works without a remote.
+
+See ADR-0015, design `agile-team/docs/design/s29.md` (rules U1–U27, modules).
 
 ## Context reduction — focused design files (s23)
 

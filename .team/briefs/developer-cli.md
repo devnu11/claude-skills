@@ -1,8 +1,23 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
 
 See `developer.md` for the base conventions.
+
+## s29: Sync with upstream, verify review branches, and deliver stacked PRs
+
+Sprint boundaries are now runner steps (boundary.py, boundary_runner.py, stack.py, fullcheck.py, upstream.py) that sync with upstream at start, rebuild and verify review branches at end, and manage stacked PRs. Key modules:
+
+- **upstream.py:** Merges upstream main into the team branch (start), pushes review branches and manages the PR stack. Narrow interface: `Git.options`, `Git.attempt`, `Git.branch()`, `Upstream` (merge_in, target, push), `Prs` protocol (find, create, edit), `GhPrs` and `NoPrs` implementations.
+- **stack.py:** Rebuilds review branches from scratch in a worktree (`.team/run/review`) by cherry-picking each sprint's commits onto the latest main, detects conflicts, records resolutions with `git rerere`.
+- **fullcheck.py:** Runs full checks in order: lint, static, test, coverage, then e2e per delivery. Every check runs; none is skipped after a failure.
+- **boundary.py:** Data and strings for boundary stages (sync, check, review, push), holds, failures, fixes, permissions.
+- **boundary_runner.py:** Orchestrates the four stages, runs after_fix on DevOps reports, escalates repeats (s27).
+- **config.py:** `UpstreamSettings(remote, branch, prefix)`, `Delivery.e2e`.
+- **state.py:** Boundary, UpstreamState, StackEntry for persisting state.
+- **dispatch.py, router.py, handover.py:** Boundary routing, refusals, escalation, hand-overs, permission asking.
+
+See ADR-0015, design `agile-team/docs/design/s29.md` (rules U1–U27, modules, test checklist).
 
 ## s24: Rework gate and hold clearing
 

@@ -1,6 +1,12 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
+
+## s29: Boundary escalation context
+
+In addition to story escalations (s27), the runner's own boundary failures (sync conflict, check failure, review rebuild conflict, push reject) can escalate. You receive `repeated_boundary` in the context when the same failure repeats after a DevOps fix, with `edge` (start/end), `sprint`, `stage` (sync/check/review/push), `reason` (the failure output), `key` (normalised), `count` (repeats), `history` (earlier failures), and `events` (all logs). Decide whether to hold the human's answer or ask them for input, then the PO clears the hold with `continue_boundary(note)`.
+
+See ADR-0015, design `agile-team/docs/design/s29.md` (rule U13).
 
 ## Corrected cost accounting (s25)
 

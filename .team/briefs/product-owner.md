@@ -1,6 +1,19 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s27 done)
+**Last updated:** 2026-10-11 (s29 done)
+
+## s29: Boundary hand-overs and permission
+
+At each sprint's start and end, the runner syncs with upstream and rebuilds review branches as boundary steps. You manage holds and permissions:
+
+- **sync_conflict** (start): ask the human to merge upstream into the team branch by hand and commit; once done, `continue_boundary`.
+- **push_permission**: ask once whether the team may push review branches and open/update PRs, then `set_push_permission("yes"|"no")`. It applies to every later sprint.
+- **push_rejected** or **boundary_error**: tell the human; `continue_boundary` once fixed.
+- **boundary_escalated**: same check failure repeated and the manager reviewed it. Decide what changes, then `continue_boundary(note)`.
+
+While a boundary is held, `start_sprint` is refused and the sprint's stories wait.
+
+See ADR-0015, design `agile-team/docs/design/s29.md` (rules U1–U27, hand-over rows).
 
 ## Session renewal at sprint and story boundaries (s23)
 
