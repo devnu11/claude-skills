@@ -40,11 +40,6 @@ class Trigger(StrEnum):
     RUNNER_FAULT = "runner_fault"
     OFF_PIPELINE_FAULT = "off_pipeline_fault"
     FAULT_NOT_APPLIED = "fault_not_applied"
-    SYNC_CONFLICT = "sync_conflict"
-    PUSH_PERMISSION = "push_permission"
-    PUSH_REJECTED = "push_rejected"
-    BOUNDARY_ERROR = "boundary_error"
-    BOUNDARY_ESCALATED = "boundary_escalated"
 
 
 @dataclass(frozen=True)
@@ -62,14 +57,6 @@ def _gate(report: dict) -> dict:
 
 def _fault(report: dict) -> dict:
     return report.get("fault") or {}
-
-
-def _boundary(report: dict) -> dict:
-    return report.get("boundary") or {}
-
-
-def _held(hold: str) -> Callable[[dict], bool]:
-    return lambda r: _boundary(r).get("hold") == hold
 
 
 def _faulted(report: dict, kind: str) -> bool:
@@ -168,40 +155,6 @@ HANDOVERS: tuple[Rule, ...] = (
         "{story}: the manager's ruling on the repeated setback was not applied: {fault_why}; "
         "run the manager on {story} again",
     ),
-    Rule(
-        Trigger.SYNC_CONFLICT,
-        _held("sync_conflict"),
-        "{story}: sprint {sprint} start: merging {target} into {team_branch} conflicts in "
-        "{files}; the merge was aborted and the team branch is unchanged. Ask the human to "
-        "merge {target} into {team_branch} by hand and commit it, then continue_boundary",
-    ),
-    Rule(
-        Trigger.PUSH_PERMISSION,
-        _held("push_permission"),
-        "{story}: sprint {sprint}'s review branches are built and checked: {branches}. Ask the "
-        "human once: may the team push review branches and open or update pull requests? Then "
-        'set_push_permission with "yes" or "no"; it applies to every later sprint',
-    ),
-    Rule(
-        Trigger.PUSH_REJECTED,
-        _held("push_rejected"),
-        "{story}: pushing {branch} was rejected and nothing after it was pushed: "
-        "{boundary_reason}. Tell the human (someone else may have pushed to it), then "
-        "continue_boundary",
-    ),
-    Rule(
-        Trigger.BOUNDARY_ERROR,
-        _held("error"),
-        "{story}: sprint {sprint} {edge} boundary failed at {stage}: {boundary_reason}; "
-        "details in .team/run/crash.log. Fix it, then continue_boundary",
-    ),
-    Rule(
-        Trigger.BOUNDARY_ESCALATED,
-        lambda r: _boundary(r).get("reviewed") is True,
-        "{story}: sprint {sprint} {edge} boundary failed the same way again at {stage}; the "
-        "manager reviewed it: {summary}. Once something has changed (a fix, the human's "
-        "answer), continue_boundary(note); your note reaches the next devops fix",
-    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -241,22 +194,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields["fault"] = str(fault.get("fault") or "")
     fields["fault_reason"] = str(fault.get("reason") or "")
     fields["fault_why"] = str(fault.get("why") or "")
-    return {**fields, **_boundary_fields(report), "story": story_id or "run"}
-
-
-BOUNDARY_TEXT = ("sprint", "edge", "stage", "target", "team_branch", "branch")
-
-
-def _boundary_fields(report: dict) -> dict[str, str]:
-    """The fields of a boundary report; none for any other report."""
-    boundary = _boundary(report)
-    if not boundary:
-        return {}
-    fields = {name: str(boundary.get(name) or "") for name in BOUNDARY_TEXT}
-    fields["boundary_reason"] = str(boundary.get("reason") or "")
-    fields["files"] = ", ".join(boundary.get("files") or [])
-    fields["branches"] = ", ".join(boundary.get("branches") or [])
-    return fields
+    return {**fields, "story": story_id or "run"}
 
 
 def report_lines(report: dict, story_id: str | None) -> list[str]:

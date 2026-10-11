@@ -80,16 +80,6 @@ class Delivery:
     commands: list[str] = field(default_factory=list)
     bin: list[str] = field(default_factory=list)
     probe: str = ""
-    e2e: str = ""
-
-
-@dataclass
-class UpstreamSettings:
-    """Where the team syncs from and which prefix its review branches use."""
-
-    remote: str = "origin"
-    branch: str = "main"
-    prefix: str = "team/sprint-"
 
 
 @dataclass
@@ -113,7 +103,6 @@ class Config:
     team: Team = field(default_factory=Team)
     toolchain: Toolchain = field(default_factory=Toolchain)
     gates: Gates = field(default_factory=Gates)
-    upstream: UpstreamSettings = field(default_factory=UpstreamSettings)
     deliveries: list[Delivery] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
@@ -168,7 +157,6 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         team=_team(raw.get("team", {})),
         toolchain=_toolchain(raw.get("toolchain", {})),
         gates=_gates(raw.get("gates", {})),
-        upstream=_upstream(raw.get("upstream", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
         roles=dict(raw.get("roles", {})),
         providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
@@ -196,11 +184,6 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
 
 def _gates(raw: dict[str, Any]) -> Gates:
     return Gates(**{k: v for k, v in raw.items() if k in Gates.__dataclass_fields__})
-
-
-def _upstream(raw: dict[str, Any]) -> UpstreamSettings:
-    known = UpstreamSettings.__dataclass_fields__
-    return UpstreamSettings(**{k: v for k, v in raw.items() if k in known})
 
 
 def _delivery(raw: dict[str, Any]) -> Delivery:
@@ -245,14 +228,6 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: g.repeat >= 2, "gates.repeat must be at least 2"),
     (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
 )
-SAFE_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
-UPSTREAM_RULES: tuple[Rule, ...] = (
-    (lambda u: not u.remote or bool(u.branch), "upstream.branch must be set"),
-    (
-        lambda u: bool(SAFE_BRANCH.fullmatch(u.prefix)),
-        "upstream.prefix must be a branch name prefix",
-    ),
-)
 DELIVERY_RULES: tuple[Rule, ...] = (
     (lambda d: bool(SAFE_NAME.fullmatch(d.name)), "name must be lowercase letters, digits, - or _"),
     (lambda d: d.kind != "web" or bool(d.url), "(web) needs a url"),
@@ -281,7 +256,6 @@ def validate(config: Config, known: Known) -> list[str]:
         *broken(TEAM_RULES, config.team),
         *broken(TOOLCHAIN_RULES, config.toolchain),
         *broken(GATE_RULES, config.gates),
-        *broken(UPSTREAM_RULES, config.upstream),
         *_validate_deliveries(config.deliveries, known.delivery_kinds),
         *_validate_roles(config.roles, known.roles),
         *_validate_providers(config.providers),

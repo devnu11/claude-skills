@@ -24,7 +24,6 @@ class Git:
     """Runs git in one working tree."""
 
     repo: Path
-    options: tuple[str, ...] = ()
 
     def run(self, *args: str) -> str:
         """Run ``git <args>`` and return stdout; raise ``GitError`` on failure."""
@@ -33,23 +32,9 @@ class Git:
             raise GitError(f"git {' '.join(args)}: {proc.stderr.strip()}")
         return proc.stdout
 
-    def attempt(self, *args: str) -> tuple[int, str]:
-        """Run ``git <args>``; the exit code and stdout+stderr, never raising."""
-        proc = self._exec(*args)
-        return proc.returncode, proc.stdout + proc.stderr
-
-    def branch(self) -> str | None:
-        """The checked-out branch name, or ``None`` on a detached HEAD."""
-        code, out = self.attempt("symbolic-ref", "--quiet", "--short", "HEAD")
-        return out.strip() if code == 0 else None
-
     def _exec(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", *self.options, *args],
-            cwd=self.repo,
-            capture_output=True,
-            text=True,
-            check=False,
+            ["git", *args], cwd=self.repo, capture_output=True, text=True, check=False
         )
 
     def is_repo(self) -> bool:

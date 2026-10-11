@@ -152,18 +152,18 @@ def trail(story: StoryState) -> list[Setback]:
 # ----- what the Manager sees ------------------------------------------------
 
 
-def event_number(event_id: str) -> int:
+def _number(event_id: str) -> int:
     return int(event_id[1:])
 
 
 def _first_number(setbacks: list[Setback]) -> int:
-    return min((event_number(s.event) for s in setbacks if s.event), default=0)
+    return min((_number(s.event) for s in setbacks if s.event), default=0)
 
 
 def _history_events(story: StoryState, events: list[Event]) -> list[dict[str, Any]]:
     first = _first_number(trail(story))
     mine = [e for e in events if e.story == story.id and e.kind in HISTORY_KINDS]
-    return [asdict(e) for e in mine if event_number(e.id) >= first]
+    return [asdict(e) for e in mine if _number(e.id) >= first]
 
 
 def manager_view(story: StoryState, events: list[Event]) -> dict[str, Any]:

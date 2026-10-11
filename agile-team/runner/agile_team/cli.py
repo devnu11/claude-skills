@@ -43,7 +43,6 @@ from .roles import (
     expand_globs,
     user_roles_dir,
 )
-from .upstream import GhPrs, command_runner
 
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
 Kill = Callable[[int, int], None]
@@ -312,7 +311,6 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         providers=Providers(config.providers, os.environ),
         query_fn=query_fn,
         pipeline=make_pipeline(config),
-        prs=GhPrs(command_runner(place.repo)),
     )
 
 
@@ -421,8 +419,6 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
         "manager_due": st.manager_due,
         "open_questions": [asdict(m) for m in Relay(config.run_dir).open_questions()],
         "budget": budget_status(Ledger(config.run_dir / LEDGER), config.team.budget_usd),
-        "boundary": asdict(st.boundary) if st.boundary else None,
-        "upstream": asdict(st.upstream),
     }
 
 

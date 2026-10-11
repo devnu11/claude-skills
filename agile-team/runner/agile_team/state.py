@@ -8,7 +8,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .config import PIPELINE_STEPS
 from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
 from .ledger import SessionCost
@@ -67,9 +66,6 @@ class RunState:
     po_renew_due: list[str] = field(default_factory=list)
     po_renew_path: str = "compact"
     po_cost: SessionCost | None = None
-    boundary: Boundary | None = None
-    upstream: UpstreamState = field(default_factory=UpstreamState)
-    goal: str = ""
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -107,8 +103,6 @@ class RunState:
         data["stories"] = {k: _story(v) for k, v in data.get("stories", {}).items()}
         data["overrides"] = {k: ModelOverride(**v) for k, v in data.get("overrides", {}).items()}
         data["po_cost"] = _nested(SessionCost, data.get("po_cost"))
-        data["boundary"] = _boundary(data.get("boundary"))
-        data["upstream"] = _upstream_state(data.get("upstream"))
         return cls(**data)
 
 
@@ -130,20 +124,6 @@ def _story(data: dict[str, Any]) -> StoryState:
     by = data.get("escalated_by")
     extra = {"implemented": implemented, "escalated_by": Rule(by) if by else None}
     return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
-
-
-def _boundary(data: dict[str, Any] | None) -> Boundary | None:
-    if not data:
-        return None
-    failure = _nested(Failure, data.get("failure"))
-    streak = [Setback(**s) for s in data.get("streak", [])]
-    return Boundary(**{**data, "failure": failure, "streak": streak})
-
-
-def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
-    data = data or {}
-    stack = [StackEntry(**e) for e in data.get("stack", [])]
-    return UpstreamState(**{**data, "stack": stack})
 
 
 def _nested(cls: type, data: dict[str, Any] | None) -> Any:
