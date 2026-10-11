@@ -8,6 +8,7 @@ import json
 import pytest
 from agile_team import po_tools
 from agile_team.gates import StoryStatus
+from agile_team.loops import Setback
 from agile_team.po_tools import Tools
 from agile_team.relay import Note
 from agile_team.router import Router
@@ -161,7 +162,8 @@ def test_question_blocked_and_needs_manager_are_skipped(make_runtime) -> None:
 def test_repeat_work_picks_by_ranking(make_runtime) -> None:
     rt = make_runtime()
     for sid in ("s1", "s2"):
-        add_story(rt, sid, status=StoryStatus.NEEDS_MANAGER, repeated="same")
+        story = add_story(rt, sid, status=StoryStatus.NEEDS_MANAGER, repeated="same")
+        story.streak = [Setback("tests", "tests", "unit-tester", "bounce", "runner", "same")]
     rt.state.order = ["s2"]
     work = Router(rt).next_work()
     assert (work.role, work.story.id) == ("manager", "s2")

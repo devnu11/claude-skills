@@ -45,8 +45,13 @@ def test_start_sprint_requires_manager(make_runtime) -> None:
     t = Tools(rt)
     open_stories(t, "s1")
     out = call(t.start_sprint({"goal": "MVP", "stories": ["s1"]}))
-    assert out == {"sprint": 1, "stories": ["s1"], "next": "run the manager"}
-    event = rt.events.events()[-1]
+    assert out == {
+        "sprint": 1,
+        "stories": ["s1"],
+        "order": ["s1"],
+        "next": "run the manager",
+    }
+    event = next(e for e in rt.events.events() if e.kind == "sprint-start")
     assert event.data == {"sprint": 1, "goal": "MVP", "stories": ["s1"]}
     assert rt.state.stories["s1"].sprint == 1
     assert rt.state.manager_due == ["sprint 1 start: MVP (s1)"]
@@ -68,7 +73,8 @@ def test_start_sprint_dedupes_ids(make_runtime) -> None:
     open_stories(t, "s1", "s2")
     out = call(t.start_sprint({"goal": "G", "stories": ["s2", "s1", "s2"]}))
     assert out["stories"] == ["s2", "s1"]
-    assert t.runtime.events.events()[-1].data["stories"] == ["s2", "s1"]
+    start = next(e for e in t.runtime.events.events() if e.kind == "sprint-start")
+    assert start.data["stories"] == ["s2", "s1"]
 
 
 def test_start_sprint_replaces_scope(make_runtime) -> None:

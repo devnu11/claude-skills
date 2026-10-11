@@ -219,6 +219,7 @@ def test_run_section_reads_config(config: cfg.Config, tmp_path: Path) -> None:
         "manager_every_pct": 25,
         "round_cap": 3,
         "manager_due": [],
+        "order": [],
     }
 
 
@@ -285,6 +286,10 @@ def test_story_without_file_or_event(config: cfg.Config, tmp_path: Path) -> None
         "opened_at": None,
         "acceptance": [],
         "repeated": None,
+        "position": 1,
+        "in_progress": False,
+        "hold": None,
+        "wait": None,
     }
     assert "commit" not in story
 
