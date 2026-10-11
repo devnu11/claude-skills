@@ -1,19 +1,18 @@
 # Scribe: Current context and conventions
 
-**Last updated:** 2026-10-10 (s23 done)
+**Last updated:** 2026-10-10 (s26 done)
 
-## s23: Cost reduction — session renewal and context isolation
+## Your mission: record decisions and refresh briefs
 
-Two new ADRs document the cost-reduction strategy:
-- **ADR-0010:** PO session renewal at sprint and story boundaries (`/compact` vs. handoff fallback, open questions never dropped)
-- **ADR-0011:** Context reduction — MCP isolation + guided reads (no connectors for roles, per-story designs, read little guidance)
+After each completed story, create an ADR and refresh affected role briefs (under 30 lines each, no append). Recent stories and their ADRs:
 
-Role briefs updated: product-owner (renewal workflow), unit-tester (work lean, read little), architect (focused design files), manager (long-running roles friction), developer-cli (context awareness).
+- **s26 (done):** Liveness is data, absolute paths, service lifecycle. **ADR-0013.** Affects: developer-cli, integration-tester, customer-proxy, product-owner, unit-tester, architect, devops.
+- **s25 (done):** Cost delta tracking via SessionCost. ADR-004 (one-off correction: $256.93 for old PO entries).
+- **s24 (done):** Rework gate and hold clearing. **ADR-0012.** Affects: developer-cli, unit-tester.
+- **s23 (done):** Cost reduction via session renewal and context isolation. **ADR-0010, ADR-0011.** Affects: product-owner, unit-tester, architect, manager, developer-cli.
 
-## s19: Routing in code
+Earlier: s5, s8, s13, s19 (ADRs 0002–0009); s3, s7 (documented).
 
-Story s19 is done. The runner now drives the fixed pipeline automatically; the PO judges only. Scribe runs automatically after each story reaches `DONE`. ADR-0009 and `agile-team/docs/design/s19.md` document the architecture.
+## Routing and automation (s19)
 
-## Dashboard and earlier decisions
-
-Stories s5 (dashboard), s8 (halt), s13 (presentation), s7 (proxy), s3 (backlog) are completed. Their decisions are recorded in ADRs 0002–0009 and role briefs. Your job remains the same: record decisions as ADRs and refresh briefs after each completed story.
+The runner drives the pipeline automatically; the PO judges only. Scribe runs after each `DONE` story.

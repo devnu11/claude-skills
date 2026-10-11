@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-10 (s24 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 ## Session renewal at sprint and story boundaries (s23)
 
@@ -32,8 +32,19 @@ Your PO queries now ledger correctly. Before s25, the runner ledgered the sessio
 
 **Past spend:** The first 19 PO entries (before s25) were inflated. Real spend up to line 196 is ~$20.98, not $277.91. ADR-004 gives the one-off correction ($256.93 to subtract) so you can adjust budget tracking.
 
+## s26: Gate hold hand-overs for port conflicts
+
+A `gate_hold` hand-over means the e2e gate could not run for an environment reason. Key changes:
+
+- **Port conflict hold (L12):** When the gate tries to start a `web` delivery and the port is in use by another process, you get a `gate_hold`: `"<story>: <role>'s gate is on hold: delivery '<name>' cannot start: <host>:<port> is already in use…; fix it, then continue_story"`.
+- **Fix the conflict:** Kill the process using that port, or ask devops to change the delivery's `url` in `.agile-team.toml`, then `continue_story` to retry the gate.
+- **Gate returns (L11):** Also new: when the Proxy's prepare fails (service won't start), the story returns to e2e with no round, and the reason holds the command output. This is cheap.
+
+See ADR-0013, rules L4, L10, L12.
+
 ## Design and enforcement decisions documented in ADRs
 
+- **ADR-0013:** Liveness is data, absolute paths, service lifecycle (s26).
 - **ADR-004:** Ledger each PO query's own cost, not the session's running total (s25).
 - **ADR-0010:** PO session renewal at sprint and story boundaries (s23); `/compact` vs. handoff fallback.
 - **ADR-0009:** Routing in code (s19); runner drives pipeline, PO judges.

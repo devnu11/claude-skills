@@ -1,6 +1,6 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 ## s19: Runner calls you automatically from the pipeline
 
@@ -46,6 +46,16 @@ Your read/write sandbox and forbidden roots are tightly controlled:
 - **Forbidden:** source code and test directories; nested roots are handled—e.g., `agile-team/docs/customer/` is readable even though `agile-team/runner/agile_team/` is forbidden
 
 Details: `reference/protocol.md` Enforcement section; s7 implemented nested root depth.
+
+## s26: Service is already running; return without billing
+
+For web deliveries, the runner has already started the service and tested it (gate trial). Your step runs the service that is already listening. Key changes:
+
+- **Service already up (L4–L5, L10):** For `web` kind, the delivery's service is running when your step starts. Do not start, stop, or restart it—your `finally` block will.
+- **If it stops answering (L11):** Return `changes_requested` with `next_role: integration-tester` saying what you saw. The runner won't bill you (return path with no round).
+- **Returns are cheap (L8, L11):** If the runner's prepare fails, you don't run and nothing is billed. If your query runs and you return, the cost is ledgered (same as other steps).
+
+See ADR-0013, rules L4–L5, L10–L11.
 
 ## Backlog and sprint membership
 

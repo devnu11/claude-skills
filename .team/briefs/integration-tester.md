@@ -1,6 +1,6 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 ## s19: Runner drives the fixed pipeline automatically
 
@@ -68,6 +68,17 @@ Known gaps:
 - No executable test for live dot animation or halo movement. These were verified by hand in headless Chrome (ADR-0003).
 - Without internet, Flow shows source text instead of diagram (Mermaid off CDN). Other tabs work offline.
 - Dashboard does not show AC1 (reconnect after server restart) in a way that automated tests can verify; simulation confirms it.
+
+## s26: Self-contained presentations and the e2e gate trial
+
+The e2e gate now tests service delivery liveness before the Proxy runs. Your presentation must be self-contained (no repo paths). Key changes:
+
+- **Self-contained rule (L13):** The Proxy's sandbox can't read repo paths. Include only copies of what the customer needs (ADR, protocol section, files to try) and captured command output (test, ruff results with command and exit code). No repo paths in PRESENTATION.md.
+- **Gate trial (L10):** For `web` deliveries, the gate runs a `Trial` from your presentation: starts the service, probes it, stops it. `NotUp` bounces to e2e (round +1, reason has command output). Port conflict holds (no round, hand-over to PO). Pass means something answered.
+- **Clean up your own server:** If you start a service for your own testing, stop it before handing off. The gate will start one too; if your port is in use, the gate holds and the PO must fix it.
+- **Web delivery recipe:** Same as cli (init, add state files). Before handing off: `agile-team dashboard --no-open --port 0` prints a URL; `curl <url>api/snapshot` returns 200 JSON.
+
+See ADR-0013, design `agile-team/docs/design/s26.md` (rules L3, L10, L13, reason strings).
 
 ## Backlog and sprint membership
 

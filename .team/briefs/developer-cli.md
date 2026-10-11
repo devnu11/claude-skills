@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s24 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 See `developer.md` for the base conventions.
 
@@ -39,6 +39,22 @@ Your session has no Claude.ai connectors. Reduce re-sent context by being strate
 - **Run quietly:** Test commands with `-q -x --no-header` flags; keep only the failures.
 
 See ADR-0011 for the context reduction strategy.
+
+## s26: Liveness is data; absolute paths; service lifecycle
+
+The runner now starts and probes service deliveries before the Proxy runs. Key changes:
+
+- **Absolute paths (L1):** `cli.repo_of(args)` resolves `--repo` once. `Prepared.expand` resolves `{repo}` and `{sandbox}` so prepare commands never depend on cwd.
+- **Port placeholders (L2):** `{host}` and `{port}` extracted from `url` in placeholders (saves to `config.toml` under `url` only).
+- **Liveness is data (L3):** `Check(FILES | SERVICE)` enum, `Recipe(need, check)`, only `web` is `SERVICE`. No code branches on delivery name.
+- **Service startup/probe (L4–L5):** `_serve`, `_start`, `_await_answer` start with output capture and probe up to 120 times. `http_answers` GET with 2s timeout, 200 + valid JSON.
+- **Stale cleanup (L7):** `stop_stale` before layout; SIGTERM+SIGKILL escalation; pid file always deleted.
+- **Teardown (L9):** `prepared.stop()` idempotent; all Proxy paths call it (new guard in `Runtime.plan`).
+- **Gate trial (L10):** `Check.SERVICE` runs `Trial.liveness` from presentation sandbox; `NotUp` → bounce e2e (round +1), `PortBusy` → hold (no round).
+- **Return on NotUp (L11):** Proxy's `prepare` raising `NotUp` returns to e2e with no round if e2e exists; never bills. `PortBusy` is refused.
+- **Gate hold (L12):** `Trigger.GATE_HOLD` for port conflict; PO hand-over with exact error text.
+
+See ADR-0013 for decisions. Design: `agile-team/docs/design/s26.md` (rules L1–L13, test checklist, reason strings).
 
 ## CLI-specific context
 

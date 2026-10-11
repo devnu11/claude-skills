@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 ## Context reduction — focused design files (s23)
 
@@ -12,6 +12,8 @@ Move designs out of the 1600-line `architecture.md` into focused per-story files
 This lets Unit Testers and Developers read only what they need. Expect Unit Tester context per turn to drop under 60k tokens (s19 was 113.9k). See ADR-0011.
 
 ## Key design decisions
+
+**Liveness is data; absolute paths; service lifecycle (s26):** Service deliveries are tested before the Proxy runs. The runner starts, probes, and stops them from the presentation (same sandbox the Proxy gets), so a gate pass guarantees readiness. Stale services are cleaned up with SIGTERM+SIGKILL escalation; all paths call `prepared.stop()`. Paths are absolute (no cwd dependency). Liveness check, probe attempt count, and port are data (Check enum, Recipe, PRESENTATIONS table). Returns are possible without billing when the Proxy's prepare fails. Port conflicts hold (no round, hand-over to PO). Presentations must be self-contained (no repo paths). Design: `agile-team/docs/design/s26.md` (rules L1–L13). ADR-0013.
 
 **Ledger each PO query's own cost (s25):** The PO resumes one session, and `total_cost_usd` is a session running total. The ledger now records deltas: `own = reported − previous` for resumed sessions, full amount for fresh sessions. `SessionCost(session, reported)` and `SessionCost.own_cost()` compute the delta; `RunState.po_cost` persists it. Rules C1–C9 in `agile-team/docs/design/s25.md` govern the implementation; C6 handles legacy seeds. ADR-004 documents the finding, decision, and one-off correction ($256.93 for old entries).
 

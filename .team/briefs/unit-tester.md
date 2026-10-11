@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s24 done)
+**Last updated:** 2026-10-10 (s26 done)
 
 ## s24: Reworked stories and test claims
 
@@ -100,6 +100,25 @@ Check that tests match the HALTS table values exactly: statuses `blocked`, `fail
 - Escaping rule (ADR-0005): all snapshot strings in HTML must go through `esc()`. Tests check string presence, not injection prevention. Consider adding a test that verifies no unescaped interpolations exist in the shipping `index.html`.
 
 Review round 1 found two defects (D1: bad Mermaid selector, D2: unescaped strings) that were fixed and verified by round 3. Round 4 fixed a crash on empty sprint-start data, verified by the customer. Tests are green at 100% coverage.
+
+## s26: Service lifecycle and liveness testing
+
+s26 added service startup, probe, and liveness testing. Key test areas:
+
+1. **Absolute paths (L1):** Relative `--repo` resolves to absolute; `expand` with relative repo gives absolute `{repo}` and `{sandbox}`.
+2. **Placeholders (L2):** `{host}` and `{port}` from `http://127.0.0.1:8799/`, from `http://h/` (default 80), no url.
+3. **Liveness data (L3):** `PRESENTATIONS["web"].check is Check.SERVICE`; others are `FILES`; SERVICE ⇔ BACKGROUND `Start` kind.
+4. **Start and probe (L4–L5):** Fake `popen` with live process, probe true on 3rd call → prepare returns, sleep twice, pid/log files exist. Probe fail: process exited → `NotUp` "exited with code X", never answers → `NotUp` "did not answer…within Ys". **Real hung process test:** `exec sleep 60`, `attempts=2` → "did not answer…within 0.5s", never "exited with code -15" (reason before stop).
+5. **Stale cleanup (L7):** Start real sleep, write pid, `stop_stale` → gone, file gone. Dead pid → silent. **SIGKILL escalation test:** trap TERM, `STOP_WAIT_S=0.2`, assert `-SIGKILL`.
+6. **Port conflict (L8):** `listening` true → `PortBusy` exact text, `popen` never called. `port_in_use` true for bound socket.
+7. **Teardown (L9):** `Prepared.stop` idempotent, deletes pid file. `Runtime.plan` exception after prepare → `stop` called.
+8. **Gate trial (L10):** Missing files → bounce (liveness never called). Files ok + `liveness` pass → pass. `NotUp` → bounce e2e, round +1. `PortBusy` → hold, rounds unchanged. `Check.FILES` never calls prepare.
+9. **Return (L11):** Fake `prepare_fn` raising `NotUp` → returned, no round, no query. No e2e → refused.
+10. **Gate hold (L12):** Report with `hold` verdict → `GATE_HOLD` line with reason. Blocked → `STOPPED`.
+11. **Make pipeline:** Wires `Trial(config).liveness`.
+12. **HTTP probe (L5):** Real `ThreadingHTTPServer`: 200 JSON → true, 204/201 → false, 500 → false, nothing listening → false.
+
+Coverage 100%, ruff clean. See design `agile-team/docs/design/s26.md` test checklist.
 
 ## Backlog and sprint membership
 
