@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## s47: Waiting status is explicit; wake logic data-driven; halt notes include context
+
+Two visibility rules: `status_reason` while waiting (W3) and halt-note suffix when halting with open questions (W5). Wake logic unchanged (W1); polling reads inbox first. Implementation: `Relay.waits()` lists one line per story an open question names (`"s40 waits on m42"`), then one for unnamed questions (`"the run waits on m43"`). `Relay.waiting()` joins with `WAITING_HEAD` prefix. `Router._show_wait()` sets reason, saves only on change. `_clear_wait()` and `_end_wait()` manage lifecycle (W4). `_deliver` calls `_clear_wait` first; `_step` calls `_end_wait` (avoiding double save). `halt_run` builds note with `_waits_suffix()` (W5). Stall lines unchanged; `_idle` never stalls while waiting (W6). Data-driven: `WAIT_LINE`, `RUN_WAIT_LINE`, `WAITING_HEAD` constants. See ADR-0025, design `agile-team/docs/design/s47.md` (W1–W6, modules).
 
 ## s46: Code already in passes tests gate; advance ruling
 

@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
 
 See `developer.md` for the base conventions.
+
+## s47: Show what the run waits on; wake logic unchanged
+
+When the router waits on open questions, `status_reason` becomes `"waiting on answers: s40 waits on m42; the run waits on m43"` (W3). When a run halts while waiting, the halt note includes this suffix (W5). The wake logic is unchanged; polling picks up answers within one cycle. New methods on `Relay` (`waits()`, `waiting()`) and `Router` (`_show_wait()`, `_clear_wait()`, `_end_wait()`); modified `halt_run()` suffix logic. Docs updated: protocol, SKILL.md, customer/routing.md. See ADR-0025, design `agile-team/docs/design/s47.md` (rules W1–W6).
 
 ## s46: Code already in passes tests gate; advance ruling; dispute output
 

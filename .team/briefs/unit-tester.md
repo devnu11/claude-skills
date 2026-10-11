@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## s47: Router wait (W1–W6); status_reason shows waiting; halt note suffix
+
+Router wait is unchanged (W1); your tests verify a driver-level path with mocked sleep and answer hand-over. New `Relay` tests: `waits()` maps stories to ids in first-seen order, `waiting()` joins them with `WAITING_HEAD` prefix. `Router` tests: `_show_wait()` sets/saves reason only on change, `_clear_wait()` strips `WAITING_HEAD`, `_end_wait()` saves if cleared. Halt test: opened question adds "; waiting on …" suffix to note, stored reason stays halt reason alone. No change to stall lines. See design `agile-team/docs/design/s47.md` test checklist; ADR-0025.
 
 ## s46: Rework gate when code is in; dispute output in brief
 

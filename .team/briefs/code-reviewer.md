@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s21 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## Design decisions to verify
+
+**Waiting status shows what run waits on (s47):** Verify that `status_reason` reflects open questions while waiting and halt notes include the waiting context:
+- **W1–W3:** `Relay.waits()` lists one line per story/question (stories first in outbox order, unnamed last). `Relay.waiting()` joins with `WAITING_HEAD` prefix or `""`. `Router._show_wait()` sets reason, saves on change only.
+- **W4–W5:** `_clear_wait()` strips `WAITING_HEAD`. `_end_wait()` saves if cleared (first call in `_step`). `_deliver` calls `_clear_wait` first; existing save handles persistence. Halt note: `halt_note(…) + "; waiting on …"` when a question is open, unchanged when no question.
+- **W6:** Stall lines unchanged; `_idle` never stalls while a question is open.
+- Tests cover empty, one story, multiple stories, outbox order, unnamed, answered-excluded, story-named-twice, unchanged reason not re-saved, new question updates reason, halt with/without question, leave non-waiting reason. See ADR-0025, design `agile-team/docs/design/s47.md`.
 
 ## Design decisions to verify
 

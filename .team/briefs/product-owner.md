@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## s47: Status shows what the run waits on; halt notes include it
+
+When you post a question and your turn ends, the run waits on the answer. While waiting, `agile-team status` shows `status_reason: "waiting on answers: s40 waits on m42; the run waits on m43"`. The router polls every 5 seconds (unchanged); when the answer arrives, the PO gets it as a hand-over. If you halt the run while questions are open, the halt note includes the waiting context so you know what to answer. No change to wake logic or polling. See ADR-0025, design `agile-team/docs/design/s47.md`.
 
 ## s46: Advance ruling moves stories forward; code commits tracked
 

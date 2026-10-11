@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## s47: Waiting status shows what run waits on (no new Manager context)
+
+While the router waits on open questions, `status_reason` shows `"waiting on answers: s40 waits on m42; the run waits on m43"` (W3). When a run halts while waiting, the halt note includes this context (W5). The wake logic is unchanged; polling picks up answers within 5 seconds (W1–W2). This is a visibility feature only; no change to Manager's escalation or ruling logic. See ADR-0025, design `agile-team/docs/design/s47.md`.
 
 ## s46: Code facts in context; advance ruling moves stories forward
 

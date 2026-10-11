@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s46 done)
+**Last updated:** 2026-10-11 (s47 done)
+
+## s47: Halt notes show what run was waiting on when halted
+
+When the runner halts (e.g., `stop --now`) while questions are open, the halt note now includes what it was waiting on: `…; waiting on answers: s40 waits on m42; the run waits on m43`. This helps you understand what needs answering before resuming. No change to the halt's exit code, status, or stored reason. See ADR-0025, design `agile-team/docs/design/s47.md` (W5).
 
 ## s46: Dispute brief now includes test output
 
