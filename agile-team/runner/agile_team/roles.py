@@ -52,7 +52,7 @@ OVERRIDABLE = (
 )
 FRONTMATTER_KEYS = frozenset({*OVERRIDABLE, "extends"})
 HANDOFF_STATUSES = ("done", "changes_requested", "blocked", "failed")
-RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate")
+RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate", "advance")
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 _HANDOFF = re.compile(r"```handoff\s*\n(.*?)\n```", re.DOTALL)
@@ -165,6 +165,7 @@ class Handoff:
     dispute: Dispute | None = None
     tests: TestClaim | None = None
     fault: str | None = None
+    ruling_reason: str = ""
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -404,6 +405,7 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
     (lambda d: isinstance(d.get("changed_files", []), list), "changed_files must be a list"),
     (lambda d: isinstance(d.get("open_questions", []), list), "open_questions must be a list"),
     (lambda d: d.get("ruling") in (None, *RULINGS), f"ruling must be one of {RULINGS}"),
+    (lambda d: isinstance(d.get("ruling_reason", ""), str), "ruling_reason must be a string"),
     (lambda d: isinstance(d.get("friction", ""), str), "friction must be a string"),
     (lambda d: _str_map(d.get("followups", {})), "followups must map role names to questions"),
     (
@@ -469,6 +471,7 @@ def _handoff_from(data: Any) -> Handoff:
         dispute=_dispute_from(data, str(data.get("summary", ""))),
         tests=_claim(data.get("tests")),
         fault=data.get("fault"),
+        ruling_reason=data.get("ruling_reason") or str(data.get("summary", "")),
     )
 
 

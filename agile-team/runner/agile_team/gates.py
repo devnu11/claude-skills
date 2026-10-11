@@ -99,6 +99,13 @@ class DisputeStage(StrEnum):
     CONFIRMED = "confirmed"
 
 
+ANCESTOR_COMMAND = "git merge-base --is-ancestor {sha} HEAD"
+ADVANCE_LAST = "story {id} is at {step}, its last step; advance cannot mark it done"
+EXCERPT_LINES = 40
+TEST_GREEN = "the test command passes, so {test} is not failing"
+TEST_NOT_IN_OUTPUT = "the test command fails, but its output never names {name}; its tail:\n{tail}"
+
+
 @dataclass
 class OpenDispute:
     """A developer's claim that a test contradicts the design.
@@ -113,6 +120,7 @@ class OpenDispute:
     file: str = ""
     baseline: str = ""
     stage: DisputeStage = DisputeStage.RAISED
+    output: str = ""
 
     def __post_init__(self) -> None:
         self.stage = DisputeStage(self.stage)
@@ -182,6 +190,7 @@ class StoryState:
     dispute: OpenDispute | None = None
     disputes: int = 0
     implemented: int = 0
+    code_commits: list[str] = field(default_factory=list)
     streak: list[Setback] = field(default_factory=list)
     repeated: str | None = None
     run: list[Setback] = field(default_factory=list)
@@ -332,6 +341,29 @@ class Checks:
         code, out = self.run(LS_FILES_COMMAND.format(path=shlex.quote(file), suffix=suffix))
         return pick_tracked(file, out) if code == 0 else None
 
+    def landed(self, sha: str) -> bool:
+        """Whether the commit is an ancestor of HEAD."""
+        return self.run(ANCESTOR_COMMAND.format(sha=shlex.quote(sha)))[0] == 0
+
+    def code_in(self, story: StoryState) -> bool:
+        """The story's code is in: implement passed, or a developer commit is in the branch."""
+        return story.implemented > 0 or any(map(self.landed, story.code_commits))
+
+    def code_facts(self, story: StoryState) -> dict[str, Any]:
+        """What the Manager is told about the story's code."""
+        shas = [s for s in story.code_commits if self.landed(s)]
+        code_in = story.implemented > 0 or shas != []
+        return {"implemented": story.implemented, "code_commits": shas, "code_in": code_in}
+
+    def test_output(self, test: str) -> str:
+        """The test command's output as shown to the dispute's readers."""
+        code, out = self.run(self.commands["test"])
+        if code == 0:
+            return TEST_GREEN.format(test=test)
+        name = test_name(test)
+        found = excerpt(out, name)
+        return found if found is not None else TEST_NOT_IN_OUTPUT.format(name=name, tail=tail(out))
+
     def content_hash(self, path: str) -> str | None:
         """The fingerprint of the working-tree file, or None when unreadable."""
         text = self.read(path)
@@ -419,9 +451,13 @@ class Pipeline:
     def _gate_for(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         if story.step == "tests" and story.dispute:
             return self._dispute_gate(story, handoff)
-        if story.step == "tests" and story.implemented:
+        if self.reworked(story):
             return self._rework_gate(handoff)
         return self._command_gate(story.step) or self._done_gate(story, handoff)
+
+    def reworked(self, story: StoryState) -> bool:
+        """A story back at tests with its code already in and no dispute open."""
+        return story.step == "tests" and story.dispute is None and self.checks.code_in(story)
 
     def _raises_dispute(self, story: StoryState, handoff: Handoff) -> bool:
         return bool(handoff.dispute) and story.step == "implement" and "tests" in self.steps
@@ -438,7 +474,10 @@ class Pipeline:
     def _open(self, d: Dispute) -> OpenDispute | None:
         path = self.checks.tracked(test_file(d.test))
         baseline = self.checks.content_hash(path) if path else None
-        return OpenDispute(d.test, d.rule, d.reason, path, baseline) if baseline else None
+        if not baseline:
+            return None
+        output = self.checks.test_output(d.test)
+        return OpenDispute(d.test, d.rule, d.reason, path, baseline, output=output)
 
     def _dispute_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         """With a dispute open, a ``done`` at tests is settled by the dispute, not red tests."""
@@ -577,13 +616,26 @@ class Pipeline:
             story.status = StoryStatus.NEEDS_MANAGER
 
     def apply_ruling(self, story: StoryState, ruling: str) -> None:
-        """Apply the Manager's ruling to a capped story and reset its round count."""
-        design = "design" if "design" in self.steps else self.first()
-        targets = {"rescope": self.first(), "revise_design": design}
-        story.step = targets.get(ruling, story.step)
+        """Apply the Manager's ruling to a story and reset its round count."""
         self._clear(story)
         escalated = ruling == "escalate"
         story.status = StoryStatus.BLOCKED if escalated else StoryStatus.ACTIVE
+        self._move_for(story, ruling)
+
+    def _move_for(self, story: StoryState, ruling: str) -> None:
+        design = "design" if "design" in self.steps else self.first()
+        moves = {
+            "rescope": lambda: setattr(story, "step", self.first()),
+            "revise_design": lambda: setattr(story, "step", design),
+            "advance": lambda: self._forward(story),
+        }
+        moves.get(ruling, lambda: None)()
+
+    def ruling_move_refusal(self, story: StoryState, ruling: str) -> str | None:
+        """Why the ruling's move cannot be made, or ``None``."""
+        if ruling == "advance" and story.step == self.steps[-1]:
+            return ADVANCE_LAST.format(id=story.id, step=story.step)
+        return None
 
 
 FAULT_STATUS = {
@@ -609,6 +661,22 @@ def _retry_here(outcome: Outcome, step: str) -> Outcome:
     if outcome.verdict is Verdict.BOUNCE:
         outcome.bounce_to = step
     return outcome
+
+
+def test_name(test: str) -> str:
+    """The part of a test id after the last ``::``."""
+    return test.rsplit("::", 1)[-1]
+
+
+def excerpt(output: str, name: str) -> str | None:
+    """Output from the first line naming the test, plus later lines that name it."""
+    lines = output.splitlines()
+    first = next((i for i, line in enumerate(lines) if name in line), None)
+    if first is None:
+        return None
+    head = lines[first : first + EXCERPT_LINES]
+    later = [x for x in lines[first + EXCERPT_LINES :] if name in x]
+    return "\n".join(head + later)
 
 
 def tail(text: str) -> str:

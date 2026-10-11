@@ -73,6 +73,7 @@ from .stack import REVIEW_DIR
 from .state import RunState
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
 
+DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
 REWORK_BRIEF = (
     "Code from an earlier pass is in, so the suite may already be green. "
     'If it is once the tests are right, say so in your handoff: "tests": "changed" '
@@ -473,11 +474,15 @@ class Runtime:
 
     def user_prompt(self, plan: Plan) -> str:
         parts = [plan.prompt]
-        parts.extend(_story_lines(plan.story))
+        parts.extend(_story_lines(plan.story, self._rework_lines(plan.story)))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context(plan.story))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
         return "\n\n".join(p for p in parts if p)
+
+    def _rework_lines(self, story: StoryState | None) -> list[str]:
+        """The rework brief exactly when the tests gate would treat the story as reworked."""
+        return [REWORK_BRIEF] if story and self.pipeline.reworked(story) else []
 
     def _manager_context(self, story: StoryState | None = None) -> str:
         overrides = {r: vars(self.state.overrides[r]) for r in self.state.unreviewed}
@@ -510,7 +515,12 @@ class Runtime:
     def _repeated_context(self, story: StoryState | None) -> dict[str, Any]:
         if story is None or story.repeated is None:
             return {}
-        return {"repeated_setback": loops.manager_view(story, self.events.events())}
+        return {
+            "repeated_setback": {
+                **loops.manager_view(story, self.events.events()),
+                "code": self.pipeline.checks.code_facts(story),
+            }
+        }
 
     # ----- running -------------------------------------------------------
 
@@ -750,7 +760,12 @@ class Runtime:
         sha = self.git.commit(paths, commit_message(plan, self._subject(plan)))
         if plan.story and not plan.story.commit:
             plan.story.commit = sha
+        self._record_code(plan, sha)
         return sha
+
+    def _record_code(self, plan: Plan, sha: str) -> None:
+        if plan.story and role_fits_step(plan.role.name, "implement"):
+            plan.story.code_commits.append(sha)
 
     def _subject(self, plan: Plan) -> str:
         story = plan.story
@@ -815,7 +830,7 @@ class Runtime:
     def _rulings(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         if _names_fault(plan, handoff):
             return self._rule_after_fault(plan, handoff)
-        return self._rule(plan, handoff.ruling) if handoff.ruling else {}
+        return self._rule(plan, handoff) if handoff.ruling else {}
 
     def _rule_after_fault(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Apply the named fault; a ruling then wins, or is reported unapplied."""
@@ -823,7 +838,7 @@ class Runtime:
         if not handoff.ruling:
             return report
         if report["fault"]["applied"]:
-            return report | self._rule(plan, handoff.ruling)
+            return report | self._rule(plan, handoff)
         return report | _unapplied_ruling(handoff.ruling)
 
     def _fault_refusal(self, story: StoryState | None, fault: str | None) -> str | None:
@@ -855,13 +870,16 @@ class Runtime:
         )
         self.relay.post(Note("update", text, [plan.story.id]))
 
-    def _rule(self, plan: Plan, ruling: str) -> dict[str, Any]:
-        why = ruling_refusal(plan.story)
+    def _rule(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        ruling = handoff.ruling
+        why = ruling_refusal(plan.story) or self.pipeline.ruling_move_refusal(plan.story, ruling)
         if why:
             return {"ruling": {"ruling": ruling, "applied": False, "why": why}}
         self.pipeline.apply_ruling(plan.story, ruling)
         now_at = plan.story.step
-        self.emit(EventKind.RULING, plan, ruling=ruling, now_at=now_at)
+        self.emit(
+            EventKind.RULING, plan, ruling=ruling, reason=handoff.ruling_reason, now_at=now_at
+        )
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
 
 
@@ -881,12 +899,12 @@ FIX_SETUPS = {
 }
 
 
-def _story_lines(story: StoryState | None) -> list[str]:
+def _story_lines(story: StoryState | None, rework: list[str]) -> list[str]:
     """The story line, the open test dispute, and the rework brief when they apply."""
     if story is None:
         return []
     head = f"Story {story.id}: {story.title} (step {story.step}, round {story.rounds})"
-    lines = [head, *_dispute_lines(story), *_rework_lines(story), *_interrupted_lines(story)]
+    lines = [head, *_dispute_lines(story), *rework, *_interrupted_lines(story)]
     return ["\n".join(lines)]
 
 
@@ -903,12 +921,8 @@ def _dispute_lines(story: StoryState) -> list[str]:
     d = story.dispute
     if not d:
         return []
-    return [f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"]
-
-
-def _rework_lines(story: StoryState) -> list[str]:
-    reworked = story.step == "tests" and story.implemented > 0 and story.dispute is None
-    return [REWORK_BRIEF] if reworked else []
+    head = f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"
+    return [head, DISPUTE_OUTPUT.format(output=d.output)] if d.output else [head]
 
 
 def _setback(plan: Plan, outcome: Outcome) -> Setback | None:
