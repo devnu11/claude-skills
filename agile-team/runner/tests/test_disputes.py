@@ -25,9 +25,9 @@ OLD = "def test_a():\n    assert f(1) == 1\n"
 NEW = "def test_a():\n    assert f(1) == 2\n"
 BASE = fingerprint.of(FILE, OLD)
 UNCHANGED = (
-    f"the disputed test {TEST_ID} is unchanged: {FILE} still matches its baseline "
-    f"{BASE[:12]} from when the dispute was raised (whitespace and comment edits do "
-    "not count); fix the test, or confirm it with changes_requested and "
+    f"the disputed test file {FILE} has not changed since the dispute was raised: "
+    f"{TEST_ID} still matches its baseline {BASE[:12]} (whitespace and comment edits "
+    "do not count); fix the test, or confirm it with changes_requested and "
     "next_role architect"
 )
 UNTRACKED = (
