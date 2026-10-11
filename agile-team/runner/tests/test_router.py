@@ -206,7 +206,7 @@ def test_scribe_heading(make_runtime) -> None:
 
 def test_pickers_is_manager_scribe_story() -> None:
     names = [p.__name__ for p in Router.PICKERS]
-    assert names == ["_manager_work", "_scribe_work", "_story_work"]
+    assert names == ["_manager_work", "_repeat_work", "_scribe_work", "_story_work"]
 
 
 def test_manager_comes_first_and_runs_story_less(make_runtime) -> None:
@@ -517,6 +517,7 @@ def test_the_third_bounce_hands_over_the_round_cap(make_runtime) -> None:
     script = Script()
     rt = build(make_runtime, script, steps=["implement", "review"], failures=99)
     rt.pipeline.cap = 3
+    rt.pipeline.repeat = 99  # the same red gate each time; test the cap, not the repeat
     add_story(rt, "s1", "implement")
     drive(rt)
     assert step_roles(rt) == ["developer"] * 3

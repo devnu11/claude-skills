@@ -29,6 +29,9 @@ def test_trigger_values_are_snake_case() -> None:
         "sprint_end",
         "stalled",
         "ruling_not_applied",
+        "runner_fault",
+        "off_pipeline_fault",
+        "fault_not_applied",
     ]
 
 
@@ -44,6 +47,9 @@ def test_table_rows_are_in_design_order() -> None:
         T.ROUND_CAP,
         T.UNROUTABLE,
         T.RULING_NOT_APPLIED,
+        T.RUNNER_FAULT,
+        T.OFF_PIPELINE_FAULT,
+        T.FAULT_NOT_APPLIED,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
@@ -201,6 +207,9 @@ def test_report_fields_default_to_empty_and_name_the_run() -> None:
             "ruling",
             "ruling_why",
             "gate_reason",
+            "fault",
+            "fault_reason",
+            "fault_why",
         ],
         "",
     ) | {"story": "run"}

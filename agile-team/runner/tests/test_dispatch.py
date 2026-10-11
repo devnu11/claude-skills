@@ -127,6 +127,7 @@ def test_developer_bash_write_to_tests_is_quarantined(make_runtime, configured: 
 def test_failed_gate_bounces_and_caps(make_runtime) -> None:
     rt = make_runtime(FakeQuery(handoff("changes_requested", next_role="developer")))
     open_story(rt, "review")
+    rt.pipeline.repeat = 99  # same reason each time; this test is about the cap
     for _ in range(3):
         rt.state.stories["s1"].step = "review"
         report = run(rt, "code-reviewer", story="s1")

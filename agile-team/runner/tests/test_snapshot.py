@@ -87,6 +87,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             status=StoryStatus(s["status"]),
             delivery=s["delivery"],
             sprint=s["sprint"],
+            repeated=s.get("repeated"),
         )
         for s in fixture["stories"]
     }
@@ -234,6 +235,7 @@ def test_story_without_file_or_event(config: cfg.Config, tmp_path: Path) -> None
         "rounds": 0,
         "opened_at": None,
         "acceptance": [],
+        "repeated": None,
     }
     assert "commit" not in story
 
