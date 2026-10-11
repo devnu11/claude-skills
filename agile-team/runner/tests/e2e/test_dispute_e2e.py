@@ -232,7 +232,7 @@ def test_ruling_below_the_cap_moves_the_story_and_resets_counters(make_runtime, 
     assert report["ruling"] == {"ruling": "revise_design", "applied": True, "now_at": "design"}
     assert (story.step, story.rounds, story.disputes, story.dispute) == ("design", 0, 0, None)
     (event,) = kinds(rt, EventKind.RULING)
-    assert event.data == {"ruling": "revise_design", "now_at": "design"}
+    assert event.data == {"ruling": "revise_design", "reason": "", "now_at": "design"}
 
 
 def test_ruling_on_a_done_story_is_reported_not_applied(make_runtime, configured) -> None:
