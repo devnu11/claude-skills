@@ -1,8 +1,10 @@
 """Per-role cost and token ledger, appended after every ``query()``.
 
 Costs come from ``ResultMessage.total_cost_usd`` and tokens from its ``usage``.
-The soft budget is the config's ``team.budget_usd``; hard caps belong to the
-key's Console workspace. A resumed PO query records only its own share of the
+The budget is the config's ``team.budget_usd``: a ceiling at which the
+runner halts (s38). Readers get corrected entries: PO entries written before
+s25 held the session's running total and are turned into each query's own
+cost when read (``corrected``, ADR-007). A resumed PO query records only its own share of the
 session's running total (``SessionCost``, ADR-004).
 """
 
@@ -11,7 +13,7 @@ from __future__ import annotations
 import json
 import time
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,9 @@ USAGE_KEYS = {
     "cache_read": "cache_read_input_tokens",
     "cache_creation": "cache_creation_input_tokens",
 }
+PO_ROLE = "product-owner"
+PO_DELTAS_FROM = 1791694950.0  # 2026-10-11 05:02:30 UTC; ADR-007
+LEGACY_SESSION = "pre-s25"
 
 
 @dataclass
@@ -85,6 +90,20 @@ class Entry:
         return cls(**{**data, "tokens": Tokens(**data.get("tokens", {}))})
 
 
+def corrected(entries: list[Entry]) -> list[Entry]:
+    """``entries`` with each pre-s25 PO running total turned into that query's own cost (K2, K3)."""
+    seen = SessionCost(LEGACY_SESSION)
+    return [_own_share(e, seen) for e in entries]
+
+
+def _own_share(entry: Entry, seen: SessionCost) -> Entry:
+    if entry.role != PO_ROLE or entry.at >= PO_DELTAS_FROM:
+        return entry
+    own = seen.own_cost(LEGACY_SESSION, entry.cost_usd)
+    seen.reported = entry.cost_usd
+    return replace(entry, cost_usd=own)
+
+
 @dataclass
 class Totals:
     """Summed cost and tokens over some ledger entries."""
@@ -133,6 +152,15 @@ class Ledger:
             fh.write(json.dumps(asdict(entry)) + "\n")
 
     def entries(self) -> list[Entry]:
+        """Entries with the PO overcount corrected (K4)."""
+        return corrected(self._raw())
+
+    def overcount(self) -> float:
+        """What the correction takes off the raw ledger (K6)."""
+        raw = self._raw()
+        return sum(e.cost_usd for e in raw) - sum(e.cost_usd for e in corrected(raw))
+
+    def _raw(self) -> list[Entry]:
         if not self.path.is_file():
             return []
         lines = self.path.read_text().splitlines()
@@ -149,8 +177,8 @@ class Ledger:
         return dict(groups)
 
     def last_cost(self, role: str) -> float:
-        """The most recent cost ledgered for ``role``; 0.0 if it has none."""
-        costs = [e.cost_usd for e in self.entries() if e.role == role]
+        """The most recent cost ledgered for ``role`` as written; 0.0 if it has none."""
+        costs = [e.cost_usd for e in self._raw() if e.role == role]
         return costs[-1] if costs else 0.0
 
     def by_role(self) -> dict[str, float]:
@@ -158,7 +186,7 @@ class Ledger:
 
 
 def budget_status(ledger: Ledger, budget_usd: float) -> dict[str, object]:
-    """Spend summary handed to the Product Owner and Manager."""
+    """Corrected spend against the budget ceiling, for the PO, the Manager and ``status``."""
     spent = ledger.total()
     tokens = sum((e.tokens for e in ledger.entries()), Tokens())
     return {
@@ -166,6 +194,7 @@ def budget_status(ledger: Ledger, budget_usd: float) -> dict[str, object]:
         "budget_usd": budget_usd,
         "remaining_usd": round(budget_usd - spent, 4),
         "pct_used": round(100 * spent / budget_usd, 1) if budget_usd else 0.0,
+        "po_overcount_usd": round(ledger.overcount(), 4),
         "by_role": {k: round(v, 4) for k, v in sorted(ledger.by_role().items())},
         "tokens": asdict(tokens),
     }
@@ -173,7 +202,7 @@ def budget_status(ledger: Ledger, budget_usd: float) -> dict[str, object]:
 
 @dataclass(frozen=True)
 class Budget:
-    """The soft budget and how often (in percent of it) the Manager checks in."""
+    """The budget and how often (in percent of it) the Manager checks in."""
 
     usd: float
     every_pct: int

@@ -20,7 +20,10 @@ brief says why, and gives you the numbers.
 
 ## Inputs (in the runner context)
 
-- `budget`: spend so far against the soft budget, with tokens.
+- `budget`: corrected spend so far (`spent_usd`), the ceiling (`budget_usd`;
+  the runner halts the run when spend reaches it), `remaining_usd`,
+  `pct_used`, spend per role (`by_role`), tokens, and `po_overcount_usd` (the
+  pre-s25 PO overcount already taken off; ADR-007).
 - `spend_by_role`: steps, cost, cost per step, tokens and turns per step for
   each role, most expensive first. It also has `latest_turns` and
   `context_per_turn` (tokens re-sent per turn).

@@ -143,6 +143,9 @@ A `gate_hold` hand-over means the gate could not run for an environment reason (
 Defaults come from each role file. Use `set_role_model` only with a concrete
 reason (e.g. the developer failed the same gate twice on a hard algorithm);
 the manager reviews every override. Check `budget_status` at sprint start.
+`budget_usd` is a ceiling: when spend reaches it, the runner halts
+the run (`blocked`), and only the human can raise it. Plan sprints to fit
+`remaining_usd`.
 
 Some roles may run on another provider (shown as `role (provider: model)` in
 your kickoff), usually a cheaper local model. Its model names are the

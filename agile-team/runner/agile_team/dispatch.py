@@ -52,7 +52,7 @@ from .insights import (
     long_running_roles,
     spend_by_role,
 )
-from .ledger import Budget, Entry, Ledger, Tokens, budget_status
+from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
 from .priority import Priority
 from .providers import Providers
@@ -80,7 +80,7 @@ REWORK_BRIEF = (
 )
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
-PO = "product-owner"
+PO = PO_ROLE
 MANAGER = "manager"
 SCRIBE = "scribe"
 ARCHITECT = "architect"
@@ -520,6 +520,7 @@ class Runtime:
         self.settle_po()
         report = self._unpresented(request) or await self._plan_and_run(request)
         self._note_if_ran(request, report)
+        self.enforce_ceiling()
         return report
 
     def _note_if_ran(self, request: StepRequest, report: dict[str, Any]) -> None:
@@ -600,6 +601,11 @@ class Runtime:
     def priority(self) -> Priority:
         """The story ranking: the PO's order over this run's pipeline."""
         return Priority(self.state.order, self.pipeline.first())
+
+    def enforce_ceiling(self) -> Halt | None:
+        """Halt the run when corrected spend has reached ``team.budget_usd`` (B1, B3)."""
+        found = halt.budget_halt(self.ledger.total(), self.config.team.budget_usd)
+        return self.halt_run(found) if found else None
 
     def halt_run(self, found: Halt) -> Halt:
         """Record the run's first halt (status, reason, liaison note); later calls re-assert it."""

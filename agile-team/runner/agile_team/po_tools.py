@@ -397,7 +397,10 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"answer": str},
     ),
     "wait_for_answers": ("Wait for answers to question ids.", {"ids": list, "timeout_s": int}),
-    "budget_status": ("Spend so far against the soft budget.", {}),
+    "budget_status": (
+        "Corrected spend so far against the budget ceiling; the run halts when spend reaches it.",
+        {},
+    ),
     "set_role_model": (
         "Override a role's provider/model/effort with a logged reason.",
         {"role": str, "provider": str, "model": str, "effort": str, "reason": str},
@@ -494,7 +497,8 @@ class PoRun:
         return result
 
     async def _turns(self) -> StepResult:
-        result, turn = StepResult("", 0.0), await self._opening()
+        result = StepResult("", 0.0)
+        turn = None if self.runtime.enforce_ceiling() else await self._opening()
         while turn:
             turn = await self._renewed(turn)
             result = await self._turn(turn)
@@ -582,6 +586,8 @@ class PoRun:
         return PoTurn(lead + handover.prompt(found, state), state.po_session)
 
     async def _turn(self, turn: PoTurn) -> StepResult:
+        if self.runtime.halted_by:
+            return StepResult("", 0.0)
         plan = po_plan(self.runtime, turn)
         raw = await self._collect(plan)
         result = self.runtime.priced(plan, self._own_cost(turn, raw))
@@ -624,12 +630,13 @@ class PoRun:
         self.runtime.save()
 
     def _record(self, model: str, result: StepResult) -> None:
-        """Ledger the PO's cost and keep its session for resume."""
+        """Ledger the PO's cost, keep its session for resume, then hold the budget ceiling."""
         state = self.runtime.state
         entry = Entry(PO, model, result.cost, tokens=result.tokens, turns=result.turns)
         self.runtime.ledger.record(entry)
         state.po_session = result.session_id or state.po_session
         self.runtime.save()
+        self.runtime.enforce_ceiling()
 
 
 PoRun.RENEWERS = {RenewPath.COMPACT: PoRun._compact, RenewPath.HANDOFF: PoRun._handoff}

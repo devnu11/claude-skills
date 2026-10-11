@@ -17,6 +17,8 @@ CRASH_LOG = "crash.log"
 SIGTERM_REASON = "stopped by stop --now"
 REASON_LIMIT = 200
 RESUME = "run `agile-team start --resume`"
+BUDGET_REASON = "budget reached: spent ${spent:,.2f} of ${budget:,.2f}"
+BUDGET_ADVICE = f"raise team.budget_usd in .agile-team.toml, then {RESUME}"
 
 
 class HaltKind(StrEnum):
@@ -25,6 +27,7 @@ class HaltKind(StrEnum):
     LIMIT = "limit"
     CRASH = "crash"
     SIGTERM = "sigterm"
+    BUDGET = "budget"
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,7 @@ HALTS: dict[HaltKind, HaltRule] = {
         RunStatus.FAILED, "failed", 70, f"details in .team/run/{CRASH_LOG}; {RESUME} to continue"
     ),
     HaltKind.SIGTERM: HaltRule(RunStatus.STOPPED, "stopped", 143, f"{RESUME} to continue"),
+    HaltKind.BUDGET: HaltRule(RunStatus.BLOCKED, "blocked", 77, BUDGET_ADVICE),
 }
 
 
@@ -109,6 +113,13 @@ def sigterm_halt(exc: BaseException) -> Halt | None:
     if any(isinstance(leaf, asyncio.CancelledError) for leaf in leaves(exc)):
         return Halt(HaltKind.SIGTERM, SIGTERM_REASON)
     return None
+
+
+def budget_halt(spent: float, budget_usd: float) -> Halt | None:
+    """A ``budget`` halt when ``spent`` reached the ceiling, rounded as shown."""
+    if round(spent, 4) < budget_usd:
+        return None
+    return Halt(HaltKind.BUDGET, BUDGET_REASON.format(spent=spent, budget=budget_usd))
 
 
 def crash_halt(exc: BaseException) -> Halt:

@@ -20,7 +20,7 @@ from .. import state as state_mod
 from .. import waits
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
-from ..ledger import LEDGER, Entry
+from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
 from ..relay import INBOX, OUTBOX
 from ..roles import RoleBook, RoleError
@@ -233,7 +233,7 @@ def _events(files: RunFiles) -> list[dict]:
 
 
 def _ledger(files: RunFiles) -> list[dict]:
-    return [asdict(Entry.from_dict(line)) for line in files.lines(LEDGER)]
+    return [asdict(e) for e in corrected([Entry.from_dict(x) for x in files.lines(LEDGER)])]
 
 
 def _messages(files: RunFiles) -> list[dict]:

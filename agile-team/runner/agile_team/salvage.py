@@ -29,12 +29,13 @@ NO_EDITS = "no edits"
 
 
 class Cause(StrEnum):
-    """Why a step was cut off; the first three equal ``halt.HaltKind`` values."""
+    """Why a step was cut off; LIMIT, CRASH, SIGTERM and BUDGET equal ``halt.HaltKind`` values."""
 
     ERROR = "error"
     LIMIT = "limit"
     CRASH = "crash"
     SIGTERM = "sigterm"
+    BUDGET = "budget"
     KILLED = "killed"
 
 
