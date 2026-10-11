@@ -29,15 +29,21 @@ def test_normalise_worked_examples(reason, expected):
 
 
 def test_same_reason_other_numbers_same_key():
-    a = loops.Setback("acceptance", "e2e", "customer-proxy", "bounce", "role", "down at 127.0.0.1:8799 pid 12")
-    b = loops.Setback("acceptance", "e2e", "customer-proxy", "bounce", "role", "down at 127.0.0.1:9000 pid 99")
+    a = loops.Setback(
+        "acceptance", "e2e", "customer-proxy", "bounce", "role", "down at 127.0.0.1:8799 pid 12"
+    )
+    b = loops.Setback(
+        "acceptance", "e2e", "customer-proxy", "bounce", "role", "down at 127.0.0.1:9000 pid 99"
+    )
     assert a.key == b.key
     assert a.key.startswith("acceptance>e2e ")
 
 
 def test_different_tests_different_keys():
     def make(name):
-        return loops.Setback("tests", "tests", "unit-tester", "bounce", "runner", f"FAILED t.py::{name}")
+        return loops.Setback(
+            "tests", "tests", "unit-tester", "bounce", "runner", f"FAILED t.py::{name}"
+        )
 
     assert make("test_a").key != make("test_b").key
 
