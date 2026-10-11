@@ -751,7 +751,8 @@ function priorityLabel(e) {
   if (e.data.change === "set") return "order set";
   if (e.data.change === "sprint") return "sprint order";
   const m = e.data.moves.find((x) => x.story === e.story);
-  return `#${m?.from} → #${m?.to}`;
+  if (!m) return `#${e.data.order.indexOf(e.story) + 1} (unchanged)`;
+  return `#${m.from} → #${m.to}`;
 }
 
 const TIMELINE = {
