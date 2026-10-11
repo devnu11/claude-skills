@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from unattended import supervisor
-from unattended.limits import GRACE, Bounds, Metrics, Outcome, OutcomeKind, local
+from unattended.limits import GRACE, Bounds, Metrics, Outcome, OutcomeKind, WakeOn, local
 from unattended.store import EVENTS_FILE, Job, JobKind, JobStatus, Spec
 from unattended.supervisor import StopRequested, Supervisor
 
@@ -245,6 +245,62 @@ def test_offline_waits_for_the_network_without_a_resume(job: Job) -> None:
     assert (state.runs, state.resumes, state.retries) == (2, 0, 0)
     assert clock.sleeps == [supervisor.SLICE] * 3
     assert events(job) == ["run", "offline", "online", "run", "end"]
+
+
+def test_no_stale_wake_after_a_limit_then_an_offline_wait(job: Job) -> None:
+    seen_run: list[tuple[JobStatus, float | None]] = []
+    seen_offline: list[tuple[JobStatus, float | None, object]] = []
+    script = Script(LIMIT, OFFLINE, DONE)
+
+    def before() -> None:
+        state = job.load()
+        seen_run.append((state.status, state.next_wake))
+
+    def online() -> bool:
+        state = job.load()
+        seen_offline.append((state.status, state.next_wake, state.wake_on))
+        return len(seen_offline) > 1
+
+    script.before = before
+    clock = FakeClock()
+    Supervisor(job, script, clock, clock.sleep, online).run()
+    assert seen_run == [(JobStatus.RUNNING, None)] * 3
+    assert seen_offline[0] == (JobStatus.WAITING, None, WakeOn.NETWORK)
+    assert job.load().wake_on is None
+
+
+def wake_after(job: Job, *outcomes: Outcome) -> tuple[float | None, WakeOn | None]:
+    seen: list[tuple[float | None, WakeOn | None]] = []
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        state = job.load()
+        seen.append((state.next_wake, state.wake_on))
+        clock.sleep(seconds)
+
+    Supervisor(job, Script(*outcomes, DONE), clock, sleep).run()
+    return seen[0]
+
+
+def test_wake_on_fallback(job: Job) -> None:
+    assert wake_after(job, UNREADABLE) == (START + 3600.0, WakeOn.FALLBACK)
+
+
+def test_wake_on_reset(job: Job) -> None:
+    next_wake, on = wake_after(job, LIMIT)
+    assert on is WakeOn.RESET
+    assert next_wake is not None and next_wake > START
+
+
+def test_wake_on_backoff(job: Job) -> None:
+    assert wake_after(job, RATE) == (START + 60.0, WakeOn.BACKOFF)
+
+
+def test_wait_event_carries_why(job: Job) -> None:
+    supervise(job, Script(UNREADABLE, DONE))
+    lines = job.path(EVENTS_FILE).read_text().splitlines()
+    wait = next(json.loads(line) for line in lines if json.loads(line)["event"] == "wait")
+    assert wait["on"] == "fallback"
 
 
 def test_offline_marks_the_job_waiting(job: Job) -> None:

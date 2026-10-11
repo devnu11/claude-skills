@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from unattended import limits
-from unattended.limits import Bounds, OutcomeKind, Progress, Waits
+from unattended.limits import Bounds, OutcomeKind, Progress, Wake, WakeOn, Waits
 
 EDMONTON = ZoneInfo("America/Edmonton")
 NOW = datetime(2026, 10, 9, 14, 0, tzinfo=EDMONTON)
@@ -111,12 +111,35 @@ def test_reset_at_unknown_zone_uses_now_zone() -> None:
 
 def test_waits_adds_grace_to_the_reset() -> None:
     wake = Waits().after_limit("resets 7:20pm (America/Edmonton)", NOW.timestamp())
-    assert wake == (at(19, 20) + timedelta(minutes=3)).timestamp()
+    assert wake.at == (at(19, 20) + timedelta(minutes=3)).timestamp()
+    assert wake.on is WakeOn.RESET
 
 
 def test_waits_falls_back_when_unreadable() -> None:
-    assert Waits(60.0).after_limit("session limit", 1000.0) == 1060.0
-    assert Waits().after_limit("x", 0.0) == 5 * 3600
+    assert Waits(60.0).after_limit("session limit", 1000.0) == Wake(1060.0, WakeOn.FALLBACK)
+    assert Waits().after_limit("x", 0.0) == Wake(5 * 3600, WakeOn.FALLBACK)
+
+
+def test_live_halt_reason_waits_for_the_stated_reset() -> None:
+    chicago = ZoneInfo("America/Chicago")
+    now = datetime(2026, 10, 10, 17, 26, tzinfo=chicago)
+    wake = Waits().after_limit("session limit, resets 9pm (America/Chicago)", now.timestamp())
+    expected = datetime(2026, 10, 10, 21, 3, tzinfo=chicago).timestamp()
+    assert wake == Wake(expected, WakeOn.RESET)
+
+
+@pytest.mark.parametrize("text", ["resets the count", "resets soon", "resets tomorrow"])
+def test_reset_note_needs_a_readable_time(text: str) -> None:
+    assert limits.find_reason(limits.RESET_NOTE, text) is None
+
+
+def test_reset_note_with_a_date() -> None:
+    reason = limits.find_reason(limits.RESET_NOTE, "resets Oct 10, 5pm (UTC)")
+    assert reason == "usage limit, resets Oct 10, 5pm (UTC)"
+
+
+def test_wake_on_values() -> None:
+    assert [w.value for w in WakeOn] == ["reset", "fallback", "backoff", "network"]
 
 
 @pytest.mark.parametrize(

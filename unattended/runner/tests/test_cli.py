@@ -235,7 +235,10 @@ def test_supervisor_crash_marks_failed(
 def test_status_and_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     make(tmp_path)
     assert run(tmp_path, "status", "j") == 0
-    assert printed(capsys)["status"] == "stopped"
+    report = printed(capsys)
+    assert report["status"] == "stopped"
+    assert report["wake_on"] is None
+    assert list(report).index("wake_on") == list(report).index("next_wake") + 1
     assert run(tmp_path, "status") == 0
     assert [r["name"] for r in printed(capsys)] == ["j"]
     assert run(tmp_path, "list") == 0

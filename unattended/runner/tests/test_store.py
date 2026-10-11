@@ -8,7 +8,7 @@ import pytest
 from unattended import store
 from unattended.auth import Auth
 from unattended.awake import SleepPolicy
-from unattended.limits import Bounds, Progress
+from unattended.limits import Bounds, Progress, WakeOn
 from unattended.store import Job, JobError, JobHome, JobKind, JobState, JobStatus, Spec
 
 
@@ -38,6 +38,26 @@ def test_mark_clears_reason() -> None:
     st.mark(JobStatus.FAILED, "boom")
     st.mark(JobStatus.RUNNING)
     assert (st.status, st.reason) == (JobStatus.RUNNING, "")
+
+
+def test_mark_clears_the_wake() -> None:
+    st = state()
+    st.next_wake, st.wake_on = 99.0, WakeOn.RESET
+    st.mark(JobStatus.RUNNING)
+    assert (st.next_wake, st.wake_on) == (None, None)
+
+
+def test_wake_on_round_trips() -> None:
+    st = state()
+    st.wake_on = WakeOn.FALLBACK
+    loaded = JobState.from_json(st.to_json())
+    assert loaded.wake_on is WakeOn.FALLBACK
+
+
+def test_legacy_state_has_no_wake_on() -> None:
+    data = json.loads(state().to_json())
+    del data["wake_on"]
+    assert JobState.from_json(json.dumps(data)).wake_on is None
 
 
 def test_progress() -> None:

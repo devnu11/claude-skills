@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -7,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from unattended import command_job
-from unattended.command_job import CommandJob
+from unattended.command_job import CommandJob, RunOutput
 from unattended.limits import Outcome, OutcomeKind
 from unattended.store import LOG_FILE
 
@@ -67,7 +68,11 @@ def test_failure(make_job: MakeJob, workdir: Path) -> None:
 def test_network_failure_is_offline() -> None:
     text = "agile-team start: crashed: API Error: Can't reach the API server (ENOTFOUND)"
     expected = Outcome(OutcomeKind.OFFLINE, "API server unreachable, exit code 70")
-    assert command_job.outcome_for(70, text) == expected
+    assert command_job.outcome_for(70, out(text)) == expected
+
+
+def out(text: str, cwd: Path = Path("/nonexistent-s37")) -> RunOutput:
+    return RunOutput(text, cwd)
 
 
 @pytest.mark.parametrize(
@@ -77,13 +82,91 @@ def test_network_failure_is_offline() -> None:
         ("You've hit your session limit\nresets 2am (America/Edmonton)",
          "session limit, resets 2am (America/Edmonton)"),
         ("agile-team start: session limit, resets 7:20pm (UTC); run `agile-team start --resume`",
-         "usage limit, resets 7:20pm (UTC)"),
+         "session limit, resets 7:20pm (UTC)"),
         ("You've hit your weekly limit", "weekly limit"),
         ("nothing useful", command_job.DEFAULT_LIMIT_REASON),
+        ("the count resets the count", command_job.DEFAULT_LIMIT_REASON),
+        ("resets the count", command_job.DEFAULT_LIMIT_REASON),
     ],
 )  # fmt: skip
 def test_limit_reasons(text: str, reason: str) -> None:
-    assert command_job.outcome_for(75, text) == Outcome(OutcomeKind.LIMIT, reason)
+    assert command_job.outcome_for(75, out(text)) == Outcome(OutcomeKind.LIMIT, reason)
+
+
+LIVE = (
+    "agile-team start: session limit, resets 9pm (America/Chicago); "
+    "run `agile-team start --resume` after the reset\n"
+    "PO: AC4 resets the count) and add AC4b for the fallback wait\n"
+)
+HALTED = "agile-team start: session limit, resets 9pm (UTC); run `agile-team start --resume`\n"
+
+
+def write_status(cwd: Path, content: str) -> None:
+    path = cwd / command_job.STATUS_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def blocked(reason: str) -> str:
+    return json.dumps({"status": "blocked", "status_reason": reason})
+
+
+def test_live_case_reads_the_halt_line_not_the_po_text(tmp_path: Path) -> None:
+    expected = Outcome(OutcomeKind.LIMIT, "session limit, resets 9pm (America/Chicago)")
+    assert command_job.outcome_for(75, out(LIVE, tmp_path)) == expected
+
+
+def test_the_last_halt_line_wins(tmp_path: Path) -> None:
+    text = HALTED + "agile-team start: weekly limit; run `agile-team start --resume`\n"
+    assert command_job.halt_reason(out(text, tmp_path)) == "weekly limit"
+
+
+def test_no_halt_line(tmp_path: Path) -> None:
+    assert command_job.halt_reason(out("PO: hello", tmp_path)) is None
+
+
+def test_halt_line_beats_the_status_file(tmp_path: Path) -> None:
+    write_status(tmp_path, blocked("from the file"))
+    outcome = command_job.outcome_for(75, out(HALTED, tmp_path))
+    assert outcome.reason == "session limit, resets 9pm (UTC)"
+
+
+def test_blocked_status_file_gives_its_reason(tmp_path: Path) -> None:
+    write_status(tmp_path, blocked("session limit, resets 4am (UTC)"))
+    outcome = command_job.outcome_for(75, out("PO: resets 7pm", tmp_path))
+    assert outcome == Outcome(OutcomeKind.LIMIT, "session limit, resets 4am (UTC)")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        json.dumps({"status": "running", "status_reason": "x"}),
+        json.dumps({"status": "blocked"}),
+        json.dumps({"status": "blocked", "status_reason": ""}),
+        json.dumps({"status": "blocked", "status_reason": 5}),
+        "{not json",
+        "[1, 2]",
+        None,
+    ],
+)
+def test_unusable_status_file_falls_through_to_free_text(tmp_path: Path, content: str | None) -> None:
+    if content is not None:
+        write_status(tmp_path, content)
+    outcome = command_job.outcome_for(75, out("limit hit, resets 7pm", tmp_path))
+    assert outcome.reason == "usage limit, resets 7pm"
+    assert command_job.status_reason(out("", tmp_path)) is None
+
+
+def test_unreadable_status_file_is_no_reason(tmp_path: Path) -> None:
+    (tmp_path / command_job.STATUS_FILE).mkdir(parents=True)
+    assert command_job.status_reason(out("", tmp_path)) is None
+
+
+def test_run_once_passes_cwd_to_the_status_file(make_job: MakeJob, workdir: Path) -> None:
+    write_status(workdir, blocked("session limit, resets 4am (UTC)"))
+    job = make_job(command_spec(workdir, "echo PO says resets the count; exit 75"))
+    outcome = CommandJob(job, os.environ).run_once()
+    assert outcome == Outcome(OutcomeKind.LIMIT, "session limit, resets 4am (UTC)")
 
 
 def test_tail_keeps_the_last_lines(tmp_path: Path) -> None:
