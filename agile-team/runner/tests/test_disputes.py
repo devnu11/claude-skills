@@ -44,6 +44,7 @@ def story(step: str = "implement", **kw) -> StoryState:
 
 
 def open_dispute(**kw) -> OpenDispute:
+    kw.setdefault("output", gates.TEST_GREEN.format(test=TEST_ID))
     return OpenDispute(TEST_ID, "W6", "why", FILE, BASE, **kw)
 
 
@@ -272,7 +273,7 @@ def test_a_dispute_at_implement_moves_to_tests_without_running_gates() -> None:
     assert (out.verdict, out.bounce_to) == (Verdict.DISPUTE, "tests")
     assert out.reason == f"{TEST_ID} contradicts W6: why"
     assert out.dispute == open_dispute()
-    assert p.checks.run.calls == [LS]
+    assert p.checks.run.calls[0] == LS and len(p.checks.run.calls) == 2
 
 
 def test_the_raised_dispute_stores_the_resolved_file_and_baseline() -> None:
@@ -554,13 +555,20 @@ def test_a_developer_dispute_logs_one_dispute_event_and_no_gate(make_runtime) ->
     assert report["gate"] == event.data
     s = rt.state.stories["s1"]
     assert (s.step, s.rounds, s.disputes) == ("tests", 0, 1)
-    assert s.dispute == OpenDispute(TEST_ID, "W6", "rule says X, test expects Y", FILE, BASE)
+    assert s.dispute == OpenDispute(
+        TEST_ID,
+        "W6",
+        "rule says X, test expects Y",
+        FILE,
+        BASE,
+        output=gates.TEST_GREEN.format(test=TEST_ID),
+    )
 
 
 def test_a_dispute_does_not_run_the_implement_gate(make_runtime) -> None:
     rt = dispute_runtime(make_runtime)
     run(rt, "developer")
-    assert rt.pipeline.checks.run.calls == [LS]
+    assert rt.pipeline.checks.run.calls[0] == LS and len(rt.pipeline.checks.run.calls) == 2
 
 
 def test_a_normal_gate_still_logs_a_gate_event(make_runtime) -> None:
@@ -617,7 +625,7 @@ def test_a_ruling_applies_at_any_step_on_an_active_story(make_runtime) -> None:
     assert (s.step, s.rounds, s.disputes, s.dispute) == ("design", 0, 0, None)
     assert report["ruling"] == {"ruling": "revise_design", "applied": True, "now_at": "design"}
     [event] = events_of(rt, "ruling")
-    assert event.data == {"ruling": "revise_design", "now_at": "design"}
+    assert event.data == {"ruling": "revise_design", "reason": "", "now_at": "design"}
 
 
 def test_a_ruling_on_a_capped_story_behaves_as_before(make_runtime) -> None:

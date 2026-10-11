@@ -150,6 +150,7 @@ def test_manager_rules_on_capped_story(make_runtime) -> None:
     ruling = rt.events.events()[-1]
     assert ruling.kind == "ruling" and ruling.data == {
         "ruling": "revise_design",
+        "reason": "",
         "now_at": "design",
     }
     prompt = rt.query_fn.calls[0]["prompt"]
