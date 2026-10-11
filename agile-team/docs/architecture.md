@@ -943,7 +943,7 @@ design step. `index.html` is s5's and does not change here.
 `dashboard/fixtures/snapshot.json` is the contract (AC3). It holds **raw**
 sections, and the approved UI (`index.html`) derives the board, flow, tokens
 and questions views from them in the browser. `build()` therefore returns the
-fixture's ten top-level keys. AC1 and AC2 name views, and each one maps onto
+fixture's eleven top-level keys (`upstream` was added by s29). AC1 and AC2 name views, and each one maps onto
 those keys like this:
 
 | AC view | Snapshot keys it comes from | Derived in `index.html` by |
@@ -962,7 +962,7 @@ in Python.
 
 | # | Rule | AC |
 |---|---|---|
-| D1 | `build(config, book) -> dict` returns exactly the keys `generated_at, run, pipeline, roles, stories, requirements, events, ledger, messages, answers`, in that order, with the shapes in the section table below. After a JSON round trip, the value types match the fixture. | AC1, AC3 |
+| D1 | `build(config, book) -> dict` returns exactly the keys `generated_at, run, pipeline, roles, stories, requirements, events, ledger, messages, answers, upstream`, in that order (`upstream` added by s29, see [design/s29.md](design/s29.md)), with the shapes in the section table below. After a JSON round trip, the value types match the fixture. | AC1, AC3 |
 | D2 | `build` only **reads** the files in the source table (`watched_files(config)` plus the role files already loaded into `book`). It never writes, never runs git, never touches the network and never reads key files. Pure apart from `time.time()` and file reads. | AC1, AC4 |
 | D3 | A missing file or directory gives an empty section (`[]`) or the default (`RunState()`). A blank JSONL line, or one that does not parse as a JSON object, is skipped. The runner appends while the server reads, so a torn last line is normal. | AC1 |
 | D4 | `roles`: every name in `book.names()`, sorted, resolved with `state.runtime_overrides(name)`, so a PO model override shows up. Disabled roles are left out. A role that raises `RoleError` is left out, not an error. | AC1 |
@@ -1088,7 +1088,7 @@ dashboard renders. Read-only; the contract is `fixtures/snapshot.json`."
 | `RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX)` | Imported names from `state`, `events`, `ledger` and `relay`. |
 | `@dataclass(frozen=True) class RunFiles` | `config: Config`, `book: RoleBook`, `state: RunState`, `events: list[dict]` (raw `events.jsonl`). Docstring: "The inputs one snapshot reads, loaded once." |
 | `RunFiles.load(config, book)` (classmethod) | `state_mod.load(config.run_dir)`, `read_jsonl(config.run_dir / EVENTS)`. |
-| `SECTIONS: dict[str, Callable[[RunFiles], Any]]` | The ten keys in D1 order → `_generated_at`, `_run`, `_pipeline`, `_roles`, `_stories`, `_requirements`, `_events`, `_ledger`, `_messages`, `_answers`. |
+| `SECTIONS: dict[str, Callable[[RunFiles], Any]]` | The eleven keys in D1 order → `_generated_at`, `_run`, `_pipeline`, `_roles`, `_stories`, `_requirements`, `_events`, `_ledger`, `_messages`, `_answers`, `_upstream` (s29). |
 | `build(config, book) -> dict[str, Any]` | `files = RunFiles.load(config, book)`; `return {key: section(files) for key, section in SECTIONS.items()}`. Docstring names the fixture as the contract. AC1 reads `build(config)`. The role book is the second argument because resolving roles needs the global layer under the home dir, which `Config` doesn't carry. |
 | `watched_files(config) -> list[Path]` | `[run_dir / n for n in RUN_FILES]` + `sorted(stories_dir.glob("*.md"))` + `sorted(requirements_dir.glob("REQ-*.md"))`. Missing ones included (the fingerprint skips them). |
 | `read_jsonl(path) -> list[dict]` | D3. `[]` when the file is missing. Uses a helper `_parse_line(line) -> dict \| None` that returns `None` for blank lines, `json.JSONDecodeError` and non-dict values. |
@@ -1189,7 +1189,7 @@ autouse `AGILE_TEAM_HOME` fixture already isolates the home dir.
    from `sha == ""`), `ledger`, `messages`, `answers` and `pipeline` equal
    the fixture's, and the top-level key order equals D1.
 2. **Empty (AC1).** Config only, with no run files, story dir or
-   requirements dir. All ten keys are present. `stories`, `requirements`,
+   requirements dir. All eleven keys are present. `stories`, `requirements`,
    `events`, `ledger`, `messages` and `answers` are `[]`. `run` is
    `{"status": "idle", "sprint": 0, "task": "", "manager_due": [], …}`.
    `roles` is not empty (built-ins). Nothing is raised.
