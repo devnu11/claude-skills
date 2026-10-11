@@ -18,7 +18,7 @@ SIGTERM_REASON = "stopped by stop --now"
 REASON_LIMIT = 200
 RESUME = "run `agile-team start --resume`"
 BUDGET_REASON = "budget reached: spent ${spent:,.2f} of ${budget:,.2f}"
-BUDGET_ADVICE = f"raise team.budget_usd in .agile-team.toml, then {RESUME}"
+BUDGET_ADVICE = f"raise team.budget_usd in .agile-team.toml and commit it, then {RESUME}"
 
 
 class HaltKind(StrEnum):
