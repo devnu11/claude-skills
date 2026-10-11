@@ -28,7 +28,10 @@ from .test_po_cost import Totals
 PO = "product-owner"
 LATER = PO_DELTAS_FROM + 100.0
 REASON = "budget reached: spent $4.00 of $4.00"
-ADVICE = "raise team.budget_usd in .agile-team.toml, then run `agile-team start --resume`"
+ADVICE = (
+    "raise team.budget_usd in .agile-team.toml and commit it, "
+    "then run `agile-team start --resume`"
+)
 
 
 def entry(role: str, cost: float, at: float = 1.0) -> Entry:
@@ -303,3 +306,76 @@ def test_raise_then_resume_runs_and_no_raise_halts_again(make_runtime) -> None:
     assert cli._run(rt, Start("r", StartMode.RESUME)) == 0
     assert len(q.calls) == 1
     assert state_mod.load(rt.config.run_dir).status is not RunStatus.BLOCKED
+
+
+# ----- AC4 through the real start entry point (checklist 12, B9) -----------------------
+
+
+def start_resume(repo: Path, home: Path, q) -> int:
+    args = cli.build_parser().parse_args(
+        ["--repo", str(repo), "--home", str(home), "start", "--resume"]
+    )
+    return cli.cmd_start(args, q)
+
+
+def set_budget(repo: Path, budget: float) -> None:
+    import tomli_w
+    from agile_team import config as config_mod
+
+    from .conftest import PY_CONFIG
+
+    team = {**PY_CONFIG["team"], "budget_usd": budget}
+    text = tomli_w.dumps({**PY_CONFIG, "team": team})
+    (repo / config_mod.CONFIG_NAME).write_text(text)
+
+
+def blocked_at_four(configured: Path, key_home: Path, monkeypatch) -> Totals:
+    from functools import partial
+
+    from agile_team import preflight
+
+    monkeypatch.setattr(cli, "Preflight", partial(preflight.Preflight, which=lambda e: e))
+    set_budget(configured, 4.0)
+    from .conftest import git
+
+    git(configured, "commit", "-qam", "budget 4")
+    q = Totals([4.0])
+    args = cli.build_parser().parse_args(
+        ["--repo", str(configured), "--home", str(key_home), "start", "--task", "t"]
+    )
+    assert cli.cmd_start(args, q) == 77
+    return q
+
+
+def test_resume_without_a_raise_halts_again_with_no_query(
+    configured: Path, key_home: Path, monkeypatch
+) -> None:
+    blocked_at_four(configured, key_home, monkeypatch)
+    q = Totals([1.0])
+    assert start_resume(configured, key_home, q) == 77
+    assert q.calls == []
+
+
+def test_an_uncommitted_raise_is_refused_by_preflight(
+    configured: Path, key_home: Path, monkeypatch
+) -> None:
+    blocked_at_four(configured, key_home, monkeypatch)
+    set_budget(configured, 50.0)
+    q = Totals([1.0])
+    with pytest.raises(cli.CliError, match=r"dirty \(\.agile-team\.toml\)"):
+        start_resume(configured, key_home, q)
+    assert q.calls == []
+    run_dir = configured / ".team/run"
+    assert state_mod.load(run_dir).status is RunStatus.BLOCKED
+
+
+def test_a_committed_raise_lets_resume_run(configured: Path, key_home: Path, monkeypatch) -> None:
+    blocked_at_four(configured, key_home, monkeypatch)
+    set_budget(configured, 50.0)
+    from .conftest import git
+
+    git(configured, "commit", "-qam", "raise budget")
+    q = Totals([5.0])
+    assert start_resume(configured, key_home, q) == 0
+    assert len(q.calls) >= 1
+    assert state_mod.load(configured / ".team/run").status is not RunStatus.BLOCKED
