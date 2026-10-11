@@ -58,6 +58,11 @@ def _pattern(regex: str) -> re.Pattern[str]:
     return re.compile(regex, re.IGNORECASE)
 
 
+RESET_CLOCK = (
+    r"(?:(?P<month>[a-z]{3})[a-z]*\.?\s+(?P<day>\d{1,2}),?\s+(?:at\s+)?)?"
+    r"(?P<hour>\d{1,2})(?::(?P<minute>\d\d))?\s*(?P<half>[ap]m)"
+    r"(?:\s*\((?P<zone>[\w/+-]+)\))?"
+)
 LIMIT_PATTERNS: Patterns = (
     (_pattern(r"hit your (?P<kind>[\w ]+?) limit\W+resets (?P<reset>[^\n;]*[^\s;])"),
      "{kind} limit, resets {reset}"),
@@ -65,7 +70,7 @@ LIMIT_PATTERNS: Patterns = (
     (_pattern(r"(?P<kind>usage) limit reached"), "{kind} limit reached"),
 )  # fmt: skip
 RESET_NOTE: Patterns = (
-    (_pattern(r"resets (?P<reset>[^\n;]*[^\s;])"), "usage limit, resets {reset}"),
+    (_pattern(rf"resets\s+(?P<reset>{RESET_CLOCK})"), "usage limit, resets {reset}"),
 )
 RATE_PATTERNS: Patterns = (
     (_pattern(r"(?:API Error|HTTP|status)\W*(?P<code>429|529)\b"), "rate limited (HTTP {code})"),
@@ -112,11 +117,7 @@ def classify(text: str) -> Outcome:
 
 # ----- reset times -------------------------------------------------------------
 
-RESET_TIME = _pattern(
-    r"resets\s+(?:(?P<month>[a-z]{3})[a-z]*\.?\s+(?P<day>\d{1,2}),?\s+(?:at\s+)?)?"
-    r"(?P<hour>\d{1,2})(?::(?P<minute>\d\d))?\s*(?P<half>[ap]m)"
-    r"(?:\s*\((?P<zone>[\w/+-]+)\))?"
-)
+RESET_TIME = _pattern(rf"resets\s+{RESET_CLOCK}")
 MONTH_NAMES = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 MONTHS = {name: number for number, name in enumerate(MONTH_NAMES, 1)}
 
@@ -160,16 +161,35 @@ def _roll(at: datetime, match: re.Match[str]) -> datetime:
     return at.replace(year=at.year + 1) if match["month"] else at + timedelta(days=1)
 
 
+class WakeOn(StrEnum):
+    """What a waiting job waits for."""
+
+    RESET = "reset"
+    FALLBACK = "fallback"
+    BACKOFF = "backoff"
+    NETWORK = "network"
+
+
+@dataclass(frozen=True)
+class Wake:
+    """When a timed wait ends (epoch seconds) and why then."""
+
+    at: float
+    on: WakeOn
+
+
 @dataclass(frozen=True)
 class Waits:
     """How long to wait after a limit when its reset time cannot be read."""
 
     fallback: float = DEFAULT_FALLBACK
 
-    def after_limit(self, reason: str, now: float) -> float:
-        """Epoch seconds to wake: the stated reset plus ``GRACE``, else the fallback."""
+    def after_limit(self, reason: str, now: float) -> Wake:
+        """The stated reset plus ``GRACE`` (``RESET``), else the fallback (``FALLBACK``)."""
         at = reset_at(reason, local(now))
-        return (at + GRACE).timestamp() if at else now + self.fallback
+        if at:
+            return Wake((at + GRACE).timestamp(), WakeOn.RESET)
+        return Wake(now + self.fallback, WakeOn.FALLBACK)
 
 
 def backoff(retries: int) -> float:

@@ -289,7 +289,8 @@ def report(job: Job) -> dict[str, Any]:
         "name": st.name, "kind": st.spec.kind, "status": st.status, "reason": st.reason,
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
-        "next_wake": iso(st.next_wake), "deadline": iso(st.bounds.deadline),
+        "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
+        "deadline": iso(st.bounds.deadline),
         "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:

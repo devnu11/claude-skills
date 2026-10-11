@@ -8,7 +8,7 @@ it as ``limit-reached``. A network failure (``OFFLINE``) runs nothing until a
 plain TCP probe reaches the API again, so waiting costs no tokens; it does not
 count as a resume, but ``MAX_RECONNECTS`` in a row fail the job. A stop (the
 stop file, SIGTERM or Ctrl-C) raises ``StopRequested`` and ends it as
-``stopped``.
+``stopped``. An offline wait has no wake time (``wake_on`` is ``network``).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from types import FrameType
 from typing import Protocol
 
 from . import network
-from .limits import Outcome, OutcomeKind, Waits, backoff, local
+from .limits import Outcome, OutcomeKind, Waits, Wake, WakeOn, backoff, local
 from .store import Job, JobState, JobStatus
 
 SLICE = 30.0
@@ -54,10 +54,10 @@ def install_sigterm() -> None:
     signal.signal(signal.SIGTERM, raise_stop)
 
 
-def wake_after(state: JobState, outcome: Outcome) -> Callable[[float], float]:
-    """When to wake after a limit or rate limit, as a function of now."""
+def wake_after(state: JobState, outcome: Outcome) -> Callable[[float], Wake]:
+    """When and why to wake after a limit or rate limit, as a function of now."""
     if outcome.kind is OutcomeKind.RATE_LIMITED:
-        return lambda now: now + backoff(state.retries - 1)
+        return lambda now: Wake(now + backoff(state.retries - 1), WakeOn.BACKOFF)
     return lambda now: Waits(state.spec.fallback_wait).after_limit(outcome.reason, now)
 
 
@@ -107,11 +107,11 @@ class Supervisor:
     def _wait(self, state: JobState, outcome: Outcome) -> JobStatus | None:
         """Wait for the reset and count a resume, unless the bounds end the job first."""
         wake = wake_after(state, outcome)(self.clock())
-        stop = state.bounds.stop_reason(state.progress(wake))
+        stop = state.bounds.stop_reason(state.progress(wake.at))
         if stop:
             return self._finish(JobStatus.LIMIT_REACHED, f"{outcome.reason}; {stop}")
         self._mark_waiting(wake, outcome.reason)
-        self._sleep_until(wake)
+        self._sleep_until(wake.at)
         state = self.job.update(lambda st: setattr(st, "resumes", st.resumes + 1))
         self.job.event("resume", {"resumes": state.resumes})
         return None
@@ -120,7 +120,7 @@ class Supervisor:
         """Wait until the API is reachable, then run again; None to run, else the end."""
         if state.retries > MAX_RECONNECTS:
             return self._finish(JobStatus.FAILED, f"{reason}; {MAX_RECONNECTS} reconnects in a row")
-        self.job.update(lambda st: st.mark(JobStatus.WAITING, reason))
+        self._mark_offline(reason)
         self.job.event("offline", {"reason": reason})
         if not self._await_network(state.bounds.deadline):
             return self._finish(JobStatus.LIMIT_REACHED, f"{reason}; deadline passed offline")
@@ -136,13 +136,23 @@ class Supervisor:
                 return True
         return False
 
-    def _mark_waiting(self, wake: float, reason: str) -> None:
+    def _mark_offline(self, reason: str) -> None:
+        """Wait for the network: no wake time, only what is awaited."""
+
         def apply(st: JobState) -> None:
             st.mark(JobStatus.WAITING, reason)
-            st.next_wake = wake
+            st.wake_on = WakeOn.NETWORK
 
         self.job.update(apply)
-        self.job.event("wait", {"until": local(wake).isoformat(timespec="seconds")})
+
+    def _mark_waiting(self, wake: Wake, reason: str) -> None:
+        def apply(st: JobState) -> None:
+            st.mark(JobStatus.WAITING, reason)
+            st.next_wake, st.wake_on = wake.at, wake.on
+
+        self.job.update(apply)
+        until = local(wake.at).isoformat(timespec="seconds")
+        self.job.event("wait", {"until": until, "on": wake.on})
 
     def _sleep_until(self, wake: float) -> None:
         """Sleep in ``SLICE`` steps, checking the stop and wake files before each."""
@@ -164,10 +174,6 @@ class Supervisor:
             raise StopRequested
 
     def _finish(self, status: JobStatus, reason: str) -> JobStatus:
-        def apply(st: JobState) -> None:
-            st.mark(status, reason)
-            st.next_wake = None
-
-        self.job.update(apply)
+        self.job.update(lambda st: st.mark(status, reason))
         self.job.event("end", {"status": status, "reason": reason})
         return status

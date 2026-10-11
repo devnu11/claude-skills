@@ -20,7 +20,7 @@ from typing import Any
 
 from .auth import Auth
 from .awake import SleepPolicy
-from .limits import DEFAULT_FALLBACK, Bounds, Progress
+from .limits import DEFAULT_FALLBACK, Bounds, Progress, WakeOn
 
 JOBS = Path(".claude/jobs")
 STATE_FILE = "state.json"
@@ -93,11 +93,16 @@ class JobState:
     cost: float = 0.0
     session_id: str | None = None
     next_wake: float | None = None
+    wake_on: WakeOn | None = None
     created: float = field(default_factory=time.time)
 
     def mark(self, status: JobStatus, reason: str = "") -> None:
-        """Set the status and why; a status without a reason clears the old one."""
+        """Set the status and why, and clear the wake time.
+
+        A status without a reason clears the old one; a timed wait sets its wake after this.
+        """
         self.status, self.reason = status, reason
+        self.next_wake = self.wake_on = None
 
     def progress(self, next_wake: float) -> Progress:
         return Progress(self.resumes, self.cost, next_wake)
@@ -115,7 +120,13 @@ class JobState:
         )
         data["bounds"] = Bounds(**data["bounds"])
         data["status"] = JobStatus(data["status"])
+        data["wake_on"] = _wake_on(data)
         return cls(**data)
+
+
+def _wake_on(data: dict[str, Any]) -> WakeOn | None:
+    stored = data.get("wake_on")
+    return WakeOn(stored) if stored else None
 
 
 def alive(pid: int) -> bool:
