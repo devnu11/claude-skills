@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 See `developer.md` for the base conventions.
 
@@ -55,6 +55,21 @@ The runner now starts and probes service deliveries before the Proxy runs. Key c
 - **Gate hold (L12):** `Trigger.GATE_HOLD` for port conflict; PO hand-over with exact error text.
 
 See ADR-0013 for decisions. Design: `agile-team/docs/design/s26.md` (rules L1–L13, test checklist, reason strings).
+
+## s27: Escalate repeated setbacks to the Manager
+
+Stories that bounce or hold for the same reason (or back-and-forth between same steps) now escalate to the Manager instead of looping. Key modules and changes:
+
+- **`loops.py` (new):** `NORMALISE` table (regex subs for timestamps, URLs, ports, paths, ids, counts), `Setback` dataclass, `normalise()`, `extend()`, `repeats()`, `bounces()`, `extend_run()`, `after_pass()`, `Manager` context builders.
+- **`gates.py`:** `Verdict.ESCALATE`, `StoryState.streak/repeated/run/escalated_by`, `Outcome.rule/author`, `Pipeline.screen/fault_kind/apply_fault/_clear`, `dispatch_refusal` chains.
+- **`dispatch.py`:** `_setback()` from gate outcomes, `_advance_and_log` screens for repeats/backstop, `_setback_fields` attaches event metadata, `_fault()` applies faults and emits events, `_rule_repeat` handles both, `_manager_context` adds `repeated_setback`.
+- **`router.py`:** `_repeat_work` picks escalated stories before scribe, `repeat_brief()` formats the heading, `SENT_BACK_LINES["escalate"]`.
+- **`handover.py`:** Three new rows (`runner_fault`, `off_pipeline_fault`, `fault_not_applied`) after `ruling_not_applied`.
+- **`roles.py`:** `Handoff.fault` field, validation.
+- **`events.py`:** `EventKind.ESCALATION`, `EventKind.FAULT`.
+- **Dashboard:** `snapshot.repeated`, timeline events for `escalation` and `fault`, board pill for `needs_manager · repeat`.
+
+**Rules:** L1–L18 for repeat detection; B1–B9 for backstop (back-and-forth). Key configs: `gates.repeat` (default 2, min 2), `gates.backstop` (default 4, min 2). See ADR-0014, design `agile-team/docs/design/s27.md`.
 
 ## CLI-specific context
 

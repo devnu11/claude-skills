@@ -1,6 +1,6 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 ## Corrected cost accounting (s25)
 
@@ -18,6 +18,18 @@ Your context now includes `long_running_roles`: roles where 2 of the last 3 meas
 - **What to propose:** Split the step (design separately from implement), change the brief (give targeted focus), or change the tools (remove a blocker reading).
 
 Turn counts appear in the ledger and dashboard (`Turns/step`, `Context/turn` columns). This helps detect when context reduction measures (ADR-0011) are working.
+
+## s27: Repeated setback escalation and ruling
+
+You now receive escalated stories when the same setback repeats (or a story bounces back and forth between the same two steps, regardless of reason). You have the bounce history, every reason, and the last output to determine who owns the fault.
+
+**Your decision:** Hand off `"fault"` (the role that bounced it back, another role, or `"runner"` for runner faults). Optionally hand off a `"ruling"` (e.g., `"rescope"`, `"revise_design"`) to move it; the ruling wins if both are given.
+
+**Context:** `repeated_setback` in the runner context holds `reason` (the last output, verbatim), `key` (the normalised reason), `count` (how many times), `author` (who wrote it: `role` or `runner`), `history` (each bounce: step, to_step, role, reason, event), `rule` (`repeat` or `backstop`), `pair` (for backstop: which steps), and `events` (all logs from the first setback on).
+
+**Effect:** The fault clears the bounce history and resets rounds/disputes/hold, so the story moves forward. A runner fault blocks the story until fixed. An off-pipeline fault goes to that role (brief them with `followups`). A pipeline fault moves to that role's step. A bad fault (missing or unknown name) refuses and hands over to you.
+
+See ADR-0014, rules L4–L10, L13.
 
 ## Backlog and sprints
 

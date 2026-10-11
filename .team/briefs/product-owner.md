@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 ## Session renewal at sprint and story boundaries (s23)
 
@@ -42,8 +42,21 @@ A `gate_hold` hand-over means the e2e gate could not run for an environment reas
 
 See ADR-0013, rules L4, L10, L12.
 
+## s27: Repeated setbacks and fault hand-overs
+
+Stories that bounce or hold for the same reason now escalate to the Manager (instead of looping), who rules on the fault. New hand-overs for you:
+
+- **`runner_fault` (L12):** The Manager says it's the runner's fault (failed start, gate that can't pass). The story is `blocked` and the human was notified (liaison will relay). Open a story to fix the runner (often devops or developer-cli); once fixed, run the manager on the blocked story with a `"ruling"` to move it.
+- **`off_pipeline_fault` (L13):** The fault is on a role with no pipeline step (e.g., devops). Run that role with your tools, brief them on what to fix (the Manager's `followups` hint at it), then `continue_story`.
+- **`fault_not_applied` (L13):** The fault was missing or unknown (runner would not accept it). Run the manager on the story again, telling them to name a valid fault or "runner".
+
+The Manager now gets escalated stories with the repeated reason, bounce history, and evidence (logs, outputs) attached. You hand over the result of that ruling.
+
+See ADR-0014, rules L8–L13.
+
 ## Design and enforcement decisions documented in ADRs
 
+- **ADR-0014:** Escalate repeated setbacks to the Manager (s27).
 - **ADR-0013:** Liveness is data, absolute paths, service lifecycle (s26).
 - **ADR-004:** Ledger each PO query's own cost, not the session's running total (s25).
 - **ADR-0010:** PO session renewal at sprint and story boundaries (s23); `/compact` vs. handoff fallback.

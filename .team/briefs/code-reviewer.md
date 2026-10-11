@@ -1,8 +1,23 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 ## Design decisions to verify
+
+**Repeated setback escalation and backstop (s27):** Verify that loops are broken when a story bounces for the same reason or ping-pongs between two steps:
+- `loops.NORMALISE` table (data-driven): regex patterns strip timestamps, URLs, host:port, paths, ids, shas, counts in order. Stored keys are recomputed on load (never trusted).
+- `Setback` dataclass: `step`, `to_step`, `role`, `verdict`, `author`, `reason`, `event`, `key` (set in `__post_init__`). `Setback.pair` is a property, not saved.
+- `Pipeline.screen(story, setback)` returns `Outcome(ESCALATE, …)` when repeat rule fires (`len(streak_same_key) + 1 >= repeat`) or backstop fires (bounces between same pair `+ 1 >= backstop`). Repeat wins if both fire.
+- `Pipeline.advance` on `ESCALATE`: step/rounds unchanged, `status = NEEDS_MANAGER`, `repeated = reason`, `escalated_by = rule`. Streak and run are extended before escalation.
+- `Pipeline.apply_fault(story, fault)`: clears `rounds`, `disputes`, `dispute`, `streak`, `run`, `repeated`, `escalated_by`. Sets step and status by `fault_kind`.
+- `Pipeline._clear` is also called by `apply_ruling`; old reset lines replaced with a single call to `_clear`.
+- Router `_repeat_work` picks escalated stories (story with `repeated` set) before Scribe; respects holds and open questions.
+- Manager context `repeated_setback` includes `count`, `key`, `author`, `reason`, `history` (earlier setbacks with ids), `rule`, `pair`, `events` (all logs from first on). Built from `trail(story)` based on rule.
+- Fault report: `"fault": {"fault", "kind" ("runner"|"pipeline"|"off_pipeline"), "applied": true/false, "reason", "now_at"}`.
+- Three new hand-over rows (after `ruling_not_applied`): `runner_fault`, `off_pipeline_fault`, `fault_not_applied`. `round_cap` no longer matches escalate verdicts.
+- Escalation and fault are logged as `escalation` and `fault` events (not `gate`), with metadata: `step`, `reason`, `author`, `count`, `history`, `key` (escalation only), `rule`, `bounces` (gate events too).
+- Dashboard: story dict gains `repeated` field; board shows `needs_manager · repeat` pill and reason line; timeline has `escalation` (`repeat`/`backstop`) and `fault` events.
+- Rules L1–L18 and B1–B9 in `agile-team/docs/design/s27.md` and ADR-0014.
 
 **Cost delta tracking (s25):** Verify that PO query costs are correctly deltas, not running totals:
 - `SessionCost.own_cost()` logic: `reported − previous` for resumed same session; full `reported` for fresh session or counter drop.

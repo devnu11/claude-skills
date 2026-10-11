@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 ## Context reduction — focused design files (s23)
 
@@ -12,6 +12,8 @@ Move designs out of the 1600-line `architecture.md` into focused per-story files
 This lets Unit Testers and Developers read only what they need. Expect Unit Tester context per turn to drop under 60k tokens (s19 was 113.9k). See ADR-0011.
 
 ## Key design decisions
+
+**Escalate repeated setbacks to the Manager (s27):** Stories that bounce or hold for the same reason (normalised) now escalate to the Manager instead of looping. A backstop rule also catches back-and-forth between the same two steps (regardless of reason). The runner detects this via `Pipeline.screen()` before advancing. The Manager rules on the fault, which clears the bounce history and resets counters. Three new hand-over rows (`runner_fault`, `off_pipeline_fault`, `fault_not_applied`) surface fault decisions to the PO. Normalisation is data (`NORMALISE` table), so adding a pattern requires one row. Rules L1–L18 and B1–B9 in `agile-team/docs/design/s27.md` govern the implementation. ADR-0014.
 
 **Liveness is data; absolute paths; service lifecycle (s26):** Service deliveries are tested before the Proxy runs. The runner starts, probes, and stops them from the presentation (same sandbox the Proxy gets), so a gate pass guarantees readiness. Stale services are cleaned up with SIGTERM+SIGKILL escalation; all paths call `prepared.stop()`. Paths are absolute (no cwd dependency). Liveness check, probe attempt count, and port are data (Check enum, Recipe, PRESENTATIONS table). Returns are possible without billing when the Proxy's prepare fails. Port conflicts hold (no round, hand-over to PO). Presentations must be self-contained (no repo paths). Design: `agile-team/docs/design/s26.md` (rules L1–L13). ADR-0013.
 

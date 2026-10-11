@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s27 done)
 
 ## s24: Reworked stories and test claims
 
@@ -119,6 +119,30 @@ s26 added service startup, probe, and liveness testing. Key test areas:
 12. **HTTP probe (L5):** Real `ThreadingHTTPServer`: 200 JSON → true, 204/201 → false, 500 → false, nothing listening → false.
 
 Coverage 100%, ruff clean. See design `agile-team/docs/design/s26.md` test checklist.
+
+## s27: Repeated setback escalation and backstop
+
+s27 detects when a story bounces for the same reason and escalates to the Manager instead of looping. Key test areas:
+
+1. **Normalisation (L2):** `test_loops.py` asserts each NORMALISE pattern exactly; same reason with different numbers/ports/paths/ids/times/shas gives one key; stored keys recompute on load.
+2. **Streak (L3):** `extend` appends on same key, restarts on different; `repeats` is 0 for empty or different last key, else `len(streak)`.
+3. **Repeat rule (L4–L5):** With `repeat=2`, first setback bounces (move, +1 round); second same-key setback → `ESCALATE`, step/rounds unchanged, `NEEDS_MANAGER`. With `repeat=3`, escalation on third. Different reason resets. A pass in between does **not** reset. Dispute never counts.
+4. **All setback kinds (L1):** `changes_requested` bounce, command-gate bounce, `blocked` hold, `NotUp` return, malformed handoff — each lands in `streak` with gate event id. On repeat, each escalates.
+5. **Escalation event (L5):** `escalation` event (not `gate`) carries `step`, `verdict: "escalate"`, `reason`, `now_at` (=step), `story_status: "needs_manager"`, `rounds` (unchanged), `key`, `author`, `count`, `history` (earlier event ids). Repeat escalation has `rule: "repeat"`.
+6. **Zero rounds (L6):** Before/after escalation equal. Manager adds none. After applied fault: `rounds==0`, `disputes==0`, `streak==[]`, `repeated is None`.
+7. **Manager hand-over (L7):** Escalated story queues Manager with `REPEAT_HEADING` (count 2) in brief, `repeated_setback` in context. Router picks it before Scribe. Held escalated story waits for `continue_story`. Open question blocks it too.
+8. **Fault (L8):** `fault: "integration-tester"` → step `e2e`, `active`, `fault` event kind `pipeline`, applied true. `fault: "devops"` → step kept, `off_pipeline_fault` hand-over. `fault: "runner"` → `blocked`, event kind `runner`, outbox note, `runner_fault` hand-over.
+9. **Fault refusal (L9):** Missing → `FAULT_MISSING`. Unknown name → `FAULT_UNKNOWN`. Story unchanged, ruling not applied, `fault_not_applied` hand-over.
+10. **Fault + ruling (L10):** `fault: "developer-cli"` + `ruling: "revise_design"` → step `design`, both in report. On non-repeated story, `fault` ignored.
+11. **Backstop (B1–B4):** `extend_run` appends on same pair (different reasons OK), restarts on new pair. `bounces` is 0 for empty/different pair/hold/in-place, else `len(run)`. With `backstop=4`, fourth bounce between same steps escalates with `rule: BACKSTOP`, regardless of reason.
+12. **Pass reset (B3):** `after_pass(run, upper)` returns `[]` when upper step just passed; `after_pass(run, lower/other)` returns `run` unchanged. Both fault and ruling clear `run` and `escalated_by`.
+13. **Backstop vs. repeat (B5):** Both fire; repeat wins. Neither resets the other.
+14. **Config/state (L16):** `gates.repeat ≥ 2` (default 2), `gates.backstop ≥ 2` (default 4). `streak`, `repeated`, `run`, `escalated_by` round-trip in `state.json`; older files load with `[]`/`None`.
+15. **Dashboard (L17, B9):** Snapshot stories have `repeated`. Board shows `needs_manager · repeat`, reason line. Timeline: `escalation` event (`repeat` or `backstop`), `fault` event. Replay handles both.
+
+Contract changes: `Pipeline(...)` gains `repeat` and `backstop` (both with defaults). Tests bouncing the same reason 2+ or same pair 4+ times must adjust these or change the reason to keep intent.
+
+Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s27.md` test checklist (18 areas).
 
 ## Backlog and sprint membership
 
