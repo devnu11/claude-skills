@@ -113,8 +113,9 @@ command fails.
      `$AT start --resume` only when the human says so.
    - `blocked` with "budget reached: spent $X of $Y" (exit 77): tell the
      human the spend and the ceiling. Only the human raises
-     `team.budget_usd` in `.agile-team.toml`; never edit it yourself. On
-     their word, `$AT start --resume`. Resuming without a raise halts again
+     `team.budget_usd` in `.agile-team.toml` and commits it; never edit it
+     yourself. The commit is needed because the file is tracked and `start`
+     refuses a dirty tree. On their word, `$AT start --resume`. Resuming without a raise halts again
      at once, at no cost. `$AT status` shows the corrected spend under
      `budget` (`po_overcount_usd` is the pre-s25 PO overcount already taken
      off).

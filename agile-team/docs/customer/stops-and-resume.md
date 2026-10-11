@@ -50,12 +50,22 @@ does not wait for the reset or restart by itself.
 after every step and when it starts, and halts once spend is at or over it:
 
 ```text
-agile-team start: budget reached: spent $50.12 of $50.00; raise team.budget_usd in .agile-team.toml, then run `agile-team start --resume`
+agile-team start: budget reached: spent $50.12 of $50.00; raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume`
 ```
 
 A step that is already running finishes and is kept, so spend can pass the
 ceiling by about one step. To carry on, raise `budget_usd` (by as much or as
-little as you like) and run `agile-team start --resume`. If you resume
+little as you like), commit the change, and run `agile-team start --resume`:
+
+```sh
+git commit -m "Raise the team budget" .agile-team.toml
+agile-team start --resume
+```
+
+The commit is needed because `.agile-team.toml` is tracked and the runner
+only starts from a clean working tree. If you skip it, `start --resume`
+stops with `working tree is dirty (.agile-team.toml); commit or stash first`
+and nothing runs. If you resume
 without raising it, the runner stops again at once and spends nothing.
 `agile-team status` shows the spend under `budget`. `po_overcount_usd` there
 is the Product Owner's early overcount (from before the s25 fix), which is

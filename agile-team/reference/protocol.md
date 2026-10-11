@@ -93,7 +93,7 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
 | 1 | CLI error or failed preflight | unchanged | the error |
 | 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
 | 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
-| 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml, then run `agile-team start --resume` `` |
+| 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume` `` |
 | 130 | Ctrl-C | unchanged | — |
 | 143 | `stop --now` (SIGTERM) | `stopped` | ``run `agile-team start --resume` to continue`` |
 
@@ -468,7 +468,11 @@ The halt is like a limit stop: status `blocked`, `status_reason`
 later `run_role` refused, and exit 77. After a halt, no further PO query
 starts in that process. The run can pass the ceiling by at most the step or
 PO query that was in progress. To carry on, the human raises `budget_usd` in
-`.agile-team.toml` and runs `agile-team start --resume`. The config is read
+`.agile-team.toml`, commits it, and runs `agile-team start --resume`. The
+file is tracked and preflight refuses a dirty tree, so an uncommitted raise
+is refused (`working tree is dirty (.agile-team.toml); commit or stash
+first`) and the run stays `blocked`. The runner never commits the raise for
+the human. The config is read
 afresh at start, and `status` and the dashboard re-read it on every call, so
 nothing else needs a restart. Under `unattended`, exit 77 ends the job as
 failed (it is not a limit to wait out). The Manager checkpoints
