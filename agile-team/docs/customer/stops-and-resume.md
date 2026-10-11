@@ -50,15 +50,17 @@ does not wait for the reset or restart by itself.
 after every step and when it starts, and halts once spend is at or over it:
 
 ```text
-agile-team start: budget reached: spent $50.12 of $50.00; raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume`
+agile-team start: budget reached: spent $50.12 of $50.00; raise team.budget_usd in .agile-team.toml and commit it, run `agile-team accept-checkout`, then run `agile-team start --resume`
 ```
 
 A step that is already running finishes and is kept, so spend can pass the
 ceiling by about one step. To carry on, raise `budget_usd` (by as much or as
-little as you like), commit the change, and run `agile-team start --resume`:
+little as you like), commit the change, tell the runner the commit is yours
+(see "When the checkout changes under the runner"), and resume:
 
 ```sh
 git commit -m "Raise the team budget" .agile-team.toml
+agile-team accept-checkout
 agile-team start --resume
 ```
 
@@ -70,6 +72,38 @@ without raising it, the runner stops again at once and spends nothing.
 `agile-team status` shows the spend under `budget`. `po_overcount_usd` there
 is the Product Owner's early overcount (from before the s25 fix), which is
 already taken off `spent_usd`.
+
+## When the checkout changes under the runner
+
+The runner remembers the branch it works on and the commit it made last. If
+anything else changes that (a script that checks out another commit, a
+`git reset`, a commit you made yourself, a rebase left half done), the runner
+stops at once, before any further step, commit or check runs on a tree the
+team did not make:
+
+```text
+agile-team start: checkout changed: expected feat/x at a3cc264; found detached HEAD at 92a38ea; last HEAD move: HEAD@{2026-10-11 16:14:54 +0200} checkout: moving from feat/x to 92a38ea; put the checkout back, or keep it with `agile-team accept-checkout`, then run `agile-team start --resume`
+```
+
+`status` shows `checkout-changed` with that reason, the dashboard's status
+pill turns red, and your Claude session gets it as a question. The last HEAD
+move tells you who moved it. Then either:
+
+- put the checkout back, for example `git switch feat/x` (or
+  `git reset --hard a3cc264` on that branch), and run
+  `agile-team start --resume`; or
+- keep what is there now (say you rebased the branch on purpose):
+
+  ```sh
+  agile-team accept-checkout
+  agile-team start --resume
+  ```
+
+`accept-checkout` is refused while the runner is still running, on a detached
+HEAD, or with a rebase or merge in progress. If a step was cut off, its edits
+stay in the tree uncommitted: they were made on the wrong tree, so look at
+them before you commit, stash or discard them. `start --resume` keeps
+stopping, at no cost, until the checkout is back or accepted.
 
 ## After an error
 

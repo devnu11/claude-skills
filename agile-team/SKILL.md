@@ -123,13 +123,25 @@ command fails.
      human the spend and the ceiling. Only the human raises
      `team.budget_usd` in `.agile-team.toml` and commits it; never edit it
      yourself. The commit is needed because the file is tracked and `start`
-     refuses a dirty tree. On their word, `$AT start --resume`. Resuming without a raise halts again
+     refuses a dirty tree. The commit is not the runner's, so on their word run
+     `$AT accept-checkout`, then `$AT start --resume`. Resuming without a raise halts again
      at once, at no cost. `$AT status` shows the corrected spend under
      `budget` (`po_overcount_usd` is the pre-s25 PO overcount already taken
      off).
    - `failed` (exit 70): relay the note and show the last entry of
      `.team/run/crash.log`. Ask the human whether to resume.
    - `stopped` (exit 143): the run ended because of `stop --now`.
+   - `checkout-changed` (exit 78, a `question` in the outbox, red on the
+     dashboard): someone else moved the checkout (another branch, a detached
+     HEAD, a reset, a foreign commit, a rebase in progress). Relay the reason
+     verbatim: it names the expected and found branch and commit and the last
+     HEAD move. This is an escalation: do nothing until the human decides.
+     Either the checkout goes back to the recorded branch and commit, or, on
+     the human's explicit word (for example after you rebase the branch for
+     them), `$AT accept-checkout` keeps the new HEAD. Then
+     `$AT start --resume`. Resuming while it is still changed halts again.
+     The cut-off step's edits stay uncommitted in the tree; show them to the
+     human before anything is committed or discarded.
    A step cut off mid-way keeps its edits: the runner commits them as
    `chore(team): interrupted step by <role> on <story>`, reverts that commit
    at once, and names the sha in the note. The next step on the story is

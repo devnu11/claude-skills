@@ -38,6 +38,7 @@ one line here. Older designs are the sections at the end of this file.
 | s47 A waiting run wakes on an answer (pinned by a driver test); `status_reason` and halt notes say what it waits on (`s40 waits on m42`) | [design/s47.md](design/s47.md) |
 | s58 The Proxy's OS sandbox gets `network.allowLocalBinding` for a delivery that serves locally (`Start.BACKGROUND`); verified on macOS by an e2e test with the bundled CLI; service lifecycle stated | [design/s58.md](design/s58.md) |
 | s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
+| s61 The runner records the branch and HEAD it expects and halts (`checkout-changed`, exit 78, a question) when anyone else moves the checkout; `accept-checkout` keeps a new HEAD | [design/s61.md](design/s61.md) |
 
 ## Components
 
@@ -55,6 +56,7 @@ one line here. Older designs are the sections at the end of this file.
 | `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
+| `checkout.py` | the checkout guard (s61): `Found`, `Drift`, `OPERATIONS`, `check`, `recorded`, `CheckoutChanged`; `Guard` for `start` and `accept-checkout` | git, halt, state, relay, events |
 | `salvage.py` | a step cut short (s9): `Cause`, `InFlight`, `Interruption`; save the tree as a reverted commit; the note, brief and resume texts | git |
 | `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
 | `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27; `pass_tests`, s30), `dispatch_refusal`, command gates, the dispute gate (resolve and fingerprint at raise, compare at tests, s30) | roles (`Handoff`), loops, fingerprint |

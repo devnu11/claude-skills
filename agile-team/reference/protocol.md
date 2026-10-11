@@ -16,9 +16,10 @@ Run from the target repo root, or pass `--repo PATH`.
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`) and `upstream` (the review stack; see "Sprint boundaries"). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries") and `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"). |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
+| `accept-checkout` | Keep the current branch and HEAD as the team's after a `checkout-changed` halt (see "Checkout guard"). Refused (exit 1) while a runner is alive, on a detached HEAD, or with a git operation in progress. |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
 
 `init` (without `--detect`) in a directory that is not a git work tree prints
@@ -46,7 +47,8 @@ end that pushed review branches (or built them without pushing; see
 "Sprint boundaries"). A
 `manual` delivery's acceptance script arrives as a `question`; the answer is
 the human's test result. The runner itself posts `blocked`, `failed` or
-`stopped` when it halts (see "Run status and stops").
+`stopped` when it halts (see "Run status and stops"), and a `question` when
+the checkout changed under it (see "Checkout guard").
 
 `inbox.jsonl` holds `{"id", "text", "at"}` answers, written by `answer`.
 
@@ -54,7 +56,9 @@ Other run files: `state.json` (resume state; `task` holds the last
 non-resume `start --task`, `""` in older files; `po_cost` holds the PO
 session's last running cost, see "Ledger cost"; `in_flight` the role step
 running now as `{role, story, brief}`, else `null`; `interrupted` the
-interrupted steps not yet shown to the PO, see "Interrupted steps"),
+interrupted steps not yet shown to the PO, see "Interrupted steps";
+`checkout` the `{branch, head}` the runner expects, `null` until the first
+check, see "Checkout guard"),
 `ledger.jsonl` (per-step cost), `runner.pid` (the live runner's pid; a
 stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
@@ -73,7 +77,8 @@ runner handled, each headed `--- <time> <ExceptionType>`),
 | `sprint-end`, `done` | PO (`notify_user`) | The sprint or the whole task finished. |
 | `blocked` | PO (`notify_user`) or runner | Nothing can move without the human, or a usage limit was hit. |
 | `failed` | runner | The runner crashed. |
-| `stopped` | runner | `stop --now` (SIGTERM) ended the run. |
+| `stopped` | runner | `stop --now` (SIGTERM) ended the run, or `accept-checkout` kept a new HEAD. |
+| `checkout-changed` | runner | Someone else moved the checkout; the run halted and asks the human (see "Checkout guard"). Shown red on the dashboard. |
 | `interrupted` | derived by `status` and the dashboard, never stored | `state.json` says `running`, but `runner.pid` is missing or names a dead process: the runner was killed outright (`kill -9`, power loss, Ctrl-C). `running` is `false`. |
 
 `status` also shows `running` (a live process holds `runner.pid`),
@@ -98,7 +103,8 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
 | 1 | CLI error or failed preflight | unchanged | the error |
 | 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
 | 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
-| 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume` `` |
+| 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml and commit it, run `agile-team accept-checkout`, then run `agile-team start --resume` `` |
+| 78 | the checkout changed under the runner (see "Checkout guard"); the note is a `question` | `checkout-changed` | ``put the checkout back, or keep it with `agile-team accept-checkout`, then run `agile-team start --resume` `` |
 | 130 | Ctrl-C | unchanged | — |
 | 143 | `stop --now` (SIGTERM) | `stopped` | ``run `agile-team start --resume` to continue`` |
 
@@ -127,6 +133,56 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   `; waiting on answers: s40 waits on m42`, in the same format as the waiting
   `status_reason` (s47). The stored `status_reason` and the stderr line do
   not change.
+
+### Checkout guard
+
+The runner records the branch it runs on and the commit it expects
+(`state.json` `checkout`). Only its own git writes move the record: step and
+PO commits, quarantine, saving an interrupted step, the sprint-start merge.
+`accept-checkout` moves it on the human's word. While the record is `null`,
+the first check that passes records the live branch and HEAD.
+
+The checkout matches when HEAD is attached, no rebase, merge, cherry-pick,
+revert or bisect is in progress, and the branch and HEAD equal the record.
+The runner checks:
+
+- on `start` and `start --resume`, before saving a killed run's edits and
+  before preflight;
+- on every router tick: before every router step and boundary stage, and on
+  every 5 s poll while it waits for answers;
+- before every PO turn;
+- before every commit or quarantine, so before and after every role step;
+- before every gate (also the PO's `pass_tests`);
+- before saving an interrupted step.
+
+On a mismatch the run halts at once: status `checkout-changed`, a
+`status_reason`, one `question` note (`<reason>; <advice>`), exit 78. Nothing
+else runs on the changed tree: no commit, quarantine, gate, salvage or
+further step. A role step that already ran keeps its cost in the ledger, and
+its edits stay uncommitted in the tree for the human to judge. The PO's
+`run_role` returns `{"status": "halted", …}`. The reason reads:
+
+```text
+checkout changed: expected feat/x at a3cc264; found detached HEAD at 92a38ea; last HEAD move: HEAD@{2026-10-11 16:14:54 +0200} checkout: moving from feat/x to 92a38ea
+```
+
+`found` may also read `other-branch at 1b2c3d4` or end `with a rebase in
+progress`. `last HEAD move` is the newest HEAD reflog entry, or `no reflog
+entry`.
+
+`start --resume` checks again and halts again (exit 78) while the mismatch
+remains, without posting a second question. Two ways on:
+
+- **Put it back** (check out the team branch at the recorded commit). The
+  next `start` passes and answers the open checkout question
+  `restored: <branch> at <sha7>`.
+- **Keep it**: `agile-team accept-checkout` (no runner alive, HEAD attached,
+  no operation in progress). It records the live branch and HEAD, sets
+  `stopped` (``checkout accepted: <branch> at <sha7>; run `agile-team start --resume` ``),
+  logs a `checkout` event (`{action: "accepted", from, to}`) and answers the
+  question `accepted: <branch> at <sha7>`. Use it after the liaison rebases the
+  branch, or after any commit of the human's own (a budget raise, a
+  reconfigure).
 
 ### Interrupted steps
 
@@ -493,7 +549,8 @@ The halt is like a limit stop: status `blocked`, `status_reason`
 later `run_role` refused, and exit 77. After a halt, no further PO query
 starts in that process. The run can pass the ceiling by at most the step or
 PO query that was in progress. To carry on, the human raises `budget_usd` in
-`.agile-team.toml`, commits it, and runs `agile-team start --resume`. The
+`.agile-team.toml`, commits it, runs `agile-team accept-checkout` (the commit
+is not the runner's, see "Checkout guard"), and runs `agile-team start --resume`. The
 file is tracked and preflight refuses a dirty tree, so an uncommitted raise
 is refused (`working tree is dirty (.agile-team.toml); commit or stash
 first`) and the run stays `blocked`. The runner never commits the raise for
