@@ -51,9 +51,9 @@ UNTRACKED = (
     "with the test's path from the repo root"
 )
 UNCHANGED = (
-    "the disputed test {test} is unchanged: {file} still matches its baseline "
-    "{short} from when the dispute was raised (whitespace and comment edits do "
-    "not count); fix the test, or confirm it with changes_requested and "
+    "the disputed test file {file} has not changed since the dispute was raised: "
+    "{test} still matches its baseline {short} (whitespace and comment edits "
+    "do not count); fix the test, or confirm it with changes_requested and "
     "next_role architect"
 )
 LEGACY_PASS = "dispute raised before content baselines; passed without a check"
