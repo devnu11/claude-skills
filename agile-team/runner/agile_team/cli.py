@@ -291,7 +291,9 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     commands, threshold = config.toolchain.commands, config.gates.coverage
     missing = functools.partial(presentation.missing, config)
     live = presentation.Trial(config).liveness
-    checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline, missing, live)
+    read = functools.partial(gates.read_repo_file, config.repo)
+    runner = shell_runner(config.repo)
+    checks = gates.Checks(commands, threshold, runner, baseline, missing, live, read=read)
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
 

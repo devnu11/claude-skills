@@ -33,7 +33,9 @@ Propose pragmas for existing untestable code instead of writing new tests.
 
 When the brief has `Test dispute (raised)`, compare the test with the design
 rule. If the test is wrong, fix it (and any other test with the same mistake)
-and hand off `done`; the runner checks that the test file changed. If the test
+and hand off `done`; the runner checks that the test file's
+content changed since the dispute was raised; whitespace and comment edits do
+not count. If the test
 is right, hand off `changes_requested` with `next_role: architect` and say why.
 When it says `(confirmed)`, the architect has ruled: follow the design, fix the
 test if the architect says so, and hand off `done`.

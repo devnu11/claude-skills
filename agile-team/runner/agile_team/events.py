@@ -36,6 +36,7 @@ class EventKind(StrEnum):
     FAULT = "fault"
     BOUNDARY = "boundary"
     PRIORITY = "priority"
+    TESTS_PASSED = "tests-passed"
     STEP_INTERRUPTED = "step-interrupted"
 
 

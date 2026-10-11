@@ -15,8 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
-from . import loops
+from . import fingerprint, loops
 from .loops import Author, Fault, Rule, Setback
 from .roles import Dispute, Handoff, TestClaim
 from .salvage import Interruption
@@ -35,8 +36,7 @@ UNGATED_ROLES = frozenset({"manager", "scribe"})
 STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager", "scribe"})
 STOPPED_HANDOFFS = frozenset({"blocked", "failed"})
 BASELINE = ".team/baseline.json"
-HEAD_COMMAND = "git rev-parse HEAD"
-DIFF_COMMAND = "git diff --quiet {base} HEAD -- {path}"
+LS_FILES_COMMAND = "git ls-files -- {path} {suffix}"
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%")
 
 REWORK_UNCLAIMED = (
@@ -44,6 +44,25 @@ REWORK_UNCLAIMED = (
     'or hand off "tests": "changed" or "tests": "confirmed"'
 )
 REWORK_PASS = "tests pass on code from an earlier pass; tests {claim}"
+
+UNTRACKED = (
+    "dispute rejected: {file} (from {test}) is not a tracked file at the repo root, "
+    "and no single tracked file ends with that path; hand off the dispute again "
+    "with the test's path from the repo root"
+)
+UNCHANGED = (
+    "the disputed test {test} is unchanged: {file} still matches its baseline "
+    "{short} from when the dispute was raised (whitespace and comment edits do "
+    "not count); fix the test, or confirm it with changes_requested and "
+    "next_role architect"
+)
+LEGACY_PASS = "dispute raised before content baselines; passed without a check"
+PASS_TESTS_STEP = "story {id} is at step {step!r}; pass_tests only moves a story from tests"
+PASS_TESTS_NOT_STUCK = (
+    "story {id} is not stuck at tests (no open dispute, round cap, block or "
+    "repeated setback); let the tests gate decide"
+)
+PASS_TESTS_RED = "the suite is red; pass_tests needs a green suite. {reason}"
 
 CommandRunner = Callable[[str], tuple[int, str]]
 
@@ -82,21 +101,53 @@ class DisputeStage(StrEnum):
 
 @dataclass
 class OpenDispute:
-    """A developer's claim that a test contradicts the design; ``base`` is HEAD when raised."""
+    """A developer's claim that a test contradicts the design.
+
+    ``file`` is the resolved repo-relative test file, ``baseline`` its content
+    fingerprint when raised.
+    """
 
     test: str
     rule: str
     reason: str
-    base: str
+    file: str = ""
+    baseline: str = ""
     stage: DisputeStage = DisputeStage.RAISED
 
     def __post_init__(self) -> None:
         self.stage = DisputeStage(self.stage)
 
-    @property
-    def file(self) -> str:
-        """The disputed test's file, the part of the id before ``::``."""
-        return self.test.split("::")[0]
+
+def test_file(test: str) -> str:
+    """The file part of a test id, before the first ``::``."""
+    return test.split("::")[0]
+
+
+def load_dispute(**data: Any) -> OpenDispute:
+    """Build a dispute from saved data, dropping s11's ``base`` key."""
+    data.pop("base", None)
+    return OpenDispute(**data)
+
+
+def pick_tracked(file: str, listing: str) -> str | None:
+    """``file`` if listed, else the one listed path ending with ``/file``."""
+    lines = listing.splitlines()
+    if file in lines:
+        return file
+    ends = [x for x in lines if x.endswith("/" + file)]
+    return ends[0] if len(ends) == 1 else None
+
+
+def read_repo_file(repo: Path, path: str) -> str | None:
+    """The text of ``path`` under ``repo``, or None when it is not a file."""
+    target = repo / path
+    if not target.is_file():
+        return None
+    return target.read_text(encoding="utf-8", errors="replace")
+
+
+def _unread(_path: str) -> str | None:
+    return None
 
 
 @dataclass
@@ -246,6 +297,7 @@ class Checks:
     baseline_coverage: float | None = None
     presentation: Callable[[StoryState], str | None] = _always_presented
     liveness: Callable[[StoryState], Outcome] = _always_live
+    read: Callable[[str], str | None] = _unread
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -254,18 +306,26 @@ class Checks:
             return self.liveness(story)
         return Outcome(Verdict.BOUNCE, reason)
 
-    def head(self) -> str:
-        """The current commit."""
-        return self.run(HEAD_COMMAND)[1].strip()
+    def tracked(self, file: str) -> str | None:
+        """The one tracked repo-relative path for a test file id, if any."""
+        suffix = shlex.quote("*/" + file)
+        code, out = self.run(LS_FILES_COMMAND.format(path=shlex.quote(file), suffix=suffix))
+        return pick_tracked(file, out) if code == 0 else None
+
+    def content_hash(self, path: str) -> str | None:
+        """The fingerprint of the working-tree file, or None when unreadable."""
+        text = self.read(path)
+        return None if text is None else fingerprint.of(path, text)
 
     def dispute_settled(self, dispute: OpenDispute) -> Outcome:
-        """Pass when the dispute is confirmed or its test file changed since it was raised."""
+        """Pass when confirmed, legacy, or the test file's content changed since the raise."""
         if dispute.stage is DisputeStage.CONFIRMED:
             return Outcome(Verdict.PASS, "dispute confirmed")
-        diff = DIFF_COMMAND.format(base=dispute.base, path=shlex.quote(dispute.file))
-        if self.run(diff)[0] == 1:
+        if not dispute.baseline:
+            return Outcome(Verdict.PASS, LEGACY_PASS)
+        if self.content_hash(dispute.file) != dispute.baseline:
             return Outcome(Verdict.PASS, "disputed test changed")
-        return Outcome(Verdict.BOUNCE, _unchanged(dispute))
+        return Outcome(Verdict.BOUNCE, _unchanged(dispute), "tests")
 
     def required_coverage(self) -> float:
         """Threshold, or the recorded baseline when old debt keeps the total below it."""
@@ -288,10 +348,17 @@ class Checks:
             return Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED)
         return Outcome(Verdict.PASS, REWORK_PASS.format(claim=claim))
 
-    def tests_green_and_covered(self) -> Outcome:
+    def green(self) -> Outcome:
+        """Pass when the test command exits 0, else bounce with its output tail."""
         code, out = self.run(self.commands["test"])
         if code != 0:
             return Outcome(Verdict.BOUNCE, f"tests fail:\n{tail(out)}")
+        return Outcome(Verdict.PASS)
+
+    def tests_green_and_covered(self) -> Outcome:
+        green = self.green()
+        if green.verdict is not Verdict.PASS:
+            return green
         return self._coverage_outcome(parse_coverage(self.run(self.commands["coverage"])[1]))
 
     def _coverage_outcome(self, pct: float | None) -> Outcome:
@@ -341,11 +408,17 @@ class Pipeline:
 
     def _raise(self, handoff: Handoff) -> Outcome:
         d = handoff.dispute
+        opened = self._open(d)
+        if opened is None:
+            reason = UNTRACKED.format(file=test_file(d.test), test=d.test)
+            return Outcome(Verdict.BOUNCE, reason, "implement", author=Author.ROLE)
         reason = f"{d.test} contradicts {d.rule}: {d.reason}"
-        return Outcome(Verdict.DISPUTE, reason, "tests", self._open(d), Author.ROLE)
+        return Outcome(Verdict.DISPUTE, reason, "tests", opened, Author.ROLE)
 
-    def _open(self, d: Dispute) -> OpenDispute:
-        return OpenDispute(d.test, d.rule, d.reason, self.checks.head())
+    def _open(self, d: Dispute) -> OpenDispute | None:
+        path = self.checks.tracked(test_file(d.test))
+        baseline = self.checks.content_hash(path) if path else None
+        return OpenDispute(d.test, d.rule, d.reason, path, baseline) if baseline else None
 
     def _dispute_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         """With a dispute open, a ``done`` at tests is settled by the dispute, not red tests."""
@@ -433,6 +506,23 @@ class Pipeline:
         story.status = FAULT_STATUS[self.fault_kind(fault)]
         self._clear(story)
 
+    def pass_tests_refusal(self, story: StoryState) -> str | None:
+        """Why the PO may not pass ``story`` from tests by hand, or None."""
+        if story.step != "tests":
+            return PASS_TESTS_STEP.format(id=story.id, step=story.step)
+        if not _stuck(story):
+            return PASS_TESTS_NOT_STUCK.format(id=story.id)
+        green = self.checks.green()
+        if green.verdict is not Verdict.PASS:
+            return PASS_TESTS_RED.format(reason=green.reason)
+        return None
+
+    def pass_tests(self, story: StoryState) -> None:
+        """Move a stuck story on from tests, clearing its loop state."""
+        story.status = StoryStatus.ACTIVE
+        self._clear(story)
+        self._forward(story)
+
     def _clear(self, story: StoryState) -> None:
         story.rounds, story.disputes, story.dispute = 0, 0, None
         story.streak, story.run = [], []
@@ -483,10 +573,15 @@ FAULT_STATUS = {
 
 
 def _unchanged(dispute: OpenDispute) -> str:
-    return (
-        f"the disputed test file {dispute.file} has not changed; fix {dispute.test}, "
-        "or confirm it with changes_requested and next_role architect"
-    )
+    short = dispute.baseline[:12]
+    return UNCHANGED.format(test=dispute.test, file=dispute.file, short=short)
+
+
+STUCK_STATUSES = frozenset({StoryStatus.NEEDS_MANAGER, StoryStatus.BLOCKED})
+
+
+def _stuck(story: StoryState) -> bool:
+    return bool(story.dispute or story.status in STUCK_STATUSES or story.repeated)
 
 
 def _retry_here(outcome: Outcome, step: str) -> Outcome:

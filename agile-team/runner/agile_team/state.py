@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Any
 
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .config import PIPELINE_STEPS
-from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
+from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
 from .ledger import SessionCost
 from .loops import Rule, Setback
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -129,7 +130,7 @@ class RunState:
         return cls(**data)
 
 
-NESTED = {"previous": PreviousStep, "dispute": OpenDispute, "interrupted": Interruption}
+NESTED = {"previous": PreviousStep, "dispute": load_dispute, "interrupted": Interruption}
 
 
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
@@ -163,7 +164,7 @@ def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
     return UpstreamState(**{**data, "stack": stack})
 
 
-def _nested(cls: type, data: dict[str, Any] | None) -> Any:
+def _nested(cls: Callable[..., Any], data: dict[str, Any] | None) -> Any:
     return cls(**data) if data else None
 
 

@@ -238,6 +238,30 @@ class Tools:
         self.runtime.save()
         return text_result({"status": "continued", "story": story.id, "step": story.step})
 
+    async def pass_tests(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Move a story stuck at tests on to the next step when the suite is green."""
+        story, reason = self._story_for(args)
+        reason = reason or self._pass_refusal(story, args)
+        if reason:
+            return text_result(refused(reason))
+        return text_result(self._pass_tests(story, args["reason"]))  # type: ignore[arg-type]
+
+    def _pass_refusal(self, story: StoryState | None, args: dict[str, Any]) -> str | None:
+        if not args.get("reason"):
+            return "a reason is required"
+        return self.runtime.pipeline.pass_tests_refusal(story)  # type: ignore[arg-type]
+
+    def _pass_tests(self, story: StoryState, reason: str) -> dict[str, Any]:
+        rt = self.runtime
+        test = story.dispute.test if story.dispute else None
+        rt.pipeline.pass_tests(story)
+        story.hold, story.note = None, reason
+        rt.state.manager_due.append(f"{story.id}: PO passed tests by hand: {reason}")
+        rt.save()
+        data = {"from": "tests", "now_at": story.step, "reason": reason, "test": test}
+        rt.events.emit(Event(EventKind.TESTS_PASSED, PO, story.id, data))
+        return {"status": "passed", "story": story.id, "now_at": story.step}
+
     async def set_developer(self, args: dict[str, Any]) -> dict[str, Any]:
         """Choose the developer specialisation for a story's implement steps."""
         story, reason = self._story_for(args)
@@ -349,6 +373,13 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Release a story the runner handed to you (a done story too, to clear its hold); "
         "your note is added to its next step's standard brief.",
         {"story": str, "note": str},
+    ),
+    "pass_tests": (
+        "Move a story stuck at tests (open dispute, round cap, block or repeated setback) to "
+        "the next step when the suite is green, e.g. a disputed test that was corrected but "
+        "the gate missed it. The runner runs the tests first; the manager reviews it. A "
+        "reason is required.",
+        {"story": str, "reason": str},
     ),
     "set_developer": (
         "Choose the developer specialisation for a story's implement steps (overrides the "

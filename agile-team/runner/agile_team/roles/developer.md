@@ -42,6 +42,9 @@ story back to the unit-tester:
 `"dispute": {"test": "<test id as the runner prints it, file path first>",
 "rule": "<design rule id>", "reason": "<what the rule says and what the
 test expects>"}`.
+The `test` id's path must be repo-relative. The runner accepts a
+runner-relative id only when exactly one tracked file ends with it, and
+otherwise rejects the dispute (a round).
 A dispute the unit-tester upholds costs no round. One it confirms costs a
 round, and only the first round_cap disputes on a story are free. Use it
 only when the test and the design disagree, not when your code fails a

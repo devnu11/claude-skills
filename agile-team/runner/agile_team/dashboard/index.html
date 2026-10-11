@@ -780,6 +780,14 @@ const TIMELINE = {
     tone: "serious", body: e.data.reason,
     meta: `${e.data.step} · ${e.data.count}× in a row · by ${e.data.author} · no round`,
   }),
+  "tests-passed": (e) => ({
+    from: PO,
+    to: e.data.now_at,
+    what: "tests passed by the PO: tests → " + e.data.now_at,
+    tone: "warning",
+    body: e.data.reason,
+    meta: e.data.test ?? "",
+  }),
   priority: (e) => ({
     from: PO, to: "order", what: priorityLabel(e), body: e.data.reason,
     meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · "),
