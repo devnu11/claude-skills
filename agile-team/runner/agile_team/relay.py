@@ -13,6 +13,9 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+WAIT_LINE = "{story} waits on {ids}"
+RUN_WAIT_LINE = "the run waits on {ids}"
+WAITING_HEAD = "waiting on answers: "
 KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped")
 OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"
@@ -92,6 +95,24 @@ class Relay:
     def open_questions(self) -> list[Message]:
         answered = self.answers()
         return [m for m in self.messages() if m.kind == "question" and m.id not in answered]
+
+    def waits(self) -> list[str]:
+        """One line per story an open question names, then one for questions naming none (W2)."""
+        by_story: dict[str, list[str]] = {}
+        for m in self.open_questions():
+            for sid in dict.fromkeys(m.stories):
+                by_story.setdefault(sid, []).append(m.id)
+        lines = [WAIT_LINE.format(story=s, ids=", ".join(i)) for s, i in by_story.items()]
+        return lines + self._unnamed_wait()
+
+    def _unnamed_wait(self) -> list[str]:
+        ids = [m.id for m in self.open_questions() if not m.stories]
+        return [RUN_WAIT_LINE.format(ids=", ".join(ids))] if ids else []
+
+    def waiting(self) -> str:
+        """WAITING_HEAD + the waits joined by "; ", or "" when no question is open (W3, W5)."""
+        lines = self.waits()
+        return WAITING_HEAD + "; ".join(lines) if lines else ""
 
     def blocked_stories(self) -> set[str]:
         return {s for m in self.open_questions() for s in m.stories}

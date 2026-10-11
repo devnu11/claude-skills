@@ -19,7 +19,7 @@ from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
 from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
-from .relay import Answer
+from .relay import WAITING_HEAD, Answer
 
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
@@ -267,6 +267,7 @@ class Router:
     # ----- running a step
 
     async def _step(self, work: Work) -> Pass | None:
+        self._end_wait()
         self.steps += 1
         report = await self._dispatch(work)
         kinds = handover.triggers(report)
@@ -312,6 +313,7 @@ class Router:
 
     def _deliver(self, answers: list[Answer]) -> Pass:
         state, relay = self.runtime.state, self.runtime.relay
+        self._clear_wait()
         state.delivered = [*(state.delivered or []), *(a.id for a in answers)]
         self.runtime.save()
         asked = {m.id: m for m in relay.messages()}
@@ -358,7 +360,28 @@ class Router:
         return lines + ([f"Backlog: {', '.join(backlog)}"] if backlog else [])
 
     async def _wait(self) -> None:
+        self._show_wait()
         await self.sleep(POLL_S)
+
+    def _show_wait(self) -> None:
+        """Name what the run waits on in `status_reason`, saving only on change (W3)."""
+        state, reason = self.runtime.state, self.runtime.relay.waiting()
+        if state.status_reason != reason:
+            state.mark(state.status, reason)
+            self.runtime.save()
+
+    def _clear_wait(self) -> bool:
+        """Drop a waiting reason from the state; say whether there was one (W4)."""
+        state = self.runtime.state
+        waiting = (state.status_reason or "").startswith(WAITING_HEAD)
+        if waiting:
+            state.mark(state.status)
+        return waiting
+
+    def _end_wait(self) -> None:
+        """Clear a waiting reason once the wait ends, and save (W4)."""
+        if self._clear_wait():
+            self.runtime.save()
 
 
 def _boundary_stall(b: Boundary) -> str:

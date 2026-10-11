@@ -635,7 +635,12 @@ class Runtime:
         self.state.mark(self.halted_by.rule.status, self.halted_by.reason)
         self.save()
         if first:
-            self.relay.post(Note(self.halted_by.rule.note_kind, halt_note(self.halted_by, saved)))
+            self.relay.post(
+                Note(
+                    self.halted_by.rule.note_kind,
+                    halt_note(self.halted_by, saved) + _waits_suffix(self.relay),
+                )
+            )
         return self.halted_by
 
     def save_interrupted(self, cause: Cause) -> Interruption | None:
@@ -910,6 +915,12 @@ def _story_lines(story: StoryState | None, rework: list[str]) -> list[str]:
 
 def _interrupted_lines(story: StoryState) -> list[str]:
     return [salvage.offer(story.interrupted)] if story.interrupted else []
+
+
+def _waits_suffix(relay: Relay) -> str:
+    """ "; " + the run's waiting reason when a question is open, else "" (W5)."""
+    waiting = relay.waiting()
+    return f"; {waiting}" if waiting else ""
 
 
 def halt_note(found: Halt, saved: Interruption | None) -> str:
