@@ -9,20 +9,25 @@ manager_every_pct = 25
 
 [toolchain]
 preset = "python"
-test = "uv run --directory agile-team/runner pytest -q"
-coverage = "uv run --directory agile-team/runner pytest --cov --cov-report=term -q"
-lint = "uv run --directory agile-team/runner ruff check ."
-static = "uv run --directory agile-team/runner ruff format --check ."
+# Two runners share one toolchain (s37): agile-team/runner, then unattended/runner.
+# `&&` keeps the coverage gate sound: both pyprojects set fail_under = 95, so a
+# runner below it stops the chain and its TOTAL is the last one the gate reads.
+test = "uv run --directory agile-team/runner pytest -q && uv run --directory unattended/runner pytest -q"
+coverage = "uv run --directory agile-team/runner pytest --cov --cov-report=term -q && uv run --directory unattended/runner pytest --cov --cov-report=term -q"
+lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check ."
+static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check ."
 pragma = "# pragma: no cover"
 
 [toolchain.globs]
 source = [
     "agile-team/runner/agile_team/**",
     "agile-team/runner/scripts/**",
+    "unattended/runner/unattended/**",
 ]
 tests = [
     "agile-team/runner/tests/**",
     "!agile-team/runner/tests/e2e/**",
+    "unattended/runner/tests/**",
 ]
 e2e = [
     "agile-team/runner/tests/e2e/**",
@@ -31,6 +36,8 @@ ci = [
     ".github/workflows/**",
     "agile-team/runner/pyproject.toml",
     "agile-team/runner/uv.lock",
+    "unattended/runner/pyproject.toml",
+    "unattended/runner/uv.lock",
 ]
 
 [gates]
@@ -53,6 +60,14 @@ kind = "package"
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}/agile-team/runner"
 bin = [
     "venv/bin",
+]
+
+[[delivery]]
+name = "unattended"
+kind = "package"
+prepare = "uv venv {sandbox}/venv-unattended && uv pip install --python {sandbox}/venv-unattended {repo}/unattended/runner"
+bin = [
+    "venv-unattended/bin",
 ]
 
 [[delivery]]
