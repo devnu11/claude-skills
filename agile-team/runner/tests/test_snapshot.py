@@ -660,4 +660,6 @@ def test_build_falls_back_when_file_missing_or_unparsable(
 
 def test_fresh_config_returns_new_values(config: cfg.Config) -> None:
     rewrite_config(config, ["design"], 3.0, 3)
-    assert snapshot.fresh_config(config).team.budget_usd == 3.0
+    fresh = snapshot.fresh_config(config)
+    assert fresh.team.budget_usd == 3.0
+    assert fresh is not config
