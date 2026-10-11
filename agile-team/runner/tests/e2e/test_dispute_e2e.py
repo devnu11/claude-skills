@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from agile_team import fingerprint
 from agile_team.dispatch import StepRequest, shell_runner
 from agile_team.events import EventKind
 from agile_team.gates import DisputeStage, StoryStatus
@@ -14,6 +15,7 @@ from ..pipeline_helpers import Script, add_story, drive, step_roles
 
 TEST_FILE = "tests/test_x.py"
 TEST_ID = f"{TEST_FILE}::test_a"
+ORIGINAL = "def test_a(): assert 1 == 2\n"
 DISPUTE = {"test": TEST_ID, "rule": "W6", "reason": "rule says X, test expects Y"}
 RAISE = handoff("changes_requested", summary="test contradicts design", dispute=DISPUTE)
 TO_ARCHITECT = handoff("changes_requested", summary="the test is right", next_role="architect")
@@ -46,7 +48,7 @@ def fix_test(text: str):
 
 def build_rt(make_runtime, configured, replies, steps):
     (configured / "tests").mkdir(exist_ok=True)
-    (configured / TEST_FILE).write_text("def test_a(): assert 1 == 2\n")
+    (configured / TEST_FILE).write_text(ORIGINAL)
     git(configured, "add", "-A")
     git(configured, "commit", "-q", "-m", "tests")
     script = Script(replies)
@@ -93,17 +95,75 @@ def test_malformed_dispute_is_refused_and_costs_a_round(make_runtime, configured
     assert not kinds(rt, EventKind.TEST_DISPUTE)
 
 
+def unchanged_text(file: str, test: str, content: str) -> str:
+    """The pinned UNCHANGED reason, written out literally (s30 F6)."""
+    short = fingerprint.of(file, content)[:12]
+    return (
+        f"the disputed test file {file} has not changed since the dispute was raised: "
+        f"{test} still matches its baseline {short} (whitespace and comment edits do "
+        "not count); fix the test, or confirm it with changes_requested and "
+        "next_role architect"
+    )
+
+
 def test_unchanged_test_file_bounces_with_the_reason(make_runtime, configured) -> None:
-    """AC3: a tester that touches nothing fails the gate (real git diff exit 0)."""
+    """AC3: a tester that touches nothing fails the gate with the full reason."""
     replies = {"developer": [RAISE]}
     _, rt, _ = build_rt(make_runtime, configured, replies, ["tests", "implement"])
     add_story(rt, step="implement")
     asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
     report = asyncio.run(rt.run_role(StepRequest("unit-tester", "go", "s1")))
     story = rt.state.stories["s1"]
-    assert f"the disputed test file {TEST_FILE} has not changed" in str(report)
+    assert unchanged_text(TEST_FILE, TEST_ID, ORIGINAL) in str(report)
     assert (story.step, story.rounds) == ("tests", 1)
     assert story.dispute is not None and story.dispute.stage is DisputeStage.RAISED
+
+
+def test_cosmetic_fix_bounces_with_the_same_text(make_runtime, configured) -> None:
+    """AC2: comments and blank lines are not a fix."""
+    cosmetic = "# looked at it\n\n\ndef test_a():  assert 1 == 2   # still wrong\n"
+    replies = {"developer": [RAISE], "unit-tester": [fix_test(cosmetic)]}
+    _, rt, _ = build_rt(make_runtime, configured, replies, ["tests", "implement"])
+    add_story(rt, step="implement")
+    asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
+    report = asyncio.run(rt.run_role(StepRequest("unit-tester", "go", "s1")))
+    assert unchanged_text(TEST_FILE, TEST_ID, ORIGINAL) in str(report)
+    assert rt.state.stories["s1"].step == "tests"
+
+
+def test_runner_relative_id_resolves_through_git_ls_files(make_runtime, configured) -> None:
+    """AC1b: a file under a subdirectory is found by its runner-relative id."""
+    sub = configured / "runner" / "tests"
+    sub.mkdir(parents=True)
+    (sub / "test_y.py").write_text("def test_b(): assert 0\n")
+    git(configured, "add", "-A")
+    git(configured, "commit", "-q", "-m", "sub")
+    raise_y = handoff(
+        "changes_requested",
+        summary="s",
+        dispute={"test": "tests/test_y.py::test_b", "rule": "W6", "reason": "r"},
+    )
+    _, rt, _ = build_rt(make_runtime, configured, {"developer": [raise_y]}, ["tests", "implement"])
+    add_story(rt, step="implement")
+    asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
+    story = rt.state.stories["s1"]
+    assert story.step == "tests" and story.dispute.file == "runner/tests/test_y.py"
+
+
+def test_untracked_dispute_file_is_rejected_and_costs_a_round(make_runtime, configured) -> None:
+    """AC1b: an id naming no tracked file bounces to implement, no dispute event."""
+    ghost = handoff(
+        "changes_requested",
+        summary="s",
+        dispute={"test": "tests/test_ghost.py::test_g", "rule": "W6", "reason": "r"},
+    )
+    _, rt, _ = build_rt(make_runtime, configured, {"developer": [ghost]}, ["tests", "implement"])
+    add_story(rt, step="implement")
+    report = asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
+    story = rt.state.stories["s1"]
+    assert "dispute rejected: tests/test_ghost.py (from tests/test_ghost.py::test_g)" in str(report)
+    assert (story.step, story.rounds, story.dispute) == ("implement", 1, None)
+    assert not kinds(rt, EventKind.TEST_DISPUTE)
 
 
 def test_confirmed_dispute_goes_through_the_architect_and_costs_a_round(
