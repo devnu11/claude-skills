@@ -1,6 +1,20 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s40 done)
+
+## s40: Story priority is explicit and code-driven
+
+The order in which stories are worked is now an explicit list the PO sets, the router follows, and the board shows. This replaces creation order as the priority mechanism.
+
+Key architectural choices:
+- **`state.order`:** A list of story ids (unfinished stories, in priority order) persisted in state.json. Legacy files load with `[]`.
+- **Single ranking rule:** `Priority.key()` = `(done, listed, not in_progress, natural(id))` breaks all ties deterministically. Explicit position beats in-progress; in-progress breaks ties among unlisted stories.
+- **PO tools are explicit:** `prioritise()`, `move_story()`, and `start_sprint()`'s list order set the queue. Refusals are clear (unknown, done, empty, bad position). Every change emits a `priority` event (logged and visible on timeline).
+- **Hold keeps position:** A held story is skipped by the router but keeps its position number. Once released, it runs from that position.
+- **Wait system is data-driven:** `WAITS` table (exact order matters) determines why a story can't move. The board marks each with `⏸ <reason>` and `waits on:` details.
+- **Snapshot carries priority:** `run.order` = queue, stories in ranking order, each story has `position`, `in_progress`, `hold`, `wait` fields.
+
+This completes the move from implicit ordering (creation order, prose agreements) to explicit, auditable, code-driven priority. See ADR-0016, design `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2, D1–D5).
 
 ## s29: Sync and stacked PR delivery
 

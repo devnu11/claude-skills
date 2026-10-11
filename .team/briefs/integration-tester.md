@@ -1,6 +1,17 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s40 done)
+
+## s40: Snapshot now includes priority and wait state
+
+The snapshot and state.json now carry explicit priority information:
+
+- **`state.json`:** `order` field holds the queue (list of unfinished story ids in priority order). Legacy files without it load with `[]`.
+- **Snapshot stories:** Each story now has `position` (1-based int or null when done), `in_progress` (bool), `hold` (reason string or null), and `wait` ({reason, on} or null).
+- **Observable on the board:** Stories show `#<position>` in the id line. Held or blocked stories show `⏸ <reason>` pill and `waits on:` line with the full reason they can't move.
+- **Fixture updates:** `run.order` key added. Stories listed in ranking order (not creation order). At least one held story with open question naming it, showing the `wait` structure.
+
+For your presentations, note that `state.order` is now part of the state, and stories' `position` and `wait` fields are observable on the board. See ADR-0016, design `agile-team/docs/design/s40.md` (rules D1–D5).
 
 ## s19: Runner drives the fixed pipeline automatically
 

@@ -1,8 +1,21 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s40 done)
 
 ## Design decisions to verify
+
+**Story priority in code (s40):** Verify that priority is explicit, auditable, and data-driven:
+- `state.order: list[str]` persists the queue; legacy files load with `[]`.
+- `Priority.key()` = `(done, listed, not in_progress, natural(id))` is the single ranking rule. No creation order, no implicit ties.
+- Router `_story_work` and `_repeat_work` use `priority().ranked()`, not `state.stories.values()` order.
+- `prioritise()` and `move_story()` validate ids and positions; refusals are exact. `start_sprint()` treats list as priority.
+- `_reorder()` helper emits `priority` events (change: set/move/sprint, order, moves [1-based from→to], reason).
+- Hold does not change order: `_movable` skips held stories; position never changes.
+- `waits.wait()` returns first matching `WAITS` row (data-driven, ordered). Board shows `⏸ <reason>` and `waits on:`.
+- Snapshot: `run.order` = queue, stories ranked, each has `position`/`in_progress`/`hold`/`wait`. Fixture matches.
+- Dashboard: `#${s.position}` in story id, `WAIT_TONE` for hold colors, `priorityLabel()` for timeline labels, no re-sorting board.
+- `story_status` returns stories ranked with `order` key. `story_status_data` iterates `ranked()`.
+- Contract changes: Tools have exact descriptions in `SCHEMAS`. `start_sprint` emits `priority` event after `sprint-start`. See ADR-0016, design `agile-team/docs/design/s40.md`.
 
 **Sync with upstream and stacked PRs (s29):** Verify that sprint boundaries are code (not prompt) and that all git and PR operations go through narrow interfaces:
 - Boundary steps (sync, check, review, push) are router-picked before sprint stories; they cannot be skipped by a prompt.

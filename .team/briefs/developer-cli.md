@@ -1,8 +1,25 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s40 done)
 
 See `developer.md` for the base conventions.
+
+## s40: Story priority lives in code
+
+The router now follows an explicit, ordered list of stories instead of creation order. Key modules:
+
+- **`priority.py` (new):** `Priority` class with `key()` ranking rule: `(done, listed, not in_progress, natural(id))`. `natural()` for digit-aware sorting. `ranked()` and `queue()` builders. `order_refusal()`, `move_refusal()`, `with_first()`, `with_move()` helpers for validation and reordering.
+- **`waits.py` (new):** `Wait` dataclass, `WaitReason` enum, `WAITS` table (data-driven). `wait()` function computes why a story can't move from hold, status, questions, and previous step.
+- **`state.py`:** `RunState.order: list[str]` field (default `[]`). Legacy load with missing key takes default.
+- **`dispatch.py`:** `Runtime.priority() -> Priority` returns the ranking for this run.
+- **`router.py`:** `_story_work` and `_repeat_work` use `priority().ranked()` to pick stories by order, not creation order.
+- **`po_tools.py`:** New tools `prioritise(stories, reason)` and `move_story(story, position, reason)`. `_begin_sprint` applies priority to sprint stories. `story_status` returns stories in ranking order with `order` key. `_reorder()` helper emits `priority` events. Exact tool descriptions in `SCHEMAS`.
+- **`events.py`:** `EventKind.PRIORITY = "priority"`. Event data: change (set/move/sprint), order, moves (from→to), reason.
+- **`dashboard/snapshot.py`:** `_priority()` builder, `_run` adds order, `_stories` uses ranking, `_story` adds position, in_progress, hold, wait fields.
+- **`dashboard/index.html`:** `#${s.position}` in story id line. `WAIT_TONE` for hold colors. `priorityLabel()` formats timeline labels. Board never re-sorts (snapshot order is authoritative).
+- **`roles/product-owner.md`:** Documents the new tools and how the router follows priority.
+
+See ADR-0016, design `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2, D1–D5, X1, test checklist).
 
 ## s29: Sync with upstream, verify review branches, and deliver stacked PRs
 

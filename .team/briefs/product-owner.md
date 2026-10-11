@@ -1,6 +1,19 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s40 done)
+
+## s40: Set and manage the story order
+
+You now have explicit tools to set the order the team works in. The router follows your order, and a held story keeps its place:
+
+- **`prioritise(stories, reason)`:** Set the order the team works in: the listed story ids first, in that order; every other unfinished story keeps its order after them. Unknown or done ids are refused. The router follows it; a held story keeps its place.
+- **`move_story(story, position, reason)`:** Move one story to a position in the order (1 = next; the board shows each story's #position). Unknown or done stories are refused.
+- **`start_sprint(goal, stories)`:** The order you list them in is their priority. After sprint starts, they come first in that order, and every other unfinished story follows.
+- **The board shows priority:** Each unfinished card displays `#<position>` (where it will run in priority order). A held or blocked card shows `⏸ <reason>` (questions, manager, round cap, held, or needs the human) and what it waits on.
+
+Held stories keep their position number. When released with `continue_story`, they run from their original position.
+
+See ADR-0016, design `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2).
 
 ## s29: Boundary hand-overs and permission
 

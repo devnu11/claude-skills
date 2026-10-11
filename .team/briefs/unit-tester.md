@@ -1,6 +1,23 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s40 done)
+
+## s40: Story priority ranking and explicit order
+
+The router now ranks stories by an explicit priority order instead of creation order. Test coverage checklist:
+
+1. **Ranking rule (P2):** `Priority.key()` = `(done, listed, not in_progress, natural(id))`. Done stories last. Explicit position beats in-progress. In-progress breaks ties among unlisted stories. Natural id sorts digit runs as numbers (s9 < s10).
+2. **Order state (P1, P7):** `RunState.order` persists in state.json. Legacy load without it takes `[]`. After any change, order holds the full unfinished queue.
+3. **PO tools (P5–P8, AC2):** `prioritise(ids, reason)` sets order and refuses unknown/done/empty. `move_story(story, position, reason)` moves to 1–queue_length, refuses unknown/done/bad position. `start_sprint` treats list as order.
+4. **Router by order (AC3):** `_story_work` and `_repeat_work` pick first movable story in `priority().ranked()`, not creation order.
+5. **Hold semantics (P4, AC6):** Held story skipped by router; position never changes. `continue_story` releases it to run from original position.
+6. **Waits (W1–W2, AC6):** `waits.wait()` returns first matching `WAITS` row (blocked→needs human, needs_manager + repeated→manager, needs_manager→round cap, questions hold, any hold, open asking). Board shows hold pill and reason.
+7. **Events (P9, AC5):** `priority` event on every change: set/move/sprint, full order, moves (1-based from→to), reason. Timeline shows label and meta.
+8. **Snapshot (D1–D5, AC4):** `run.order` = queue. Stories in ranking order. Each story: `position` (int/null), `in_progress` (bool), `hold` (str/null), `wait` ({reason, on}/null).
+
+Fixture gains `order` key, story `position`/`in_progress`/`hold`/`wait` fields, and at least one held story with open question matching it. Timeline has one `priority` event with move.
+
+Contract changes: `story_status` returns `order` key, `story_status_data` iterates `ranked()`. `start_sprint` emits `priority` event after `sprint-start`. Tests bouncing a story twice need `repeat=2` config or change reasons. Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s40.md` (test checklist).
 
 ## s29: Boundary runner tests (sync, rebuild, check, push, stacked PRs)
 

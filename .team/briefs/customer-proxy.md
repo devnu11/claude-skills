@@ -1,6 +1,16 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-10 (s26 done)
+**Last updated:** 2026-10-11 (s40 done)
+
+## s40: Board now shows story priority order and hold reasons
+
+The board shows the order stories will run in and why any are held:
+
+- **Priority order:** Each story card shows `#<position>` (e.g., `#1`, `#2`) indicating its place in the queue. Smaller numbers run first.
+- **Hold indicators:** A held or blocked story shows a `⏸` pill with the reason (questions, manager, round cap, held, or needs the human) and a line `waits on: <reason details>`. This tells you why the story isn't moving.
+- **Observable behaviour:** Held stories keep their position number even when the router skips over them. Once released, they run from their original place in the order.
+
+The order and hold state are now observable on the dashboard board view and in the snapshot. See ADR-0016, design `agile-team/docs/design/s40.md` (rules D1–D4).
 
 ## s19: Runner calls you automatically from the pipeline
 
