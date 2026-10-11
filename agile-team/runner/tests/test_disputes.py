@@ -1,9 +1,10 @@
 """s11: test disputes (T1-T9, T13) and rulings at any step (T10, T11)."""
 
 import asyncio
+import functools
 
 import pytest
-from agile_team import gates, roles
+from agile_team import fingerprint, gates, roles
 from agile_team.config import PIPELINE_STEPS
 from agile_team.dispatch import StepRequest
 from agile_team.events import Event, EventKind
@@ -17,11 +18,21 @@ from .pipeline_helpers import Script, add_story, build, drive, handover_events, 
 
 STEPS = list(PIPELINE_STEPS)
 TEST_ID = "tests/test_x.py::test_a"
-HEAD = "git rev-parse HEAD"
-DIFF = "git diff --quiet abc123 HEAD -- tests/test_x.py"
-NOT_CHANGED = (
-    "the disputed test file tests/test_x.py has not changed; fix tests/test_x.py::test_a, "
-    "or confirm it with changes_requested and next_role architect"
+LS = "git ls-files -- tests/test_x.py '*/tests/test_x.py'"
+FILE = "agile-team/runner/tests/test_x.py"
+OLD = "def test_a():\n    assert f(1) == 1\n"
+NEW = "def test_a():\n    assert f(1) == 2\n"
+BASE = fingerprint.of(FILE, OLD)
+UNCHANGED = (
+    f"the disputed test {TEST_ID} is unchanged: {FILE} still matches its baseline "
+    f"{BASE[:12]} from when the dispute was raised (whitespace and comment edits do "
+    "not count); fix the test, or confirm it with changes_requested and "
+    "next_role architect"
+)
+UNTRACKED = (
+    f"dispute rejected: tests/test_x.py (from {TEST_ID}) is not a tracked file at the "
+    "repo root, and no single tracked file ends with that path; hand off the dispute "
+    "again with the test's path from the repo root"
 )
 DISPUTE_JSON = {"test": TEST_ID, "rule": "W6", "reason": "rule says X, test expects Y"}
 
@@ -32,12 +43,14 @@ def story(step: str = "implement", **kw) -> StoryState:
 
 
 def open_dispute(**kw) -> OpenDispute:
-    return OpenDispute(TEST_ID, "W6", "why", "abc123", **kw)
+    return OpenDispute(TEST_ID, "W6", "why", FILE, BASE, **kw)
 
 
-def pipeline(results=None, steps=STEPS, cap=3) -> gates.Pipeline:
-    runner = FakeRunner(results)
-    checks = gates.Checks({"test": "T", "coverage": "C"}, 95.0, runner)
+def pipeline(results=None, steps=STEPS, cap=3, files=None) -> gates.Pipeline:
+    """A pipeline whose runner is scripted and whose working tree is ``files``."""
+    files = {FILE: OLD} if files is None else files
+    runner = FakeRunner({LS: (0, FILE + "\n"), **(results or {})})
+    checks = gates.Checks({"test": "T", "coverage": "C"}, 95.0, runner, read=files.get)
     return gates.Pipeline(list(steps), cap, checks)
 
 
@@ -108,12 +121,11 @@ def test_verdict_dispute_value() -> None:
     assert Verdict.DISPUTE == "dispute"
 
 
-def test_open_dispute_defaults_coerces_and_names_its_file() -> None:
-    d = open_dispute()
-    assert d.stage is DisputeStage.RAISED and d.file == "tests/test_x.py"
-    assert OpenDispute("a.py", "W6", "r", "b").file == "a.py"
-    loaded = OpenDispute(TEST_ID, "W6", "why", "abc123", stage="confirmed")
-    assert loaded.stage is DisputeStage.CONFIRMED
+def test_open_dispute_defaults_and_coerces() -> None:
+    d = OpenDispute(TEST_ID, "W6", "why")
+    assert (d.file, d.baseline, d.stage) == ("", "", DisputeStage.RAISED)
+    loaded = OpenDispute(TEST_ID, "W6", "why", FILE, BASE, stage="confirmed")
+    assert loaded.stage is DisputeStage.CONFIRMED and loaded.file == FILE
     assert [s.value for s in DisputeStage] == ["raised", "confirmed"]
 
 
@@ -123,48 +135,167 @@ def test_story_and_outcome_default_to_no_dispute() -> None:
     assert gates.Outcome(Verdict.PASS).dispute is None
 
 
-def test_head_is_the_stripped_commit() -> None:
-    checks = gates.Checks({}, 95.0, FakeRunner({HEAD: (0, "abc123\n")}))
-    assert checks.head() == "abc123"
+def checks_with(files, results=None) -> gates.Checks:
+    return gates.Checks({}, 95.0, FakeRunner(results), read=files.get)
 
 
-def test_dispute_settled_when_the_file_changed() -> None:
-    checks = gates.Checks({}, 95.0, FakeRunner({DIFF: (1, "")}))
-    out = checks.dispute_settled(open_dispute())
+def test_a_real_change_settles_the_dispute() -> None:
+    out = checks_with({FILE: NEW}).dispute_settled(open_dispute())
     assert (out.verdict, out.reason) == (Verdict.PASS, "disputed test changed")
 
 
-@pytest.mark.parametrize("code", [0, 128, 2])
-def test_dispute_unsettled_unless_diff_exits_one(code) -> None:
-    checks = gates.Checks({}, 95.0, FakeRunner({DIFF: (code, "")}))
-    out = checks.dispute_settled(open_dispute())
-    assert (out.verdict, out.reason) == (Verdict.BOUNCE, NOT_CHANGED)
+@pytest.mark.parametrize(
+    "text",
+    [OLD, "# note\n" + OLD, OLD.replace("    ", "        ") + "\n\n", OLD.replace("==", "  ==  ")],
+)
+def test_no_change_or_a_cosmetic_change_bounces_with_the_reason(text) -> None:
+    out = checks_with({FILE: text}).dispute_settled(open_dispute())
+    assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "tests", UNCHANGED)
 
 
-def test_dispute_settled_when_confirmed_without_running_anything() -> None:
-    runner = FakeRunner()
-    out = gates.Checks({}, 95.0, runner).dispute_settled(open_dispute(stage="confirmed"))
+def test_a_vanished_file_counts_as_changed() -> None:
+    out = checks_with({}).dispute_settled(open_dispute())
+    assert (out.verdict, out.reason) == (Verdict.PASS, "disputed test changed")
+
+
+def test_dispute_settled_when_confirmed_without_reading() -> None:
+    reads = []
+    checks = gates.Checks({}, 95.0, FakeRunner(), read=lambda p: reads.append(p))
+    out = checks.dispute_settled(open_dispute(stage="confirmed"))
     assert (out.verdict, out.reason) == (Verdict.PASS, "dispute confirmed")
+    assert reads == []
+
+
+def test_a_legacy_dispute_passes_without_reading() -> None:
+    reads = []
+    checks = gates.Checks({}, 95.0, FakeRunner(), read=lambda p: reads.append(p))
+    out = checks.dispute_settled(OpenDispute(TEST_ID, "W6", "why"))
+    assert (out.verdict, out.reason) == (Verdict.PASS, gates.LEGACY_PASS)
+    assert gates.LEGACY_PASS == "dispute raised before content baselines; passed without a check"
+    assert reads == []
+
+
+def test_the_gate_runs_no_command() -> None:
+    runner = FakeRunner()
+    gates.Checks({}, 95.0, runner, read={FILE: NEW}.get).dispute_settled(open_dispute())
     assert runner.calls == []
 
 
-def test_the_diff_path_is_shell_quoted() -> None:
-    runner = FakeRunner()
-    d = OpenDispute("tests/my test.py::a", "W6", "r", "abc123")
-    gates.Checks({}, 95.0, runner).dispute_settled(d)
-    assert runner.calls == ["git diff --quiet abc123 HEAD -- 'tests/my test.py'"]
+def test_the_default_reader_reads_nothing() -> None:
+    assert gates.Checks({}, 95.0, FakeRunner()).content_hash(FILE) is None
+
+
+def test_content_hash_is_the_fingerprint() -> None:
+    assert checks_with({FILE: OLD}).content_hash(FILE) == BASE
+
+
+# ----- F1: resolving the path -------------------------------------------------
+
+
+def test_pick_tracked_prefers_an_exact_line() -> None:
+    assert gates.pick_tracked("tests/a.py", "x/tests/a.py\ntests/a.py\n") == "tests/a.py"
+
+
+def test_pick_tracked_takes_a_single_suffix_match() -> None:
+    assert gates.pick_tracked("tests/a.py", "x/y/tests/a.py\nother.py\n") == "x/y/tests/a.py"
+
+
+@pytest.mark.parametrize("listing", ["", "other.py\n", "a/tests/a.py\nb/tests/a.py\n"])
+def test_pick_tracked_gives_none_for_zero_or_several(listing) -> None:
+    assert gates.pick_tracked("tests/a.py", listing) is None
+
+
+def test_pick_tracked_needs_a_whole_path_component() -> None:
+    assert gates.pick_tracked("s/a.py", "x/tests/a.py\n") is None
+    assert gates.pick_tracked("s/a.py", "x/s/a.py\n") == "x/s/a.py"
+
+
+def test_tracked_runs_a_quoted_ls_files() -> None:
+    runner = FakeRunner(
+        {"git ls-files -- 'tests/my test.py' '*/tests/my test.py'": (0, "a/tests/my test.py\n")}
+    )
+    assert gates.Checks({}, 95.0, runner).tracked("tests/my test.py") == "a/tests/my test.py"
+    assert len(runner.calls) == 1
+
+
+def test_tracked_is_none_on_a_failed_command() -> None:
+    runner = FakeRunner({"git ls-files -- a.py '*/a.py'": (128, "a.py\n")})
+    assert gates.Checks({}, 95.0, runner).tracked("a.py") is None
+
+
+def test_test_file_is_the_id_up_to_the_first_separator() -> None:
+    assert gates.test_file("tests/t.py::C::m[a::b]") == "tests/t.py"
+    assert gates.test_file("tests/t.py") == "tests/t.py"
+
+
+def test_read_repo_file(tmp_path) -> None:
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "t.py").write_text("x = 1\n")
+    assert gates.read_repo_file(tmp_path, "d/t.py") == "x = 1\n"
+    assert gates.read_repo_file(tmp_path, "d") is None
+    assert gates.read_repo_file(tmp_path, "gone.py") is None
+
+
+def test_load_dispute_drops_the_legacy_base() -> None:
+    d = gates.load_dispute(test="t::a", rule="W6", reason="r", base="abc", stage="confirmed")
+    assert (d.file, d.baseline, d.stage) == ("", "", DisputeStage.CONFIRMED)
+
+
+# ----- AC2: the baseline is the content at the raise ---------------------------
+
+
+def test_a_change_after_the_raise_passes_the_gate() -> None:
+    files = {FILE: OLD}
+    s, p = story(), pipeline(files=files)
+    p.advance(s, p.evaluate(s, raised()))
+    files[FILE] = NEW
+    s.step = "tests"
+    assert p.evaluate(s, Handoff("done")).verdict is Verdict.PASS
+
+
+def test_content_already_changed_at_the_raise_is_the_baseline() -> None:
+    files = {FILE: NEW}
+    s, p = story(), pipeline(files=files)
+    p.advance(s, p.evaluate(s, raised()))
+    out = p.evaluate(s, Handoff("done"))
+    assert out.verdict is Verdict.BOUNCE and NEW != OLD
+    assert fingerprint.of(FILE, NEW)[:12] in out.reason
 
 
 # ----- T3: raising ------------------------------------------------------------
 
 
 def test_a_dispute_at_implement_moves_to_tests_without_running_gates() -> None:
-    p = pipeline({HEAD: (0, "abc123\n")})
+    p = pipeline()
     out = p.evaluate(story(), raised())
     assert (out.verdict, out.bounce_to) == (Verdict.DISPUTE, "tests")
     assert out.reason == f"{TEST_ID} contradicts W6: why"
     assert out.dispute == open_dispute()
-    assert p.checks.run.calls == [HEAD]
+    assert p.checks.run.calls == [LS]
+
+
+def test_the_raised_dispute_stores_the_resolved_file_and_baseline() -> None:
+    d = pipeline().evaluate(story(), raised()).dispute
+    assert (d.file, d.baseline) == (FILE, fingerprint.of(FILE, OLD))
+    assert d.file != "tests/test_x.py"
+
+
+@pytest.mark.parametrize(
+    "results,files",
+    [
+        ({LS: (0, "")}, {FILE: OLD}),
+        ({LS: (0, "a/tests/test_x.py\nb/tests/test_x.py\n")}, {FILE: OLD}),
+        ({LS: (1, FILE)}, {FILE: OLD}),
+        ({}, {}),
+    ],
+)
+def test_an_unresolvable_dispute_is_rejected_as_a_round(results, files) -> None:
+    s, p = story(disputes=2), pipeline(results, files=files)
+    out = p.evaluate(s, raised())
+    assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "implement", UNTRACKED)
+    assert out.author is gates.Author.ROLE and out.dispute is None
+    p.advance(s, out)
+    assert (s.step, s.rounds, s.dispute, s.disputes) == ("implement", 1, None, 2)
 
 
 def test_a_stopped_handoff_beats_the_dispute() -> None:
@@ -182,14 +313,14 @@ def test_a_dispute_with_tests_disabled_is_gated_as_today() -> None:
     p = pipeline({"T": (1, "boom")}, steps=["implement", "review"])
     out = p.evaluate(story(), raised())
     assert out.verdict is Verdict.BOUNCE and "boom" in out.reason
-    assert HEAD not in p.checks.run.calls
+    assert LS not in p.checks.run.calls
 
 
 # ----- T4: the move and the free-dispute cap ----------------------------------
 
 
 def test_a_dispute_moves_to_tests_and_stores_it() -> None:
-    s, p = story(), pipeline({HEAD: (0, "abc123")})
+    s, p = story(), pipeline()
     p.advance(s, p.evaluate(s, raised()))
     assert (s.step, s.rounds, s.disputes, s.status) == ("tests", 0, 1, StoryStatus.ACTIVE)
     assert s.dispute == open_dispute()
@@ -214,24 +345,23 @@ def test_a_counted_dispute_can_cap_the_story() -> None:
 
 
 def test_done_with_a_changed_test_passes_to_implement_and_closes() -> None:
-    s, p = story("tests", dispute=open_dispute(), disputes=1), pipeline({DIFF: (1, "")})
+    s, p = story("tests", dispute=open_dispute(), disputes=1), pipeline(files={FILE: NEW})
     out = p.evaluate(s, Handoff("done"))
     assert out.verdict is Verdict.PASS and out.reason == "disputed test changed"
     p.advance(s, out)
     assert (s.step, s.dispute, s.rounds) == ("implement", None, 0)
 
 
-@pytest.mark.parametrize("code", [0, 128])
-def test_done_with_an_unchanged_test_bounces_and_counts(code) -> None:
-    s, p = story("tests", dispute=open_dispute()), pipeline({DIFF: (code, "")})
+def test_done_with_an_unchanged_test_bounces_and_counts() -> None:
+    s, p = story("tests", dispute=open_dispute()), pipeline()
     out = p.evaluate(s, Handoff("done"))
-    assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "tests", NOT_CHANGED)
+    assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "tests", UNCHANGED)
     p.advance(s, out)
     assert (s.step, s.rounds, s.dispute.stage) == ("tests", 1, DisputeStage.RAISED)
 
 
 def test_tests_red_is_not_called_while_a_dispute_is_open() -> None:
-    s, p = story("tests", dispute=open_dispute()), pipeline({DIFF: (1, "")})
+    s, p = story("tests", dispute=open_dispute()), pipeline(files={FILE: NEW})
     p.evaluate(s, Handoff("done"))
     assert "T" not in p.checks.run.calls
 
@@ -241,8 +371,8 @@ def test_tests_red_still_gates_without_a_dispute() -> None:
     assert p.evaluate(story("tests"), Handoff("done")).verdict is Verdict.BOUNCE
 
 
-def test_done_on_a_confirmed_dispute_passes_without_the_diff() -> None:
-    s, p = story("tests", dispute=open_dispute(stage="confirmed")), pipeline()
+def test_done_on_a_confirmed_dispute_passes_without_a_check() -> None:
+    s, p = story("tests", dispute=open_dispute(stage="confirmed")), pipeline(files={})
     out = p.evaluate(s, Handoff("done"))
     assert (out.verdict, out.reason) == (Verdict.PASS, "dispute confirmed")
     assert p.checks.run.calls == []
@@ -320,6 +450,15 @@ def test_an_open_dispute_round_trips_through_state_json() -> None:
     assert back.stories["s2"].dispute is None and back.stories["s2"].disputes == 0
 
 
+def test_a_dispute_from_before_s30_loads_with_no_baseline() -> None:
+    old = (
+        '{"stories": {"s1": {"id": "s1", "title": "t", "step": "tests", "dispute": '
+        '{"test": "t.py::a", "rule": "W6", "reason": "r", "base": "abc", "stage": "raised"}}}}'
+    )
+    d = RunState.from_json(old).stories["s1"].dispute
+    assert (d.test, d.file, d.baseline, d.stage) == ("t.py::a", "", "", DisputeStage.RAISED)
+
+
 def test_older_state_files_load_without_a_dispute() -> None:
     old = '{"stories": {"s1": {"id": "s1", "title": "t", "step": "design", "rounds": 1}}}'
     s = RunState.from_json(old).stories["s1"]
@@ -369,12 +508,19 @@ def open_story(rt, step="implement", **kw) -> StoryState:
     return rt.state.stories["s1"]
 
 
-RESULTS = {HEAD: (0, "abc123\n"), "pytest --cov": (0, "TOTAL 96%")}
+RESULTS = {LS: (0, FILE + "\n"), "pytest --cov": (0, "TOTAL 96%")}
+
+
+def write_test_file(rt, text=OLD) -> None:
+    path = rt.config.repo / FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
 
 
 def dispute_runtime(make_runtime, **kw):
     text = handoff("changes_requested", summary="why", dispute=DISPUTE_JSON)
     rt = make_runtime(FakeQuery(text), runner=FakeRunner(RESULTS), **kw)
+    write_test_file(rt)
     open_story(rt)
     return rt
 
@@ -403,13 +549,13 @@ def test_a_developer_dispute_logs_one_dispute_event_and_no_gate(make_runtime) ->
     assert report["gate"] == event.data
     s = rt.state.stories["s1"]
     assert (s.step, s.rounds, s.disputes) == ("tests", 0, 1)
-    assert s.dispute == OpenDispute(TEST_ID, "W6", "rule says X, test expects Y", "abc123")
+    assert s.dispute == OpenDispute(TEST_ID, "W6", "rule says X, test expects Y", FILE, BASE)
 
 
 def test_a_dispute_does_not_run_the_implement_gate(make_runtime) -> None:
     rt = dispute_runtime(make_runtime)
     run(rt, "developer")
-    assert rt.pipeline.checks.run.calls == [HEAD]
+    assert rt.pipeline.checks.run.calls == [LS]
 
 
 def test_a_normal_gate_still_logs_a_gate_event(make_runtime) -> None:
@@ -546,6 +692,9 @@ def test_a_dispute_round_trip_costs_no_round_and_no_handover(make_runtime) -> No
     dispute = handoff("changes_requested", summary="why", dispute=DISPUTE_JSON)
     script = Script({"developer": [dispute]})
     rt = build(make_runtime, script, steps=["tests", "implement", "review"])
+    rt.pipeline.checks.read = functools.partial(gates.read_repo_file, rt.config.repo)
+    rt.pipeline.checks.run.results[LS] = (0, FILE + "\n")  # type: ignore[attr-defined]
+    write_test_file(rt)
     add_story(rt, "s1", "implement")
     drive(rt)
     assert step_roles(rt)[:4] == ["developer", "unit-tester", "developer", "code-reviewer"]
@@ -553,3 +702,27 @@ def test_a_dispute_round_trip_costs_no_round_and_no_handover(make_runtime) -> No
     assert (s.rounds, s.dispute, s.status) == (0, None, StoryStatus.DONE)
     assert len(handover_events(rt)) == 1  # only the sprint end
     assert f"Test dispute (raised): {TEST_ID}" in script.prompts["unit-tester"][0]
+
+
+def test_a_dispute_on_an_untracked_path_is_a_round_not_a_dispute(make_runtime) -> None:
+    rt = dispute_runtime(make_runtime)
+    rt.pipeline.checks.run.results[LS] = (0, "")
+    run(rt, "developer")
+    s = rt.state.stories["s1"]
+    assert (s.step, s.rounds, s.dispute, s.disputes) == ("implement", 1, None, 0)
+    assert events_of(rt, "test-dispute") == [] and len(events_of(rt, "gate")) == 1
+
+
+# ----- F7: a repeated unchanged bounce escalates --------------------------------
+
+
+def test_the_same_unchanged_bounce_twice_escalates_not_caps(make_runtime) -> None:
+    rt = dispute_runtime(make_runtime)
+    run(rt, "developer")
+    rt.query_fn.text = handoff("done", summary="fixed")
+    run(rt, "unit-tester")
+    s = rt.state.stories["s1"]
+    assert (s.step, s.rounds, s.status) == ("tests", 1, StoryStatus.ACTIVE)
+    run(rt, "unit-tester")
+    assert (s.step, s.rounds, s.status) == ("tests", 1, StoryStatus.NEEDS_MANAGER)
+    assert events_of(rt, "escalation")[-1].data["verdict"] == "escalate"

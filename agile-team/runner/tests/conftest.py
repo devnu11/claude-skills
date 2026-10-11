@@ -153,6 +153,7 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
             config.gates.coverage,
             runner or FakeRunner(),
             presentation=partial(presentation.missing, config),
+            read=partial(gates.read_repo_file, configured),
         )
         pipeline = gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
         return Runtime(
