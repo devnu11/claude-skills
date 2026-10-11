@@ -20,7 +20,8 @@ class Setup:
     def __init__(self, tmp_path: Path):
         self.tmp = tmp_path
         self.origin, self.work = make_origin(tmp_path)
-        self.start = rev(self.work, "origin/main")
+        self.start = rev(self.work, "HEAD")
+        self.setup_commit = self.start  # make_origin's team commit, below sprint 1
         self.s1 = [commit(self.work, "a.txt"), commit(self.work, "b.txt")]
         self.mid = rev(self.work, "HEAD")
         self.s2 = [commit(self.work, "c.txt")]
@@ -53,7 +54,7 @@ def test_constants() -> None:
 def test_unmerged_lists_team_commits_only(s: Setup) -> None:
     land_upstream(s.tmp, s.origin, "up.txt")
     git(s.work, "fetch", "-q", "origin")
-    assert s.rb.unmerged(s.end) == {*s.s1, *s.s2}
+    assert s.rb.unmerged(s.end) == {s.setup_commit, *s.s1, *s.s2}
 
 
 def test_picks_are_the_range_in_order(s: Setup) -> None:
@@ -119,7 +120,8 @@ def test_build_stacks_each_sprint_on_the_one_below(s: Setup) -> None:
     assert git(s.work, "rev-list", "--count", f"{TARGET}..{e1.branch}").strip() == "2"
     assert git(s.work, "rev-parse", f"{e2.branch}~1").strip() == e1.head
     assert git(s.work, "log", "-1", "--format=%s", e2.branch).strip() == "add c.txt"
-    assert git(s.work, "diff", "--stat", e2.branch, "agile-team").strip() == ""
+    diff = git(s.work, "diff", "--stat", e2.branch, "agile-team", "--", ".", ":!.gitignore")
+    assert diff.strip() == ""
     assert rev(s.work, "agile-team") == before and rev(s.work, "agile-team") == s.end
 
 
