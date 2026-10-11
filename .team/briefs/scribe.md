@@ -6,6 +6,7 @@
 
 After each completed story, create an ADR and refresh affected role briefs (under 30 lines each, no append). Recent stories and their ADRs:
 
+- **s37 (done):** Unattended wake time and reason sources. **ADR-0020.** Affects: developer-cli, unit-tester, code-reviewer, product-owner, architect.
 - **s29 (done):** Sync with upstream and deliver stacked PRs. **ADR-0015.** Affects: developer-cli, unit-tester, product-owner, manager, devops, architect, code-reviewer.
 - **s27 (done):** Escalate repeated setbacks to the Manager. **ADR-0014.** Affects: developer-cli, unit-tester, product-owner, manager, architect, code-reviewer.
 - **s26 (done):** Liveness is data, absolute paths, service lifecycle. **ADR-0013.** Affects: developer-cli, integration-tester, customer-proxy, product-owner, unit-tester, architect, devops.

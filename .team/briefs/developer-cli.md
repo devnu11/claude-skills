@@ -1,8 +1,20 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s30 done)
+**Last updated:** 2026-10-11 (s37 done)
 
 See `developer.md` for the base conventions.
+
+## s37: Unattended wake time and reason sources
+
+Fixed two bugs in unattended/runner: stale `next_wake` after resume/offline, and reset time read from wrong text. Key changes:
+
+- **`limits.py`:** `WakeOn` enum (RESET/FALLBACK/BACKOFF/NETWORK), `Wake` dataclass (at, on), `RESET_CLOCK` shared grammar, `Waits.after_limit()` returns `Wake`.
+- **`store.py`:** `JobState.wake_on` field, `JobState.mark()` clears both `next_wake` and `wake_on`, `_wake_on()` helper for JSON load (legacy: missing/null → None).
+- **`supervisor.py`:** `wake_after()` returns `Wake`, `_mark_waiting()` sets both fields and emits "on", `_mark_offline()` marks WAITING with `wake_on=NETWORK`, `_wait` uses `wake.at`.
+- **`command_job.py`:** `RunOutput` (tail, cwd), `REASON_SOURCES` table (halt_reason, status_reason, text_reason) in order, `limit_reason()` picks first match.
+- **`cli.py`:** `report` adds `"wake_on"` after `"next_wake"`.
+
+Tests: AC5 exact case (17:26 → 21:03 Chicago), reason source order (halt beats file beats text), offline wait with `next_wake` null throughout. Design `agile-team/docs/design/s37.md` (rules N1–N2, R1–R3, S1, L1); ADR-0020.
 
 ## s30: Dispute baseline is content hash, not commit
 

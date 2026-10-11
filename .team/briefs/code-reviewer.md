@@ -1,8 +1,20 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s37 done)
 
 ## Design decisions to verify
+
+**Unattended wake time and reason sources (s37):** Verify that wake state is cleared consistently and reset times are read from the right source:
+- **N1:** `JobState.mark()` is the only place `next_wake` and `wake_on` are cleared; every status change (running, waiting, done, blocked, failed, stopped) clears both. Timed waits set both after calling `mark`.
+- **N2:** Offline wait (via `_mark_offline()`) marks WAITING with `wake_on=NETWORK`, then `next_wake` remains `None` (cleared by `mark`). Resume calls `_cycle()` → `mark(RUNNING)` which clears both again.
+- **R1:** `REASON_SOURCES` tuple (data, ordered): halt_reason → status_reason → text_reason → default. First truthy source wins; later ones not read. Halt line regex anchored at `^`, covers block-buffer case via status file.
+- **R2:** `RESET_NOTE` pattern requires readable time (H[:MM]am|pm with optional date/zone). `RESET_CLOCK` fragment shared between `RESET_TIME` and `RESET_NOTE` (DRY, both built from one grammar).
+- **R3:** `Waits.after_limit()` returns `Wake(reset+grace, RESET)` or `Wake(now+fallback, FALLBACK)` depending on whether a readable time was found.
+- **S1:** Status/list/wait report `"wake_on"` (reset/fallback/backoff/network/null) right after `"next_wake"`. Wait event carries `"on"`.
+- **L1:** `from_json` loads missing or null `wake_on` as `None` (legacy files supported). String loads as `WakeOn` via `_wake_on()` helper.
+- Tests: AC5 exact case, reason source order, offline with null wake throughout, all rule cases covered. See ADR-0020, design `agile-team/docs/design/s37.md`.
+
+## Previous design decisions to verify
 
 **Test disputes and rulings at any step (s11):** Verify that the dispute mechanism is safe and rulings apply correctly:
 - `Dispute` and `OpenDispute` dataclasses: `test` (pytest id), `rule` (design rule id), `reason`, `base` (HEAD at dispute time), `stage` (raised/confirmed). Handoff validation: both test and rule are non-empty strings.

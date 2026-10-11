@@ -1,6 +1,21 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s30 done)
+**Last updated:** 2026-10-11 (s37 done)
+
+## s37: Unattended wake time and reason sources
+
+Fixed stale `next_wake` after resume/offline, and reset time from wrong source. Test coverage (design `agile-team/docs/design/s37.md`, section 7):
+
+1. **Rules N1/N2:** `mark()` clears both wake fields. After limit+resume, status=running, next_wake=null. After offline wait, status=waiting, next_wake=null, wake_on=network.
+2. **R1 source order:** Halt line beats status.json, status.json beats free text. Last halt-line match wins. Free text with no time → fallback wait. Default fallback value passes.
+3. **R2 tightened reset:** `RESET_NOTE` needs readable time (H[:MM]am|pm + optional date/zone). "resets the count/soon/tomorrow" don't match. "resets 7pm" matches.
+4. **R3 fallback vs reset:** Readable time → `Wake(..., RESET)`. No time → `Wake(now+fallback, FALLBACK)`. Test grace period included in reset.
+5. **S1 wake_on field:** Status/list/wait report wake_on after next_wake. Wait event carries "on". Exact output format.
+6. **L1 legacy load:** Missing wake_on key → None. Null → None. String → WakeOn enum.
+7. **AC5 exact case:** Halt line "session limit, resets 9pm" + PO text "resets the count" → halt wins, parse 9pm. Oct 10 17:26 Chicago → Oct 10 21:03 Chicago.
+8. **Coverage ≥95%** for unattended/runner; ruff clean.
+
+See ADR-0020, `agile-team/docs/design/s37.md` test checklist.
 
 ## s30: Dispute gate now checks content, not commits
 

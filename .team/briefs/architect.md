@@ -1,6 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s30 done)
+**Last updated:** 2026-10-11 (s37 done)
+
+## s37: Unattended wake time and reason sources
+
+Two consistency rules prevent stale wake times and lost reset deadlines in the unattended service:
+
+**N1: Single place to clear wake state:** `JobState.mark(status, reason)` clears both `next_wake` and `wake_on` when setting a new status. Every status change (running, waiting, done, etc.) goes through `mark` and clears both fields. Timed waits (limit, rate-limit) then call `mark` and set both fields after, defining when the wait ends. Consequence: `_cycle` (resume) and `_finish` both clear stale wake fields automatically via `mark`.
+
+**R1: Reason sources in priority order:** The supervisor tries to read a limit reason from four sources in order: (1) agile-team's halt line to stderr, (2) the status file agile-team writes atomically with the halt, (3) free text in the output with `RESET_NOTE` pattern (R2), (4) default reason. Each source is checked only if the earlier ones found nothing, so when the halt line is present (even if stdout is buffered after it), the PO's text is never read. This prevents "resets the count" from blocking a 9pm reset time.
+
+**R2: Readable time required:** `RESET_NOTE` is built from a shared `RESET_CLOCK` fragment that requires `H[:MM]am|pm` (plus optional date and zone). Patterns like "resets soon" or "resets the count" no longer match, so a reason with no parseable time falls back to `wake_on: FALLBACK` (now + default wait) with explicit status indication, rather than silently guessing a 5-hour wait.
+
+**N2: Offline wait state:** An offline wait (detecting network loss) calls `_mark_offline()`, which marks the job WAITING (clearing wake state via N1) then sets `wake_on = NETWORK`. The human sees `next_wake: null` and `wake_on: "network"`, making it clear the job is waiting for network, not a time. When the network returns and `_cycle` marks RUNNING again, both wake fields clear, ensuring no stale time leaks into the next wait.
+
+Architectural patterns: wake state metadata (`WakeOn` enum, `Wake` dataclass) makes decisions explicit and auditable. Reason sources (data-driven table) apply the priority rule everywhere without branching. Both changes follow the team's principles of data-driven code and single-source-of-truth (ADRs 0007, 0009).
+
+See ADR-0020, design `agile-team/docs/design/s37.md` (rules N1–N2, R1–R3, S1, L1).
 
 ## s30: Content-based dispute resolution and manual escalation
 
