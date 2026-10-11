@@ -133,8 +133,9 @@ command fails.
   sends the story back to the unit-tester (a `test-dispute` on the
   dashboard), and the Manager can rule on a stuck story at any step. A story
   that comes back to `tests` with its code already in moves on by itself
-  once the unit-tester vouches for the tests, so never edit `state.json` to
-  move a story. The one exception is a **sync conflict** at sprint start:
+  once the unit-tester vouches for the tests, and the PO can move a story
+  stuck at `tests` with a green suite with `pass_tests`, so never edit
+  `state.json` to move a story. The one exception is a **sync conflict** at sprint start:
   the PO asks the human to merge `origin/main` into the team branch by hand.
   The runner waits and runs nothing meanwhile. The human, or you if they
   ask, merges and commits, and then the question is answered.

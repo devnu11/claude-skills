@@ -30,6 +30,7 @@ one line here. Older designs are the sections at the end of this file.
 | s9 Recover from an interrupted step: keep its edits, stop reporting a dead run as running | [design/s9.md](design/s9.md) |
 | s40 Story priority lives in code: an explicit order the PO sets, the router follows and the board shows, with holds marked | [design/s40.md](design/s40.md) |
 | s21 Dashboard fixes: $/tokens toggle, live budget, visible Done column | [design/s21.md](design/s21.md) |
+| s30 Dispute gate compares the test file's content hash from the raise (path resolved at the repo root); PO `pass_tests` for a stuck story | [design/s30.md](design/s30.md) |
 
 ## Components
 
@@ -49,7 +50,8 @@ one line here. Older designs are the sections at the end of this file.
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
 | `salvage.py` | a step cut short (s9): `Cause`, `InFlight`, `Interruption`; save the tree as a reverted commit; the note, brief and resume texts | git |
 | `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
-| `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27), `dispatch_refusal`, command gates | roles (`Handoff`), loops |
+| `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27; `pass_tests`, s30), `dispatch_refusal`, command gates, the dispute gate (resolve and fingerprint at raise, compare at tests, s30) | roles (`Handoff`), loops, fingerprint |
+| `fingerprint.py` | content fingerprints that ignore whitespace and comments (s30): `of`, `normalise`, `LINE_COMMENTS`; no I/O | none |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
 | `priority.py` | story priority (s40): `Priority` (the one ranking rule `key`, `ranked`, `queue`, `with_first`, `with_move`), refusals, `moves`; no I/O | gates (`StoryState`) |
 | `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |

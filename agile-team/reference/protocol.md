@@ -609,17 +609,50 @@ block"):
    `implement`.
 3. At `tests`, the unit-tester either fixes the test and hands off `done`,
    or confirms it with `changes_requested` and `next_role: architect`. A
-   `done` passes only when the test file (the test id up to `::`) changed
-   since the dispute (`git diff`); otherwise it bounces and counts a round.
-   Confirming moves the story to `design`, counts a round and marks the
-   dispute `confirmed`. The red-tests gate does not run while a dispute is
-   open.
+   `done` passes only when the test file's content changed since the
+   dispute was raised; otherwise it bounces and counts a round, with a
+   reason naming the test id, the file and the baseline hash. Confirming
+   moves the story to `design`, counts a round and marks the dispute
+   `confirmed`. The red-tests gate does not run while a dispute is open.
 4. The architect rules on a confirmed dispute (it keeps the rule or changes
    the design) and hands off `done`. Back at `tests`, a `done` then passes
    whether or not the test changed, and the story goes on to `implement`.
 
 A dispute is free only when the unit-tester upholds it. If the tester
 confirms the test, the developer's round is spent all the same.
+
+How "changed" is checked (s30):
+
+- **Path.** When a dispute is raised, the runner resolves the test file
+  (the test id up to `::`) to a tracked path at the repo root. It uses the
+  path as given if git tracks it. Otherwise it uses the only tracked file
+  that ends with `/<path>` (a runner-relative id such as
+  `tests/test_x.py` resolves to `agile-team/runner/tests/test_x.py`). With
+  no match, several matches, or an unreadable file, the dispute is
+  rejected: the developer's step bounces back to `implement` with a
+  round, and the reason says to give the path from the repo root.
+- **Baseline.** The dispute stores the resolved `file` and a `baseline`:
+  the sha256 of the file's content as it was when the dispute was raised,
+  with whitespace and comments removed. Python is compared by its tokens.
+  Other files are compared line by line, with whitespace collapsed and
+  whole-line comments dropped for known suffixes. The gate compares the
+  working tree's file with the baseline, not commits. Editing only
+  whitespace or comments is not a change. Changing an assertion, a
+  parameter row, a string or a test name is. A deleted file counts as
+  changed.
+- **Repeats.** The same "unchanged" bounce twice in a row escalates to the
+  Manager (see "Repeated setbacks"), so it never runs into the round cap
+  by itself.
+- **Older disputes.** A dispute saved before s30 has no baseline. It
+  passes at the next `done`.
+- **Way out.** `pass_tests(story, reason)` (PO tool) moves a story stuck
+  at `tests` to the next step. Stuck means one of these: an open dispute,
+  `needs_manager`, `blocked`, or a repeated setback. The runner runs the
+  test command first and refuses on a red suite, or on a story that is not
+  stuck or not at `tests`. The move resets the story's rounds, disputes
+  and setback history, clears its hold, and passes `reason` to the next
+  brief as a note. It logs a `tests-passed` event and queues a Manager
+  review.
 
 ## Presentation
 
@@ -752,7 +785,8 @@ story.
 - PO tools added: `continue_story(story, note)` releases a held story (done
   or not) and adds `note` to its next brief. `set_developer(story, role)` picks the
   developer for that story; it refuses an unknown role or one that is not a
-  developer.
+  developer. `pass_tests(story, reason)` (s30) moves a story stuck at
+  `tests` on when the suite is green (see "Test disputes").
 - When nothing can move but a question is open, the runner waits for an
   answer (polling every 5 s, no timeout). `stop` ends the wait.
 - The run ends when a stop is requested, the run halts, the PO sets
@@ -768,7 +802,8 @@ story.
 - `state.json` additions: per story `developer`, `po_developer`, `hold`,
   `note`, `previous` (the last gated step: role, status, summary, verdict,
   reason, next_role), `dispute` (the open test dispute: test, rule, reason,
-  base commit, stage `raised` or `confirmed`), `disputes` (disputes since
+  `file` (resolved at the repo root) and `baseline` (content hash when
+  raised, s30), stage `raised` or `confirmed`), `disputes` (disputes since
   the last ruling), `implemented` (implement-gate passes), `streak` (the
   setbacks since the key last changed), `run` (the bounces and returns in a
   row between one pair of steps), `repeated` (the repeated reason while

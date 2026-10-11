@@ -71,6 +71,13 @@ the test yourself.
   costs a round, the same as a failed gate.
 - A story gets at most `round_cap` free disputes. Later ones count a round,
   so a story can't loop between developer and tester forever.
+- "Fixed" means the test file's content changed after the dispute was
+  raised. Whitespace and comment edits don't count. The developer names
+  the test with its path from the repo root. A path the runner can't find
+  is sent back to the developer.
+- If a story is still stuck at `tests` with a green suite, the PO can move
+  it on with `pass_tests`. The runner checks the suite first. Nobody needs
+  to edit `state.json`.
 
 The dashboard's timeline shows each one as a **test dispute**, and
 `agile-team status` shows the open one under the story's `"dispute"`.
