@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import handover, po_session
+from . import handover, po_session, priority
 from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
 from .boundary_runner import boundary_event
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
@@ -23,6 +23,7 @@ from .events import Event, EventKind
 from .gates import StoryState, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
+from .priority import Change, Placement, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .router import Router
@@ -94,8 +95,14 @@ class Tools:
         if reason:
             return text_result(refused(reason))
         self._begin_sprint(args.get("goal", ""), ids)
+        state = self.runtime.state
         return text_result(
-            {"sprint": self.runtime.state.sprint, "stories": ids, "next": "run the manager"}
+            {
+                "sprint": state.sprint,
+                "stories": ids,
+                "order": state.order,
+                "next": "run the manager",
+            }
         )
 
     def _sprint_refusal(self, ids: list[str]) -> str | None:
@@ -109,7 +116,7 @@ class Tools:
             return "no stories listed; pass the story ids this sprint commits to"
         unknown = self.runtime.state.unknown_stories(ids)
         if unknown:
-            return f"unknown stories: {', '.join(unknown)}; open them with open_story first"
+            return priority.UNKNOWN.format(ids=", ".join(unknown))
         return None
 
     def _begin_sprint(self, goal: str, ids: list[str]) -> None:
@@ -122,6 +129,42 @@ class Tools:
         self.runtime.save()
         data = {"sprint": state.sprint, "goal": goal, "stories": ids}
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
+        order = self.runtime.priority().with_first(ids, state.stories.values())
+        self._reorder(Reorder(Change.SPRINT, order, None, goal))
+
+    async def prioritise(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Set the order the team works in."""
+        rt, ids = self.runtime, list(dict.fromkeys(args.get("stories") or []))
+        reason = priority.order_refusal(ids, rt.state.stories)
+        if reason:
+            return text_result(refused(reason))
+        order = rt.priority().with_first(ids, rt.state.stories.values())
+        return text_result(self._reorder(Reorder(Change.SET, order, None, args.get("reason", ""))))
+
+    async def move_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Move one story to a position in the order."""
+        rt, stories = self.runtime, self.runtime.state.stories
+        placement = Placement(args["story"], args.get("position"))
+        reason = rt.priority().move_refusal(placement, stories)
+        if reason:
+            return text_result(refused(reason))
+        order = rt.priority().with_move(placement, stories.values())
+        change = Reorder(Change.MOVE, order, placement.story, args.get("reason", ""))
+        return text_result(self._reorder(change))
+
+    def _reorder(self, change: Reorder) -> dict[str, Any]:
+        rt = self.runtime
+        before = rt.priority().queue(rt.state.stories.values())
+        rt.state.order = change.order
+        rt.save()
+        data = {
+            "change": str(change.change),
+            "order": change.order,
+            "moves": priority.moves(before, change.order),
+            "reason": change.reason,
+        }
+        rt.events.emit(Event(EventKind.PRIORITY, PO, change.story, data))
+        return {"status": "ordered", "order": change.order}
 
     async def continue_boundary(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release a held sprint boundary so the runner retries its stage."""
@@ -255,9 +298,12 @@ class Tools:
 
 def story_status_data(runtime: Runtime) -> dict[str, Any]:
     """What ``story_status`` reports: sprint, stories, review reasons, enabled roles."""
+    ranking = runtime.priority()
+    ranked = ranking.ranked(runtime.state.stories.values())
     return {
         "sprint": runtime.state.sprint,
-        "stories": {sid: asdict(s) for sid, s in runtime.state.stories.items()},
+        "stories": {s.id: asdict(s) for s in ranked},
+        "order": ranking.queue(ranked),
         "manager_due": runtime.state.manager_due,
         "roles": runtime.book.enabled_names(),
         "boundary": asdict(b) if (b := runtime.state.boundary) else None,
@@ -276,8 +322,20 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
-        "not listed go back to the backlog. The manager must run next.",
+        "not listed go back to the backlog. The manager must run next."
+        " The order you list them in is their priority.",
         {"goal": str, "stories": list},
+    ),
+    "prioritise": (
+        "Set the order the team works in: the listed story ids first, in that order; every "
+        "other unfinished story keeps its order after them. The router follows it; a held "
+        "story keeps its place. Unknown or done ids are refused.",
+        {"stories": list, "reason": str},
+    ),
+    "move_story": (
+        "Move one story to a position in the order (1 = next; the board shows each "
+        "story's #position).",
+        {"story": str, "position": int, "reason": str},
     ),
     "ask_user": (
         "Ask the human a question; blocks only the listed stories.",
@@ -313,7 +371,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Override a role's provider/model/effort with a logged reason.",
         {"role": str, "provider": str, "model": str, "effort": str, "reason": str},
     ),
-    "story_status": ("Pipeline position of every story.", {}),
+    "story_status": ("Pipeline position of every story, in priority order, with the order.", {}),
 }
 METHODS = {"budget_status": "budget"}
 

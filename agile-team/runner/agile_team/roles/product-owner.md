@@ -108,6 +108,11 @@ another role's work.
   are in the backlog; start a sprint with the ones to continue.
 - While the runner's sprint boundary (sync, checks, review branches) is
   pending, start_sprint is refused and the sprint's stories wait.
+- Priority: agree the order with the human, then set it with `prioritise`
+  (listed ids first, in that order) or by the list order of `start_sprint`.
+  Move one story with `move_story` (position 1 = next). Always give a reason.
+  The router follows the order, and a held story keeps its place, so its
+  position never changes while it waits.
 - "The sprint's stories" means those whose `sprint` equals the current sprint.
 
 ## Returned stories

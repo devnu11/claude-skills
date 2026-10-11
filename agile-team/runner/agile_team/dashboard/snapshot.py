@@ -16,9 +16,11 @@ import yaml
 
 from .. import roles as roles_mod
 from .. import state as state_mod
+from .. import waits
 from ..config import Config
 from ..events import EVENTS
 from ..ledger import LEDGER, Entry
+from ..priority import Priority
 from ..relay import INBOX, OUTBOX
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
@@ -79,6 +81,10 @@ def _pipeline(files: RunFiles) -> list[str]:
     return list(files.config.gates.steps)
 
 
+def _priority(files: RunFiles) -> Priority:
+    return Priority(files.state.order, files.config.gates.steps[0])
+
+
 def _run(files: RunFiles) -> dict[str, Any]:
     state, config = files.state, files.config
     return {
@@ -90,6 +96,7 @@ def _run(files: RunFiles) -> dict[str, Any]:
         "manager_every_pct": config.team.manager_every_pct,
         "round_cap": config.gates.round_cap,
         "manager_due": list(state.manager_due),
+        "order": _priority(files).queue(state.stories.values()),
     }
 
 
@@ -134,6 +141,23 @@ def _acceptance(config: Config, story_id: str) -> list[dict]:
     ]
 
 
+def _position(files: RunFiles, story: Any) -> int | None:
+    queue = _priority(files).queue(files.state.stories.values())
+    return queue.index(story.id) + 1 if story.id in queue else None
+
+
+def _asking(files: RunFiles, story_id: str) -> list[str]:
+    answered = {a.get("id") for a in files.lines(INBOX)}
+    asked = (m for m in files.lines(OUTBOX) if m.get("kind") == "question")
+    open_ = (m for m in asked if m.get("id") not in answered)
+    return [f"{m['id']}: {m.get('text', '')}" for m in open_ if story_id in m.get("stories", [])]
+
+
+def _wait(files: RunFiles, story: Any) -> dict[str, Any] | None:
+    found = waits.wait(story, _asking(files, story.id))
+    return None if found is None else {"reason": str(found.reason), "on": found.on}
+
+
 def _story(files: RunFiles, story: Any) -> dict:
     return {
         "id": story.id,
@@ -144,13 +168,18 @@ def _story(files: RunFiles, story: Any) -> dict:
         "status": str(story.status),
         "rounds": story.rounds,
         "repeated": story.repeated,
+        "position": _position(files, story),
+        "in_progress": _priority(files).in_progress(story),
+        "hold": story.hold,
+        "wait": _wait(files, story),
         "opened_at": _opened_at(files.events, story.id),
         "acceptance": _acceptance(files.config, story.id),
     }
 
 
 def _stories(files: RunFiles) -> list[dict]:
-    return [_story(files, story) for story in files.state.stories.values()]
+    ranked = _priority(files).ranked(files.state.stories.values())
+    return [_story(files, story) for story in ranked]
 
 
 def _history(events: list[dict]) -> dict[str, list[dict]]:

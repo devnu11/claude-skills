@@ -54,6 +54,7 @@ from .insights import (
 )
 from .ledger import Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
+from .priority import Priority
 from .providers import Providers
 from .relay import Note, Relay
 from .roles import (
@@ -579,6 +580,10 @@ class Runtime:
         if found is None:
             raise exc
         return halted_report(plan, self.halt_run(found))
+
+    def priority(self) -> Priority:
+        """The story ranking: the PO's order over this run's pipeline."""
+        return Priority(self.state.order, self.pipeline.first())
 
     def halt_run(self, found: Halt) -> Halt:
         """Record the run's first halt (status, reason, liaison note); later calls re-assert it."""

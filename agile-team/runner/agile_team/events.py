@@ -35,6 +35,7 @@ class EventKind(StrEnum):
     ESCALATION = "escalation"
     FAULT = "fault"
     BOUNDARY = "boundary"
+    PRIORITY = "priority"
 
 
 @dataclass

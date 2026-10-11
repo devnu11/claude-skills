@@ -10,6 +10,14 @@
   "round_cap": 3,
   "manager_due": [
    "story s3 hit the round cap"
+  ],
+  "order": [
+   "s3",
+   "s2",
+   "s4",
+   "s7",
+   "s5",
+   "s6"
   ]
  },
  "pipeline": [
@@ -76,29 +84,35 @@
  ],
  "stories": [
   {
-   "id": "s1",
-   "title": "Export a report as CSV",
+   "id": "s3",
+   "title": "Stream large exports without loading them into memory",
    "sprint": 1,
    "delivery": "cli",
-   "step": "acceptance",
-   "status": "done",
-   "rounds": 0,
-   "opened_at": 1791450406.7,
+   "step": "implement",
+   "status": "needs_manager",
+   "rounds": 3,
+   "opened_at": 1791450678.3,
    "acceptance": [
     {
      "id": "AC1",
-     "text": "Running `report run --format csv` writes CSV to stdout"
+     "text": "A 2M-row report exports with memory under 256 MB"
     },
     {
      "id": "AC2",
-     "text": "Values with commas, quotes or newlines survive a round trip"
-    },
-    {
-     "id": "AC3",
-     "text": "Columns appear in a predictable order"
+     "text": "--progress shows rows written so far"
     }
    ],
-   "repeated": null
+   "repeated": null,
+   "position": 1,
+   "in_progress": true,
+   "hold": null,
+   "wait": {
+    "reason": "round cap",
+    "on": [
+     "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
+     "round 3: the manager must rule"
+    ]
+   }
   },
   {
    "id": "s2",
@@ -123,28 +137,11 @@
      "text": "An unknown column name fails with a clear message"
     }
    ],
-   "repeated": null
-  },
-  {
-   "id": "s3",
-   "title": "Stream large exports without loading them into memory",
-   "sprint": 1,
-   "delivery": "cli",
-   "step": "implement",
-   "status": "needs_manager",
-   "rounds": 3,
-   "opened_at": 1791450678.3,
-   "acceptance": [
-    {
-     "id": "AC1",
-     "text": "A 2M-row report exports with memory under 256 MB"
-    },
-    {
-     "id": "AC2",
-     "text": "--progress shows rows written so far"
-    }
-   ],
-   "repeated": null
+   "repeated": null,
+   "position": 2,
+   "in_progress": true,
+   "hold": null,
+   "wait": null
   },
   {
    "id": "s4",
@@ -165,41 +162,17 @@
      "text": "Scripts that read the CSV are not broken by the change"
     }
    ],
-   "repeated": null
-  },
-  {
-   "id": "s5",
-   "title": "Export through the HTTP API",
-   "sprint": null,
-   "delivery": "cli",
-   "step": "design",
-   "status": "active",
-   "rounds": 0,
-   "opened_at": 1791451059.1,
-   "acceptance": [
-    {
-     "id": "AC1",
-     "text": "GET /reports/{id}.csv returns the export"
-    }
-   ],
-   "repeated": null
-  },
-  {
-   "id": "s6",
-   "title": "Scheduled exports",
-   "sprint": null,
-   "delivery": "cli",
-   "step": "design",
-   "status": "active",
-   "rounds": 0,
-   "opened_at": 1791451121.6,
-   "acceptance": [
-    {
-     "id": "AC1",
-     "text": "A schedule can attach a CSV export to its email"
-    }
-   ],
-   "repeated": null
+   "repeated": null,
+   "position": 3,
+   "in_progress": true,
+   "hold": "questions",
+   "wait": {
+    "reason": "questions",
+    "on": [
+     "m4: s4: should exports write a UTF-8 BOM by default (Excel opens them correctly) or only with a new --excel flag (cleaner for scripts)?",
+     "architect: Asked which export encoding Excel on Windows expects"
+    ]
+   }
   },
   {
    "id": "s7",
@@ -216,7 +189,87 @@
      "id": "AC1",
      "text": "The dashboard answers on its port"
     }
-   ]
+   ],
+   "position": 4,
+   "in_progress": true,
+   "hold": null,
+   "wait": {
+    "reason": "manager",
+    "on": [
+     "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
+    ]
+   }
+  },
+  {
+   "id": "s5",
+   "title": "Export through the HTTP API",
+   "sprint": null,
+   "delivery": "cli",
+   "step": "design",
+   "status": "active",
+   "rounds": 0,
+   "opened_at": 1791451059.1,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "GET /reports/{id}.csv returns the export"
+    }
+   ],
+   "repeated": null,
+   "position": 5,
+   "in_progress": false,
+   "hold": null,
+   "wait": null
+  },
+  {
+   "id": "s6",
+   "title": "Scheduled exports",
+   "sprint": null,
+   "delivery": "cli",
+   "step": "design",
+   "status": "active",
+   "rounds": 0,
+   "opened_at": 1791451121.6,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "A schedule can attach a CSV export to its email"
+    }
+   ],
+   "repeated": null,
+   "position": 6,
+   "in_progress": false,
+   "hold": null,
+   "wait": null
+  },
+  {
+   "id": "s1",
+   "title": "Export a report as CSV",
+   "sprint": 1,
+   "delivery": "cli",
+   "step": "acceptance",
+   "status": "done",
+   "rounds": 0,
+   "opened_at": 1791450406.7,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "Running `report run --format csv` writes CSV to stdout"
+    },
+    {
+     "id": "AC2",
+     "text": "Values with commas, quotes or newlines survive a round trip"
+    },
+    {
+     "id": "AC3",
+     "text": "Columns appear in a predictable order"
+    }
+   ],
+   "repeated": null,
+   "position": null,
+   "in_progress": true,
+   "hold": null,
+   "wait": null
   }
  ],
  "requirements": [
@@ -1810,6 +1863,37 @@
      "team/sprint-9",
      "team/sprint-10"
     ]
+   }
+  },
+  {
+   "id": "e98",
+   "at": 1791472260.0,
+   "kind": "priority",
+   "role": "product-owner",
+   "story": "s3",
+   "data": {
+    "change": "move",
+    "order": [
+     "s3",
+     "s2",
+     "s4",
+     "s7",
+     "s5",
+     "s6"
+    ],
+    "moves": [
+     {
+      "story": "s3",
+      "from": 2,
+      "to": 1
+     },
+     {
+      "story": "s2",
+      "from": 1,
+      "to": 2
+     }
+    ],
+    "reason": "s3 blocks the export; fix its memory bound first"
    }
   }
  ],

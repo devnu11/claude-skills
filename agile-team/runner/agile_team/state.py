@@ -70,6 +70,7 @@ class RunState:
     boundary: Boundary | None = None
     upstream: UpstreamState = field(default_factory=UpstreamState)
     goal: str = ""
+    order: list[str] = field(default_factory=list)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""

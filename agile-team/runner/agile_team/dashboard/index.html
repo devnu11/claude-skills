@@ -292,6 +292,7 @@ const RING_ORDER = [
   "architect", "unit-tester", "developer", "quality-czar", "code-reviewer",
   "integration-tester", "customer-proxy", "devops", "scribe", "manager",
 ];
+const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager: "serious", "round cap": "serious", held: "warning" };
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
   pass: "good", bounce: "serious", hold: "warning", return: "warning",
@@ -746,6 +747,13 @@ const BOUNDARY_TONE = {
 };
 const BOUNDARY_TO = { fail: "devops", conflict: "devops", escalate: "manager", held: PO, error: PO };
 
+function priorityLabel(e) {
+  if (e.data.change === "set") return "order set";
+  if (e.data.change === "sprint") return "sprint order";
+  const m = e.data.moves.find((x) => x.story === e.story);
+  return `#${m?.from} → #${m?.to}`;
+}
+
 const TIMELINE = {
   "step-start": (e) => ({ from: PO, to: e.role, what: "brief", body: e.data.brief }),
   "step-end": (e) => ({
@@ -766,6 +774,10 @@ const TIMELINE = {
     what: e.data.rule === "backstop" ? "back and forth → needs manager" : "repeat → needs manager",
     tone: "serious", body: e.data.reason,
     meta: `${e.data.step} · ${e.data.count}× in a row · by ${e.data.author} · no round`,
+  }),
+  priority: (e) => ({
+    from: PO, to: "order", what: priorityLabel(e), body: e.data.reason,
+    meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · "),
   }),
   fault: (e) => ({
     from: "manager", to: e.data.kind === "runner" ? "you" : e.data.fault,
@@ -869,34 +881,32 @@ function renderStack(view) {
 
 function renderBoard(view) {
   renderStack(view);
-  const act = activeStep(view.events), blockers = blockedBy(view);
+  const act = activeStep(view.events);
   $("#board").innerHTML = boardColumns(view).map(([id, label, test]) => {
     const cards = view.stories.filter(test);
     return `<div class="col ${esc(id)}"><h3>${esc(label)}<span>${cards.length}</span></h3>
-      ${cards.map((s) => storyCard(view, s, act, blockers)).join("")}</div>`;
+      ${cards.map((s) => storyCard(view, s, act)).join("")}</div>`;
   }).join("");
 }
 
-function blockedBy(view) {
-  const map = {};
-  for (const q of openQuestions(view)) for (const s of q.stories) (map[s] ??= []).push(q.id);
-  return map;
+/** The one line saying what a held story waits on, cut to 140 characters. */
+function waitLine(w) {
+  const full = "waits on: " + w.on.join(" · ");
+  return `<div class="rounds" title="${esc(full)}">${esc(full.slice(0, 140))}</div>`;
 }
 
-function storyCard(view, s, act, blockers) {
+function storyCard(view, s, act) {
   const working = act?.story === s.id;
   const reqs = view.requirements.filter((r) => r.covers.some((c) => c.startsWith(s.id + "/"))).map((r) => r.id);
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
     working ? pill(`▶ ${act.role}`, "accent") : "",
-    s.status === "needs_manager" ? pill(s.repeated ? "⚑ needs manager · repeat" : "⚑ needs manager", "serious") : "",
-    s.status === "blocked" ? pill("escalated", "critical") : "",
-    ...(blockers[s.id] ?? []).map((id) => pill(`? waiting on ${id}`, "warning")),
+    s.wait ? pill(`⏸ ${s.wait.reason}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
-    <div class="sid">${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}</div>
+    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}</div>
     <div class="title">${esc(s.title)}</div>
-    ${s.repeated ? `<div class="rounds" title="${esc(s.repeated)}">repeated: ${esc(s.repeated.split("\n")[0].slice(0, 140))}</div>` : ""}
+    ${s.wait ? waitLine(s.wait) : ""}
     ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
     <div class="row">${rounds(s.rounds, view.run.round_cap)}
       ${view.requirements.length ? `<span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span>` : ""}</div>

@@ -221,10 +221,14 @@ class Router:
         return self._briefed(SCRIBE, story) if story else None
 
     def _repeat_work(self) -> Work | None:
-        story = next((s for s in self.runtime.state.stories.values() if self._escalated(s)), None)
+        story = self._first_ranked(self._escalated)
         if story is None:
             return None
         return Work(MANAGER, story, repeat_brief(self.runtime.config, story))
+
+    def _first_ranked(self, wanted: Callable[[StoryState], bool]) -> StoryState | None:
+        rt = self.runtime
+        return next((s for s in rt.priority().ranked(rt.state.stories.values()) if wanted(s)), None)
 
     def _escalated(self, story: StoryState) -> bool:
         rt = self.runtime
@@ -233,7 +237,7 @@ class Router:
         return in_sprint and waiting and story.id not in rt.relay.blocked_stories()
 
     def _story_work(self) -> Work | None:
-        story = next((s for s in self.runtime.state.stories.values() if self._movable(s)), None)
+        story = self._first_ranked(self._movable)
         return self._briefed(step_role(story), story) if story else None
 
     def _movable(self, story: StoryState) -> bool:
