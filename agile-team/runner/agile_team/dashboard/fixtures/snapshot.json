@@ -1,5 +1,5 @@
 {
- "generated_at": 1791471886.058443,
+ "generated_at": 1791472200.0,
  "run": {
   "status": "running",
   "sprint": 1,
@@ -97,7 +97,8 @@
      "id": "AC3",
      "text": "Columns appear in a predictable order"
     }
-   ]
+   ],
+   "repeated": null
   },
   {
    "id": "s2",
@@ -121,7 +122,8 @@
      "id": "AC3",
      "text": "An unknown column name fails with a clear message"
     }
-   ]
+   ],
+   "repeated": null
   },
   {
    "id": "s3",
@@ -141,7 +143,8 @@
      "id": "AC2",
      "text": "--progress shows rows written so far"
     }
-   ]
+   ],
+   "repeated": null
   },
   {
    "id": "s4",
@@ -161,7 +164,8 @@
      "id": "AC2",
      "text": "Scripts that read the CSV are not broken by the change"
     }
-   ]
+   ],
+   "repeated": null
   },
   {
    "id": "s5",
@@ -177,7 +181,8 @@
      "id": "AC1",
      "text": "GET /reports/{id}.csv returns the export"
     }
-   ]
+   ],
+   "repeated": null
   },
   {
    "id": "s6",
@@ -192,6 +197,24 @@
     {
      "id": "AC1",
      "text": "A schedule can attach a CSV export to its email"
+    }
+   ],
+   "repeated": null
+  },
+  {
+   "id": "s7",
+   "title": "Serve the report dashboard",
+   "sprint": null,
+   "delivery": "web",
+   "step": "acceptance",
+   "status": "needs_manager",
+   "rounds": 0,
+   "repeated": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "opened_at": 1791471900.0,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "The dashboard answers on its port"
     }
    ]
   }
@@ -1605,6 +1628,93 @@
    "story": "s2",
    "data": {
     "brief": "Re-review --columns after the fix."
+   }
+  },
+  {
+   "id": "e88",
+   "at": 1791471900.0,
+   "kind": "story-opened",
+   "role": "product-owner",
+   "story": "s7",
+   "data": {
+    "title": "Serve the report dashboard",
+    "step": "design"
+   }
+  },
+  {
+   "id": "e89",
+   "at": 1791471960.0,
+   "kind": "gate",
+   "role": "customer-proxy",
+   "story": "s7",
+   "data": {
+    "step": "acceptance",
+    "verdict": "return",
+    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "now_at": "e2e",
+    "story_status": "active",
+    "rounds": 0,
+    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "author": "runner",
+    "count": 1,
+    "history": [],
+    "bounces": 1
+   }
+  },
+  {
+   "id": "e90",
+   "at": 1791472080.0,
+   "kind": "fault",
+   "role": "manager",
+   "story": "s7",
+   "data": {
+    "fault": "runner",
+    "kind": "runner",
+    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "now_at": "acceptance"
+   }
+  },
+  {
+   "id": "e91",
+   "at": 1791472140.0,
+   "kind": "gate",
+   "role": "customer-proxy",
+   "story": "s7",
+   "data": {
+    "step": "acceptance",
+    "verdict": "return",
+    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "now_at": "e2e",
+    "story_status": "active",
+    "rounds": 0,
+    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "author": "runner",
+    "count": 1,
+    "history": [],
+    "bounces": 1
+   }
+  },
+  {
+   "id": "e92",
+   "at": 1791472200.0,
+   "kind": "escalation",
+   "role": "customer-proxy",
+   "story": "s7",
+   "data": {
+    "step": "acceptance",
+    "verdict": "escalate",
+    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "now_at": "acceptance",
+    "story_status": "needs_manager",
+    "rounds": 0,
+    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "author": "runner",
+    "count": 2,
+    "history": [
+     "e91"
+    ],
+    "bounces": 2,
+    "rule": "repeat"
    }
   }
  ],

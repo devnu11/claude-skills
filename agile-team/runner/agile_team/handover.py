@@ -37,6 +37,9 @@ class Trigger(StrEnum):
     SPRINT_END = "sprint_end"
     STALLED = "stalled"
     RULING_NOT_APPLIED = "ruling_not_applied"
+    RUNNER_FAULT = "runner_fault"
+    OFF_PIPELINE_FAULT = "off_pipeline_fault"
+    FAULT_NOT_APPLIED = "fault_not_applied"
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,22 @@ class Rule:
 
 def _gate(report: dict) -> dict:
     return report.get("gate") or {}
+
+
+def _fault(report: dict) -> dict:
+    return report.get("fault") or {}
+
+
+def _faulted(report: dict, kind: str) -> bool:
+    fault = _fault(report)
+    return fault.get("applied") is True and fault.get("kind") == kind
+
+
+def _capped(report: dict) -> bool:
+    gate = _gate(report)
+    return (
+        gate.get("story_status") == StoryStatus.NEEDS_MANAGER and gate.get("verdict") != "escalate"
+    )
 
 
 def _unroutable(report: dict) -> bool:
@@ -103,7 +122,7 @@ HANDOVERS: tuple[Rule, ...] = (
     ),
     Rule(
         Trigger.ROUND_CAP,
-        lambda r: _gate(r).get("story_status") == StoryStatus.NEEDS_MANAGER,
+        _capped,
         "{story}: hit the round cap; run the manager on it for a ruling",
     ),
     Rule(
@@ -116,6 +135,25 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.RULING_NOT_APPLIED,
         lambda r: (r.get("ruling") or {}).get("applied") is False,
         "{story}: the manager's {ruling} ruling was not applied: {ruling_why}",
+    ),
+    Rule(
+        Trigger.RUNNER_FAULT,
+        lambda r: _faulted(r, "runner"),
+        "{story}: runner fault: {fault_reason}; the story is blocked and the human was told. "
+        "Open a story to fix the runner; once it is fixed, run the manager on {story} "
+        "with a ruling",
+    ),
+    Rule(
+        Trigger.OFF_PIPELINE_FAULT,
+        lambda r: _faulted(r, "off_pipeline"),
+        "{story}: the manager puts the repeated setback ({fault_reason}) on {fault}, which owns no "
+        "pipeline step; brief {fault} yourself, then continue_story",
+    ),
+    Rule(
+        Trigger.FAULT_NOT_APPLIED,
+        lambda r: _fault(r).get("applied") is False,
+        "{story}: the manager's ruling on the repeated setback was not applied: {fault_why}; "
+        "run the manager on {story} again",
     ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
@@ -152,6 +190,10 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields["gate_reason"] = str(_gate(report).get("reason") or "")
     fields["ruling"] = str(ruling.get("ruling") or "")
     fields["ruling_why"] = str(ruling.get("why") or "")
+    fault = _fault(report)
+    fields["fault"] = str(fault.get("fault") or "")
+    fields["fault_reason"] = str(fault.get("reason") or "")
+    fields["fault_why"] = str(fault.get("why") or "")
     return {**fields, "story": story_id or "run"}
 
 
@@ -165,7 +207,8 @@ def previous_step(report: dict) -> PreviousStep | None:
     """What a gated step leaves for the next brief, or ``None`` for other reports."""
     role, status = str(report.get("role", "")), report.get("status")
     if status == "bad_handoff":
-        return PreviousStep(role, status, "", "bounce", str(report.get("reason", "")))
+        verdict = str(_gate(report).get("verdict") or "bounce")
+        return PreviousStep(role, status, "", verdict, str(report.get("reason", "")))
     gate = report.get("gate")
     if not gate:
         return None

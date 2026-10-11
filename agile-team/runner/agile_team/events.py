@@ -32,6 +32,8 @@ class EventKind(StrEnum):
     HANDOVER = "handover"
     TEST_DISPUTE = "test-dispute"
     PO_SESSION = "po-session"
+    ESCALATION = "escalation"
+    FAULT = "fault"
 
 
 @dataclass

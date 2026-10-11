@@ -10,11 +10,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import halt, handover
+from . import halt, handover, loops
 from .config import Config
 from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
 from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
+from .loops import Rule
 from .relay import Answer
 
 POLL_S = 5.0
@@ -34,7 +35,25 @@ STALL_REASONS: dict[str, str] = {
     StoryStatus.NEEDS_MANAGER: "at the round cap",
     StoryStatus.BLOCKED: "escalated to the human",
 }
-SENT_BACK = frozenset({"bounce", "return"})
+REPEAT_HEADING = (
+    "Story {id} hit the same setback {count} times in a row, so the runner stopped the loop. "
+    'Find who owns the fault and rule on it: hand off "fault" (the role at fault, or '
+    '"runner") and, if needed, a "ruling". The repeated reason, the history and the last '
+    "output are in the runner context under repeated_setback."
+)
+BACKSTOP_HEADING = (
+    "Story {id} bounced between {step} and {to_step} {count} times in a row, not always for "
+    "the same reason, so the runner stopped the loop. It may be one complaint reworded, or a "
+    'fault no role can fix. Find who owns the fault and rule on it: hand off "fault" (the '
+    'role at fault, or "runner") and, if needed, a "ruling". Every reason, the history and '
+    "the last output are in the runner context under repeated_setback."
+)
+HEADINGS = {Rule.REPEAT: REPEAT_HEADING, Rule.BACKSTOP: BACKSTOP_HEADING}
+SENT_BACK_LINES = {
+    "bounce": "- Sent back to this step: {reason}",
+    "return": "- Sent back to this step: {reason}",
+    "escalate": "- The same setback repeated, so the manager ruled on it: {reason}",
+}
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -114,9 +133,19 @@ def _history_lines(story: StoryState) -> list[str]:
     if prev:
         said = f": {prev.summary}" if prev.summary else ""
         lines.append(f"- Previous step: {prev.role} reported {prev.status}{said}")
-    if prev and prev.verdict in SENT_BACK:
-        lines.append(f"- Sent back to this step: {prev.reason}")
+    if prev and prev.verdict in SENT_BACK_LINES:
+        lines.append(SENT_BACK_LINES[prev.verdict].format(reason=prev.reason))
     return lines + ([f"- From the PO: {story.note}"] if story.note else [])
+
+
+def repeat_brief(config: Config, story: StoryState) -> str:
+    """The Manager's brief on a story the runner escalated: the heading and the standard paths."""
+    setbacks = loops.trail(story)
+    last = setbacks[-1]
+    heading = HEADINGS[story.escalated_by or Rule.REPEAT].format(
+        id=story.id, count=len(setbacks), step=last.step, to_step=last.to_step
+    )
+    return "\n".join([heading, *_path_lines(config, story.id)])
 
 
 def standard_brief(config: Config, work: Work) -> str:
@@ -179,6 +208,18 @@ class Router:
         story = next((s for s in map(rt.state.stories.get, ids) if s and _scribable(s)), None)
         return self._briefed(SCRIBE, story) if story else None
 
+    def _repeat_work(self) -> Work | None:
+        story = next((s for s in self.runtime.state.stories.values() if self._escalated(s)), None)
+        if story is None:
+            return None
+        return Work(MANAGER, story, repeat_brief(self.runtime.config, story))
+
+    def _escalated(self, story: StoryState) -> bool:
+        rt = self.runtime
+        in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.NEEDS_MANAGER
+        waiting = story.repeated is not None and story.hold is None
+        return in_sprint and waiting and story.id not in rt.relay.blocked_stories()
+
     def _story_work(self) -> Work | None:
         story = next((s for s in self.runtime.state.stories.values() if self._movable(s)), None)
         return self._briefed(step_role(story), story) if story else None
@@ -193,12 +234,13 @@ class Router:
 
     PICKERS: ClassVar[tuple[Callable[[Router], Work | None], ...]] = (
         _manager_work,
+        _repeat_work,
         _scribe_work,
         _story_work,
     )
 
     def next_work(self) -> Work | None:
-        """The first step due: the Manager, then a Scribe, then a movable story."""
+        """The first step due: the Manager (review, then a repeated story), a Scribe, a story."""
         works = (pick(self) for pick in self.PICKERS)
         return next((w for w in works if w), None)
 

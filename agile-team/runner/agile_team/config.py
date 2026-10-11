@@ -62,6 +62,8 @@ class Gates:
     coverage: float = 95.0
     round_cap: int = 3
     steps: list[str] = field(default_factory=lambda: list(PIPELINE_STEPS))
+    repeat: int = 2
+    backstop: int = 4
 
 
 @dataclass
@@ -223,6 +225,8 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: set(g.steps) <= set(PIPELINE_STEPS), f"gates.steps must be among {PIPELINE_STEPS}"),
     (lambda g: 0 <= g.coverage <= 100, "gates.coverage must be in 0..100"),
     (lambda g: g.round_cap >= 1, "gates.round_cap must be at least 1"),
+    (lambda g: g.repeat >= 2, "gates.repeat must be at least 2"),
+    (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
 )
 DELIVERY_RULES: tuple[Rule, ...] = (
     (lambda d: bool(SAFE_NAME.fullmatch(d.name)), "name must be lowercase letters, digits, - or _"),

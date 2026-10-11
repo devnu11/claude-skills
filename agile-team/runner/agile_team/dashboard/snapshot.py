@@ -143,6 +143,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "step": story.step,
         "status": str(story.status),
         "rounds": story.rounds,
+        "repeated": story.repeated,
         "opened_at": _opened_at(files.events, story.id),
         "acceptance": _acceptance(files.config, story.id),
     }

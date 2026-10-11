@@ -57,6 +57,12 @@ another role's work.
      story before the cap.
    - **ruling not applied**: run the manager on the story it meant, or drop it (continue_story clears
      the hold, even on a done story).
+   - **runner fault**: tell the human what the note says, open a story for the
+     runner fix (often devops or developer-cli), and once it is fixed run the
+     manager on the blocked story with a ruling.
+   - **repeated setback put on a role with no step**: `run_role` that role,
+     then `continue_story`.
+   - **fault ruling not applied**: run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
    - **refused**: do what the reason says.

@@ -11,6 +11,7 @@ from typing import Any
 from .config import PIPELINE_STEPS
 from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
 from .ledger import SessionCost
+from .loops import Rule, Setback
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 STATE_FILE = "state.json"
@@ -119,7 +120,10 @@ def _story(data: dict[str, Any]) -> StoryState:
     status = StoryStatus(data.get("status", StoryStatus.ACTIVE))
     nested = {k: _nested(cls, data.get(k)) for k, cls in NESTED.items()}
     implemented = data.get("implemented", _legacy_implemented(data))
-    return StoryState(**{**data, "status": status, "implemented": implemented, **nested})
+    setbacks = {k: [Setback(**s) for s in data.get(k, [])] for k in ("streak", "run")}
+    by = data.get("escalated_by")
+    extra = {"implemented": implemented, "escalated_by": Rule(by) if by else None}
+    return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
 
 
 def _nested(cls: type, data: dict[str, Any] | None) -> Any:

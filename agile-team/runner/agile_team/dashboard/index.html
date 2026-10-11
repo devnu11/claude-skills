@@ -295,7 +295,7 @@ const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
   pass: "good", bounce: "serious", hold: "warning", return: "warning",
   running: "accent", idle: "", "sprint-end": "good", active: "",
-  needs_manager: "serious",
+  needs_manager: "serious", escalate: "serious",
 };
 const TOKEN_KINDS = [
   ["input", "Input", "--s1"], ["output", "Output", "--s2"],
@@ -358,7 +358,7 @@ function asOf(snap, cursor) {
   return {
     ...snap, generated_at: cursor, events, stories,
     run: { ...snap.run, sprint: stories.some((s) => s.sprint) ? 1 : 0,
-           manager_due: capped.map((s) => `story ${s.id} hit the round cap`) },
+           manager_due: capped.map((s) => `story ${s.id} ${s.repeated ? "repeated a setback" : "hit the round cap"}`) },
     ledger: snap.ledger.filter(upto),
     messages: snap.messages.filter(upto),
     answers: snap.answers.filter(upto),
@@ -376,6 +376,13 @@ function replayStories(stories, events) {
     if (e.kind === "story-opened") pos[e.story] = { step: e.data.step, status: "active", rounds: 0 };
     if (e.kind === "gate" && pos[e.story]) {
       Object.assign(pos[e.story], { step: e.data.now_at, status: e.data.story_status, rounds: e.data.rounds });
+    }
+    if (e.kind === "escalation" && pos[e.story]) {
+      Object.assign(pos[e.story], { step: e.data.now_at, status: "needs_manager", repeated: e.data.reason });
+    }
+    if (e.kind === "fault" && pos[e.story]) {
+      const status = e.data.kind === "runner" ? "blocked" : "active";
+      Object.assign(pos[e.story], { step: e.data.now_at, status, rounds: 0, repeated: null });
     }
   }
   return stories.filter((s) => pos[s.id])
@@ -406,6 +413,7 @@ function flowStats(view) {
       if (e.data.status === "blocked" || e.data.status === "failed") r(e.role).stuck++;
     }
     if (e.kind === "gate" && e.data.verdict === "bounce" && lastEnd) r(lastEnd.role).bounced++;
+    if (e.kind === "escalation") r(e.role).stuck++;
   }
   for (const l of view.ledger) r(l.role).tokens += sumTok(l.tokens);
   return roles;
@@ -746,6 +754,18 @@ const TIMELINE = {
     tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
   }),
+  escalation: (e) => ({
+    from: "gate", to: "manager",
+    what: e.data.rule === "backstop" ? "back and forth → needs manager" : "repeat → needs manager",
+    tone: "serious", body: e.data.reason,
+    meta: `${e.data.step} · ${e.data.count}× in a row · by ${e.data.author} · no round`,
+  }),
+  fault: (e) => ({
+    from: "manager", to: e.data.kind === "runner" ? "you" : e.data.fault,
+    what: e.data.kind === "runner" ? "runner fault" : `fault: ${e.data.fault}`,
+    tone: e.data.kind === "runner" ? "critical" : "warning", body: e.data.reason,
+    meta: `now at ${e.data.now_at}`,
+  }),
   "test-dispute": (e) => ({
     from: e.role, to: "unit-tester", what: "test dispute: implement → tests", tone: "warning",
     body: e.data.reason, meta: `dispute ${e.data.disputes}, round ${e.data.rounds}`,
@@ -828,13 +848,14 @@ function storyCard(view, s, act, blockers) {
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
     working ? pill(`▶ ${act.role}`, "accent") : "",
-    s.status === "needs_manager" ? pill("⚑ needs manager", "serious") : "",
+    s.status === "needs_manager" ? pill(s.repeated ? "⚑ needs manager · repeat" : "⚑ needs manager", "serious") : "",
     s.status === "blocked" ? pill("escalated", "critical") : "",
     ...(blockers[s.id] ?? []).map((id) => pill(`? waiting on ${id}`, "warning")),
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
     <div class="sid">${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}</div>
     <div class="title">${esc(s.title)}</div>
+    ${s.repeated ? `<div class="rounds" title="${esc(s.repeated)}">repeated: ${esc(s.repeated.split("\n")[0].slice(0, 140))}</div>` : ""}
     ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
     <div class="row">${rounds(s.rounds, view.run.round_cap)}
       ${view.requirements.length ? `<span class="rounds">· AC ${covered.filter((c) => c.reqs.length).length}/${covered.length} traced</span>` : ""}</div>

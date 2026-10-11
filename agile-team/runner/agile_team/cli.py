@@ -291,7 +291,8 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     missing = functools.partial(presentation.missing, config)
     live = presentation.Trial(config).liveness
     checks = gates.Checks(commands, threshold, shell_runner(config.repo), baseline, missing, live)
-    return gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
+    g = config.gates
+    return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
 
 
 def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:

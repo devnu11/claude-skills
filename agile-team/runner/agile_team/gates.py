@@ -12,10 +12,12 @@ import json
 import re
 import shlex
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
+from . import loops
+from .loops import Author, Fault, Rule, Setback
 from .roles import Dispute, Handoff, TestClaim
 
 STEP_ROLES = {
@@ -59,6 +61,7 @@ class Verdict(StrEnum):
 
     ``HOLD`` stays put without counting a round (a block). ``RETURN`` moves back
     without counting a round (the team, not the product, missed a step).
+    ``ESCALATE`` stays put, counts no round and waits for the Manager's ruling.
     """
 
     PASS = "pass"
@@ -66,6 +69,7 @@ class Verdict(StrEnum):
     HOLD = "hold"
     RETURN = "return"
     DISPUTE = "dispute"
+    ESCALATE = "escalate"
 
 
 class DisputeStage(StrEnum):
@@ -126,6 +130,10 @@ class StoryState:
     dispute: OpenDispute | None = None
     disputes: int = 0
     implemented: int = 0
+    streak: list[Setback] = field(default_factory=list)
+    repeated: str | None = None
+    run: list[Setback] = field(default_factory=list)
+    escalated_by: Rule | None = None
 
 
 @dataclass
@@ -136,6 +144,8 @@ class Outcome:
     reason: str = ""
     bounce_to: str | None = None
     dispute: OpenDispute | None = None
+    author: Author = Author.RUNNER
+    rule: Rule = Rule.REPEAT
 
 
 def role_fits_step(role: str, step: str) -> bool:
@@ -159,7 +169,21 @@ def dispatch_refusal(role: str, story: StoryState | None) -> str | None:
         return None
     if story is None:
         return None if role in STORYLESS_ROLES else f"{role} only runs on a story; open_story"
-    return _status_refusal(story) or _backlog_refusal(story) or _step_refusal(role, story)
+    return (
+        _repeat_refusal(story)
+        or _status_refusal(story)
+        or _backlog_refusal(story)
+        or _step_refusal(role, story)
+    )
+
+
+REPEAT_REFUSAL = "story {id} repeated a setback ({key}); the manager rules on it first"
+
+
+def _repeat_refusal(story: StoryState) -> str | None:
+    if story.repeated is None:
+        return None
+    return REPEAT_REFUSAL.format(id=story.id, key=loops.trail(story)[-1].key)
 
 
 def _status_refusal(story: StoryState) -> str | None:
@@ -283,6 +307,8 @@ class Pipeline:
     steps: list[str]
     cap: int
     checks: Checks
+    repeat: int = 2
+    backstop: int = 4
 
     def first(self) -> str:
         return self.steps[0]
@@ -294,7 +320,8 @@ class Pipeline:
     def evaluate(self, story: StoryState, handoff: Handoff) -> Outcome:
         """Gate result for the step a role just finished on ``story``."""
         if handoff.status in STOPPED_HANDOFFS:
-            return Outcome(Verdict.HOLD, f"role reported {handoff.status}: {handoff.summary}")
+            reason = f"role reported {handoff.status}: {handoff.summary}"
+            return Outcome(Verdict.HOLD, reason, author=Author.ROLE)
         if self._raises_dispute(story, handoff):
             return self._raise(handoff)
         gate = self._gate_for(story, handoff)
@@ -313,7 +340,7 @@ class Pipeline:
     def _raise(self, handoff: Handoff) -> Outcome:
         d = handoff.dispute
         reason = f"{d.test} contradicts {d.rule}: {d.reason}"
-        return Outcome(Verdict.DISPUTE, reason, "tests", self._open(d))
+        return Outcome(Verdict.DISPUTE, reason, "tests", self._open(d), Author.ROLE)
 
     def _open(self, d: Dispute) -> OpenDispute:
         return OpenDispute(d.test, d.rule, d.reason, self.checks.head())
@@ -335,7 +362,8 @@ class Pipeline:
         if handoff.status == "done":
             return Outcome(Verdict.PASS)
         target = self.step_for_role(handoff.next_role) or "implement"
-        return Outcome(Verdict.BOUNCE, handoff.summary or "changes requested", target)
+        reason = handoff.summary or "changes requested"
+        return Outcome(Verdict.BOUNCE, reason, target, author=Author.ROLE)
 
     def _command_gate(self, step: str) -> Callable[[], Outcome] | None:
         gates = {"tests": self.checks.tests_red, "implement": self.checks.tests_green_and_covered}
@@ -364,11 +392,49 @@ class Pipeline:
             Verdict.BOUNCE: lambda: self._bounce(story, outcome.bounce_to),
             Verdict.RETURN: lambda: self._return(story, outcome.bounce_to),
             Verdict.DISPUTE: lambda: self._dispute(story, outcome),
+            Verdict.ESCALATE: lambda: self._escalate(story, outcome),
         }
         if outcome.verdict in moves:
             moves[outcome.verdict]()
         if story.step == "implement":
             story.dispute = None
+
+    def screen(self, story: StoryState, setback: Setback) -> Outcome | None:
+        """An escalation when ``setback`` repeats the last one or ends a back-and-forth."""
+        return self._repeat(story, setback) or self._backstop(story, setback)
+
+    def _repeat(self, story: StoryState, setback: Setback) -> Outcome | None:
+        if loops.repeats(story.streak, setback) + 1 < self.repeat:
+            return None
+        return Outcome(Verdict.ESCALATE, setback.reason, setback.step, author=setback.author)
+
+    def _backstop(self, story: StoryState, setback: Setback) -> Outcome | None:
+        if loops.bounces(story.run, setback) + 1 < self.backstop:
+            return None
+        reason = loops.backstop_reason([*story.run, setback])
+        return Outcome(Verdict.ESCALATE, reason, setback.step, None, setback.author, Rule.BACKSTOP)
+
+    def _escalate(self, story: StoryState, outcome: Outcome) -> None:
+        story.status = StoryStatus.NEEDS_MANAGER
+        story.repeated = outcome.reason
+        story.escalated_by = outcome.rule
+
+    def fault_kind(self, fault: str) -> Fault:
+        """Where the Manager put the blame: the runner, a pipeline role or any other role."""
+        if fault == "runner":
+            return Fault.RUNNER
+        return Fault.PIPELINE if self.step_for_role(fault) else Fault.OFF_PIPELINE
+
+    def apply_fault(self, story: StoryState, fault: str) -> None:
+        """Send the story to the role at fault (or block it for the runner) and clear its loop."""
+        story.step = self.step_for_role(fault) or story.step
+        story.status = FAULT_STATUS[self.fault_kind(fault)]
+        self._clear(story)
+
+    def _clear(self, story: StoryState) -> None:
+        story.rounds, story.disputes, story.dispute = 0, 0, None
+        story.streak, story.run = [], []
+        story.repeated, story.escalated_by = None, None
 
     def _dispute(self, story: StoryState, outcome: Outcome) -> None:
         story.dispute = outcome.dispute
@@ -402,9 +468,16 @@ class Pipeline:
         design = "design" if "design" in self.steps else self.first()
         targets = {"rescope": self.first(), "revise_design": design}
         story.step = targets.get(ruling, story.step)
-        story.rounds, story.disputes, story.dispute = 0, 0, None
+        self._clear(story)
         escalated = ruling == "escalate"
         story.status = StoryStatus.BLOCKED if escalated else StoryStatus.ACTIVE
+
+
+FAULT_STATUS = {
+    Fault.RUNNER: StoryStatus.BLOCKED,
+    Fault.PIPELINE: StoryStatus.ACTIVE,
+    Fault.OFF_PIPELINE: StoryStatus.ACTIVE,
+}
 
 
 def _unchanged(dispute: OpenDispute) -> str:

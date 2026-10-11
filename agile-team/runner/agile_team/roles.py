@@ -164,6 +164,7 @@ class Handoff:
     developer: str | None = None
     dispute: Dispute | None = None
     tests: TestClaim | None = None
+    fault: str | None = None
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -418,6 +419,10 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
         "dispute needs status changes_requested",
     ),
     (lambda d: d.get("tests") in (None, *TEST_CLAIMS), f"tests must be one of {TEST_CLAIMS}"),
+    (
+        lambda d: d.get("fault") is None or _text(d.get("fault")),
+        'fault must be a role name or "runner"',
+    ),
 )
 
 
@@ -463,6 +468,7 @@ def _handoff_from(data: Any) -> Handoff:
         developer=data.get("developer") or None,
         dispute=_dispute_from(data, str(data.get("summary", ""))),
         tests=_claim(data.get("tests")),
+        fault=data.get("fault"),
     )
 
 

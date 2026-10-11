@@ -27,7 +27,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import guard, halt, handover, keys, presentation, sandbox
+from . import guard, halt, handover, keys, loops, presentation, sandbox
 from . import state as state_mod
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
@@ -51,6 +51,7 @@ from .insights import (
     spend_by_role,
 )
 from .ledger import Budget, Entry, Ledger, Tokens, budget_status
+from .loops import Author, Setback
 from .providers import Providers
 from .relay import Note, Relay
 from .roles import (
@@ -77,7 +78,14 @@ PO = "product-owner"
 MANAGER = "manager"
 SCRIBE = "scribe"
 ARCHITECT = "architect"
-GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE}
+GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
+SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD})
+FAULT_MISSING = 'story {id} repeated a setback; name its fault: "fault": a role or "runner"'
+FAULT_UNKNOWN = 'unknown fault {fault!r}; name a role or "runner"'
+RUNNER_FAULT_NOTE = (
+    "Runner fault on {story}: the same setback repeated and no role can fix it: {reason}. "
+    "The manager says: {summary} The story is blocked until the runner is fixed."
+)
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
 SHELL_OPTS: dict[str, Any] = {
@@ -309,11 +317,11 @@ class Runtime:
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
 
-    def emit(self, kind: EventKind, plan: Plan | None = None, **data: Any) -> None:
+    def emit(self, kind: EventKind, plan: Plan | None = None, **data: Any) -> Event:
         """Log an event, attributed to ``plan``'s role and story when given."""
         role = plan.role.name if plan else None
         story = plan.story.id if plan and plan.story else None
-        self.events.emit(Event(kind, role, story, data))
+        return self.events.emit(Event(kind, role, story, data))
 
     def save(self) -> None:
         state_mod.save(self.config.run_dir, self.state)
@@ -419,14 +427,16 @@ class Runtime:
         parts = [plan.prompt]
         parts.extend(_story_lines(plan.story))
         if plan.role.name == MANAGER:
-            parts.append(self._manager_context())
+            parts.append(self._manager_context(plan.story))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
         return "\n\n".join(p for p in parts if p)
 
-    def _manager_context(self) -> str:
+    def _manager_context(self, story: StoryState | None = None) -> str:
         overrides = {r: vars(self.state.overrides[r]) for r in self.state.unreviewed}
         capped = [
-            s.id for s in self.state.stories.values() if s.status is StoryStatus.NEEDS_MANAGER
+            s.id
+            for s in self.state.stories.values()
+            if s.status is StoryStatus.NEEDS_MANAGER and s.repeated is None
         ]
         context = {
             "review_reasons": self.state.manager_due,
@@ -438,8 +448,14 @@ class Runtime:
             "friction_since_last_review": friction_since_review(self.events.events()),
             "test_disputes_since_last_review": disputes_since_review(self.events.events()),
             "pending_followups": self.state.followups,
+            **self._repeated_context(story),
         }
         return "Runner context:\n" + json.dumps(context, indent=2)
+
+    def _repeated_context(self, story: StoryState | None) -> dict[str, Any]:
+        if story is None or story.repeated is None:
+            return {}
+        return {"repeated_setback": loops.manager_view(story, self.events.events())}
 
     # ----- running -------------------------------------------------------
 
@@ -578,8 +594,12 @@ class Runtime:
 
     def _apply(self, plan: Plan, parsed: Handoff | HandoffError) -> dict[str, Any]:
         if isinstance(parsed, HandoffError):
-            self._bounce(plan, str(parsed))
-            return {"status": "bad_handoff", "reason": str(parsed)}
+            gate = self._bounce(plan, str(parsed))
+            return {
+                "status": "bad_handoff",
+                "reason": str(parsed),
+                **({"gate": gate} if gate else {}),
+            }
         self.state.followups.pop(plan.role.name, None)
         return {
             **handoff_report(parsed),
@@ -596,10 +616,12 @@ class Runtime:
             effect(plan.story, handoff)
         return {"gate": self.gate(plan, handoff)} if plan.story else {}
 
-    def _bounce(self, plan: Plan, reason: str) -> None:
+    def _bounce(self, plan: Plan, reason: str) -> dict[str, Any] | None:
         story = plan.story
         if story and role_fits_step(plan.role.name, story.step):
-            self.pipeline.advance(story, Outcome(Verdict.BOUNCE, reason, story.step))
+            outcome = Outcome(Verdict.BOUNCE, reason, story.step, author=Author.ROLE)
+            return self._advance_and_log(plan, outcome)
+        return None
 
     def _manual_question(self, plan: Plan) -> dict[str, Any]:
         if not plan.prepared or plan.prepared.delivery.kind != "manual":
@@ -655,6 +677,8 @@ class Runtime:
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
+        setback = _setback(plan, outcome)
+        outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self.pipeline.advance(story, outcome)
         if story.status is StoryStatus.DONE and story.id not in self.state.scribe_due:
             self.state.scribe_due.append(story.id)
@@ -667,8 +691,13 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
-        result |= _dispute_fields(outcome, story)
-        self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
+        result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
+        result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
+        event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
+        _record(story, setback, event)
+        story.run = (
+            loops.after_pass(story.run, step) if outcome.verdict is Verdict.PASS else story.run
+        )
         return result
 
     def apply_manager(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
@@ -677,7 +706,45 @@ class Runtime:
         self.state.unreviewed.clear()
         for role, question in handoff.followups.items():
             self.state.followups.setdefault(role, []).append(question)
+        return self._rulings(plan, handoff)
+
+    def _rulings(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        if plan.story and plan.story.repeated is not None:
+            return self._rule_repeat(plan, handoff)
         return self._rule(plan, handoff.ruling) if handoff.ruling else {}
+
+    def _rule_repeat(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """Apply the fault the Manager named; a ruling then wins, but only after a fault applied."""
+        report = self._fault(plan, handoff)
+        if report["fault"]["applied"] and handoff.ruling:
+            report |= self._rule(plan, handoff.ruling)
+        return report
+
+    def _fault_refusal(self, story: StoryState, fault: str | None) -> str | None:
+        if not fault:
+            return FAULT_MISSING.format(id=story.id)
+        known = fault == "runner" or fault in self.book.names()
+        return None if known else FAULT_UNKNOWN.format(fault=fault)
+
+    def _fault(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        story, fault = plan.story, handoff.fault
+        why = self._fault_refusal(story, fault)
+        if why:
+            return {"fault": {"fault": fault, "applied": False, "why": why}}
+        reason, kind = story.repeated, self.pipeline.fault_kind(fault)
+        self.pipeline.apply_fault(story, fault)
+        report = {"fault": fault, "kind": kind, "reason": reason, "now_at": story.step}
+        self.emit(EventKind.FAULT, plan, **report)
+        self._tell_human(plan, handoff, report)
+        return {"fault": {**report, "applied": True}}
+
+    def _tell_human(self, plan: Plan, handoff: Handoff, report: dict[str, Any]) -> None:
+        if report["kind"] is not loops.Fault.RUNNER:
+            return
+        text = RUNNER_FAULT_NOTE.format(
+            story=plan.story.id, reason=report["reason"], summary=handoff.summary
+        )
+        self.relay.post(Note("update", text, [plan.story.id]))
 
     def _rule(self, plan: Plan, ruling: str) -> dict[str, Any]:
         why = ruling_refusal(plan.story)
@@ -707,6 +774,46 @@ def _dispute_lines(story: StoryState) -> list[str]:
 def _rework_lines(story: StoryState) -> list[str]:
     reworked = story.step == "tests" and story.implemented > 0 and story.dispute is None
     return [REWORK_BRIEF] if reworked else []
+
+
+def _setback(plan: Plan, outcome: Outcome) -> Setback | None:
+    """The setback a bounce, return or hold is, or ``None`` for any other outcome."""
+    if outcome.verdict not in SETBACKS:
+        return None
+    step = plan.story.step
+    to_step = outcome.bounce_to or step
+    return Setback(step, to_step, plan.role.name, outcome.verdict, outcome.author, outcome.reason)
+
+
+def _history(setback: Setback, story: StoryState) -> list[str]:
+    if story.escalated_by is loops.Rule.BACKSTOP and story.status is StoryStatus.NEEDS_MANAGER:
+        return [s.event for s in story.run]
+    return [s.event for s in story.streak] if loops.repeats(story.streak, setback) else []
+
+
+def _setback_fields(setback: Setback | None, story: StoryState) -> dict[str, Any]:
+    """Key, author, count, history and bounces for the event of a setback."""
+    if setback is None:
+        return {}
+    history = _history(setback, story)
+    count = len(history) + 1
+    bounces = loops.bounces(story.run, setback) + 1 if loops.counts(setback) else 0
+    return {
+        "key": setback.key,
+        "author": setback.author,
+        "count": count,
+        "history": history,
+        "bounces": bounces,
+    }
+
+
+def _record(story: StoryState, setback: Setback | None, event: Event) -> None:
+    """Add a setback to the streak, and to the run when it crosses between two steps."""
+    if setback is None:
+        return
+    stamped = replace(setback, event=event.id)
+    story.streak = loops.extend(story.streak, stamped)
+    story.run = loops.extend_run(story.run, stamped) if loops.counts(stamped) else story.run
 
 
 def _dispute_fields(outcome: Outcome, story: StoryState) -> dict[str, Any]:
