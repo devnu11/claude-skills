@@ -26,6 +26,7 @@ one line here. Older designs are the sections at the end of this file.
 | s26 A presentation must start the delivery; "presentation ready" means up and answering | [design/s26.md](design/s26.md) |
 | s24 Tests gate accepts code from an earlier pass; a hold on a done story can be cleared | [design/s24.md](design/s24.md) |
 | s27 A repeated setback escalates to the Manager instead of looping | [design/s27.md](design/s27.md) |
+| s29 Sync with upstream at sprint start; each sprint as a rebased, checked, stacked PR | [design/s29.md](design/s29.md) |
 
 ## Components
 
@@ -34,7 +35,12 @@ one line here. Older designs are the sections at the end of this file.
 | `cli.py` | subcommands (`COMMANDS` table), `status_report`, top-level halt handling and SIGTERM | config, state, relay, ledger, halt, `po_tools.run_po` |
 | `po_tools.py` | the PO's MCP tools (`Tools`, `SCHEMAS`) and the driver `run_po`: PO turns alternating with router passes (s19); renews the PO's session at boundaries (s23) | `Runtime`, `Router`, `RunState`, events, relay, po_session |
 | `po_session.py` | renewal texts, `RenewPath`, the open-question carry-over and `.team/po/handoff.md` I/O (s23) | relay |
-| `router.py` | `Router`: picks the next step (Manager, the Manager on a repeated setback (s27), Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, handover, gates, relay |
+| `router.py` | `Router`: picks the next step (the sprint boundary or its DevOps fix (s29), Manager, the Manager on a repeated setback (s27), Scribe, next movable sprint story), writes its standard brief, runs it, stops at a hand-over (s19) | `Runtime`, `BoundaryRunner`, handover, gates, relay |
+| `boundary.py` | sprint boundary data and texts (s29): `Boundary`, `Failure`, `StackEntry`, `UpstreamState`, stages, fix briefs, the Manager's `repeated_boundary` view; no I/O | loops |
+| `boundary_runner.py` | `BoundaryRunner` (s29): runs one boundary stage per router tick (sync, check, review, push), opens fix steps, escalates repeats, finishes the boundary | `Runtime`, upstream, stack, fullcheck, relay, events |
+| `upstream.py` | the one narrow interface to the remote (s29): `Upstream` (fetch, merge in, leased push of review branches only) and the `Prs` protocol (`GhPrs` over `gh`, `NoPrs`) | git_ops |
+| `stack.py` | `Rebuilder` (s29): the scratch worktree `.team/run/review/`, per-sprint cherry-picks onto main with rerere, branch refs | git_ops |
+| `fullcheck.py` | the full checks (s29): toolchain lint, static, test, coverage gate, each delivery's `e2e` | config, gates |
 | `handover.py` | `HANDOVERS` table (when the PO is needed), `Pass`, the hand-over prompt, `previous_step` (s19) | gates |
 | `dispatch.py` | `Runtime`: refusal, planning, running and settling one role step; `halt_run` records a halt | gates, guard, sandbox, git, ledger, state, events, halt |
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |

@@ -16,7 +16,7 @@ Run from the target repo root, or pass `--repo PATH`.
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend. |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`) and `upstream` (the review stack; see "Sprint boundaries"). |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
@@ -40,7 +40,9 @@ command's executable is missing; `config check` fails.
 `kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`,
 `failed`, `stopped`. A `question` blocks only the stories it lists. While a
 question is open and nothing else can move, the runner keeps running and
-waits for the answer. A
+waits for the answer. The runner itself posts an `update` at each sprint
+end that pushed review branches (or built them without pushing; see
+"Sprint boundaries"). A
 `manual` delivery's acceptance script arrives as a `question`; the answer is
 the human's test result. The runner itself posts `blocked`, `failed` or
 `stopped` when it halts (see "Run status and stops").
@@ -125,8 +127,12 @@ story file's `acceptance`; the board shows a repeated story as `needs
 manager · repeat` with its reason, and the timeline shows `escalation` and
 `fault` events), `requirements` (from `<docs>/requirements/REQ-*.md`, with
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
-outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`
-and `answers`. The contract is
+outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`,
+`answers` and `upstream` (remote, branch, team branch, push permission, the
+last end report, the pending boundary and the review stack: each sprint's
+branch, base, PR number and URL, `mode` `none`/`draft`/`ready`/`closed`,
+`check` `unchecked`/`pass`/`fail`; the Board tab shows it as the **Review
+stack** card, and the timeline shows `boundary` events). The contract is
 `runner/agile_team/dashboard/fixtures/snapshot.json`. The Tokens tab's role
 and story tables show turns per step, the latest step's turns and context
 per turn next to tokens and cost (see "Turns and context"). The timeline
@@ -176,11 +182,17 @@ backstop = 4                   # this many bounces/returns in a row between two 
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
+[upstream]                     # optional; these are the defaults (see Sprint boundaries)
+remote = "origin"              # "" turns sync and pull requests off
+branch = "main"                # merged in at sprint start; what the bottom PR targets
+prefix = "team/sprint-"        # review branch names: <prefix><sprint>
+
 [[delivery]]                   # one or more
 name = "cli"
 kind = "package"               # package | script | web | library | harness | manual
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
 bin = ["venv/bin"]             # prepended to the Proxy's PATH
+e2e = ""                       # this delivery's e2e suite, run with the full checks at sprint boundaries
 url = ""                       # web only; its host and port fill {host} and {port}
 probe = ""                     # web only: path joined to url that must answer 200 (e.g. "api/snapshot")
 commands = []                  # harness only: the Proxy's Bash allowlist
@@ -613,6 +625,10 @@ PO's session with one prompt (the kickoff, the resume note or a hand-over)
 and lasts until the PO ends its turn. A router pass runs steps with no PO
 involved, in this order:
 
+0. the pending sprint **boundary** (sync, full checks, review branches,
+   push; see "Sprint boundaries"), one stage per step, or its DevOps fix
+   step. A held boundary is skipped. While a boundary is pending, no sprint
+   story moves;
 1. the `manager`, story-less, while `manager_due` is not empty;
 2. the `manager` on a story escalated for a repeated setback (in the
    current sprint, not held, not blocked by a question; see "Repeated
@@ -651,11 +667,17 @@ The pass ends at the first step whose report matches a row of the
 | `runner_fault` | the Manager put a repeated setback on the runner; the story is blocked and the human was told |
 | `off_pipeline_fault` | the Manager put a repeated setback on a role with no pipeline step; brief it, then `continue_story` |
 | `fault_not_applied` | the Manager ruled on a repeated setback without a valid `fault` |
+| `sync_conflict` | merging upstream into the team branch at sprint start conflicts (files named; the merge was aborted) |
+| `push_permission` | the review branches are built and checked, and the human has not yet said whether the team may push |
+| `push_rejected` | a review branch push was refused (its remote branch moved) |
+| `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
+| `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen; they are listed by id with the question), `sprint_end` (every story
-in the sprint is done) and `stalled` (nothing can move; the reason for each
-story is listed). Gate bounces, `changes_requested` to a pipeline role, a
+in the sprint is done and the sprint's end boundary has finished; a
+`Review: …` line says what was pushed) and `stalled` (nothing can move; the
+reason for each story is listed, or the held boundary). Gate bounces, `changes_requested` to a pipeline role, a
 gated role's malformed handoff and `returned` do **not** hand over. The
 runner passes their reasons on in the next standard brief. An `escalate`
 verdict does not hand over either: the runner runs the Manager on the
@@ -690,8 +712,9 @@ story.
   setbacks since the key last changed), `run` (the bounces and returns in a
   row between one pair of steps), `repeated` (the repeated reason while
   escalated, else `null`) and `escalated_by` (`repeat`, `backstop` or
-  `null`); run-level `scribe_due` and `delivered` (answer ids the
-  PO has seen). Older files load with these empty. On the first run after
+  `null`); run-level `scribe_due`, `delivered` (answer ids the
+  PO has seen), `goal` (the current sprint's goal), `boundary` and
+  `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
 
 ## PO sessions
@@ -748,6 +771,110 @@ committed to, or `null` when it is in the backlog.
   backlog. Step, rounds, status and commit are kept. On resume, the runner
   tells the PO that nothing can move, and the PO starts a sprint with the
   stories to continue.
+- `start_sprint` opens the sprint's **start boundary**, and it is refused
+  while a boundary is pending (`sprint N <edge> boundary is still pending
+  (…); finish it first`). See "Sprint boundaries".
+
+## Sprint boundaries: sync, full checks, review stack
+
+At each sprint's start and end the runner runs a **boundary**: code steps,
+not prompts, that no role can skip. It is saved as `state.json` `boundary`
+(`edge` `start`/`end`, `sprint`, `stage`, `hold`, `failure`, `streak`,
+`rounds`, `escalated`, `restack`, `note`) until it finishes. Each stage logs
+a `boundary` event (`edge`, `sprint`, `stage`, `outcome`, plus `note`,
+`reason`, `sha`, `files`, `branch`, `branches`, `checks`, `hold`, `key`,
+`count`, `history` where they apply). While a boundary is pending, no story
+in the current sprint moves: `run_role` of a gated role on one is refused
+with `sprint N <edge> boundary is at <stage>…; the sprint's stories move
+once it passes`.
+
+**Skipped.** With `[upstream] remote = ""`, no such remote, a failed
+`git fetch` or no `<remote>/<branch>`, the whole boundary is skipped with
+one `skipped` event and a note. This is not an error. (At a sprint end whose
+fetch failed, the sprint is still added to the stack.)
+
+**Start** (opened by `start_sprint`, before any role runs, including the
+Manager):
+
+1. **sync**: fetch. Drop stack entries whose commits are all in main (see
+   below). Then `git merge --no-edit --no-verify <remote>/<branch>` into
+   the team branch, with message `chore(team): merge origin/main at sprint
+   N start`. If nothing is new, no commit is made. On a conflict the merge
+   is aborted, the team branch is unchanged, and the PO gets
+   `sync_conflict` with the files. The human merges by hand, and the PO
+   calls `continue_boundary`. The team branch is never rebased, reset or
+   amended.
+2. **check**: the full checks on the team branch (skipped when HEAD is the
+   sha that last passed them).
+3. **review** and **push**, only when an entry was dropped (a PR was
+   merged): the stack is rebuilt and pushed so the next PR is retargeted.
+
+**End** (opened when every sprint story is done, before the `sprint_end`
+hand-over):
+
+1. **sync**: fetch, drop merged entries, and add this sprint's entry:
+   branch `<prefix><N>`, range `start..end` (start = the previous entry's
+   end, or `git merge-base HEAD <remote>/<branch>` for the first one).
+2. **check**: the full checks on the team branch.
+3. **review**: in the scratch worktree `.team/run/review/`, each entry's
+   own commits (`start..end`, no merges, only those whose patch is not in
+   main) are cherry-picked onto the latest main, each on the branch below.
+   This uses `rerere` and skips picks that come out empty. The branch is
+   then set. An entry with nothing left is in main and drops out. The
+   bottom and the newest branch get the full checks.
+4. **push** (needs `gh` and permission): each branch is pushed with
+   `--force-with-lease` against the sha the runner last pushed. Then its PR
+   is created or updated: the bottom one is **ready** with base `main`, and
+   each other one is a **draft** based on the branch below. A PR that is
+   closed (or merged elsewhere) is left alone. The runner posts an `update`
+   to the human with the PRs. The sprint-end hand-over then says `Review:
+   …`.
+
+**Full checks**: the `[toolchain]` `lint`, `static`, `test` and `coverage`
+commands (coverage must reach the gate or the baseline), then each
+delivery's `e2e` command. Every configured check runs, and the failed ones
+are quoted (`<name> failed (<why>): <command>` plus the last 30 lines).
+
+**Failures.** A failed check or a rebuild conflict becomes a **DevOps fix
+step**, whose brief quotes the output. Failed checks on the team branch or
+a review branch are fixed on the team branch. For that step DevOps may also
+write source, tests and e2e tests, and the runner commits it and checks or
+rebuilds again. A conflict is resolved in the review worktree, in exactly
+the conflicting files, and recorded with `git rerere`, so later rebuilds
+reuse it. A fix step that hands over (blocked, questions…) holds the
+boundary. Each failure is a setback keyed `<edge>><stage> <normalised
+output>` (see "Repeated setbacks"). The same failure again, or
+`round_cap` fix steps, **escalates**: the boundary is held, `manager_due`
+gets `sprint N <edge> boundary failed K times at <stage>; see
+repeated_boundary`, and the Manager's context carries `repeated_boundary`
+(reason, key, count, history, events). The PO then gets
+`boundary_escalated` with the Manager's summary.
+
+**Permission.** The first push asks: the PO gets `push_permission`, asks
+the human once, and records the answer with `set_push_permission` (`yes`
+or `no`). `state.json` keeps it in `upstream.push` for every later sprint.
+With `no`, or without `gh`, the branches are built and checked locally,
+and the human is told their names.
+
+**Safety.** The runner pushes only branches that start with `[upstream]
+prefix`, never the team branch, never `[upstream] branch`. The only force
+is the lease on a review branch. Roles still cannot run git commands that
+write.
+
+**PO tools.** `continue_boundary(note)` releases a held boundary. Its stage
+reruns, and the note reaches the next fix brief. After an escalation it
+also resets the streak and rounds. `set_push_permission(answer)`.
+
+`state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
+`stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,
+`head`, `checked`, `check`, `pushed`, `pr`, `url`, `base`, `mode`),
+`last_end`, `checked` (the last team sha that passed), `closed` (the last
+sprint whose end boundary finished) and `report`.
+
+CI: the repo's workflows skip draft PRs (`if:
+github.event.pull_request.draft == false`, with the `ready_for_review`
+trigger), so only the ready bottom PR runs CI. Merge it with **Rebase and
+merge**.
 
 ## Enforcement
 
@@ -805,7 +932,8 @@ committed to, or `null` when it is in the backlog.
   may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
   `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`,
   `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
-  push.
+  push. Only the runner pushes, and only review branches (see "Sprint
+  boundaries").
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could

@@ -89,6 +89,17 @@ command fails.
    `update` note that starts `Runner fault on sN` means no role can fix it:
    the runner itself (a prepare line, a gate) needs fixing. Relay it; the
    story stays blocked while the PO plans the fix.
+   **Sprint boundaries.** At each sprint start the runner merges
+   `origin/main` into the team branch and runs the full checks. At each
+   sprint end it builds a review branch per unmerged sprint
+   (`team/sprint-<N>`, rebased onto the latest main in
+   `.team/run/review/`), checks it, and pushes it as a stacked PR: the
+   bottom one is ready and the rest are drafts. The dashboard's Board tab
+   shows the **Review stack**. The PO asks the human **once** whether the
+   team may push and open PRs; relay it like any question. The runner posts
+   an `update` with the PR numbers; tell the human to merge the ready one
+   with **Rebase and merge**. A repo with no remote or no `gh` skips this
+   with a note. The runner never pushes the team branch or main.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets
    `status` and `status_reason`, and prints one line saying what to do:
    - `blocked` with a limit (e.g. "session limit, resets 2:20pm
@@ -110,7 +121,10 @@ command fails.
   dashboard), and the Manager can rule on a stuck story at any step. A story
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, so never edit `state.json` to
-  move a story.
+  move a story. The one exception is a **sync conflict** at sprint start:
+  the PO asks the human to merge `origin/main` into the team branch by hand.
+  The runner waits and runs nothing meanwhile. The human, or you if they
+  ask, merges and commits, and then the question is answered.
 - Never answer a PO question on the human's behalf.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
 - With `auth = "api-key"` the key bills the repo's Console workspace, not the
