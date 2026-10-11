@@ -289,7 +289,7 @@ class Checks:
     def tests_green_and_covered(self) -> Outcome:
         code, out = self.run(self.commands["test"])
         if code != 0:
-            return Outcome(Verdict.BOUNCE, f"tests fail:\n{_tail(out)}")
+            return Outcome(Verdict.BOUNCE, f"tests fail:\n{tail(out)}")
         return self._coverage_outcome(parse_coverage(self.run(self.commands["coverage"])[1]))
 
     def _coverage_outcome(self, pct: float | None) -> Outcome:
@@ -493,5 +493,5 @@ def _retry_here(outcome: Outcome, step: str) -> Outcome:
     return outcome
 
 
-def _tail(text: str) -> str:
+def tail(text: str) -> str:
     return "\n".join(text.splitlines()[-30:])
