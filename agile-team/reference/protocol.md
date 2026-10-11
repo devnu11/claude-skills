@@ -172,6 +172,7 @@ ci = [".github/workflows/**"]
 coverage = 95
 round_cap = 3
 repeat = 2                     # the same setback this many times in a row escalates to the Manager
+backstop = 4                   # this many bounces/returns in a row between two steps, any reasons, escalate too
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
@@ -483,7 +484,20 @@ tests do not.
   the manager ruled on it: <reason>`. The Manager's `followups` tell the
   fault role what to fix.
 - Role prose seldom repeats word for word, so two summaries saying the same
-  thing differently are two keys. The round cap still applies to them.
+  thing differently are two keys. The round cap and the backstop still
+  apply to them.
+- **Backstop.** A `bounce` or `return` from one step to another extends the
+  story's `run` when it crosses the same pair of steps as the last one,
+  whatever its reason; a new pair restarts it at 1. A pass of the step that
+  sends the story back, a fault or a ruling empties it; holds and in-place
+  bounces leave it alone. When the run would reach `[gates] backstop`
+  (default 4, at least 2), the setback escalates exactly as above, with
+  `rule: "backstop"` on the escalation event, every reason in `repeated`,
+  and a brief that starts `Story sN bounced between <step> and <to_step> N
+  times in a row…`. If both rules fire, the repeat rule wins. Gate events
+  carry `bounces` (the run length, 0 when the setback does not count). The
+  backstop is for runs that include returns, which count no round; pure
+  bounces reach the round cap first.
 
 ### Back at tests with the code in
 
@@ -673,8 +687,10 @@ story.
   reason, next_role), `dispute` (the open test dispute: test, rule, reason,
   base commit, stage `raised` or `confirmed`), `disputes` (disputes since
   the last ruling), `implemented` (implement-gate passes), `streak` (the
-  setbacks since the key last changed) and `repeated` (the repeated reason
-  while escalated, else `null`); run-level `scribe_due` and `delivered` (answer ids the
+  setbacks since the key last changed), `run` (the bounces and returns in a
+  row between one pair of steps), `repeated` (the repeated reason while
+  escalated, else `null`) and `escalated_by` (`repeat`, `backstop` or
+  `null`); run-level `scribe_due` and `delivered` (answer ids the
   PO has seen). Older files load with these empty. On the first run after
   the upgrade, every answer already in the inbox counts as seen.
 

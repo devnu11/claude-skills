@@ -109,6 +109,15 @@ Apart from those details, two reasons must match word for word. A role
 that describes the same problem in different words gives two reasons; the
 round cap catches those.
 
+A **backstop** catches the rest. If a story is sent back between the same
+two steps four times in a row, for any reasons, the runner stops the loop
+the same way and runs the Manager with every reason. The number is
+`backstop` under `[gates]` (default 4). It matters most for stories sent
+back without a round (for example when the presentation is missing);
+ordinary bounces reach the round cap first. The dashboard timeline shows
+**back and forth → needs manager**, and `agile-team status` shows the run
+under `"run"`.
+
 ## When a story comes back to tests with its code done
 
 A ruling or a review can send a story back to `tests` after its code is
