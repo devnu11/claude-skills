@@ -36,6 +36,7 @@ one line here. Older designs are the sections at the end of this file.
 | s45 Manager step: every role-step crash goes to `crash.log` once; a fault applies to any story and an unapplied fault or ruling is reported; `continue_story` refuses a blocked story | [design/s45.md](design/s45.md) |
 | s46 Tests gate accepts green tests when a developer's recorded commit is in the branch; Manager `advance` ruling (logged with its reason); dispute brief quotes the test output | [design/s46.md](design/s46.md) |
 | s47 A waiting run wakes on an answer (pinned by a driver test); `status_reason` and halt notes say what it waits on (`s40 waits on m42`) | [design/s47.md](design/s47.md) |
+| s58 The Proxy's OS sandbox gets `network.allowLocalBinding` for a delivery that serves locally (`Start.BACKGROUND`); verified on macOS by an e2e test with the bundled CLI; service lifecycle stated | [design/s58.md](design/s58.md) |
 | s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
 
 ## Components
@@ -66,7 +67,7 @@ one line here. Older designs are the sections at the end of this file.
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
 | `relay.py` | outbox/inbox with the liaison | none |
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
-| `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26), key hygiene | git |
+| `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26; loopback reachable from the OS sandbox, s58), key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |
 | `dashboard/snapshot.py` | `build(config, book)`: run files → one snapshot dict (read-only) | state, ledger, relay files, events file, story and requirement files, roles |

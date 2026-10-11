@@ -86,7 +86,8 @@ command fails.
    `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
    Show these when the human asks how a story was accepted. For a `web`
    delivery the runner started the service and checked that it answers
-   before the Proxy ran; its output is in
+   before the Proxy ran. The Proxy's OS sandbox may reach it on 127.0.0.1
+   (macOS verified). The service's output is in
    `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
    in use means another process holds the delivery's port. Tell the human.
    When the same setback repeats on a story, the runner stops the loop and

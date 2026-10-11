@@ -818,6 +818,12 @@ to `integration-tester`).
   there (left by an earlier step or a killed runner). It stops the service
   when the Proxy's step ends (pass, fail, halt or crash) and deletes the pid
   file. It never kills a process it did not start.
+- Service lifecycle (s58). The e2e gate's trial stops its service on purpose,
+  because a gate leaves nothing running. The Proxy step does not reuse that
+  service. Planning the step (`plan()`) starts a fresh one from the copied
+  presentation and probes it. Nothing between the plan and the Proxy's
+  session stops it. It stops only when the session ends, or when the plan's
+  own set-up fails.
 
 The Manager must also run after `start_sprint`, after any `set_role_model`,
 and when spend crosses each `manager_every_pct` checkpoint. The runner runs it
@@ -1224,8 +1230,14 @@ merge**.
   `allowRead` for the sandbox, stories, `.team/acceptance` and customer docs, plus
   `permissions.deny` rules `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`
   for each forbidden root, so the rules never cover `<docs>/customer/` unless a
-  source or test glob does. Needs bubblewrap (Linux) or Seatbelt (macOS); not
-  verified end to end yet.
+  source or test glob does. A delivery that serves locally (a kind whose start
+  is `background`, today `web`) also gets `sandbox.network.allowLocalBinding:
+  true`, so the Proxy's sandboxed `curl` reaches the service on 127.0.0.1;
+  other kinds get no `network` key (s58). Needs bubblewrap (Linux) or Seatbelt
+  (macOS). On macOS, an e2e test runs the bundled claude CLI with these
+  settings. A sandboxed `curl` gets 200 from a live local service, and it
+  exits 7 without the `network` key. Linux is not verified end to end; the
+  test is skipped there.
 
 ## Delivery kinds
 
