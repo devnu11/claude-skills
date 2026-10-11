@@ -188,10 +188,18 @@ per turn next to tokens and cost (see "Turns and context"). The timeline
 shows each step-end's turns and each `po-session` renewal.
 
 Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
-outbox.jsonl, inbox.jsonl}`, `.team/stories/*.md` and
+outbox.jsonl, inbox.jsonl}`, `.agile-team.toml`, `.team/stories/*.md` and
 `<docs>/requirements/REQ-*.md`. A missing file gives an empty section. A
 torn last line, which can appear while the runner is appending, is skipped.
-Role files and `.agile-team.toml` are read once, at start.
+Each snapshot re-reads `.agile-team.toml`, so a budget, round cap or
+pipeline edit shows within a second. While the file is missing or does not
+parse, the snapshot uses the config from start. Role files are read once, at
+start.
+
+The Board never scrolls sideways: its columns share the page width, and a
+column with no cards collapses to a narrow strip. The Tokens tab's bar chart
+switches between tokens and dollars. Only that chart changes, and the choice
+holds across live updates.
 
 Anyone who can reach the port can see the run (task, stories, questions and
 spend). It never shows keys. Use `--host 127.0.0.1` to keep it local to the

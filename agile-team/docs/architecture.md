@@ -29,6 +29,7 @@ one line here. Older designs are the sections at the end of this file.
 | s29 Sync with upstream at sprint start; each sprint as a rebased, checked, stacked PR | [design/s29.md](design/s29.md) |
 | s9 Recover from an interrupted step: keep its edits, stop reporting a dead run as running | [design/s9.md](design/s9.md) |
 | s40 Story priority lives in code: an explicit order the PO sets, the router follows and the board shows, with holds marked | [design/s40.md](design/s40.md) |
+| s21 Dashboard fixes: $/tokens toggle, live budget, visible Done column | [design/s21.md](design/s21.md) |
 
 ## Components
 
@@ -1264,9 +1265,9 @@ poll_seconds=0.01)`)
 - Each snapshot re-reads every file, and the stream sends the whole snapshot
   on each change. That is fine at the size of a run. Paging or deltas are
   out of scope.
-- Role files and `.agile-team.toml` are read once at start, so a config or
-  role edit needs a dashboard restart. Model overrides from the PO do show
-  live (D4).
+- Role files are read once at start, so a role edit needs a dashboard
+  restart. Model overrides from the PO do show live (D4). Since s21,
+  `.agile-team.toml` is watched and re-read for each snapshot (s21 F5, F6).
 - A requirement retired by deleting its file disappears from `requirements`
   (its history remains in the events).
 - `/?mock` served by the server gets 404 for `fixtures/snapshot.json`. Mock

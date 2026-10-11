@@ -40,7 +40,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 - **Header:** the run's status, sprint, task, spend against the budget, and
   the step that is running now.
-- **Board:** a backlog column, one column per pipeline step, and done. Every
+- **Board:** a backlog column, one column per pipeline step, and done. The
+  board fits the window, so Done is always in view without scrolling
+  sideways. A column with no stories shrinks to a narrow strip with its name
+  written vertically, and the columns with stories share the rest. Every
   column lists stories in priority order, and each unfinished card shows its
   position (`#1` runs next) and its rounds. A story that cannot move shows
   `⏸ <reason>` (`questions`, `manager`, `round cap`, `needs the human` or
@@ -58,8 +61,11 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   The flowchart is drawn by Mermaid, which the page loads from
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
-- **Tokens:** spend by role, story or model (switch with the buttons above
-  the bars), and cumulative spend over time. The role and story tables also
+- **Tokens:** a bar chart by role, story or model, and cumulative spend
+  over time. Above the bars, the first buttons pick the grouping (Role,
+  Story, Model). The second pick the unit: **Tokens** (bars split by token
+  kind) or **Dollars** (one bar of cost per row). The unit changes only that
+  bar chart, and it stays as you set it while the page updates. The role and story tables also
   show **Turns/step** (average turns per step), **Last turns** (the most
   recent step's turns) and **Context/turn** (how much context each turn
   re-sends on average), next to tokens and cost. A role whose Context/turn
@@ -93,6 +99,9 @@ header switches between automatic, light and dark.
   until it is fixed.
 - Requirements are empty: this repo has no `<docs>/requirements/REQ-*.md`
   files yet.
-- A change to `.agile-team.toml` or a role file doesn't show: restart the
-  dashboard. Model changes made by the Product Owner do show without a
-  restart.
+- A change to `.agile-team.toml` (for example the budget, the round cap or
+  the pipeline steps) shows within about a second, with no restart. While
+  the file is half-saved or has a TOML syntax error, the page keeps showing
+  the settings from when the dashboard started. A change to a role file, or
+  to `docs_dir`, needs a dashboard restart. Model changes made by the
+  Product Owner show without a restart.
