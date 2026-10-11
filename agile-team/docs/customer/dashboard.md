@@ -104,7 +104,9 @@ header switches between automatic, light and dark.
   files yet.
 - A change to `.agile-team.toml` (for example the budget, the round cap or
   the pipeline steps) shows within about a second, with no restart. While
-  the file is half-saved or has a TOML syntax error, the page keeps showing
-  the settings from when the dashboard started. A change to a role file, or
+  the file is missing or is not valid TOML, the page keeps showing the
+  settings from when the dashboard started. A file that is valid but
+  incomplete (for example an editor saved it half-way) loads with the
+  default values until the next save. A change to a role file, or
   to `docs_dir`, needs a dashboard restart. Model changes made by the
   Product Owner show without a restart.
