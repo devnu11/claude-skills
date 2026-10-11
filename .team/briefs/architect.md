@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s37 done)
+**Last updated:** 2026-10-11 (s38 done)
 
 ## s37: Unattended wake time and reason sources
 
@@ -17,6 +17,17 @@ Two consistency rules prevent stale wake times and lost reset deadlines in the u
 Architectural patterns: wake state metadata (`WakeOn` enum, `Wake` dataclass) makes decisions explicit and auditable. Reason sources (data-driven table) apply the priority rule everywhere without branching. Both changes follow the team's principles of data-driven code and single-source-of-truth (ADRs 0007, 0009).
 
 See ADR-0020, design `agile-team/docs/design/s37.md` (rules N1–N2, R1–R3, S1, L1).
+
+## s38: Corrected budget numbers and the ceiling is a hard stop
+
+The budget is no longer a soft target; it is now a hard ceiling that halts the run. Ledger entries are corrected on read, so all consumers see the same true spend. Key architectural patterns:
+
+- **Correction on read (K1, K4):** One function `ledger.corrected()` walks PO entries written before s25 and turns running totals into own costs using `SessionCost`. All readers go through it: `Ledger.entries()`, snapshot builder, `budget_status`. The ledger file stays append-only and never rewritten.
+- **Ceiling is code-driven (B1–B3):** `Runtime.enforce_ceiling()` calls `halt.budget_halt()` and checks corrected spend rounded to 4 decimals. Called consistently at 3 points: after role steps land, after PO ledgers, at run start. First halt wins; later calls re-assert the same halt (one liaison note).
+- **Legacy boundary (K2):** `PO_DELTAS_FROM = 1791694950.0` (2026-10-11 05:02:30 UTC) between lines 310 and 312 of the ledger. Any PO entry before this timestamp is legacy (pre-s25 code). No guessing; the boundary is a wall-clock time.
+- **Halt is normal (B3):** `HaltKind.BUDGET` (new; adds to `salvage.Cause`). Exit code 77 (`EX_NOPERM`): budget stop needs human permission. Preflight clean-tree unchanged. Human edits `.agile-team.toml`, commits, resumes. Config reloads; no restart needed.
+
+Rules K1–K6, B1–B9, M1 in design; ADR-007 for decision rationale and options considered.
 
 ## s30: Content-based dispute resolution and manual escalation
 

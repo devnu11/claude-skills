@@ -1,21 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s37 done)
+**Last updated:** 2026-10-11 (s38 done)
 
-## s37: Unattended wake time and reason sources
+## s38: Budget correction and the ceiling halts the run
 
-Fixed stale wake times after resume/offline, and reset times read from the wrong text source. Hand-off note (AC6): the fix lives in this checkout and takes effect only when merged and the live supervisor is re-pinned (supervised by an unattended running from another worktree). Key points:
+The runner now uses the corrected PO ledger (s25's actual costs, not inflated running totals) everywhere. The budget is a hard ceiling: when spend reaches it, the run halts cleanly and only you can raise it.
 
-- **`next_wake` is now null during offline waits:** After the network comes back, status shows no wake time (waiting for network, not a time). On resume, it clears and stays null until the next timed wait.
-- **Reset times come from the runner's halt line first:** When the runner exits with a halt line like "session limit, resets 9pm", that time is used. Only if the halt line is missing or unreadable does the PO's output get checked (and only if it has a readable time).
-- **Fallback waits are now explicit:** When no readable reset time is found, status says `"wake_on": "fallback"` so the human knows the team is waiting for a default period, not a stated time.
-- **Live confirmation:** AC3 verified: job resumed at 17:26 CDT with halt line "resets 9pm (America/Chicago)", status correctly shows next_wake 21:03, offline wait shows next_wake null. See `.team/reviews/s37.md`.
+- **Corrected everywhere:** `agile-team status`, the dashboard, `budget_status`, and the Manager all show the true spend (PO overcount removed). In this repo, spend dropped by ~$1,025 at once.
+- **The ceiling halts the run:** When spend reaches `budget_usd`, the runner halts with status `blocked` and a reason naming the spend and ceiling. One liaison note. The run stays `blocked` until you raise it.
+- **Raise and resume:** Edit `.agile-team.toml`, raise `team.budget_usd`, commit it (required: the tree must be clean), then `agile-team start --resume`. Config reloads and the run resumes if the new budget allows it.
+- **If you resume without raising:** The run halts again at once with zero queries (no new spend).
 
-See ADR-0020, design `agile-team/docs/design/s37.md`.
-
-## s30: `pass_tests()` tool to move stuck stories
-
-A story stuck at `tests` (open dispute, round cap, blocked, or repeated setback) with a **green suite** can be moved to the next step by hand: `pass_tests(story, reason)`. The tool runs the suite first (only when needed), refuses if red, then moves the story and clears all holds/rounds/disputes. Reason is captured in note and `manager_due` for review. No editing `state.json` by hand. This covers both runner faults at `tests` and corrected disputed tests that the gate missed. See ADR-0019, design `agile-team/docs/design/s30.md` (rules F8–F11).
+See ADR-007, design `agile-team/docs/design/s38.md`.
 
 ## s9: Interrupted steps and recovery on resume
 

@@ -1,21 +1,20 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s37 done)
+**Last updated:** 2026-10-11 (s38 done)
 
-## s37: Unattended wake time and reason sources
+## s38: Corrected budget numbers and ceiling
 
-Fixed stale `next_wake` after resume/offline, and reset time from wrong source. Test coverage (design `agile-team/docs/design/s37.md`, section 7):
+Budget correction on read + ceiling halts run. Test coverage from design section 8:
 
-1. **Rules N1/N2:** `mark()` clears both wake fields. After limit+resume, status=running, next_wake=null. After offline wait, status=waiting, next_wake=null, wake_on=network.
-2. **R1 source order:** Halt line beats status.json, status.json beats free text. Last halt-line match wins. Free text with no time → fallback wait. Default fallback value passes.
-3. **R2 tightened reset:** `RESET_NOTE` needs readable time (H[:MM]am|pm + optional date/zone). "resets the count/soon/tomorrow" don't match. "resets 7pm" matches.
-4. **R3 fallback vs reset:** Readable time → `Wake(..., RESET)`. No time → `Wake(now+fallback, FALLBACK)`. Test grace period included in reset.
-5. **S1 wake_on field:** Status/list/wait report wake_on after next_wake. Wait event carries "on". Exact output format.
-6. **L1 legacy load:** Missing wake_on key → None. Null → None. String → WakeOn enum.
-7. **AC5 exact case:** Halt line "session limit, resets 9pm" + PO text "resets the count" → halt wins, parse 9pm. Oct 10 17:26 Chicago → Oct 10 21:03 Chicago.
-8. **Coverage ≥95%** for unattended/runner; ruff clean.
+1. **`corrected()` function:** worked example (legacy PO running totals → own costs), non-legacy pass-through, empty list, missing `at` field (legacy), no mutations.
+2. **`Ledger` changes:** `entries()` corrected, `last_cost(PO)` raw, `overcount()` difference, `budget_status` has `po_overcount_usd`.
+3. **`halt.budget_halt()`:** below → None, at → Halt with exact reason, rounding matches `budget_status`.
+4. **`Runtime.enforce_ceiling()`:** called after steps land, after PO ledgers, at start before opening; below → no halt, at/over → halt with one note.
+5. **Role step reaches ceiling (B2a, B7):** step lands normally, run halts, next step refused.
+6. **PO query reaches ceiling (B2b):** ledger entry halts run, no further query (renewal → no main query).
+7. **AC4 sequence:** through `cli.main([...])`, real config load, preflight runs. Below/reaches/over at start/raise+commit/resume without raise.
 
-See ADR-0020, `agile-team/docs/design/s37.md` test checklist.
+Coverage ≥95%, ruff clean. See ADR-007, design `agile-team/docs/design/s38.md` test checklist.
 
 ## s30: Dispute gate now checks content, not commits
 

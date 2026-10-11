@@ -1,8 +1,20 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s37 done)
+**Last updated:** 2026-10-11 (s38 done)
 
 ## Design decisions to verify
+
+**Budget correction and ceiling (s38):** Verify that ledger entries are corrected on read, the ceiling is enforced consistently, and the human can raise the budget:
+- **K1–K3:** `ledger.corrected()` walks legacy entries with `SessionCost`, turning running totals into own costs. `_own_share()` checks `at < PO_DELTAS_FROM`. Only `cost_usd` changes; other fields stay. Input never mutated.
+- **K4–K5:** One code path: `Ledger.entries()` → `corrected()`. All readers go through it or `_raw()` (only `last_cost`). `budget_status` carries corrected spend + `po_overcount_usd`.
+- **B1–B3:** `Runtime.enforce_ceiling()` halts when `round(total, 4) >= budget_usd`. Checked (a) after steps land (b) after PO ledgers (c) at start before opening. Normal halt: `HaltKind.BUDGET`, exit 77, one liaison note.
+- **B5–B6:** Reason exact: "budget reached: spent $X,XXX.XX of $Y,YYY.YY". Advice: "raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume` ". Raise + commit + resume loads config afresh. No restart needed.
+- **B9:** Clean-tree preflight unchanged. Advice tells human to commit. Uncommitted raise → preflight refuses.
+- **M1:** Manager gets `budget.spent_usd` (corrected), `budget_usd`, `remaining_usd`, `pct_used`, `by_role`, `po_overcount_usd` in runner context.
+
+Function by function: ledger (`corrected`, `_own_share`, `Ledger.entries`, `.last_cost`, `.overcount`), halt (`budget_halt`, `HALTS[BUDGET]`, `Cause.BUDGET`), dispatch (`enforce_ceiling`), po_tools (skip opening, `_turn` no query), snapshot (`_ledger`). See ADR-007, design `agile-team/docs/design/s38.md`.
+
+## Previous design decisions to verify
 
 **Unattended wake time and reason sources (s37):** Verify that wake state is cleared consistently and reset times are read from the right source:
 - **N1:** `JobState.mark()` is the only place `next_wake` and `wake_on` are cleared; every status change (running, waiting, done, blocked, failed, stopped) clears both. Timed waits set both after calling `mark`.

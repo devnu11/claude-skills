@@ -1,6 +1,12 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s38 done)
+
+## s38: Corrected cost accounting and budget ceiling
+
+Your context now carries corrected spend totals and the ceiling that halts the run. The PO's old entries (before s25) held running totals and overcounted by ~$1,025 in this repo. They are corrected on read; the ledger file is never rewritten.
+
+**Budget context:** `budget.spent_usd` (corrected), `budget_usd` (the ceiling), `remaining_usd`, `pct_used`, `by_role` (corrected per role), `po_overcount_usd` (the correction just applied). When corrected spend reaches the ceiling, the runner halts the run (status `blocked`, exit 77) and only the human can raise `budget_usd` in `.agile-team.toml` and resume. See ADR-007, design `agile-team/docs/design/s38.md` (rule M1).
 
 ## s11: Test disputes and rulings at any step
 
