@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config as config_mod
-from . import gates, halt, keys, onboard, presentation, sandbox
+from . import gates, halt, keys, onboard, presentation, recovery, sandbox
 from . import state as state_mod
 from .dashboard import server
 from .dashboard.server import DashboardServer
@@ -334,6 +334,7 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     """Preflight, then run the Product Owner loop in the foreground."""
     place, start = Place.of(args), start_from(args)
     config = _load_config(place.repo)
+    _recover(config, start)
     _require_preflight(config, place.home)
     runtime = make_runtime(place, query_fn or default_query())
     runtime.state.cadence = args.cadence or config.team.cadence
@@ -345,6 +346,16 @@ def _record_task(state: state_mod.RunState, start: Start) -> None:
     """Remember the run's task; a resume's ``--task`` is only a message to the PO."""
     if start.mode is not StartMode.RESUME:
         state.task = start.task
+
+
+def _recover(config: config_mod.Config, start: Start) -> None:
+    """On ``--resume`` after a kill, save the dead run's edits so preflight passes."""
+    if start.mode is not StartMode.RESUME:
+        return
+    found = recovery.recover_killed(config.run_dir, Git(config.repo))
+    if found and found.sha:
+        saved = f"{found.label}'s edits are saved in {found.sha} (reverted)"
+        print(f"agile-team start: the last run was killed; {saved}", file=sys.stderr)
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:
@@ -412,11 +423,13 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
     """Run state, open questions and budget, for the liaison."""
     st = state_mod.load(config.run_dir)
     return {
-        "status": st.status,
+        "status": state_mod.shown_status(config.run_dir, st),
         "status_reason": st.status_reason,
         "cadence": st.cadence,
         "sprint": st.sprint,
-        "running": (config.run_dir / state_mod.PID_FILE).exists(),
+        "running": state_mod.runner_alive(config.run_dir),
+        "in_flight": asdict(st.in_flight) if st.in_flight else None,
+        "interrupted": [asdict(i) for i in st.interrupted],
         "stories": {k: asdict(v) for k, v in st.stories.items()},
         "manager_due": st.manager_due,
         "open_questions": [asdict(m) for m in Relay(config.run_dir).open_questions()],

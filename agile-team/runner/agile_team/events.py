@@ -36,6 +36,7 @@ class EventKind(StrEnum):
     FAULT = "fault"
     BOUNDARY = "boundary"
     PRIORITY = "priority"
+    STEP_INTERRUPTED = "step-interrupted"
 
 
 @dataclass

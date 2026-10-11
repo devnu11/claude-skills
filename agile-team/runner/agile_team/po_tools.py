@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import handover, po_session, priority
+from . import handover, po_session, priority, salvage
 from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
 from .boundary_runner import boundary_event
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
@@ -520,12 +520,21 @@ class PoRun:
         self.runtime.events.emit(Event(EventKind.PO_SESSION, PO, None, data))
 
     async def _opening(self) -> PoTurn | None:
+        told = self._take_interrupted()
         session = resume_session(self.runtime, self.start)
         if session is None:
-            return PoTurn(first_prompt(self.runtime, self.start), None)
-        if self.start.task:
-            return PoTurn(resume_prompt(self.start.task), session)
+            return PoTurn(_joined(first_prompt(self.runtime, self.start), told), None)
+        if self.start.task or told:
+            return PoTurn(_joined(resume_prompt(self.start.task), told), session)
         return self._hand_over(await self.router.advance(), RESUME_NOTE + "\n\n")
+
+    def _take_interrupted(self) -> str:
+        """The resume section on cut-off steps; it is told once, then cleared."""
+        state = self.runtime.state
+        section = salvage.resume_section(state.interrupted)
+        state.interrupted.clear()
+        self.runtime.save()
+        return section
 
     async def _after_po(self) -> PoTurn | None:
         found = await self.router.advance()
@@ -593,3 +602,7 @@ class PoRun:
 
 
 PoRun.RENEWERS = {RenewPath.COMPACT: PoRun._compact, RenewPath.HANDOFF: PoRun._handoff}
+
+
+def _joined(*parts: str) -> str:
+    return "\n\n".join(p for p in parts if p)

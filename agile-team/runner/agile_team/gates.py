@@ -19,6 +19,7 @@ from pathlib import Path
 from . import loops
 from .loops import Author, Fault, Rule, Setback
 from .roles import Dispute, Handoff, TestClaim
+from .salvage import Interruption
 
 STEP_ROLES = {
     "design": "architect",
@@ -134,6 +135,7 @@ class StoryState:
     repeated: str | None = None
     run: list[Setback] = field(default_factory=list)
     escalated_by: Rule | None = None
+    interrupted: Interruption | None = None
 
 
 @dataclass

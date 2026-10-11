@@ -95,6 +95,11 @@ another role's work.
 9. Keep the human informed with `notify_user` at milestones, not every step.
 10. At sprint start and after a story is done, the runner renews your session before your next turn. It compacts it, or it asks you to write .team/po/handoff.md and starts you fresh from that file. When asked, write only that file, then end your turn.
 
+After a stop, your first prompt may hold an **Interrupted steps** section.
+Re-run each step it lists. For a story step the runner offers the saved commit
+to the role itself. For any other step, add the `git cherry-pick -n <sha>`
+line to your brief.
+
 ## Backlog and sprints
 
 - Only stories in the current sprint can move. `run_role` on a backlog story

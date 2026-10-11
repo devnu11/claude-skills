@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -14,6 +15,7 @@ from .gates import OpenDispute, PreviousStep, StoryState, StoryStatus
 from .ledger import SessionCost
 from .loops import Rule, Setback
 from .providers import DEFAULT as DEFAULT_PROVIDER
+from .salvage import RUN_ENDING, InFlight, Interruption
 
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
@@ -25,7 +27,7 @@ class RunStatus(StrEnum):
 
     ``sprint-end``, ``blocked`` and ``done`` are set by the PO's ``notify_user``.
     ``blocked``, ``failed`` and ``stopped`` are set by the runner when it halts
-    (see ``halt.HALTS``).
+    (see ``halt.HALTS``). ``interrupted`` is derived by ``shown_status`` and never stored.
     """
 
     IDLE = "idle"
@@ -35,6 +37,7 @@ class RunStatus(StrEnum):
     DONE = "done"
     FAILED = "failed"
     STOPPED = "stopped"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass
@@ -71,6 +74,8 @@ class RunState:
     upstream: UpstreamState = field(default_factory=UpstreamState)
     goal: str = ""
     order: list[str] = field(default_factory=list)
+    in_flight: InFlight | None = None
+    interrupted: list[Interruption] = field(default_factory=list)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -98,6 +103,15 @@ class RunState:
             if story.status != StoryStatus.DONE:
                 story.sprint = self.sprint if sid in ids else None
 
+    def interrupt(self, found: Interruption) -> None:
+        """Record a cut-off step: pending for the PO, and offered on its story."""
+        self.in_flight = None
+        if found.cause in RUN_ENDING:
+            self.interrupted.append(found)
+        story = self.stories.get(found.story or "")
+        if story and found.sha is not None:
+            story.interrupted = found
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
 
@@ -110,10 +124,12 @@ class RunState:
         data["po_cost"] = _nested(SessionCost, data.get("po_cost"))
         data["boundary"] = _boundary(data.get("boundary"))
         data["upstream"] = _upstream_state(data.get("upstream"))
+        data["in_flight"] = _nested(InFlight, data.get("in_flight"))
+        data["interrupted"] = [Interruption(**i) for i in data.get("interrupted", [])]
         return cls(**data)
 
 
-NESTED = {"previous": PreviousStep, "dispute": OpenDispute}
+NESTED = {"previous": PreviousStep, "dispute": OpenDispute, "interrupted": Interruption}
 
 
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
@@ -162,3 +178,36 @@ def save(run_dir: Path, state: RunState) -> None:
     tmp = run_dir / f"{STATE_FILE}.tmp"
     tmp.write_text(state.to_json())
     tmp.replace(run_dir / STATE_FILE)
+
+
+def runner_pid(run_dir: Path) -> int | None:
+    """The pid in ``runner.pid``; ``None`` when missing, unreadable or not positive."""
+    try:
+        pid = int((run_dir / PID_FILE).read_text().strip())
+    except (OSError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def pid_alive(pid: int) -> bool:
+    """Whether a process with ``pid`` exists."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def runner_alive(run_dir: Path) -> bool:
+    """Whether the process named in ``runner.pid`` is alive."""
+    pid = runner_pid(run_dir)
+    return pid is not None and pid_alive(pid)
+
+
+def shown_status(run_dir: Path, state: RunState) -> RunStatus:
+    """The stored status, except ``running`` with no live runner reads ``interrupted``."""
+    if state.status is RunStatus.RUNNING and not runner_alive(run_dir):
+        return RunStatus.INTERRUPTED
+    return state.status

@@ -27,7 +27,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from . import boundary, guard, halt, handover, keys, loops, presentation, sandbox
+from . import boundary, guard, halt, handover, keys, loops, presentation, recovery, salvage, sandbox
 from . import state as state_mod
 from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
@@ -67,6 +67,7 @@ from .roles import (
     parse_handoff,
     scope_note,
 )
+from .salvage import Cause, Interruption
 from .stack import REVIEW_DIR
 from .state import RunState
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
@@ -533,8 +534,22 @@ class Runtime:
             return self._not_up(request, exc)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
-        self.emit(EventKind.STEP_START, plan, brief=request.brief)
+        self._take_off(plan, request.brief)
         return await self._run_planned(plan)
+
+    def _take_off(self, plan: Plan, brief: str) -> None:
+        """Announce the step and record it as in flight."""
+        self.emit(EventKind.STEP_START, plan, brief=brief)
+        story = plan.story.id if plan.story else None
+        self.state.in_flight = salvage.InFlight(plan.role.name, story, brief)
+        self.save()
+
+    def _land(self, plan: Plan) -> None:
+        """The step settled: nothing is in flight and its offered work is spent."""
+        self.state.in_flight = None
+        if plan.story:
+            plan.story.interrupted = None
+        self.save()
 
     def note_step(self, story: StoryState, report: dict[str, Any]) -> None:
         """Record a story step: its hold, its gated previous step and the scribe queue."""
@@ -578,6 +593,7 @@ class Runtime:
         halt.log_traceback(self.config.run_dir, exc)
         found = halt.limit_halt(exc)
         if found is None:
+            self.save_interrupted(Cause.ERROR)
             raise exc
         return halted_report(plan, self.halt_run(found))
 
@@ -589,11 +605,18 @@ class Runtime:
         """Record the run's first halt (status, reason, liaison note); later calls re-assert it."""
         first = self.halted_by is None
         self.halted_by = self.halted_by or found
+        saved = self.save_interrupted(Cause(self.halted_by.kind.value))
         self.state.mark(self.halted_by.rule.status, self.halted_by.reason)
         self.save()
         if first:
-            self.relay.post(Note(self.halted_by.rule.note_kind, self.halted_by.message()))
+            self.relay.post(Note(self.halted_by.rule.note_kind, halt_note(self.halted_by, saved)))
         return self.halted_by
+
+    def save_interrupted(self, cause: Cause) -> Interruption | None:
+        """Save a cut-off step's edits (or the PO's) in a reverted commit and record it."""
+        saved = recovery.Salvager(self.git, self.config.run_dir).save(self.state, cause)
+        self.save()
+        return saved
 
     async def _execute(self, plan: Plan) -> StepResult:
         try:
@@ -620,7 +643,7 @@ class Runtime:
         report |= self.settle_tree(plan)
         self._emit_step_end(plan, parsed, result, report["commit"])
         report |= self._apply(plan, parsed)
-        self.save()
+        self._land(plan)
         return report
 
     def _emit_step_end(
@@ -832,7 +855,17 @@ def _story_lines(story: StoryState | None) -> list[str]:
     if story is None:
         return []
     head = f"Story {story.id}: {story.title} (step {story.step}, round {story.rounds})"
-    return ["\n".join([head, *_dispute_lines(story), *_rework_lines(story)])]
+    lines = [head, *_dispute_lines(story), *_rework_lines(story), *_interrupted_lines(story)]
+    return ["\n".join(lines)]
+
+
+def _interrupted_lines(story: StoryState) -> list[str]:
+    return [salvage.offer(story.interrupted)] if story.interrupted else []
+
+
+def halt_note(found: Halt, saved: Interruption | None) -> str:
+    """The liaison note for a halt, naming the commit that holds the cut-off edits."""
+    return found.message() + salvage.note_suffix(saved)
 
 
 def _dispute_lines(story: StoryState) -> list[str]:

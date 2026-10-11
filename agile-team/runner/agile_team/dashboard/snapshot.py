@@ -88,7 +88,7 @@ def _priority(files: RunFiles) -> Priority:
 def _run(files: RunFiles) -> dict[str, Any]:
     state, config = files.state, files.config
     return {
-        "status": str(state.status),
+        "status": str(state_mod.shown_status(config.run_dir, state)),
         "sprint": state.sprint,
         "cadence": state.cadence,
         "task": state.task,
