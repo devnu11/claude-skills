@@ -1266,6 +1266,28 @@ poll_seconds=0.01)`)
     127.0.0.1:<p>:`.
 23. No `.agile-team.toml`: exit 1 with the existing config error.
 
+### Presentation for the Customer Proxy (added after acceptance round 2)
+
+The `dashboard` delivery is `kind = "web"`. The runner starts the service
+(`.agile-team.toml` `prepare`, `--host 127.0.0.1 --port 8799 --no-open`
+against `{sandbox}/presentation/workspace`), probes `api/snapshot`, and only
+then runs the Proxy. The Proxy's Bash allows **only `curl`** (`Shell.CURL`).
+It cannot run `agile-team`, `ls`, `grep`, or edit or delete workspace files.
+So any check that needs one of those must ship as evidence the tester
+captured. The code and rules D1–D14 do not change.
+
+| Rule | Requirement |
+|---|---|
+| PR1 | `PRESENTATION.md` says the runner has **already started** the dashboard at `http://127.0.0.1:8799/` and that the Proxy must not start, stop or restart it. It gives no start command for the Proxy to run. |
+| PR2 | AC1, AC2 and AC4 are checked live with `curl` against `http://127.0.0.1:8799/`: `/api/snapshot` (eleven keys, D1 order), `/`, `/api/stream` (`curl -sN --max-time 3`), and 404s for `/nope`, `/api/` and `/%2e%2e/.team/run/events.jsonl`. |
+| PR3 | The tester runs each check below in a scratch copy of the workspace, **not** against the runner's service, and writes the results to `evidence.txt` in the presentation dir. Every block starts with `$ <exact command>`, followed by its verbatim output: (a) `agile-team dashboard --help` (AC6: `--host`, `--port` default 8765, `--no-open`); (b) the start line printed by `dashboard --host 127.0.0.1 --port 0 --no-open` (AC6: a real port, not 0); (c) the start line printed with no `--host` (AC5: the machine's hostname, bound to 0.0.0.0); (d) `curl -s .../api/snapshot` against a workspace whose `.team/run/` is empty (AC1: 200 with empty sections); (e) an SSE transcript showing a fresh `data:` snapshot after one line is appended to `events.jsonl` (AC4 push); (f) the `dashboard` lines from `agile-team/SKILL.md` step 5 and from the `reference/protocol.md` CLI row and routes table (AC7). |
+| PR4 | `test-results.txt` stays as it is (AC3, AC8: suite, coverage, ruff). |
+| PR5 | The guide's AC table names, for each AC, whether to check it live (PR2) or in `evidence.txt` (PR3). It sends the Proxy to no command that its allowlist would deny. |
+
+If the live URL refuses connections even though the runner's probe passed,
+that is a runner or sandbox fault and not a defect in s4. The Proxy reports
+it as such, as it did in round 2.
+
 ### Known limits (accepted for lab use)
 
 - No auth and no TLS. Anyone on the network who can reach the port sees the
