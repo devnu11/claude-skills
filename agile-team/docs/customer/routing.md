@@ -82,8 +82,19 @@ the test yourself.
 The dashboard's timeline shows each one as a **test dispute**, and
 `agile-team status` shows the open one under the story's `"dispute"`.
 
+The unit-tester's brief quotes what the test command said about the
+disputed test when the dispute was raised, including when the test was not
+failing at all.
+
+If the developer already committed the story's code before a dispute (or a
+ruling or review sent the story back), the story's tests may already pass.
+The unit-tester then says it changed or checked the tests, and the story
+moves on. Nobody has to write a test that fails on purpose.
+
 The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
-`escalate`) work at any step, not only at the round cap. A ruling that can't
+`escalate`, `advance`) work at any step, not only at the round cap.
+`advance` moves a story one step on when its gate can't be met; the event
+log records why. It can't move a story past its last step. A ruling that can't
 apply, such as one on a done story, is reported to the PO. It is never
 silently dropped. The PO can then clear the done story's hold with
 `continue_story`. A done story's hold never stops its Scribe step.

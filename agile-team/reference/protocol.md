@@ -378,7 +378,9 @@ the design (see "Test disputes"). A dispute without `test` and `rule`, or
 with another status, is a malformed handoff. The unit-tester may add
 `"tests": "changed"` or `"tests": "confirmed"` when a story is back at
 `tests` with its code in (see "Back at tests with the code in"). The Manager adds `"ruling"` (`rescope`,
-`upgrade_model`, `revise_design`, `escalate`) and may add `"followups":
+`upgrade_model`, `revise_design`, `escalate`, `advance`), optionally
+`"ruling_reason": "<why>"` (a string; it defaults to the summary and is
+logged on the `ruling` event), and may add `"followups":
 {"<role>": "<question>"}`. On a story escalated for a repeated setback it
 must add `"fault": "<role>"` or `"fault": "runner"` (see "Repeated
 setbacks"). It may name a fault on any other story it is run on too, for
@@ -401,7 +403,8 @@ overrides and capped stories. It also carries
 `test_disputes_since_last_review` (story, role, test, rule, rounds for each
 test dispute since its last step). When it runs on a story escalated for a
 repeated setback, it also carries `repeated_setback` (see "Repeated
-setbacks"), and `stories_at_round_cap` leaves that story out. The Manager raises every role in
+setbacks"; its `code` entry says whether the story's code is already in:
+`{"implemented", "code_commits", "code_in"}`), and `stories_at_round_cap` leaves that story out. The Manager raises every role in
 `long_running_roles` as friction in its summary, with one proposal: split
 the step, change the brief, or change the tools.
 
@@ -409,13 +412,21 @@ the step, change the brief, or change the tools.
 
 A ruling applies to the story that the Manager's step runs on, at any step
 and in any status (active, at the round cap, blocked). It moves the story
-(`rescope` → first step, `revise_design` → `design`, `escalate` → blocked)
-and resets its rounds and test disputes. The Manager's report carries
-`"ruling": {"ruling", "applied": true, "now_at"}`. When the ruling cannot
+(`rescope` → first step, `revise_design` → `design`, `escalate` → blocked,
+`advance` → the next enabled step, `active`) and resets its rounds, test
+disputes, open dispute and setback loop. `advance` is for a gate no role
+can satisfy. It moves on from where the story is when the ruling applies
+(after any fault), and passing `implement` this way counts as an
+implement pass. The Manager's report carries
+`"ruling": {"ruling", "applied": true, "now_at"}`, and the `ruling` event
+logs `{ruling, reason, now_at}` (`reason` is the handoff's
+`ruling_reason`, else its summary). When the ruling cannot
 apply, the report says why and the story does not change:
 `{"ruling", "applied": false, "why"}`. That happens when the step has no
-story (`a ruling needs a story; run the manager on that story`) or the story
-is done (`story sN is done; a ruling cannot move it`). On a repeated
+story (`a ruling needs a story; run the manager on that story`), the story
+is done (`story sN is done; a ruling cannot move it`), or `advance` is
+asked at the last enabled step (`story sN is at <step>, its last step;
+advance cannot mark it done`). On a repeated
 setback the `fault` applies first and a ruling in the same handoff then
 wins; see "Repeated setbacks".
 
@@ -625,9 +636,14 @@ tests do not.
 ### Back at tests with the code in
 
 Each story counts how often it has passed the implement gate
-(`implemented` in `state.json`). A ruling, a review or a closed dispute can
-send a story back to `tests` after its code is in. Its suite may then be
-green already. In that case, with no dispute open and a `done` handoff:
+(`implemented` in `state.json`) and records the sha of every commit the
+runner makes for a developer step on it (`code_commits`, whatever the
+step's outcome). The story's **code is in** when `implemented > 0`, or when
+one of those commits is in the branch (`git merge-base --is-ancestor <sha>
+HEAD`). A ruling, a review or a closed dispute can send a story back to
+`tests` after its code is in, and a developer can commit code and then
+dispute a test (s46). Its suite may then be green already. In that case,
+with no dispute open and a `done` handoff:
 
 - A red suite passes, as on a first pass.
 - A green suite passes when the handoff says `"tests": "changed"` (the
@@ -641,8 +657,10 @@ green already. In that case, with no dispute open and a `done` handoff:
   dispute.
 
 The unit-tester's prompt says `Code from an earlier pass is in…` while this
-applies. On a first pass (`implemented` is 0) the gate still needs a red
-suite, and a claim is ignored. An open dispute's own gate (below) takes
+applies. On a first pass (`implemented` is 0 and no recorded developer
+commit is in the branch) the gate still needs a red suite, and a claim is
+ignored. A `state.json` written before s46 loads `code_commits` as `[]`; a
+story stranded that way is moved on by the Manager's `advance` ruling. An open dispute's own gate (below) takes
 precedence. Any other value of `tests` is a malformed handoff. A
 `state.json` written before s24 loads `implemented` as 1 for stories past
 `implement` and as 0 for the rest.
@@ -660,7 +678,13 @@ block"):
    a round. A Manager ruling resets the count.
 2. Every step on the story gets `Test dispute (raised|confirmed): <test>
    contradicts <rule>: <reason>` in its prompt until the story is back at
-   `implement`.
+   `implement`. When the dispute opens, the runner runs the test command
+   once and keeps what it says about the test (`output` on the dispute):
+   the lines from the first one naming the test (40 at most) plus later
+   lines naming it, or `the test command passes, so <test> is not failing`,
+   or, when the output never names it, its tail. The next line of the
+   prompt quotes it: `Output of the test command when the dispute was
+   raised:` and the output in a code block.
 3. At `tests`, the unit-tester either fixes the test and hands off `done`,
    or confirms it with `changes_requested` and `next_role: architect`. A
    `done` passes only when the test file's content changed since the
@@ -860,8 +884,10 @@ story.
   `note`, `previous` (the last gated step: role, status, summary, verdict,
   reason, next_role), `dispute` (the open test dispute: test, rule, reason,
   `file` (resolved at the repo root) and `baseline` (content hash when
-  raised, s30), stage `raised` or `confirmed`), `disputes` (disputes since
-  the last ruling), `implemented` (implement-gate passes), `streak` (the
+  raised, s30), stage `raised` or `confirmed`, `output` (the test command's
+  output about the test when raised, s46)), `disputes` (disputes since
+  the last ruling), `implemented` (implement-gate passes), `code_commits`
+  (shas of the developer steps' commits on the story, s46), `streak` (the
   setbacks since the key last changed), `run` (the bounces and returns in a
   row between one pair of steps), `repeated` (the repeated reason while
   escalated, else `null`), `escalated_by` (`repeat`, `backstop` or
