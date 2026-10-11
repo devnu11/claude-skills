@@ -35,6 +35,7 @@ one line here. Older designs are the sections at the end of this file.
 | s38 Corrected spend everywhere (pre-s25 PO running totals corrected on read, one function); the budget is a ceiling that halts the run (exit 77); the human commits the raise, then resumes | [design/s38.md](design/s38.md) |
 | s45 Manager step: every role-step crash goes to `crash.log` once; a fault applies to any story and an unapplied fault or ruling is reported; `continue_story` refuses a blocked story | [design/s45.md](design/s45.md) |
 | s46 Tests gate accepts green tests when a developer's recorded commit is in the branch; Manager `advance` ruling (logged with its reason); dispute brief quotes the test output | [design/s46.md](design/s46.md) |
+| s47 A waiting run wakes on an answer (pinned by a driver test); `status_reason` and halt notes say what it waits on (`s40 waits on m42`) | [design/s47.md](design/s47.md) |
 
 ## Components
 

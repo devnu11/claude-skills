@@ -64,7 +64,10 @@ command fails.
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
    The dashboard shows step-by-step progress. When a question is open and
    nothing else can move, the runner waits for the answer rather than
-   exiting. **Order of work** is data, not prose: the PO sets it with
+   exiting. It picks the answer up within 5 s. While it waits, `$AT status`
+   shows `status_reason: "waiting on answers: s40 waits on m42"`. Check it if
+   the run looks idle: an unanswered id there is a question you have not
+   relayed yet. **Order of work** is data, not prose: the PO sets it with
    `prioritise`, `move_story` or the order of `start_sprint`'s list, and the
    router follows it. When the human states an order ("s30 before s29"),
    relay it to the PO. The board shows each story's `#position`. A story

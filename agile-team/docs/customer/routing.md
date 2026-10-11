@@ -32,7 +32,10 @@ run spends far less on the PO than before.
   (`agile-team dashboard`).
 - **The runner waits for your answers.** When the PO has asked you something
   and nothing else can move, the runner keeps running and picks up the moment
-  you answer (`agile-team answer <id> "<text>"`). To end the run instead, use
+  you answer (`agile-team answer <id> "<text>"`), within a few seconds. While
+  it waits, `agile-team status` says what it waits on, for example
+  `"status_reason": "waiting on answers: s40 waits on m42"`. If the run halts
+  meanwhile, its note ends the same way. To end the run instead, use
   `agile-team stop`.
 - **Held stories.** `agile-team status` shows `"hold"` on a story that the
   runner has handed to the PO, for example `"hold": "questions"`. The story

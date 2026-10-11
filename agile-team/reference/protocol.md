@@ -16,7 +16,7 @@ Run from the target repo root, or pass `--repo PATH`.
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`) and `upstream` (the review stack; see "Sprint boundaries"). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`) and `upstream` (the review stack; see "Sprint boundaries"). |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
@@ -82,6 +82,11 @@ runner handled, each headed `--- <time> <ExceptionType>`),
 `status_reason` says why the runner stopped (`null` otherwise). For example:
 `session limit, resets 2:20pm (America/Edmonton)`, `crashed: RuntimeError:
 boom` or `stopped by stop --now`. Older `state.json` files load with `null`.
+While the router waits on open questions, `status_reason` names what it waits
+on, and `status` stays as it was: `waiting on answers: s40 waits on m42; the
+run waits on m43`. That is one entry per story an open question names (ids in
+the order asked), then the questions that name no story. The reason clears
+when an answer is handed over or a step runs (s47).
 
 When the runner halts, it saves the status and reason, posts a note of the
 same kind to the outbox, appends the traceback to `crash.log`, prints **one**
@@ -118,6 +123,10 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
   "Interrupted steps"). The halt note ends with
   `; <role> on <story>'s edits are saved in <sha> (git cherry-pick -n <sha>)`.
   The stderr line does not change.
+- When a question is open at the halt, the note ends with
+  `; waiting on answers: s40 waits on m42`, in the same format as the waiting
+  `status_reason` (s47). The stored `status_reason` and the stderr line do
+  not change.
 
 ### Interrupted steps
 
@@ -869,7 +878,12 @@ story.
   developer. `pass_tests(story, reason)` (s30) moves a story stuck at
   `tests` on when the suite is green (see "Test disputes").
 - When nothing can move but a question is open, the runner waits for an
-  answer (polling every 5 s, no timeout). `stop` ends the wait.
+  answer (polling every 5 s, no timeout). `stop` ends the wait. Each poll
+  reads the inbox first, so an answer ends the wait within one poll, whether
+  or not a PO session is running, and the PO gets it as a `human_message`
+  hand-over. While it waits, `status_reason` lists each story and the
+  question ids it waits on (`waiting on answers: s40 waits on m42`). A
+  `stalled` hand-over never happens while a question is open.
 - The run ends when a stop is requested, the run halts, the PO sets
   `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
   and the next pass finds only "sprint complete" or "nothing can move" without
