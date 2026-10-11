@@ -170,16 +170,18 @@ def test_real_sdk_error_str_ends_with_exit_code_but_reason_does_not() -> None:
 # (3) a halted role step leaves its partial edits alone
 
 
-def test_halted_role_step_leaves_tree_untouched(harness, configured: Path, capsys) -> None:
+def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> None:
     start, holder = harness
     po = PoRunsRole(holder)
     head = git(configured, "rev-parse", "HEAD")
     assert start(Router(po, RoleWritesThenLimit(configured)), "--task", "t") == 75
     assert po.reports[0]["status"] == "halted"
-    assert git(configured, "rev-parse", "HEAD") == head
-    porcelain = git(configured, "status", "--porcelain")
-    assert "docs/" in porcelain and "src/oops.py" in porcelain
-    assert (configured / "docs" / "design.md").read_text() == "partial design\n"
+    assert git(configured, "rev-list", "--count", f"{head.strip()}..HEAD").strip() == "2"
+    assert git(configured, "status", "--porcelain").strip() == ""
+    saved_sha = git(configured, "rev-parse", "HEAD~1").strip()
+    files = git(configured, "show", "--name-only", "--format=", saved_sha).split()
+    assert "docs/design.md" in files and "src/oops.py" in files
+    assert "partial design" in git(configured, "show", f"{saved_sha}:docs/design.md")
     events = holder[0].events.events()
     assert not [e for e in events if e.kind == EventKind.QUARANTINE]
     story = saved(configured).stories["s1"]
