@@ -29,8 +29,7 @@ PO = "product-owner"
 LATER = PO_DELTAS_FROM + 100.0
 REASON = "budget reached: spent $4.00 of $4.00"
 ADVICE = (
-    "raise team.budget_usd in .agile-team.toml and commit it, "
-    "then run `agile-team start --resume`"
+    "raise team.budget_usd in .agile-team.toml and commit it, then run `agile-team start --resume`"
 )
 
 
