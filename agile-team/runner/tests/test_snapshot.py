@@ -351,6 +351,17 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, tmp_path: P
     assert by_id["s3"]["wait"] is None
 
 
+def test_answered_question_is_not_a_wait(config: cfg.Config, tmp_path: Path) -> None:
+    stories = {"s1": StoryState("s1", "A", "tests")}
+    state_mod.save(config.run_dir, RunState(stories=stories))
+    write_jsonl(config.run_dir / "outbox.jsonl", [
+        {"id": "m1", "kind": "question", "text": "Which DB?", "stories": ["s1"], "at": 1.0}
+    ])  # fmt: skip
+    write_jsonl(config.run_dir / "inbox.jsonl", [{"id": "m1", "text": "sqlite", "at": 2.0}])
+    (story,) = build(config, tmp_path)["stories"]
+    assert story["wait"] is None
+
+
 # ----- 6. requirements (D6) --------------------------------------------------
 
 

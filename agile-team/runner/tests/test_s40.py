@@ -173,6 +173,6 @@ def test_page_source_shows_position_waits_and_priority_events() -> None:
     from agile_team.dashboard import snapshot
 
     html = (snapshot.Path(snapshot.__file__).parent / "index.html").read_text()
-    for needle in ("WAIT_TONE", "priority:", "#${s.position}", "waits on:"):
+    for needle in ("WAIT_TONE", "priority:", "#${s.position}", "waits on:", "(unchanged)"):
         assert needle in html
     assert "view.stories.sort(" not in html and "view.stories.slice().sort(" not in html
