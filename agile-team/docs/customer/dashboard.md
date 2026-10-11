@@ -39,7 +39,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 ## What you see
 
 - **Header:** the run's status, sprint, task, spend against the budget, and
-  the step that is running now.
+  the step that is running now. The spend is the same corrected figure that
+  `agile-team status` shows: the Product Owner's costs from before the s25
+  fix are counted once each, not as running totals. When spend reaches the
+  budget, the run halts and the status reads `blocked`.
 - **Board:** a backlog column, one column per pipeline step, and done. The
   board fits the window, so Done is always in view without scrolling
   sideways. A column with no stories shrinks to a narrow strip with its name

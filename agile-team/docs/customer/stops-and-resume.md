@@ -1,8 +1,9 @@
 # When the runner stops on its own
 
-The team may stop before its work is done. Three causes are handled:
+The team may stop before its work is done. Four causes are handled:
 
 - your Claude session or usage limit runs out;
+- the team's spend reaches your budget (`team.budget_usd`);
 - the runner hits an unexpected error;
 - you run `agile-team stop --now`.
 
@@ -21,6 +22,7 @@ agile-team start: session limit, resets 2:20pm (America/Edmonton); run `agile-te
 | Exit | Why | `status` |
 |---|---|---|
 | 75 | session or usage limit | `blocked` |
+| 77 | spend reached the budget | `blocked` |
 | 70 | unexpected error | `failed` |
 | 143 | `stop --now` | `stopped` |
 
@@ -41,6 +43,23 @@ without being asked.
 
 The reset time comes word for word from Claude's own message. The runner
 does not wait for the reset or restart by itself.
+
+## When the budget is reached
+
+`team.budget_usd` in `.agile-team.toml` is a ceiling. The runner checks it
+after every step and when it starts, and halts once spend is at or over it:
+
+```text
+agile-team start: budget reached: spent $50.12 of $50.00; raise team.budget_usd in .agile-team.toml, then run `agile-team start --resume`
+```
+
+A step that is already running finishes and is kept, so spend can pass the
+ceiling by about one step. To carry on, raise `budget_usd` (by as much or as
+little as you like) and run `agile-team start --resume`. If you resume
+without raising it, the runner stops again at once and spends nothing.
+`agile-team status` shows the spend under `budget`. `po_overcount_usd` there
+is the Product Owner's early overcount (from before the s25 fix), which is
+already taken off `spent_usd`.
 
 ## After an error
 

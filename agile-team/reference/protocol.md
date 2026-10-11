@@ -93,6 +93,7 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
 | 1 | CLI error or failed preflight | unchanged | the error |
 | 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
 | 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
+| 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml, then run `agile-team start --resume` `` |
 | 130 | Ctrl-C | unchanged | — |
 | 143 | `stop --now` (SIGTERM) | `stopped` | ``run `agile-team start --resume` to continue`` |
 
@@ -214,7 +215,7 @@ artifacts = "committed"        # or "ignored"
 key_file = ".team/run/api-key" # falls back to ~/secrets/anthropic-api-key
 auth = "api-key"               # or "login": run on the human's Claude Code login
 cadence = "sprint"             # default; the liaison asks at every start
-budget_usd = 20.0              # soft budget, enforced by the Manager
+budget_usd = 20.0              # ceiling: the run halts when spend reaches it
 manager_every_pct = 25         # Manager checkpoint every N% of budget
 
 [toolchain]
@@ -330,7 +331,7 @@ step's environment gets:
   `model`.
 
 `billing` controls the ledger. With `free`, the step is recorded at $0 and does
-not count towards the soft budget. With `reported`, the step keeps
+not count towards the budget ceiling. With `reported`, the step keeps
 `total_cost_usd`, which Claude Code prices at Claude rates (for a resumed PO
 query, only its own share: see "Ledger cost").
 
@@ -385,7 +386,9 @@ malformed block fails the step (and counts a round).
 
 ### What the Manager sees
 
-The Manager's runner context carries `budget` (spend, tokens), `spend_by_role`
+The Manager's runner context carries `budget` (the corrected
+`budget_status`: `spent_usd`, the ceiling `budget_usd`, `remaining_usd`,
+`pct_used`, `by_role`, tokens and `po_overcount_usd`; see "Ledger cost"), `spend_by_role`
 (steps, cost, cost per step, tokens, `turns_per_step`, `latest_turns` and
 `context_per_turn`, most expensive first; see "Turns and context"),
 `long_running_roles`, `friction_since_last_review` (friction from step-ends
@@ -432,10 +435,44 @@ difference:
 - A PO query that is never ledgered (an error result) is still in the
   next query's running total, so that query's difference pays for it.
 
-`budget_status`, `spend_by_role`, the budget checkpoints and the dashboard
-read the ledger, so they show real spend. Ledger lines are never rewritten.
-PO entries written before s25 are running totals. ADR-004 gives the one-off
-correction ($256.93 overcounted up to ledger line 196).
+Ledger lines are never rewritten. PO entries written before s25 are running
+totals, so they are corrected when the ledger is read (ADR-007):
+
+- A PO entry with `at` before `1791694950` (2026-10-11 05:02:30 UTC, when
+  s25 began ledgering deltas) is legacy. Legacy PO entries, in file order,
+  each count only `figure − previous legacy PO figure`, or the figure
+  itself when it is lower (a new session). Other entries count as written.
+- One function (`ledger.corrected`) does this, and every reader goes
+  through it: `status`, `budget_status`, `spend_by_role`,
+  `long_running_roles`, the budget checkpoints, the ceiling, the Manager's
+  runner context and the dashboard snapshot. They all show the same spend.
+- `budget_status` (and `status`'s `budget`) carries `po_overcount_usd`, the
+  amount the correction takes off the raw ledger. In this repo that is
+  about $1,024.87: ADR-004's $256.93 covered only lines up to 196, and the
+  same PO session ran on to line 310.
+
+### Budget ceiling
+
+`team.budget_usd` is a ceiling. The runner halts the run when the corrected
+spend, rounded to 4 places as `budget_status.spent_usd` shows it, is at or
+over `budget_usd`. It checks:
+
+- after every role step has landed (committed and gated; a step is never
+  cut off for budget);
+- after every PO query is ledgered;
+- at run start, before the PO's first turn. A `start --resume` that is still
+  over the ceiling halts at once, with no query and no spend.
+
+The halt is like a limit stop: status `blocked`, `status_reason`
+`budget reached: spent $X of $Y`, one `blocked` note to the liaison, every
+later `run_role` refused, and exit 77. After a halt, no further PO query
+starts in that process. The run can pass the ceiling by at most the step or
+PO query that was in progress. To carry on, the human raises `budget_usd` in
+`.agile-team.toml` and runs `agile-team start --resume`. The config is read
+afresh at start, and `status` and the dashboard re-read it on every call, so
+nothing else needs a restart. Under `unattended`, exit 77 ends the job as
+failed (it is not a limit to wait out). The Manager checkpoints
+(`manager_every_pct`) still apply below the ceiling, on corrected spend.
 
 ### Turns and context
 

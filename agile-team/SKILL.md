@@ -33,8 +33,8 @@ command fails.
    confirm or edit. Then ask: artifact policy (`.team/` and docs committed or
    ignored), docs dir, auth (`api-key` bills the repo's Console workspace;
    `login` uses the human's Claude Code subscription), key file location for
-   `api-key` (or fall back to `~/secrets/anthropic-api-key`), soft budget in
-   USD, default cadence. Run `$AT init --preset … --delivery … [--url …]
+   `api-key` (or fall back to `~/secrets/anthropic-api-key`), budget ceiling
+   in USD (the run halts when spend reaches it), default cadence. Run `$AT init --preset … --delivery … [--url …]
    --docs-dir … --artifacts … --auth … --key-file … --budget … --cadence …`. Then ask whether any roles should run
    on a local or other Anthropic-compatible model. If so, add
    `[providers.<name>]` and `[roles.<role>]` `provider`/`model` to the config
@@ -111,6 +111,13 @@ command fails.
      (America/Edmonton)"; exit 75): tell the human the reset time. Do **not**
      restart before the reset or schedule a restart yourself. Resume with
      `$AT start --resume` only when the human says so.
+   - `blocked` with "budget reached: spent $X of $Y" (exit 77): tell the
+     human the spend and the ceiling. Only the human raises
+     `team.budget_usd` in `.agile-team.toml`; never edit it yourself. On
+     their word, `$AT start --resume`. Resuming without a raise halts again
+     at once, at no cost. `$AT status` shows the corrected spend under
+     `budget` (`po_overcount_usd` is the pre-s25 PO overcount already taken
+     off).
    - `failed` (exit 70): relay the note and show the last entry of
      `.team/run/crash.log`. Ask the human whether to resume.
    - `stopped` (exit 143): the run ended because of `stop --now`.
