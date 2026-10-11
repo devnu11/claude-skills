@@ -235,6 +235,44 @@ def test_os_sandbox_settings(configured: Path) -> None:
     assert f"Read(/{repo}/src/**)" in s["permissions"]["deny"]
 
 
+def _settings(configured: Path, d: Delivery) -> dict:
+    c = load(configured, d)
+    return sandbox.os_sandbox_settings(c, sandbox.layout(c, d))
+
+
+def test_web_sandbox_may_reach_loopback(configured: Path) -> None:
+    s = _settings(configured, Delivery("dash", "web", url="http://127.0.0.1:8799/"))
+    assert s["sandbox"]["network"] == {"allowLocalBinding": True}
+
+
+def test_web_sandbox_keeps_filesystem_rules(configured: Path) -> None:
+    d = Delivery("dash", "web", url="http://127.0.0.1:8799/")
+    c = load(configured, d)
+    p = sandbox.layout(c, d)
+    s = sandbox.os_sandbox_settings(c, p)
+    assert s["sandbox"]["filesystem"]["denyRead"] == [str(configured.resolve())]
+    assert str(p.root.resolve()) in s["sandbox"]["filesystem"]["allowRead"]
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [k for k, v in sandbox.DELIVERY_KINDS.items() if v.start is not sandbox.Start.BACKGROUND],
+)
+def test_other_kinds_have_no_network_key(configured: Path, kind: str) -> None:
+    assert "network" not in _settings(configured, Delivery("x", kind))["sandbox"]
+
+
+def test_network_section_is_a_fresh_copy(configured: Path) -> None:
+    s = _settings(configured, Delivery("dash", "web", url="http://127.0.0.1:8799/"))
+    del s["sandbox"]["network"]["allowLocalBinding"]
+    assert sandbox.LOCAL_SERVICE_NETWORK == {"allowLocalBinding": True}
+
+
+def test_os_sandbox_docstring_names_the_e2e_test() -> None:
+    doc = sandbox.os_sandbox_settings.__doc__ or ""
+    assert "Not verified" not in doc and "test_proxy_sandbox_e2e" in doc
+
+
 def test_sandbox_env(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("PATH", "/usr/bin")
     env = sandbox.sandbox_env(Delivery("x", "package", bin=["b"]), tmp_path)

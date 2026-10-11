@@ -271,6 +271,47 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
     assert stopped == [True]
 
 
+def _web_proxy_order(make_runtime, events: list[str], action):
+    """A runtime whose web Proxy step logs ``query``/``stop`` into ``events``."""
+
+    def fake_prepare(config, order):
+        p = sandbox.Prepared(
+            order.delivery,
+            sandbox.DELIVERY_KINDS["web"],
+            config.repo,
+            config.run_dir,
+            config.run_dir,
+        )
+        p.stop = lambda: events.append("stop")  # type: ignore[method-assign]
+        return p
+
+    rt = make_runtime(FakeQuery(action=action), prepare_fn=fake_prepare)
+    rt.config.deliveries = [Delivery("ui", "web", url="http://localhost:3000")]
+    open_story(rt, "acceptance")
+    present(rt.config)
+    return rt
+
+
+def test_proxy_service_stops_only_after_the_query_returns(make_runtime) -> None:
+    events: list[str] = []
+    rt = _web_proxy_order(make_runtime, events, lambda: events.append("query"))
+    run(rt, "customer-proxy", story="s1")
+    assert events == ["query", "stop"]
+
+
+def test_proxy_service_stops_once_when_the_query_raises(make_runtime) -> None:
+    events: list[str] = []
+
+    def boom() -> None:
+        events.append("query")
+        raise RuntimeError("boom")
+
+    rt = _web_proxy_order(make_runtime, events, boom)
+    with pytest.raises(RuntimeError):
+        run(rt, "customer-proxy", story="s1")
+    assert events == ["query", "stop"]
+
+
 def test_shell_runner(tmp_path: Path) -> None:
     code, out = dispatch.shell_runner(tmp_path)("echo hi; exit 4")
     assert (code, out.strip()) == (4, "hi")
