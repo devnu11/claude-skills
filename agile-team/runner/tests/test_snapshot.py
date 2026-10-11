@@ -40,6 +40,9 @@ def shape(value: Any) -> Any:
     return type(value).__name__
 
 
+AFTER_CUTOFF_S = 10_000_000  # fixture times are ~1.79e9; the cutoff is 1791694950
+
+
 def write_jsonl(path: Path, rows: list[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(r) + "\n" for r in rows))
@@ -178,11 +181,16 @@ def test_build_matches_fixture_shape(tmp_path: Path) -> None:
 
 def test_build_matches_fixture_values(tmp_path: Path) -> None:
     fixture = json.loads(FIXTURE.read_text())
-    snap = build(write_run(tmp_path / "repo", fixture), tmp_path)
+    config = write_run(tmp_path / "repo", fixture)
+    # Rows from before ledger.PO_DELTAS_FROM are corrected on read (s38 K2); move them past it.
+    after = [{**e, "at": e["at"] + AFTER_CUTOFF_S} for e in fixture["ledger"]]
+    write_jsonl(config.run_dir / "ledger.jsonl", after)
+    snap = build(config, tmp_path)
+    assert snap["ledger"] == after
     assert [s["acceptance"] for s in snap["stories"]] == [
         s["acceptance"] for s in fixture["stories"]
     ]
-    for key in ("ledger", "messages", "answers", "pipeline"):
+    for key in ("messages", "answers", "pipeline"):
         assert snap[key] == fixture[key]
     for got, want in zip(snap["requirements"], fixture["requirements"], strict=True):
         want_history = [{**h, "sha": ""} for h in want["history"]]

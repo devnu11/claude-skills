@@ -68,7 +68,7 @@ def test_label_with_and_without_story() -> None:
 
 
 def test_cause_values_and_run_ending() -> None:
-    assert {c.value for c in Cause} == {"error", "limit", "crash", "sigterm", "killed"}
+    assert {c.value for c in Cause} == {"error", "limit", "crash", "sigterm", "budget", "killed"}
     assert frozenset(Cause) - {Cause.ERROR} == salvage.RUN_ENDING
     for kind in halt.HaltKind:
         assert Cause(kind.value)

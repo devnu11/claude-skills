@@ -146,6 +146,7 @@ def test_halt_table_values() -> None:
         halt.HaltKind.LIMIT: (RunStatus.BLOCKED, "blocked", 75),
         halt.HaltKind.CRASH: (RunStatus.FAILED, "failed", 70),
         halt.HaltKind.SIGTERM: (RunStatus.STOPPED, "stopped", 143),
+        halt.HaltKind.BUDGET: (RunStatus.BLOCKED, "blocked", 77),
     }
 
 
