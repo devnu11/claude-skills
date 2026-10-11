@@ -31,6 +31,7 @@ one line here. Older designs are the sections at the end of this file.
 | s40 Story priority lives in code: an explicit order the PO sets, the router follows and the board shows, with holds marked | [design/s40.md](design/s40.md) |
 | s21 Dashboard fixes: $/tokens toggle, live budget, visible Done column | [design/s21.md](design/s21.md) |
 | s30 Dispute gate compares the test file's content hash from the raise (path resolved at the repo root); PO `pass_tests` for a stuck story | [design/s30.md](design/s30.md) |
+| s37 unattended: `next_wake` null unless a timed wait, `wake_on` in status; reset read from agile-team's halt line, then its state.json, then timed free text | [design/s37.md](design/s37.md) |
 
 ## Components
 

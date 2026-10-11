@@ -55,8 +55,8 @@ unique within a home.
 
 | File | Holds |
 |---|---|
-| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until), `offline` (reason), `online`, `resume`, `end` (status, reason). |
+| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`, `wake_on`. |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `end` (status, reason). |
 | `output.md` | A prompt job's latest result text. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -70,6 +70,17 @@ mid-run cost stop keeps the session, so `resume --max-cost` continues it). Each
 comes with a `reason`; `limit-reached` gives the last limit and the bound,
 e.g. `session limit, resets 7pm; used all 10 resumes`.
 
+`next_wake` is set only while a timed wait is under way; every other status
+(including `running` and an offline `waiting`) has it null. `wake_on` says
+what a `waiting` job waits for:
+
+| `wake_on` | `next_wake` |
+|---|---|
+| `reset` | the stated reset plus 3 min |
+| `fallback` | now plus `--fallback-wait`: no readable reset time was stated |
+| `backoff` | now plus the rate-limit backoff |
+| `network` | null: offline, waiting for the API to answer |
+
 ## Supervisor loop
 
 ```
@@ -80,7 +91,7 @@ loop:
   DONE / FAILED -> finish; BUDGET -> limit-reached
   next_wake = reset + 3 min   # LIMIT; the fallback wait when no reset is readable
             = now + 1, 2, 4… min (cap 30)   # RATE_LIMITED, consecutive
-  OFFLINE -> status waiting; every 30 s probe api.anthropic.com:443 (TCP, no tokens)
+  OFFLINE -> status waiting (no next_wake); every 30 s probe api.anthropic.com:443 (TCP, no tokens)
              until it answers, then run again (not a resume); more than 10
              in a row -> failed; deadline passes first -> limit-reached
   deadline <= next_wake, resumes >= max, or cost >= max -> limit-reached
@@ -155,8 +166,18 @@ to the local one, and the next occurrence after now is used.
   exits with on a usage limit) means a usage limit. Any other code means
   failed, unless the output's last 50 lines name a network failure: then it
   is `OFFLINE` (agile-team exits 70 on such a crash).
-- **Reset time:** read from the last 50 output lines. A line such as `resets
-  7pm` is enough. Without one, the fallback wait applies.
+- **Reset time:** on exit 75 the limit reason comes from the first of these
+  sources that gives one:
+  1. the last `agile-team start: <reason>; run `agile-team start --resume``
+     line in the last 50 output lines, taken as is;
+  2. `.team/run/state.json` in `--cwd`, when its `status` is `blocked`: its
+     `status_reason`;
+  3. the last 50 output lines, matched against the limit patterns. A bare
+     `resets <time>` counts only when the time is readable (`resets 7pm`),
+     so prose such as `resets the count` is never a reset.
+
+  When a reason has no readable time, the fallback wait applies and
+  `wake_on` is `fallback`.
 - **Shell:** the command runs with `sh -c` in `--cwd`, in its own process
   group, with stdin closed and stdout and stderr appended to `output.log`.
 - **agile-team:** wrap it as `--command "agile-team start --task '…'"
