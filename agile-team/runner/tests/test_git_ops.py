@@ -87,3 +87,25 @@ def test_is_repo_false_outside_git(outside_git: Path) -> None:
 
 def test_is_repo_false_for_a_missing_directory(outside_git: Path) -> None:
     assert not Git(outside_git / "nope").is_repo()
+
+
+# ----- s29: options, attempt, branch ----------------------------------------
+
+
+def test_attempt_returns_code_and_output_without_raising(repo: Path) -> None:
+    code, out = Git(repo).attempt("rev-parse", "--verify", "nope-not-a-ref")
+    assert code != 0 and out
+    code, out = Git(repo).attempt("rev-parse", "HEAD")
+    assert code == 0 and out.strip() == Git(repo).head()
+
+
+def test_options_are_prepended_to_every_command(repo: Path) -> None:
+    g = Git(repo, ("-c", "user.name=Option Name"))
+    assert g.run("config", "user.name").strip() == "Option Name"
+    assert g.attempt("config", "user.name") == (0, "Option Name\n")
+
+
+def test_branch_names_the_checked_out_branch_or_none(repo: Path) -> None:
+    assert Git(repo).branch() == "main"
+    git(repo, "checkout", "-q", "--detach")
+    assert Git(repo).branch() is None

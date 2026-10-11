@@ -32,6 +32,11 @@ def test_trigger_values_are_snake_case() -> None:
         "runner_fault",
         "off_pipeline_fault",
         "fault_not_applied",
+        "sync_conflict",
+        "push_permission",
+        "push_rejected",
+        "boundary_error",
+        "boundary_escalated",
     ]
 
 
@@ -50,6 +55,11 @@ def test_table_rows_are_in_design_order() -> None:
         T.RUNNER_FAULT,
         T.OFF_PIPELINE_FAULT,
         T.FAULT_NOT_APPLIED,
+        T.SYNC_CONFLICT,
+        T.PUSH_PERMISSION,
+        T.PUSH_REJECTED,
+        T.BOUNDARY_ERROR,
+        T.BOUNDARY_ESCALATED,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 

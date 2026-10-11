@@ -204,9 +204,15 @@ def test_scribe_heading(make_runtime) -> None:
 # ----- picking work (R2, R13) ------------------------------------------------------
 
 
-def test_pickers_is_manager_scribe_story() -> None:
+def test_pickers_is_boundary_manager_repeat_scribe_story() -> None:
     names = [p.__name__ for p in Router.PICKERS]
-    assert names == ["_manager_work", "_repeat_work", "_scribe_work", "_story_work"]
+    assert names == [
+        "_boundary_work",
+        "_manager_work",
+        "_repeat_work",
+        "_scribe_work",
+        "_story_work",
+    ]
 
 
 def test_manager_comes_first_and_runs_story_less(make_runtime) -> None:
@@ -277,12 +283,13 @@ def test_sprint_end_when_every_story_is_done(make_runtime) -> None:
     add_story(rt, "s1", status=StoryStatus.DONE)
     add_story(rt, "s2", sprint=None)
     p = advance(rt)
+    skipped = "Review: sync and pull requests skipped: no remote 'origin'"
     assert (p.kinds, p.lines, p.stories, p.steps) == (
         [T.SPRINT_END],
-        ["Sprint 1 is complete: every story in it is done."],
+        ["Sprint 1 is complete: every story in it is done.", skipped],
         [],
-        0,
-    )
+        1,
+    )  # one step: the end boundary, skipped because the scratch repo has no origin
 
 
 def test_empty_sprint_is_stalled_not_ended(make_runtime) -> None:
@@ -801,3 +808,101 @@ def test_an_unclaimed_rework_bounces_once_with_the_reason(make_runtime) -> None:
     retry = script.prompts["unit-tester"][1]
     assert "- Sent back to this step: tests pass on code from an earlier pass" in retry
     assert st.status is StoryStatus.DONE and len(handover_events(rt)) == 1
+
+
+# ----- s29: sprint boundaries (U1, U2, U3, U22, U23) -----------------------------
+
+
+def test_boundary_comes_before_the_manager_and_stories(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    add_story(rt, "s1")
+    rt.state.manager_due = ["sprint 1 start: G (s1)"]
+    rt.state.boundary = bd.Boundary(bd.Edge.START, 1)
+    work = Router(rt).next_work()
+    assert (work.role, work.kind, work.story) == ("runner", bd.StepKind.BOUNDARY, None)
+
+
+def test_fix_work_runs_devops_with_the_fix_kind_and_brief(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    b = rt.state.boundary = bd.Boundary(bd.Edge.START, 1, stage=bd.Stage.CHECK)
+    b.failure = bd.Failure(bd.Stage.CHECK, bd.FixCase.TEAM_CHECK, "lint broke")
+    work = Router(rt).next_work()
+    assert (work.role, work.kind, work.story) == ("devops", bd.StepKind.TEAM_FIX, None)
+    assert work.brief.startswith("Sprint 1 start boundary:") and "lint broke" in work.brief
+
+
+def test_a_held_boundary_picks_nothing_and_stalls_the_pass(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    add_story(rt, "s1")
+    rt.state.boundary = bd.Boundary(
+        bd.Edge.START, 1, stage=bd.Stage.CHECK, hold=bd.BoundaryHold.ERROR
+    )
+    assert Router(rt).next_work() is None
+    p = advance(rt)
+    assert p.kinds == [T.STALLED] and p.steps == 0
+    assert p.lines[0] == "Nothing in sprint 1 can move."
+    assert p.lines[1] == bd.BOUNDARY_STALL.format(
+        sprint=1, edge="start", stage="check", hold="error"
+    )
+
+
+def test_a_held_boundary_waits_when_a_question_is_open(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    add_story(rt, "s1")
+    rt.state.boundary = bd.Boundary(bd.Edge.START, 1, hold=bd.BoundaryHold.SYNC_CONFLICT)
+    rt.relay.post(Note("question", "merge by hand?", ["s1"]))
+    p = advance(rt)
+    assert p.kinds != [T.STALLED]
+
+
+def test_stories_do_not_move_while_a_boundary_is_pending(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    add_story(rt, "s1")
+    rt.state.boundary = bd.Boundary(bd.Edge.START, 1)
+    works = [Router(rt)._story_work()]
+    assert works == [None]
+
+
+def test_the_complete_sprint_opens_an_end_boundary_first(make_runtime) -> None:
+
+    rt = make_runtime()
+    add_story(rt, "s1", status=StoryStatus.DONE)
+    p = advance(rt)
+    assert rt.state.upstream.closed == 1 and rt.state.boundary is None
+    assert p.steps == 1 and p.kinds == [T.SPRINT_END]
+    [event] = [e for e in rt.events.events() if e.kind == "boundary"]
+    assert (event.data["edge"], event.data["sprint"], event.data["outcome"]) == (
+        "end",
+        1,
+        "skipped",
+    )
+
+
+def test_a_closed_sprint_does_not_open_a_second_end_boundary(make_runtime) -> None:
+    rt = make_runtime()
+    add_story(rt, "s1", status=StoryStatus.DONE)
+    rt.state.upstream.closed = 1
+    p = advance(rt)
+    assert p.steps == 0 and p.kinds == [T.SPRINT_END]
+    assert not any(line.startswith("Review:") for line in p.lines)
+
+
+def test_a_boundary_step_counts_and_its_report_is_saved(make_runtime) -> None:
+    from agile_team import boundary as bd
+
+    rt = make_runtime()
+    rt.state.sprint = 1
+    rt.state.boundary = bd.Boundary(bd.Edge.START, 1)
+    r = Router(rt)
+    asyncio.run(r.advance())
+    assert r.steps >= 1 and rt.state.boundary is None

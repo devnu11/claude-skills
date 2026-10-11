@@ -207,3 +207,34 @@ def test_inline_scripts_parse(parts: PageParts, tmp_path: Path) -> None:
         target.write_text(body, encoding="utf-8")
         done = subprocess.run(["node", "--check", str(target)], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
+
+
+# ----- s29: the Review stack card and boundary timeline rows (U25) -------------------
+
+
+def test_board_tab_has_the_stack_card_before_the_board(page: str) -> None:
+    assert 'id="stack-card"' in page
+    assert page.index('id="stack-card"') < page.index('id="board"')
+
+
+@pytest.mark.parametrize("name", ["renderStack"])
+def test_stack_functions_exist(script: str, name: str) -> None:
+    assert re.search(rf"function\s+{name}\s*\(|{name}\s*=", script)
+
+
+@pytest.mark.parametrize(
+    "needle",
+    ["Review stack", "STACK_TONE", "no PR", "BOUNDARY_TONE", "BOUNDARY_TO", "stack-card", "held: "],
+)
+def test_stack_card_vocabulary(script: str, page: str, needle: str) -> None:
+    assert needle in script or needle in page
+
+
+def test_timeline_has_a_boundary_row_builder(script: str) -> None:
+    assert re.search(r"\bboundary\s*:\s*\(e\)\s*=>", script)
+    assert "e.data.outcome" in script and "e.data.edge" in script
+
+
+def test_stack_card_escapes_its_strings(script: str) -> None:
+    body = script[script.index("function renderStack") :][:2500]
+    assert "esc(" in body

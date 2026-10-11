@@ -74,6 +74,39 @@ def write_story_file(config: cfg.Config, sid: str, meta: str, body: str = "x\n")
     path.write_text(f"---\n{meta}---\n{body}")
 
 
+def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
+    """Put the fixture's ``upstream`` section back into the run state (s29)."""
+    if not section:
+        return
+    from agile_team import boundary as bd
+
+    state.upstream = bd.UpstreamState(
+        team_branch=section["team_branch"],
+        push=section["push"],
+        report=section["report"],
+        stack=[
+            bd.StackEntry(
+                e["sprint"],
+                e["branch"],
+                "a",
+                "b",
+                head=e["head"],
+                check=e["check"],
+                pr=e["pr"],
+                url=e["url"],
+                base=e["base"],
+                mode=e["mode"],
+            )
+            for e in section["stack"]
+        ],
+    )
+    b = section["boundary"]
+    if b:
+        state.boundary = bd.Boundary(
+            b["edge"], b["sprint"], stage=b["stage"], hold=b["hold"], rounds=b["rounds"]
+        )
+
+
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
     config = make_config(root, steps=fixture["pipeline"])
@@ -99,6 +132,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
         manager_due=run["manager_due"],
         task=run["task"],
     )
+    restore_upstream(state, fixture.get("upstream"))
     state_mod.save(config.run_dir, state)
     plain = [e for e in fixture["events"] if e["kind"] not in ("message", "answer")]
     write_jsonl(config.run_dir / "events.jsonl", plain)
@@ -448,3 +482,78 @@ def test_ledger_constant_lives_in_ledger_module() -> None:
     from agile_team import cli, ledger
 
     assert ledger.LEDGER == "ledger.jsonl" and cli.LEDGER is ledger.LEDGER
+
+
+# ----- s29: the upstream section (U25) -------------------------------------------
+
+
+def test_snapshot_has_an_empty_upstream_section(config: cfg.Config, tmp_path: Path) -> None:
+    section = build(config, tmp_path)["upstream"]
+    assert section == {
+        "remote": "origin",
+        "branch": "main",
+        "team_branch": "",
+        "push": "unasked",
+        "report": "",
+        "boundary": None,
+        "stack": [],
+    }
+
+
+def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, tmp_path: Path) -> None:
+    from agile_team import boundary as bd
+
+    st = RunState(sprint=2)
+    st.upstream = bd.UpstreamState(
+        team_branch="agile-team",
+        push=bd.Permission.YES,
+        stack=[
+            bd.StackEntry(
+                1,
+                "team/sprint-1",
+                "a",
+                "b",
+                head="h",
+                pr=4,
+                url="u",
+                base="main",
+                mode="ready",
+                check="pass",
+            )
+        ],
+    )
+    st.boundary = bd.Boundary(
+        bd.Edge.END, 2, stage=bd.Stage.CHECK, hold=bd.BoundaryHold.ERROR, rounds=1
+    )
+    st.boundary.failure = bd.Failure(
+        bd.Stage.CHECK, bd.FixCase.TEAM_CHECK, "first line\nsecond line"
+    )
+    state_mod.save(config.run_dir, st)
+    section = build(config, tmp_path)["upstream"]
+    assert section["team_branch"] == "agile-team" and section["push"] == "yes"
+    assert section["stack"] == [
+        {
+            "sprint": 1,
+            "branch": "team/sprint-1",
+            "base": "main",
+            "pr": 4,
+            "url": "u",
+            "mode": "ready",
+            "check": "pass",
+            "head": "h",
+        }
+    ]
+    assert section["boundary"] == {
+        "edge": "end", "sprint": 2, "stage": "check", "hold": "error", "failure": "first line", "rounds": 1,  # noqa: E501
+    }  # fmt: skip
+
+
+def test_fixture_upstream_section_has_a_two_entry_stack_and_boundary_events() -> None:
+    fixture = json.loads(FIXTURE.read_text())
+    section = fixture["upstream"]
+    assert [e["mode"] for e in section["stack"]] == ["ready", "none"]
+    assert section["stack"][1]["pr"] is None and section["boundary"]["hold"] == "push_permission"
+    events = [e["data"] for e in fixture["events"] if e["kind"] == "boundary"]
+    assert {(d["stage"], d["outcome"]) for d in events} >= {
+        ("sync", "merged"), ("check", "fail"), ("check", "pass"), ("review", "built"), ("push", "held"),  # noqa: E501
+    }  # fmt: skip

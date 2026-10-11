@@ -378,3 +378,30 @@ def test_pipeline_checks_the_story_presentation(configured: Path) -> None:
     assert "no presentation" in pipeline.checks.presentation(story)
     present(config, "s4")
     assert pipeline.checks.presentation(story) is None
+
+
+# ----- s29: status shows the boundary and upstream (U26) -----------------------------
+
+
+def test_status_report_has_boundary_and_upstream(configured) -> None:
+    from agile_team import boundary as bd
+    from agile_team import config as config_mod
+    from agile_team import state as state_mod
+
+    config = config_mod.load(configured)
+    empty = cli.status_report(config)
+    assert empty["boundary"] is None and empty["upstream"]["push"] == "unasked"
+    assert empty["upstream"]["stack"] == []
+    st = state_mod.RunState(sprint=1)
+    st.boundary = bd.Boundary(bd.Edge.END, 1, stage=bd.Stage.PUSH)
+    state_mod.save(config.run_dir, st)
+    report = cli.status_report(config)
+    assert report["boundary"]["edge"] == "end" and report["boundary"]["stage"] == "push"
+
+
+def test_make_runtime_wires_the_gh_pr_service(configured: Path, key_home: Path) -> None:
+    from agile_team import upstream
+
+    rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
+    assert isinstance(rt.prs, upstream.GhPrs)
+    assert rt.upstream.target == "origin/main"

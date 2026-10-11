@@ -112,3 +112,52 @@ def test_providers_load_and_validate(tmp_path: Path) -> None:
         "providers.odd billing must be one of ('reported', 'free')",
         "providers.odd base_url must be an http(s) URL",
     ]
+
+
+# ----- s29: [upstream] and Delivery.e2e -------------------------------------
+
+
+def test_upstream_defaults(tmp_path: Path) -> None:
+    c = cfg.from_raw(tmp_path, {})
+    assert (c.upstream.remote, c.upstream.branch, c.upstream.prefix) == (
+        "origin",
+        "main",
+        "team/sprint-",
+    )
+
+
+def test_upstream_loads_and_ignores_unknown_keys(tmp_path: Path) -> None:
+    raw = {"upstream": {"remote": "up", "branch": "dev", "prefix": "rev/s", "bogus": 1}}
+    u = cfg.from_raw(tmp_path, raw).upstream
+    assert (u.remote, u.branch, u.prefix) == ("up", "dev", "rev/s")
+
+
+def test_delivery_e2e_loads(tmp_path: Path) -> None:
+    c = cfg.from_raw(
+        tmp_path, {"delivery": [{"name": "a", "kind": "package", "e2e": "pytest e2e"}]}
+    )
+    assert c.deliveries[0].e2e == "pytest e2e"
+    assert (
+        cfg.from_raw(tmp_path, {"delivery": [{"name": "b", "kind": "package"}]}).deliveries[0].e2e
+        == ""
+    )
+
+
+def _upstream_problems(tmp_path: Path, upstream: dict) -> list[str]:
+    c = cfg.from_raw(tmp_path, {"upstream": upstream})
+    return [p for p in cfg.validate(c, KNOWN) if p.startswith("upstream")]
+
+
+def test_upstream_rules_messages(tmp_path: Path) -> None:
+    assert _upstream_problems(tmp_path, {"branch": ""}) == ["upstream.branch must be set"]
+    assert _upstream_problems(tmp_path, {"prefix": "-bad"}) == [
+        "upstream.prefix must be a branch name prefix"
+    ]
+    assert _upstream_problems(tmp_path, {"prefix": "a b"}) == [
+        "upstream.prefix must be a branch name prefix"
+    ]
+
+
+def test_upstream_valid_and_sync_off_allow_empty_branch(tmp_path: Path) -> None:
+    assert _upstream_problems(tmp_path, {}) == []
+    assert _upstream_problems(tmp_path, {"remote": "", "branch": ""}) == []

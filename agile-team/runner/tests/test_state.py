@@ -134,3 +134,35 @@ def test_previous_step_defaults() -> None:
 
     p = PreviousStep("architect", "done")
     assert (p.summary, p.verdict, p.reason, p.next_role) == ("", "", "", None)
+
+
+# ----- s29: boundary, upstream, goal ----------------------------------------
+
+
+def test_boundary_and_upstream_round_trip() -> None:
+    from agile_team import boundary as bd
+    from agile_team.loops import Setback
+
+    st = state.RunState(goal="ship it")
+    fail = bd.Failure(bd.Stage.CHECK, bd.FixCase.TEAM_CHECK, "lint broke", files=["a.py"])
+    boundary = bd.Boundary(bd.Edge.END, 2, stage=bd.Stage.CHECK, failure=fail, rounds=1)
+    boundary.hold = bd.BoundaryHold.ESCALATED
+    boundary.streak = [bd.setback(boundary, fail)]
+    st.boundary = boundary
+    entry = bd.StackEntry(2, "team/sprint-2", "aa", "bb", stories=["s1"], pr=7, mode="draft")
+    st.upstream = bd.UpstreamState(push=bd.Permission.YES, stack=[entry], last_end="bb", closed=1)
+    back = state.RunState.from_json(st.to_json())
+    assert back.goal == "ship it"
+    assert back.boundary == boundary and isinstance(back.boundary.failure, bd.Failure)
+    assert isinstance(back.boundary.streak[0], Setback) and back.boundary.edge is bd.Edge.END
+    assert back.upstream == st.upstream and isinstance(back.upstream.stack[0], bd.StackEntry)
+    assert back.upstream.push is bd.Permission.YES
+
+
+def test_older_state_loads_with_no_boundary_and_empty_upstream() -> None:
+    from agile_team import boundary as bd
+
+    back = state.RunState.from_json('{"sprint": 2, "status": "idle"}')
+    assert back.boundary is None and back.goal == ""
+    assert back.upstream == bd.UpstreamState()
+    assert back.upstream.push == "unasked" and back.upstream.closed == 0
