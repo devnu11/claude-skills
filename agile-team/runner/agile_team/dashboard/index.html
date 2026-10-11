@@ -111,6 +111,7 @@ section[hidden] { display: none; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg + .seg { margin-left: 8px; }
 .node.live-halo { animation: halo 1.6s ease-in-out infinite; }
 @keyframes halo { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 7px var(--accent)); } }
 .flow-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
@@ -137,12 +138,15 @@ select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; bo
 .tl-meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
 
 /* board */
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
-.col { background: var(--surface-2); border-radius: 10px; padding: 8px; min-height: 160px; }
+.board { display: flex; gap: 8px; padding-bottom: 6px; }
+.col { flex: 1 1 0; min-width: 0; overflow: hidden; background: var(--surface-2); border-radius: 10px; padding: 8px; min-height: 160px; }
 .col h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); margin: 2px 4px 8px; display: flex; justify-content: space-between; }
+.col.empty { flex: 0 0 44px; padding: 8px 4px; }
+.col.empty h3 { writing-mode: vertical-rl; margin: 2px auto; gap: 6px; justify-content: flex-start; }
 .col h3 span { color: var(--muted); font-weight: 500; }
 .col.backlog { background: transparent; border: 1px dashed var(--axis); }
-.story { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; }
+.story .pill { white-space: normal; }
+.story { overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; }
 .story.working { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .story .sid { font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .story .title { font-weight: 550; margin: 1px 0 6px; }
@@ -252,7 +256,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
       <div class="tiles" id="tiles"></div>
       <div class="grid-2">
         <div class="card chart"><h2>Spend over time</h2><p class="sub">Gridlines are the Manager's budget checkpoints.</p><div id="spend"></div></div>
-        <div class="card chart"><h2>Tokens by</h2><div class="seg" id="group" role="group" aria-label="Group tokens by"></div><div class="legend" id="mix-legend" style="margin:0 0 8px"></div><div id="mix"></div></div>
+        <div class="card chart"><h2 id="mix-title">Tokens by</h2><div class="seg" id="group" role="group" aria-label="Group by"></div><div class="seg" id="unit" role="group" aria-label="Measure in"></div><div class="legend" id="mix-legend" style="margin:0 0 8px"></div><div id="mix"></div></div>
       </div>
       <div class="card">
         <h2>By role</h2>
@@ -885,7 +889,7 @@ function renderBoard(view) {
   const act = activeStep(view.events);
   $("#board").innerHTML = boardColumns(view).map(([id, label, test]) => {
     const cards = view.stories.filter(test);
-    return `<div class="col ${esc(id)}"><h3>${esc(label)}<span>${cards.length}</span></h3>
+    return `<div class="col ${esc(id)}${cards.length ? "" : " empty"}"><h3>${esc(label)}<span>${cards.length}</span></h3>
       ${cards.map((s) => storyCard(view, s, act)).join("")}</div>`;
   }).join("");
 }
@@ -939,6 +943,7 @@ function renderTokens(view) {
   renderSpend(view);
   renderBars(view);
   renderGroup();
+  renderUnit();
   renderTables(view);
 }
 
@@ -1008,16 +1013,24 @@ function renderGroup() {
     `<button data-group="${k}" aria-pressed="${k === ui.group}">${label}</button>`).join("");
 }
 
-function renderBars(view) {
-  const rows = Object.entries(totalsBy(view.ledger, ui.group))
-    .map(([role, t]) => ({ role, t, total: sum(TOKEN_KINDS, ([k]) => t[k]) }))
+/** Bar rows for the chosen grouping, largest first in the chosen unit. */
+function barRows(view) {
+  const groups = Object.entries(totalsBy(view.ledger, ui.group));
+  const spend = sum(groups, ([, t]) => t.cost);
+  return groups
+    .map(([role, t]) => ({ role, t, spend, total: UNITS[ui.unit].total(t) }))
     .sort((a, b) => b.total - a.total);
-  $("#mix-legend").innerHTML = TOKEN_KINDS.map(([, label, v]) => `<span><i class="sw" style="background:var(${v})"></i>${label}</span>`).join("");
+}
+
+function renderBars(view) {
+  const unit = UNITS[ui.unit], rows = barRows(view);
+  $("#mix-legend").innerHTML = unit.legend();
   if (!rows.length) { $("#mix").innerHTML = `<p class="empty">No steps yet.</p>`; return; }
-  const max = rows[0].total, span = MIX.w - MIX.label - MIX.right;
+  const span = MIX.w - MIX.label - MIX.right;
+  const scale = rows[0].total ? span / rows[0].total : 0;
   const h = rows.length * (MIX.bar + MIX.gap);
-  const bars = rows.map((r, i) => mixRow(r, i, span / max)).join("");
-  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="Tokens by ${ui.group}">
+  const bars = rows.map((r, i) => unit.row(r, i, scale)).join("");
+  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="${unit.title} ${ui.group}">
     <line class="baseline" x1="${MIX.label}" x2="${MIX.label}" y1="0" y2="${h - MIX.gap}"/>${bars}</svg>`;
   for (const seg of document.querySelectorAll("#mix [data-tip]")) {
     seg.addEventListener("mousemove", (ev) => showTip(ev, seg.dataset.tip));
@@ -1025,12 +1038,40 @@ function renderBars(view) {
   }
 }
 
+function tokenLegend() {
+  return TOKEN_KINDS.map(([, label, v]) => `<span><i class="sw" style="background:var(${v})"></i>${label}</span>`).join("");
+}
+
+function costLegend() {
+  return `<span><i class="sw" style="background:var(--s1)"></i>Cost (USD)</span>`;
+}
+
+const UNITS = {
+  tokens: { label: "Tokens", title: "Tokens by", total: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), legend: tokenLegend, row: mixRow },
+  usd: { label: "Dollars", title: "Spend by", total: (t) => t.cost, legend: costLegend, row: costRow },
+};
+
+function renderUnit() {
+  $("#unit").innerHTML = Object.entries(UNITS).map(([k, u]) =>
+    `<button data-unit="${k}" aria-pressed="${k === ui.unit}">${u.label}</button>`).join("");
+  $("#mix-title").textContent = UNITS[ui.unit].title;
+}
+
+function costRow({ role, t, spend, total }, i, scale) {
+  const y = i * (MIX.bar + MIX.gap), w = Math.max(0, t.cost * scale);
+  const share = spend ? (100 * t.cost) / spend : 0;
+  const tip = `<b>${esc(role)}</b><br>${fmt.usd(t.cost)} <span class="k">(${fmt.pct(share)} of spend)</span> · ${t.steps} steps`;
+  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(role)}</text>
+    <path d="${segment(MIX.label, y, w, true)}" fill="var(--s1)" data-tip="${esc(tip)}"/>
+    <text x="${MIX.label + w + 6}" y="${y + MIX.bar / 2 + 4}">${fmt.usd(total)}</text>`;
+}
+
 function mixRow({ role, t, total }, i, scale) {
   const y = i * (MIX.bar + MIX.gap);
   let x = MIX.label;
   const segs = TOKEN_KINDS.map(([k, label, v], j) => {
     const w = t[k] * scale, last = j === TOKEN_KINDS.length - 1;
-    const tip = `<b>${esc(role)}</b><br>${label}: ${fmt.tok(t[k])} <span class="k">(${fmt.pct((100 * t[k]) / total)})</span>`;
+    const tip = `<b>${esc(role)}</b><br>${label}: ${fmt.tok(t[k])} <span class="k">(${fmt.pct(total ? (100 * t[k]) / total : 0)})</span>`;
     const shape = segment(x, y, Math.max(0, w - (last ? 0 : 2)), last);
     x += w;
     return `<path d="${shape}" fill="var(${v})" data-tip="${esc(tip)}"/>`;
@@ -1150,7 +1191,7 @@ function showTip(ev, html) {
 }
 const hideTip = () => { $("#tip").style.display = "none"; };
 
-const ui = { tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role" };
+const ui = { tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens" };
 const RENDER = { flow: renderFlowTab, board: renderBoard, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 
 function showTab(id) {
@@ -1185,6 +1226,8 @@ document.addEventListener("click", (ev) => {
   if (tab) showTab(tab.dataset.tab);
   const group = ev.target.closest("[data-group]");
   if (group) { ui.group = group.dataset.group; render(); }
+  const unit = ev.target.closest("[data-unit]");
+  if (unit) { ui.unit = unit.dataset.unit; render(); }
   const copy = ev.target.closest("[data-copy]");
   if (copy) navigator.clipboard?.writeText(copy.dataset.copy);
   const act = ev.target.closest("[data-mock]");

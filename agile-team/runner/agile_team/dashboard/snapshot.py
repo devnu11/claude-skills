@@ -14,10 +14,11 @@ from typing import Any
 
 import yaml
 
+from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
 from .. import waits
-from ..config import Config
+from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
 from ..ledger import LEDGER, Entry
 from ..priority import Priority
@@ -70,7 +71,8 @@ def watched_files(config: Config) -> list[Path]:
     """Every file a snapshot reads (missing ones included)."""
     run = [config.run_dir / name for name in RUN_FILES]
     stories = sorted(config.stories_dir.glob("*.md"))
-    return run + stories + sorted(config.requirements_dir.glob("REQ-*.md"))
+    reqs = sorted(config.requirements_dir.glob("REQ-*.md"))
+    return [*run, config_path(config.repo), *stories, *reqs]
 
 
 def _generated_at(files: RunFiles) -> float:
@@ -297,7 +299,18 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
 }
 
 
+def fresh_config(config: Config) -> Config:
+    """The config as the file says now; the given one if the file is missing or bad."""
+    try:
+        return config_mod.load(config.repo)
+    except ConfigError:
+        return config
+
+
 def build(config: Config, book: RoleBook) -> dict[str, Any]:
-    """The snapshot dict; ``fixtures/snapshot.json`` is its contract."""
-    files = RunFiles.load(config, book)
+    """The snapshot dict; ``fixtures/snapshot.json`` is its contract.
+
+    Re-reads ``.agile-team.toml`` each time.
+    """
+    files = RunFiles.load(fresh_config(config), book)
     return {key: section(files) for key, section in SECTIONS.items()}
