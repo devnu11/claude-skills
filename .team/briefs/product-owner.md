@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s30 done)
+
+## s30: `pass_tests()` tool to move stuck stories
+
+A story stuck at `tests` (open dispute, round cap, blocked, or repeated setback) with a **green suite** can be moved to the next step by hand: `pass_tests(story, reason)`. The tool runs the suite first (only when needed), refuses if red, then moves the story and clears all holds/rounds/disputes. Reason is captured in note and `manager_due` for review. No editing `state.json` by hand. This covers both runner faults at `tests` and corrected disputed tests that the gate missed. See ADR-0019, design `agile-team/docs/design/s30.md` (rules F8–F11).
 
 ## s9: Interrupted steps and recovery on resume
 

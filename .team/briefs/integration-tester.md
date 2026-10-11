@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s30 done)
+
+## s30: Dispute gate compares content, not commits
+
+E2E tests for the dispute gate now verify that it compares the disputed test file's **content hash** (ignoring whitespace and comments) against a baseline stored at dispute raise time. Test cases: unchanged file bounces with exact reason text (test id, file, baseline[:12]); cosmetic fix (comments/blanks only) bounces; real fix passes; file now missing passes; confirmed disputes pass without reading. Also verify: path resolution through `git ls-files` (exact + suffix match), unresolvable files bounce to `implement` with `UNTRACKED` text and no `test-dispute` event, legacy disputes (before s30) pass with `LEGACY_PASS`. See design `agile-team/docs/design/s30.md` (E2E checklist).
 
 ## s11: Test disputes in e2e flows
 

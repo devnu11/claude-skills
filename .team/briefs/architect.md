@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s30 done)
+
+## s30: Content-based dispute resolution and manual escalation
+
+The dispute mechanism (s11) is now fully functional. Baseline is the file's content hash (not a commit), stored at raise time, compared at the gate. Path resolution happens at raise; unresolvable files are rejected. Repeat bounces escalate to the Manager via s27 logic. New `pass_tests()` tool lets the PO move stuck stories when suite is green (no manual state edits). Design rules F1–F12 in `agile-team/docs/design/s30.md` govern path resolution, fingerprinting (whitespace/comment normalization), raise/gate/repeat/legacy logic, and tool implementation. See ADR-0019.
 
 ## s9: Save interrupted steps in commits, not stashes
 

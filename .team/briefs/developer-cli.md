@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s30 done)
 
 See `developer.md` for the base conventions.
+
+## s30: Dispute baseline is content hash, not commit
+
+Disputes now store the disputed test file's content fingerprint (whitespace/comment-normalized hash) instead of a git commit. The gate compares current content against this baseline. Unresolvable test ids are rejected at raise time with `UNTRACKED`. New PO tool `pass_tests()` moves stuck stories from `tests` when suite is green. Key modules: `fingerprint.py` (new), changes to `gates.py`, `state.py`, `po_tools.py`. See ADR-0019, design `agile-team/docs/design/s30.md`.
 
 ## s9: Recover from an interrupted step—keep its edits
 

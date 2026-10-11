@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s11 done)
+**Last updated:** 2026-10-11 (s30 done)
+
+## s30: Dispute gate now checks content, not commits
+
+The dispute gate (s11 T6) now compares the disputed test file's **content hash** against the baseline stored when the dispute was raised, ignoring whitespace and comments. A real change passes; cosmetic (comment/whitespace only) or no change bounces with reason including file and baseline hash. New: test file paths are resolved to repo root at raise time; unresolvable paths are rejected with `UNTRACKED`. Test checklist (design section 7): fingerprint tests (comments, blanks, indents, assertions, strings), resolution (exact + suffix matching, git ls-files), raise (resolve, baseline capture, unresolvable bounce), gate (real/cosmetic/no change, confirmed, legacy, no git command), repeat escalates. See ADR-0019, design `agile-team/docs/design/s30.md`.
 
 ## s9: Interrupted steps—save and offer edits, not stash them
 
