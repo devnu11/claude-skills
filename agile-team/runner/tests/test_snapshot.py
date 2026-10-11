@@ -209,6 +209,7 @@ def test_empty_run_files(config: cfg.Config, tmp_path: Path) -> None:
 
 
 def test_run_section_reads_config(config: cfg.Config, tmp_path: Path) -> None:
+    """The run section carries the config values and the (empty) queue `order` (s40 D1/D5)."""
     run = build(config, tmp_path)["run"]
     assert run == {
         "status": "idle",
