@@ -79,8 +79,8 @@ class Delivery:
     url: str = ""
     commands: list[str] = field(default_factory=list)
     bin: list[str] = field(default_factory=list)
-    probe: str = ""
     e2e: str = ""
+    probe: str = ""
 
 
 @dataclass

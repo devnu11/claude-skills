@@ -1716,6 +1716,101 @@
     "bounces": 2,
     "rule": "repeat"
    }
+  },
+  {
+   "id": "e93",
+   "at": 1791472210.0,
+   "kind": "boundary",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "edge": "end",
+    "sprint": 10,
+    "stage": "sync",
+    "outcome": "merged",
+    "sha": "3f9c2ab41d7e",
+    "target": "origin/main",
+    "team_branch": "agile-team"
+   }
+  },
+  {
+   "id": "e94",
+   "at": 1791472220.0,
+   "kind": "boundary",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "edge": "end",
+    "sprint": 10,
+    "stage": "check",
+    "outcome": "fail",
+    "reason": "test failed (exit 1): uv run pytest\nFAILED tests/test_export.py::test_csv",
+    "key": "end>check test failed",
+    "count": 1,
+    "history": [],
+    "checks": [
+     {
+      "name": "test",
+      "passed": false,
+      "why": "exit 1"
+     }
+    ]
+   }
+  },
+  {
+   "id": "e95",
+   "at": 1791472230.0,
+   "kind": "boundary",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "edge": "end",
+    "sprint": 10,
+    "stage": "check",
+    "outcome": "pass",
+    "checks": [
+     {
+      "name": "test",
+      "passed": true,
+      "why": ""
+     }
+    ]
+   }
+  },
+  {
+   "id": "e96",
+   "at": 1791472240.0,
+   "kind": "boundary",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "edge": "end",
+    "sprint": 10,
+    "stage": "review",
+    "outcome": "built",
+    "branches": [
+     "team/sprint-9",
+     "team/sprint-10"
+    ]
+   }
+  },
+  {
+   "id": "e97",
+   "at": 1791472250.0,
+   "kind": "boundary",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "edge": "end",
+    "sprint": 10,
+    "stage": "push",
+    "outcome": "held",
+    "hold": "push_permission",
+    "branches": [
+     "team/sprint-9",
+     "team/sprint-10"
+    ]
+   }
   }
  ],
  "ledger": [
@@ -2143,5 +2238,42 @@
    "text": "Only `report run` for now. Yes, Excel on Windows matters: finance opens these.",
    "at": 1791450263.9
   }
- ]
+ ],
+ "upstream": {
+  "remote": "origin",
+  "branch": "main",
+  "team_branch": "agile-team",
+  "push": "yes",
+  "report": "Sprint 9 is up for review: #12 (ready, team/sprint-9) https://github.com/o/r/pull/12.",
+  "boundary": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "push",
+   "hold": "push_permission",
+   "failure": null,
+   "rounds": 0
+  },
+  "stack": [
+   {
+    "sprint": 9,
+    "branch": "team/sprint-9",
+    "base": "main",
+    "pr": 12,
+    "url": "https://github.com/o/r/pull/12",
+    "mode": "ready",
+    "check": "pass",
+    "head": "3f9c2ab41d7e"
+   },
+   {
+    "sprint": 10,
+    "branch": "team/sprint-10",
+    "base": "team/sprint-9",
+    "pr": null,
+    "url": "",
+    "mode": "none",
+    "check": "pass",
+    "head": "8be05c61a9f2"
+   }
+  ]
+ }
 }

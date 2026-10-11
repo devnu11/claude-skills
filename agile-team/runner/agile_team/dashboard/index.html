@@ -244,6 +244,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
     </div>
   </section>
   <section id="tab-board" hidden>
+    <div class="card" id="stack-card" hidden></div>
     <div class="board" id="board"></div>
   </section>
   <section id="tab-tokens" hidden>
@@ -739,6 +740,12 @@ function stepEndMeta(d) {
     .filter(Boolean).join(" · ");
 }
 
+const BOUNDARY_TONE = {
+  pass: "good", merged: "good", built: "good", pushed: "good", done: "good", local: "warning", held: "warning",
+  fail: "serious", conflict: "serious", escalate: "serious", error: "critical",
+};
+const BOUNDARY_TO = { fail: "devops", conflict: "devops", escalate: "manager", held: PO, error: PO };
+
 const TIMELINE = {
   "step-start": (e) => ({ from: PO, to: e.role, what: "brief", body: e.data.brief }),
   "step-end": (e) => ({
@@ -780,6 +787,12 @@ const TIMELINE = {
     body: e.data.reason, meta: e.data.affected_done_stories?.length ? `affects done: ${e.data.affected_done_stories.join(", ")}` : "",
   }),
   "story-opened": (e) => ({ from: PO, to: "backlog", what: "story opened", body: e.data.title }),
+  boundary: (e) => ({
+    from: "runner", to: BOUNDARY_TO[e.data.outcome] ?? null,
+    what: `sprint ${e.data.sprint} ${e.data.edge} · ${e.data.stage}: ${e.data.outcome}`,
+    tone: BOUNDARY_TONE[e.data.outcome] ?? "", body: e.data.reason || e.data.note || "",
+    meta: e.data.branch || (e.data.files ?? []).join(", "),
+  }),
   "sprint-start": (e) => ({
     from: PO, to: e.data.sprint != null ? `sprint ${e.data.sprint}` : "sprint", what: "sprint start",
     body: [e.data.goal, e.data.stories?.length ? `Stories: ${e.data.stories.join(", ")}` : ""].filter(Boolean).join("\n"),
@@ -827,7 +840,35 @@ function boardColumns(view) {
   return cols;
 }
 
+const STACK_TONE = { ready: "good", draft: "", none: "warning", closed: "critical" };
+const CHECK_TONE = { pass: "good", fail: "critical", unchecked: "" };
+
+/** One row of the review stack: sprint, branch, PR link, mode and check pills. */
+function stackRow(e) {
+  const pr = e.pr ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">#${esc(e.pr)}</a>` : "no PR";
+  return `<div class="lane"><span class="who">sprint ${esc(e.sprint)}</span><code>${esc(e.branch)}</code>
+    <span>${pr}</span>${pill(e.mode, STACK_TONE[e.mode] ?? "")}${pill(e.check, CHECK_TONE[e.check] ?? "")}</div>`;
+}
+
+/** The boundary line: `Sprint N <edge>: <stage>` and a held or running pill. */
+function boundaryLine(b) {
+  const state = b.hold ? pill("held: " + b.hold, "warning") : pill("running", "accent");
+  return `<p class="sub">${esc(`Sprint ${b.sprint} ${b.edge}: ${b.stage}`)} ${state}</p>`;
+}
+
+/** The Review stack card; hidden when there is no stack and no boundary. */
+function renderStack(view) {
+  const up = view.upstream, card = $("#stack-card");
+  const stack = up?.stack ?? [];
+  card.hidden = !up || (!stack.length && !up.boundary);
+  if (card.hidden) return;
+  card.innerHTML = `<h2>Review stack</h2>
+    <p class="sub">${esc(`${up.team_branch} → ${up.remote}/${up.branch} · push: ${up.push}`)}</p>
+    ${up.boundary ? boundaryLine(up.boundary) : ""}${stack.map(stackRow).join("")}`;
+}
+
 function renderBoard(view) {
+  renderStack(view);
   const act = activeStep(view.events), blockers = blockedBy(view);
   $("#board").innerHTML = boardColumns(view).map(([id, label, test]) => {
     const cards = view.stories.filter(test);

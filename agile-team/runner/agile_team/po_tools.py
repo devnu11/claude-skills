@@ -16,6 +16,8 @@ from typing import Any, ClassVar
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
 from . import handover, po_session
+from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
+from .boundary_runner import boundary_event
 from .dispatch import PO, Launch, Plan, Runtime, StepRequest, StepResult, collect, refused
 from .events import Event, EventKind
 from .gates import StoryState, role_fits_step
@@ -31,6 +33,13 @@ POLL_S = 5.0
 DEFAULT_WAIT_S = 1800
 RESUME_NOTE = "Resume the run from state."
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
+SPRINT_REFUSAL_BOUNDARY = (
+    "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
+)
+NO_BOUNDARY = "no sprint boundary is pending"
+NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it"
+PERMISSION_REFUSAL = 'answer must be "yes" or "no"'
+AFTER_REVIEW = frozenset({BoundaryHold.ESCALATED, BoundaryHold.REVIEWED})
 
 Sleep = Callable[[float], Awaitable[None]]
 
@@ -90,6 +99,12 @@ class Tools:
         )
 
     def _sprint_refusal(self, ids: list[str]) -> str | None:
+        pending = self.runtime.state.boundary
+        if pending:
+            return SPRINT_REFUSAL_BOUNDARY.format(
+                sprint=pending.sprint, edge=pending.edge, stage=pending.stage,
+                held=held_text(pending),
+            )  # fmt: skip
         if not ids:
             return "no stories listed; pass the story ids this sprint commits to"
         unknown = self.runtime.state.unknown_stories(ids)
@@ -100,12 +115,44 @@ class Tools:
     def _begin_sprint(self, goal: str, ids: list[str]) -> None:
         state = self.runtime.state
         state.begin_sprint(ids)
+        state.goal, state.boundary = goal, Boundary(Edge.START, state.sprint)
         state.status = RunStatus.RUNNING
         state.manager_due.append(f"sprint {state.sprint} start: {goal} ({', '.join(ids)})")
         state.po_renew_due.append(f"sprint {state.sprint} start")
         self.runtime.save()
         data = {"sprint": state.sprint, "goal": goal, "stories": ids}
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
+
+    async def continue_boundary(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Release a held sprint boundary so the runner retries its stage."""
+        b = self.runtime.state.boundary
+        if b is None or b.hold is None:
+            return text_result(refused(self._not_held(b)))
+        if b.hold in AFTER_REVIEW:
+            b.streak, b.rounds, b.escalated = [], 0, None
+        b.hold, b.failure, b.note = None, None, args.get("note", "")
+        boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
+        self.runtime.save()
+        return text_result({"status": "continued", "stage": b.stage})
+
+    def _not_held(self, b: Boundary | None) -> str:
+        if b is None:
+            return NO_BOUNDARY
+        return NOT_HELD.format(sprint=b.sprint, edge=b.edge)
+
+    async def set_push_permission(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Record the human's answer to: may the team push review branches?"""
+        answer = args.get("answer")
+        if answer not in (Permission.YES, Permission.NO):
+            return text_result(refused(PERMISSION_REFUSAL))
+        state = self.runtime.state
+        state.upstream.push = Permission(answer)
+        b = state.boundary
+        if b and b.hold is BoundaryHold.PUSH_PERMISSION:
+            b.hold = None
+        boundary_event(self.runtime, b, BoundaryOutcome.PERMISSION, answer=answer)
+        self.runtime.save()
+        return text_result({"status": "set", "answer": answer})
 
     async def ask_user(self, args: dict[str, Any]) -> dict[str, Any]:
         msg = self.runtime.relay.post(Note("question", args["text"], args.get("stories", [])))
@@ -213,6 +260,7 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
         "stories": {sid: asdict(s) for sid, s in runtime.state.stories.items()},
         "manager_due": runtime.state.manager_due,
         "roles": runtime.book.enabled_names(),
+        "boundary": asdict(b) if (b := runtime.state.boundary) else None,
     }
 
 
@@ -248,6 +296,16 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Choose the developer specialisation for a story's implement steps (overrides the "
         "architect's pick).",
         {"story": str, "role": str},
+    ),
+    "continue_boundary": (
+        "Release a held sprint boundary (sync, checks, review branches, push) so the runner "
+        "retries its stage; your note reaches the next devops fix.",
+        {"note": str},
+    ),
+    "set_push_permission": (
+        "Record the human's answer to: may the team push review branches and open or update "
+        'PRs? answer is "yes" or "no"; it applies to every later sprint.',
+        {"answer": str},
     ),
     "wait_for_answers": ("Wait for answers to question ids.", {"ids": list, "timeout_s": int}),
     "budget_status": ("Spend so far against the soft budget.", {}),

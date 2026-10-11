@@ -33,6 +33,9 @@ BOUNDARY_DUE = (
 BOUNDARY_STALL = (
     "Sprint {sprint} {edge} is held at {stage} ({hold}); continue_boundary once it is resolved."
 )
+BOUNDARY_REFUSAL = (
+    "sprint {sprint} {edge} boundary is at {stage}{held}; the sprint's stories move once it passes"
+)
 SKIPPED_REPORT = "sync and pull requests skipped: {why}"
 NOTHING_REPORT = "nothing to review: every sprint is in {target}"
 PUSHED_REPORT = (

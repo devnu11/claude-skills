@@ -11,7 +11,10 @@ from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
 from . import halt, handover, loops
+from .boundary import BOUNDARY_STALL, Boundary, StepKind
+from .boundary_runner import BoundaryRunner
 from .config import Config
+from .dispatch import FIX_KINDS_SET as FIX_STEPS
 from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
 from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
@@ -65,6 +68,7 @@ class Work:
     role: str
     story: StoryState | None
     brief: str
+    kind: StepKind = StepKind.ROLE
 
 
 # ----- role choice -------------------------------------------------------------
@@ -169,6 +173,10 @@ class Router:
     runtime: Runtime
     sleep: Sleep = asyncio.sleep
     steps: int = field(default=0, init=False)
+    boundaries: BoundaryRunner = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.boundaries = BoundaryRunner(self.runtime)
 
     async def advance(self) -> Pass:
         """Run steps until a hand-over trigger, the end of the sprint or the end of the run."""
@@ -196,6 +204,10 @@ class Router:
         return rt.stop_requested() or bool(rt.halted_by) or rt.state.halted()
 
     # ----- picking work
+
+    def _boundary_work(self) -> Work | None:
+        due = self.boundaries.due()
+        return Work(due.role, None, due.brief, due.kind) if due else None
 
     def _manager_work(self) -> Work | None:
         due = self.runtime.state.manager_due
@@ -227,12 +239,14 @@ class Router:
     def _movable(self, story: StoryState) -> bool:
         rt = self.runtime
         in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.ACTIVE
-        return in_sprint and story.hold is None and story.id not in rt.relay.blocked_stories()
+        free = story.hold is None and rt.state.boundary is None
+        return in_sprint and free and story.id not in rt.relay.blocked_stories()
 
     def _briefed(self, role: str, story: StoryState) -> Work:
         return Work(role, story, standard_brief(self.runtime.config, Work(role, story, "")))
 
     PICKERS: ClassVar[tuple[Callable[[Router], Work | None], ...]] = (
+        _boundary_work,
         _manager_work,
         _repeat_work,
         _scribe_work,
@@ -240,7 +254,7 @@ class Router:
     )
 
     def next_work(self) -> Work | None:
-        """The first step due: the Manager (review, then a repeated story), a Scribe, a story."""
+        """The first step due: boundary, Manager (review, repeat), Scribe, then a story."""
         works = (pick(self) for pick in self.PICKERS)
         return next((w for w in works if w), None)
 
@@ -257,14 +271,23 @@ class Router:
 
     async def _dispatch(self, work: Work) -> dict[str, Any]:
         story = work.story
-        request = StepRequest(work.role, work.brief, story.id if story else None)
         try:
-            report = await self.runtime.run_role(request)
+            report = await self._run(work)
         except Exception as exc:
             report = _error_report(work, exc)
         report = {"role": work.role, **report}
         self._after(story, report)
+        if work.kind in FIX_STEPS:
+            self.boundaries.after_fix(report)
         return report
+
+    async def _run(self, work: Work) -> dict[str, Any]:
+        if work.kind is StepKind.BOUNDARY:
+            return self.boundaries.step()
+        story = work.story
+        return await self.runtime.run_role(
+            StepRequest(work.role, work.brief, story.id if story else None, work.kind)
+        )
 
     def _after(self, story: StoryState | None, report: dict[str, Any]) -> None:
         if story is None:
@@ -296,14 +319,21 @@ class Router:
 
     def _idle(self) -> Pass | None:
         mine = self._sprint_stories()
-        if mine and all(s.status is StoryStatus.DONE for s in mine):
-            n = self.runtime.state.sprint
-            return Pass(
-                [Trigger.SPRINT_END], [f"Sprint {n} is complete: every story in it is done."], []
-            )
+        pending = self.runtime.state.boundary
+        if pending is None and mine and all(s.status is StoryStatus.DONE for s in mine):
+            return self._sprint_end()
         if self.runtime.relay.open_questions():
             return None
         return self._stalled([s for s in mine if s.status is not StoryStatus.DONE])
+
+    def _sprint_end(self) -> Pass | None:
+        if self.boundaries.open_end():
+            return None
+        state = self.runtime.state
+        lines = [f"Sprint {state.sprint} is complete: every story in it is done."]
+        if state.upstream.report:
+            lines.append(f"Review: {state.upstream.report}")
+        return Pass([Trigger.SPRINT_END], lines, [])
 
     def _stalled(self, unfinished: list[StoryState]) -> Pass:
         n = self.runtime.state.sprint
@@ -311,6 +341,9 @@ class Router:
         return Pass([Trigger.STALLED], lines, [s.id for s in unfinished])
 
     def _stall_lines(self, unfinished: list[StoryState]) -> list[str]:
+        pending = self.runtime.state.boundary
+        if pending:
+            return [_boundary_stall(pending)]
         if unfinished:
             return [f"{s.id} at {s.step}: {_why(s)}" for s in unfinished]
         lines = [
@@ -322,6 +355,10 @@ class Router:
 
     async def _wait(self) -> None:
         await self.sleep(POLL_S)
+
+
+def _boundary_stall(b: Boundary) -> str:
+    return BOUNDARY_STALL.format(sprint=b.sprint, edge=b.edge, stage=b.stage, hold=b.hold)
 
 
 def _why(story: StoryState) -> str:

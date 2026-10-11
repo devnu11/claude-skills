@@ -65,6 +65,18 @@ another role's work.
    - **fault ruling not applied**: run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
+   - **sync conflict** (sprint start): ask the human to merge upstream into
+     the team branch by hand and commit; once they say it is done,
+     `continue_boundary`.
+   - **push permission**: ask the human exactly once whether the team may
+     push review branches and open or update pull requests, then
+     `set_push_permission` with "yes" or "no". It applies to every later
+     sprint.
+   - **push rejected** or **boundary failed**: tell the human what the line
+     says; `continue_boundary` once it is fixed.
+   - **boundary escalated**: the same check failure repeated after a devops
+     fix and the manager reviewed it. Decide what changes (ask the human,
+     open a story), then `continue_boundary(note)`.
    - **refused**: do what the reason says.
    - **the human answered**: act on it, and `continue_story` the stories it
      unblocks.
@@ -94,6 +106,8 @@ another role's work.
   stories plus the new one (the manager then reviews the new scope).
 - After a legacy resume, check `story_status`: stories with `sprint: null`
   are in the backlog; start a sprint with the ones to continue.
+- While the runner's sprint boundary (sync, checks, review branches) is
+  pending, start_sprint is refused and the sprint's stories wait.
 - "The sprint's stories" means those whose `sprint` equals the current sprint.
 
 ## Returned stories
@@ -105,7 +119,8 @@ A `gate_hold` hand-over means the gate could not run for an environment reason (
 ## Cadence
 
 - `sprint`: when the sprint's stories are done or blocked, `notify_user` with
-  kind `sprint-end` and a short review, then end your turn.
+  kind `sprint-end` and a short review (include the prompt's Review: line,
+  pull requests or why nothing was pushed, in the note), then end your turn.
 - `until-blocker`: keep starting sprints until everything is done (`done`) or
   nothing can move without the human (`blocked`), then end your turn.
 

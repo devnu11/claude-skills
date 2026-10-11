@@ -213,6 +213,46 @@ def _answers(files: RunFiles) -> list[dict]:
     return files.lines(INBOX)
 
 
+def _stack_entry(entry: Any) -> dict[str, Any]:
+    return {
+        "sprint": entry.sprint,
+        "branch": entry.branch,
+        "base": entry.base,
+        "pr": entry.pr,
+        "url": entry.url,
+        "mode": str(entry.mode),
+        "check": str(entry.check),
+        "head": entry.head,
+    }
+
+
+def _boundary(b: Any) -> dict[str, Any] | None:
+    if b is None:
+        return None
+    failure = b.failure.reason.splitlines()[0] if b.failure and b.failure.reason else None
+    return {
+        "edge": str(b.edge),
+        "sprint": b.sprint,
+        "stage": str(b.stage),
+        "hold": str(b.hold) if b.hold else None,
+        "failure": failure,
+        "rounds": b.rounds,
+    }
+
+
+def _upstream(files: RunFiles) -> dict[str, Any]:
+    state, settings = files.state, files.config.upstream
+    return {
+        "remote": settings.remote,
+        "branch": settings.branch,
+        "team_branch": state.upstream.team_branch,
+        "push": str(state.upstream.push),
+        "report": state.upstream.report,
+        "boundary": _boundary(state.boundary),
+        "stack": [_stack_entry(e) for e in state.upstream.stack],
+    }
+
+
 SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "generated_at": _generated_at,
     "run": _run,
@@ -224,6 +264,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "ledger": _ledger,
     "messages": _messages,
     "answers": _answers,
+    "upstream": _upstream,
 }
 
 
