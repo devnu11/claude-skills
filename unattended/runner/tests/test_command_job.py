@@ -149,7 +149,9 @@ def test_blocked_status_file_gives_its_reason(tmp_path: Path) -> None:
         None,
     ],
 )
-def test_unusable_status_file_falls_through_to_free_text(tmp_path: Path, content: str | None) -> None:
+def test_unusable_status_file_falls_through_to_free_text(
+    tmp_path: Path, content: str | None
+) -> None:
     if content is not None:
         write_status(tmp_path, content)
     outcome = command_job.outcome_for(75, out("limit hit, resets 7pm", tmp_path))

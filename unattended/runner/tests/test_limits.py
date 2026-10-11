@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from unattended import limits
-from unattended.limits import Bounds, OutcomeKind, Progress, Wake, WakeOn, Waits
+from unattended.limits import Bounds, OutcomeKind, Progress, Waits, Wake, WakeOn
 
 EDMONTON = ZoneInfo("America/Edmonton")
 NOW = datetime(2026, 10, 9, 14, 0, tzinfo=EDMONTON)
