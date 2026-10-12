@@ -123,10 +123,15 @@ it prints one line and exits 0:
 The line also carries `"health": {"level", "reason"}`. A timeout line has
 `"triggers": ["heartbeat"]` and `"messages": []` (this watch heartbeat is
 not `heartbeat.json`). `was` is
-the status seen before (its `status` is `null` the first time). What was
+the status seen before. What was
 reported is kept in `.team/run/liaison/watch.json`
 (`{messages, status, status_reason, health}`), so nothing is lost between two
-watches. The first watch in a repo reports the whole outbox. Run one watch
+watches. The first watch in a repo (no `watch.json` yet) does not report the
+history: it takes the outbox, status and health as they stand as already
+seen, writes `watch.json` at once, and then waits like any watch. Only what
+comes after fires. Its heartbeat line still shows the current `status` and
+`health`. An unreadable `watch.json` counts as empty memory: that watch
+reports the whole outbox, and `was.status` is `null`. Run one watch
 at a time. Every halt and every PO `notify_user` also posts an outbox entry,
 so `message` catches a halt even when the status ends up as it was.
 

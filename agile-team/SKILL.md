@@ -79,7 +79,9 @@ command fails.
    `$AT stop`; the reason is under
    `health`) or `heartbeat` (nothing happened within the timeout). Act on it, then start
    the next watch at once. It remembers what it reported, so nothing is lost
-   in between. Run one at a time. For each new message, relay `text`
+   in between. The first watch in a repo takes the outbox and status as they
+   stand as already seen and waits for something new (use `$AT status` for
+   where the run stands). Run one at a time. For each new message, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
    entries, include the id. The PO speaks only when the runner needs its
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
