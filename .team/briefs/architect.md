@@ -1,6 +1,24 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
+
+## s43: Process group timeouts; hung test naming
+
+A hung test in s29 showed that subprocess timeout didn't work: the runner killed the shell but then read from `communicate()` with no deadline, so child processes still holding the pipe would hang the runner indefinitely. Design fixes this with two architectural decisions.
+
+**Process group isolation:** Each gate command runs in its own session (`start_new_session=True`), so its pgid is its pid. On timeout, the runner signals only that group with `SIGKILL` via `process_groups.signal_child_group()` (s41). This is safe: the guard prevents signaling the runner's own group, and processes that left the group themselves (`setsid`) are not chased. Consequence: hung tests do not hang the runner.
+
+**Drain deadline:** After the kill, `communicate(timeout=5.0)` reads remaining output with a 5-second deadline. Python keeps what was read before the timeout, so nothing is lost. If an escaped process holds the pipe, the read times out and the runner continues (with empty string for that chunk). Consequence: even an escaped process does not hang the runner beyond 5 seconds.
+
+**Hung test naming:** When a timeout fires, `hung_test(output)` tries patterns from `HUNG_PATTERNS` (faulthandler and traceback formats). The last match (latest stack dump) wins. If no test is named, a fallback message says so. The bounce reason ends with this message, so `gates.tail` keeps it. Consequence: developers see which test hung and can fix it without guessing.
+
+**Guard enforcement:** Bash commands with `until` or `while` loops are denied unless a segment starts with `timeout` or `gtimeout`. The check runs on every view (shell and comment-aware), so the s29 accident (`until grep -q … ; do sleep 5; done` with no deadline) is caught before dispatch. Consequence: developers cannot accidentally leave bare waits in their commands.
+
+**Configuration is explicit:** `[gates] command_timeout_s` (default 300.0) is human-owned in `.agile-team.toml`. Role edits are quarantined (cannot bypass). Timeout values are auditable in git history. Consequence: the limit is transparent and can be adjusted without code changes.
+
+Pattern: Problem (hung test, no name, second hang) → architectural solution (process groups, naming, guard) → enforced in code, not prompt.
+
+See ADR-0030, design `agile-team/docs/design/s43.md` (rules T1–T14).
 
 ## s62: Message delivery, watch polling, unsaved-state recovery, frozen resolution
 

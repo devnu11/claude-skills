@@ -1,8 +1,19 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
 
 ## Design decisions to verify
+
+**Gate command timeout and hung test naming (s43):** Verify that timeouts work, hung tests are named, and guard rules are enforced:
+- **T1–T3:** `[gates] command_timeout_s` configurable (default 300.0); all gate commands use it. Commands start with `start_new_session=True`, stdin `/dev/null`, stdout+stderr merged.
+- **T4–T5:** On timeout, `SIGKILL` via `process_groups.signal_child_group()` (s41); `communicate(timeout=5.0)` drains with a deadline. Code returns 124, reason is last line.
+- **T7–T8:** `hung_test(output)` tries `HUNG_PATTERNS` rows; last match wins. Output formats: faulthandler (`in test_x`, no comma), traceback (`in test_x`, comma). Fallback: no test named.
+- **T9, T12:** `timed_out(code, output)` bounces with `TIMED_OUT_BOUNCE` when `code == TIMED_OUT`. `tests_red`, `green`, `tests_green_and_covered` check it before other outcomes. `_check_waits()` denies `until`/`while` unless segment starts with `timeout`/`gtimeout`.
+- **T13–T14:** `pytest-timeout` in dev dependencies, `timeout = 30` in config. `test_a_held_boundary_waits_when_a_question_is_open` injects `sleep`, not waiting on real sleep; no skip/xfail/deselect in config.
+- **Config/validation:** `command_timeout_s > 0` rule. `make_pipeline` and `make_runtime` pass the configured limit. `[gates]` is human-owned (no role edit escapes).
+- Functions by function: `commands.py` (HungPattern, hung_test, hung_line, kill_group, drain, CommandShell.run, report_timeout, shell_runner), `gates.py` (timed_out, Checks methods), `fullcheck.py` (_run_one uses TIMED_OUT), `guard.py` (_check_waits, _open_wait, _reads_stream), `config.py`/`cli.py` (command_timeout_s field, rule, make_pipeline, make_runtime).
+- Round 1 additions (architect `c1603cb`): `commands.kill_group` now calls `process_groups.signal_child_group()`. E2E tests: real pytest hang → names test, `tests_red` bounces; no nameable test → `NO_HUNG_LINE`, fallback; group kill → grandchild gone, foreign process lives; guard → `until grep` denied, `while true` denied, `for i in $(seq 60)` allowed.
+- See ADR-0030, design `agile-team/docs/design/s43.md`.
 
 **Liaison commands, self-hosting, frozen uv (s62):** Verify that messages, watch, resume, and pinning work as designed:
 - **T1–T7:** `tell` stores unstripped text in `t<N>.md` with hard-link atomicity (no race overwrites), never on command line. `unread(told_ids)` filters to non-delivered. Router delivers in `human_message` pass after checkout check (T5), with path repo-relative.

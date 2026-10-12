@@ -1,8 +1,28 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
 
 See `developer.md` for the base conventions.
+
+## s43: Gate commands have a timeout; hung tests are named, not waited on
+
+Gate commands now run in their own process group under a time limit. When a test hangs, it is killed, its name is extracted and reported, and the gate bounces. Key decisions:
+
+**Timeout (T1, T2):** `[gates] command_timeout_s` (default 300.0) in `.agile-team.toml` applies to all gate commands: tests, coverage, git operations, boundary checks. Each command gets its own full limit; the limit applies to every `CommandRunner` call.
+
+**Process group isolation (T3, T4):** Commands start with `start_new_session=True` (their pgid is their pid). At the limit, `SIGKILL` signals only that pgid via `process_groups.signal_child_group()` (s41). Stdin is `/dev/null` (test gets EOF). Stdout and stderr are merged.
+
+**Drain deadline (T5):** After the kill, `communicate(timeout=5.0)` collects output with a 5-second deadline. If that times out, captured output is `""` (nothing lost; Python keeps earlier reads).
+
+**Hung test naming (T7, T8):** On timeout, exit code is 124 (GNU `timeout`'s code). The bounce reason holds output lines, then `TIMEOUT_LINE` ("timed out after …"), then `HUNG_LINE` (test name or fallback). The reason goes **last** so `gates.tail` keeps it. `hung_test(output)` tries `HUNG_PATTERNS` rows (faulthandler `in test_x`, traceback `in test_x`); last match wins.
+
+**Per-test timeout (T13):** `pytest-timeout>=2.4.0` with `timeout = 30` in `[tool.pytest.ini_options]` stops hanging tests by themselves. Test name appears in the `FAILED` line, suite continues.
+
+**Guard on wait loops (T12):** Bash commands with `until` or `while` loops (no deadline) are denied at dispatch, unless a segment starts with `timeout` or `gtimeout`. This catches the s29 accident.
+
+**Role rule (T11):** `roles/_shared.md` gets "Never wait without a deadline" section: run suites in the foreground, give every wait a deadline (`timeout N` or bounded `for` loop), name hung tests in your handoff.
+
+See ADR-0030, design `agile-team/docs/design/s43.md` (rules T1–T14, exact strings, test checklist).
 
 ## s62: Liaison commands in the runner; self-hosting and frozen uv
 

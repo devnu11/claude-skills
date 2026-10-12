@@ -1,6 +1,22 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
+
+## s43: Gate timeouts; hung tests named; wait rules enforced
+
+Gate commands (tests, coverage, boundary checks) now have a timeout to prevent hung tests from hanging the runner. Key acceptance criteria:
+
+**AC1:** Gate commands have a timeout set in `.agile-team.toml` with sensible default (300s). Command that outlives its timeout is killed (process group only), and gate bounces.
+
+**AC2:** Bounce reason names the hung test (e.g., from faulthandler or per-test timeout), so developer and tester know what to fix. Timeout with no test names still bounces with command and time limit.
+
+**AC3:** Per-test timeout set in pytest config (pytest-timeout, timeout = 30), so hanging test fails by itself instead of waiting for gate's timeout.
+
+**AC4:** Bash commands with bare `until` or `while` loops (no deadline) are denied at dispatch. Developer must add `timeout` wrapper or bounded `for` loop.
+
+**AC5:** The s29 hung test (`test_a_held_boundary_waits_when_a_question_is_open`) injects `sleep` instead of waiting on real wait. Test is present, not skipped or deselected.
+
+See ADR-0030, design `agile-team/docs/design/s43.md` (AC1–AC6, test checklist).
 
 ## s62: Liaison commands in the runner; self-hosting available
 

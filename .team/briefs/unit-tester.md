@@ -1,6 +1,24 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
+
+## s43: Gate command timeout; hung test naming and per-test timeout
+
+**Test coverage from design checklist:**
+
+**commands.py (T1–T9):** `shell_runner(tmp)("echo out; echo err >&2; exit 4")` gives `(4, …)` holding both. Stdin `/dev/null` → `cat` returns `(0, "")` at once. Timeout (0.3s on `sleep 30`) gives `TIMED_OUT` (124) with tail ending in `NO_HUNG_LINE`. Faulthandler-style frame → `the hanging test: /x/tests/test_a.py::test_hangs (line 12)`. Kill group: grandchild gone afterward. Drain deadline (monkeypatch `DRAIN_S = 0.2`) with `setsid` child → returns `TIMED_OUT` with only reason lines. `KeyboardInterrupt` → `kill_group` called and propagates. `hung_test`: both formats, last dump wins, noise frames ignored, empty → `None`. `report_timeout` on empty output gives exactly two reason lines.
+
+**gates.py (T9–T12):** `tests_red` with `(124, "…")` bounces with `"the command did not finish in time:"`. `tests_reworked` on timeout bounces. `green` timeout bounces, not `"tests fail:"`. `tests_green_and_covered` coverage timeout bounces, not `"could not read"`. `Pipeline.evaluate`: timeout at `implement` → bounce_to `implement`, at `tests` → bounce_to `tests`.
+
+**config.py / cli.py (T14–T15):** Default is 300.0. `command_timeout_s = 90` is read. `0` and `-1` fail with `"gates.command_timeout_s must be positive"`. `make_pipeline(config).checks.run.__self__.limit_s == 90`. `make_runtime(...).shell(path).__self__.limit_s == 90` with configured value.
+
+**fullcheck.py (T16):** Timeout check returns `code == TIMED_OUT` → why is `"timed out"`, tail holds reason lines.
+
+**guard.py (T12, T17):** Denied with `WAIT_DENIED`: `until grep -q passed /tmp/run.log; do sleep 5; done`, `while true; do sleep 1; done`, `while ! grep -q x f; do sleep 1; done`. Allowed: `timeout 300 bash -c 'until …'`, `for i in $(seq 60); do …; done`, `cat f | while read l; do echo "$l"; done`, `while IFS= read -r l; do :; done < f`.
+
+**pytest config (T18–T19):** `pytestconfig.getini("timeout")` is `"30"`. Reviewer check: `test_a_held_boundary_waits_when_a_question_is_open` present, injects `sleep` (fake posts answer, records `[5.0]`), no skip/xfail/deselect.
+
+Coverage ≥95%, ruff clean. See ADR-0030, design `agile-team/docs/design/s43.md` (test checklist).
 
 ## s62: Tell/watch commands, resume from dirty tree, frozen uv, self-hosting
 

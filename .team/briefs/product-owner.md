@@ -1,6 +1,22 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s43 done)
+
+## s43: Gate commands time out; hung tests are named and fixed, not waited on
+
+Gate commands (tests, coverage, git checks, boundary checks) now have a timeout to prevent hung tests from hanging the runner. When a test hangs, it is killed, named, and the gate bounces. You see which test hung in the bounce reason.
+
+**The timeout:** Set in `.agile-team.toml` under `[gates]`, field `command_timeout_s` (seconds, float, default 300.0). This applies to all gate commands. You can raise it in the file and commit; the change takes effect on resume. No timeout means no maximum wait—be cautious with very large values.
+
+**What happens on timeout (AC1–AC2):** The runner kills only the hanging command's process group (not the runner itself). It then reads any remaining output with a 5-second deadline, capturing what the test wrote before it died. The gate bounces with exit code 124 and a bounce reason. The last line of the reason names the hung test if it can be extracted from output, e.g., `test_a.py::test_hangs (line 123)`. If no test is named, the reason says so (pytest-timeout or faulthandler would help).
+
+**Per-test timeout (AC3):** The test suite also has a per-test timeout (30 seconds, via `pytest-timeout`). A test that hangs fails on its own instead of waiting for the gate's global timeout. This keeps the suite running while fixing the bad test.
+
+**Bash wait rule (AC4):** Commands with bare `until` or `while` loops (no deadline) are now denied at dispatch. This catches accidents like `until grep -q "passed" /tmp/run.log; do sleep 5; done` with no timeout. The developer must add a `timeout` wrapper or change the loop to be bounded.
+
+**What you'll see:** If a gate bounces due to timeout, the reason will include the test name (if found) or a note that none was found. Read the test in question and ask the developer to fix it or dispute it. The story will return to the implementing step with no new round added (it bounces like any other gate failure).
+
+See ADR-0030, design `agile-team/docs/design/s43.md` (rules AC1–AC5, config reference).
 
 ## s61: Accept the checkout when branch or commit changes
 

@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done, s47 documented)
+**Last updated:** 2026-10-12 (s43 done)
+
+## s43: Gate command timeouts (no new Manager context)
+
+When a gate times out, it bounces the story like any other failure. No escalation to you unless the same timeout repeats (s27 logic). The bounce reason names the hung test if found, so the developer and tester know what to fix. See ADR-0030, design `agile-team/docs/design/s43.md` (AC1–AC2).
 
 ## s47: Waiting status shows what run waits on (no new Manager context)
 
