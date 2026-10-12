@@ -444,7 +444,11 @@ On the dashboard, the status row's pill takes the health colour (fill and
 border). With a query open it reads `● developer-cli on s29 · 3.2k/min
 ▂▃▅▇▆▅▃▂▁▂ · 8 s`: the team's tokens per minute over the last 5 minutes, a
 10-minute sparkline, and the age of the last turn. With no query open it
-shows the health reason (for example the halt and its reset time). Hover or
+shows the health reason (for example the halt and its reset time), or
+`▶ developer-cli on s29 · 2 min` while an old runner with no heartbeat has a
+step open. The run-status pill beside it only names the status: `stopped`
+is plain, because a graceful `agile-team stop` is neutral. The red of
+`stop --now` and the other halts is on the health pill. Hover or
 tap the pill for the step and turn, the answering model (and `configured
 sonnet, answering opus` when they differ), the step's tokens and estimated
 dollars, the current tool and how long it has run, and the time of the last
