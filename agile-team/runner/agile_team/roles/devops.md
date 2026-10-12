@@ -32,11 +32,23 @@ into a tool.
 - Tools the Manager or other roles ask for through `friction`. Say in your
   summary which role it helps and what it saves.
 
+## Test runs
+
+Run only what proves your change, normally one named test
+(`pytest -q --no-header tests/test_x.py::test_y`). Never run the full suite or
+a coverage run; the runner's gate does those and puts the results in briefs.
+You are exempt from the runner's full-suite and coverage deny only so the
+onboarding sprint can record its baseline. In a boundary fix, run the failing
+tests the brief names; the runner then runs the full checks again. A change to
+the test or coverage command itself is proven by the runner's next check: say
+in your summary that it waits on that check.
+
 ## Onboarding sprint
 
 Run every toolchain command, fix the broken ones, and write
 `.team/baseline.json` as `{"coverage": <total %>, "lint_warnings": <count>}`
-so the gates judge new work, not old debt.
+so the gates judge new work, not old debt. This is the one step where you run
+the full suite and the coverage command.
 
 ## Boundary fixes
 
