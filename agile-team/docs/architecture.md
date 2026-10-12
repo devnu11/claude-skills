@@ -45,6 +45,7 @@ one line here. Older designs are the sections at the end of this file.
 | s68 The implement gate runs the suite once (the `coverage` command only); a non-zero exit never passes; failing tests vs coverage shortfall told apart by `TEST_FAILURES`, bounce texts unchanged | [design/s68.md](design/s68.md) |
 | s69 Only the runner runs the full suite: `SUITE_RULES` deny full pytest and coverage runs from role Bash; gate and pre-quality results kept per story and shown under `## Runner results`; the developer's `run_tests`/`run_new_tests` runner tools (`[[toolchain.targeted]]`); the quality czar has no shell | [design/s69.md](design/s69.md) |
 | s70 The runner's suite runs in parallel (pytest-xdist dev dependency, `-n auto` in the coverage, test and targeted commands and CI); `sandbox.stop_stale` takes injected `RunnerIds`, so no test ID holds a live pid; a two-process collection test checks it | [design/s70.md](design/s70.md) |
+| s71 Unit tests touch no OS: `agile_team/system.py` is the one OS seam (imported as a module); the in-memory `tests/fake_system.FakeSystem` swapped in by an autouse fixture; an audit hook and a patch table (`tests/os_guard.py`) fail a unit test that reaches the real OS; ruff `TID251`; real OS only in `tests/e2e/`; three green phases | [design/s71.md](design/s71.md) |
 
 ## Components
 
@@ -80,6 +81,7 @@ one line here. Older designs are the sections at the end of this file.
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
 | `suite_check.py` | which test runs a Bash segment starts (s69): `Run`, `run_kind`, `is_target`, the `SUITE_RULES` table, `suite_denial`; no I/O | none |
 | `results.py` | the runner's toolchain results per story (s69): `Ran`, `Results` (`.team/run/results/<story>/<name>.json`), `BRIEF_RESULTS`, the `## Runner results` section | none |
+| `system.py` | the one OS seam (s71): thin functions for files, processes, signals, ids, the clock, the network and the environment (`__all__`), plus `Command`, `ShellCommand`, `Completed`, `FileStat`, `HttpReply`; no logic. Every other module calls `system.x(...)`; unit tests swap it for `tests/fake_system.FakeSystem` | the OS (stdlib only) |
 | `runner_tools.py` | a developer step's MCP tools (s69): `run_tests`, `run_new_tests` (named tests only, a runner chore, a `tests-run` event), `Batch`, `text_result` | gates (`Checks`), config (`Targeted`), live, events |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26; loopback reachable from the OS sandbox, s58), key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |

@@ -872,6 +872,36 @@ group wrote, for at most 5 s more. The command counts as exit code 124.
 - At a sprint boundary a timed-out check fails with `timed out`.
 - `[gates]` is human-owned: a role's edit to it is quarantined.
 
+### Unit tests touch no OS
+
+The rule for every repo the team works on, in any language: **a unit test
+runs no shell command and touches no OS.** That means no process (git
+included), no signal, no real pid, no clock or sleep, no network, no
+environment and no filesystem, a temp dir included. The unit-tester mocks
+them at the repo's OS seam. A test that needs the real OS is an e2e test.
+The unit-tester can't write the e2e glob, so it removes such a test from the
+unit suite and lists it in its handoff summary as
+`moves to e2e: <test id> (<what it proves>)`. The integration-tester
+recreates each one under the e2e glob in the same story's e2e step.
+
+The agile-team runner follows the rule itself (s71):
+
+- `agile_team/system.py` is the only module that touches the OS. Other
+  modules import it as a module (`from agile_team import system`) and call
+  `system.read_text(...)`, `system.run(...)`, `system.now()`. A
+  `from agile_team.system import name` import is not allowed.
+- Every unit test runs against `tests/fake_system.FakeSystem`, swapped in by
+  an autouse fixture. It holds files in memory (it can also simulate a
+  missing file, an unreadable file or a full disk), a reply table for
+  commands (git included), a clock, ids, signals and the network.
+- An audit hook in `tests/conftest.py` fails a unit test that reaches the
+  real OS anyway, and so does a patch on calls that raise no audit event
+  (pids, waits, `signal`, `time.sleep`, `shutil.which`, `platform`,
+  `os.stat`). The message names the call and ends with
+  `inject it, or move the test to tests/e2e/`. Tests under `tests/e2e/` run
+  on the real OS.
+- Ruff `TID251` bans direct OS calls outside `system.py`.
+
 ### Repeated setbacks
 
 A **setback** is a gate outcome that sends a story back or holds it:

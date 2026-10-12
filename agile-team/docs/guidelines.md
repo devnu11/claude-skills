@@ -107,11 +107,28 @@ rule, update in the same story:
   `uv run --directory agile-team/runner pytest -q tests/test_x.py::test_y`.
 - Tests never touch the real home directory. The suite points
   `AGILE_TEAM_HOME` at a scratch dir.
+- **Only `agile_team/system.py` touches the OS (s71).** Files, processes (git
+  included), signals, pids, the clock, sleeps, the network, the environment
+  and the browser all go through it. Write `from agile_team import system`
+  (`from . import system` inside the package) and call `system.read_text(p)`.
+  Never `from agile_team.system import read_text`: it binds the real function
+  and the test swap misses it. For the same reason, never keep a `system`
+  function in a default, a `default_factory`, a `partial` or a module constant.
+  Don't add parameters or fields to inject a clock, a sleep, a runner or a
+  pid. Call `system` where the work happens. A new OS call needs a new
+  `system` function, a matching `FakeSystem` method and an e2e test.
+- **Unit tests touch no OS, `tmp_path` included.** The autouse `fake`
+  fixture swaps `system` for `FakeSystem`. Script files with `fake.put`,
+  commands with `fake.reply`, and time with the fake clock. A unit test that
+  reaches the real OS fails with "inject it, or move the test to
+  `tests/e2e/`". A test whose point is real git, a real process or real files
+  belongs in `tests/e2e/`. Test helpers write through `system`, so one helper
+  serves both worlds.
 - The suite runs in parallel under pytest-xdist (s70), so a test ID never holds
   a live value. No parametrize value or id comes from a pid, a process group,
   the clock, a random number, a temp path or the environment. Parametrize with
   a label or a template and resolve the live value in the test body. Inject
   live process values (such as `process_groups.RunnerIds`) so tests can pass
-  fixed fakes. Tests share no fixed port or path outside `tmp_path`, and none
-  depends on another test having run first.
+  fixed fakes (the fake's ids are `FAKE_IDS`). e2e tests share no fixed port or
+  path outside `tmp_path`, and no test depends on another test having run first.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.
