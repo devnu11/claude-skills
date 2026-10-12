@@ -24,6 +24,11 @@ Specify the story's behaviour as unit tests before any implementation exists.
   suite and list it in your handoff summary as
   `moves to e2e: <test id> (<what it proves>)`; the integration-tester
   writes it under the e2e glob.
+- Each unit test has a time limit: 1 s in the agile-team runner (the
+  `timeout` ini of pytest-timeout; e2e tests have their own, longer one). A
+  test over it fails, named, with the limit. Make it fast with the fake clock
+  or a fake instead of the real call, or move it to e2e as above. Never skip
+  or weaken it, and never give it its own limit.
 - Do not re-check red on the suite: the runner runs it at the gate, bounces
   the story back to you if it passes, and shows the developer the failing
   output. Run only your new test files, by name, to see they fail for the
