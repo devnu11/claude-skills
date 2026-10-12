@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done; s67 recorded)
+**Last updated:** 2026-10-12 (s79 done; no ADR)
+
+## s79: E2E tests pass on CI runners—no git identity, any timezone
+
+All four ACs pass: service-presentation tests pass with no global git identity (verified with `HOME=<scratch> GIT_CONFIG_GLOBAL=/dev/null`), timezone test passes in both UTC and Asia/Kolkata zones (parametrized), guard test verifies isolation cannot be broken, coverage at 95%+. The runner's CLI tests are now portable and pass on any CI machine. See design `agile-team/docs/design/s79.md`.
 
 ## s67: First watch records the current state, then waits
 

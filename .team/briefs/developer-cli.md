@@ -1,8 +1,16 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done; s67 recorded)
+**Last updated:** 2026-10-12 (s79 done; no ADR)
 
 See `developer.md` for the base conventions.
+
+## s79: Git isolation for REAL-world tests (no-op developer step; implementation by unit/integration testers)
+
+All REAL-world tests (tests/e2e/ and os_guard.LEGACY) now run with git isolation: no global config, no guessed identity. The `isolated_git` autouse fixture (in conftest.py) sets this up automatically.
+
+**What this means for your code:** If you write e2e tests that commit, call `set_git_identity(repo)` after `git init`. If you extend `present_workspace` or `_real_repo`, use the same pattern. The isolation is transparent—your tests pass on CI and dev alike. A test that forgets this and relies on `~/.gitconfig` will fail on CI and pass only locally; that's the guard working.
+
+See design `agile-team/docs/design/s79.md` (rules G1–G3).
 
 ## s67: First watch records current state before waiting (watch.py, no ADR)
 

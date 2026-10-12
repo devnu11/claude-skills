@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done; s67 recorded)
+**Last updated:** 2026-10-12 (s79 done; no ADR)
+
+## s79: E2E tests pass on CI—git isolation and timezone independence (test-only changes)
+
+The runner's CLI e2e tests now pass on any CI machine. Two gaps fixed: (1) tests relied on global git identity; (2) timezone test checked local time strings. Solutions: all REAL-world tests now run with `GIT_ISOLATION` (no global/system git config), and each test repo carries its own identity via `set_git_identity(repo)`. Timezone-dependent tests compare instants, not strings, and parametrize over zones (`["UTC", "Asia/Kolkata"]`). A guard test verifies the isolation cannot be broken. No runtime code changes; no new dependencies. All four ACs pass. See design `agile-team/docs/design/s79.md` (rules G1–G3, Z1–Z2).
 
 ## s67: First watch records current state, then waits (watch refinement, no ADR)
 
