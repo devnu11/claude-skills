@@ -15,7 +15,7 @@ from agile_team import config as config_mod
 from agile_team.gates import Verdict
 from agile_team.sandbox import port_in_use
 
-from ..conftest import PY_CONFIG, git
+from ..conftest import PY_CONFIG, git, set_git_identity
 
 RUNNER = Path(__file__).resolve().parents[2]
 
@@ -54,6 +54,7 @@ def present_workspace(config, init: bool) -> Path:
     )
     (source / "PRESENTATION.md").write_text("Open the dashboard.\n")
     if init:
+        set_git_identity(source / "workspace")  # init commits there (s79 G2)
         args = ["--repo", str(source / "workspace"), "init", "--preset", "python"]
         assert cli.main([*args, "--delivery", "package"]) == 0
     else:

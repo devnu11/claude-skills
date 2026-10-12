@@ -58,6 +58,53 @@ def git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+# s79 G1: what a CI runner's git sees. No global/system config, no guessed identity.
+GIT_ISOLATION: dict[str, str] = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "user.useConfigOnly",
+    "GIT_CONFIG_VALUE_0": "true",
+}
+# s79 G1: identity a developer's shell may export; it would hide a repo with none.
+AMBIENT_IDENTITY: tuple[str, ...] = (
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "EMAIL",
+)
+# s79 G2: the local config every test repo that commits carries.
+REPO_GIT_CONFIG: dict[str, str] = {
+    "user.email": "t@example.com",
+    "user.name": "Test",
+    "commit.gpgsign": "false",
+}
+
+
+def set_git_identity(repo: Path) -> None:
+    """Give ``repo`` its own commit identity, so no test relies on ``~/.gitconfig`` (s79 G2)."""
+    for key, value in REPO_GIT_CONFIG.items():
+        git(repo, "config", key, value)
+
+
+def _isolate_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in AMBIENT_IDENTITY:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in GIT_ISOLATION.items():
+        monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
+def isolated_git(world: os_guard.World, monkeypatch: pytest.MonkeyPatch) -> None:
+    """REAL-world tests run git as a CI runner does: no global config, no guessed identity."""
+    isolations: dict[os_guard.World, Callable[[], None]] = {
+        os_guard.World.FAKE: lambda: None,
+        os_guard.World.REAL: lambda: _isolate_git(monkeypatch),
+    }
+    isolations[world]()
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register the e2e time limit's ini key (s72 L2)."""
     parser.addini(time_limit.E2E_LIMIT_INI, "per-test time limit (s) for tests/e2e/ and LEGACY")
@@ -143,9 +190,7 @@ def _real_repo(request: pytest.FixtureRequest) -> Path:
     path = tmp_path / "repo"
     path.mkdir()
     git(path, "init", "-q", "-b", "main")
-    git(path, "config", "user.email", "t@example.com")
-    git(path, "config", "user.name", "Test")
-    git(path, "config", "commit.gpgsign", "false")
+    set_git_identity(path)
     (path / ".gitignore").write_text(".team/run/\n")
     (path / "src").mkdir()
     (path / "src" / "app.py").write_text("x = 1\n")

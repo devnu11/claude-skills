@@ -135,4 +135,12 @@ rule, update in the same story:
   live process values (such as `process_groups.RunnerIds`) so tests can pass
   fixed fakes (the fake's ids are `FAKE_IDS`). e2e tests share no fixed port or
   path outside `tmp_path`, and no test depends on another test having run first.
+- **e2e tests pass on any machine (s79).** REAL-world tests run git as a CI
+  runner does: the autouse `isolated_git` fixture removes global and system
+  config and the ambient identity variables, and sets `user.useConfigOnly`. A
+  repo a test commits in gets its own identity from `set_git_identity(repo)`
+  (`tests/conftest.py`). Never restore global config or export `GIT_AUTHOR_*`
+  to make a test pass. A test never asserts on a local-time string: parse it
+  and compare instants, or convert to a named zone. A zone-sensitive test sets
+  `TZ` itself and runs under at least `UTC` and one other zone.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.

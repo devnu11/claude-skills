@@ -5,10 +5,16 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from datetime import datetime
+from datetime import time as clock
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
+RESET_ZONE = ZoneInfo("America/Chicago")  # the zone the halt line names
+RESET_AT = clock(21, 3)  # 9pm plus unattended's margin, in RESET_ZONE
+MACHINE_ZONES = ["UTC", "Asia/Kolkata"]  # static labels (s70)
 ROOT = Path(__file__).resolve().parents[4]
 RUNNER = ROOT / "unattended" / "runner"
 HALT = (
@@ -35,7 +41,9 @@ def status_when_waiting(home: Path) -> dict:
 
 
 @pytest.mark.skipif(not RUNNER.is_dir(), reason="unattended runner not in this checkout")
-def test_halt_line_reset_wins_over_po_text(tmp_path):
+@pytest.mark.parametrize("zone", MACHINE_ZONES)
+def test_halt_line_reset_wins_over_po_text(tmp_path, monkeypatch, zone):
+    monkeypatch.setenv("TZ", zone)
     script = tmp_path / "fake.sh"
     script.write_text(SCRIPT)
     script.chmod(0o755)
@@ -51,4 +59,6 @@ def test_halt_line_reset_wins_over_po_text(tmp_path):
     assert state["status"] == "waiting"
     assert state["reason"] == "session limit, resets 9pm (America/Chicago)"
     assert state["wake_on"] == "reset"
-    assert state["next_wake"].endswith("T21:03:00-05:00") or "T21:03:00" in state["next_wake"]
+    wake = datetime.fromisoformat(state["next_wake"])
+    assert wake.tzinfo is not None
+    assert wake.astimezone(RESET_ZONE).time() == RESET_AT

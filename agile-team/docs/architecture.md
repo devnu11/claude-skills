@@ -48,6 +48,7 @@ one line here. Older designs are the sections at the end of this file.
 | s70 The runner's suite runs in parallel (pytest-xdist dev dependency, `-n auto` in the coverage, test and targeted commands and CI); `sandbox.stop_stale` takes injected `RunnerIds`, so no test ID holds a live pid; a two-process collection test checks it | [design/s70.md](design/s70.md) |
 | s71 Unit tests touch no OS: `agile_team/system.py` is the one OS seam (imported as a module); the in-memory `tests/fake_system.FakeSystem` swapped in by an autouse fixture; an audit hook and a patch table (`tests/os_guard.py`) fail a unit test that reaches the real OS; ruff `TID251`; real OS only in `tests/e2e/`; three green phases (s71 ships P1, s76 P2, s77 P3) | [design/s71.md](design/s71.md) |
 | s72 A 1 s limit per unit test: `timeout = 1` and `e2e_timeout = 30` in `[tool.pytest.ini_options]`; `tests/time_limit.py` marks each test with its world's limit (`os_guard.world_of`: FAKE 1 s, REAL = e2e and `LEGACY` 30 s); no test sets its own limit | [design/s72.md](design/s72.md) |
+| s79 E2E tests pass on a CI runner: the autouse `isolated_git` fixture gives every REAL-world test CI's git (no global or system config, `user.useConfigOnly`, no ambient identity variables); repos that commit carry `set_git_identity`; the wake test compares instants in `America/Chicago` across `TZ` values. Tests only: unit-tester writes the fixture, integration-tester the e2e tests (m72), developer no-op | [design/s79.md](design/s79.md) |
 
 ## Components
 
