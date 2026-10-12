@@ -65,7 +65,7 @@ def test_the_heartbeat_step_carries_quiet_since(tmp_path: Path) -> None:
 def test_a_nested_role_closing_wakes_the_po_reading(tmp_path: Path) -> None:
     pulse, clock = make_pulse(tmp_path)
     po = pulse.open(PO_WHO)
-    po.take(reply("a", {"input_tokens": 1}, tools=("run_role",)))
+    po.take(reply("a", {"input_tokens": 1}, tools=("run_role",), model="claude-opus-4"))
     clock.t = NOW + 10
     role = pulse.open(WHO)
     clock.t = NOW + 1510
