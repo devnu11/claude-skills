@@ -11,6 +11,11 @@ def returns_value(nodes):
     return bool(nodes)
 
 
+def normalise_shape(shape):
+    """A British spelling of a listed verb."""
+    return shape
+
+
 def to_dict(shape):
     """A conversion prefix."""
     return {"width": shape.width}

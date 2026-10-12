@@ -38,6 +38,11 @@ PROGRAMMING_VERBS = frozenset(
     replace report require retry return route run scan schedule screen serialize settle
     signal sleep spawn strip subscribe sum summarize take tell throw tick track transform
     translate trim try unwrap visit walk wrap yield
+    address advance answer attempt audit await bounce capture carry charge claim continue
+    deliver detect enforce escalate evaluate execute finish fit forward guide hand hold
+    include interrupt land leave normalize offer onboard override own pass prioritize pump
+    quarantine queue reach reconnect recover reorder repeat revert review rework roll seed
+    serve stall stub suggest summarize tail wake
     """.split()
 )
 
