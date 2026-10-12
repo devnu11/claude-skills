@@ -15,7 +15,7 @@ def failure(**kw) -> b.Failure:
 
 def test_enum_values() -> None:
     assert [e.value for e in b.Edge] == ["start", "end"]
-    assert [e.value for e in b.Stage] == ["sync", "check", "review", "push"]
+    assert [e.value for e in b.Stage] == ["sync", "check", "review", "push", "ci"]
     assert [e.value for e in b.StepKind] == ["role", "boundary", "team-fix", "review-fix"]
     assert [e.value for e in b.BoundaryHold] == [
         "sync_conflict",
@@ -23,6 +23,8 @@ def test_enum_values() -> None:
         "reviewed",
         "push_permission",
         "push_rejected",
+        "ci_failed",
+        "ci_pending",
         "error",
     ]
     assert [e.value for e in b.FixCase] == ["team_check", "review_check", "review_conflict"]
@@ -62,7 +64,7 @@ def test_next_stage_end_goes_through_every_stage() -> None:
     while (nxt := b.next_stage(bd)) is not None:
         seen.append(nxt)
         bd.stage = nxt
-    assert seen == [b.Stage.CHECK, b.Stage.REVIEW, b.Stage.PUSH]
+    assert seen == [b.Stage.CHECK, b.Stage.REVIEW, b.Stage.PUSH, b.Stage.CI]
 
 
 def test_next_stage_start_skips_review_and_push_without_restack() -> None:
@@ -78,6 +80,8 @@ def test_next_stage_start_with_restack_goes_on() -> None:
     bd.stage = b.Stage.REVIEW
     assert b.next_stage(bd) is b.Stage.PUSH
     bd.stage = b.Stage.PUSH
+    assert b.next_stage(bd) is b.Stage.CI
+    bd.stage = b.Stage.CI
     assert b.next_stage(bd) is None
 
 
@@ -87,7 +91,7 @@ def test_fix_kinds_table() -> None:
         b.FixCase.REVIEW_CHECK: b.StepKind.TEAM_FIX,
         b.FixCase.REVIEW_CONFLICT: b.StepKind.REVIEW_FIX,
     }
-    assert frozenset({b.Stage.REVIEW, b.Stage.PUSH}) == b.RESTACK_ONLY
+    assert frozenset({b.Stage.REVIEW, b.Stage.PUSH, b.Stage.CI}) == b.RESTACK_ONLY
 
 
 def test_setback_key_uses_edge_stage_and_normalised_reason() -> None:

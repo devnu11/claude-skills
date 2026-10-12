@@ -855,7 +855,11 @@ def test_a_held_boundary_picks_nothing_and_stalls_the_pass(make_runtime) -> None
     assert p.kinds == [T.STALLED] and p.steps == 0
     assert p.lines[0] == "Nothing in sprint 1 can move."
     assert p.lines[1] == bd.BOUNDARY_STALL.format(
-        sprint=1, edge="start", stage="check", hold="error"
+        sprint=1,
+        edge="start",
+        stage="check",
+        hold="error",
+        hint="continue_boundary once it is resolved",
     )
 
 
