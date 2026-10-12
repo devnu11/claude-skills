@@ -1,10 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s82 done)
 
 ## s74: Dashboard pill fixes reviewed and shipped (no defects)
 
 **Verdict: ship.** Changes in `agile_team/dashboard/index.html`: `STATUS_TONE.stopped` from `"warning"` to `""`, `pillText` fallback with space after `▶`, new `statusPills(view, now)` pure function. Design updated protocol.md § Health. Node UI tests pass (three new, existing green). Python unchanged; coverage 99.68%; ruff clean. No defects. The pill-tone change affects only `status=stopped` (timeline step-end statuses are handoff/verdicts, not `stopped`). See `.team/reviews/s74.md`, ADR-0037.
+
+## s82: Service stop waits for group and port release—verdict ship (no defects, no ADR)
+
+**Verdict: ship.** Diff reviewed: `sandbox.py`, `presentation.py`, `tests/test_s82.py`, `protocol.md`, `architecture.md`. Coverage 99.68%; sandbox.py and presentation.py at 100%; ruff clean. No defects. The fix is sound: (Q1) `stop()` now waits for the whole group to end, not just the leader (proven in design's cause section). (Q2–Q5) Sequence: SIGTERM 10s, SIGKILL 5s, port wait 5s; returns note on timeout; (Q3) no signal sent to already-reaped leaders (reused pid safe). E2E test reproduces the race (dash leader dies at SIGTERM, server sleeps 1s) without Linux. Linux proof only via CI on PR #14; macOS e2e cannot show dash behavior. Constants (KILL_WAIT_S, PORT_WAIT_S, POLL_EVERY_S, STOP_WAIT_S) pinned by test. Extends ADR-0013 (lifecycle); keeps ADR-0031 G1 (signals through process_groups only). No new dependency. See `.team/reviews/s82.md`, design `agile-team/docs/design/s82.md`.
 
 ## s72: Per-test time limit (1s unit, 30s e2e) — no code branches, one table
 

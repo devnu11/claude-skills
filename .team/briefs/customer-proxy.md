@@ -1,10 +1,14 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s82 done)
 
 ## s74: Resting pill verified live—plain neutral `● stopped`, no warning styling
 
 Your manual acceptance testing verified the two regressions from s44 are fixed. After a graceful `agile-team stop`, the run-status pill reads plain `● stopped` with no yellow warning tone and no `⚠` in the pill or tab title. The pill appears without any smart health indicator, confirming the design (idle health does not render). All 20 e2e tests pass. See design `agile-team/docs/design/s74.md`, ADR-0037.
+
+## s82: Service stop is clean on Linux; port released before stop returns (no ADR)
+
+The trial (`presentation.Trial`) now cleanly shuts down web deliveries on Linux. The bug: when the runner stops the dashboard, the shell leader (dash) dies at SIGTERM but `uv` and Python keep running, leaving the port in use. CI on PR #14 was red. Fix: `stop()` waits for the entire process group to end, not just the leader. Sequence: SIGTERM up to 10s, SIGKILL up to 5s, port released up to 5s (total 20s worst case). If the port is still in use at the deadline, Trial turns the note into a HOLD verdict (no round, hand-over to PO to fix the conflict). Linux proof via CI on PR #14; macOS e2e reproduces the race locally by making the shell exit fast. All 24 e2e tests pass. See design `agile-team/docs/design/s82.md`, review `.team/reviews/s82.md`.
 
 ## s79: E2E tests pass on CI runners—no git identity, any timezone
 

@@ -1,10 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s82 done)
 
 ## s74: Dashboard pill fixes — graceful stops neutral, fallback text has space
 
 The two regressions left open by s44 are fixed. **N1:** Fallback step pill text (`▶ <role> on <story> · <ago>`) now has the required space after the arrow. **Resting pill:** After a graceful `agile-team stop`, the run-status pill shows plain `● stopped` (no yellow warning), and no smart pill appears. Forced halts (stop --now, limit, crash, dead runner) still show red on the smart pill. The implementation extracts `statusPills` as a pure function, making the visual contract testable. See ADR-0037, design `agile-team/docs/design/s74.md` (rules N1, S1–S3). All ACs pass; coverage 99.68%; ruff clean.
+
+## s82: Dashboard port is free after stop (Linux CI green, no new ADR)
+
+CI on PR #14 was red on Linux: `test_trial_starts_the_real_dashboard_probes_it_and_stops_it` failed because the dashboard port was still in use after stop returned. Root cause: `Prepared.stop()` waited only for the shell leader process to exit. On Linux (dash), the leader dies at SIGTERM straight away, but `uv` and Python keep running. Fix: wait for the entire process group to end, then wait for the port to be released. Sequence: SIGTERM → 10s wait for group → SIGKILL → 5s wait → 5s port wait. If port still busy at deadline, return a note; Trial turns this into a HOLD verdict (hand-over to you to fix the port conflict). No new ADR (extends ADR-0013 service lifecycle, keeps ADR-0031 G1). Docs updated: `reference/protocol.md` § service lifecycle. Coverage 100% (sandbox, presentation); ruff clean. Linux proof via CI; macOS e2e reproduces the race. See design `agile-team/docs/design/s82.md`, review `.team/reviews/s82.md`.
 
 ## s79: E2E tests pass on CI—git isolation and timezone independence (test-only changes)
 

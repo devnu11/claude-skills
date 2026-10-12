@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s82 done)
 
 ## s74: Dashboard pill UI tests—fallback text space, resting stopped pill, forced halts stay red
 
@@ -11,6 +11,10 @@ Three new node UI tests written (in `test_dashboard_live_ui.py`, via `drive`), a
 - **S2:** `test_forced_halts_stay_red_on_the_smart_pill`: Parametrized over `stopped` with `halt_kind: "sigterm"` (stop --now), `blocked`, `failed`, `interrupted`; each has health level `red` and heartbeat `null`. One part of `statusPills(view, now)` contains `pill smart h-red` and `● <reason>`.
 
 All three tests were written first and failed before the fix. Existing tests (`test_graceful_stop_is_idle_and_silent`, `test_pill_with_red_health_and_no_live_step`) stay green. Coverage 99.68%, ruff clean. See design `agile-team/docs/design/s74.md` test checklist, ADR-0037.
+
+## s82: Service stop waits for port release—new `tests/test_s82.py` (FAKE world, 1s limit)
+
+New test file `tests/test_s82.py` covers the service stop lifecycle with fake-world tests. Drive time with the fake clock. Key test areas: `wait_until` (true at once, on 3rd check, never true, exactly at deadline), `port_released` (frees on 3rd poll, never frees with exact text, no url skips listening call), `KILL_WAIT_S`, `PORT_WAIT_S`, `POLL_EVERY_S` constants pinned, Trial outcomes on prepared.stop note (HOLD or PASS), `_joined` helper. All 11 test cases pass, 1s limit honored. Existing tests (sandbox, presentation) pass; coverage 100% (sandbox, presentation). See design `agile-team/docs/design/s82.md` test checklist.
 
 ## s79: Git isolation for CI portability (GIT_ISOLATION, REPO_GIT_CONFIG, isolated_git fixture)
 

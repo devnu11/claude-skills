@@ -1,6 +1,6 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s79 done; no ADR)
+**Last updated:** 2026-10-12 (s82 done; no ADR)
 
 ## s79: Zone-independent tests and git isolation guard
 
@@ -9,6 +9,10 @@
 **G3 guard test:** `tests/e2e/test_ci_git_e2e.py` verifies git isolation cannot be accidentally broken. Import `AMBIENT_IDENTITY`, `git`, `set_git_identity` from `..conftest`. Write five guard tests: (1) repo with no identity cannot commit (stderr has `auto-detection is disabled`), (2) no global identity is read from a fresh repo, (3) ambient identity variables are cleared, (4) `set_git_identity` lets a new repo commit with expected author, (5) the `repo` fixture has its own identity in local config.
 
 See design `agile-team/docs/design/s79.md` (rules Z1–Z2, G3, test checklist).
+
+## s82: Service stop race on Linux—e2e reproduces race without Linux (no ADR)
+
+New file `tests/e2e/test_service_stop_e2e.py` (30s limit) verifies the service stop works. The race (dash leader dies at SIGTERM, child keeps running) cannot be shown locally without Linux CI. Instead, reproduce it: delivery prepare is `sh -c '<python> <slow_server.py> {port} & wait'` (leader dies at SIGTERM, server on SIGTERM sleeps 1s then exits). Test cases: (1) stop → None, port free at once (fails on pre-s82, passes now); (2) server ignores SIGTERM, STOP_WAIT_S=0.2 → SIGKILL ends it; (3) leader already exited before stop is called → no signal sent (spy on process_groups.signal_child_group); (4) existing dashboard trial test unchanged, passes. Linux proof via CI on PR #14. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s82.md` test checklist.
 
 ## s67: E2E test—first watch records, then waits (liaison behavior)
 

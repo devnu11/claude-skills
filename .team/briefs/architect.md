@@ -1,10 +1,14 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s82 done)
 
 ## s74: Dashboard graceful vs forced stop display—run-status pill neutral for stopped
 
 The dashboard now visually distinguishes graceful and forced halts (refining ADR-0032 D4). The **run-status pill** for `stopped` shows tone `""` (plain), not `"warning"` (yellow). Health colour belongs to the **smart pill** (which is hidden at rest when health is `idle`). Graceful stops: plain `● stopped`. Forced halts: plain run-status pill + red smart pill with the reason. Fallback step text (`▶ <role> on <story> · <ago>`) restored with space after arrow. New **`statusPills(view, now)`** pure function builds the row's pills for unit testability (S3); `renderStatusRow` calls it and writes the result. No changes to CSS, smart pill, health rules, or snapshot. See ADR-0037, design `agile-team/docs/design/s74.md` (rules N1, S1–S3).
+
+## s82: Service stop waits for the whole process group—refines ADR-0013 (no new ADR)
+
+The service lifecycle (ADR-0013) now adds a missing detail: **`stop()` must wait for the entire process group to end before returning.** The bug: on Linux (dash), the shell leader dies at SIGTERM immediately, but `uv` and Python keep running, leaving the port in use. Fix: (Q1) Wait for group end, not just leader reaping. (Q2) Sequence: SIGTERM up to 10s, SIGKILL up to 5s, port wait up to 5s. (Q3) Never signal already-reaped leaders (reused pid safety via process_groups). (Q4) Port wait runs whenever a process was started, even if leader already exited. (Q5) Return PORT_HELD if port busy at deadline, never raise or hang. (Q6) Trial turns PORT_HELD note into HOLD verdict. Docs: `protocol.md` § service lifecycle and `architecture.md` Prepared contract updated. New functions: `wait_until`, `port_released`, `end_group`, `_group_alive`, `_ended`. Modified: `Prepared.stop`, `Prepared._end`, `Preparer._await_answer`, `Trial._stopped`. Extends ADR-0013; keeps ADR-0031 G1. No new dependency.
 
 ## s72: Timeout limits follow the world concept from s71
 
