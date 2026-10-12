@@ -12,7 +12,7 @@ from agile_team import state as state_mod
 from agile_team.boundary import Edge
 from agile_team.boundary_runner import BoundaryRunner
 from agile_team.checkout import ACCEPTED_REASON
-from agile_team.health import Health, Level, Runner, Vitals, judge
+from agile_team.health import Clock, Health, Level, Runner, Vitals, judge
 from agile_team.po_tools import PoRun, Start, Tools
 from agile_team.providers import DEFAULT, Billing
 from agile_team.state import RunState, RunStatus
@@ -218,7 +218,7 @@ def test_vitals_read_carries_the_saved_halt_kind(configured: Path) -> None:
     state.mark(RunStatus.STOPPED, "stopped by stop --now")
     state.halt_kind = "sigterm"
     state_mod.save(config.run_dir, state)
-    assert Vitals.read(config, NOW).halt_kind == "sigterm"
+    assert Vitals.read(config, Clock(NOW)).halt_kind == "sigterm"
 
 
 def test_watch_ignores_a_change_to_a_graceful_stop() -> None:

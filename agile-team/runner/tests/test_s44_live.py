@@ -515,7 +515,7 @@ def test_every_rule_level_is_ranked_and_the_last_row_always_matches() -> None:
     assert health.RANK[Level.IDLE] < health.RANK[Level.GREEN]
     assert health.RANK[Level.GREEN] < health.RANK[Level.AMBER] < health.RANK[Level.RED]
     assert health.RULES[-1].level is Level.IDLE and health.RULES[-1].test(vitals())
-    assert len(health.RULES) == 10
+    assert len(health.RULES) == 12
 
 
 def test_read_vitals_from_disk(configured: Path) -> None:
@@ -526,9 +526,9 @@ def test_read_vitals_from_disk(configured: Path) -> None:
     state = state_mod.RunState()
     state.mark(RunStatus.RUNNING)
     state_mod.save(config.run_dir, state)
-    assert health.Vitals.read(config, NOW).runner is Runner.UP
+    assert health.Vitals.read(config, health.Clock(NOW)).runner is Runner.UP
     (config.run_dir / live.HEARTBEAT).write_text(json.dumps(beat(pid=2_000_000_000)))
-    assert health.Vitals.read(config, NOW).runner is Runner.GONE
+    assert health.Vitals.read(config, health.Clock(NOW)).runner is Runner.GONE
     current = health.current(config)
     assert current.level is Level.RED
 
