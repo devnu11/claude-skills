@@ -1,6 +1,16 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done)
+**Last updated:** 2026-10-12 (s70 done)
+
+## s70: The test suite runs in parallel with pytest-xdist; no live values in test IDs
+
+The gate now runs the full suite with `-n auto`, using pytest-xdist on multi-core machines. One blocker was fixed: a test parametrized with `os.getpid()` and `os.getpgrp()` created different IDs in each worker, so xdist refused to run. The suite is now stable under xdist with two rules:
+
+1. **No live values in test IDs:** Any parametrize that evaluates a pid, time, random, temp path, or environment at collection time will differ in every worker. Use a static label (`ids=["pid"]`) and resolve the live value **in the test body**. Example: parametrize a label "pid" and inside the test read `os.getpid()`.
+
+2. **Check with `test_s70_ids.py`:** This new test collects the full suite in two separate processes at once and asserts both see the same node IDs. If you add a live value, this test fails loudly and names the test with the live value, so no live values escape.
+
+Tests in `test_process_groups.py` now use fixed fakes (`FAKE = RunnerIds(4242, 4243)`) with static ids, so they're stable across workers. The gate at 99.67% coverage. See ADR-0035, design `agile-team/docs/design/s70.md`.
 
 ## s69: Your test files are recorded; full suite denied; run your tests by name
 

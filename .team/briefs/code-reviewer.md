@@ -1,6 +1,19 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done)
+**Last updated:** 2026-10-12 (s70 done)
+
+## s70: Parallel test suite with pytest-xdist; gate runs with `-n auto`
+
+The suite now runs in parallel on multi-core machines via pytest-xdist. Gate cycle time drops to ~1 minute (from ~4 minutes). Review key changes:
+
+- **`RunnerIds` injection:** `process_groups.RunnerIds` holds the runner's pid and process group. `sandbox.stop_stale()` receives it and never signals the runner itself. Test uses fixed fakes (`RunnerIds(4242, 4243)`) with static ids, stable across workers.
+- **Test ID safety:** The new `test_s70_ids.py` collects the suite in two processes at once and asserts both lists are identical, catching any parametrize with a live value.
+- **Commands use `-n auto`:** `test`, `coverage`, and targeted runs add `-n auto`. The gate parser reads the single combined `TOTAL` line unchanged.
+- **Shared constant `TESTS_FAIL`:** Moved to module level in `gates.py` for DRY (shared by `green()` and `_failed_run()`).
+- **Config updated:** pytest-xdist added as dev dependency (no runtime change); `.agile-team.toml` and CI workflows updated with `-n auto`.
+- **Coverage 99.67%** (all tests pass under xdist).
+
+See ADR-0035, design `agile-team/docs/design/s70.md`. Non-blocking cosmetic nit: `&&uv` spacing in `.agile-team.toml` coverage line.
 
 ## s69: Read tests; runner's coverage is in your brief; no test runs allowed
 

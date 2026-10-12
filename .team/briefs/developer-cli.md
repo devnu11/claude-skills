@@ -1,8 +1,19 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done)
+**Last updated:** 2026-10-12 (s70 done)
 
 See `developer.md` for the base conventions.
+
+## s70: The test suite runs in parallel with pytest-xdist
+
+The runner's full test suite now uses pytest-xdist for parallel execution on multi-core machines. Gate cycle time drops from ~4 minutes to ~1 minute on 10 cores. Key changes in your code:
+
+- **`RunnerIds` injection:** `sandbox.stop_stale()` receives the runner's own pid and process group via `process_groups.RunnerIds(pid, pgrp)`. The runner is never signalled, even by itself. The test passes fixed fakes so its IDs are stable across workers.
+- **Test parametrization:** Any test using `os.getpid()` or `os.getpgrp()` in a `@pytest.mark.parametrize` id will create different test IDs in every xdist worker, blocking the run. Avoid live values in ids; use labels like `["pid", "pgrp"]` and resolve the live value in the test body.
+- **Commands use `-n auto`:** `test`, `coverage`, and targeted runs now include `-n auto`. `addopts` stays without `-n` so a named test stays serial (faster).
+- **No runtime change:** pytest-xdist is a dev dependency only. The installed CLI is unchanged.
+
+See ADR-0035, design `agile-team/docs/design/s70.md`.
 
 ## s69: Only the runner runs the full suite; you have `run_tests` and `run_new_tests` tools
 

@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done)
+**Last updated:** 2026-10-12 (s70 done)
+
+## s70: Test suite runs in parallel; gate cycle drops from 4 min to 1 min
+
+DevOps config has been applied. The test suite now runs in parallel via pytest-xdist on multi-core machines. The implement → quality gate drops from ~4 minutes to ~1 minute on 10 cores.
+
+- **What you see:** Cycles are faster. All gate bounces and passes work the same way (same commands, same output parsing).
+- **Config changes:** `.agile-team.toml` and CI workflows now run with `-n auto`. pytest-xdist is a dev dependency; no runtime change.
+- **Test stability:** One test was using live pids in its parametrize id; it's been fixed with static fakes. A new test (`test_s70_ids.py`) checks that no test IDs depend on live values in any worker, catching similar issues in the future.
+- **Non-blocking note:** The `coverage` command line in `.agile-team.toml` has `&&uv` with no space (cosmetic, shell parses it correctly). DevOps can fix it in passing.
+
+See ADR-0035, design `agile-team/docs/design/s70.md`.
 
 ## s69: Agents never run the full suite; runner does and shows results in briefs
 

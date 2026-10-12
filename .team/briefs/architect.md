@@ -1,6 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s70 done)
+
+## s70: Parallel test suite with pytest-xdist; gate cycle time drops to 1 minute
+
+The runner's test suite now runs in parallel on multi-core machines. Cycle time drops from ~4 minutes to ~1 minute on 10 cores. Architectural patterns:
+
+**Injection pattern:** The runner's own ids (pid, process group) are injected into `sandbox.stop_stale()` via `process_groups.RunnerIds`. This allows the test to pass fixed fakes and stay stable across xdist workers, while proving the runner never signals itself—even by accident.
+
+**Test ID stability:** xdist refuses to run when workers collect different test IDs. One test was parametrized with `os.getpid()` and `os.getpgrp()` (live at collection time), creating different IDs in each worker. Fixed by using static labels (`ids=["pid", "pgrp"]`) and resolving live values inside the test body.
+
+**Verification:** New `test_s70_ids.py` collects the suite in two processes at once and asserts both IDs are identical and non-empty. This catches any future parametrize that holds a live value by failing loudly on the difference.
+
+**Coverage combination:** pytest-cov combines coverage across workers into one `TOTAL` line (controller output). Gate parser reads it unchanged. Combined coverage is 99.67%.
+
+**Config pattern:** Commands opt in with `-n auto` (gate test/coverage, targeted runs, CI). `addopts` stays without `-n`, so a named test from a role's Bash stays serial (faster for one test). `python` preset unchanged (users may not have pytest-xdist).
+
+See ADR-0035, design `agile-team/docs/design/s70.md`.
 
 ## s68: Single coverage run replaces test + coverage gate command pair
 
