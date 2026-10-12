@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import checkout, halt, salvage
+from . import checkout, halt, live, salvage
 from . import state as state_mod
 from .events import EVENTS, Event, EventKind, EventLog
 from .git_ops import Git, GitError
@@ -48,12 +48,21 @@ def _cut_cause(run_dir: Path, state: RunState) -> Cause | None:
     return state.unsaved
 
 
+def _close_killed(run_dir: Path, state: RunState, cause: Cause) -> None:
+    """A killed run never closed its step: emit the ``interrupted`` step-end now (I4)."""
+    step = state.in_flight
+    if cause is Cause.KILLED and step is not None:
+        data = live.interrupted_data(live.Stop(Cause.KILLED))
+        EventLog(run_dir / EVENTS).emit(Event(EventKind.STEP_END, step.role, step.story, data))
+
+
 def recover_cut(run_dir: Path, git: Git) -> Interruption | None:
     """Save the edits of a run that was killed or halted unsaved; ``None`` if it was not."""
     state = state_mod.load(run_dir)
     cause = _cut_cause(run_dir, state)
     if cause is None:
         return None
+    _close_killed(run_dir, state, cause)
     found = Salvager(git, run_dir).save(state, cause)
     state.unsaved = None
     state.checkout = checkout.recorded(git)

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 EVENTS = "events.jsonl"
+INTERRUPTED = "interrupted"  # step-end status of a step cut short (s44)
 
 
 class EventKind(StrEnum):

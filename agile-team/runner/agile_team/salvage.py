@@ -40,6 +40,15 @@ class Cause(StrEnum):
     KILLED = "killed"
 
 
+STOP_REASONS: dict[Cause, str] = {
+    Cause.ERROR: "error in the step (details in crash.log)",
+    Cause.LIMIT: "usage limit",
+    Cause.CRASH: "runner crash (details in crash.log)",
+    Cause.SIGTERM: "exit 143 (SIGTERM)",
+    Cause.BUDGET: "budget ceiling reached",
+    Cause.CHECKOUT: "the checkout moved",
+    Cause.KILLED: "the runner was killed (no clean exit)",
+}
 RUN_ENDING = frozenset(c for c in Cause if c is not Cause.ERROR)
 
 

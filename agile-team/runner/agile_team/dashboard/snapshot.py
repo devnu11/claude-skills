@@ -6,6 +6,7 @@ Read-only; the contract is ``fixtures/snapshot.json``.
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -15,9 +16,9 @@ from typing import Any
 import yaml
 
 from .. import config as config_mod
+from .. import health, live, waits
 from .. import roles as roles_mod
 from .. import state as state_mod
-from .. import waits
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
 from ..ledger import LEDGER, Entry, corrected
@@ -26,7 +27,10 @@ from ..relay import INBOX, OUTBOX
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
 
-RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX)
+RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX, live.HEARTBEAT, live.TURNS)
+TURN_TAIL_BYTES = 262_144
+TURN_WINDOW_S = 600
+TURNS_SHOWN = 500
 HISTORY_KEYS = ("at", "change", "reason", "role", "story")
 
 
@@ -38,12 +42,13 @@ class RunFiles:
     book: RoleBook
     state: RunState
     events: list[dict]
+    now: float = 0.0
 
     @classmethod
     def load(cls, config: Config, book: RoleBook) -> RunFiles:
         """Read the state and the event log."""
         state = state_mod.load(config.run_dir)
-        return cls(config, book, state, read_jsonl(config.run_dir / EVENTS))
+        return cls(config, book, state, read_jsonl(config.run_dir / EVENTS), time.time())
 
     def lines(self, name: str) -> list[dict]:
         """The objects of one JSONL file in the run directory."""
@@ -67,6 +72,20 @@ def read_jsonl(path: Path) -> list[dict]:
     return [item for item in parsed if item is not None]
 
 
+def read_tail(path: Path, size: int) -> list[dict]:
+    """JSON objects in the last ``size`` bytes of a JSONL file; a cut first line is dropped."""
+    try:
+        with path.open("rb") as fh:
+            end = fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, end - size))
+            lines = fh.read().decode(errors="replace").splitlines()
+            cut = end > size
+    except OSError:
+        return []
+    parsed = (_parse_line(line) for line in lines[1 if cut else 0 :] if line.strip())
+    return [item for item in parsed if item is not None]
+
+
 def watched_files(config: Config) -> list[Path]:
     """Every file a snapshot reads (missing ones included)."""
     run = [config.run_dir / name for name in RUN_FILES]
@@ -76,7 +95,7 @@ def watched_files(config: Config) -> list[Path]:
 
 
 def _generated_at(files: RunFiles) -> float:
-    return time.time()
+    return files.now
 
 
 def _pipeline(files: RunFiles) -> list[str]:
@@ -284,6 +303,21 @@ def _upstream(files: RunFiles) -> dict[str, Any]:
     }
 
 
+def _turns(files: RunFiles) -> list[dict]:
+    rows = read_tail(files.config.run_dir / live.TURNS, TURN_TAIL_BYTES)
+    recent = [r for r in rows if r.get("at", 0) >= files.now - TURN_WINDOW_S]
+    return recent[-TURNS_SHOWN:]
+
+
+def _heartbeat(files: RunFiles) -> dict[str, Any] | None:
+    return live.read_heartbeat(files.config.run_dir)
+
+
+def _health(files: RunFiles) -> dict[str, Any]:
+    verdict = health.judge(health.Vitals.read(files.config, files.now))
+    return {"level": str(verdict.level), "reason": verdict.reason, "model_note": verdict.model_note}
+
+
 SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "generated_at": _generated_at,
     "run": _run,
@@ -296,6 +330,9 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "messages": _messages,
     "answers": _answers,
     "upstream": _upstream,
+    "turns": _turns,
+    "heartbeat": _heartbeat,
+    "health": _health,
 }
 
 
@@ -314,3 +351,8 @@ def build(config: Config, book: RoleBook) -> dict[str, Any]:
     """
     files = RunFiles.load(fresh_config(config), book)
     return {key: section(files) for key, section in SECTIONS.items()}
+
+
+def vital_sign(config: Config) -> str:
+    """``level|reason`` of the run's health now; the server pushes when it changes (S6)."""
+    return health.current(fresh_config(config)).key()

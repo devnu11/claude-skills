@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .events import Event, EventKind
+from .events import INTERRUPTED, Event, EventKind
 from .ledger import Entry, Ledger, Totals
 
 MANAGER = "manager"
@@ -73,8 +73,14 @@ def _dispute(event: Event) -> dict[str, Any]:
     return {"story": event.story, "role": event.role, **{k: event.data[k] for k in keys}}
 
 
+def _manager_review(event: Event) -> bool:
+    """A Manager ``step-end`` that reviewed; an interrupted one did not."""
+    done = event.kind is EventKind.STEP_END and event.role == MANAGER
+    return done and event.data.get("status") != INTERRUPTED
+
+
 def _after_last_manager(events: list[Event]) -> int:
-    ends = [i for i, e in enumerate(events) if e.kind is EventKind.STEP_END and e.role == MANAGER]
+    ends = [i for i, e in enumerate(events) if _manager_review(e)]
     return ends[-1] + 1 if ends else 0
 
 

@@ -89,11 +89,15 @@ class Providers:
             return PLACEHOLDER_TOKEN
         return self.environ.get(provider.token_env, "")
 
+    def billing(self, role: Any) -> Billing:
+        """Where ``role``'s cost comes from."""
+        if role.provider == DEFAULT or self.get(role.provider).billing == Billing.REPORTED:
+            return Billing.REPORTED
+        return Billing.FREE
+
     def cost_of(self, role: Any, reported: float) -> float:
         """The cost to ledger for one of ``role``'s steps."""
-        if role.provider == DEFAULT or self.get(role.provider).billing == Billing.REPORTED:
-            return reported
-        return 0.0
+        return reported if self.billing(role) is Billing.REPORTED else 0.0
 
 
 def endpoint_env(provider: Provider, token: str) -> dict[str, str]:

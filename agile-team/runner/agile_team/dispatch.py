@@ -33,6 +33,7 @@ from . import (
     halt,
     handover,
     keys,
+    live,
     loops,
     presentation,
     recovery,
@@ -152,6 +153,7 @@ class Plan:
     prepared: sandbox.Prepared | None = None
     summary: str = ""
     text: str = ""
+    meter: live.Meter | None = None
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -205,8 +207,11 @@ class _Drain:
     last_text: str = ""
     result: ResultMessage | None = None
     compacted_from: int | None = None
+    meter: live.Meter | None = None
 
     def take(self, message: Any) -> None:
+        if self.meter:
+            self.meter.take(message)
         self.last_text = _text_of(message) or self.last_text
         if isinstance(message, ResultMessage):
             self.result = message
@@ -231,7 +236,7 @@ def _is_boundary(message: Any) -> bool:
 
 async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
     """Drain a query; keep the final text, cost, tokens, session id and compaction."""
-    drain = _Drain()
+    drain = _Drain(meter=getattr(plan, "meter", None))  # tests pass bare plans
     async for message in query_fn(prompt=plan.prompt, options=plan.options):
         drain.take(message)
     return drain.step_result()
@@ -325,9 +330,12 @@ class Runtime:
     shell: Callable[[Path], CommandRunner] = shell_runner
     events: EventLog = field(init=False)
     halted_by: Halt | None = field(default=None, init=False)
+    pulse: live.Pulse = field(init=False)
+    step_meter: live.Meter | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
+        self.pulse = live.Pulse(self.config.run_dir, self.config.health.beat_s)
         if self.upstream is None:
             self.upstream = Upstream(self.git, self.config.upstream)
 
@@ -562,7 +570,31 @@ class Runtime:
         self.emit(EventKind.STEP_START, plan, brief=brief)
         story = plan.story.id if plan.story else None
         self.state.in_flight = salvage.InFlight(plan.role.name, story, brief)
+        plan.meter = self.step_meter = self.pulse.open(self.who(plan))
         self.save()
+
+    def who(self, plan: Plan) -> live.Who:
+        """What the live meter measures for ``plan``."""
+        story = plan.story
+        billing = self.providers.billing(plan.role)
+        return live.Who(
+            plan.role.name, story.id if story else None, story.step if story else None,
+            plan.role.model, billing,
+        )  # fmt: skip
+
+    def _end_meter(self) -> live.Meter | None:
+        """Take the open step's meter (once) and close it; ``None`` when already taken (I1)."""
+        meter, self.step_meter = self.step_meter, None
+        if meter is not None:
+            self.pulse.close(meter)
+        return meter
+
+    def _close_interrupted(self, cause: Cause) -> None:
+        """Emit the open step's ``interrupted`` step-end, if nobody has ended it yet (I2)."""
+        meter = self._end_meter()
+        if meter is not None:
+            reason = self.halted_by.reason if self.halted_by else None
+            self.events.emit(meter.reading.interrupted(live.Stop(cause, reason)))
 
     def _land(self, plan: Plan) -> None:
         """The step settled: nothing is in flight and its offered work is spent."""
@@ -647,6 +679,7 @@ class Runtime:
         Nothing is saved when the checkout moved (K5): the tree is not the team's;
         the cause is kept for ``start --resume`` (s62 R1).
         """
+        self._close_interrupted(cause)
         if checkout.check(self.git, self.state.checkout) is not None:
             self.state.unsaved = cause
             return None
@@ -692,6 +725,11 @@ class Runtime:
 
     def settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         """Record cost, read the handoff, settle the tree, then gate; save state."""
+        what = f"settling {salvage.label(plan.role.name, plan.story.id if plan.story else None)}"
+        with self.pulse.doing(what):
+            return self._settle(plan, result)
+
+    def _settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         plan.text = result.text
         self.record_cost(plan, result)
         parsed = self._parse(plan)
@@ -708,6 +746,7 @@ class Runtime:
         outcome = handoff_report(parsed) if isinstance(parsed, Handoff) else bad_handoff(parsed)
         cost = round(result.cost, 4)
         tokens = asdict(result.tokens)
+        meter = self._end_meter()
         self.emit(
             EventKind.STEP_END,
             plan,
@@ -716,6 +755,7 @@ class Runtime:
             cost_usd=cost,
             commit=commit,
             turns=result.turns,
+            model=meter.reading.model if meter else None,
         )
 
     def _parse(self, plan: Plan) -> Handoff | HandoffError:

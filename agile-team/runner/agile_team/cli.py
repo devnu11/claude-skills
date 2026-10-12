@@ -125,10 +125,12 @@ def _load_config(repo: Path) -> config_mod.Config:
 def cmd_dashboard(args: argparse.Namespace, io: DashboardIO = DEFAULT_IO) -> int:
     """Serve the read-only dashboard until interrupted."""
     httpd = _dashboard_server(args)
-    url = server.display_url(*httpd.server_address[:2])
-    print(f"dashboard: {url}", flush=True)
+    urls = server.dashboard_urls(*httpd.server_address[:2])
+    print(f"dashboard: {urls.local}", flush=True)
+    if urls.lan:
+        print(f"from other machines: {urls.lan}", flush=True)
     if args.browser is Browser.OPEN:
-        io.browse(url)
+        io.browse(urls.local)
     io.serve(httpd)
     return 0
 
@@ -390,7 +392,11 @@ async def _po_until_sigterm(runtime: Runtime, start: Start) -> StepResult:
     """Run the PO as a task that SIGTERM (``stop --now``) cancels."""
     task = asyncio.current_task()
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
-    return await run_po(runtime, start)
+    runtime.pulse.start()
+    try:
+        return await run_po(runtime, start)
+    finally:
+        runtime.pulse.end()
 
 
 def _halt_exit(runtime: Runtime, exc: BaseException) -> int:

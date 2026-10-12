@@ -27,6 +27,7 @@ DEFAULT_PORT = 8765
 KEEPALIVE = b": keepalive\n\n"
 HOSTS = {"win32": "127.0.0.1"}
 ALL_INTERFACES = {"0.0.0.0", ""}
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 INDEX = resources.files(__package__) / "index.html"
 
 
@@ -37,14 +38,20 @@ class Dashboard:
     snapshot: Callable[[], dict[str, Any]]
     watched: Callable[[], list[Path]]
     poll_seconds: float = POLL_SECONDS
+    vital_sign: Callable[[], str] = lambda: ""
 
     @classmethod
     def for_run(cls, config: Config, book: RoleBook) -> Dashboard:
         """A dashboard over one repo's run files."""
-        return cls(partial(snapshot.build, config, book), partial(snapshot.watched_files, config))
+        return cls(
+            partial(snapshot.build, config, book),
+            partial(snapshot.watched_files, config),
+            vital_sign=partial(snapshot.vital_sign, config),
+        )
 
 
 Fingerprint = tuple[tuple[str, int, int], ...]
+Seen = tuple[Fingerprint, str]
 
 
 def _stat(path: Path) -> tuple[str, int, int] | None:
@@ -116,9 +123,9 @@ def sse_data(snap: dict[str, Any]) -> bytes:
 
 
 def _pump(out: BinaryIO, app: Dashboard) -> None:
-    last: Fingerprint | None = None
+    last: Seen | None = None
     while True:
-        now = fingerprint(app.watched())
+        now = (fingerprint(app.watched()), app.vital_sign())
         out.write(sse_data(app.snapshot()) if now != last else KEEPALIVE)
         out.flush()
         last = now
@@ -148,10 +155,25 @@ def default_host() -> str:
     return HOSTS.get(sys.platform, "0.0.0.0")
 
 
-def display_url(host: str, port: int) -> str:
-    """The URL to show; an all-interfaces host becomes this machine's name."""
-    name = socket.gethostname() if host in ALL_INTERFACES else host
-    return f"http://{name}:{port}/"
+class Urls(NamedTuple):
+    """Where the dashboard can be opened: here, and from other machines if it listens there."""
+
+    local: str
+    lan: str | None
+
+
+def lan_name() -> str:
+    """This machine's name on the LAN: its hostname, with ``.local`` added when it has no dot."""
+    name = socket.gethostname()
+    return name if "." in name else f"{name}.local"
+
+
+def dashboard_urls(host: str, port: int) -> Urls:
+    """The links to print for a listening ``host`` and ``port`` (S7)."""
+    if host in ALL_INTERFACES:
+        return Urls(f"http://localhost:{port}/", f"http://{lan_name()}:{port}/")
+    name = "localhost" if host in LOOPBACK else host
+    return Urls(f"http://{name}:{port}/", None)
 
 
 def serve(server: DashboardServer) -> None:

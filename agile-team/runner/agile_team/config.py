@@ -108,6 +108,17 @@ class Team:
 
 
 @dataclass
+class HealthLimits:
+    """``[health]``: when the live meter turns amber or red, and the heartbeat pace (s44)."""
+
+    beat_s: float = 20.0
+    stale_s: float = 90.0
+    amber_tool_s: float = 180.0
+    amber_quiet_s: float = 300.0
+    red_quiet_s: float = 600.0
+
+
+@dataclass
 class Config:
     """Parsed ``.agile-team.toml`` for one repo."""
 
@@ -116,6 +127,7 @@ class Config:
     toolchain: Toolchain = field(default_factory=Toolchain)
     gates: Gates = field(default_factory=Gates)
     upstream: UpstreamSettings = field(default_factory=UpstreamSettings)
+    health: HealthLimits = field(default_factory=HealthLimits)
     deliveries: list[Delivery] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
@@ -171,6 +183,7 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         toolchain=_toolchain(raw.get("toolchain", {})),
         gates=_gates(raw.get("gates", {})),
         upstream=_upstream(raw.get("upstream", {})),
+        health=_health(raw.get("health", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
         roles=dict(raw.get("roles", {})),
         providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
@@ -198,6 +211,10 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
 
 def _gates(raw: dict[str, Any]) -> Gates:
     return Gates(**{k: v for k, v in raw.items() if k in Gates.__dataclass_fields__})
+
+
+def _health(raw: dict[str, Any]) -> HealthLimits:
+    return HealthLimits(**{k: v for k, v in raw.items() if k in HealthLimits.__dataclass_fields__})
 
 
 def _upstream(raw: dict[str, Any]) -> UpstreamSettings:
@@ -249,6 +266,18 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
     (lambda g: g.command_timeout_s > 0, "gates.command_timeout_s must be positive"),
 )
+HEALTH_KEYS = tuple(HealthLimits.__dataclass_fields__)
+HEALTH_RULES: tuple[Rule, ...] = (
+    *(
+        (lambda h, key=key: getattr(h, key) > 0, f"health.{key} must be positive")
+        for key in HEALTH_KEYS
+    ),
+    (lambda h: h.beat_s < h.stale_s, "health.beat_s must be below health.stale_s"),
+    (
+        lambda h: max(h.amber_tool_s, h.amber_quiet_s) <= h.red_quiet_s,
+        "health.amber_tool_s and health.amber_quiet_s must not exceed health.red_quiet_s",
+    ),
+)
 SAFE_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
 UPSTREAM_RULES: tuple[Rule, ...] = (
     (lambda u: not u.remote or bool(u.branch), "upstream.branch must be set"),
@@ -286,6 +315,7 @@ def validate(config: Config, known: Known) -> list[str]:
         *broken(TOOLCHAIN_RULES, config.toolchain),
         *broken(GATE_RULES, config.gates),
         *broken(UPSTREAM_RULES, config.upstream),
+        *broken(HEALTH_RULES, config.health),
         *_validate_deliveries(config.deliveries, known.delivery_kinds),
         *_validate_roles(config.roles, known.roles),
         *_validate_providers(config.providers),

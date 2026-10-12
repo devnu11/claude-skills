@@ -528,8 +528,127 @@ snapshot = {
     "messages": messages,
     "answers": answers,
 }
+
+# ----- live meter (s44) ------------------------------------------------------
+# The curated fixture (upstream, priority, boundary) outgrew the generator above,
+# so the live additions are applied on top of the existing file when there is one.
+
+CURATED_END = 1791472260.0  # the last curated event; everything after is generated here
+LIVE_STORY, LIVE_ROLE = "s3", "developer-cli"
+MODEL_ID = {"opus": "claude-opus-4-1", "sonnet": "claude-sonnet-4-5-20250929"}
+
+
+def live_turns(now, rnd):
+    """About 40 turns in the 10 minutes before ``now``: the dev's step plus a few PO turns."""
+    rows = []
+    for i in range(40):
+        at = round(now - 600 + i * 14.5 + rnd.uniform(0, 6), 1)
+        po = i % 9 == 4
+        role, story, step_ = (
+            ("product-owner", None, None) if po else (LIVE_ROLE, LIVE_STORY, "implement")
+        )
+        family = ROLES[role][0]
+        tok = {
+            "input": rnd.randint(1, 9),
+            "output": rnd.randint(150, 900),
+            "cache_read": rnd.randint(30_000, 90_000),
+            "cache_creation": rnd.randint(0, 2_500),
+        }
+        rows.append(
+            {
+                "at": at,
+                "role": role,
+                "story": story,
+                "step": step_,
+                "turn": i + 1,
+                "model": MODEL_ID[family],
+                "tokens": tok,
+                "tools": [] if i % 3 else ["Bash"],
+                "cost_usd": cost(family, tok),
+                "message_id": f"msg_fixture_{i:03d}",
+            }
+        )
+    return rows
+
+
+def live_events(base, now):
+    """An interrupted step-end, then the same step started again (shows as restarted)."""
+    first = {"role": LIVE_ROLE, "story": LIVE_STORY}
+    data = {
+        "status": "interrupted",
+        "reason": "exit 143 (SIGTERM)",
+        "cause": "sigterm",
+        "halt": "stopped by stop --now",
+        "turns": 7,
+        "tokens": {"input": 18, "output": 4210, "cache_read": 402_000, "cache_creation": 9_100},
+        "estimate_usd": 0.0812,
+        "model": MODEL_ID["sonnet"],
+    }
+    rows = [
+        ("step-start", now - 520, {"brief": "Memory test fails at 412MB."}),
+        ("step-end", now - 330, data),
+        ("step-start", now - 200, {"brief": "Memory test fails at 412MB."}),
+    ]
+    n = len(base)
+    return [
+        {"id": f"e{n + i + 1}", "at": round(at, 1), "kind": kind, **first, "data": d}
+        for i, (kind, at, d) in enumerate(rows)
+    ]
+
+
+def live_heartbeat(now, turns):
+    mine = [x for x in turns if x["role"] == LIVE_ROLE]
+    last = mine[-1]
+    tok = {k: sum(x["tokens"][k] for x in mine) for k in last["tokens"]}
+    return {
+        "version": 1,
+        "pid": 4242,
+        "beat": "beating",
+        "at": round(now - 3, 1),
+        "started_at": round(now - 3600, 1),
+        "chore": None,
+        "step": {
+            "role": LIVE_ROLE,
+            "story": LIVE_STORY,
+            "step": "implement",
+            "started_at": round(now - 200, 1),
+            "turn": 14,
+            "model": last["model"],
+            "configured_model": "sonnet",
+            "last_turn_at": min(last["at"], round(now - 8, 1)),
+            "tool": {"name": "Bash", "started_at": round(now - 40, 1)},
+            "tokens": tok,
+            "cost_usd": round(sum(x["cost_usd"] for x in mine), 4),
+        },
+    }
+
+
+def add_live(snap):
+    """Add turns, a heartbeat, health and the interrupted step to a snapshot."""
+    now = CURATED_END + 900  # all live events fall after CURATED_END
+    base = [e for e in snap["events"] if e["at"] <= CURATED_END]
+    turns = live_turns(now, random.Random(44))
+    snap["events"] = base + live_events(base, now)
+    snap["generated_at"] = now
+    snap["turns"] = turns
+    snap["heartbeat"] = live_heartbeat(now, turns)
+    snap["health"] = {"level": "green", "reason": "turns arriving", "model_note": None}
+    return snap
+
+
+def starting_point(path):
+    """The existing curated fixture when there is one, else the fake run built above."""
+    try:
+        with open(path) as fh:
+            previous = json.load(fh)
+    except (OSError, ValueError):
+        return snapshot
+    return previous if "upstream" in previous else snapshot
+
+
+result = add_live(starting_point(sys.argv[1]))  # read before the file is truncated
 with open(sys.argv[1], "w") as out:
-    json.dump(snapshot, out, indent=1)
+    json.dump(result, out, indent=1)
 print(
     len(events),
     "events,",

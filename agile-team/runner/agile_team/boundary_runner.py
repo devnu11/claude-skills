@@ -142,7 +142,13 @@ class BoundaryRunner:
         return True
 
     def step(self) -> dict[str, Any]:
-        """Run the current stage once; any exception holds the boundary as an error."""
+        """Run the current stage once, as a chore on the heartbeat."""
+        stage = self.runtime.state.boundary.stage  # type: ignore[union-attr]
+        with self.runtime.pulse.doing(f"sprint boundary: {stage}"):
+            return self._step()
+
+    def _step(self) -> dict[str, Any]:
+        """Run the current stage; any exception holds the boundary as an error."""
         b = self.runtime.state.boundary
         try:
             STAGE_RUNNERS[b.stage](self, b)  # type: ignore[union-attr]

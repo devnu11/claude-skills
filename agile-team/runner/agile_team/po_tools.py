@@ -635,6 +635,8 @@ class PoRun:
 
     async def _collect(self, plan: Plan) -> StepResult:
         """Drain the PO's query. On an SDK error result, keep its session for resume."""
+        pulse = self.runtime.pulse
+        plan.meter = pulse.open(self.runtime.who(plan))
         try:
             return await collect(self.runtime.query_fn, plan)
         except ResultError as exc:
@@ -642,6 +644,8 @@ class PoRun:
             state.po_session = exc.session_id or state.po_session
             self.runtime.save()
             raise
+        finally:
+            pulse.close(plan.meter)
 
     def _set_status(self, status: RunStatus) -> None:
         self.runtime.state.mark(status)

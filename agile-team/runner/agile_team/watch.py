@@ -10,7 +10,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from . import relay
+from . import config as config_mod
+from . import health, relay
 from . import state as state_mod
 from .relay import Message, Relay
 
@@ -26,6 +27,7 @@ class Seen:
     messages: int = 0
     status: str | None = None
     status_reason: str | None = None
+    health: str = ""
 
     @classmethod
     def load(cls, path: Path) -> Seen:
@@ -50,6 +52,8 @@ class Look:
     messages: list[Message]
     status: str
     status_reason: str | None
+    health: str = ""
+    health_reason: str = ""
 
     def quiet(self) -> bool:
         """Running with no reason."""
@@ -62,7 +66,7 @@ class Look:
 
     def seen(self) -> Seen:
         """This look as watch memory."""
-        return Seen(len(self.messages), self.status, self.status_reason)
+        return Seen(len(self.messages), self.status, self.status_reason, self.health)
 
 
 def look(run_dir: Path) -> Look | None:
@@ -72,7 +76,18 @@ def look(run_dir: Path) -> Look | None:
     except json.JSONDecodeError:
         return None
     state = state_mod.load(run_dir)
-    return Look(messages, str(state_mod.shown_status(run_dir, state)), state.status_reason)
+    status = str(state_mod.shown_status(run_dir, state))
+    verdict = health.current(_config_of(run_dir))
+    return Look(messages, status, state.status_reason, str(verdict.level), verdict.reason)
+
+
+def _config_of(run_dir: Path) -> config_mod.Config:
+    """The run's config (the repo is two levels above ``.team/run``); defaults if unreadable."""
+    repo = run_dir.parents[1]
+    try:
+        return config_mod.load(repo)
+    except config_mod.ConfigError:
+        return config_mod.Config(repo)
 
 
 def _status_changed(seen: Seen, now: Look) -> bool:
@@ -82,6 +97,7 @@ def _status_changed(seen: Seen, now: Look) -> bool:
 TRIGGERS: tuple[tuple[str, Callable[[Seen, Look], bool]], ...] = (
     ("message", lambda seen, now: bool(now.new_since(seen))),
     ("status", _status_changed),
+    ("health", lambda seen, now: now.health == "red" and seen.health != "red"),
 )
 
 
@@ -107,6 +123,7 @@ def line(triggers: list[str], basis: Basis) -> dict[str, Any]:
         "status": now.status,
         "status_reason": now.status_reason,
         "was": {"status": seen.status, "status_reason": seen.status_reason},
+        "health": {"level": now.health, "reason": now.health_reason},
     }
 
 
@@ -158,4 +175,4 @@ class Watcher:
         """After a quiet look the status baseline moves to it; the message count stays (V5)."""
         if now is None:
             return seen
-        return Seen(seen.messages, now.status, now.status_reason)
+        return Seen(seen.messages, now.status, now.status_reason, now.health)
