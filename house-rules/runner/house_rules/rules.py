@@ -31,6 +31,8 @@ TOP_LEVEL_DEFINITIONS = (
     ast.TypeAlias,
 )
 OWN_BODY_STOPS = (*FUNCTION_TYPES, ast.ClassDef, ast.Lambda)
+# Dunders whose signature the class chooses: a boolean there is still a flag.
+USER_SIGNATURE_DUNDERS = frozenset({"__init__", "__new__", "__post_init__", "__call__"})
 
 
 @dataclass(frozen=True)
@@ -162,7 +164,8 @@ def is_factory(site: FunctionSite, patterns: tuple[str, ...]) -> bool:
 def check_boolean_parameters(module: ParsedModule) -> Iterator[Measure]:
     """Parameters typed ``bool`` or defaulting to ``True`` or ``False``."""
     for site in walk_functions(module.tree):
-        if is_dunder(site.name) or site.overrides or site.kind is Kind.ACCESSOR:
+        fixed = is_dunder(site.name) and site.name not in USER_SIGNATURE_DUNDERS
+        if fixed or site.overrides or site.kind is Kind.ACCESSOR:
             continue
         flagged = [
             argument.arg
