@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import state as state_mod
+from . import system
 from .events import EVENTS, Event, EventKind, EventLog
 from .git_ops import Git
 from .halt import Halt, HaltKind
@@ -87,7 +88,7 @@ class Drift:
 def operation(git: Git) -> str | None:
     """The first ``OPERATIONS`` name whose path exists in the worktree's git dir."""
     git_dir = Path(git.run("rev-parse", "--absolute-git-dir").strip())
-    return next((name for path, name in OPERATIONS if (git_dir / path).exists()), None)
+    return next((name for path, name in OPERATIONS if system.exists(git_dir / path)), None)
 
 
 def read(git: Git) -> Found:

@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import halt, handover, loops
+from . import halt, handover, loops, system
 from .boundary import BOUNDARY_STALL, Boundary, StepKind
 from .boundary_runner import BoundaryRunner
 from .config import Config
@@ -124,7 +124,7 @@ def step_role(story: StoryState) -> str:
 def _first_existing(config: Config, candidates: tuple[str, ...], story_id: str) -> str | None:
     docs = config.team.docs_dir.rstrip("/")
     paths = (c.format(id=story_id, docs=docs) for c in candidates)
-    return next((p for p in paths if (config.repo / p).is_file()), None)
+    return next((p for p in paths if system.is_file(config.repo / p)), None)
 
 
 def _path_lines(config: Config, story_id: str) -> list[str]:

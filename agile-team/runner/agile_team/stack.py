@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import system
 from .boundary import StackEntry
 from .git_ops import Git, GitError
 
@@ -60,7 +61,7 @@ class Rebuilder:
 
     def prepare(self) -> None:
         """A clean detached worktree at the target, made if missing."""
-        if not (self.worktree / ".git").exists():
+        if not system.exists(self.worktree / ".git"):
             self.git.run("worktree", "prune")
             self.git.run("worktree", "add", "--detach", str(self.worktree), self.target)
             return

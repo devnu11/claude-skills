@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import fingerprint, loops
+from . import fingerprint, loops, system
 from .commands import TIMED_OUT, CommandRunner
 from .loops import Author, Fault, Rule, Setback
 from .results import Ran, result_tail
@@ -152,9 +152,9 @@ def pick_tracked(file: str, listing: str) -> str | None:
 def read_repo_file(repo: Path, path: str) -> str | None:
     """The text of ``path`` under ``repo``, or None when it is not a file."""
     target = repo / path
-    if not target.is_file():
+    if not system.is_file(target):
         return None
-    return target.read_text(encoding="utf-8", errors="replace")
+    return system.read_bytes(target).decode("utf-8", errors="replace")
 
 
 def _unread(_path: str) -> str | None:
@@ -319,7 +319,7 @@ def parse_coverage(output: str) -> float | None:
 
 def load_baseline(repo: Path) -> dict[str, float]:
     path = repo / BASELINE
-    return json.loads(path.read_text()) if path.is_file() else {}
+    return json.loads(system.read_text(path)) if system.is_file(path) else {}
 
 
 def _always_presented(_story: StoryState) -> str | None:

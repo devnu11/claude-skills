@@ -8,13 +8,13 @@ use bare repos for the first and a fake for the second; they never run ``gh``.
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
+from . import system
 from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, PrMode
 from .config import UpstreamSettings
 from .git_ops import Git, GitError, with_trailer
@@ -110,12 +110,10 @@ def command_runner(repo: Path) -> Exec:
 
     def run(argv: list[str]) -> tuple[int, str]:
         try:
-            proc = subprocess.run(
-                argv, cwd=repo, capture_output=True, text=True, timeout=GH_TIMEOUT, check=False
-            )
+            done = system.run(system.Command(tuple(argv), repo, GH_TIMEOUT))
         except FileNotFoundError as exc:
             return 127, str(exc)
-        return proc.returncode, proc.stdout + proc.stderr
+        return done.code, done.out + done.err
 
     return run
 

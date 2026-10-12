@@ -14,6 +14,8 @@ from functools import cache
 from itertools import takewhile
 from pathlib import Path
 
+from . import system
+
 GLOB_TOKENS = {"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}
 GLOB_CHARS = "*?["
 GROUP_CHARS = "{("
@@ -96,13 +98,13 @@ def under_root(path: str, root: str) -> bool:
 
 def resolve_in(base: Path, raw: str) -> Path:
     """``raw`` (absolute, ``~``-relative or relative to ``base``) as a resolved path."""
-    candidate = Path(raw).expanduser()
-    return (candidate if candidate.is_absolute() else base / candidate).resolve()
+    candidate = system.expand_user(Path(raw))
+    return system.resolve(candidate if candidate.is_absolute() else base / candidate)
 
 
 def repo_relative(repo: Path, path: Path) -> str | None:
     """``path`` relative to ``repo`` as POSIX, or ``None`` when outside the repo."""
     try:
-        return path.relative_to(repo.resolve()).as_posix()
+        return path.relative_to(system.resolve(repo)).as_posix()
     except ValueError:
         return None

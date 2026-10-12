@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import shlex
-import time
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
@@ -13,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
+from . import system
 from .config import Targeted, Toolchain
 from .events import EventKind
 from .gates import StoryState, test_file
@@ -96,7 +96,7 @@ def batches(paths: list[str], toolchain: Toolchain) -> list[Batch]:
 
 def new_tests(story: StoryState, repo: Path) -> list[str]:
     """The story's recorded test files that match TEST_FILE_NAMES and exist now (R6)."""
-    return [f for f in story.test_files if _is_test_file(f) and (repo / f).is_file()]
+    return [f for f in story.test_files if _is_test_file(f) and system.is_file(repo / f)]
 
 
 def _is_test_file(path: str) -> bool:
@@ -157,10 +157,10 @@ class RunnerTools:
 
     async def _run(self, ids: list[str], plan: list[Batch]) -> dict[str, Any]:
         story = self.plan.story.id if self.plan.story else NO_STORY_ID
-        started = time.monotonic()
+        started = system.monotonic()
         with self.runtime.pulse.doing(TESTS_CHORE.format(role=self.plan.role.name, story=story)):
             runs = [await self._run_batch(batch) for batch in plan]
-        seconds = round(time.monotonic() - started, 1)
+        seconds = round(system.monotonic() - started, 1)
         self._log(ids, runs, seconds)
         return {"status": "ran", "runs": runs, "seconds": seconds}
 

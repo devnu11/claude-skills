@@ -11,12 +11,12 @@ import json
 import tomllib
 from dataclasses import dataclass
 from enum import StrEnum
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import tomli_w
 
+from . import system
 from .config import API_KEY_AUTH, CONFIG_NAME, DEFAULT_KEY_FILE, PIPELINE_STEPS, config_path
 from .git_ops import Git
 from .roles import REPO_ROLES, Layer, RoleBook
@@ -43,17 +43,18 @@ Every role reads this file. Keep it short and specific to this repo.
 - (paths or systems the team must leave alone)
 """
 
+PRESETS = Path(__file__).parent / "presets.toml"
+
 
 def load_presets() -> dict[str, dict[str, Any]]:
     """The packaged stack preset table."""
-    text = resources.files("agile_team").joinpath("presets.toml").read_text()
-    return tomllib.loads(text)
+    return tomllib.loads(system.read_text(PRESETS))
 
 
 def detect(repo: Path, presets: dict[str, dict[str, Any]]) -> str | None:
     """Name of the first preset with a marker file in ``repo``."""
     return next(
-        (name for name, p in presets.items() if any((repo / m).exists() for m in p["markers"])),
+        (name for name, p in presets.items() if any(system.exists(repo / m) for m in p["markers"])),
         None,
     )
 
@@ -62,8 +63,8 @@ def suggest_kind(repo: Path, preset: dict[str, Any]) -> str:
     """Likely delivery kind: ``web`` when package.json depends on a web framework."""
     web = set(preset.get("web_dependencies", []))
     pkg = repo / "package.json"
-    if web and pkg.is_file():
-        data = json.loads(pkg.read_text())
+    if web and system.is_file(pkg):
+        data = json.loads(system.read_text(pkg))
         deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
         if web & set(deps):
             return "web"
@@ -142,28 +143,27 @@ def gitignore_lines(artifacts: str) -> list[str]:
 
 def ensure_lines(path: Path, lines: list[str]) -> None:
     """Append any of ``lines`` missing from ``path``."""
-    current = path.read_text().splitlines() if path.is_file() else []
+    current = system.read_text(path).splitlines() if system.is_file(path) else []
     missing = [ln for ln in lines if ln not in current]
     if missing:
         prefix = "" if not current or current[-1] == "" else "\n"
-        with path.open("a") as fh:
-            fh.write(prefix + "# agile-team\n" + "\n".join(missing) + "\n")
+        system.append_text(path, prefix + "# agile-team\n" + "\n".join(missing) + "\n")
 
 
 def write_if_missing(path: Path, text: str) -> None:
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+    if not system.exists(path):
+        system.make_dirs(path.parent)
+        system.write_text(path, text)
 
 
 def write_config(repo: Path, answers: Answers) -> None:
     """Write the config; on reconfigure keep every value already in the file."""
     path, data = config_path(repo), build_config(_preset(answers.preset), answers)
-    if path.is_file():
+    if system.is_file(path):
         if answers.mode is not WriteMode.RECONFIGURE:
             raise FileExistsError(f"{CONFIG_NAME} exists; use --reconfigure")
-        data = merge_keep(tomllib.loads(path.read_text()), data)
-    path.write_text(tomli_w.dumps(data))
+        data = merge_keep(tomllib.loads(system.read_text(path)), data)
+    system.write_text(path, tomli_w.dumps(data))
 
 
 def _preset(name: str) -> dict[str, Any]:

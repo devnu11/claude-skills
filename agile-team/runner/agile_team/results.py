@@ -6,6 +6,8 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from . import system
+
 RESULTS_DIR = "results"
 RESULT_LINES = 60
 SHA_CHARS = 7
@@ -63,13 +65,13 @@ class Results:
     def keep(self, story: str, ran: Ran) -> None:
         """Write ``ran`` (``asdict`` JSON), replacing the story's last run of that command."""
         path = self._file(story, ran.name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(ran)))
+        system.make_dirs(path.parent)
+        system.write_text(path, json.dumps(asdict(ran)))
 
     def latest(self, story: str, name: str) -> Ran | None:
         """The kept run, or None when there is none or the file is unreadable."""
         try:
-            return Ran(**json.loads(self._file(story, name).read_text()))
+            return Ran(**json.loads(system.read_text(self._file(story, name))))
         except (OSError, ValueError, TypeError):
             return None
 

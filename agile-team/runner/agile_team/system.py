@@ -9,26 +9,41 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import stat as stat_bits
+import subprocess
+import threading
 import time
+import urllib.request
+from collections.abc import Mapping
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import NamedTuple
 
 __all__ = [
     "append_text",
+    "connect",
     "copy_tree",
+    "environ",
     "exists",
     "expand_user",
     "glob",
     "hard_link",
+    "hostname",
+    "http_get",
     "is_dir",
     "is_file",
     "kill",
+    "killpg",
     "list_dir",
+    "listen_http",
     "local_time",
     "make_dirs",
     "monotonic",
     "now",
+    "pgid",
+    "pgrp",
     "pid",
     "read_bytes",
     "read_end",
@@ -37,10 +52,52 @@ __all__ = [
     "remove_tree",
     "replace",
     "resolve",
+    "run",
+    "run_shell",
     "sleep",
+    "spawn_logged",
+    "spawn_piped",
     "stat",
+    "wait_event",
     "write_text",
 ]
+
+TimeoutExpired = subprocess.TimeoutExpired
+Process = subprocess.Popen
+
+
+class Completed(NamedTuple):
+    """A finished command: exit code, stdout, stderr."""
+
+    code: int
+    out: str
+    err: str
+
+
+@dataclass(frozen=True)
+class Command:
+    """An argv to run without a shell."""
+
+    argv: tuple[str, ...]
+    cwd: Path | None = None
+    timeout: float | None = None
+
+
+@dataclass(frozen=True)
+class ShellCommand:
+    """A shell command line, where it runs, and its environment (None inherits)."""
+
+    text: str
+    cwd: Path
+    env: Mapping[str, str] | None = None
+
+
+class HttpReply(NamedTuple):
+    """An HTTP response: status, content type (no parameters), body."""
+
+    status: int
+    content_type: str
+    body: bytes
 
 
 class FileStat(NamedTuple):
@@ -180,3 +237,103 @@ def pid() -> int:
 def kill(pid: int, sig: int) -> None:
     """Send signal ``sig`` to process ``pid``."""
     os.kill(pid, sig)
+
+
+def pgrp() -> int:
+    """The runner's process group id."""
+    return os.getpgrp()
+
+
+def pgid(pid: int) -> int:
+    """The process group id of ``pid``."""
+    return os.getpgid(pid)
+
+
+def killpg(pgid: int, sig: int) -> None:
+    """Send signal ``sig`` to process group ``pgid``."""
+    os.killpg(pgid, sig)
+
+
+def run(command: Command) -> Completed:
+    """Run an argv to the end and capture its output."""
+    done = subprocess.run(
+        list(command.argv),
+        cwd=command.cwd,
+        timeout=command.timeout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return Completed(done.returncode, done.stdout, done.stderr)
+
+
+def run_shell(command: ShellCommand) -> int:
+    """Run a shell line to the end; return its exit code."""
+    return subprocess.run(
+        command.text, shell=True, cwd=command.cwd, env=command.env, check=False
+    ).returncode
+
+
+def spawn_piped(command: ShellCommand) -> Process:
+    """Start a shell line in a new session, output piped (stderr merged)."""
+    return subprocess.Popen(
+        command.text,
+        shell=True,
+        cwd=command.cwd,
+        env=command.env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        start_new_session=True,
+    )
+
+
+def spawn_logged(command: ShellCommand, log: Path) -> Process:
+    """Start a shell line in a new session, output written to ``log``."""
+    with log.open("wb") as out:
+        return subprocess.Popen(
+            command.text,
+            shell=True,
+            cwd=command.cwd,
+            env=command.env,
+            start_new_session=True,
+            stdout=out,
+            stderr=subprocess.STDOUT,
+        )
+
+
+def wait_event(event: threading.Event, timeout: float) -> bool:
+    """Wait for the event up to ``timeout`` seconds; whether it is set."""
+    return event.wait(timeout)
+
+
+def environ() -> Mapping[str, str]:
+    """The process environment."""
+    return os.environ
+
+
+def http_get(url: str, timeout: float) -> HttpReply:
+    """GET a URL; raises OSError when it cannot be reached."""
+    with urllib.request.urlopen(url, timeout=timeout) as reply:
+        return HttpReply(reply.status, reply.headers.get_content_type(), reply.read())
+
+
+def connect(address: tuple[str, int]) -> None:
+    """Open and close a TCP connection; raises OSError when refused."""
+    socket.create_connection(address, timeout=1).close()
+
+
+def hostname() -> str:
+    """This machine's host name."""
+    return socket.gethostname()
+
+
+def listen_http(
+    address: tuple[str, int], handler: type[BaseHTTPRequestHandler]
+) -> ThreadingHTTPServer:
+    """Bind a threaded HTTP server (daemon threads) on ``address``."""
+    server = ThreadingHTTPServer(address, handler)
+    server.daemon_threads = True
+    return server
