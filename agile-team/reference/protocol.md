@@ -1465,7 +1465,8 @@ merge**.
   their targets are picked at run time. A `kill` target of `0`, `-1`,
   `-<runner pgid>`, or a pid in the runner's group is denied. Stop your own
   work by the pid you saved (`cmd & PID=$!` … `kill $PID`). Residual risk:
-  the hook cannot resolve a variable target (`kill $p`), so that passes.
+  the hook cannot resolve a variable target (`kill $p`, `kill $PPID`), so
+  that passes.
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
