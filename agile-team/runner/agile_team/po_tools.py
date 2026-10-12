@@ -86,10 +86,16 @@ class Tools:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
         return text_result(await self.runtime.run_role(request))
 
+    def _open_refusal(self, args: dict[str, Any]) -> str | None:
+        """Why ``open_story`` must refuse ``args``, or None (duplicate id, then s64 V1)."""
+        if args["id"] in self.runtime.state.stories:
+            return f"story {args['id']} already exists"
+        return self.runtime.config.delivery_refusal(args.get("delivery"))
+
     async def open_story(self, args: dict[str, Any]) -> dict[str, Any]:
         rt, sid = self.runtime, args["id"]
-        if sid in rt.state.stories:
-            return text_result(refused(f"story {sid} already exists"))
+        if reason := self._open_refusal(args):
+            return text_result(refused(reason))
         first = rt.pipeline.first()
         rt.state.stories[sid] = StoryState(sid, args["title"], first, delivery=args.get("delivery"))
         rt.save()
@@ -358,7 +364,9 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"role": str, "brief": str, "story": str},
     ),
     "open_story": (
-        "Register a story; it starts in the backlog until start_sprint lists it.",
+        "Register a story; it starts in the backlog until start_sprint lists it. "
+        "delivery must be the name of a configured [[delivery]] (empty = the first one); "
+        "any other name is refused with the valid names.",
         {"id": str, "title": str, "delivery": str},
     ),
     "start_sprint": (
