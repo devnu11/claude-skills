@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s75 done)
+
+## s75: Test pins DevOps scoping rule (ADR-0039, prompt test only)
+
+New test `test_devops_scopes_its_test_runs` in `tests/test_roles.py`: resolves the packaged devops role, collapses whitespace, asserts five phrases from the design checklist (D2 ×2, D3 ×2, D4). Phrases: "Run only what proves your change, normally one named test", "Never run the full suite or a coverage run; the runner's gate does those", "only so the onboarding sprint can record its baseline", "This is the one step where you run the full suite and the coverage command", "run the failing tests the brief names". All five asserted and present in the resolved body. Design section "Test checklist" verifies all rules covered. Coverage 99.64%; ruff clean. No code change; no new ADR (documents s69 boundary). See design `agile-team/docs/design/s75.md`.
 
 ## s77: Close LEGACY, extend fake system, enforce ruff TID251 (P3 of s71, no new ADR)
 

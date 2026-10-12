@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s75 done)
+
+## s75: DevOps scoping rule documented; exemption boundary established (ADR-0039, ship)
+
+**Verdict: ship.** No defects. Scope: `roles/devops.md`, `tests/test_roles.py`, three docs files. Prompt and test only; no runtime change. Changes: new `## Test runs` section (D1–D5) and one sentence added to `## Onboarding sprint` (D3). Test `test_devops_scopes_its_test_runs` (same style as existing role tests) collapses whitespace and asserts five phrases (D2–D4). Three doc paragraphs each address their reader with the same rule in different words. Suite_check.py unchanged; devops stays in FULL/COVERAGE allowed (D6). All ACs pass. Coverage 99.64%, ruff clean. ADR-0039 documents the decision: exemption from s69 applies only to onboarding baseline; in normal work DevOps scopes test runs. See design `agile-team/docs/design/s75.md`, review `.team/reviews/s75.md`.
 
 ## s77: Ruff TID251 enforcement—system import discipline (P3 of s71, no new ADR)
 
