@@ -3,6 +3,7 @@
 Unit tests run in the FAKE world (s71): an autouse fixture swaps ``agile_team.system``
 for ``FakeSystem`` and ``os_guard`` fails any test that reaches the real OS. Tests in
 ``tests/e2e/`` (and the ``os_guard.LEGACY`` files, until P3) run in the REAL world.
+Unit tests have a 1 s limit, the real world ``e2e_timeout`` (s72).
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from agile_team.roles import RoleBook
 from agile_team.state import RunState
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-from . import os_guard
+from . import os_guard, time_limit
 from .fake_system import FAKE_HOME, FAKE_REPO, FakeSystem
 
 PY_CONFIG: dict[str, Any] = {
@@ -55,6 +56,16 @@ def git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, capture_output=True, text=True
     ).stdout
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the e2e time limit's ini key (s72 L2)."""
+    parser.addini(time_limit.E2E_LIMIT_INI, "per-test time limit (s) for tests/e2e/ and LEGACY")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Mark each test with its world's time limit (s72 L4)."""
+    time_limit.mark(items)
 
 
 @pytest.hookimpl(wrapper=True, trylast=True)
