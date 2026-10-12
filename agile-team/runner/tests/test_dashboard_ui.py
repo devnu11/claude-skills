@@ -5,43 +5,15 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from html.parser import HTMLParser
 from importlib import resources
 from pathlib import Path
 
 import pytest
 
+from tests.dashboard_node import PageParts
+
 MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs"
 URL_RE = re.compile(r"https?://[^\"'\s)]+")
-
-
-class PageParts(HTMLParser):
-    """Collects element ids and inline script bodies."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.ids: set[str] = set()
-        self.scripts: list[str] = []
-        self.script_srcs: list[str] = []
-        self._in_script = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attributes = dict(attrs)
-        if attributes.get("id"):
-            self.ids.add(attributes["id"] or "")
-        if tag == "script":
-            self._in_script = True
-            self.scripts.append("")
-            if attributes.get("src"):
-                self.script_srcs.append(attributes["src"] or "")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "script":
-            self._in_script = False
-
-    def handle_data(self, data: str) -> None:
-        if self._in_script:
-            self.scripts[-1] += data
 
 
 def _resource():  # type: ignore[no-untyped-def]
