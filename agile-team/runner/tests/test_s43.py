@@ -213,19 +213,21 @@ def test_command_timeout_must_be_positive(tmp_path: Path, bad: int) -> None:
     assert "gates.command_timeout_s must be positive" in cfg.validate(c, known)
 
 
-def test_cli_passes_the_limit(configured: Path, tmp_path: Path) -> None:
+def test_cli_passes_the_limit(configured: Path, key_home: Path, tmp_path: Path) -> None:
     config = cfg.load(configured)
     config.gates.command_timeout_s = 90
     assert cli.make_pipeline(config).checks.run.__self__.limit_s == 90
-    rt = cli.make_runtime(cli.Place(configured, tmp_path / "home"), lambda *a, **k: None)
+    rt = cli.make_runtime(cli.Place(configured, key_home), lambda *a, **k: None)
     assert rt.shell(tmp_path).__self__.limit_s == rt.config.gates.command_timeout_s
     assert rt.shell(tmp_path).__self__.limit_s == 300.0
 
 
-def test_cli_runtime_uses_the_configured_limit(configured: Path, tmp_path: Path) -> None:
+def test_cli_runtime_uses_the_configured_limit(
+    configured: Path, key_home: Path, tmp_path: Path
+) -> None:
     text = (configured / cfg.CONFIG_NAME).read_text()
     (configured / cfg.CONFIG_NAME).write_text(text + "\n[gates]\ncommand_timeout_s = 90\n")
-    rt = cli.make_runtime(cli.Place(configured, tmp_path / "home"), lambda *a, **k: None)
+    rt = cli.make_runtime(cli.Place(configured, key_home), lambda *a, **k: None)
     assert rt.shell(tmp_path).__self__.limit_s == 90
 
 
