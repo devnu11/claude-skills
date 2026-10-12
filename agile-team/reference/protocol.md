@@ -1518,7 +1518,9 @@ merge**.
   (`tests/`, `.` and `tests/*.py` are not, so `pytest tests/test_x.py tests/`
   is a full run). Any `--cov…` flag or `coverage run` is denied too. Write
   option values with `=` (`--foo=1`): a spaced value counts as a path, which
-  makes the run full. The reason says how to ask the runner (`run_tests`,
+  makes the run full. Redirects (`2>&1`, `>out`) are not paths, but a
+  redirect target after a space (`> out`) is, so write `>out` or pipe to
+  `tail`. The reason says how to ask the runner (`run_tests`,
   `run_new_tests`). A run that names only tests
   (`pytest -q tests/test_x.py::test_y`) passes, except for the code reviewer
   and the quality czar, who run no tests. Residual risk: pytest run from a
