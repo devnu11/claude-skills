@@ -38,7 +38,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-timeout = 30
+timeout = 1        # unit tests (s72); e2e and os_guard.LEGACY use e2e_timeout
+e2e_timeout = 30
 
 [tool.coverage.run]
 source = ["agile_team"]
