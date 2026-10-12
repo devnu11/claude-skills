@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: Ruff TID251 DevOps step—banned-api config enforcement (P3 phase, no new ADR)
+
+After implement gate passes, you run `run_role devops` with `story=""` (storyless) to land ruff config. AC4: DevOps adds `TID251` `per-file-ignores` rows to `agile-team/runner/pyproject.toml` and runs `uv run --directory agile-team/runner ruff check .`. All checks must pass (TID251 now bans `from agile_team.system import …` everywhere). If findings exist, DevOps lists each as `path:line: name` in the handoff and names the owner (developer-cli owns `agile_team/`, unit-tester owns `tests/`). Record the `builtins.open` / `io.open` result. Release the story after DevOps succeeds. No changes to developer or tester scope—only DevOps edits `pyproject.toml`. See design `agile-team/docs/design/s77.md` (Z11, DevOps checklist).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no ADR needed)
 

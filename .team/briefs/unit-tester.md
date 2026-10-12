@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: Close LEGACY, extend fake system, enforce ruff TID251 (P3 of s71, no new ADR)
+
+P3 completion: all 31 LEGACY files migrated to fake or e2e. `tests/os_guard.py` deletes `LEGACY` table; `world_of()` becomes simpler (REAL iff `/e2e/` in path). `conftest.py` docstrings updated (no mention of LEGACY). Four tests rewritten: `test_os_guard.py` (new ones check absence of table, former-LEGACY file in FAKE), `test_s72_limit.py` (former-LEGACY file gets 1s, no monkeypatch). **Fake additions (Z10):** `FakeSystem.workdir` (was `cwd` attr, now method), `programs` dict for `which()`, `opened` list for `open_browser()`, `handlers` list for `on_signal()`, `on_sleep` list for `async_sleep` callbacks, `sleep` through same helper as `async_sleep`. All six new functions tested. **Ruff TID251:** DevOps step lands config ban on `from agile_team.system import …` across all code. Unit tests TID251-clean. Two `per-file-ignores` rows for `test_os_guard.py` and `dashboard_node.py`. No test weakened or deleted. Coverage 95%+, ruff clean. See design `agile-team/docs/design/s77.md` (Z1–Z13, fake additions, test checklist).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
 

@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: E2E bridge step, moved tests, P3 system functions covered (P3 of s71, no new ADR)
+
+P3 e2e: **e2e bridge (Z9, storyless, after unit tests, before implement):** Replace two `monkeypatch.setattr(cli, "Preflight", partial(..., which=lambda e: e))` with `monkeypatch.setattr(system, "which", lambda name: name)`. Patches in `test_halt_e2e.py:100` and `test_budget_e2e.py:26`; drop `partial`, `preflight` imports if unused. **New file `tests/e2e/test_system_e2e.py`:** Six P3 functions on real OS (Z2, Z13): `asyncio.run(async_sleep(0))` is None; `which("sh")` absolute, made-up name is None; `home() == Path.home()`; `cwd()` after chdir matches; `open_browser` patched, returns result, never opens tab; `on_signal(SIGUSR1, event.set)` then `raise_signal` sets event in 1s. **Paths:** Moved tests use `parents[4]` (one more level), no imports of git helpers or file helpers from `s29_helpers.py`. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s77.md` (Z9, Z13, e2e checklist).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
 

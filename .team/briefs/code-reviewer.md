@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: Ruff TID251 enforcement—system import discipline (P3 of s71, no new ADR)
+
+The seam import rule is now enforced by ruff. Every module does `from agile_team import system` and calls `system.func(...)`, never `from agile_team.system import func`. Ruff `TID251` banned-api rule in `pyproject.toml` (DevOps step) bans all `from agile_team.system import …` imports. Review check (Z3, Z12): No module imports `ThreadingHTTPServer` directly (use `system.HttpServer` type); `http.server.BaseHTTPRequestHandler` stays in `server.py` only. All six P3 names in `system.__all__` (Z2): `home`, `which`, `on_signal`, `open_browser`, `async_sleep`, `HttpServer` type. Functions thin (one-liners), no logic. Two `per-file-ignores` rows for `test_os_guard.py` (its own tests check real names pass) and `dashboard_node.py` (e2e node driver). Coverage 95%+, ruff clean. See design `agile-team/docs/design/s77.md` (Z2, Z3, Z12, ruff config).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
 

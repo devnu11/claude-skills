@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: CLI works unchanged; unit-test seam complete (internal refactor, P3 of s71, no ADR)
+
+Internal refactor only. The CLI you test is unchanged. Dashboard, commands, status—all work as documented. This story closes the three-phase unit-test seam (s71 P1, s76 P2, s77 P3). All developer and tester scope is inside the seam; your sandbox sees no change. Black-box acceptance: CLI status works, e2e tests pass, ruff clean (verified by Proxy). See design `agile-team/docs/design/s77.md` (AC1–AC5), ADR-0036 (seam architecture).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no ADR)
 
