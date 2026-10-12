@@ -55,7 +55,8 @@ command fails.
    Tell the human where their own instructions go: `.team/roles/<role>.md`
    for this repo (stubs were just created) and, for every repo,
    `~/.config/agile-team/roles/` (offer `$AT roles scaffold --global`).
-   `_shared.md` applies to every role; `$AT roles list` shows what is active. For a repo
+   `_shared.md` applies to every role and `_leadership.md` to the PO, the
+   Manager and you; `$AT roles list` shows what is active. For a repo
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
    run until a blocker (`until-blocker`)?
@@ -368,6 +369,11 @@ command fails.
   test ID holds a live value (a pid, a clock). The unit-tester must fix that
   test. It is not a runner fault.
 - Never answer a PO question on the human's behalf.
+- You are on the leadership team with the PO and the Manager. Read
+  `.team/roles/_leadership.md` (if present) when you start and after any
+  compaction: it holds the human's decisions for all three of you. When the
+  human states a decision that should bind the whole leadership team, it goes
+  there (once), not into your own notes.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
 - With `auth = "api-key"` the key bills the repo's Console workspace, not the
   human's login; with `login` the run uses their subscription. Never print or

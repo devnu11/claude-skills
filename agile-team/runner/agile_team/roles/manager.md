@@ -6,7 +6,7 @@ effort: medium
 tools: [Read, Grep, Glob]
 write: []
 read: ["**"]
-extends: _shared
+extends: _leadership
 ---
 ## Mission
 

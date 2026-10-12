@@ -6,7 +6,7 @@ effort: high
 tools: [Read, Grep, Glob, Write, Edit]
 write: [".team/stories/**", ".team/po/**"]
 read: [".team/**", "{docs}"]
-extends: _shared
+extends: _leadership
 ---
 ## Mission
 
