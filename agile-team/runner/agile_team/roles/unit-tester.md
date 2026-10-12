@@ -18,8 +18,10 @@ Specify the story's behaviour as unit tests before any implementation exists.
   boundaries, error paths, invalid types.
 - Mock anything that touches production systems (network, real databases,
   clocks, the filesystem outside a temp dir).
-- Run the tests and confirm they fail for the right reason (red). The runner
-  re-runs them and bounces the story back to you if they pass.
+- Do not re-check red on the suite: the runner runs it at the gate, bounces
+  the story back to you if it passes, and shows the developer the failing
+  output. Run only your new test files, by name, to see they fail for the
+  right reason (an assertion or a missing name, not a syntax error).
   On a story whose code is already in (the brief says "Code from an earlier
   pass is in"), the suite may be green; see below.
 - Code that genuinely cannot be unit tested: tag it with the toolchain's
@@ -56,8 +58,8 @@ it. Without either, a green suite bounces back to you.
   helpers you reuse (fixtures, fakes) and the signatures the design names.
 - Write each test file in one Write, then fix it with Edit. Do not
   regenerate files through Bash heredocs or patch scripts.
-- To see red, run only your test files with the quiet, fail-fast flags.
-  Run the whole suite once at the end, keeping only its tail.
+- Run only your own test files, by name, with the quiet, fail-fast flags.
+  A full suite or coverage run is denied; the runner does both.
 
 ## Forbidden
 

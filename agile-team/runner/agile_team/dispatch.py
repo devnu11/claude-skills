@@ -37,9 +37,11 @@ from . import (
     loops,
     presentation,
     recovery,
+    runner_tools,
     salvage,
     sandbox,
 )
+from . import results as results_mod
 from . import state as state_mod
 from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
@@ -72,6 +74,7 @@ from .loops import Author, Setback
 from .priority import Priority
 from .providers import Providers
 from .relay import Note, Relay
+from .results import Ran
 from .roles import (
     Handoff,
     HandoffError,
@@ -94,6 +97,8 @@ REWORK_BRIEF = (
     '(you changed tests for this story) or "tests": "confirmed" '
     "(you checked the existing tests already cover it)."
 )
+QUALITY_CHORE = "quality checks for {story}"
+QUALITY_COMMANDS = ("lint", "static")
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
@@ -331,11 +336,13 @@ class Runtime:
     events: EventLog = field(init=False)
     halted_by: Halt | None = field(default=None, init=False)
     pulse: live.Pulse = field(init=False)
+    results: results_mod.Results = field(init=False)
     step_meter: live.Meter | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
         self.pulse = live.Pulse(self.config.run_dir, self.config.health.beat_s)
+        self.results = results_mod.Results(self.config.run_dir)
         if self.upstream is None:
             self.upstream = Upstream(self.git, self.config.upstream)
 
@@ -417,8 +424,36 @@ class Runtime:
         setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
         if plan.role.name in setups:
             setups[plan.role.name](plan)
+        step = next((s for s in STEP_SETUPS if role_fits_step(plan.role.name, s)), None)
+        if step:
+            STEP_SETUPS[step](self, plan)
         if kind in FIX_SETUPS:
             FIX_SETUPS[kind](self, plan)
+
+    def _attach_runner_tools(self, plan: Plan) -> None:
+        """Give a developer step the runner's named-test tools (R1)."""
+        server = runner_tools.mcp_server(runner_tools.RunnerTools(self, plan))
+        plan.launch.mcp_servers = {**plan.launch.mcp_servers, runner_tools.SERVER: server}
+        plan.launch.extra_allowed = [*plan.launch.extra_allowed, *runner_tools.tool_names()]
+
+    def _run_quality_checks(self, plan: Plan) -> None:
+        """Lint, static and (unless kept at HEAD) coverage before the quality czar (Q1-Q3)."""
+        if plan.story is None:
+            return
+        with self.pulse.doing(QUALITY_CHORE.format(story=plan.story.id)):
+            for name in self._quality_due(plan.story):
+                self._keep(plan.story, self.pipeline.checks.ran(name), "before quality")
+
+    def _quality_due(self, story: StoryState) -> list[str]:
+        """The configured QUALITY_COMMANDS, plus coverage when its kept run is not at HEAD (Q2)."""
+        commands = self.pipeline.checks.commands
+        due = [name for name in QUALITY_COMMANDS if commands.get(name)]
+        kept = self.results.latest(story.id, "coverage")
+        return due if kept and kept.at == self.git.head() else [*due, "coverage"]
+
+    def _keep(self, story: StoryState, ran: Ran, where: str) -> None:
+        """Store a run with HEAD and where it ran (B2, Q1)."""
+        self.results.keep(story.id, replace(ran, at=self.git.head(), where=where))
 
     def _team_fix_scope(self, plan: Plan) -> None:
         """A team-branch fix may also write source, tests and e2e tests."""
@@ -479,6 +514,9 @@ class Runtime:
     def user_prompt(self, plan: Plan) -> str:
         parts = [plan.prompt]
         parts.extend(_story_lines(plan.story, self._rework_lines(plan.story)))
+        if plan.story:
+            found = self.results.shown(plan.story.id, plan.story.step)
+            parts.append(results_mod.section(found))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context(plan.story))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
@@ -834,12 +872,14 @@ class Runtime:
         sha = self.git.commit(paths, commit_message(plan, self._subject(plan)))
         if plan.story and not plan.story.commit:
             plan.story.commit = sha
-        self._record_code(plan, sha)
+        self._record_commit(plan, sha, paths)
         return sha
 
-    def _record_code(self, plan: Plan, sha: str) -> None:
-        if plan.story and role_fits_step(plan.role.name, "implement"):
-            plan.story.code_commits.append(sha)
+    def _record_commit(self, plan: Plan, sha: str, paths: list[str]) -> None:
+        """Run the COMMIT_RECORDS rows that fit the committing role (s46, R7)."""
+        for step, record in COMMIT_RECORDS:
+            if plan.story and role_fits_step(plan.role.name, step):
+                record(plan.story, sha, paths)
 
     def _subject(self, plan: Plan) -> str:
         story = plan.story
@@ -862,6 +902,8 @@ class Runtime:
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
+        if outcome.ran:
+            self._keep(story, outcome.ran, f"{step} gate")
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self.pipeline.advance(story, outcome)
@@ -967,6 +1009,24 @@ def _unapplied_ruling(ruling: str) -> dict[str, Any]:
     """The report of a ruling held back because its fault did not apply."""
     return {"ruling": {"ruling": ruling, "applied": False, "why": RULING_AFTER_FAULT}}
 
+
+def _add_code_commit(story: StoryState, sha: str, paths: list[str]) -> None:
+    story.code_commits.append(sha)
+
+
+def _add_test_files(story: StoryState, sha: str, paths: list[str]) -> None:
+    story.test_files.extend(p for p in paths if p not in story.test_files)
+
+
+COMMIT_RECORDS: tuple[tuple[str, Callable[[StoryState, str, list[str]], None]], ...] = (
+    ("implement", _add_code_commit),
+    ("tests", _add_test_files),
+)
+
+STEP_SETUPS = {
+    "implement": Runtime._attach_runner_tools,
+    "quality": Runtime._run_quality_checks,
+}
 
 FIX_SETUPS = {
     StepKind.TEAM_FIX: Runtime._team_fix_scope,

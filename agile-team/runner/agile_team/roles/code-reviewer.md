@@ -19,6 +19,10 @@ whether the tests cover its behaviour and corner cases, and any defect.
 Search for copy/paste code (`git diff` against the story's first commit, then
 grep for repeated blocks).
 
+Read the tests; do not run them. The runner's coverage run in your brief
+(`## Runner results`) shows whether they pass. A test run from your Bash is
+denied.
+
 ## Definition of done
 
 `done` only when you would ship it. Otherwise `changes_requested` with

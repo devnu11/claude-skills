@@ -29,6 +29,7 @@ from typing import Any
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
+from .suite_check import suite_denial
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
@@ -156,7 +157,8 @@ def _check_pattern(scope: Scope, call: ToolCall) -> str | None:
 
 
 def check_bash(scope: Scope, command: str) -> str | None:
-    """Deny key mentions, write-side git, off-allowlist commands, forbidden paths, wait loops.
+    """Deny key mentions, write-side git, off-allowlist commands, forbidden paths, wait loops,
+    kills and suite runs (s69).
 
     Checks run on both the raw command and the one with ``\\``-newline
     continuations joined; a denial in either view denies (a ``#`` comment
@@ -200,6 +202,7 @@ def _check_view(scope: Scope, command: str) -> str | None:
         lambda: _check_tokens(scope, _tokens(command)),
         lambda: _check_waits(segments),
         lambda: _check_kills(segments),
+        lambda: _check_suite(scope, segments),
     )
     return next((reason for reason in (c() for c in checks) if reason), None)
 
@@ -207,6 +210,12 @@ def _check_view(scope: Scope, command: str) -> str | None:
 def _check_kills(segments: list[list[str]]) -> str | None:
     """Deny signalling the runner's group, or choosing kill targets by name or at run time (s41)."""
     return next((r for r in map(kill_denial, segments) if r), None)
+
+
+def _check_suite(scope: Scope, segments: list[list[str]]) -> str | None:
+    """Deny the full suite or coverage, and test runs by roles that only read tests (s69)."""
+    denials = (suite_denial(scope.role, words) for words in segments)
+    return next((reason for reason in denials if reason), None)
 
 
 def _check_waits(segments: list[list[str]]) -> str | None:

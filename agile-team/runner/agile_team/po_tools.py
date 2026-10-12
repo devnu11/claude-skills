@@ -39,6 +39,7 @@ from .priority import Change, Placement, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .router import Router
+from .runner_tools import text_result
 from .state import ModelOverride, RunStatus
 
 SERVER = "team"
@@ -72,11 +73,6 @@ class Start:
 
     task: str
     mode: StartMode = StartMode.DELIVERY
-
-
-def text_result(data: Any) -> dict[str, Any]:
-    """MCP tool result carrying ``data`` as JSON text."""
-    return {"content": [{"type": "text", "text": json.dumps(data, indent=2)}]}
 
 
 @dataclass

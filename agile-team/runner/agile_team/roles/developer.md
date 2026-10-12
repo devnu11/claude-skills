@@ -20,8 +20,13 @@ brief.
 
 ## Deliverables
 
-Production code only. Run the test and coverage commands from the charter or
-config yourself before handing off.
+Production code only. Do not run the full suite or coverage: the runner runs
+coverage at the implement gate and bounces the story back to you with the
+output. Your brief's `## Runner results` holds the runner's last test output,
+with the failing tests. To check your work, ask the runner: `run_tests` with
+test ids (`agile-team/runner/tests/test_x.py::test_y`), or `run_new_tests` for
+the story's new tests. A named run in Bash (`pytest -q <file>::<test>`) is
+also allowed.
 
 ## Definition of done
 

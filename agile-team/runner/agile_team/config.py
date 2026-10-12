@@ -46,6 +46,22 @@ class ConfigError(Exception):
     """Raised when the config file is missing or cannot be parsed."""
 
 
+@dataclass(frozen=True)
+class Targeted:
+    """How the runner runs named tests under ``root`` (s69 T1)."""
+
+    root: str
+    command: str
+
+    def holds(self, path: str) -> bool:
+        """``root`` is "" or ``path`` is under it."""
+        return not self.root or path.startswith(self.root.rstrip("/") + "/")
+
+    def relative(self, path: str) -> str:
+        """``path`` with ``root/`` removed."""
+        return path.removeprefix(self.root.rstrip("/") + "/") if self.root else path
+
+
 @dataclass
 class Toolchain:
     """Per-repo commands and the globs that role scopes resolve against."""
@@ -54,6 +70,12 @@ class Toolchain:
     commands: dict[str, str] = field(default_factory=dict)
     pragma: str = ""
     globs: dict[str, list[str]] = field(default_factory=dict)
+    targeted: list[Targeted] = field(default_factory=list)
+
+    def targeted_for(self, path: str) -> Targeted | None:
+        """The row with the longest root that holds ``path`` (R4)."""
+        rows = [row for row in self.targeted if row.holds(path)]
+        return max(rows, key=lambda row: len(row.root), default=None)
 
 
 @dataclass
@@ -206,6 +228,10 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
         commands=commands,
         pragma=raw.get("pragma", ""),
         globs={k: list(v) for k, v in raw.get("globs", {}).items()},
+        targeted=[
+            Targeted(str(r.get("root", "")), str(r.get("command", "")))
+            for r in raw.get("targeted", [])
+        ],
     )
 
 
@@ -254,6 +280,10 @@ TOOLCHAIN_RULES: tuple[Rule, ...] = (
     (lambda t: bool(t.commands.get("coverage")), "toolchain.coverage is not set"),
     (lambda t: bool(t.globs.get("source")), "toolchain.globs.source is empty"),
     (lambda t: bool(t.globs.get("tests")), "toolchain.globs.tests is empty"),
+    (
+        lambda t: all("{tests}" in r.command for r in t.targeted),
+        "toolchain.targeted commands must hold {tests}",
+    ),
 )
 GATE_RULES: tuple[Rule, ...] = (
     (lambda g: set(g.steps) <= set(PIPELINE_STEPS), f"gates.steps must be among {PIPELINE_STEPS}"),

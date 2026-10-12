@@ -12,7 +12,7 @@ import json
 import re
 import shlex
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -20,6 +20,7 @@ from typing import Any
 from . import fingerprint, loops
 from .commands import TIMED_OUT, CommandRunner
 from .loops import Author, Fault, Rule, Setback
+from .results import Ran, result_tail
 from .roles import Dispute, Handoff, TestClaim
 from .salvage import Interruption
 
@@ -193,6 +194,7 @@ class StoryState:
     disputes: int = 0
     implemented: int = 0
     code_commits: list[str] = field(default_factory=list)
+    test_files: list[str] = field(default_factory=list)
     streak: list[Setback] = field(default_factory=list)
     repeated: str | None = None
     run: list[Setback] = field(default_factory=list)
@@ -210,6 +212,7 @@ class Outcome:
     dispute: OpenDispute | None = None
     author: Author = Author.RUNNER
     rule: Rule = Rule.REPEAT
+    ran: Ran | None = None
 
 
 def role_fits_step(role: str, step: str) -> bool:
@@ -399,8 +402,15 @@ class Checks:
             return self.threshold
         return min(self.threshold, self.baseline_coverage)
 
+    def ran(self, name: str) -> Ran:
+        """Run toolchain command ``name``; keep its exit code and output tail (Q1, Q2)."""
+        return _ran(name, *self.run(self.commands[name]))
+
     def tests_red(self) -> Outcome:
         code, out = self.run(self.commands["test"])
+        return _with_ran(self._red_outcome(code, out), _ran("test", code, out))
+
+    def _red_outcome(self, code: int, out: str) -> Outcome:
         if timeout := timed_out(code, out):
             return timeout
         if code != 0:
@@ -413,8 +423,8 @@ class Checks:
         if red.reason != GREEN_TOO_EARLY:
             return red
         if claim is None:
-            return Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED)
-        return Outcome(Verdict.PASS, REWORK_PASS.format(claim=claim))
+            return _with_ran(Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED), red.ran)
+        return _with_ran(Outcome(Verdict.PASS, REWORK_PASS.format(claim=claim)), red.ran)
 
     def green(self) -> Outcome:
         """Pass when the test command exits 0, else bounce with its output tail."""
@@ -428,6 +438,9 @@ class Checks:
     def tests_green_and_covered(self) -> Outcome:
         """One coverage run proves green and gives the total (s68 C1-C5)."""
         code, out = self.run(self.commands["coverage"])
+        return _with_ran(self._covered_outcome(code, out), _ran("coverage", code, out))
+
+    def _covered_outcome(self, code: int, out: str) -> Outcome:
         if timeout := timed_out(code, out):
             return timeout
         if code == 0:
@@ -448,6 +461,15 @@ class Checks:
         if pct < self.required_coverage():
             return Outcome(Verdict.BOUNCE, f"coverage {pct}% is below {self.required_coverage()}%")
         return Outcome(Verdict.PASS, f"coverage {pct}%")
+
+
+def _ran(name: str, code: int, out: str) -> Ran:
+    return Ran(name, code, result_tail(out))
+
+
+def _with_ran(outcome: Outcome, ran: Ran | None) -> Outcome:
+    """``outcome`` carrying the run it was judged on (B1)."""
+    return replace(outcome, ran=ran)
 
 
 @dataclass

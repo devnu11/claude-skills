@@ -27,14 +27,16 @@ the most.
   a short preview, and you end up reading it twice.
 - Read each file once, and never re-run a command whose output you already
   have.
-- Run checks quietly and keep the tail: only what you changed, fail fast,
-  e.g. `pytest -q -x --no-header <files> 2>&1 | tail -20`.
+- Never run the full suite or coverage: the runner runs them and puts the
+  results in your brief (`## Runner results`), and a full `pytest` or a
+  `--cov` run is denied. Run only named tests, quietly, and keep the tail,
+  e.g. `pytest -q -x --no-header tests/test_x.py::test_y 2>&1 | tail -20`.
 - Your brief's design file is the contract. Read source only for what it
   leaves open.
 
 ## Never wait without a deadline
 
-- Run a test suite in the foreground and let it finish. Don't start it in
+- Run every command in the foreground and let it finish. Don't start it in
   the background and then poll for its output.
 - Give every wait a deadline: run it under `timeout N`, or loop a bounded
   number of times (`for i in $(seq 60); do …; done`). An open `until` or

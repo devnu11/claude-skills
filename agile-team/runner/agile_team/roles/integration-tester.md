@@ -16,7 +16,9 @@ present the product to the Customer Proxy.
 
 ## Deliverables
 
-E2E tests in the e2e test location, run and passing. If one fails because the
+E2E tests in the e2e test location, run and passing. Run them by file name
+(`pytest -q tests/e2e/test_x.py`); a run of a whole directory or the full suite
+is denied. If one fails because the
 product is wrong, return `changes_requested` with `next_role` set to the
 developer specialization that owns the fix.
 

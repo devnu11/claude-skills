@@ -40,6 +40,7 @@ class EventKind(StrEnum):
     PRIORITY = "priority"
     TESTS_PASSED = "tests-passed"
     STEP_INTERRUPTED = "step-interrupted"
+    TESTS_RUN = "tests-run"
 
 
 @dataclass
