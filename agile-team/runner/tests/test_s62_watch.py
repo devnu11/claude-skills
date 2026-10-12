@@ -311,6 +311,7 @@ def test_quiet_means_running_without_a_reason() -> None:
 
 def test_the_line_is_json_ready(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
+    remember(run_dir, 0, "running")
     note(run_dir)
     json.dumps(until(run_dir, FakePace()))
 
