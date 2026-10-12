@@ -86,7 +86,9 @@ function is not one: move it onto its class.
 A parameter annotated `bool` (alone, in a union, or as a string), or one that
 defaults to `True` or `False`, keyword-only parameters included. Use an enum.
 
-Exempt: dunders, property setters and deleters, and overrides.
+Exempt: protocol dunders with fixed signatures (`__exit__`, `__eq__`, …), property setters
+and deleters, and overrides. `__init__`, `__new__`, `__post_init__` and `__call__` are
+checked: constructors are exempt from the parameter count, not from this rule.
 
 ### verb-name
 
