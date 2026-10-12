@@ -3,9 +3,9 @@ name: agile-team runner
 on:
   push:
     branches: [main]
-    paths: ["agile-team/**", ".github/workflows/agile-team.yml"]
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
   pull_request:
-    paths: ["agile-team/**", ".github/workflows/agile-team.yml"]
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
 
 defaults:
   run:
@@ -23,9 +23,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --dev
+      - run: uv sync --locked --dev
         env:
           UV_PYTHON: ${{ matrix.python-version }}
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pytest --cov
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pytest --cov
