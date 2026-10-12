@@ -1,6 +1,6 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s62 done, s47 documented)
 
 ## s47: Waiting status shows what run waits on (no new Manager context)
 

@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
 
 ## s61: Accept the checkout when branch or commit changes
 
@@ -23,6 +23,20 @@ The dashboard backend is now live. When you run `agile-team dashboard [--host HO
 - Serves `index.html` on `/`, the snapshot JSON on `/api/snapshot`, and an SSE stream on `/api/stream` that pushes updates every second if files change.
 
 The snapshot builder reads only explicit files (state, events, ledger, messages, requirements) and returns raw data. The browser derives all views (board, flow, tokens, questions) in JavaScript. The fixture is the API contract. No new runtime dependencies. Covered at 99.68% (14 e2e tests); ruff clean. See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend".
+
+## s62: Liaison now has `tell`, `watch`, and a self-hosting script
+
+The liaison has two new commands and a self-hosting mechanism. No more private shell scripts. Key changes:
+
+**`agile-team tell <file>` or `-`:** Queue a message for you without stopping the run. The message is stored in a file under `.team/run/liaison/messages/` and delivered to you at the next router pass (or on resume). Use this to wake the team with context that doesn't fit in an email.
+
+**`agile-team watch [--timeout S]`:** Poll the run's status and outbox with no token cost. Blocks until something needs you (new message, status change, or timeout reached), then prints one JSON line and exits. Liaison uses this to detect when you need to be called.
+
+**Self-hosting and frozen uv:** An unattended job can now run on a pinned copy of the runner with `pin-runner.sh <commit>`. The runner is pinned at a specific commit, built once, and never re-resolved. Unattended jobs run with `uv run --frozen --project .team/run/runner-pin agile-team …`, so lock files never change in dotfiles.
+
+**Dirty tree recovery:** If the run crashes or is killed while editing, `start --resume` now recovers the edits automatically—same as after a checkout halt. Stderr tells you what was saved and where.
+
+See ADR-0029, design `agile-team/docs/design/s62.md`.
 
 ## Recent decisions
 

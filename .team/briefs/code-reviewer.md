@@ -1,8 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
 
 ## Design decisions to verify
+
+**Liaison commands, self-hosting, frozen uv (s62):** Verify that messages, watch, resume, and pinning work as designed:
+- **T1–T7:** `tell` stores unstripped text in `t<N>.md` with hard-link atomicity (no race overwrites), never on command line. `unread(told_ids)` filters to non-delivered. Router delivers in `human_message` pass after checkout check (T5), with path repo-relative.
+- **V1–V8:** `watch` polls every 2s, exits on trigger fire or timeout (heartbeat). `Seen` remembers count + baseline. Triggers table (message, status) in order. Torn JSON → retry. `line()` builds exact V6/V7 dict (triggers, messages, status, status_reason, was).
+- **R1–R4:** `state.unsaved` tracks why salvage was skipped (moved checkout). `recover_cut(run_dir, git)` prefers KILLED > unsaved > None. Message via `RECOVERED_LEADS`. `unsaved` cleared at `PoRun` start.
+- **P1–P3:** `pin-runner.sh <commit>` checks in order (usage, repo, commit, ancestor, pyproject, runner.pid), builds to `.new`, replaces atomically, writes `.commit` last. No re-resolution on later runs (frozen uv).
+- **F1–F3:** Every `uv run --project …` in docs (SKILL, protocol, self-hosting, README) has `--frozen`. CI workflows use `--locked`. `agile-team.yml` paths updated.
+- See ADR-0029, design `agile-team/docs/design/s62.md` (rules T1–T7, V1–V8, R1–R4, P1–P3, F1–F3).
+
+## Previous design decisions to verify
 
 **Checkout guard halts on external changes (s61):** Verify that the checkout record and guard are safe and comprehensive:
 - **K1–K2:** `state.checkout` persists branch and head; written only by runner (record, record_checkout, accept-checkout). Checkout matches when attached, no operation in progress, and (with record) branch/head equal recorded.

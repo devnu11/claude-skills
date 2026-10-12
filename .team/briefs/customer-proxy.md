@@ -1,6 +1,19 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
+
+## s62: Liaison commands in the runner; self-hosting available
+
+The liaison now runs acceptance tests in a self-hosted copy of the runner, not the working repo. The human can use `agile-team tell` and `agile-team watch` as part of the standard tooling (not private scripts). For your acceptance testing, the key change is that the runner can be pinned, so the team can safely edit the runner while it is running on a pinned copy.
+
+**For AC testing:**
+- **AC1–AC2:** `tell` and `watch` commands work as documented in SKILL.md; test that messages queue and watch exits with JSON.
+- **AC3:** Dirty tree after a halt is recovered on resume without a wrapper script.
+- **AC4:** `pin-runner.sh` script builds and pins a runner copy; documented self-hosting pattern works.
+- **AC5:** No new docs defects; `--frozen` on all uv commands, `--locked` in CI.
+- **AC6–AC8:** Integration with s61 (checkout guard), s9 (salvage), and s47 (answer delivery).
+
+See design `agile-team/docs/design/s62.md` (AC1–AC8) and ADR-0029.
 
 ## s61: Halt on external checkout changes
 

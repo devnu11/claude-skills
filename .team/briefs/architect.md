@@ -1,6 +1,26 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
+
+## s62: Message delivery, watch polling, unsaved-state recovery, frozen resolution
+
+Four architectural decisions working together to eliminate private scripts and enable self-hosting.
+
+**Message delivery through router (T1–T6):** Messages queued via `tell` are not delivered via a separate alert; they join the inbox feed and become a `human_message` pass after checkout check (same flow as answers from s47). Consequence: delivery is atomic with the checkpoint system, no race between answer and message, message text never reaches the command line (safe from `pkill -f`).
+
+**Watch as free polling (V1–V8):** File-based memory (`watch.json`) with poll state (outbox count + status baseline). `Seen` + `Look` dataclasses track what to fire on. `TRIGGERS` table (data-driven) defines when to report. Consequence: liaison gets status changes instantly (2s poll), outbox appends are caught, no tokens spent, memory survives resume.
+
+**Unsaved state for dirty recovery (R1–R4):** When salvage is skipped (moved checkout in s61 K5), the cause is saved in `state.unsaved`. On resume via `recover_cut()`, if no INTERRUPTED status, check `unsaved` for the cause to salvage. Consequence: both killed runs (INTERRUPTED status) and checkout halts (moved checkout) recover cleanly from dirty trees without wrapper scripts.
+
+**Frozen resolution for self-hosting (P1–P3, F1–F3):** Pin script builds a git archive at a commit (no symlink, no state sharing). Pinned runner uses `uv run --frozen`, which locks to the pinned `uv.lock` without re-resolution. Documented `uv` commands all use `--frozen`, so users' dotfiles never get `uv.lock` rewrites that halt shell loops. CI uses `--locked` to enforce version alignment. Consequence: unattended jobs stay stable even when the runner is being updated in the repo.
+
+Each decision follows the team principle of "process in code, not scripts":
+- Messages in files, not on command line.
+- Watch state in JSON, not in a shell variable.
+- Recovery via flagged state, not wrapper logic.
+- Pinning via git archive, not manual scripts.
+
+See ADR-0029, design `agile-team/docs/design/s62.md` (rules T1–T7, V1–V8, R1–R4, P1–P3, F1–F3).
 
 ## s61: Checkout guard prevents silent corruption
 

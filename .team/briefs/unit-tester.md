@@ -1,6 +1,24 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
+
+## s62: Tell/watch commands, resume from dirty tree, frozen uv, self-hosting
+
+Test coverage from design checklist:
+
+**Tell (T1–T6):** `Relay.tell("text")` writes `t<N>.md` exactly, race to `t<N+1>`, draft unlinked always. `t1, t5, msg-…` present → next is `t6`. `cmd_tell` with file/stdin, prints `queued <id> for the PO: <path>`, no state mutation. Whitespace-only → exit 1. Missing file → exit 1. Works in checkout-changed status.
+
+**Delivery (T5–T7):** Router pass has `human_message` trigger, message line without text, state.told extended, never re-delivered. With answer + message → one pass, answer first. While waiting (s47 driver pattern) → message ends wait. Halted run → message on resume first prompt. AC6 checkout halt + tell + accept → message delivered. `status.queued_messages` before/after delivery.
+
+**Watch (V1–V7, tested with fake Pace):** First watch with message + running → triggers `["message"]`, `was.status=null`. Second watch + timeout → heartbeat line. Message during sleep → fired at next poll. Torn line → no crash, next poll retries. Outbox shorter → every entry new. Unreadable `watch.json` → fresh. `cmd_watch` prints one JSON line, exits 0. TRIGGERS names are `("message", "status")` in order.
+
+**Resume (R1–R4):** Killed run (dead pid, dirty tree) → `start --resume` salvages before preflight, stderr says `the last run was killed`. Checkout halt (dirty tree) + accept + resume → salvages with `unsaved=cause`, stderr says `halted (checkout)`. `PoRun.run` clears `unsaved` at start. Dirty tree + plain start → still refused.
+
+**Pin script:** `.team/run/runner-pin/pyproject.toml` exists, `.commit` is sha + newline. Re-pin replaces tree, no `.new` left. P2 refusals: exit 2 on usage, exit 1 on others, existing pin unchanged. Each refusal exact (unknown commit, not-on-branch, no pyproject, runner live, not-a-repo). Run from subdirectory → still roots.
+
+**Docs/CI (F1–F3):** Every `uv run --project …` in SKILL.md, protocol.md, self-hosting.md, README has `--frozen`. Test with self-check. Both workflows use `--locked` everywhere. `agile-team.yml` paths include F3 entries.
+
+Coverage ≥95%, ruff clean. See ADR-0029, design `agile-team/docs/design/s62.md` test checklist.
 
 ## s61: Checkout guard halts when branch or commit changes externally
 

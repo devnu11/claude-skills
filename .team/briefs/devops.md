@@ -1,6 +1,6 @@
 # DevOps: Current context and conventions
 
-**Last updated:** 2026-10-11 (s29 done)
+**Last updated:** 2026-10-11 (s62 done)
 
 ## s26: Service delivery configuration
 
@@ -23,6 +23,17 @@ At each sprint start and end, the runner syncs and builds review branches as bou
 A repeat of the same failure escalates to the Manager (via s27 escalation logic).
 
 See ADR-0015, design `agile-team/docs/design/s29.md` (rules U9–U11, U16, DevOps role file).
+
+## s62: CI workflows now use `uv sync --locked` and `uv run --locked`
+
+Both `.github/workflows/agile-team.yml` and `unattended.yml` enforce locked resolution in CI:
+- `uv sync --locked --dev` ensures the lock file matches pyproject.toml
+- `uv run --locked …` enforces that lock file
+- Any mismatch fails CI and blocks merge
+
+This prevents lock file rewrites that would break unattended jobs using `--frozen`. No changes to your configuration or delivery setup.
+
+See ADR-0029, design `agile-team/docs/design/s62.md` (rule F2).
 
 ## Your role: present environments
 

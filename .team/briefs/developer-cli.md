@@ -1,8 +1,24 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s61 done, s4 documented)
+**Last updated:** 2026-10-11 (s62 done)
 
 See `developer.md` for the base conventions.
+
+## s62: Liaison commands in the runner; self-hosting and frozen uv
+
+The runner now has `tell` and `watch` commands, replacing private shell scripts. Message delivery goes through the router (no stop/resume needed). Watch polls files with no token cost. Resume from dirty trees works via a new `unsaved` state field. Self-hosting: `pin-runner.sh <commit>` builds a pinned runner copy; unattended jobs run the pinned version with `uv run --frozen`. All documented uv commands use `--frozen`; CI uses `--locked`. Modules:
+
+- **`relay.py`:** `Told` dataclass (id, path); `Relay.tell(text)` queues messages in `t<N>.md` files with hard-link atomicity. `told()` lists files in number order. `unread(told_ids)` computes undelivered.
+- **`watch.py` (new):** `Seen` (memory file with outbox count + status baseline), `Look` (one poll's outbox + status), `TRIGGERS` table (message, status), `Watcher.until(timeout_s)` polls until fired/timeout. `line()` builds V6/V7 JSON dict.
+- **`state.py`:** `told: list[str]` (delivered ids), `unsaved: Cause | None` (salvage skip reason).
+- **`router.py`:** `_unread()` lists undelivered, `_deliver(answers, told)` extends state fields, saves once, returns human_message pass.
+- **`recovery.py`:** `recover_killed()` → `recover_cut(run_dir, git)` picks cause (KILLED > unsaved > None), salvages, clears unsaved.
+- **`dispatch.py`:** `save_interrupted` sets `unsaved` when checkout moved; `PoRun.run` clears unsaved at start.
+- **`cli.py`:** `cmd_tell(source)` reads file or stdin, stores `.draft-<pid>`, links to `t<N>.md`, exits 0 or 1 (errors printed with `agile-team tell:` prefix). `cmd_watch(args, pace)` calls `Watcher.until()`, prints one JSON line, exits 0 or 130 (Ctrl-C). `status_report` adds `queued_messages`. `_recover` uses `RECOVERED_LEADS` dict (Cause → reason text).
+- **`pin-runner.sh` (new):** Extracts `agile-team/runner` from git at commit into `.team/run/runner-pin/`, writes sha to `.commit`. Validates: commit exists, on-branch, has pyproject.toml, runner not running. P2 refusals checked in order; exit 2 on usage.
+- **Workflows:** `uv sync --locked --dev`, `uv run --locked …`. F3: paths include unattended files.
+
+See ADR-0029, design `agile-team/docs/design/s62.md` (rules T1–T7, V1–V8, R1–R4, P1–P3, F1–F3).
 
 ## s61: Runner halts when checkout changes under it
 
