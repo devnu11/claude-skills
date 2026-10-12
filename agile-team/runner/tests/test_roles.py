@@ -313,3 +313,33 @@ def test_integration_tester_prompt_explains_the_seeded_config(repo: Path) -> Non
     body = RoleBook.for_repo(repo, {}).resolve("integration-tester").body
     assert "the runner seeds the config" in body
     assert 'token = "presentation"' in body
+
+
+LEADERSHIP = {
+    "_shared": "---\nname: _shared\n---\nSHARED",
+    "_lead": "---\nextends: _shared\n---\nLEAD",
+    "boss": "---\nextends: _lead\nmodel: sonnet\neffort: low\n---\nBOSS",
+}
+
+
+def test_underscore_files_are_bases_not_roles() -> None:
+    lead = RoleBook(dict(LEADERSHIP), {}, {}, Path())
+    assert lead.names() == {"boss"}
+    assert lead.resolve("boss").body == "LEAD\n\nBOSS"
+
+
+def test_addenda_follow_the_extends_chain() -> None:
+    repo = {"_lead": "Decided once.", "boss": "Boss note."}
+    body = RoleBook(dict(LEADERSHIP), repo, {}, Path()).resolve("boss").body
+    assert body == "LEAD\n\nDecided once.\n\nBOSS\n\nBoss note."
+
+
+def test_leadership_reaches_po_and_manager_only(tmp_path: Path) -> None:
+    (tmp_path / ".team" / "roles").mkdir(parents=True)
+    (tmp_path / ".team" / "roles" / "_leadership.md").write_text("Raise budgets slowly.")
+    real = RoleBook.for_repo(tmp_path, {})
+    assert "_leadership" not in real.names()
+    for name in ("product-owner", "manager"):
+        assert "Raise budgets slowly." in real.resolve(name).body
+        assert "leadership team" in real.resolve(name).body
+    assert "Raise budgets slowly." not in real.resolve("architect").body

@@ -17,6 +17,12 @@ A global or repo file *without* frontmatter is an addendum appended to the
 body, global first. HTML comments in an addendum are dropped, so a scaffolded
 stub adds nothing until the human writes in it. ``_shared.md`` addenda apply
 to every role.
+
+A file whose name starts with ``_`` is a base, never a role: it is only
+reached through ``extends`` (``_shared`` for every role, ``_leadership`` for
+the Product Owner and the Manager). Addenda apply along the whole ``extends``
+chain, each right after its own role's body, so a repo addendum to a base
+reaches every role built on it.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from .providers import DEFAULT as DEFAULT_PROVIDER
 
 BUILTIN_DIR = Path(__file__).parent / "roles"
 SHARED = "_shared"
+BASE_PREFIX = "_"
 REPO_ROLES = ".team/roles"
 USER_ROLES = ".config/agile-team/roles"
 HOME_ENV = "AGILE_TEAM_HOME"
@@ -257,11 +264,15 @@ class RoleBook:
         return self.repo_files, self.user_files
 
     def names(self) -> set[str]:
-        """Every role that can be resolved (built-in, global or repo files, config-only)."""
+        """Every role that can be resolved (built-in, global or repo files, config-only).
+
+        Bases (``_``-prefixed files such as ``_shared`` and ``_leadership``) are left out.
+        """
         complete = {
             n for files in self._human_layers() for n, t in files.items() if has_frontmatter(t)
         }
-        return (set(self.builtin) | complete | set(self.config_roles)) - {SHARED}
+        found = set(self.builtin) | complete | set(self.config_roles)
+        return {n for n in found if not n.startswith(BASE_PREFIX)}
 
     def enabled_names(self) -> list[str]:
         return sorted(n for n in self.names() if self.resolve(n).enabled)
@@ -324,8 +335,8 @@ class RoleBook:
         """Merge the chain, config overrides and run-time overrides."""
         chain = self.chain(name)
         merged = _merge(chain, [self.config_roles.get(name, {}), runtime or {}])
-        bodies = [s.body for s in chain] + [self.addendum(name)]
-        merged.body = "\n\n".join(b for b in bodies if b)
+        parts = [part for spec in chain for part in (spec.body, self.addendum(spec.name))]
+        merged.body = "\n\n".join(p for p in parts if p)
         return _concrete(merged)
 
     def shared_body(self) -> str:

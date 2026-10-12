@@ -1034,14 +1034,22 @@ Two layers of human-written role files sit on top of the built-ins:
 - `<role>.md` **with** frontmatter replaces the role (or adds one). Repo beats
   global beats built-in.
 - `_shared.md` addenda apply to every role.
+- A file whose name starts with `_` is a **base**, never a role: it is only
+  reached through `extends`. `_shared` is the base of every role.
+  `_leadership` (extends `_shared`) is the base of the Product Owner and the
+  Manager; the liaison reads it too (SKILL.md). Write the human's decisions
+  for the whole leadership team once, in `.team/roles/_leadership.md`.
+- Addenda apply along the whole `extends` chain, each right after its own
+  role's body. So a repo addendum to a base reaches every role built on it.
 
 `roles scaffold` writes the stubs; `roles list` shows what each layer does.
 Global files can live in a dotfiles repo; the runner only reads them.
 
-System prompt order: `_shared` (+ `_shared` addenda) → role chain bodies →
-global addendum → repo addendum → `.team/CLAUDE.md` → file scope. Nothing
-else is added: a `.team/briefs/` directory, if one is left over, is never
-read (s114). Each step's own brief is the message the runner or the PO sends.
+System prompt order: `_shared` (+ `_shared` addenda) → for each role in the
+chain, root first: its body, then its global and repo addenda →
+`.team/CLAUDE.md` → file scope. Nothing else is added: a `.team/briefs/`
+directory, if one is left over, is never read (s114). Each step's own brief is
+the message the runner or the PO sends.
 
 **Retired roles (s114).** The Scribe is gone. A `[roles.scribe]` section in
 `.agile-team.toml`, or a global or repo `scribe.md` with frontmatter or with
