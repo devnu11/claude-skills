@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from agile_team import dispatch, gates, halt, handover
+from agile_team import dispatch, gates, halt, handover, system
 from agile_team.dispatch import Runtime, StepRequest
 from agile_team.gates import OpenDispute, PreviousStep, StoryStatus
 from agile_team.handover import Trigger
@@ -60,7 +60,7 @@ def events_of(rt: Runtime, kind: str) -> list[Any]:
 
 def entries(rt: Runtime) -> list[str]:
     path = rt.config.run_dir / halt.CRASH_LOG
-    text = path.read_text() if path.exists() else ""
+    text = system.read_text(path) if system.exists(path) else ""
     return [line for line in text.splitlines() if line.startswith("--- ")]
 
 
@@ -176,7 +176,7 @@ def test_settle_crash_saves_the_edits_like_an_execute_crash(
     make_runtime, configured, monkeypatch
 ) -> None:
     monkeypatch.setattr(Runtime, "settle", boom)
-    query = FakeQuery(action=lambda: (configured / "stray.txt").write_text("edit"))
+    query = FakeQuery(action=lambda: system.write_text(configured / "stray.txt", "edit"))
     rt = make_runtime(query)
     add_story(rt)
     with pytest.raises(TypeError):

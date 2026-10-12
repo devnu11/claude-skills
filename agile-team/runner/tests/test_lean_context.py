@@ -7,7 +7,7 @@ from importlib import resources
 from pathlib import Path
 
 import pytest
-from agile_team import dispatch, guard, insights, roles
+from agile_team import dispatch, guard, insights, roles, system
 from agile_team import state as state_mod
 from agile_team.dashboard import snapshot
 from agile_team.dispatch import Launch, Plan
@@ -65,9 +65,9 @@ def test_context_per_turn_rounds() -> None:
     assert t.context_per_turn() == 3
 
 
-def test_old_ledger_lines_load_as_unmeasured(tmp_path: Path) -> None:
-    path = tmp_path / "ledger.jsonl"
-    path.write_text(json.dumps({"role": "a", "model": "m", "cost_usd": 1.0}) + "\n")
+def test_old_ledger_lines_load_as_unmeasured(scratch: Path) -> None:
+    path = scratch / "ledger.jsonl"
+    system.write_text(path, json.dumps({"role": "a", "model": "m", "cost_usd": 1.0}) + "\n")
     (loaded,) = Ledger(path).entries()
     assert loaded.turns == 0
     t = Totals()
@@ -78,8 +78,8 @@ def test_old_ledger_lines_load_as_unmeasured(tmp_path: Path) -> None:
 # ----- T5: spend_by_role ------------------------------------------------------------
 
 
-def test_spend_by_role_reports_measured_turns_and_context(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "ledger.jsonl")
+def test_spend_by_role_reports_measured_turns_and_context(scratch: Path) -> None:
+    led = Ledger(scratch / "ledger.jsonl")
     led.record(entry("tester", 10, Tokens(input=1000)))
     led.record(entry("tester", 0))
     led.record(entry("tester", 20, Tokens(input=2000)))
@@ -90,8 +90,8 @@ def test_spend_by_role_reports_measured_turns_and_context(tmp_path: Path) -> Non
     assert view["context_per_turn"] == 100
 
 
-def test_spend_by_role_without_turns(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "ledger.jsonl")
+def test_spend_by_role_without_turns(scratch: Path) -> None:
+    led = Ledger(scratch / "ledger.jsonl")
     led.record(entry("tester", 0))
     view = spend_by_role(led)["tester"]
     assert (view["turns_per_step"], view["latest_turns"], view["context_per_turn"]) == (0.0, 0, 0)
@@ -100,8 +100,8 @@ def test_spend_by_role_without_turns(tmp_path: Path) -> None:
 # ----- T6: long_running_roles -------------------------------------------------------
 
 
-def long_ledger(tmp_path: Path, rows: list[tuple[str, int]]) -> Ledger:
-    led = Ledger(tmp_path / "ledger.jsonl")
+def long_ledger(scratch: Path, rows: list[tuple[str, int]]) -> Ledger:
+    led = Ledger(scratch / "ledger.jsonl")
     for role, turns in rows:
         led.record(entry(role, turns, Tokens(input=turns * 100)))
     return led
@@ -111,42 +111,42 @@ def test_constants() -> None:
     assert (insights.LONG_TURNS, insights.RECENT, insights.LONG_OF_RECENT) == (30, 3, 2)
 
 
-def test_two_of_the_last_three_long_lists_the_role(tmp_path: Path) -> None:
-    led = long_ledger(tmp_path, [("t", 5), ("t", 31), ("t", 40), ("t", 10)])
+def test_two_of_the_last_three_long_lists_the_role(scratch: Path) -> None:
+    led = long_ledger(scratch, [("t", 5), ("t", 31), ("t", 40), ("t", 10)])
     # last three: 31, 40, 10 -> two long
     (item,) = long_running_roles(led)
     assert item["role"] == "t" and item["recent_turns"] == [31, 40, 10]
     assert item["context_per_turn"] == 100
 
 
-def test_exactly_thirty_is_not_long(tmp_path: Path) -> None:
-    led = long_ledger(tmp_path, [("t", 30), ("t", 30), ("t", 30)])
+def test_exactly_thirty_is_not_long(scratch: Path) -> None:
+    led = long_ledger(scratch, [("t", 30), ("t", 30), ("t", 30)])
     assert long_running_roles(led) == []
 
 
-def test_one_of_three_is_not_listed(tmp_path: Path) -> None:
-    led = long_ledger(tmp_path, [("t", 99), ("t", 5), ("t", 5)])
+def test_one_of_three_is_not_listed(scratch: Path) -> None:
+    led = long_ledger(scratch, [("t", 99), ("t", 5), ("t", 5)])
     assert long_running_roles(led) == []
 
 
-def test_only_the_recent_window_counts(tmp_path: Path) -> None:
-    led = long_ledger(tmp_path, [("t", 99), ("t", 99), ("t", 5), ("t", 5), ("t", 5)])
+def test_only_the_recent_window_counts(scratch: Path) -> None:
+    led = long_ledger(scratch, [("t", 99), ("t", 99), ("t", 5), ("t", 5), ("t", 5)])
     assert long_running_roles(led) == []
 
 
-def test_unmeasured_entries_are_ignored(tmp_path: Path) -> None:
-    led = long_ledger(tmp_path, [("t", 40), ("t", 0), ("t", 41), ("t", 0)])
+def test_unmeasured_entries_are_ignored(scratch: Path) -> None:
+    led = long_ledger(scratch, [("t", 40), ("t", 0), ("t", 41), ("t", 0)])
     (item,) = long_running_roles(led)
     assert item["recent_turns"] == [40, 41]
 
 
-def test_roles_are_sorted_by_name(tmp_path: Path) -> None:
+def test_roles_are_sorted_by_name(scratch: Path) -> None:
     rows = [("zed", 40), ("alpha", 50), ("zed", 40), ("alpha", 50)]
-    assert [i["role"] for i in long_running_roles(long_ledger(tmp_path, rows))] == ["alpha", "zed"]
+    assert [i["role"] for i in long_running_roles(long_ledger(scratch, rows))] == ["alpha", "zed"]
 
 
-def test_no_ledger_no_long_roles(tmp_path: Path) -> None:
-    assert long_running_roles(Ledger(tmp_path / "none.jsonl")) == []
+def test_no_ledger_no_long_roles(scratch: Path) -> None:
+    assert long_running_roles(Ledger(scratch / "none.jsonl")) == []
 
 
 def test_manager_context_has_long_running_roles(make_runtime) -> None:
@@ -223,7 +223,7 @@ def resolved(name: str):
 # ----- state ------------------------------------------------------------------------
 
 
-def test_new_state_fields_default_and_legacy_files_load(tmp_path: Path) -> None:
+def test_new_state_fields_default_and_legacy_files_load(scratch: Path) -> None:
     assert state_mod.RunState().po_renew_due == []
     assert state_mod.RunState().po_renew_path == "compact"
     legacy = state_mod.RunState().to_json()
@@ -233,10 +233,10 @@ def test_new_state_fields_default_and_legacy_files_load(tmp_path: Path) -> None:
     assert (back.po_renew_due, back.po_renew_path) == ([], "compact")
 
 
-def test_new_state_fields_round_trip(tmp_path: Path) -> None:
+def test_new_state_fields_round_trip(scratch: Path) -> None:
     st = state_mod.RunState(po_renew_due=["s1 done"], po_renew_path="handoff")
-    state_mod.save(tmp_path, st)
-    back = state_mod.load(tmp_path)
+    state_mod.save(scratch, st)
+    back = state_mod.load(scratch)
     assert (back.po_renew_due, back.po_renew_path) == (["s1 done"], "handoff")
 
 
@@ -305,9 +305,9 @@ def test_po_prompt_explains_renewal_and_handoff_scope() -> None:
 # ----- dashboard (T9-T11) -----------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def page() -> str:
-    return DASHBOARD.joinpath("index.html").read_text(encoding="utf-8")
+    return system.read_text(DASHBOARD / "index.html")
 
 
 @pytest.mark.parametrize("needle", ["Turns/step", "Last turns", "Context/turn"])
@@ -344,7 +344,7 @@ def test_timeline_has_the_po_session_entry(page: str) -> None:
 
 
 def test_fixture_step_ends_have_turns_and_a_po_session_event() -> None:
-    data = json.loads(FIXTURE.read_text())
+    data = json.loads(system.read_text(FIXTURE))
     ends = [e for e in data["events"] if e["kind"] == "step-end"]
     assert ends and all(isinstance(e["data"].get("turns"), int) for e in ends)
     (session,) = [e for e in data["events"] if e["kind"] == "po-session"]

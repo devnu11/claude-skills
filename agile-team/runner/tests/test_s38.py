@@ -7,10 +7,11 @@ import json
 from pathlib import Path
 
 import pytest
-from agile_team import cli, halt, salvage
+from agile_team import cli, halt, salvage, system
 from agile_team import state as state_mod
 from agile_team.dashboard import snapshot
 from agile_team.dispatch import StepRequest
+from agile_team.git_ops import Git
 from agile_team.ledger import (
     PO_DELTAS_FROM,
     Entry,
@@ -23,6 +24,7 @@ from agile_team.relay import Relay
 from agile_team.state import RunStatus
 
 from .conftest import FakeQuery
+from .fake_system import FakeSystem
 from .test_po_cost import Totals
 
 PO = "product-owner"
@@ -90,33 +92,33 @@ def test_a_po_line_without_at_is_legacy() -> None:
 # ----- Ledger (K1, K4, K5, K6) -------------------------------------------------------
 
 
-def test_ledger_reads_are_corrected_and_the_file_is_untouched(tmp_path: Path) -> None:
-    ledger = write_ledger(tmp_path / "l.jsonl", worked_example())
-    text = ledger.path.read_text()
+def test_ledger_reads_are_corrected_and_the_file_is_untouched(scratch: Path) -> None:
+    ledger = write_ledger(scratch / "l.jsonl", worked_example())
+    text = system.read_text(ledger.path)
     assert ledger.total() == pytest.approx(5.55)
     assert [e.cost_usd for e in ledger.entries()][2] == pytest.approx(0.5)
     assert ledger.by_role()[PO] == pytest.approx(5.15)
     assert ledger.totals("role")[PO].cost_usd == pytest.approx(5.15)
-    assert ledger.path.read_text() == text
+    assert system.read_text(ledger.path) == text
 
 
-def test_last_cost_and_overcount(tmp_path: Path) -> None:
-    ledger = write_ledger(tmp_path / "l.jsonl", worked_example())
+def test_last_cost_and_overcount(scratch: Path) -> None:
+    ledger = write_ledger(scratch / "l.jsonl", worked_example())
     assert ledger.last_cost(PO) == 1.20
     assert ledger.last_cost("architect") == 0.40
-    legacy = write_ledger(tmp_path / "m.jsonl", [entry(PO, 1.0), entry(PO, 2.0)])
+    legacy = write_ledger(scratch / "m.jsonl", [entry(PO, 1.0), entry(PO, 2.0)])
     assert legacy.last_cost(PO) == 2.0
     assert ledger.overcount() == pytest.approx(2.80)
 
 
-def test_a_missing_ledger_is_empty(tmp_path: Path) -> None:
-    ledger = Ledger(tmp_path / "none.jsonl")
+def test_a_missing_ledger_is_empty(scratch: Path) -> None:
+    ledger = Ledger(scratch / "none.jsonl")
     assert (ledger.entries(), ledger.total(), ledger.overcount()) == ([], 0.0, 0.0)
     assert (ledger.by_role(), ledger.last_cost(PO)) == ({}, 0.0)
 
 
-def test_budget_status_uses_corrected_figures(tmp_path: Path) -> None:
-    ledger = write_ledger(tmp_path / "l.jsonl", worked_example())
+def test_budget_status_uses_corrected_figures(scratch: Path) -> None:
+    ledger = write_ledger(scratch / "l.jsonl", worked_example())
     status = budget_status(ledger, 10.0)
     assert status["spent_usd"] == 5.55
     assert status["remaining_usd"] == 4.45
@@ -127,8 +129,8 @@ def test_budget_status_uses_corrected_figures(tmp_path: Path) -> None:
     assert keys.index("po_overcount_usd") == keys.index("pct_used") + 1
 
 
-def test_budget_status_overcount_is_zero_without_legacy_lines(tmp_path: Path) -> None:
-    ledger = write_ledger(tmp_path / "l.jsonl", [entry(PO, 1.0, LATER), entry("scribe", 0.5)])
+def test_budget_status_overcount_is_zero_without_legacy_lines(scratch: Path) -> None:
+    ledger = write_ledger(scratch / "l.jsonl", [entry(PO, 1.0, LATER), entry("scribe", 0.5)])
     assert budget_status(ledger, 10.0)["po_overcount_usd"] == 0.0
 
 
@@ -213,7 +215,7 @@ def test_enforce_ceiling_at_the_ceiling_blocks_once(make_runtime) -> None:
 
 def test_a_role_step_lands_then_the_run_blocks(make_runtime, configured) -> None:
     def write() -> None:
-        (configured / "src" / "app.py").write_text("x = 2\n")
+        system.write_text(configured / "src" / "app.py", "x = 2\n")
 
     rt = make_runtime(FakeQuery(cost=1.2, action=write))
     rt.config.team.budget_usd = 1.0
@@ -326,19 +328,18 @@ def set_budget(repo: Path, budget: float) -> None:
 
     team = {**PY_CONFIG["team"], "budget_usd": budget}
     text = tomli_w.dumps({**PY_CONFIG, "team": team})
-    (repo / config_mod.CONFIG_NAME).write_text(text)
+    system.write_text(repo / config_mod.CONFIG_NAME, text)
 
 
-def blocked_at_four(configured: Path, key_home: Path, monkeypatch) -> Totals:
-    from functools import partial
+def commit_config(repo: Path, message: str) -> None:
+    Git(repo).commit([".agile-team.toml"], message)
 
-    from agile_team import preflight
 
-    monkeypatch.setattr(cli, "Preflight", partial(preflight.Preflight, which=lambda e: e))
+def blocked_at_four(configured: Path, key_home: Path, fake: FakeSystem) -> Totals:
+    fake.track()
+    fake.programs.update({"pytest": "/bin/pytest", "ruff": "/bin/ruff"})
     set_budget(configured, 4.0)
-    from .conftest import git
-
-    git(configured, "commit", "-qam", "budget 4")
+    commit_config(configured, "budget 4")
     q = Totals([4.0])
     args = cli.build_parser().parse_args(
         ["--repo", str(configured), "--home", str(key_home), "start", "--task", "t"]
@@ -348,18 +349,18 @@ def blocked_at_four(configured: Path, key_home: Path, monkeypatch) -> Totals:
 
 
 def test_resume_without_a_raise_halts_again_with_no_query(
-    configured: Path, key_home: Path, monkeypatch
+    configured: Path, key_home: Path, fake: FakeSystem
 ) -> None:
-    blocked_at_four(configured, key_home, monkeypatch)
+    blocked_at_four(configured, key_home, fake)
     q = Totals([1.0])
     assert start_resume(configured, key_home, q) == 77
     assert q.calls == []
 
 
 def test_an_uncommitted_raise_is_refused_by_preflight(
-    configured: Path, key_home: Path, monkeypatch
+    configured: Path, key_home: Path, fake: FakeSystem
 ) -> None:
-    blocked_at_four(configured, key_home, monkeypatch)
+    blocked_at_four(configured, key_home, fake)
     set_budget(configured, 50.0)
     q = Totals([1.0])
     with pytest.raises(cli.CliError, match=r"dirty \(\.agile-team\.toml\)"):
@@ -369,12 +370,12 @@ def test_an_uncommitted_raise_is_refused_by_preflight(
     assert state_mod.load(run_dir).status is RunStatus.BLOCKED
 
 
-def test_a_committed_raise_lets_resume_run(configured: Path, key_home: Path, monkeypatch) -> None:
-    blocked_at_four(configured, key_home, monkeypatch)
+def test_a_committed_raise_lets_resume_run(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
+    blocked_at_four(configured, key_home, fake)
     set_budget(configured, 50.0)
-    from .conftest import git
-
-    git(configured, "commit", "-qam", "raise budget")
+    commit_config(configured, "raise budget")
     accept = ["--repo", str(configured), "--home", str(key_home), "accept-checkout"]
     assert cli.cmd_accept_checkout(cli.build_parser().parse_args(accept)) == 0
     q = Totals([5.0])

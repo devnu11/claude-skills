@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 import signal
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -13,6 +12,7 @@ from agile_team import (
     cli,
     halt,
     po_tools,
+    system,
 )
 from agile_team import state as state_mod
 from agile_team.dispatch import StepRequest
@@ -83,7 +83,7 @@ def notes(rt) -> list:
 
 
 def crash_log(rt) -> str:
-    return (rt.config.run_dir / halt.CRASH_LOG).read_text()
+    return system.read_text(rt.config.run_dir / halt.CRASH_LOG)
 
 
 def run_cli(rt, start: Start | None = None) -> int:
@@ -156,14 +156,14 @@ def test_halt_message_joins_reason_and_advice() -> None:
     assert found.message() == f"{LIMIT_REASON}; {RESUME_ADVICE}"
 
 
-def test_log_traceback_appends_entries(tmp_path: Path) -> None:
-    run_dir = tmp_path / "new" / "run"
+def test_log_traceback_appends_entries(scratch: Path) -> None:
+    run_dir = scratch / "new" / "run"
     for text in ("first", "second"):
         try:
             raise ValueError(text)
         except ValueError as exc:
             halt.log_traceback(run_dir, exc)
-    log = (run_dir / "crash.log").read_text()
+    log = system.read_text(run_dir / "crash.log")
     assert log.count("--- ") == 2 and "ValueError" in log
     assert "Traceback" in log and "second" in log
 
@@ -182,7 +182,7 @@ def test_po_limit_stops_cleanly(make_runtime, capsys) -> None:
     out = capsys.readouterr()
     assert out.err == LIMIT_LINE and "Traceback" not in out.out
     assert "ResultError" in crash_log(rt)
-    assert not (rt.config.run_dir / state_mod.PID_FILE).exists()
+    assert not system.exists(rt.config.run_dir / state_mod.PID_FILE)
 
 
 def test_po_crash_is_failed(make_runtime, capsys) -> None:
@@ -195,17 +195,21 @@ def test_po_crash_is_failed(make_runtime, capsys) -> None:
     assert err.startswith("agile-team start: crashed: RuntimeError: boom;")
     assert "crash.log" in err and "Traceback" not in err
     assert "RuntimeError: boom" in crash_log(rt) and "Traceback" in crash_log(rt)
-    assert not (rt.config.run_dir / state_mod.PID_FILE).exists()
+    assert not system.exists(rt.config.run_dir / state_mod.PID_FILE)
 
 
-def test_sigterm_stops_the_po(make_runtime, capsys) -> None:
+def test_sigterm_stops_the_po(make_runtime, capsys, fake) -> None:
+    """The handler registered for SIGTERM cancels the PO task (a real signal is an e2e test)."""
+
     class KillSelf:
         def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
             return self._gen()
 
         async def _gen(self) -> AsyncIterator[Any]:
-            os.kill(os.getpid(), signal.SIGTERM)
-            await asyncio.sleep(10)
+            [(sig, callback)] = fake.handlers
+            assert sig == signal.SIGTERM
+            callback()
+            await asyncio.Event().wait()  # until the SIGTERM handler cancels the task
             yield  # pragma: no cover
 
     rt = make_runtime(KillSelf())
@@ -214,7 +218,7 @@ def test_sigterm_stops_the_po(make_runtime, capsys) -> None:
     assert (saved.status, saved.status_reason) == (RunStatus.STOPPED, "stopped by stop --now")
     assert [m.kind for m in notes(rt)] == ["stopped"]
     assert capsys.readouterr().err.startswith("agile-team start: stopped by stop --now;")
-    assert not (rt.config.run_dir / state_mod.PID_FILE).exists()
+    assert not system.exists(rt.config.run_dir / state_mod.PID_FILE)
 
 
 def test_normal_run_still_exits_zero(make_runtime, capsys) -> None:

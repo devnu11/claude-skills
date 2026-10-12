@@ -9,15 +9,15 @@ from agile_team.fullcheck import CheckReport, FullCheck, Judge, Judging, full_ch
 from .conftest import FakeRunner
 
 
-def config_with(tmp_path: Path, commands: dict, deliveries: list | None = None) -> cfg.Config:
-    c = cfg.from_raw(tmp_path, {"delivery": deliveries or []})
+def config_with(scratch: Path, commands: dict, deliveries: list | None = None) -> cfg.Config:
+    c = cfg.from_raw(scratch, {"delivery": deliveries or []})
     c.toolchain.commands = commands
     return c
 
 
-def test_order_is_toolchain_then_e2e_and_unset_are_left_out(tmp_path: Path) -> None:
+def test_order_is_toolchain_then_e2e_and_unset_are_left_out(scratch: Path) -> None:
     c = config_with(
-        tmp_path,
+        scratch,
         {"coverage": "cov", "test": "t", "lint": "l"},
         [
             {"name": "cli", "kind": "package", "e2e": "run-e2e"},
@@ -34,8 +34,8 @@ def test_order_is_toolchain_then_e2e_and_unset_are_left_out(tmp_path: Path) -> N
     ]
 
 
-def test_static_sits_between_lint_and_test(tmp_path: Path) -> None:
-    c = config_with(tmp_path, {"test": "t", "static": "s", "lint": "l"})
+def test_static_sits_between_lint_and_test(scratch: Path) -> None:
+    c = config_with(scratch, {"test": "t", "static": "s", "lint": "l"})
     assert [f.name for f in full_checks(c)] == ["lint", "static", "test"]
 
 

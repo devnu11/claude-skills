@@ -4,7 +4,7 @@ import asyncio
 import json
 
 import pytest
-from agile_team import gates, roles, state
+from agile_team import gates, roles, state, system
 from agile_team.config import PIPELINE_STEPS
 from agile_team.dispatch import REWORK_BRIEF, StepRequest
 from agile_team.gates import StoryState, StoryStatus, Verdict
@@ -245,5 +245,5 @@ def test_clearing_a_done_story_hold_is_saved(make_runtime) -> None:
     rt = make_runtime(FakeQuery(), runner=FakeRunner())
     rt.state.stories["s1"] = story("review", status=StoryStatus.DONE, hold="x")
     asyncio.run(Tools(rt).continue_story({"story": "s1", "note": "n"}))
-    saved = json.loads((rt.config.run_dir / "state.json").read_text())
+    saved = json.loads(system.read_text(rt.config.run_dir / "state.json"))
     assert saved["stories"]["s1"]["hold"] is None and saved["stories"]["s1"]["note"] == "n"

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
-from agile_team import cli, gates, loops, router, state
+from agile_team import cli, gates, loops, router, state, system
 from agile_team import config as cfg
 from agile_team.gates import StoryStatus, Verdict
 from agile_team.loops import Rule
@@ -318,17 +318,17 @@ def test_manager_view_of_a_repeat_escalation_uses_the_streak():
 # ---- config and state ------------------------------------------------------
 
 
-def test_config_backstop_default_and_floor(tmp_path):
+def test_config_backstop_default_and_floor(scratch):
     known = cfg.Known({"developer"}, {"package", "web", "harness"})
     assert cfg.Gates().backstop == 4
-    problems = cfg.validate(cfg.from_raw(tmp_path, {"gates": {"backstop": 1}}), known)
+    problems = cfg.validate(cfg.from_raw(scratch, {"gates": {"backstop": 1}}), known)
     assert "gates.backstop must be at least 2" in problems
-    ok = cfg.validate(cfg.from_raw(tmp_path, {"gates": {"backstop": 2}}), known)
+    ok = cfg.validate(cfg.from_raw(scratch, {"gates": {"backstop": 2}}), known)
     assert "gates.backstop must be at least 2" not in ok
 
 
-def test_make_pipeline_passes_backstop(tmp_path):
-    config = cfg.from_raw(tmp_path, {"gates": {"backstop": 6, "repeat": 3}})
+def test_make_pipeline_passes_backstop(scratch):
+    config = cfg.from_raw(scratch, {"gates": {"backstop": 6, "repeat": 3}})
     made = cli.make_pipeline(config)
     assert (made.repeat, made.backstop) == (3, 6)
 
@@ -346,13 +346,13 @@ def test_state_roundtrip_run_and_escalated_by():
     assert (old.run, old.escalated_by) == ([], None)
 
 
-def test_run_state_file_roundtrip(tmp_path: Path):
+def test_run_state_file_roundtrip(scratch: Path):
     rs = state.RunState()
     st = story("acceptance")
     st.run, st.escalated_by = [sb("A")], Rule.BACKSTOP
     rs.stories["s1"] = st
-    state.save(tmp_path, rs)
-    back = state.load(tmp_path).stories["s1"]
+    state.save(scratch, rs)
+    back = state.load(scratch).stories["s1"]
     assert back.run == [sb("A")]
     assert back.escalated_by == "backstop"
 
@@ -364,7 +364,7 @@ PAGE = Path(__file__).parent.parent / "agile_team/dashboard/index.html"
 
 
 def test_page_labels_backstop_escalations():
-    html = PAGE.read_text(encoding="utf-8")
+    html = system.read_text(PAGE)
     assert (
         'e.data.rule === "backstop" ? "back and forth → needs manager" : "repeat → needs manager"'
         in html
@@ -372,7 +372,7 @@ def test_page_labels_backstop_escalations():
 
 
 def test_fixture_escalation_has_rule_and_keyed_gate_has_bounces():
-    events = json.loads(FIXTURE.read_text(encoding="utf-8"))["events"]
+    events = json.loads(system.read_text(FIXTURE))["events"]
     (esc,) = [e for e in events if e["kind"] == "escalation"]
     assert esc["data"]["rule"] == "repeat"
     keyed = [e for e in events if e["kind"] == "gate" and "key" in e["data"]]

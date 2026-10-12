@@ -88,12 +88,12 @@ def test_session_cost_defaults() -> None:
 # ----- Ledger.last_cost ---------------------------------------------------------------
 
 
-def test_last_cost_without_a_file(tmp_path: Path) -> None:
-    assert Ledger(tmp_path / "none.jsonl").last_cost("product-owner") == 0.0
+def test_last_cost_without_a_file(scratch: Path) -> None:
+    assert Ledger(scratch / "none.jsonl").last_cost("product-owner") == 0.0
 
 
-def test_last_cost_is_the_last_entry_of_that_role(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "l.jsonl")
+def test_last_cost_is_the_last_entry_of_that_role(scratch: Path) -> None:
+    led = Ledger(scratch / "l.jsonl")
     for role, cost in [("product-owner", 3.0), ("product-owner", 7.0), ("architect", 1.0)]:
         led.record(Entry(role, "m", cost))
     assert led.last_cost("product-owner") == 7.0

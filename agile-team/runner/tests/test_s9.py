@@ -2,13 +2,10 @@
 
 import asyncio
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from agile_team import cli, events, gates, halt, po_tools, recovery, salvage
+from agile_team import cli, events, gates, halt, po_tools, recovery, salvage, system
 from agile_team import state as state_mod
 from agile_team.dashboard import snapshot
 from agile_team.dispatch import StepRequest
@@ -17,7 +14,8 @@ from agile_team.po_tools import Start, StartMode
 from agile_team.salvage import Cause, Cut, InFlight, Interruption
 from agile_team.state import RunState, RunStatus
 
-from .conftest import FakeQuery, git
+from .conftest import FakeQuery
+from .fake_system import FAKE_IDS, FakeSystem
 from .test_cli import any_tool, start_args
 from .test_halt import (
     LIMIT_REASON,
@@ -32,21 +30,33 @@ STEP = InFlight("developer-cli", "s1", "build it\nsecond line")
 
 
 def dirty(repo: Path) -> None:
-    (repo / "src").mkdir(exist_ok=True)
-    (repo / "src" / "app.py").write_text("x = 2\n")  # tracked, changed
-    (repo / "docs").mkdir(exist_ok=True)
-    (repo / "docs" / "new.md").write_text("new\n")  # untracked
+    system.make_dirs(repo / "src")
+    system.write_text(repo / "src" / "app.py", "x = 2\n")  # tracked, changed
+    system.make_dirs(repo / "docs")
+    system.write_text(repo / "docs" / "new.md", "new\n")  # untracked
+
+
+DEAD_PID = 31337  # not in the fake's process table
 
 
 def dead_pid() -> int:
-    proc = subprocess.Popen([sys.executable, "-c", "pass"])
-    proc.wait()
-    return proc.pid
+    return DEAD_PID
+
+
+def git(repo: Path, *args: str) -> str:
+    """Run a modelled git command (``FakeSystem.track``) in ``repo``."""
+    return Git(repo).run(*args)
+
+
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake: FakeSystem) -> None:
+    """Model the working tree: status, commit and revert follow the files."""
+    fake.track()
 
 
 def run_dir_of(repo: Path) -> Path:
     path = repo / ".team" / "run"
-    path.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(path)
     return path
 
 
@@ -143,8 +153,8 @@ def test_save_tree_commits_everything_then_reverts(configured: Path) -> None:
     names = git(configured, "show", "--name-only", "--format=", sha).split()
     assert sorted(names) == ["docs/new.md", "src/app.py"]
     assert git(configured, "rev-list", "--count", f"{before}..HEAD").strip() == "2"
-    assert (configured / "src" / "app.py").read_text() == "x = 1\n"
-    assert not (configured / "docs" / "new.md").exists()
+    assert system.read_text(configured / "src" / "app.py") == "x = 1\n"
+    assert not system.exists(configured / "docs" / "new.md")
 
 
 def test_save_tree_clean_returns_none(configured: Path) -> None:
@@ -205,12 +215,12 @@ def test_interrupt_unknown_story_is_fine() -> None:
     assert len(st.interrupted) == 1
 
 
-def test_runner_pid_cases(tmp_path: Path) -> None:
-    assert state_mod.runner_pid(tmp_path) is None
-    pid = tmp_path / state_mod.PID_FILE
+def test_runner_pid_cases(scratch: Path) -> None:
+    assert state_mod.runner_pid(scratch) is None
+    pid = scratch / state_mod.PID_FILE
     for text, want in [("abc", None), ("0", None), ("-5", None), ("123", 123), ("", None)]:
-        pid.write_text(text)
-        assert state_mod.runner_pid(tmp_path) == want
+        system.write_text(pid, text)
+        assert state_mod.runner_pid(scratch) == want
 
 
 def test_pid_alive_maps_errors(monkeypatch) -> None:
@@ -221,44 +231,44 @@ def test_pid_alive_maps_errors(monkeypatch) -> None:
 
         return fake
 
-    monkeypatch.setattr(os, "kill", kill(ProcessLookupError()))
+    monkeypatch.setattr(system, "kill", kill(ProcessLookupError()))
     assert state_mod.pid_alive(5) is False
-    monkeypatch.setattr(os, "kill", kill(PermissionError()))
+    monkeypatch.setattr(system, "kill", kill(PermissionError()))
     assert state_mod.pid_alive(5) is True
-    monkeypatch.setattr(os, "kill", kill(None))
+    monkeypatch.setattr(system, "kill", kill(None))
     assert state_mod.pid_alive(5) is True
 
 
-def test_shown_status(tmp_path: Path) -> None:
+def test_shown_status(scratch: Path) -> None:
     running = RunState(status=RunStatus.RUNNING)
-    assert state_mod.shown_status(tmp_path, running) is RunStatus.INTERRUPTED
-    (tmp_path / state_mod.PID_FILE).write_text(str(dead_pid()))
-    assert state_mod.shown_status(tmp_path, running) is RunStatus.INTERRUPTED
-    assert state_mod.runner_alive(tmp_path) is False
-    (tmp_path / state_mod.PID_FILE).write_text(str(os.getpid()))
-    assert state_mod.shown_status(tmp_path, running) is RunStatus.RUNNING
-    assert state_mod.runner_alive(tmp_path) is True
+    assert state_mod.shown_status(scratch, running) is RunStatus.INTERRUPTED
+    system.write_text(scratch / state_mod.PID_FILE, str(dead_pid()))
+    assert state_mod.shown_status(scratch, running) is RunStatus.INTERRUPTED
+    assert state_mod.runner_alive(scratch) is False
+    system.write_text(scratch / state_mod.PID_FILE, str(FAKE_IDS[0]))
+    assert state_mod.shown_status(scratch, running) is RunStatus.RUNNING
+    assert state_mod.runner_alive(scratch) is True
     idle = RunState(status=RunStatus.IDLE)
-    assert state_mod.shown_status(tmp_path, idle) is RunStatus.IDLE
+    assert state_mod.shown_status(scratch, idle) is RunStatus.IDLE
     assert RunStatus.INTERRUPTED.value == "interrupted"
 
 
-def test_state_round_trip_and_legacy(tmp_path: Path) -> None:
+def test_state_round_trip_and_legacy(scratch: Path) -> None:
     st = RunState(in_flight=STEP)
     found = Interruption("developer-cli", "s1", "b", Cause.LIMIT, "abc")
     st.interrupted = [found]
     st.stories["s1"] = gates.StoryState("s1", "t", "design", interrupted=found)
-    state_mod.save(tmp_path, st)
-    back = state_mod.load(tmp_path)
+    state_mod.save(scratch, st)
+    back = state_mod.load(scratch)
     assert back.in_flight == STEP and back.interrupted == [found]
     assert back.stories["s1"].interrupted == found
     assert back.stories["s1"].interrupted.cause is Cause.LIMIT
-    data = json.loads((tmp_path / "state.json").read_text())
+    data = json.loads(system.read_text(scratch / "state.json"))
     for key in ("in_flight", "interrupted"):
         data.pop(key)
     data["stories"]["s1"].pop("interrupted")
-    (tmp_path / "state.json").write_text(json.dumps(data))
-    old = state_mod.load(tmp_path)
+    system.write_text(scratch / "state.json", json.dumps(data))
+    old = state_mod.load(scratch)
     assert old.in_flight is None and old.interrupted == []
     assert old.stories["s1"].interrupted is None
 
@@ -272,7 +282,7 @@ def test_salvager_saves_records_and_emits(configured: Path) -> None:
     st = RunState(in_flight=STEP)
     found = recovery.Salvager(Git(configured), run_dir).save(st, Cause.LIMIT)
     assert found and found.sha and st.interrupted == [found] and st.in_flight is None
-    log = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    log = [json.loads(line) for line in system.read_text(run_dir / "events.jsonl").splitlines()]
     kinds = [e for e in log if e["kind"] == "step-interrupted"]
     assert kinds[0]["role"] == "developer-cli" and kinds[0]["story"] == "s1"
     assert kinds[0]["data"] == {"cause": "limit", "commit": found.sha, "brief": STEP.brief}
@@ -290,7 +300,7 @@ def test_salvager_survives_git_error(configured: Path, monkeypatch) -> None:
     st = RunState(in_flight=STEP)
     assert recovery.Salvager(Git(configured), run_dir).save(st, Cause.LIMIT) is None
     assert st.interrupted == [] and not Git(configured).is_clean()
-    assert "GitError" in (run_dir / halt.CRASH_LOG).read_text()
+    assert "GitError" in system.read_text(run_dir / halt.CRASH_LOG)
 
 
 def test_recover_cut_saves_the_tree(configured: Path) -> None:
@@ -311,7 +321,7 @@ def test_recover_cut_does_nothing_when_run_is_alive_or_idle(configured: Path) ->
     state_mod.save(run_dir, RunState(status=RunStatus.IDLE))
     assert recovery.recover_cut(run_dir, Git(configured)) is None
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    (run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(FAKE_IDS[0]))
     assert recovery.recover_cut(run_dir, Git(configured)) is None
     assert not Git(configured).is_clean()
 
@@ -321,13 +331,13 @@ def test_recover_cut_does_nothing_when_run_is_alive_or_idle(configured: Path) ->
 
 @pytest.mark.parametrize("pid", ["dead", "missing"])
 def test_resume_after_kill_recovers_and_passes_preflight(
-    configured: Path, key_home: Path, capsys, monkeypatch, pid: str
+    configured: Path, key_home: Path, capsys, fake: FakeSystem, pid: str
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = run_dir_of(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
     if pid == "dead":
-        (run_dir / state_mod.PID_FILE).write_text(str(dead_pid()))
+        system.write_text(run_dir / state_mod.PID_FILE, str(dead_pid()))
     dirty(configured)
     assert cli.cmd_start(start_args(configured, key_home, "--resume"), FakeQuery()) == 0
     sha = state_mod.load(run_dir).stories.get("s1")
@@ -347,27 +357,33 @@ def refused(configured: Path, key_home: Path, *extra: str) -> int:
     return int(Git(configured).head() == head)
 
 
-def test_dirty_tree_still_refused_when_idle(configured: Path, key_home: Path, monkeypatch) -> None:
-    any_tool(monkeypatch)
+def test_dirty_tree_still_refused_when_idle(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
+    any_tool(fake)
     state_mod.save(run_dir_of(configured), RunState(status=RunStatus.IDLE))
     dirty(configured)
     assert refused(configured, key_home, "--resume")
 
 
-def test_dirty_tree_refused_with_live_pid(configured: Path, key_home: Path, monkeypatch) -> None:
-    any_tool(monkeypatch)
+def test_dirty_tree_refused_with_live_pid(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
+    any_tool(fake)
     run_dir = run_dir_of(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    (run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(FAKE_IDS[0]))
     dirty(configured)
     assert refused(configured, key_home, "--resume")
 
 
-def test_dirty_tree_refused_on_plain_start(configured: Path, key_home: Path, monkeypatch) -> None:
-    any_tool(monkeypatch)
+def test_dirty_tree_refused_on_plain_start(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
+    any_tool(fake)
     run_dir = run_dir_of(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    (run_dir / state_mod.PID_FILE).write_text(str(dead_pid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(dead_pid()))
     dirty(configured)
     assert refused(configured, key_home, "--task", "t")
 
@@ -408,9 +424,9 @@ def test_settle_clears_story_offer(make_runtime) -> None:
 
 def raising_action(rt_holder: list, exc: BaseException):
     def act():
-        (rt_holder[0].config.repo / "docs").mkdir(exist_ok=True)
-        (rt_holder[0].config.repo / "docs" / "half.md").write_text("half\n")
-        (rt_holder[0].config.repo / "src" / "app.py").write_text("x = 9\n")
+        system.make_dirs(rt_holder[0].config.repo / "docs")
+        system.write_text(rt_holder[0].config.repo / "docs" / "half.md", "half\n")
+        system.write_text(rt_holder[0].config.repo / "src" / "app.py", "x = 9\n")
         raise exc
 
     return act
@@ -586,7 +602,7 @@ def test_status_report_with_dead_pid_is_interrupted(configured: Path) -> None:
     found = Interruption("developer-cli", "s1", "b", Cause.LIMIT, "abc")
     st = RunState(status=RunStatus.RUNNING, in_flight=STEP, interrupted=[found])
     state_mod.save(config.run_dir, st)
-    (config.run_dir / state_mod.PID_FILE).write_text(str(dead_pid()))
+    system.write_text(config.run_dir / state_mod.PID_FILE, str(dead_pid()))
     report = cli.status_report(config)
     assert (report["status"], report["running"]) == ("interrupted", False)
     assert report["in_flight"]["role"] == "developer-cli"
@@ -596,7 +612,7 @@ def test_status_report_with_dead_pid_is_interrupted(configured: Path) -> None:
         "in_flight",
         "interrupted",
     ]
-    assert json.loads((config.run_dir / "state.json").read_text())["status"] == "running"
+    assert json.loads(system.read_text(config.run_dir / "state.json"))["status"] == "running"
 
 
 def test_status_report_live_and_idle(configured: Path) -> None:
@@ -605,7 +621,7 @@ def test_status_report_live_and_idle(configured: Path) -> None:
     config = config_mod.load(configured)
     state_mod.save(config.run_dir, RunState(status=RunStatus.RUNNING))
     assert cli.status_report(config)["status"] == "interrupted"
-    (config.run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
+    system.write_text(config.run_dir / state_mod.PID_FILE, str(FAKE_IDS[0]))
     live = cli.status_report(config)
     assert (live["status"], live["running"]) == ("running", True)
     state_mod.save(config.run_dir, RunState(status=RunStatus.IDLE))

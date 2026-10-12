@@ -117,22 +117,22 @@ def test_quiet_for_uses_quiet_since_and_falls_back_without_it() -> None:
 # ----- waiting for answers is a chore (D9) -------------------------------------------
 
 
-def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime) -> None:
+def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     system.make_dirs(rt.config.run_dir)
     rt.pulse.open(PO_WHO)
     seen: list[Any] = []
-    count = 0
 
-    async def sleep(s: float) -> None:
-        nonlocal count
-        count += 1
+    def poll() -> None:
         seen.append(live.read_heartbeat(rt.config.run_dir))
-        if count == 2:
-            rt.relay.answer("m1", "a")
-            rt.relay.answer("m2", "b")
 
-    t = Tools(rt, sleep=sleep)
+    def answer() -> None:
+        poll()
+        rt.relay.answer("m1", "a")
+        rt.relay.answer("m2", "b")
+
+    fake.on_sleep = [poll, answer]
+    t = Tools(rt)
     asyncio.run(t.ask_user({"text": "?"}))
     asyncio.run(t.ask_user({"text": "?"}))
     asyncio.run(t.wait_for_answers({"ids": ["m1", "m2"]}))
@@ -145,17 +145,15 @@ def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime) -> None:
     assert live.read_heartbeat(rt.config.run_dir)["chore"] is None
 
 
-def test_wait_chore_text_has_a_dash_without_ids(make_runtime) -> None:
+def test_wait_chore_text_has_a_dash_without_ids(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     system.make_dirs(rt.config.run_dir)
     seen: list[Any] = []
+    fake.on_sleep = [lambda: seen.append(live.read_heartbeat(rt.config.run_dir)["chore"]["what"])]
 
-    async def sleep(_s: float) -> None:
-        seen.append(live.read_heartbeat(rt.config.run_dir)["chore"]["what"])
-
-    asyncio.run(Tools(rt, sleep=sleep).wait_for_answers({"ids": [], "timeout_s": 1}))
+    asyncio.run(Tools(rt).wait_for_answers({"ids": [], "timeout_s": 1}))
     assert seen == []  # nothing to wait for: no poll, no chore left behind
-    asyncio.run(Tools(rt, sleep=sleep).wait_for_answers({"ids": ["m9"], "timeout_s": 1}))
+    asyncio.run(Tools(rt).wait_for_answers({"ids": ["m9"], "timeout_s": 1}))
     assert seen == ["waiting for answers to m9"]
 
 

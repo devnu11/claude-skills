@@ -4,7 +4,7 @@ import asyncio
 import json
 
 import pytest
-from agile_team import cli, gates, po_tools
+from agile_team import cli, gates, po_tools, system
 from agile_team import config as cfg
 from agile_team.gates import DisputeStage, OpenDispute, StoryState, StoryStatus
 from agile_team.po_tools import Tools
@@ -105,7 +105,7 @@ def test_a_stuck_story_with_a_green_suite_moves_to_implement(make_runtime, kind)
     assert (story.streak, story.run, story.repeated, story.escalated_by) == ([], [], None, None)
     assert (story.hold, story.note) == (None, "tests fixed")
     assert t.runtime.state.manager_due == ["s1: PO passed tests by hand: tests fixed"]
-    saved = json.loads((t.runtime.config.run_dir / "state.json").read_text())
+    saved = json.loads(system.read_text(t.runtime.config.run_dir / "state.json"))
     assert saved["stories"]["s1"]["step"] == "implement"
 
 
@@ -137,7 +137,7 @@ def test_a_confirmed_dispute_counts_as_stuck(make_runtime) -> None:
 
 
 def test_make_pipeline_reads_repo_files(configured) -> None:
-    (configured / "a.txt").write_text("hello\n")
+    system.write_text(configured / "a.txt", "hello\n")
     read = cli.make_pipeline(cfg.load(configured)).checks.read
     assert read("a.txt") == "hello\n" and read("missing.txt") is None
 

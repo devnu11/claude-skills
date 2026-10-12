@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agile_team import dispatch, gates, handover, roles, state
+from agile_team import dispatch, gates, handover, roles, state, system
 from agile_team.config import PIPELINE_STEPS
 from agile_team.dispatch import REWORK_BRIEF, Runtime, StepRequest
 from agile_team.gates import OpenDispute, StoryState, StoryStatus, Verdict
@@ -52,10 +52,16 @@ def done(claim=None) -> Handoff:
 
 def write(repo: Path, rel: str, text: str = "x\n"):
     def action() -> None:
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text(text)
+        system.make_dirs((repo / rel).parent)
+        system.write_text(repo / rel, text)
 
     return action
+
+
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake) -> None:
+    """Model the working tree so a step's edits are committed."""
+    fake.track()
 
 
 def repeated_story(rt: Runtime, step: str = "tests", **kw: Any) -> StoryState:

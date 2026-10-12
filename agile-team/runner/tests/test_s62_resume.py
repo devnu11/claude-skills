@@ -1,22 +1,29 @@
 """s62: ``start --resume`` saves the edits a checkout halt left behind (R1-R4)."""
 
 import asyncio
-import os
 from pathlib import Path
 
 import pytest
-from agile_team import checkout, cli, recovery
+from agile_team import checkout, cli, recovery, system
 from agile_team import state as state_mod
 from agile_team.git_ops import Git
 from agile_team.po_tools import PoRun, Start
 from agile_team.salvage import Cause
 from agile_team.state import RunState, RunStatus
 
-from .conftest import FakeQuery, git
+from .conftest import FakeQuery
+from .fake_system import FAKE_IDS, FakeSystem
 from .pipeline_helpers import Script, build
 from .test_cli import any_tool, start_args
 from .test_s9 import STEP, dead_pid, dirty, refused, run_dir_of
-from .test_s61 import detach, stored, switch
+from .test_s61 import detach, git, stored, switch
+
+
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake: FakeSystem) -> None:
+    """Model the repo: branch, HEAD, commits and the reflog follow git commands."""
+    fake.track()
+
 
 HALTED = "agile-team start: the last run halted (checkout) before its edits were saved; "
 
@@ -81,7 +88,7 @@ def test_recover_cut_prefers_killed(configured: Path) -> None:
     dirty(configured)
     st = RunState(status=RunStatus.RUNNING, in_flight=STEP, unsaved=Cause.CHECKOUT)
     state_mod.save(run_dir, st)
-    (run_dir / state_mod.PID_FILE).write_text(str(dead_pid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(dead_pid()))
     found = recovery.recover_cut(run_dir, Git(configured))
     assert found and found.cause is Cause.KILLED
 
@@ -98,7 +105,7 @@ def test_recover_cut_leaves_a_live_run_alone(configured: Path) -> None:
     run_dir = run_dir_of(configured)
     dirty(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    (run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(FAKE_IDS[0]))
     assert recovery.recover_cut(run_dir, Git(configured)) is None
 
 
@@ -115,12 +122,12 @@ def halted_with_edits(repo: Path) -> Path:
 
 
 def test_killed_run_is_saved_before_preflight(
-    configured: Path, key_home: Path, capsys, monkeypatch
+    configured: Path, key_home: Path, capsys, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = run_dir_of(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    (run_dir / state_mod.PID_FILE).write_text(str(dead_pid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(dead_pid()))
     dirty(configured)
     assert cli.cmd_start(start_args(configured, key_home, "--resume"), FakeQuery()) == 0
     err = capsys.readouterr().err
@@ -129,9 +136,9 @@ def test_killed_run_is_saved_before_preflight(
 
 
 def test_accepting_then_resuming_saves_the_edits(
-    configured: Path, key_home: Path, capsys, monkeypatch
+    configured: Path, key_home: Path, capsys, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = halted_with_edits(configured)
     switch(configured)
     assert cli.main(["--repo", str(configured), "--home", str(key_home), "accept-checkout"]) == 0
@@ -148,9 +155,9 @@ def test_accepting_then_resuming_saves_the_edits(
 
 
 def test_restoring_the_checkout_then_resuming_saves_the_edits(
-    configured: Path, key_home: Path, capsys, monkeypatch
+    configured: Path, key_home: Path, capsys, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = halted_with_edits(configured)
     assert cli.cmd_start(start_args(configured, key_home, "--resume"), FakeQuery()) == 0
     assert HALTED in capsys.readouterr().err
@@ -166,9 +173,9 @@ def test_a_plain_start_clears_the_flag(make_runtime) -> None:
 
 
 def test_a_later_resume_refuses_unrelated_edits(
-    configured: Path, key_home: Path, monkeypatch
+    configured: Path, key_home: Path, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = run_dir_of(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.IDLE, unsaved=None))
     dirty(configured)
@@ -176,11 +183,11 @@ def test_a_later_resume_refuses_unrelated_edits(
 
 
 def test_stopped_with_a_dirty_tree_and_no_flag_is_still_refused(
-    configured: Path, key_home: Path, monkeypatch
+    configured: Path, key_home: Path, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     stored_run = stored(configured, status=RunStatus.STOPPED)
-    assert stored_run.is_dir()
+    assert system.is_dir(stored_run)
     dirty(configured)
     assert refused(configured, key_home, "--resume")
 

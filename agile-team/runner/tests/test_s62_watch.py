@@ -34,7 +34,7 @@ class FakePace:
         return self.now
 
     def patch(self, mp: pytest.MonkeyPatch) -> None:
-        """Make the watch sleep and read the clock through this fake (LEGACY file: patch system)."""
+        """Make the watch sleep and read the clock through this fake."""
         mp.setattr(system, "sleep", self.sleep)
         mp.setattr(system, "monotonic", self.clock)
 

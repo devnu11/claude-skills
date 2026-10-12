@@ -11,7 +11,7 @@ from agile_team.config import Delivery
 from agile_team.guard import Scope, ToolCall
 
 from .conftest import GUIDE_TEXT, present
-from .fake_system import FIRST_CHILD_PID, Done, FakeSystem, Hang
+from .fake_system import FAKE_REPO, FIRST_CHILD_PID, Done, FakeSystem, Hang
 
 
 def use(scope: Scope, name: str, tool_input: dict) -> str | None:
@@ -83,11 +83,11 @@ def test_web_starts_in_background_and_stops(configured: Path, fake: FakeSystem) 
 
 def test_stop_escalates_to_sigkill(fake: FakeSystem) -> None:
     fake.reply(("serve",), Hang())
-    child = system.spawn_piped(system.ShellCommand("serve", fake.cwd))
+    child = system.spawn_piped(system.ShellCommand("serve", FAKE_REPO))
     fake.survivors.add(child.pid)
-    root = fake.cwd / "root"
+    root = FAKE_REPO / "root"
     p = sandbox.Prepared(
-        Delivery("w", "web"), sandbox.DELIVERY_KINDS["web"], fake.cwd, root, root, process=child
+        Delivery("w", "web"), sandbox.DELIVERY_KINDS["web"], FAKE_REPO, root, root, process=child
     )
     p.stop()
     assert [sig for _, _, sig in fake.signals] == [signal.SIGTERM, signal.SIGKILL]
