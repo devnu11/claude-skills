@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from . import fingerprint, loops
+from .commands import TIMED_OUT, CommandRunner
 from .loops import Author, Fault, Rule, Setback
 from .roles import Dispute, Handoff, TestClaim
 from .salvage import Interruption
@@ -64,7 +65,8 @@ PASS_TESTS_NOT_STUCK = (
 )
 PASS_TESTS_RED = "the suite is red; pass_tests needs a green suite. {reason}"
 
-CommandRunner = Callable[[str], tuple[int, str]]
+TIMED_OUT_BOUNCE = "the command did not finish in time:\n{tail}"
+GREEN_TOO_EARLY = "tests pass before implementation; write a failing test"
 
 
 class StoryStatus(StrEnum):
@@ -386,15 +388,17 @@ class Checks:
         return min(self.threshold, self.baseline_coverage)
 
     def tests_red(self) -> Outcome:
-        code, _ = self.run(self.commands["test"])
+        code, out = self.run(self.commands["test"])
+        if timeout := timed_out(code, out):
+            return timeout
         if code != 0:
             return Outcome(Verdict.PASS)
-        return Outcome(Verdict.BOUNCE, "tests pass before implementation; write a failing test")
+        return Outcome(Verdict.BOUNCE, GREEN_TOO_EARLY)
 
     def tests_reworked(self, claim: TestClaim | None) -> Outcome:
         """Red passes; green passes only with a tests claim (code from an earlier pass)."""
         red = self.tests_red()
-        if red.verdict is Verdict.PASS:
+        if red.reason != GREEN_TOO_EARLY:
             return red
         if claim is None:
             return Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED)
@@ -403,6 +407,8 @@ class Checks:
     def green(self) -> Outcome:
         """Pass when the test command exits 0, else bounce with its output tail."""
         code, out = self.run(self.commands["test"])
+        if timeout := timed_out(code, out):
+            return timeout
         if code != 0:
             return Outcome(Verdict.BOUNCE, f"tests fail:\n{tail(out)}")
         return Outcome(Verdict.PASS)
@@ -411,7 +417,8 @@ class Checks:
         green = self.green()
         if green.verdict is not Verdict.PASS:
             return green
-        return self._coverage_outcome(parse_coverage(self.run(self.commands["coverage"])[1]))
+        code, out = self.run(self.commands["coverage"])
+        return timed_out(code, out) or self._coverage_outcome(parse_coverage(out))
 
     def _coverage_outcome(self, pct: float | None) -> Outcome:
         if pct is None:
@@ -681,3 +688,10 @@ def excerpt(output: str, name: str) -> str | None:
 
 def tail(text: str) -> str:
     return "\n".join(text.splitlines()[-30:])
+
+
+def timed_out(code: int, output: str) -> Outcome | None:
+    """Bounce with the output tail when the command was killed at its limit."""
+    if code != TIMED_OUT:
+        return None
+    return Outcome(Verdict.BOUNCE, TIMED_OUT_BOUNCE.format(tail=tail(output)))

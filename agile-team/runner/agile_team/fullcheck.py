@@ -8,8 +8,10 @@ from enum import StrEnum
 
 from . import gates
 from .boundary import CHECK_FAILED
+from .commands import TIMED_OUT, CommandRunner
 from .config import Config
-from .gates import CommandRunner
+
+TIMED_OUT_WHY = "timed out"
 
 
 class Judge(StrEnum):
@@ -113,7 +115,8 @@ def full_checks(config: Config) -> list[FullCheck]:
 
 def _run_one(check: FullCheck, judging: Judging) -> CheckResult:
     code, output = judging.run(check.command)
-    return CheckResult(check, code, JUDGES[check.judge](code, output, judging), gates.tail(output))
+    why = TIMED_OUT_WHY if code == TIMED_OUT else JUDGES[check.judge](code, output, judging)
+    return CheckResult(check, code, why, gates.tail(output))
 
 
 def run_checks(checks: list[FullCheck], judging: Judging) -> CheckReport:

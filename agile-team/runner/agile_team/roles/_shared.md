@@ -32,6 +32,16 @@ the most.
 - Your brief's design file is the contract. Read source only for what it
   leaves open.
 
+## Never wait without a deadline
+
+- Run a test suite in the foreground and let it finish. Don't start it in
+  the background and then poll for its output.
+- Give every wait a deadline: run it under `timeout N`, or loop a bounded
+  number of times (`for i in $(seq 60); do …; done`). An open `until` or
+  `while` loop with no deadline is denied.
+- If a run hangs, stop it, name the test that hung in your handoff, and fix
+  that test (or dispute it). Don't wait on it.
+
 ## Git etiquette
 
 - The runner commits for you after your step. Do not run `git commit`,

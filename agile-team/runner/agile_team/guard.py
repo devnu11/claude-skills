@@ -42,6 +42,13 @@ QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
 LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
 _SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
 UNQUOTE = str.maketrans("", "", "'\"\\")
+WAIT_LOOPS = frozenset({"until", "while"})
+DEADLINES = frozenset({"timeout", "gtimeout"})
+STREAM_WORD = "read"
+WAIT_DENIED = (
+    "a wait loop needs a deadline: run it under `timeout N`, or loop a bounded "
+    "number of times (`for i in $(seq 60)`); better, run the suite in the foreground"
+)
 
 # The SDK fixes the hook signature at (input, tool_use_id, context).
 Hook = Callable[[dict[str, Any], str | None, Any], Awaitable[dict[str, Any]]]
@@ -146,7 +153,7 @@ def _check_pattern(scope: Scope, call: ToolCall) -> str | None:
 
 
 def check_bash(scope: Scope, command: str) -> str | None:
-    """Deny key mentions, write-side git, commands off the allowlist and forbidden paths.
+    """Deny key mentions, write-side git, off-allowlist commands, forbidden paths, wait loops.
 
     Checks run on both the raw command and the one with ``\\``-newline
     continuations joined; a denial in either view denies (a ``#`` comment
@@ -188,8 +195,26 @@ def _check_view(scope: Scope, command: str) -> str | None:
         lambda: _check_git(segments),
         lambda: _check_allowlist(scope, segments),
         lambda: _check_tokens(scope, _tokens(command)),
+        lambda: _check_waits(segments),
     )
     return next((reason for reason in (c() for c in checks) if reason), None)
+
+
+def _check_waits(segments: list[list[str]]) -> str | None:
+    """Deny an open ``until``/``while`` loop unless a segment starts a ``timeout``."""
+    if any(words[:1] and words[0] in DEADLINES for words in segments):
+        return None
+    return WAIT_DENIED if any(_open_wait(words) for words in segments) else None
+
+
+def _open_wait(words: list[str]) -> bool:
+    """True for an ``until`` or ``while`` loop that does not read a stream."""
+    return words[:1] != [] and words[0] in WAIT_LOOPS and not _reads_stream(words)
+
+
+def _reads_stream(words: list[str]) -> bool:
+    """True for ``while read ...``: the loop ends with its input."""
+    return words[0] == "while" and STREAM_WORD in words[1:3]
 
 
 def _check_secret_mention(scope: Scope, command: str) -> str | None:

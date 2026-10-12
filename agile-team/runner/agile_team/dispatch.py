@@ -11,7 +11,6 @@ changes a role was not allowed to make.
 from __future__ import annotations
 
 import json
-import subprocess
 import tomllib
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass, field, replace
@@ -44,6 +43,7 @@ from . import state as state_mod
 from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
 from .checkout import CheckoutChanged
+from .commands import CommandRunner, shell_runner
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
@@ -113,13 +113,6 @@ DEVOPS_SECTIONS = ("toolchain", "delivery")
 BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
-SHELL_OPTS: dict[str, Any] = {
-    "shell": True,
-    "capture_output": True,
-    "text": True,
-    "timeout": 1800,
-    "check": False,
-}
 
 QueryFn = Callable[..., AsyncIterator[Any]]
 PrepareFn = sandbox.PrepareFn
@@ -250,16 +243,6 @@ def _text_of(message: Any) -> str:
     return "".join(b.text for b in message.content if isinstance(b, TextBlock))
 
 
-def shell_runner(repo: Path) -> Callable[[str], tuple[int, str]]:
-    """Run toolchain commands in ``repo``; return exit code and combined output."""
-
-    def run(command: str) -> tuple[int, str]:
-        proc = subprocess.run(command, cwd=repo, **SHELL_OPTS)
-        return proc.returncode, proc.stdout + proc.stderr
-
-    return run
-
-
 def with_secret_denials(settings: dict[str, Any] | None, secrets: list[Path]) -> dict | None:
     """Add Read deny rules for the key files to a role's Claude Code settings."""
     if not secrets:
@@ -339,7 +322,7 @@ class Runtime:
     providers: Providers = field(default_factory=Providers)
     upstream: Upstream | None = None
     prs: Prs = field(default_factory=lambda: NoPrs(NO_PR_SERVICE))
-    shell: Callable[[Path], Callable[[str], tuple[int, str]]] = shell_runner
+    shell: Callable[[Path], CommandRunner] = shell_runner
     events: EventLog = field(init=False)
     halted_by: Halt | None = field(default=None, init=False)
 

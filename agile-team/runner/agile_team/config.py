@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .commands import DEFAULT_TIMEOUT_S
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .providers import Billing, Provider, ProviderKind
 
@@ -64,6 +65,7 @@ class Gates:
     steps: list[str] = field(default_factory=lambda: list(PIPELINE_STEPS))
     repeat: int = 2
     backstop: int = 4
+    command_timeout_s: float = DEFAULT_TIMEOUT_S
 
 
 @dataclass
@@ -245,6 +247,7 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: g.round_cap >= 1, "gates.round_cap must be at least 1"),
     (lambda g: g.repeat >= 2, "gates.repeat must be at least 2"),
     (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
+    (lambda g: g.command_timeout_s > 0, "gates.command_timeout_s must be positive"),
 )
 SAFE_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
 UPSTREAM_RULES: tuple[Rule, ...] = (

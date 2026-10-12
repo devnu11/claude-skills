@@ -24,9 +24,10 @@ from typing import Any
 from . import checkout, gates, halt, keys, onboard, presentation, recovery, sandbox
 from . import config as config_mod
 from . import state as state_mod
+from .commands import shell_runner
 from .dashboard import server
 from .dashboard.server import DashboardServer
-from .dispatch import QueryFn, Runtime, StepResult, shell_runner
+from .dispatch import QueryFn, Runtime, StepResult
 from .git_ops import Git
 from .ledger import LEDGER, Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
@@ -292,7 +293,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     missing = functools.partial(presentation.missing, config)
     live = presentation.Trial(config).liveness
     read = functools.partial(gates.read_repo_file, config.repo)
-    runner = shell_runner(config.repo)
+    runner = shell_runner(config.repo, config.gates.command_timeout_s)
     checks = gates.Checks(commands, threshold, runner, baseline, missing, live, read=read)
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
@@ -315,6 +316,7 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         query_fn=query_fn,
         pipeline=make_pipeline(config),
         prs=GhPrs(command_runner(place.repo)),
+        shell=functools.partial(shell_runner, limit_s=config.gates.command_timeout_s),
     )
 
 
