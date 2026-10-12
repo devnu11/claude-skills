@@ -56,8 +56,11 @@ command fails.
    (add `--onboard` for the onboarding sprint, `--resume` to continue).
    Next to it, also in the background, start the read-only dashboard:
    `$AT dashboard` (add `--no-open` over SSH or when the human is on another
-   machine). It prints `dashboard: <url>`. Give the human that URL; it opens
-   from other machines on the network (on Windows it is local only). If the
+   machine). It prints `dashboard: http://localhost:<port>/`, then
+   `from other machines: http://<host>.local:<port>/`. Give the human the
+   localhost link when they are on this machine: only there can it raise a
+   desktop notification when the run turns red. Give the second link to
+   someone on another machine (on Windows there is none; it is local only). If the
    port is taken, a dashboard is probably already running, so reuse its URL
    or pass `--port 0`. Leave it running across resumes. It never changes
    anything.
@@ -70,8 +73,10 @@ command fails.
    no tokens and exits with one JSON line when something needs you:
    `triggers` lists `message` (new outbox entries, in full under
    `messages`), `status` (the run's `status`/`status_reason` changed: halted,
-   waiting, budget, limit, interrupted, done; `was` holds the old one) or
-   `heartbeat` (nothing happened within the timeout). Act on it, then start
+   waiting, budget, limit, interrupted, done; `was` holds the old one),
+   `health` (the live meter turned red: no turns for too long, a stale
+   `heartbeat.json`, a dead runner, or a halt; the reason is under
+   `health`) or `heartbeat` (nothing happened within the timeout). Act on it, then start
    the next watch at once. It remembers what it reported, so nothing is lost
    in between. Run one at a time. For each new message, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`

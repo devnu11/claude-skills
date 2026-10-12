@@ -26,7 +26,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `watch [--timeout S]` | Block, polling the run files every 2 s (no tokens), until something needs the liaison. Then print one JSON line and exit 0. See "Watch". |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `accept-checkout` | Keep the current branch and HEAD as the team's after a `checkout-changed` halt (see "Checkout guard"). Refused (exit 1) while a runner is alive, on a detached HEAD, or with a git operation in progress. |
-| `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
+| `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: http://localhost:<port>/` once it is listening and, when it listens on all interfaces, a second line `from other machines: http://<host>.local:<port>/` (the hostname as is if it has a dot). Opens the localhost URL in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces), `127.0.0.1` on Windows (no second line). `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
 
 `init` (without `--detect`) in a directory that is not a git work tree prints
 `agile-team init: not a git repository: <repo>; run git init first` and exits 1.
@@ -68,7 +68,8 @@ interrupted steps not yet shown to the PO, see "Interrupted steps";
 check, see "Checkout guard"; `told` the `tell` message ids already handed to
 the PO; `unsaved` the cause of a halt whose salvage was skipped because the
 checkout moved, else `null`, see "Interrupted steps"),
-`ledger.jsonl` (per-step cost), `runner.pid` (the live runner's pid; a
+`ledger.jsonl` (per-step cost), `turns.jsonl` and `heartbeat.json` (the
+live meter, see "Live meter and health"), `runner.pid` (the live runner's pid; a
 stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
@@ -110,6 +111,7 @@ outbox line counts as no poll. Triggers, in order:
 |---|---|
 | `message` | the outbox has entries after the ones already reported (all of them when the outbox got shorter) |
 | `status` | the status is not plain `running` (`running` with no reason) and `(status, status_reason)` differs from the last one seen: halted, waiting on answers, budget, limit, interrupted, done, sprint end, idle |
+| `health` | the live meter's health (see "Live meter and health") turned `red` since the last one seen |
 
 When one fires, or at the first poll after `--timeout S` with nothing fired,
 it prints one line and exits 0:
@@ -118,10 +120,12 @@ it prints one line and exits 0:
 {"triggers": ["message", "status"], "messages": [{"id": "m7", "kind": "blocked", "text": "…", "stories": [], "at": 1791800000.0}], "status": "blocked", "status_reason": "session limit, resets 9pm (Europe/Berlin)", "was": {"status": "running", "status_reason": null}}
 ```
 
-A heartbeat has `"triggers": ["heartbeat"]` and `"messages": []`. `was` is
+The line also carries `"health": {"level", "reason"}`. A timeout line has
+`"triggers": ["heartbeat"]` and `"messages": []` (this watch heartbeat is
+not `heartbeat.json`). `was` is
 the status seen before (its `status` is `null` the first time). What was
 reported is kept in `.team/run/liaison/watch.json`
-(`{messages, status, status_reason}`), so nothing is lost between two
+(`{messages, status, status_reason, health}`), so nothing is lost between two
 watches. The first watch in a repo reports the whole outbox. Run one watch
 at a time. Every halt and every PO `notify_user` also posts an outbox entry,
 so `message` catches a halt even when the status ends up as it was.
@@ -254,7 +258,9 @@ remains, without posting a second question. Two ways on:
 
 The runner records the role step in flight (`in_flight`: role, story,
 brief) when the step starts and clears it when the step settles. A step
-that ends without settling is **interrupted**. Its cause is one of:
+that ends without settling is **interrupted**. It also gets a `step-end`
+event with `"status": "interrupted"`, so no step is left open (see "Live
+meter and health"). Its cause is one of:
 
 | Cause | When the edits are saved |
 |---|---|
@@ -297,7 +303,7 @@ It never writes, and it never serves files by path.
 |---|---|
 | `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resource is `mermaid@11.4.1` from `cdn.jsdelivr.net`, for the Flow chart. |
 | `GET /api/snapshot` | the snapshot as JSON |
-| `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes (checked once a second). Otherwise it sends a `: keepalive` comment every second. |
+| `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes or the health verdict (level and reason) changes (both checked once a second). Otherwise it sends a `: keepalive` comment every second. |
 | anything else | 404 (other methods: 501) |
 
 The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
@@ -320,14 +326,18 @@ outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`,
 last end report, the pending boundary and the review stack: each sprint's
 branch, base, PR number and URL, `mode` `none`/`draft`/`ready`/`closed`,
 `check` `unchecked`/`pass`/`fail`; the Board tab shows it as the **Review
-stack** card, and the timeline shows `boundary` events). The contract is
+stack** card, and the timeline shows `boundary` events), `turns` (the
+`turns.jsonl` lines of the last 10 minutes, at most 500), `heartbeat`
+(`heartbeat.json` as written, or `null`) and `health` (`{"level", "reason",
+"model_note"}`; see "Live meter and health"). The contract is
 `runner/agile_team/dashboard/fixtures/snapshot.json`. The Tokens tab's role
 and story tables show turns per step, the latest step's turns and context
 per turn next to tokens and cost (see "Turns and context"). The timeline
 shows each step-end's turns and each `po-session` renewal.
 
 Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
-outbox.jsonl, inbox.jsonl}`, `.agile-team.toml`, `.team/stories/*.md` and
+outbox.jsonl, inbox.jsonl, heartbeat.json, turns.jsonl}` (only the last
+256 KiB of `turns.jsonl`), `.agile-team.toml`, `.team/stories/*.md` and
 `<docs>/requirements/REQ-*.md`. A missing file gives an empty section. A
 torn last line, which can appear while the runner is appending, is skipped.
 Each snapshot re-reads `.agile-team.toml`, so a budget, round cap or
@@ -343,6 +353,101 @@ holds across live updates.
 Anyone who can reach the port can see the run (task, stories, questions and
 spend). It never shows keys. Use `--host 127.0.0.1` to keep it local to the
 machine.
+
+### Live meter and health
+
+The runner, never an agent, measures every query it drains: each role
+step, and the PO's own queries.
+
+**`turns.jsonl`**, one line per turn (one model response, one
+`message_id`; a response split over several SDK messages counts once):
+
+```json
+{"at": 1791800000.0, "role": "developer-cli", "story": "s29", "step": "implement", "turn": 12, "model": "claude-sonnet-4-5-20250929", "tokens": {"input": 3, "output": 412, "cache_read": 81234, "cache_creation": 1200}, "tools": ["Bash"], "cost_usd": 0.0313, "message_id": "msg_01…"}
+```
+
+`model` is the model that actually answered. `tools` names the tools the
+turn called. `cost_usd` is an estimate from per-family rates (0 on a
+`billing = "free"` provider, `null` for an unknown model). The ledger's cost
+stays the truth.
+
+**`heartbeat.json`**, rewritten atomically (temp file, then rename) by a
+thread in the runner. It is written when a query opens or closes, after each
+turn and tool end, when runner-side work starts or ends, and every
+`[health] beat_s` (20 s) in between, including while a tool or the tests
+gate runs:
+
+```json
+{"version": 1, "pid": 4242, "beat": "beating", "at": 1791800020.0, "started_at": 1791799000.0,
+ "chore": null,
+ "step": {"role": "developer-cli", "story": "s29", "step": "implement", "started_at": 1791799500.0,
+          "turn": 12, "model": "claude-sonnet-4-5-20250929", "configured_model": "sonnet",
+          "last_turn_at": 1791800012.5, "tool": {"name": "Bash", "started_at": 1791800013.0},
+          "tokens": {"input": 30, "output": 5120, "cache_read": 912340, "cache_creation": 40100},
+          "cost_usd": 0.4213}}
+```
+
+`beat` is `beating`, or `ended` once the runner has exited through Python
+(done, halted, stopped, crashed). After a `kill -9` it stays `beating`
+and goes stale. `at` is the last write. `step` is the innermost open query
+(a role step inside the PO's `run_role` call), else `null`. `chore` is
+runner-side work such as `{"what": "settling developer-cli on s29",
+"since": …}`, else `null`.
+
+**Interrupted steps.** A step that ends without a handoff (an error, a
+limit, `stop --now`, a crash, a budget or checkout halt) gets a `step-end`
+event with `"status": "interrupted"`, `reason` (for example `exit 143
+(SIGTERM)`), `cause`, `halt` (the run's halt reason or `null`), and the
+turns, tokens, `estimate_usd` and `model` measured so far. It has no
+`cost_usd`, because nothing was ledgered. A runner killed outright gets this
+event at the next `start --resume`, with cause `killed`. Every
+`step-start` has exactly one `step-end`.
+
+**Health** is one table in the runner (`health.RULES`). The first match does
+not win: the worst level among the matching rows wins, and the reason joins
+those rows' words.
+
+| Level | When |
+|---|---|
+| red | the run is halted (`blocked`, `failed`, `stopped`, `checkout-changed`): `halted: <reason>` |
+| red | turns still arriving while the run is halted |
+| red | the runner is gone (`interrupted`, or the heartbeat's pid is dead) |
+| red | no turn for `red_quiet_s` (10 min) |
+| red | heartbeat older than `stale_s` (90 s) |
+| amber | no turn for `amber_tool_s` (3 min) while a tool runs |
+| amber | no turn for `amber_quiet_s` (5 min) with no tool running |
+| green | runner-side work in progress (`runner: settling … for 2 min`); the quiet rows do not apply during it |
+| green | a query is open and turns are arriving |
+| idle | otherwise (`idle`, `done`, `sprint-end`, waiting on answers) |
+
+"No turn" counts from the last turn, or from the query's start before its
+first turn. A red reason reads, for example, `no turn for 11 min, heartbeat
+4 min old`. Any other watcher can apply the same rules to
+`heartbeat.json` and `state.json`. `agile-team watch` does this for you
+(the `health` trigger).
+
+On the dashboard, the status row's pill takes the health colour (fill and
+border). With a query open it reads `● developer-cli on s29 · 3.2k/min
+▂▃▅▇▆▅▃▂▁▂ · 8 s`: the team's tokens per minute over the last 5 minutes, a
+10-minute sparkline, and the age of the last turn. With no query open it
+shows the health reason (for example the halt and its reset time). Hover or
+tap the pill for the step and turn, the answering model (and `configured
+sonnet, answering opus` when they differ), the step's tokens and estimated
+dollars, the current tool and how long it has run, and the time of the last
+turn. A step that follows an interrupted one for the same role and story
+shows `↻ restarted`.
+
+The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
+It defaults to Story: the active step's story, or another story picked in
+the box beside it. Each role box shows that role's ledger tokens and dollars
+for the scope. A role that has not touched the story in focus is dimmed.
+The active box adds its live rate, sparkline, turn, tool and the step's
+estimate, outlined in the health colour.
+
+On red, the tab title gets a `⚠` prefix. On `localhost` (a secure context)
+the page also shows a desktop notification. It asks permission once, at your
+first click. Over the LAN by hostname, browsers allow no notifications, so
+only the title changes.
 
 ## `.agile-team.toml`
 
@@ -378,6 +483,13 @@ backstop = 4                   # this many bounces/returns in a row between two 
 command_timeout_s = 300        # each gate/check command; at the limit its process group is killed and the gate bounces
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
+
+[health]                       # optional; the live meter's thresholds in seconds (see Live meter and health)
+beat_s = 20                    # heartbeat.json rewrite interval; must be below stale_s
+stale_s = 90                   # heartbeat older than this: red
+amber_tool_s = 180             # no turn this long while a tool runs: amber
+amber_quiet_s = 300            # no turn this long, no tool: amber
+red_quiet_s = 600              # no turn this long: red
 
 [upstream]                     # optional; these are the defaults (see Sprint boundaries)
 remote = "origin"              # "" turns sync and pull requests off
