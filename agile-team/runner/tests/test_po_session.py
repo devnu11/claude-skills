@@ -25,6 +25,7 @@ from agile_team.relay import Note
 from claude_agent_sdk import ResultError, SystemMessage
 
 from .conftest import result_message
+from .fake_system import Done
 from .pipeline_helpers import PO_ROLE, Script, add_story, build, drive
 from .test_halt import limit_error
 
@@ -339,16 +340,17 @@ def test_a_limit_in_the_renewal_query_keeps_the_reasons(make_runtime) -> None:
 # ----- end to end -------------------------------------------------------------------
 
 
-def test_one_run_renews_before_the_hand_over(make_runtime) -> None:
-    fake = PoFake()
+def test_one_run_renews_before_the_hand_over(make_runtime, fake) -> None:
+    fake.reply(("pytest",), Done(0, "TOTAL   10   0   100%"))  # sprint-end checks pass
+    po_fake = PoFake()
     script = Script()
     rt = build(make_runtime, script, steps=["design"])
-    fake.rt = script.rt = rt
+    po_fake.rt = script.rt = rt
     script.answers_compact = False
     original = script._gen
 
     async def routed(role: str):
-        gen = fake._gen(script.calls[-1][1], None) if role == PO_ROLE else original(role)
+        gen = po_fake._gen(script.calls[-1][1], None) if role == PO_ROLE else original(role)
         async for message in gen:
             yield message
 
