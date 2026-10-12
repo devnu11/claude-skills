@@ -279,4 +279,5 @@ def test_bounded_loops_are_allowed(tmp_path: Path, command: str) -> None:
 
 
 def test_per_test_timeout_is_configured(pytestconfig: pytest.Config) -> None:
-    assert pytestconfig.getini("timeout") == "30"
+    assert pytestconfig.getini("timeout") == "1"
+    assert pytestconfig.getini("e2e_timeout") == "30"
