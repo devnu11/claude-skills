@@ -116,7 +116,10 @@ rule, update in the same story:
   function in a default, a `default_factory`, a `partial` or a module constant.
   Don't add parameters or fields to inject a clock, a sleep, a runner or a
   pid. Call `system` where the work happens. A new OS call needs a new
-  `system` function, a matching `FakeSystem` method and an e2e test.
+  `system` function, a matching `FakeSystem` method and an e2e test. Ruff
+  `TID251` (s77) rejects a direct OS call (`subprocess`, `os.environ`,
+  `time.sleep`, `webbrowser`, …) outside `system.py`, `tests/e2e/`, the fake,
+  the guard and `scripts/`; never add a `noqa` for it.
 - **Unit tests touch no OS, `tmp_path` included.** The autouse `fake`
   fixture swaps `system` for `FakeSystem`. Script files with `fake.put`,
   commands with `fake.reply`, and time with the fake clock. A unit test that
@@ -125,7 +128,7 @@ rule, update in the same story:
   belongs in `tests/e2e/`. Test helpers write through `system`, so one helper
   serves both worlds.
 - **A unit test runs in under 1 s** (s72; `timeout = 1` in `pyproject.toml`,
-  `e2e_timeout = 30` for `tests/e2e/` and `LEGACY`). Over it, make the test
+  `e2e_timeout = 30` for `tests/e2e/`). Over it, make the test
   fast with the fake clock or a fake, or move it to `tests/e2e/`. Never add a
   `pytest.mark.timeout`, raise the limit, skip or weaken the test.
 - The suite runs in parallel under pytest-xdist (s70), so a test ID never holds

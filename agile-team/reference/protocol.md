@@ -893,8 +893,7 @@ group wrote, for at most 5 s more. The command counts as exit code 124.
   `pytest-timeout`, so a hanging test fails by itself and the suite goes on.
 - The runner suite's per-test limit (s72) is **1 s for a unit test**
   (`timeout = 1` in `[tool.pytest.ini_options]`) and 30 s for a test in
-  `tests/e2e/` or a not-yet-migrated `os_guard.LEGACY` file
-  (`e2e_timeout = 30`, same table). `tests/time_limit.py` marks each test
+  `tests/e2e/` (`e2e_timeout = 30`, same table). `tests/time_limit.py` marks each test
   with its world's limit at collection, covering setup, call and teardown. A
   test over it fails as `FAILED <test id> - Failed: Timeout (>1.0s) from
   pytest-timeout.` A slow unit test is made fast (fake clock, a fake instead
@@ -930,13 +929,19 @@ The agile-team runner follows the rule itself (s71):
   `os.stat`). The message names the call and ends with
   `inject it, or move the test to tests/e2e/`. Tests under `tests/e2e/` run
   on the real OS.
-- Ruff `TID251` bans direct OS calls outside `system.py`.
-- The move runs in three phases, each with a green suite: files and the clock
+- Ruff `TID251` (`banned-api` in `agile-team/runner/pyproject.toml`) bans
+  direct OS calls (`subprocess`, `os.environ`, `time.sleep`,
+  `ThreadingHTTPServer`, …) everywhere except `system.py`, `tests/e2e/`,
+  the fake, the guard and its own test, `tests/conftest.py`,
+  `tests/dashboard_node.py` and `scripts/`. A new OS call needs a new
+  `system` function, a matching `FakeSystem` method and an e2e test.
+- The move ran in three phases, each with a green suite: files and the clock
   (s71), processes, signals and the network (s76: `system.run`,
   `spawn_piped`, `spawn_logged`, `killpg`, `http_get`, `listen_http`, …;
-  only `system.py` calls `os.killpg`), then the runtime, the CLI and ruff
-  `TID251` (s77). Until s77, the unit-test files named in
-  `os_guard.LEGACY` still run on the real OS.
+  only `system.py` calls `os.killpg`), then the runtime and the CLI (s77:
+  `async_sleep`, `which`, `home`, `cwd`, `open_browser`, `on_signal`) and
+  ruff `TID251`. Every unit test now runs in the fake world; only
+  `tests/e2e/` runs on the real OS.
 
 ### Repeated setbacks
 
