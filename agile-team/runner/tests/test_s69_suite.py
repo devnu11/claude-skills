@@ -109,7 +109,16 @@ def test_coverage_runs(command: str) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["grep -n pytest x.py", "rg -- --cov", "echo pytest", "ls tests", "coverage report", "", "FOO=1 echo pytest", "FOO=1"],
+    [
+        "grep -n pytest x.py",
+        "rg -- --cov",
+        "echo pytest",
+        "ls tests",
+        "coverage report",
+        "",
+        "FOO=1 echo pytest",
+        "FOO=1",
+    ],
 )
 def test_other_commands_start_no_run(command: str) -> None:
     assert kind(command) is None
