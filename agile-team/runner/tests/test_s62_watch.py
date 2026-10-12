@@ -79,25 +79,79 @@ def test_triggers_table_names() -> None:
     assert tuple(name for name, _ in watch.TRIGGERS) == ("message", "status", "health")
 
 
-def test_the_first_watch_reports_every_message(run_dir: Path) -> None:
+def test_a_first_watch_with_a_populated_outbox_does_not_report_it(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     note(run_dir)
-    line = until(run_dir, FakePace())
-    assert line["triggers"] == ["message"]
-    assert [m["id"] for m in line["messages"]] == ["m1"]
-    assert set(line["messages"][0]) == {"id", "kind", "text", "stories", "at"}
-    assert line["status"] == "running" and line["status_reason"] is None
-    assert line["was"] == {"status": None, "status_reason": None}
+    line = until(run_dir, FakePace(), timeout=4)
+    assert line["triggers"] == ["heartbeat"] and line["messages"] == []
+    assert line["was"] == {"status": "running", "status_reason": None}
     assert memory(run_dir) == {
         "messages": 1, "status": "running", "status_reason": None, "health": "idle",
     }  # fmt: skip
 
 
-def test_the_first_watch_reports_a_non_quiet_status(run_dir: Path) -> None:
+def test_a_first_watch_takes_a_non_quiet_status_as_seen(run_dir: Path) -> None:
     put(run_dir, RunStatus.STOPPED, "stop requested")
-    line = until(run_dir, FakePace())
-    assert line["triggers"] == ["status"] and line["messages"] == []
+    line = until(run_dir, FakePace(), timeout=4)
+    assert line["triggers"] == ["heartbeat"] and line["messages"] == []
     assert line["status"] == "stopped" and line["status_reason"] == "stop requested"
+
+
+def test_the_record_is_written_before_the_wait(run_dir: Path) -> None:
+    put(run_dir, RunStatus.RUNNING)
+    note(run_dir)
+    found: list[int] = []
+    fake = FakePace(acts=[lambda: found.append(memory(run_dir)["messages"])])
+    until(run_dir, fake, timeout=2)
+    assert found == [1]
+
+
+def test_a_message_after_the_record_is_new(run_dir: Path) -> None:
+    put(run_dir, RunStatus.RUNNING)
+    note(run_dir)
+    fake = FakePace(acts=[lambda: note(run_dir, text="two")])
+    line = until(run_dir, fake)
+    assert line["triggers"] == ["message"]
+    assert [m["id"] for m in line["messages"]] == ["m2"]
+    assert memory(run_dir)["messages"] == 2
+
+
+def test_a_status_change_after_the_record_fires(run_dir: Path) -> None:
+    put(run_dir, RunStatus.RUNNING)
+    fake = FakePace(acts=[lambda: put(run_dir, RunStatus.STOPPED, "x")])
+    line = until(run_dir, fake)
+    assert line["triggers"] == ["status"]
+    assert line["was"] == {"status": "running", "status_reason": None}
+
+
+def test_nothing_fires_against_the_record_itself() -> None:
+    look = watch.Look([], "stopped", "x", "red", "silent")
+    assert watch.fired(look.seen(), look) == []
+
+
+def test_a_torn_first_look_is_not_recorded(run_dir: Path) -> None:
+    put(run_dir, RunStatus.RUNNING)
+    outbox = run_dir / "outbox.jsonl"
+    outbox.write_text('{"id": "m1", "kind": "upd')
+
+    def complete() -> None:
+        outbox.write_text(
+            json.dumps({"id": "m1", "kind": "update", "text": "t", "stories": [], "at": 1.0}) + "\n"
+        )
+
+    fake = FakePace(acts=[complete])
+    line = until(run_dir, fake, timeout=2)
+    assert fake.sleeps == [2.0] and memory(run_dir)["messages"] == 1
+    assert line["triggers"] == ["heartbeat"] and line["messages"] == []
+
+
+def test_the_deadline_counts_from_the_call(run_dir: Path) -> None:
+    put(run_dir, RunStatus.RUNNING)
+    outbox = run_dir / "outbox.jsonl"
+    outbox.write_text("{")
+    fake = FakePace(acts=[lambda: outbox.write_text("")])
+    line = until(run_dir, fake, timeout=2)
+    assert line["triggers"] == ["heartbeat"] and fake.sleeps == [2.0]
 
 
 def test_a_quiet_first_look_waits(run_dir: Path) -> None:
@@ -130,6 +184,7 @@ def test_a_zero_timeout_answers_at_the_first_look(run_dir: Path) -> None:
 def test_two_messages_between_watches_are_both_reported(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     note(run_dir)
+    remember(run_dir, 0, "running")
     assert len(until(run_dir, FakePace())["messages"]) == 1
     note(run_dir, text="two")
     note(run_dir, text="three")
@@ -231,10 +286,16 @@ def test_garbage_memory_acts_as_fresh(run_dir: Path) -> None:
 
 def test_seen_defaults_and_atomic_save(tmp_path: Path) -> None:
     path = tmp_path / "a" / "watch.json"
-    assert watch.Seen.load(path) == watch.Seen(0, None, None)
+    assert watch.Seen.load(path) is None
     watch.Seen(2, "idle", "r").save(path)
     assert watch.Seen.load(path) == watch.Seen(2, "idle", "r")
     assert [p.name for p in path.parent.iterdir()] == ["watch.json"]
+
+
+def test_other_read_errors_are_fresh_memory(run_dir: Path) -> None:
+    path = run_dir / "liaison" / "watch.json"
+    path.mkdir(parents=True)
+    assert watch.Seen.load(path) == watch.Seen()
 
 
 def test_look_is_none_on_a_torn_outbox(run_dir: Path) -> None:
