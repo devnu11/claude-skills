@@ -75,7 +75,8 @@ command fails.
    `messages`), `status` (the run's `status`/`status_reason` changed: halted,
    waiting, budget, limit, interrupted, done; `was` holds the old one),
    `health` (the live meter turned red: no turns for too long, a stale
-   `heartbeat.json`, a dead runner, or a halt; the reason is under
+   `heartbeat.json`, a dead runner, or a halt, but never a graceful
+   `$AT stop`; the reason is under
    `health`) or `heartbeat` (nothing happened within the timeout). Act on it, then start
    the next watch at once. It remembers what it reported, so nothing is lost
    in between. Run one at a time. For each new message, relay `text`

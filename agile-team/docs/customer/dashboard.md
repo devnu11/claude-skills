@@ -121,10 +121,10 @@ running now and for how long, and the time of the last turn.
 
 | Colour | Means |
 |---|---|
-| green | turns are arriving, or the runner is doing its own work (for example running the tests gate) |
+| green | turns are arriving, or the runner is doing its own work (for example running the tests gate, or waiting for your answer to the PO's question) |
 | amber | no turn for 3 minutes while a tool runs, or for 5 minutes with none |
 | red | no turn for 10 minutes, the heartbeat is over 90 seconds old, the runner has died, or the run has halted (a usage limit, `stop --now`, a crash, the budget, a moved checkout, or the PO is blocked). The pill says why, for example `no turn for 11 min, heartbeat 4 min old` or `halted: session limit, resets 9pm` |
-| plain | nothing is running: idle, done, sprint end, or waiting for your answer |
+| plain | nothing is running: idle, done, sprint end, or stopped because you ran `agile-team stop` (a stop you asked for never turns red or notifies; `stop --now` does) |
 
 You can change these times in `.agile-team.toml` under `[health]`
 (`amber_tool_s`, `amber_quiet_s`, `red_quiet_s`, `stale_s`). A step cut

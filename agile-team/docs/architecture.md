@@ -40,7 +40,7 @@ one line here. Older designs are the sections at the end of this file.
 | s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
 | s61 The runner records the branch and HEAD it expects and halts (`checkout-changed`, exit 78, a question) when anyone else moves the checkout; `accept-checkout` keeps a new HEAD | [design/s61.md](design/s61.md) |
 | s41 Why s29's step got SIGTERM (its agent `kill`ed its own CLI, found by `ps \| grep pytest`); role Bash may not signal the runner's group or kill by name/run-time target; the runner signals only groups it created (pid-file start time checked) | [design/s41.md](design/s41.md) |
-| s44 Live spend meter: every turn in `turns.jsonl`, a thread-written `heartbeat.json`, an `interrupted` `step-end` for every step cut short, one `health.RULES` table (`[health]` thresholds), the smart pill, flow-box scope totals, red alerts, localhost URL first | [design/s44.md](design/s44.md) |
+| s44 Live spend meter: every turn in `turns.jsonl`, a thread-written `heartbeat.json`, an `interrupted` `step-end` for every step cut short, one `health.RULES` table (`[health]` thresholds), the smart pill, flow-box scope totals, red alerts, localhost URL first; quiet clock restarts on hand-back, the PO's wait is a chore, a graceful stop is neutral (`state.halt_kind`) | [design/s44.md](design/s44.md) |
 | s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
 
 ## Components
@@ -73,7 +73,7 @@ one line here. Older designs are the sections at the end of this file.
 | `relay.py` | outbox/inbox with the liaison; the human's queued messages `liaison/messages/t<N>.md` (`tell`, `told`, `unread`, s62) | none |
 | `watch.py` | `agile-team watch` (s62): `Look` at the outbox and shown status, the `TRIGGERS` table, `Seen` memory in `liaison/watch.json`, `Watcher.until` | relay, state |
 | `live.py` | the live meter (s44): `Reading` (turns, tokens, tools, model of one open query), `Meter`, `Pulse` (stack of open readings, chores, `turns.jsonl` lines, `heartbeat.json` from a daemon thread), `RATES` estimates | ledger (`Tokens`), providers (`Billing`), salvage (`Cause`, `STOP_REASONS`), events |
-| `health.py` | runner health (s44): `Vitals` (heartbeat, shown status, pid), the `RULES` table, `judge`, `current`, `model_note` | live, state, config |
+| `health.py` | runner health (s44): `Vitals` (heartbeat, shown status, pid, halt kind), the `RULES` table, `judge`, `current`, `model_note` | live, state, config |
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26; loopback reachable from the OS sandbox, s58), key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |

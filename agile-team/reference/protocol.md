@@ -382,7 +382,8 @@ gate runs:
  "chore": null,
  "step": {"role": "developer-cli", "story": "s29", "step": "implement", "started_at": 1791799500.0,
           "turn": 12, "model": "claude-sonnet-4-5-20250929", "configured_model": "sonnet",
-          "last_turn_at": 1791800012.5, "tool": {"name": "Bash", "started_at": 1791800013.0},
+          "last_turn_at": 1791800012.5, "quiet_since": 1791800012.5,
+          "tool": {"name": "Bash", "started_at": 1791800013.0},
           "tokens": {"input": 30, "output": 5120, "cache_read": 912340, "cache_creation": 40100},
           "cost_usd": 0.4213}}
 ```
@@ -392,7 +393,10 @@ gate runs:
 and goes stale. `at` is the last write. `step` is the innermost open query
 (a role step inside the PO's `run_role` call), else `null`. `chore` is
 runner-side work such as `{"what": "settling developer-cli on s29",
-"since": …}`, else `null`.
+"since": …}` (also `sprint boundary: <stage>` and, while the PO waits on
+the human, `waiting for answers to m3`), else `null`. `quiet_since` is when
+the query last had the floor back: its last turn, a tool's end, the end of
+an inner query (a role step inside `run_role`), or the end of a chore.
 
 **Interrupted steps.** A step that ends without a handoff (an error, a
 limit, `stop --now`, a crash, a budget or checkout halt) gets a `step-end`
@@ -409,19 +413,24 @@ those rows' words.
 
 | Level | When |
 |---|---|
-| red | the run is halted (`blocked`, `failed`, `stopped`, `checkout-changed`): `halted: <reason>` |
+| red | the run is halted (`blocked`, `failed`, `stopped` by `stop --now` or another SIGTERM, `checkout-changed`): `halted: <reason>` |
 | red | turns still arriving while the run is halted |
 | red | the runner is gone (`interrupted`, or the heartbeat's pid is dead) |
 | red | no turn for `red_quiet_s` (10 min) |
 | red | heartbeat older than `stale_s` (90 s) |
 | amber | no turn for `amber_tool_s` (3 min) while a tool runs |
 | amber | no turn for `amber_quiet_s` (5 min) with no tool running |
-| green | runner-side work in progress (`runner: settling … for 2 min`); the quiet rows do not apply during it |
+| green | runner-side work in progress (`runner: settling … for 2 min`, `runner: waiting for answers to m3 for 12 min`); the quiet rows do not apply during it |
 | green | a query is open and turns are arriving |
-| idle | otherwise (`idle`, `done`, `sprint-end`, waiting on answers) |
+| idle | otherwise (`idle`, `done`, `sprint-end`, and a graceful `stop`) |
 
-"No turn" counts from the last turn, or from the query's start before its
-first turn. A red reason reads, for example, `no turn for 11 min, heartbeat
+A graceful `agile-team stop` (status `stopped` with no halt behind it, and
+likewise `accept-checkout`) is neutral. It is `idle` whatever the heartbeat
+says, with no red, no `⚠` and no `health` trigger. `state.json`'s
+`halt_kind` tells the two stops apart: it holds the halt (`sigterm`,
+`limit`, `crash`, `budget`, `checkout`) that set the status, and is `null`
+otherwise. "No turn" counts from `quiet_since` (the last time the query had
+the floor back), or from the query's start before its first turn. A red reason reads, for example, `no turn for 11 min, heartbeat
 4 min old`. Any other watcher can apply the same rules to
 `heartbeat.json` and `state.json`. `agile-team watch` does this for you
 (the `health` trigger).
