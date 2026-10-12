@@ -184,3 +184,41 @@ def test_health_level_whitelist_blocks_html() -> None:
     )
     assert out["l"] == "idle" and out["l2"] == "red"
     assert "<b>" not in out["h"]
+
+
+def test_fallback_pill_text_has_a_space_after_the_arrow() -> None:
+    out = drive(
+        'const view = normalize(SNAP); view.heartbeat = null; view.health = {level: "idle", reason: "idle", model_note: null};\n'
+        'view.events = [{kind: "step-start", role: "developer-cli", story: "s29", at: NOW - 120, data: {}}];\n'
+        "const result = pillText(view, NOW);"
+    )
+    assert out == "▶ developer-cli on s29 · 2 min"
+
+
+def test_resting_stopped_pill_is_plain() -> None:
+    out = drive(
+        'const view = normalize(SNAP); view.run.status = "stopped"; view.health = {level: "idle", reason: "stopped", model_note: null};\n'
+        "view.events = []; view.heartbeat = null; view.messages = []; view.run.manager_due = [];\n"
+        "const result = statusPills(view, NOW);"
+    )
+    assert out[1] == '<span class="pill tone-"><span class="dot"></span>stopped</span>'
+    assert "tone-warning" not in out[1]
+    assert not any(x in p for p in out[1:] for x in ("h-amber", "h-red", "⚠"))
+
+
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        ("stopped", "halted: stopped by stop --now"),
+        ("blocked", "halted: session limit, resets 9pm"),
+        ("failed", "halted: boom"),
+        ("interrupted", "the runner is not running"),
+    ],
+)
+def test_forced_halts_stay_red_on_the_smart_pill(status: str, reason: str) -> None:
+    out = drive(
+        f"const view = normalize(SNAP); view.run.status = {json.dumps(status)};\n"
+        f'view.health = {{level: "red", reason: {json.dumps(reason)}, model_note: null}}; view.heartbeat = null; view.events = [];\n'
+        "const result = statusPills(view, NOW);"
+    )
+    assert any("pill smart h-red" in p and f"● {reason}" in p for p in out)
