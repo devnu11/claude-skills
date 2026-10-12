@@ -1510,15 +1510,20 @@ merge**.
   the hook cannot resolve a variable target (`kill $p`, `kill $PPID`), so
   that passes.
 - Every role but DevOps: Bash may not run the full suite or coverage (s69,
-  `suite_check.SUITE_RULES`). A segment that starts with a launcher (`uv`,
-  `python…`, `poetry`, `timeout`, `env`, a shell's `-c` string, `pytest`
-  itself, …) and runs `pytest` with no test file or node id (`tests/` and
-  `tests/*.py` count as none) is denied, and so is any `--cov…` flag or
-  `coverage run`. The reason says how to ask the runner (`run_tests`,
-  `run_new_tests`). A run that names tests (`pytest -q tests/test_x.py::test_y`)
-  passes, except for the code reviewer and the quality czar, who run no tests.
-  Residual risk: pytest run from a script, a `make` target or a `$VAR`, and
-  other test tools, are not seen.
+  `suite_check.SUITE_RULES`). The check looks at segments that start with a
+  launcher (`uv`, `python…`, `poetry`, `timeout`, `env`, `exec`, `command`,
+  `xargs`, a shell's `-c` string, `pytest` itself, …), after any leading
+  `NAME=value` words. Such a segment is a full run, and is denied, when it
+  runs `pytest` and not every path it names is a test file or node id
+  (`tests/`, `.` and `tests/*.py` are not, so `pytest tests/test_x.py tests/`
+  is a full run). Any `--cov…` flag or `coverage run` is denied too. Write
+  option values with `=` (`--foo=1`): a spaced value counts as a path, which
+  makes the run full. The reason says how to ask the runner (`run_tests`,
+  `run_new_tests`). A run that names only tests
+  (`pytest -q tests/test_x.py::test_y`) passes, except for the code reviewer
+  and the quality czar, who run no tests. Residual risk: pytest run from a
+  script, a `make` target, a `$VAR` or `python -mpytest`, and other test
+  tools, are not seen.
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
