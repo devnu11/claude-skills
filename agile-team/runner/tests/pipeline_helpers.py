@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
-from agile_team import gates
+from agile_team import gates, system
 from agile_team.dispatch import Runtime
 from agile_team.po_tools import Start
 from claude_agent_sdk import AssistantMessage, SystemMessage, TextBlock
@@ -139,6 +139,6 @@ def ask_and_answer(rt: Runtime, text: str = "Which DB?", stories=("s1",), answer
 
 def write_file(rt: Runtime, rel: str, text: str = "x") -> Path:
     path: Path = rt.config.repo / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    system.make_dirs(path.parent)
+    system.write_text(path, text)
     return path

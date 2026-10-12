@@ -4,19 +4,20 @@ from pathlib import Path
 
 import pytest
 from agile_team import config as cfg
+from agile_team import system
 
 KNOWN = cfg.Known({"developer"}, {"package", "web", "harness"})
 
 
-def test_load_missing(tmp_path: Path) -> None:
+def test_load_missing(repo: Path) -> None:
     with pytest.raises(cfg.ConfigError, match="not found"):
-        cfg.load(tmp_path)
+        cfg.load(repo)
 
 
-def test_load_bad_toml(tmp_path: Path) -> None:
-    (tmp_path / cfg.CONFIG_NAME).write_text("[team\n")
+def test_load_bad_toml(repo: Path) -> None:
+    system.write_text(repo / cfg.CONFIG_NAME, "[team\n")
     with pytest.raises(cfg.ConfigError):
-        cfg.load(tmp_path)
+        cfg.load(repo)
 
 
 def test_load_full(configured: Path) -> None:
@@ -39,9 +40,9 @@ def test_delivery_lookup(configured: Path) -> None:
     assert c.delivery(None) is None
 
 
-def test_unknown_keys_are_ignored(tmp_path: Path) -> None:
+def test_unknown_keys_are_ignored(repo: Path) -> None:
     c = cfg.from_raw(
-        tmp_path,
+        repo,
         {
             "team": {"bogus": 1},
             "gates": {"x": 2},
@@ -52,7 +53,7 @@ def test_unknown_keys_are_ignored(tmp_path: Path) -> None:
     assert c.deliveries[0].name == "a"
 
 
-def test_validate_reports_every_problem(tmp_path: Path) -> None:
+def test_validate_reports_every_problem(repo: Path) -> None:
     raw = {
         "team": {"cadence": "x", "artifacts": "x", "budget_usd": 0, "manager_every_pct": 0},
         "gates": {"coverage": 101, "round_cap": 0, "steps": ["nope"]},
@@ -69,7 +70,7 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
             "developer": {"model": "haiku"},
         },
     }
-    problems = cfg.validate(cfg.from_raw(tmp_path, raw), KNOWN)
+    problems = cfg.validate(cfg.from_raw(repo, raw), KNOWN)
     text = "\n".join(problems)
     for needle in [
         "cadence",
@@ -94,7 +95,7 @@ def test_validate_reports_every_problem(tmp_path: Path) -> None:
     assert "dev-y" not in text
 
 
-def test_providers_load_and_validate(tmp_path: Path) -> None:
+def test_providers_load_and_validate(repo: Path) -> None:
     raw = {
         "providers": {
             "local": {"base_url": "http://localhost:11434", "extra": 1},
@@ -102,7 +103,7 @@ def test_providers_load_and_validate(tmp_path: Path) -> None:
             "odd": {"base_url": "ftp://x", "kind": "codex", "billing": "maybe"},
         },
     }
-    c = cfg.from_raw(tmp_path, raw)
+    c = cfg.from_raw(repo, raw)
     assert c.providers["local"].name == "local"
     assert c.providers["local"].billing == "free"
     problems = [p for p in cfg.validate(c, KNOWN) if p.startswith("providers.")]
@@ -117,8 +118,8 @@ def test_providers_load_and_validate(tmp_path: Path) -> None:
 # ----- s29: [upstream] and Delivery.e2e -------------------------------------
 
 
-def test_upstream_defaults(tmp_path: Path) -> None:
-    c = cfg.from_raw(tmp_path, {})
+def test_upstream_defaults(repo: Path) -> None:
+    c = cfg.from_raw(repo, {})
     assert (c.upstream.remote, c.upstream.branch, c.upstream.prefix) == (
         "origin",
         "main",
@@ -126,38 +127,35 @@ def test_upstream_defaults(tmp_path: Path) -> None:
     )
 
 
-def test_upstream_loads_and_ignores_unknown_keys(tmp_path: Path) -> None:
+def test_upstream_loads_and_ignores_unknown_keys(repo: Path) -> None:
     raw = {"upstream": {"remote": "up", "branch": "dev", "prefix": "rev/s", "bogus": 1}}
-    u = cfg.from_raw(tmp_path, raw).upstream
+    u = cfg.from_raw(repo, raw).upstream
     assert (u.remote, u.branch, u.prefix) == ("up", "dev", "rev/s")
 
 
-def test_delivery_e2e_loads(tmp_path: Path) -> None:
-    c = cfg.from_raw(
-        tmp_path, {"delivery": [{"name": "a", "kind": "package", "e2e": "pytest e2e"}]}
-    )
+def test_delivery_e2e_loads(repo: Path) -> None:
+    c = cfg.from_raw(repo, {"delivery": [{"name": "a", "kind": "package", "e2e": "pytest e2e"}]})
     assert c.deliveries[0].e2e == "pytest e2e"
     assert (
-        cfg.from_raw(tmp_path, {"delivery": [{"name": "b", "kind": "package"}]}).deliveries[0].e2e
-        == ""
+        cfg.from_raw(repo, {"delivery": [{"name": "b", "kind": "package"}]}).deliveries[0].e2e == ""
     )
 
 
-def _upstream_problems(tmp_path: Path, upstream: dict) -> list[str]:
-    c = cfg.from_raw(tmp_path, {"upstream": upstream})
+def _upstream_problems(repo: Path, upstream: dict) -> list[str]:
+    c = cfg.from_raw(repo, {"upstream": upstream})
     return [p for p in cfg.validate(c, KNOWN) if p.startswith("upstream")]
 
 
-def test_upstream_rules_messages(tmp_path: Path) -> None:
-    assert _upstream_problems(tmp_path, {"branch": ""}) == ["upstream.branch must be set"]
-    assert _upstream_problems(tmp_path, {"prefix": "-bad"}) == [
+def test_upstream_rules_messages(repo: Path) -> None:
+    assert _upstream_problems(repo, {"branch": ""}) == ["upstream.branch must be set"]
+    assert _upstream_problems(repo, {"prefix": "-bad"}) == [
         "upstream.prefix must be a branch name prefix"
     ]
-    assert _upstream_problems(tmp_path, {"prefix": "a b"}) == [
+    assert _upstream_problems(repo, {"prefix": "a b"}) == [
         "upstream.prefix must be a branch name prefix"
     ]
 
 
-def test_upstream_valid_and_sync_off_allow_empty_branch(tmp_path: Path) -> None:
-    assert _upstream_problems(tmp_path, {}) == []
-    assert _upstream_problems(tmp_path, {"remote": "", "branch": ""}) == []
+def test_upstream_valid_and_sync_off_allow_empty_branch(repo: Path) -> None:
+    assert _upstream_problems(repo, {}) == []
+    assert _upstream_problems(repo, {"remote": "", "branch": ""}) == []

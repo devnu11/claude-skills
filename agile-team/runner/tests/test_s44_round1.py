@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from agile_team import boundary as bd
-from agile_team import cli, halt, live, po_tools, watch
+from agile_team import cli, halt, live, po_tools, system, watch
 from agile_team import state as state_mod
 from agile_team.boundary import Edge
 from agile_team.boundary_runner import BoundaryRunner
@@ -19,6 +19,7 @@ from agile_team.state import RunState, RunStatus
 from claude_agent_sdk import ResultError
 
 from .conftest import FakeQuery
+from .fake_system import FakeSystem
 from .test_s44_live import (
     LIMITS,
     NOW,
@@ -54,16 +55,16 @@ def test_a_tool_result_for_an_open_tool_wakes_and_an_unknown_one_does_not() -> N
     assert reading.quiet_since == NOW + 90
 
 
-def test_the_heartbeat_step_carries_quiet_since(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_the_heartbeat_step_carries_quiet_since(scratch: Path, fake: FakeSystem) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     clock.t += 5
     meter.take(reply("a", {"input_tokens": 1}))
-    assert beat_file(tmp_path)["step"]["quiet_since"] == NOW + 5
+    assert beat_file(scratch)["step"]["quiet_since"] == NOW + 5
 
 
-def test_a_nested_role_closing_wakes_the_po_reading(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_a_nested_role_closing_wakes_the_po_reading(scratch: Path, fake: FakeSystem) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     po = pulse.open(PO_WHO)
     po.take(reply("a", {"input_tokens": 1}, tools=("run_role",), model="claude-opus-4"))
     clock.t = NOW + 10
@@ -72,19 +73,21 @@ def test_a_nested_role_closing_wakes_the_po_reading(tmp_path: Path) -> None:
     pulse.close(role)
     assert po.reading.quiet_since == NOW + 1510
     clock.t = NOW + 1520
-    heartbeat = beat_file(tmp_path)
+    heartbeat = beat_file(scratch)
     verdict = judge(Vitals(clock.t, RunStatus.RUNNING, None, heartbeat, Runner.UP, LIMITS))
     assert verdict == Health(Level.GREEN, "turns arriving", None)
 
 
-def test_closing_the_last_reading_does_not_fail(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_closing_the_last_reading_does_not_fail(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     pulse.close(pulse.open(WHO))
-    assert beat_file(tmp_path)["step"] is None
+    assert beat_file(scratch)["step"] is None
 
 
-def test_a_chore_ending_wakes_the_innermost_reading_even_on_error(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_a_chore_ending_wakes_the_innermost_reading_even_on_error(
+    scratch: Path, fake: FakeSystem
+) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     with pytest.raises(ValueError), pulse.doing("x"):
         clock.t = NOW + 900
@@ -92,11 +95,11 @@ def test_a_chore_ending_wakes_the_innermost_reading_even_on_error(tmp_path: Path
     assert meter.reading.quiet_since == NOW + 900
 
 
-def test_a_chore_with_nothing_open_ends_quietly(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_a_chore_with_nothing_open_ends_quietly(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     with pulse.doing("x"):
         pass
-    assert beat_file(tmp_path)["chore"] is None
+    assert beat_file(scratch)["chore"] is None
 
 
 def test_quiet_for_uses_quiet_since_and_falls_back_without_it() -> None:
@@ -116,7 +119,7 @@ def test_quiet_for_uses_quiet_since_and_falls_back_without_it() -> None:
 
 def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime) -> None:
     rt = make_runtime()
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     rt.pulse.open(PO_WHO)
     seen: list[Any] = []
     count = 0
@@ -144,7 +147,7 @@ def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime) -> None:
 
 def test_wait_chore_text_has_a_dash_without_ids(make_runtime) -> None:
     rt = make_runtime()
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     seen: list[Any] = []
 
     async def sleep(_s: float) -> None:
@@ -195,14 +198,14 @@ def test_mark_clears_the_halt_kind() -> None:
     assert state.halt_kind is None
 
 
-def test_a_legacy_state_loads_no_halt_kind(tmp_path: Path) -> None:
-    (tmp_path / "state.json").write_text('{"status": "stopped"}')
-    assert state_mod.load(tmp_path).halt_kind is None
+def test_a_legacy_state_loads_no_halt_kind(scratch: Path, fake: FakeSystem) -> None:
+    system.write_text(scratch / "state.json", '{"status": "stopped"}')
+    assert state_mod.load(scratch).halt_kind is None
 
 
 def test_halt_run_records_the_kind_and_a_new_run_clears_it(make_runtime) -> None:
     rt = make_runtime()
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     rt.halt_run(halt.Halt(halt.HaltKind.SIGTERM, "stopped by stop --now"))
     assert state_mod.load(rt.config.run_dir).halt_kind == "sigterm"
     rt.state.mark(RunStatus.RUNNING)
@@ -246,7 +249,7 @@ def test_po_until_sigterm_starts_the_pulse_and_ends_it_when_the_po_raises(
     make_runtime, monkeypatch
 ) -> None:
     rt = make_runtime()
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     spy = SpyPulse()
     rt.pulse = spy
 
@@ -262,7 +265,7 @@ def test_po_until_sigterm_starts_the_pulse_and_ends_it_when_the_po_raises(
 
 def test_the_boundary_step_runs_as_a_chore(make_runtime, monkeypatch) -> None:
     rt = make_runtime()
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     rt.state.sprint = 1
     rt.state.boundary = bd.Boundary(Edge.START, 1)
     runner = BoundaryRunner(rt)
@@ -284,7 +287,7 @@ def test_the_po_query_runs_under_a_po_meter(make_runtime, failing) -> None:
             raise ResultError("bad", data={}, exit_code=1)
 
     rt = make_runtime(FakeQuery(action=action))
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(rt.config.run_dir)
     role = SimpleNamespace(name="product-owner", model="opus", provider=DEFAULT)
     plan = SimpleNamespace(role=role, story=None, prompt="p", options=None, meter=None)
     run = PoRun(rt, Start("t"))

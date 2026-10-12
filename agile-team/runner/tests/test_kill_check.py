@@ -1,33 +1,34 @@
 """s41: what a role's Bash may signal (K1-K5)."""
 
-import os
-import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from agile_team import guard, kill_check
+from agile_team import guard, kill_check, system
 from agile_team.guard import Scope
 
+from .fake_system import FAKE_IDS, FakeSystem
 
-@pytest.fixture
-def scope(tmp_path: Path) -> Scope:
-    return Scope("developer", tmp_path, ["**"])
-
-
-@pytest.fixture
-def same_group():
-    proc = subprocess.Popen(["sleep", "30"])
-    yield proc
-    proc.kill()
-    proc.wait()
+SAME = 5000  # a child in the runner's own group
+OWN = 5001  # a child that leads its own group
+GONE = 5002  # a pid that has been reaped
 
 
 @pytest.fixture
-def own_group():
-    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
-    yield proc
-    proc.kill()
-    proc.wait()
+def scope(repo: Path) -> Scope:
+    return Scope("developer", repo, ["**"])
+
+
+@pytest.fixture
+def same_group(fake: FakeSystem) -> SimpleNamespace:
+    fake.groups[SAME] = FAKE_IDS[1]
+    return SimpleNamespace(pid=SAME)
+
+
+@pytest.fixture
+def own_group(fake: FakeSystem) -> SimpleNamespace:
+    fake.groups[OWN] = OWN
+    return SimpleNamespace(pid=OWN)
 
 
 def _runner(target: str) -> str:
@@ -36,7 +37,7 @@ def _runner(target: str) -> str:
 
 # 13
 def test_killing_the_runner_pid_is_denied(scope: Scope) -> None:
-    pid = os.getpid()
+    pid = system.pid()
     assert guard.check_bash(scope, f"kill {pid}") == _runner(str(pid))
 
 
@@ -58,7 +59,7 @@ def test_killing_a_same_group_child_is_denied(scope: Scope, same_group) -> None:
     ],
 )
 def test_runner_targets_are_denied(scope: Scope, template: str, target: str) -> None:
-    ids = {"pid": os.getpid(), "pgrp": os.getpgrp()}
+    ids = {"pid": system.pid(), "pgrp": system.pgrp()}
     got = guard.check_bash(scope, template.format(**ids))
     assert got == _runner(target.format(**ids))
 
@@ -93,14 +94,12 @@ def test_run_time_targets_are_denied(scope: Scope, command: str) -> None:
 
 # 16
 def test_safe_kills_pass(scope: Scope, own_group) -> None:
-    reaped = subprocess.Popen(["true"])
-    reaped.wait()
     commands = [
         "kill $PID",
         "kill $!",
         "kill %1",
         f"kill {own_group.pid}",
-        f"kill {reaped.pid}",
+        f"kill {GONE}",
         "kill -l",
         'ps aux | grep "[p]ytest"',
         "pgrep -f pytest",
@@ -133,13 +132,13 @@ def test_kill_denial_ignores_segments_without_kill() -> None:
 
 # 18
 def test_the_git_rule_reports_first(scope: Scope) -> None:
-    command = f"git commit -m x && kill {os.getpid()}"
+    command = f"git commit -m x && kill {system.pid()}"
     got = guard.check_bash(scope, command)
-    assert got is not None and got != _runner(str(os.getpid()))
+    assert got is not None and got != _runner(str(system.pid()))
 
 
 # K5
 def test_prompt_tells_roles_not_to_kill_by_name() -> None:
     shared = Path(kill_check.__file__).parent / "roles" / "_shared.md"
-    text = shared.read_text()
+    text = system.read_text(shared)
     assert "Stop only what you started" in text and "pkill" in text

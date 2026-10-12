@@ -6,7 +6,9 @@ Paths are normalised with ``posixpath`` (pure string work); no ``Path`` method
 that touches the OS is ever called here, because the guard would fail it.
 
 Only the functions of the phases that exist are implemented; a phase adds its
-own rows (P2: processes, signals by group, network; P3: machine and browser).
+own rows (P3: machine and browser). P2 adds scripted commands, children that
+run until their group is signalled, process groups, the environment and the
+network (s76).
 """
 
 from __future__ import annotations
@@ -15,8 +17,12 @@ import errno
 import fnmatch
 import os
 import posixpath
+import signal
+import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, NamedTuple
 
 import agile_team
 import pytest
@@ -30,6 +36,9 @@ FAKE_IDS = (4242, 4243)  # the runner's pid and process group in the fake
 START_CLOCK = 1_800_000_000.0
 DEFAULT_MODE = 0o644
 DIR_MODE = 0o755
+FIRST_CHILD_PID = 5000  # the first spawned child's pid; each spawn adds 1
+FAKE_HOSTNAME = "fakehost"
+FREE_PORT = 50000  # what a server asked for port 0 is given
 
 PACKAGE_DIR = Path(agile_team.__file__).parent
 PACKAGE_DATA = ("roles/*.md", "presets.toml", "dashboard/index.html")
@@ -42,6 +51,104 @@ def _snapshot_package_data() -> dict[Path, bytes]:
 
 
 PACKAGE_FILES = _snapshot_package_data()
+
+
+class Done(NamedTuple):
+    """One scripted command result: it has already exited."""
+
+    code: int = 0
+    out: str = ""
+    err: str = ""
+
+
+class Hang(NamedTuple):
+    """A scripted child that runs until its group is signalled; ``out`` is what it wrote."""
+
+    out: str = ""
+
+
+class FakeProcess:
+    """A spawned child: ``Done`` has exited; ``Hang`` runs until the fake signals it."""
+
+    def __init__(self, fake: FakeSystem, pid: int, result: Done | Hang) -> None:
+        self.fake = fake
+        self.pid = pid
+        self.out = result.out
+        self.returncode: int | None = result.code if isinstance(result, Done) else None
+
+    def poll(self) -> int | None:
+        """The exit code, or ``None`` while the child runs."""
+        return self.returncode
+
+    def _hang(self, timeout: float | None) -> None:
+        self.fake.clock += timeout or 0.0
+        raise system.TimeoutExpired("fake", timeout or 0.0)
+
+    def wait(self, timeout: float | None = None) -> int:
+        """The exit code; a running child times out on the fake clock."""
+        if self.returncode is None:
+            self._hang(timeout)
+        return self.returncode  # type: ignore[return-value]
+
+    def communicate(self, timeout: float | None = None) -> tuple[str, None]:
+        """The output once the child has ended; a running child times out."""
+        if self.returncode is None:
+            self._hang(timeout)
+        return self.out, None
+
+    def __enter__(self) -> FakeProcess:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+class FakeServer:
+    """What ``listen_http`` returns: records the address, ``serve_forever`` returns at once."""
+
+    def __init__(self, address: tuple[str, int], handler: type) -> None:
+        port = address[1] or FREE_PORT
+        self.server_address = (address[0], port)
+        self.RequestHandlerClass = handler
+        self.daemon_threads = False
+        self.app: Any = None
+        self.closed = False
+
+    def serve_forever(self) -> None:
+        """Return at once."""
+
+    def shutdown(self) -> None:
+        """Nothing to stop."""
+
+    def server_close(self) -> None:
+        """Record the close."""
+        self.closed = True
+
+    def __enter__(self) -> FakeServer:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.server_close()
+
+
+class _Rule:
+    """A scripted reply: the words to find in the argv, in order, and the results to give."""
+
+    def __init__(self, words: tuple[str, ...], results: tuple[Any, ...]) -> None:
+        self.words = words
+        self.results = results
+        self.used = 0
+
+    def matches(self, argv: list[str]) -> bool:
+        """Whether the words appear in ``argv`` in order (a subsequence)."""
+        rest = iter(argv)
+        return all(word in rest for word in self.words)
+
+    def next(self) -> Any:
+        """The next result; the last one repeats."""
+        result = self.results[min(self.used, len(self.results) - 1)]
+        self.used += 1
+        return result
 
 
 class FakeSystem:
@@ -59,7 +166,19 @@ class FakeSystem:
         self.clock = START_CLOCK
         self.slept: list[float] = []
         self.signals: list[tuple[str, int, int]] = []
-        self.groups: dict[int, int] = {}
+        self.groups: dict[int, int] = {FAKE_IDS[0]: FAKE_IDS[1]}
+        self.survivors: set[int] = set()
+        self.commands: list[Any] = []
+        self.rules: list[_Rule] = []
+        self.procs: dict[int, FakeProcess] = {}
+        self.next_pid = FIRST_CHILD_PID
+        self.ticks = 0
+        self.env: dict[str, str] = {}
+        self.listening: set[tuple[str, int]] = set()
+        self.holds: dict[int, tuple[str, int]] = {}
+        self.web: dict[str, Any] = {}
+        self.listened: list[tuple[str, int]] = []
+        self.servers: list[FakeServer] = []
         self._add_dirs(str(FAKE_REPO))
         for path, data in PACKAGE_FILES.items():
             self.put(path, data)
@@ -92,6 +211,10 @@ class FakeSystem:
         """Swap every function in ``system.__all__`` for this fake's method."""
         for name in system.__all__:
             monkeypatch.setattr(system, name, getattr(self, name))
+
+    def reply(self, words: tuple[str, ...], *results: Any) -> None:
+        """Script a command: the last matching rule wins; results go in turn, the last repeats."""
+        self.rules.append(_Rule(words, results or (Done(),)))
 
     def text_of(self, path: Path) -> str:
         """The text stored at ``path`` (a test helper; ``FileNotFoundError`` if absent)."""
@@ -316,8 +439,132 @@ class FakeSystem:
         """The runner's pid in the fake."""
         return FAKE_IDS[0]
 
-    def kill(self, pid: int, sig: int) -> None:
-        """Record a signal to a pid; signal 0 and dead pids raise like the OS."""
-        self.signals.append(("kill", pid, sig))
-        if pid != FAKE_IDS[0] and pid not in self.groups:
+    def pgrp(self) -> int:
+        """The runner's process group in the fake."""
+        return FAKE_IDS[1]
+
+    def pgid(self, pid: int) -> int:
+        """The group of a live pid; ``ProcessLookupError`` for an unknown one."""
+        if pid not in self.groups:
             raise ProcessLookupError(errno.ESRCH, "No such process")
+        return self.groups[pid]
+
+    def _end(self, pid: int, sig: int) -> None:
+        self.groups.pop(pid, None)
+        address = self.holds.pop(pid, None)
+        self.listening.discard(address)  # type: ignore[arg-type]
+        child = self.procs.get(pid)
+        if child is not None and child.returncode is None:
+            child.returncode = -sig
+
+    def _deliver(self, pids: list[int], sig: int) -> None:
+        for pid in pids:
+            spared = sig == signal.SIGTERM and pid in self.survivors
+            if pid != FAKE_IDS[0] and not spared:
+                self._end(pid, sig)
+
+    def kill(self, pid: int, sig: int) -> None:
+        """Record a signal to a pid; a dead pid raises; a live one ends unless it survives."""
+        self.signals.append(("kill", pid, sig))
+        if pid not in self.groups:
+            raise ProcessLookupError(errno.ESRCH, "No such process")
+        if sig != 0:
+            self._deliver([pid], sig)
+
+    def killpg(self, pgid: int, sig: int) -> None:
+        """Signal every member of a group; signal 0 only checks that one is alive."""
+        members = [pid for pid, group in self.groups.items() if group == pgid]
+        if sig != 0:
+            self.signals.append(("killpg", pgid, sig))
+        if not members:
+            raise ProcessLookupError(errno.ESRCH, "No such process")
+        if sig != 0:
+            self._deliver(members, sig)
+
+    def wait_event(self, event: threading.Event, timeout: float) -> bool:
+        """True at once if set; else advance the clock and time out while ``ticks`` last."""
+        if event.is_set():
+            return True
+        if self.ticks <= 0:
+            return True
+        self.ticks -= 1
+        self.clock += timeout
+        return False
+
+    def environ(self) -> Mapping[str, str]:
+        """The scripted environment (empty by default)."""
+        return self.env
+
+    # -- commands and children -------------------------------------------------
+
+    def _result(self, argv: list[str]) -> Any:
+        for rule in reversed(self.rules):
+            if rule.matches(argv):
+                return rule.next()
+        return Done()
+
+    def _scripted(self, command: Any, argv: list[str]) -> Any:
+        self.commands.append(command)
+        result = self._result(argv)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    def run(self, command: Any) -> Any:
+        """Run a scripted argv; a ``Hang`` times out on the fake clock."""
+        result = self._scripted(command, list(command.argv))
+        if isinstance(result, Hang):
+            self.clock += command.timeout or 0.0
+            raise system.TimeoutExpired(list(command.argv), command.timeout or 0.0)
+        return system.Completed(result.code, result.out, result.err)
+
+    def run_shell(self, command: Any) -> int:
+        """Run a scripted shell line and return its exit code."""
+        result = self._scripted(command, command.text.split())
+        return result.code if isinstance(result, Done) else 0
+
+    def _spawn(self, command: Any) -> FakeProcess:
+        result = self._scripted(command, command.text.split())
+        pid = self.next_pid
+        self.next_pid += 1
+        self.groups[pid] = pid
+        child = FakeProcess(self, pid, result)
+        self.procs[pid] = child
+        return child
+
+    def spawn_piped(self, command: Any) -> FakeProcess:
+        """Start a scripted child in its own session, its output piped."""
+        return self._spawn(command)
+
+    def spawn_logged(self, command: Any, log: Path) -> FakeProcess:
+        """Start a scripted child in its own session; its output is written to ``log``."""
+        child = self._spawn(command)
+        self.write_text(log, child.out)
+        return child
+
+    # -- network -----------------------------------------------------------------
+
+    def http_get(self, url: str, timeout: float) -> Any:
+        """The scripted reply for ``url``; an unknown URL refuses the connection."""
+        reply = self.web.get(url, ConnectionRefusedError(errno.ECONNREFUSED, "refused"))
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+    def connect(self, address: tuple[str, int]) -> None:
+        """Succeed only for an address in ``listening``."""
+        if address not in self.listening:
+            raise ConnectionRefusedError(errno.ECONNREFUSED, "Connection refused")
+
+    def hostname(self) -> str:
+        """The fake machine's name."""
+        return FAKE_HOSTNAME
+
+    def listen_http(self, address: tuple[str, int], handler: type) -> FakeServer:
+        """A fake server; an address already in ``listening`` is in use."""
+        if address in self.listening:
+            raise OSError(errno.EADDRINUSE, "Address already in use")
+        self.listened.append(address)
+        server = FakeServer(address, handler)
+        self.servers.append(server)
+        return server

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +10,14 @@ import pytest
 import tomli_w
 from agile_team import config as cfg
 from agile_team import state as state_mod
+from agile_team import system
 from agile_team.dashboard import snapshot
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.roles import RoleBook
 from agile_team.state import ModelOverride, RunState, RunStatus
 
 FIXTURE = Path(snapshot.__file__).parent / "fixtures" / "snapshot.json"
+FIXTURE_TEXT = FIXTURE.read_text()  # at import, before the fake world: the unit tests touch no file
 KEYS = [
     "generated_at",
     "run",
@@ -48,38 +49,38 @@ AFTER_CUTOFF_S = 10_000_000  # fixture times are ~1.79e9; the cutoff is 17916949
 
 
 def write_jsonl(path: Path, rows: list[Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    system.make_dirs(path.parent)
+    system.write_text(path, "".join(json.dumps(r) + "\n" for r in rows))
 
 
 def make_config(root: Path, steps: list[str] | None = None, **extra: Any) -> cfg.Config:
-    root.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(root)
     raw: dict[str, Any] = {
         "team": {"docs_dir": "docs", "budget_usd": 20.0, "manager_every_pct": 25},
         "gates": {"round_cap": 3, "steps": steps or ["design", "tests", "implement"]},
         **extra,
     }
-    (root / cfg.CONFIG_NAME).write_text(tomli_w.dumps(raw))
+    system.write_text(root / cfg.CONFIG_NAME, tomli_w.dumps(raw))
     return cfg.load(root)
 
 
-def book_for(config: cfg.Config, tmp_path: Path) -> RoleBook:
-    return RoleBook.for_repo(config.repo, config.roles, tmp_path / "no-global")
+def book_for(config: cfg.Config, scratch: Path) -> RoleBook:
+    return RoleBook.for_repo(config.repo, config.roles, scratch / "no-global")
 
 
 @pytest.fixture
-def config(tmp_path: Path) -> cfg.Config:
-    return make_config(tmp_path / "repo")
+def config(scratch: Path) -> cfg.Config:
+    return make_config(scratch / "repo")
 
 
-def build(config: cfg.Config, tmp_path: Path) -> dict[str, Any]:
-    return json.loads(json.dumps(snapshot.build(config, book_for(config, tmp_path))))
+def build(config: cfg.Config, scratch: Path) -> dict[str, Any]:
+    return json.loads(json.dumps(snapshot.build(config, book_for(config, scratch))))
 
 
 def write_story_file(config: cfg.Config, sid: str, meta: str, body: str = "x\n") -> None:
     path = config.stories_dir / f"{sid}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"---\n{meta}---\n{body}")
+    system.make_dirs(path.parent)
+    system.write_text(path, f"---\n{meta}---\n{body}")
 
 
 def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
@@ -161,39 +162,39 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     write_jsonl(config.run_dir / "ledger.jsonl", fixture["ledger"])
     write_jsonl(config.run_dir / "outbox.jsonl", fixture["messages"])
     write_jsonl(config.run_dir / "inbox.jsonl", fixture["answers"])
-    fresh = [{**t, "at": time.time()} for t in fixture["turns"]]  # inside the 600 s window
+    fresh = [{**t, "at": system.now()} for t in fixture["turns"]]  # inside the 600 s window
     write_jsonl(config.run_dir / "turns.jsonl", fresh)
     if fixture["heartbeat"] is not None:
-        (config.run_dir / "heartbeat.json").write_text(json.dumps(fixture["heartbeat"]))
+        system.write_text(config.run_dir / "heartbeat.json", json.dumps(fixture["heartbeat"]))
     for s in fixture["stories"]:
         meta = json.dumps({"id": s["id"], "title": s["title"], "acceptance": s["acceptance"]})
         write_story_file(config, s["id"], meta + "\n")
     for r in fixture["requirements"]:
         meta = json.dumps({k: r[k] for k in ("id", "title", "status", "covers")})
         path = config.requirements_dir / f"{r['id']}.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"---\n{meta}\n---\n{r['text']}\n")
+        system.make_dirs(path.parent)
+        system.write_text(path, f"---\n{meta}\n---\n{r['text']}\n")
     return config
 
 
 # ----- 1. fixture shape (AC3) ----------------------------------------------
 
 
-def test_build_matches_fixture_shape(tmp_path: Path) -> None:
-    fixture = json.loads(FIXTURE.read_text())
-    config = write_run(tmp_path / "repo", fixture)
-    snap = build(config, tmp_path)
+def test_build_matches_fixture_shape(scratch: Path) -> None:
+    fixture = json.loads(FIXTURE_TEXT)
+    config = write_run(scratch / "repo", fixture)
+    snap = build(config, scratch)
     assert list(snap) == KEYS
     assert shape(snap) == shape(fixture)
 
 
-def test_build_matches_fixture_values(tmp_path: Path) -> None:
-    fixture = json.loads(FIXTURE.read_text())
-    config = write_run(tmp_path / "repo", fixture)
+def test_build_matches_fixture_values(scratch: Path) -> None:
+    fixture = json.loads(FIXTURE_TEXT)
+    config = write_run(scratch / "repo", fixture)
     # Rows from before ledger.PO_DELTAS_FROM are corrected on read (s38 K2); move them past it.
     after = [{**e, "at": e["at"] + AFTER_CUTOFF_S} for e in fixture["ledger"]]
     write_jsonl(config.run_dir / "ledger.jsonl", after)
-    snap = build(config, tmp_path)
+    snap = build(config, scratch)
     assert snap["ledger"] == after
     assert [s["acceptance"] for s in snap["stories"]] == [
         s["acceptance"] for s in fixture["stories"]
@@ -211,8 +212,8 @@ def test_build_matches_fixture_values(tmp_path: Path) -> None:
 # ----- 2. empty (AC1) --------------------------------------------------------
 
 
-def test_empty_run_files(config: cfg.Config, tmp_path: Path) -> None:
-    snap = build(config, tmp_path)
+def test_empty_run_files(config: cfg.Config, scratch: Path) -> None:
+    snap = build(config, scratch)
     assert list(snap) == KEYS
     for key in ("stories", "requirements", "events", "ledger", "messages", "answers"):
         assert snap[key] == []
@@ -224,9 +225,9 @@ def test_empty_run_files(config: cfg.Config, tmp_path: Path) -> None:
     assert snap["roles"]
 
 
-def test_run_section_reads_config(config: cfg.Config, tmp_path: Path) -> None:
+def test_run_section_reads_config(config: cfg.Config, scratch: Path) -> None:
     """The run section carries the config values and the (empty) queue `order` (s40 D1/D5)."""
-    run = build(config, tmp_path)["run"]
+    run = build(config, scratch)["run"]
     assert run == {
         "status": "idle",
         "sprint": 0,
@@ -243,7 +244,7 @@ def test_run_section_reads_config(config: cfg.Config, tmp_path: Path) -> None:
 # ----- 3. torn lines (D3) ----------------------------------------------------
 
 
-def test_torn_and_blank_lines_are_skipped(config: cfg.Config, tmp_path: Path) -> None:
+def test_torn_and_blank_lines_are_skipped(config: cfg.Config, scratch: Path) -> None:
     good = {
         "events.jsonl": {"id": "e1", "at": 1.0, "kind": "gate", "role": None, "story": None,
                          "data": {}},
@@ -251,33 +252,33 @@ def test_torn_and_blank_lines_are_skipped(config: cfg.Config, tmp_path: Path) ->
                          "at": 2.0},
         "outbox.jsonl": {"id": "m1", "kind": "update", "text": "hi", "stories": [], "at": 3.0},
     }  # fmt: skip
-    config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(config.run_dir)
     for name, row in good.items():
         text = json.dumps(row) + '\n\n[1]\n{"kind": "ga'
-        (config.run_dir / name).write_text(text)
-    snap = build(config, tmp_path)
+        system.write_text(config.run_dir / name, text)
+    snap = build(config, scratch)
     assert [e["id"] for e in snap["events"] if e["kind"] == "gate"] == ["e1"]
     assert len(snap["ledger"]) == 1
     assert [m["id"] for m in snap["messages"]] == ["m1"]
     assert len(snap["events"]) == 2  # the gate plus the merged outbox message
 
 
-def test_read_jsonl_missing_and_junk(tmp_path: Path) -> None:
-    assert snapshot.read_jsonl(tmp_path / "nope.jsonl") == []
-    path = tmp_path / "x.jsonl"
-    path.write_text('{"a": 1}\n\n"str"\n42\nnot json\n{"b": 2}\n{"c"')
+def test_read_jsonl_missing_and_junk(scratch: Path) -> None:
+    assert snapshot.read_jsonl(scratch / "nope.jsonl") == []
+    path = scratch / "x.jsonl"
+    system.write_text(path, '{"a": 1}\n\n"str"\n42\nnot json\n{"b": 2}\n{"c"')
     assert snapshot.read_jsonl(path) == [{"a": 1}, {"b": 2}]
 
 
 # ----- 4. ledger (D8) --------------------------------------------------------
 
 
-def test_ledger_line_without_tokens_gets_zero_counts(config: cfg.Config, tmp_path: Path) -> None:
+def test_ledger_line_without_tokens_gets_zero_counts(config: cfg.Config, scratch: Path) -> None:
     write_jsonl(
         config.run_dir / "ledger.jsonl",
         [{"role": "architect", "model": "opus", "cost_usd": 0.1, "story": "s1", "at": 5.0}],
     )
-    (entry,) = build(config, tmp_path)["ledger"]
+    (entry,) = build(config, scratch)["ledger"]
     assert entry["tokens"] == {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
     assert entry["role"] == "architect"
 
@@ -289,9 +290,9 @@ def put_story(config: cfg.Config, story: StoryState) -> None:
     state_mod.save(config.run_dir, RunState(stories={story.id: story}, sprint=1))
 
 
-def test_story_without_file_or_event(config: cfg.Config, tmp_path: Path) -> None:
+def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
     put_story(config, StoryState("s1", "One", "design", delivery=None, commit="abc", sprint=1))
-    (story,) = build(config, tmp_path)["stories"]
+    (story,) = build(config, scratch)["stories"]
     assert story == {
         "id": "s1",
         "title": "One",
@@ -311,7 +312,7 @@ def test_story_without_file_or_event(config: cfg.Config, tmp_path: Path) -> None
     assert "commit" not in story
 
 
-def test_story_acceptance_and_opened_at(config: cfg.Config, tmp_path: Path) -> None:
+def test_story_acceptance_and_opened_at(config: cfg.Config, scratch: Path) -> None:
     put_story(config, StoryState("s1", "One", "design"))
     meta = "acceptance:\n  - {id: AC1, text: first}\n  - just a string\n  - {id: 2}\n"
     write_story_file(config, "s1", meta)
@@ -320,31 +321,31 @@ def test_story_acceptance_and_opened_at(config: cfg.Config, tmp_path: Path) -> N
         config.run_dir / "events.jsonl",
         [{"id": "e1", "at": 7.5, **opened}, {"id": "e2", "at": 9.0, **opened}],
     )
-    (story,) = build(config, tmp_path)["stories"]
+    (story,) = build(config, scratch)["stories"]
     assert story["opened_at"] == 7.5
     assert story["acceptance"] == [{"id": "AC1", "text": "first"}, {"id": "2", "text": ""}]
 
 
 @pytest.mark.parametrize("content", ["---\nacceptance: [unclosed\n---\nbody", "no frontmatter"])
 def test_story_file_unparseable_gives_empty_acceptance(
-    config: cfg.Config, tmp_path: Path, content: str
+    config: cfg.Config, scratch: Path, content: str
 ) -> None:
     put_story(config, StoryState("s1", "One", "design"))
-    config.stories_dir.mkdir(parents=True)
-    (config.stories_dir / "s1.md").write_text(content)
-    assert build(config, tmp_path)["stories"][0]["acceptance"] == []
+    system.make_dirs(config.stories_dir)
+    system.write_text(config.stories_dir / "s1.md", content)
+    assert build(config, scratch)["stories"][0]["acceptance"] == []
 
 
-def test_stories_are_in_ranking_order(config: cfg.Config, tmp_path: Path) -> None:
+def test_stories_are_in_ranking_order(config: cfg.Config, scratch: Path) -> None:
     stories = {i: StoryState(i, i.upper(), "design") for i in ("s10", "s9", "s2")}
     state_mod.save(config.run_dir, RunState(stories=stories, order=["s2"]))
-    snap = build(config, tmp_path)
+    snap = build(config, scratch)
     assert [s["id"] for s in snap["stories"]] == ["s2", "s9", "s10"]
     assert snap["run"]["order"] == ["s2", "s9", "s10"]
     assert [s["position"] for s in snap["stories"]] == [1, 2, 3]
 
 
-def test_story_fields_for_progress_hold_and_done(config: cfg.Config, tmp_path: Path) -> None:
+def test_story_fields_for_progress_hold_and_done(config: cfg.Config, scratch: Path) -> None:
     prev = PreviousStep("architect", "done", "Asked which")
     stories = {
         "s1": StoryState("s1", "A", "tests", status=StoryStatus.DONE),
@@ -355,7 +356,7 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, tmp_path: P
     write_jsonl(config.run_dir / "outbox.jsonl", [
         {"id": "m1", "kind": "question", "text": "Which DB?", "stories": ["s2"], "at": 1.0}
     ])  # fmt: skip
-    by_id = {s["id"]: s for s in build(config, tmp_path)["stories"]}
+    by_id = {s["id"]: s for s in build(config, scratch)["stories"]}
     assert by_id["s1"]["position"] is None and by_id["s1"]["wait"] is None
     assert by_id["s2"]["position"] == 1 and by_id["s2"]["in_progress"] is True
     assert by_id["s2"]["hold"] == "questions"
@@ -367,14 +368,14 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, tmp_path: P
     assert by_id["s3"]["wait"] is None
 
 
-def test_answered_question_is_not_a_wait(config: cfg.Config, tmp_path: Path) -> None:
+def test_answered_question_is_not_a_wait(config: cfg.Config, scratch: Path) -> None:
     stories = {"s1": StoryState("s1", "A", "tests")}
     state_mod.save(config.run_dir, RunState(stories=stories))
     write_jsonl(config.run_dir / "outbox.jsonl", [
         {"id": "m1", "kind": "question", "text": "Which DB?", "stories": ["s1"], "at": 1.0}
     ])  # fmt: skip
     write_jsonl(config.run_dir / "inbox.jsonl", [{"id": "m1", "text": "sqlite", "at": 2.0}])
-    (story,) = build(config, tmp_path)["stories"]
+    (story,) = build(config, scratch)["stories"]
     assert story["wait"] is None
 
 
@@ -393,14 +394,14 @@ def req_event(eid: str, at: float, rid: str, **data: Any) -> dict[str, Any]:
 
 
 def write_req(config: cfg.Config, name: str, text: str) -> None:
-    config.requirements_dir.mkdir(parents=True, exist_ok=True)
-    (config.requirements_dir / name).write_text(text)
+    system.make_dirs(config.requirements_dir)
+    system.write_text(config.requirements_dir / name, text)
 
 
-def test_requirement_defaults_and_body(config: cfg.Config, tmp_path: Path) -> None:
+def test_requirement_defaults_and_body(config: cfg.Config, scratch: Path) -> None:
     write_req(config, "REQ-002.md", "Plain body.\n")
     write_req(config, "REQ-001.md", "---\ntitle: T\ncovers: [s1/AC1]\n---\n\nBody here.\n\n")
-    first, second = build(config, tmp_path)["requirements"]
+    first, second = build(config, scratch)["requirements"]
     assert first == {
         "id": "REQ-001",
         "title": "T",
@@ -413,14 +414,14 @@ def test_requirement_defaults_and_body(config: cfg.Config, tmp_path: Path) -> No
     assert second["title"] == "" and second["covers"] == []
 
 
-def test_requirement_bad_yaml_still_gets_a_row(config: cfg.Config, tmp_path: Path) -> None:
+def test_requirement_bad_yaml_still_gets_a_row(config: cfg.Config, scratch: Path) -> None:
     write_req(config, "REQ-009.md", "---\ntitle: [unclosed\n---\nbody")
-    (row,) = build(config, tmp_path)["requirements"]
+    (row,) = build(config, scratch)["requirements"]
     assert row["id"] == "REQ-009" and row["status"] == "active"
     assert row["text"] == "" and row["history"] == []
 
 
-def test_requirement_history_by_id_in_order(config: cfg.Config, tmp_path: Path) -> None:
+def test_requirement_history_by_id_in_order(config: cfg.Config, scratch: Path) -> None:
     write_req(config, "REQ-001.md", "---\nid: REQ-001\n---\nx")
     gate = {"id": "e4", "at": 4.0, "kind": "gate", "role": None, "story": None}
     write_jsonl(
@@ -432,7 +433,7 @@ def test_requirement_history_by_id_in_order(config: cfg.Config, tmp_path: Path) 
             {**gate, "data": {"id": "REQ-001"}},
         ],
     )
-    (row,) = build(config, tmp_path)["requirements"]
+    (row,) = build(config, scratch)["requirements"]
     common = {"reason": "why", "role": "architect", "story": "s1"}
     assert row["history"] == [
         {"at": 1.0, "change": "added", "sha": "", **common},
@@ -447,26 +448,26 @@ def names(snap: dict[str, Any]) -> list[str]:
     return [r["name"] for r in snap["roles"]]
 
 
-def test_roles_sorted_with_fields(config: cfg.Config, tmp_path: Path) -> None:
-    snap = build(config, tmp_path)
+def test_roles_sorted_with_fields(config: cfg.Config, scratch: Path) -> None:
+    snap = build(config, scratch)
     assert names(snap) == sorted(names(snap))
     assert all(set(r) == {"name", "model", "provider"} for r in snap["roles"])
     assert "architect" in names(snap)
 
 
-def test_role_override_shows_model(config: cfg.Config, tmp_path: Path) -> None:
+def test_role_override_shows_model(config: cfg.Config, scratch: Path) -> None:
     state = RunState(overrides={"architect": ModelOverride("haiku", "low", "cheap")})
     state_mod.save(config.run_dir, state)
-    roles = {r["name"]: r for r in build(config, tmp_path)["roles"]}
+    roles = {r["name"]: r for r in build(config, scratch)["roles"]}
     assert roles["architect"]["model"] == "haiku"
 
 
-def test_disabled_and_dangling_roles_are_left_out(tmp_path: Path) -> None:
+def test_disabled_and_dangling_roles_are_left_out(scratch: Path) -> None:
     config = make_config(
-        tmp_path / "repo",
+        scratch / "repo",
         roles={"integration-tester": {"enabled": False}, "ghost": {"extends": "nope"}},
     )
-    snap = build(config, tmp_path)
+    snap = build(config, scratch)
     assert "integration-tester" not in names(snap)
     assert "ghost" not in names(snap)
     assert "architect" in names(snap)
@@ -475,7 +476,7 @@ def test_disabled_and_dangling_roles_are_left_out(tmp_path: Path) -> None:
 # ----- 8. events (D7) --------------------------------------------------------
 
 
-def test_outbox_and_inbox_merge_into_events(config: cfg.Config, tmp_path: Path) -> None:
+def test_outbox_and_inbox_merge_into_events(config: cfg.Config, scratch: Path) -> None:
     def ev(eid: str, at: float, kind: str) -> dict[str, Any]:
         return {"id": eid, "at": at, "kind": kind, "role": None, "story": None, "data": {}}
 
@@ -485,7 +486,7 @@ def test_outbox_and_inbox_merge_into_events(config: cfg.Config, tmp_path: Path) 
         [{"id": "m1", "kind": "question", "text": "q", "stories": [], "at": 2.0}],
     )
     write_jsonl(config.run_dir / "inbox.jsonl", [{"id": "m1", "text": "a", "at": 3.0}])
-    events = build(config, tmp_path)["events"]
+    events = build(config, scratch)["events"]
     assert [e["id"] for e in events] == ["e1", "out-m1", "in-m1", "e2"]
     assert events[1] == {
         "id": "out-m1",
@@ -510,15 +511,15 @@ def test_outbox_and_inbox_merge_into_events(config: cfg.Config, tmp_path: Path) 
 
 
 def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
-    config.stories_dir.mkdir(parents=True)
-    config.requirements_dir.mkdir(parents=True)
+    system.make_dirs(config.stories_dir)
+    system.make_dirs(config.requirements_dir)
     for p in (config.stories_dir / "s2.md", config.stories_dir / "s1.md"):
-        p.write_text("x")
-    (config.stories_dir / "notes.txt").write_text("x")
-    (config.requirements_dir / "REQ-001.md").write_text("x")
-    (config.requirements_dir / "README.md").write_text("x")
-    config.run_dir.mkdir(parents=True)
-    (config.run_dir / "keyfile").write_text("secret")
+        system.write_text(p, "x")
+    system.write_text(config.stories_dir / "notes.txt", "x")
+    system.write_text(config.requirements_dir / "REQ-001.md", "x")
+    system.write_text(config.requirements_dir / "README.md", "x")
+    system.make_dirs(config.run_dir)
+    system.write_text(config.run_dir / "keyfile", "secret")
     run = config.run_dir
     assert snapshot.watched_files(config) == [
         run / "state.json",
@@ -564,8 +565,8 @@ def test_ledger_constant_lives_in_ledger_module() -> None:
 # ----- s29: the upstream section (U25) -------------------------------------------
 
 
-def test_snapshot_has_an_empty_upstream_section(config: cfg.Config, tmp_path: Path) -> None:
-    section = build(config, tmp_path)["upstream"]
+def test_snapshot_has_an_empty_upstream_section(config: cfg.Config, scratch: Path) -> None:
+    section = build(config, scratch)["upstream"]
     assert section == {
         "remote": "origin",
         "branch": "main",
@@ -577,7 +578,7 @@ def test_snapshot_has_an_empty_upstream_section(config: cfg.Config, tmp_path: Pa
     }
 
 
-def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, tmp_path: Path) -> None:
+def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, scratch: Path) -> None:
     from agile_team import boundary as bd
 
     st = RunState(sprint=2)
@@ -606,7 +607,7 @@ def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, tmp_path
         bd.Stage.CHECK, bd.FixCase.TEAM_CHECK, "first line\nsecond line"
     )
     state_mod.save(config.run_dir, st)
-    section = build(config, tmp_path)["upstream"]
+    section = build(config, scratch)["upstream"]
     assert section["team_branch"] == "agile-team" and section["push"] == "yes"
     assert section["stack"] == [
         {
@@ -626,7 +627,7 @@ def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, tmp_path
 
 
 def test_fixture_upstream_section_has_a_two_entry_stack_and_boundary_events() -> None:
-    fixture = json.loads(FIXTURE.read_text())
+    fixture = json.loads(FIXTURE_TEXT)
     section = fixture["upstream"]
     assert [e["mode"] for e in section["stack"]] == ["ready", "none"]
     assert section["stack"][1]["pr"] is None and section["boundary"]["hold"] == "push_permission"
@@ -644,11 +645,11 @@ def rewrite_config(config: cfg.Config, steps: list[str], budget: float, cap: int
         "team": {"docs_dir": "docs", "budget_usd": budget, "manager_every_pct": 25},
         "gates": {"round_cap": cap, "steps": steps},
     }
-    (config.repo / cfg.CONFIG_NAME).write_text(tomli_w.dumps(raw))
+    system.write_text(config.repo / cfg.CONFIG_NAME, tomli_w.dumps(raw))
 
 
-def test_build_rereads_budget_and_round_cap(config: cfg.Config, tmp_path: Path) -> None:
-    book = book_for(config, tmp_path)
+def test_build_rereads_budget_and_round_cap(config: cfg.Config, scratch: Path) -> None:
+    book = book_for(config, scratch)
     assert snapshot.build(config, book)["run"]["budget_usd"] == 20.0
     rewrite_config(config, ["design", "tests", "implement"], 7.5, 5)
     run = snapshot.build(config, book)["run"]
@@ -656,22 +657,22 @@ def test_build_rereads_budget_and_round_cap(config: cfg.Config, tmp_path: Path) 
     assert run["round_cap"] == 5
 
 
-def test_build_rereads_pipeline(config: cfg.Config, tmp_path: Path) -> None:
-    book = book_for(config, tmp_path)
+def test_build_rereads_pipeline(config: cfg.Config, scratch: Path) -> None:
+    book = book_for(config, scratch)
     rewrite_config(config, ["design", "implement"], 20.0, 3)
     assert snapshot.build(config, book)["pipeline"] == ["design", "implement"]
 
 
 @pytest.mark.parametrize("content", [None, "budget_usd = ", "[team\n"])
 def test_build_falls_back_when_file_missing_or_unparsable(
-    config: cfg.Config, tmp_path: Path, content: str | None
+    config: cfg.Config, scratch: Path, content: str | None
 ) -> None:
-    book = book_for(config, tmp_path)
+    book = book_for(config, scratch)
     path = config.repo / cfg.CONFIG_NAME
     if content is None:
-        path.unlink()
+        system.remove(path)
     else:
-        path.write_text(content)
+        system.write_text(path, content)
     assert snapshot.fresh_config(config) is config
     assert snapshot.build(config, book)["run"]["budget_usd"] == 20.0
 

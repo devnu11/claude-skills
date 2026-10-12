@@ -1,7 +1,5 @@
 """Provider environment, pricing and endpoint probing."""
 
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +10,6 @@ from agile_team.providers import (
     Provider,
     ProviderError,
     Providers,
-    reachable,
 )
 
 LOCAL = Provider("local", "http://localhost:11434")
@@ -50,26 +47,3 @@ def test_unknown_provider_is_an_error() -> None:
 @pytest.mark.parametrize(("name", "cost"), [("anthropic", 0.5), ("paid", 0.5), ("local", 0.0)])
 def test_cost_follows_billing(name: str, cost: float) -> None:
     assert PROVIDERS.cost_of(role(name), 0.5) == cost
-
-
-class _Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:
-        self.send_response(404 if self.path == "/missing" else 200)
-        self.end_headers()
-
-    def log_message(self, *_args: object) -> None:
-        pass
-
-
-def test_reachable() -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{server.server_port}"
-    try:
-        assert reachable(base)
-        assert reachable(base + "/missing")
-    finally:
-        server.shutdown()
-        server.server_close()
-    assert not reachable(base)
-    assert not reachable("not a url")

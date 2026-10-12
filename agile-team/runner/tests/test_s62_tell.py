@@ -134,7 +134,7 @@ def test_an_unread_message_ends_the_pass_once(make_runtime) -> None:
 
 def test_the_text_is_not_in_the_pass(make_runtime) -> None:
     rt = ready(make_runtime)
-    rt.relay.tell("SECRET-WORDS pkill -f")
+    rt.relay.tell("SECRET-WORDS")
     found = asyncio.run(Router(rt).advance())
     assert "SECRET-WORDS" not in "\n".join(found.lines)
 

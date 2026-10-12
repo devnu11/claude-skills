@@ -7,8 +7,8 @@ from agile_team.insights import friction_since_review, spend_by_role
 from agile_team.ledger import Entry, Ledger, Tokens
 
 
-def test_spend_by_role_sorted_with_per_step_figures(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "ledger.jsonl")
+def test_spend_by_role_sorted_with_per_step_figures(repo: Path) -> None:
+    led = Ledger(repo / "ledger.jsonl")
     led.record(Entry("quality-czar", "haiku", 0.2, tokens=Tokens(1, 1, 98), turns=20))
     led.record(Entry("architect", "opus", 1.5, tokens=Tokens(100, 10), turns=12))
     led.record(Entry("architect", "opus", 0.5, turns=8))

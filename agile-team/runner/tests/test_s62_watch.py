@@ -1,7 +1,6 @@
 """s62: ``agile-team watch`` polls the run files and prints one JSON line (V1-V8)."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -45,9 +44,9 @@ def put(run_dir: Path, status: RunStatus, reason: str | None = None) -> None:
     state_mod.save(run_dir, RunState(status=status, status_reason=reason))
     pid = run_dir / state_mod.PID_FILE
     if status is RunStatus.RUNNING:
-        pid.write_text(str(os.getpid()))
+        system.write_text(pid, str(system.pid()))
     else:
-        pid.unlink(missing_ok=True)
+        system.remove(pid)
 
 
 def remember(run_dir: Path, messages=0, status=None, reason=None) -> None:
@@ -55,7 +54,7 @@ def remember(run_dir: Path, messages=0, status=None, reason=None) -> None:
 
 
 def memory(run_dir: Path) -> dict:
-    return json.loads((run_dir / "liaison" / "watch.json").read_text())
+    return json.loads(system.read_text(run_dir / "liaison" / "watch.json"))
 
 
 def note(run_dir: Path, kind: str = "update", text: str = "hello") -> None:
@@ -69,9 +68,9 @@ def until(run_dir: Path, fake: FakePace, timeout=None) -> dict:
 
 
 @pytest.fixture
-def run_dir(tmp_path: Path) -> Path:
-    path = tmp_path / "run"
-    path.mkdir()
+def run_dir(scratch: Path) -> Path:
+    path = scratch / "run"
+    system.make_dirs(path)
     return path
 
 
@@ -132,11 +131,13 @@ def test_nothing_fires_against_the_record_itself() -> None:
 def test_a_torn_first_look_is_not_recorded(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     outbox = run_dir / "outbox.jsonl"
-    outbox.write_text('{"id": "m1", "kind": "upd')
+    system.write_text(outbox, '{"id": "m1", "kind": "upd')
 
     def complete() -> None:
-        outbox.write_text(
-            json.dumps({"id": "m1", "kind": "update", "text": "t", "stories": [], "at": 1.0}) + "\n"
+        system.write_text(
+            outbox,
+            json.dumps({"id": "m1", "kind": "update", "text": "t", "stories": [], "at": 1.0})
+            + "\n",
         )
 
     fake = FakePace(acts=[complete])
@@ -148,8 +149,8 @@ def test_a_torn_first_look_is_not_recorded(run_dir: Path) -> None:
 def test_the_deadline_counts_from_the_call(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     outbox = run_dir / "outbox.jsonl"
-    outbox.write_text("{")
-    fake = FakePace(acts=[lambda: outbox.write_text("")])
+    system.write_text(outbox, "{")
+    fake = FakePace(acts=[lambda: system.write_text(outbox, "")])
     line = until(run_dir, fake, timeout=2)
     assert line["triggers"] == ["heartbeat"] and fake.sleeps == [2.0]
 
@@ -235,7 +236,7 @@ def test_waiting_then_plain_running_is_quiet_but_moves_the_baseline(run_dir: Pat
 
 def test_a_dead_pid_reads_interrupted_and_fires(run_dir: Path) -> None:
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING))
-    (run_dir / state_mod.PID_FILE).write_text("999999999")
+    system.write_text(run_dir / state_mod.PID_FILE, "999999999")
     remember(run_dir, 0, "running")
     line = until(run_dir, FakePace())
     assert line["triggers"] == ["status"] and line["status"] == "interrupted"
@@ -255,11 +256,13 @@ def test_a_torn_outbox_line_is_not_a_look(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     remember(run_dir, 0, "running")
     outbox = run_dir / "outbox.jsonl"
-    outbox.write_text('{"id": "m1", "kind": "upd')
+    system.write_text(outbox, '{"id": "m1", "kind": "upd')
 
     def complete() -> None:
-        outbox.write_text(
-            json.dumps({"id": "m1", "kind": "update", "text": "t", "stories": [], "at": 1.0}) + "\n"
+        system.write_text(
+            outbox,
+            json.dumps({"id": "m1", "kind": "update", "text": "t", "stories": [], "at": 1.0})
+            + "\n",
         )
 
     fake = FakePace(acts=[complete])
@@ -269,7 +272,7 @@ def test_a_torn_outbox_line_is_not_a_look(run_dir: Path) -> None:
 
 def test_a_torn_line_never_ends_a_timed_watch(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
-    (run_dir / "outbox.jsonl").write_text("{")
+    system.write_text(run_dir / "outbox.jsonl", "{")
     fake = FakePace(limit=5)
     with pytest.raises(AssertionError):
         until(run_dir, fake, timeout=1)
@@ -279,27 +282,27 @@ def test_garbage_memory_acts_as_fresh(run_dir: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     note(run_dir)
     path = run_dir / "liaison" / "watch.json"
-    path.parent.mkdir(parents=True)
-    path.write_text("not json {")
+    system.make_dirs(path.parent)
+    system.write_text(path, "not json {")
     assert until(run_dir, FakePace())["triggers"] == ["message"]
 
 
-def test_seen_defaults_and_atomic_save(tmp_path: Path) -> None:
-    path = tmp_path / "a" / "watch.json"
+def test_seen_defaults_and_atomic_save(scratch: Path) -> None:
+    path = scratch / "a" / "watch.json"
     assert watch.Seen.load(path) is None
     watch.Seen(2, "idle", "r").save(path)
     assert watch.Seen.load(path) == watch.Seen(2, "idle", "r")
-    assert [p.name for p in path.parent.iterdir()] == ["watch.json"]
+    assert [p.name for p in system.list_dir(path.parent)] == ["watch.json"]
 
 
 def test_other_read_errors_are_fresh_memory(run_dir: Path) -> None:
     path = run_dir / "liaison" / "watch.json"
-    path.mkdir(parents=True)
+    system.make_dirs(path)
     assert watch.Seen.load(path) == watch.Seen()
 
 
 def test_look_is_none_on_a_torn_outbox(run_dir: Path) -> None:
-    (run_dir / "outbox.jsonl").write_text("{")
+    system.write_text(run_dir / "outbox.jsonl", "{")
     assert watch.look(run_dir) is None
 
 
@@ -330,6 +333,7 @@ def test_cmd_watch_prints_one_json_line(configured: Path, capsys) -> None:
     assert args.timeout_s == 0.0
     with pytest.MonkeyPatch.context() as mp:
         FakePace().patch(mp)
+        mp.setattr(cli, "repo_of", lambda _args: configured)  # cli resolves paths until s77
         assert cli.cmd_watch(args) == 0
     out = capsys.readouterr().out
     assert out.count("\n") == 1

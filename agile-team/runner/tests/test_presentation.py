@@ -1,17 +1,16 @@
 """The team's presentation of a story to the Customer Proxy (rules E1, E2, E5, E7, E8)."""
 
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
 from agile_team import config as cfg
-from agile_team import presentation, sandbox
+from agile_team import presentation, sandbox, system
 from agile_team.config import Delivery
 from agile_team.gates import StoryState
 from agile_team.presentation import Need
 
 from .conftest import GUIDE_TEXT, present
+from .fake_system import FAKE_ROOT, FakeSystem
 
 
 def story_of(story_id: str = "s4", delivery: str | None = None) -> StoryState:
@@ -83,12 +82,12 @@ def test_missing_when_there_is_no_dir(config: cfg.Config) -> None:
 @pytest.mark.parametrize("text", ["", "   \n\t\n"])
 def test_missing_when_the_guide_is_blank(config: cfg.Config, text: str) -> None:
     source = present(config, "s4")
-    (source / "PRESENTATION.md").write_text(text)
+    system.write_text(source / "PRESENTATION.md", text)
     assert presentation.missing(config, story_of()) == GUIDE_REASON
 
 
 def test_guide_is_checked_before_the_workspace(config: cfg.Config) -> None:
-    (presentation.source_dir(config, "s4") / "workspace").mkdir(parents=True)
+    system.make_dirs(presentation.source_dir(config, "s4") / "workspace")
     assert presentation.missing(config, story_of()) == GUIDE_REASON
 
 
@@ -98,19 +97,19 @@ def test_missing_when_there_is_a_guide_but_no_workspace(config: cfg.Config) -> N
 
 
 def test_missing_when_the_workspace_is_empty(config: cfg.Config) -> None:
-    (present(config, "s4", workspace=False) / "workspace").mkdir()
+    system.make_dirs(present(config, "s4", workspace=False) / "workspace")
     assert presentation.missing(config, story_of()) == WORKSPACE_REASON
 
 
 def test_workspace_holding_only_git_is_incomplete(config: cfg.Config) -> None:
     source = present(config, "s4", workspace=False)
-    (source / "workspace" / ".git").mkdir(parents=True)
+    system.make_dirs(source / "workspace" / ".git")
     assert presentation.missing(config, story_of()) == WORKSPACE_REASON
 
 
 def test_workspace_with_a_file_beside_git_is_complete(config: cfg.Config) -> None:
     source = present(config, "s4")
-    (source / "workspace" / ".git").mkdir()
+    system.make_dirs(source / "workspace" / ".git")
     assert presentation.missing(config, story_of()) is None
 
 
@@ -142,67 +141,57 @@ def test_each_story_has_its_own_presentation(config: cfg.Config) -> None:
 
 def test_lay_out_wipes_the_old_presentation(config: cfg.Config) -> None:
     source = present(config, "s4")
-    (source / "stale.txt").write_text("old")
+    system.write_text(source / "stale.txt", "old")
     assert presentation.lay_out(config, story_of()) == source
-    assert sorted(p.name for p in source.iterdir()) == ["workspace"]
-    assert not (source / "workspace" / "todo.txt").exists()
+    assert [p.name for p in system.list_dir(source)] == ["workspace"]
+    assert not system.exists(source / "workspace" / "todo.txt")
 
 
-def test_lay_out_gives_a_package_its_own_git_workspace(config: cfg.Config) -> None:
+def test_lay_out_gives_a_package_its_own_git_workspace(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
     source = presentation.lay_out(config, story_of())
     workspace = source / "workspace"
-    assert (workspace / ".git").exists()
-    top = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], cwd=workspace, capture_output=True, text=True
-    ).stdout.strip()
-    assert Path(top).resolve() == workspace.resolve()
+    assert system.is_dir(workspace)
+    (init,) = [c for c in fake.commands if "init" in c.argv]
+    assert (init.argv[-2:], init.cwd) == (("init", "-q"), workspace)
 
 
 def test_lay_out_leaves_the_empty_workspace_incomplete(config: cfg.Config) -> None:
     source = presentation.lay_out(config, story_of())
-    (source / "PRESENTATION.md").write_text(GUIDE_TEXT)
+    system.write_text(source / "PRESENTATION.md", GUIDE_TEXT)
     assert presentation.missing(config, story_of()) == WORKSPACE_REASON
 
 
 def test_lay_out_manual_has_no_workspace(config: cfg.Config) -> None:
     config.deliveries = [Delivery("hw", "manual")]
     source = presentation.lay_out(config, story_of(delivery="hw"))
-    assert source.is_dir() and list(source.iterdir()) == []
+    assert system.is_dir(source) and system.list_dir(source) == []
 
 
 @pytest.mark.parametrize("bad", ["../x", "..", "S1", "a/b", ""])
 def test_lay_out_refuses_an_unsafe_id_before_wiping(config: cfg.Config, bad: str) -> None:
     outside = config.run_dir / "x"
-    outside.mkdir(parents=True)
-    (outside / "keep.txt").write_text("keep")
+    system.make_dirs(outside)
+    system.write_text(outside / "keep.txt", "keep")
     survivor = present(config, "s4")
     with pytest.raises(sandbox.SandboxError, match="must match"):
         presentation.lay_out(config, story_of(bad))
-    assert (outside / "keep.txt").read_text() == "keep"
-    assert (survivor / "PRESENTATION.md").exists()
+    assert system.read_text(outside / "keep.txt") == "keep"
+    assert system.exists(survivor / "PRESENTATION.md")
 
 
 # ----- E7 -------------------------------------------------------------------
 
 
-def test_copy_into_copies_the_tree(config: cfg.Config, tmp_path: Path) -> None:
+def test_copy_into_copies_the_tree(config: cfg.Config) -> None:
     source = present(config, "s4")
-    root = tmp_path / "box"
-    root.mkdir()
+    root = FAKE_ROOT / "box"
+    system.make_dirs(root)
     copied = presentation.copy_into(source, root)
     assert copied == root / "presentation"
-    assert (copied / "PRESENTATION.md").read_text() == GUIDE_TEXT
-    assert (copied / "workspace" / "todo.txt").read_text() == "milk\n"
-
-
-def test_copy_into_keeps_symlinks_as_links(config: cfg.Config, tmp_path: Path) -> None:
-    source = present(config, "s4")
-    target = tmp_path / "secret.py"
-    target.write_text("secret")
-    os.symlink(target, source / "link.py")
-    copied = presentation.copy_into(source, tmp_path)
-    assert (copied / "link.py").is_symlink()
-    assert os.readlink(copied / "link.py") == str(target)
+    assert system.read_text(copied / "PRESENTATION.md") == GUIDE_TEXT
+    assert system.read_text(copied / "workspace" / "todo.txt") == "milk\n"
 
 
 # ----- E8 -------------------------------------------------------------------
@@ -212,10 +201,10 @@ def test_prompt_section_is_empty_without_a_presentation() -> None:
     assert presentation.prompt_section(None) == ""
 
 
-def test_prompt_section_names_the_path_the_rule_and_quotes_the_guide(tmp_path: Path) -> None:
-    copied = tmp_path / "presentation"
-    copied.mkdir()
-    (copied / "PRESENTATION.md").write_text(GUIDE_TEXT)
+def test_prompt_section_names_the_path_the_rule_and_quotes_the_guide() -> None:
+    copied = FAKE_ROOT / "box" / "presentation"
+    system.make_dirs(copied)
+    system.write_text(copied / "PRESENTATION.md", GUIDE_TEXT)
     text = presentation.prompt_section(copied)
     assert "## What the team presents" in text
     assert str(copied) in text

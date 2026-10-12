@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from agile_team import system
 from agile_team.paths import (
     could_climb,
     glob_to_regex,
@@ -80,9 +81,8 @@ def test_under_root(path: str, root: str, expected: bool) -> None:
     assert under_root(path, root) is expected
 
 
-def test_repo_relative(tmp_path: Path) -> None:
-    repo = tmp_path / "r"
-    (repo / "sub").mkdir(parents=True)
+def test_repo_relative(repo: Path) -> None:
+    system.make_dirs(repo / "sub")
     assert repo_relative(repo, resolve_in(repo, "a.py")) == "a.py"
     assert repo_relative(repo, resolve_in(repo, str(repo / "sub/x"))) == "sub/x"
     assert repo_relative(repo, resolve_in(repo / "sub", "../x")) == "x"

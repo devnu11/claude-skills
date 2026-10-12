@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from agile_team import roles
+from agile_team import roles, system
 from agile_team.roles import RoleBook, RoleError
 
 BUILTIN = {
@@ -20,8 +20,8 @@ def book(repo_files=None, repo: Path = Path()) -> RoleBook:
     return RoleBook(dict(BUILTIN), repo_files or {}, {}, repo)
 
 
-def test_every_builtin_role_resolves(tmp_path: Path) -> None:
-    real = RoleBook.for_repo(tmp_path, {})
+def test_every_builtin_role_resolves(repo: Path) -> None:
+    real = RoleBook.for_repo(repo, {})
     assert "product-owner" in real.names() and "_shared" not in real.names()
     for name in real.names():
         role = real.resolve(name)
@@ -91,8 +91,8 @@ def test_parse_role_errors() -> None:
     assert roles.parse_role("x", "just text").body == "just text"
 
 
-def test_load_dir_missing(tmp_path: Path) -> None:
-    assert roles.load_dir(tmp_path / "none") == {}
+def test_load_dir_missing(repo: Path) -> None:
+    assert roles.load_dir(repo / "none") == {}
 
 
 def test_expand_globs() -> None:
@@ -103,11 +103,11 @@ def test_expand_globs() -> None:
         roles.expand_globs(["{nope}"], values)
 
 
-def test_system_prompt_order(tmp_path: Path) -> None:
-    (tmp_path / ".team/briefs").mkdir(parents=True)
-    (tmp_path / ".team/CLAUDE.md").write_text("CHARTER")
-    (tmp_path / ".team/briefs/child.md").write_text("BRIEF")
-    b = book({"child": "ADDENDUM"}, tmp_path)
+def test_system_prompt_order(repo: Path) -> None:
+    system.make_dirs(repo / ".team/briefs")
+    system.write_text(repo / ".team/CLAUDE.md", "CHARTER")
+    system.write_text(repo / ".team/briefs/child.md", "BRIEF")
+    b = book({"child": "ADDENDUM"}, repo)
     prompt = b.system_prompt(b.resolve("child"), "SCOPE")
     order = [
         prompt.index(s)
@@ -116,8 +116,8 @@ def test_system_prompt_order(tmp_path: Path) -> None:
     assert order == sorted(order)
 
 
-def test_system_prompt_skips_missing(tmp_path: Path) -> None:
-    b = book(repo=tmp_path)
+def test_system_prompt_skips_missing(repo: Path) -> None:
+    b = book(repo=repo)
     prompt = b.system_prompt(b.resolve("base"), "")
     assert "charter" not in prompt and "Scribe" not in prompt
 
@@ -166,8 +166,8 @@ def test_parse_handoff_none() -> None:
         roles.parse_handoff(None)  # type: ignore[arg-type]
 
 
-def test_enabled_names(tmp_path: Path) -> None:
-    real = RoleBook.for_repo(tmp_path, {"integration-tester": {"enabled": False}})
+def test_enabled_names(repo: Path) -> None:
+    real = RoleBook.for_repo(repo, {"integration-tester": {"enabled": False}})
     names = real.enabled_names()
     assert "integration-tester" not in names and "developer" in names
 
@@ -206,24 +206,24 @@ def test_stub_adds_nothing_and_shared_addendum_applies() -> None:
     assert b.layers("nothing") == {"builtin": None, "global": None, "repo": None}
 
 
-def test_user_roles_dir(tmp_path: Path) -> None:
-    assert roles.user_roles_dir(tmp_path, {}) == tmp_path / ".config/agile-team/roles"
-    assert roles.user_roles_dir(tmp_path, {"AGILE_TEAM_HOME": "/x"}) == Path("/x/roles")
+def test_user_roles_dir(repo: Path) -> None:
+    assert roles.user_roles_dir(repo, {}) == repo / ".config/agile-team/roles"
+    assert roles.user_roles_dir(repo, {"AGILE_TEAM_HOME": "/x"}) == Path("/x/roles")
 
 
-def test_scaffold_writes_missing_stubs_only(tmp_path: Path) -> None:
-    real = RoleBook.for_repo(tmp_path, {})
-    target = tmp_path / "roles"
-    target.mkdir()
-    (target / "architect.md").write_text("mine")
+def test_scaffold_writes_missing_stubs_only(repo: Path) -> None:
+    real = RoleBook.for_repo(repo, {})
+    target = repo / "roles"
+    system.make_dirs(target)
+    system.write_text(target / "architect.md", "mine")
     created = real.scaffold(target, roles.Layer.GLOBAL)
     names = {p.stem for p in created}
     assert "_shared" in names and "developer" in names and "architect" not in names
-    stub = (target / "developer.md").read_text()
+    stub = system.read_text(target / "developer.md")
     assert "global layer" in stub and "Write plain Markdown" in stub
-    assert (target / "architect.md").read_text() == "mine"
+    assert system.read_text(target / "architect.md") == "mine"
     assert real.scaffold(target, roles.Layer.GLOBAL) == []
-    reloaded = RoleBook.for_repo(tmp_path, {}, target)
+    reloaded = RoleBook.for_repo(repo, {}, target)
     assert reloaded.resolve("developer").body == real.resolve("developer").body
     assert reloaded.addendum("architect") == "mine"
 
@@ -231,21 +231,21 @@ def test_scaffold_writes_missing_stubs_only(tmp_path: Path) -> None:
 # ----- s13: the role rules state the handover (AC1, AC2, AC4, AC5) ----------
 
 
-def test_integration_tester_builds_the_presentation(tmp_path: Path) -> None:
-    tester = RoleBook.for_repo(tmp_path, {}).resolve("integration-tester")
+def test_integration_tester_builds_the_presentation(repo: Path) -> None:
+    tester = RoleBook.for_repo(repo, {}).resolve("integration-tester")
     assert ".team/run/presentation/**" in tester.write and "{e2e}" in tester.write
     assert "PRESENTATION.md" in tester.body and "live-status.json" in tester.body
 
 
-def test_customer_proxy_never_builds_its_own_environment(tmp_path: Path) -> None:
-    proxy = RoleBook.for_repo(tmp_path, {}).resolve("customer-proxy")
+def test_customer_proxy_never_builds_its_own_environment(repo: Path) -> None:
+    proxy = RoleBook.for_repo(repo, {}).resolve("customer-proxy")
     assert "changes_requested" in proxy.body and "integration-tester" in proxy.body
     assert "never build" in proxy.body
     assert "Read it, then rewrite it" in proxy.body
 
 
-def test_product_owner_knows_the_returned_status(tmp_path: Path) -> None:
-    po = RoleBook.for_repo(tmp_path, {}).resolve("product-owner")
+def test_product_owner_knows_the_returned_status(repo: Path) -> None:
+    po = RoleBook.for_repo(repo, {}).resolve("product-owner")
     assert "returned" in po.body
 
 
@@ -274,8 +274,8 @@ def test_handoff_developer_must_be_a_string(value: str) -> None:
         roles.parse_handoff(text)
 
 
-def test_product_owner_defaults_to_sonnet(tmp_path: Path) -> None:
-    po = RoleBook.for_repo(tmp_path, {}).resolve("product-owner")
+def test_product_owner_defaults_to_sonnet(repo: Path) -> None:
+    po = RoleBook.for_repo(repo, {}).resolve("product-owner")
     assert po.model == "sonnet"
     assert po.description == (
         "Writes the stories, starts sprints and makes the team's judgement calls; "
@@ -283,8 +283,8 @@ def test_product_owner_defaults_to_sonnet(tmp_path: Path) -> None:
     )
 
 
-def test_product_owner_body_describes_the_split(tmp_path: Path) -> None:
-    body = RoleBook.for_repo(tmp_path, {}).resolve("product-owner").body
+def test_product_owner_body_describes_the_split(repo: Path) -> None:
+    body = RoleBook.for_repo(repo, {}).resolve("product-owner").body
     for text in ("continue_story", "set_developer", "standard brief", "judgement"):
         assert text in body
     assert "Run the `scribe` after each story" not in body
@@ -293,15 +293,15 @@ def test_product_owner_body_describes_the_split(tmp_path: Path) -> None:
     assert "the runner sends it back to e2e" in body
 
 
-def test_architect_names_the_developer_in_the_handoff(tmp_path: Path) -> None:
-    body = RoleBook.for_repo(tmp_path, {}).resolve("architect").body
+def test_architect_names_the_developer_in_the_handoff(repo: Path) -> None:
+    body = RoleBook.for_repo(repo, {}).resolve("architect").body
     assert '"developer": "developer-cli"' in body
     assert "in your summary" not in body
     assert "story index" in body
 
 
-def test_devops_scopes_its_test_runs(tmp_path: Path) -> None:
-    body = RoleBook.for_repo(tmp_path, {}).resolve("devops").body
+def test_devops_scopes_its_test_runs(repo: Path) -> None:
+    body = RoleBook.for_repo(repo, {}).resolve("devops").body
     text = " ".join(body.split())
     for phrase in (
         "Run only what proves your change, normally one named test",

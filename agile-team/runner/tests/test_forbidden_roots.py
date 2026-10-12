@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from agile_team import config as cfg
-from agile_team import guard, sandbox
+from agile_team import guard, sandbox, system
 from agile_team.config import Delivery
 from agile_team.guard import Scope, ToolCall
 
@@ -20,45 +20,45 @@ REPO_ROOTS = [
 ]
 
 
-def nested_config(tmp_path: Path) -> cfg.Config:
+def nested_config(repo: Path) -> cfg.Config:
     raw = {
         "team": {"docs_dir": "agile-team/docs"},
         "toolchain": {"globs": REPO_GLOBS},
         "delivery": [{"name": "cli", "kind": "package"}],
     }
-    return cfg.from_raw(tmp_path, raw)
+    return cfg.from_raw(repo, raw)
 
 
-def scope_with(tmp_path: Path, roots: list[str]) -> Scope:
-    return Scope("customer-proxy", tmp_path, [], cwd=tmp_path, bash_forbidden=roots)
+def scope_with(repo: Path, roots: list[str]) -> Scope:
+    return Scope("customer-proxy", repo, [], cwd=repo, bash_forbidden=roots)
 
 
 def bash(scope: Scope, command: str) -> str | None:
     return guard.check_bash(scope, command)
 
 
-def test_repo_roots(tmp_path: Path) -> None:
-    assert sandbox.forbidden_roots(nested_config(tmp_path)) == REPO_ROOTS
+def test_repo_roots(repo: Path) -> None:
+    assert sandbox.forbidden_roots(nested_config(repo)) == REPO_ROOTS
 
 
-def test_python_preset_roots(tmp_path: Path) -> None:
+def test_python_preset_roots(repo: Path) -> None:
     globs = {"source": ["src/**"], "tests": ["tests/**", "!tests/e2e/**"], "e2e": ["tests/e2e/**"]}
-    c = cfg.from_raw(tmp_path, {"toolchain": {"globs": globs}})
+    c = cfg.from_raw(repo, {"toolchain": {"globs": globs}})
     assert sandbox.forbidden_roots(c) == ["src", "tests"]
 
 
-def test_duplicate_globs_give_one_root(tmp_path: Path) -> None:
+def test_duplicate_globs_give_one_root(repo: Path) -> None:
     globs = {"source": ["src/**", "src/**", "src/a/*.py"]}
-    c = cfg.from_raw(tmp_path, {"toolchain": {"globs": globs}})
+    c = cfg.from_raw(repo, {"toolchain": {"globs": globs}})
     assert sandbox.forbidden_roots(c) == ["src"]
 
 
-def test_deny_rules_are_per_root_and_skip_docs(tmp_path: Path) -> None:
-    c = nested_config(tmp_path)
+def test_deny_rules_are_per_root_and_skip_docs(repo: Path) -> None:
+    c = nested_config(repo)
     d = Delivery("cli", "package")
     c.deliveries = [d]
     s = sandbox.os_sandbox_settings(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
-    repo = str(tmp_path.resolve())
+    repo = str(system.resolve(repo))
     expected = [
         rule for r in REPO_ROOTS for rule in (f"Read(/{repo}/{r})", f"Read(/{repo}/{r}/**)")
     ]
@@ -149,12 +149,12 @@ NESTED_CASES = [(c, True) for c in NESTED_ALLOW] + [(c, False) for c in NESTED_D
 
 
 @pytest.mark.parametrize(("command", "allowed"), NESTED_CASES)
-def test_nested_bash_tokens(tmp_path: Path, command: str, allowed: bool) -> None:
-    assert (bash(scope_with(tmp_path, REPO_ROOTS), command) is None) is allowed
+def test_nested_bash_tokens(repo: Path, command: str, allowed: bool) -> None:
+    assert (bash(scope_with(repo, REPO_ROOTS), command) is None) is allowed
 
 
-def test_bare_cli_commands_allowed(tmp_path: Path) -> None:
-    s = scope_with(tmp_path, REPO_ROOTS)
+def test_bare_cli_commands_allowed(repo: Path) -> None:
+    s = scope_with(repo, REPO_ROOTS)
     assert bash(s, "agile-team status") is None
     assert bash(s, "which agile-team") is None
     assert bash(s, "ls agile-team/runner/tests")
@@ -185,16 +185,16 @@ def test_bare_cli_commands_allowed(tmp_path: Path) -> None:
         ("ls [a-z]*", False),
     ],
 )
-def test_flat_layout_parity(tmp_path: Path, command: str, allowed: bool) -> None:
-    assert (bash(scope_with(tmp_path, ["src", "tests"]), command) is None) is allowed
+def test_flat_layout_parity(repo: Path, command: str, allowed: bool) -> None:
+    assert (bash(scope_with(repo, ["src", "tests"]), command) is None) is allowed
 
 
-def test_proxy_end_to_end_in_nested_layout(tmp_path: Path) -> None:
-    c = nested_config(tmp_path)
+def test_proxy_end_to_end_in_nested_layout(repo: Path) -> None:
+    c = nested_config(repo)
     d = Delivery("cli", "package")
     c.deliveries = [d]
     scope = sandbox.proxy_scope(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
-    read = lambda p: guard.check_tool_use(scope, ToolCall("Read", {"file_path": str(tmp_path / p)}))  # noqa: E731
+    read = lambda p: guard.check_tool_use(scope, ToolCall("Read", {"file_path": str(repo / p)}))  # noqa: E731
     run = lambda cmd: guard.check_tool_use(scope, ToolCall("Bash", {"command": cmd}))  # noqa: E731
     assert read("agile-team/docs/customer/x.md") is None
     assert read("agile-team/runner/agile_team/cli.py")
@@ -220,26 +220,26 @@ CONTINUATION_ALLOW = [
 
 
 @pytest.mark.parametrize("command", CONTINUATION_DENY)
-def test_nested_line_continuation_denied(tmp_path: Path, command: str) -> None:
+def test_nested_line_continuation_denied(repo: Path, command: str) -> None:
     """W0 joins `\\`-newline before W1-W6, so a split word cannot hide a root or `..`."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command)
+    assert bash(scope_with(repo, REPO_ROOTS), command)
 
 
 @pytest.mark.parametrize("command", CONTINUATION_ALLOW)
-def test_nested_line_continuation_allowed(tmp_path: Path, command: str) -> None:
+def test_nested_line_continuation_allowed(repo: Path, command: str) -> None:
     """W0 must not over-deny a joined word that stays outside every root."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command) is None
+    assert bash(scope_with(repo, REPO_ROOTS), command) is None
 
 
-def test_flat_line_continuation_denied(tmp_path: Path) -> None:
-    assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat s{NL}rc/x")
-    assert bash(scope_with(tmp_path, ["src", "tests"]), f"cat tests.t{NL}xt") is None
+def test_flat_line_continuation_denied(repo: Path) -> None:
+    assert bash(scope_with(repo, ["src", "tests"]), f"cat s{NL}rc/x")
+    assert bash(scope_with(repo, ["src", "tests"]), f"cat tests.t{NL}xt") is None
 
 
-def test_proxy_even_backslash_run_keeps_newline(tmp_path: Path) -> None:
+def test_proxy_even_backslash_run_keeps_newline(repo: Path) -> None:
     """W0 (review D3): an even run keeps the newline, so `git commit` runs on its own."""
     command = "echo hi \\\\\ngit commit -m x"
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command)
+    assert bash(scope_with(repo, REPO_ROOTS), command)
 
 
 COMMENT_DENY = [
@@ -257,12 +257,12 @@ COMMENT_ALLOW = [
 
 
 @pytest.mark.parametrize("command", COMMENT_DENY)
-def test_proxy_comment_continuation_denied(tmp_path: Path, command: str) -> None:
+def test_proxy_comment_continuation_denied(repo: Path, command: str) -> None:
     """D4/D5: a `#` comment ending in `\\` hides neither git nor a split root."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command)
+    assert bash(scope_with(repo, REPO_ROOTS), command)
 
 
 @pytest.mark.parametrize("command", COMMENT_ALLOW)
-def test_proxy_comment_continuation_allowed(tmp_path: Path, command: str) -> None:
+def test_proxy_comment_continuation_allowed(repo: Path, command: str) -> None:
     """D4/D5: harmless commands with `#` or a trailing `\\` stay allowed."""
-    assert bash(scope_with(tmp_path, REPO_ROOTS), command) is None
+    assert bash(scope_with(repo, REPO_ROOTS), command) is None

@@ -116,15 +116,15 @@ def test_runner_fault_blocks():
     assert st.status is StoryStatus.BLOCKED
 
 
-def test_config_repeat(tmp_path):
+def test_config_repeat(repo):
     known = cfg.Known({"developer"}, {"package", "web", "harness"})
     assert cfg.Gates().repeat == 2
     raw = {"gates": {"repeat": 1}}
-    problems = cfg.validate(cfg.from_raw(tmp_path, raw), known)
+    problems = cfg.validate(cfg.from_raw(repo, raw), known)
     assert "gates.repeat must be at least 2" in problems
 
 
-def test_state_roundtrip_streak(tmp_path):
+def test_state_roundtrip_streak():
     st = story("tests")
     st.streak, st.repeated = [_sb("x")], "x"
     data = dataclasses.asdict(st)

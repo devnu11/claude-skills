@@ -405,3 +405,14 @@ def test_make_runtime_wires_the_gh_pr_service(configured: Path, key_home: Path) 
     rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
     assert isinstance(rt.prs, upstream.GhPrs)
     assert rt.upstream.target == "origin/main"
+
+
+def test_cli_resolves_the_repo_once(tmp_path: Path, monkeypatch) -> None:
+    """s26 L1 (cli resolves paths itself until s77, so this stays in the real world)."""
+    import argparse
+
+    monkeypatch.chdir(tmp_path)
+    args = argparse.Namespace(repo=".", home=str(tmp_path / "h"))
+    assert cli.repo_of(args) == tmp_path.resolve()
+    assert cli.Place.of(args).repo == tmp_path.resolve()
+    assert cli.Place.of(args).repo.is_absolute()
