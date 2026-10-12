@@ -50,6 +50,10 @@ def kind(command: str) -> Run | None:
         "pytest tests/test_x.py::test_y",
         UV + "pytest -q tests/test_x.py",
         "pytest -q tests/test_a.py tests/test_b.py::t",
+        "pytest tests/test_a.py tests/test_b.py::t",
+        "pytest --tb short tests/test_x.py",
+        "pytest --maxfail 1 -x tests/test_x.py",
+        "PYTHONPATH=. pytest tests/test_x.py",
     ],
 )
 def test_named_tests_are_targeted(command: str) -> None:
@@ -73,6 +77,16 @@ def test_named_tests_are_targeted(command: str) -> None:
         "uv run pytest -x",
         "timeout 600 uv run pytest",
         "/usr/bin/pytest -q",
+        "pytest tests/test_x.py tests/",
+        "pytest tests/test_x.py .",
+        "pytest tests/test_x.py -- tests/e2e",
+        "pytest --foo 1 tests/test_x.py",
+        "PYTHONPATH=. pytest -q",
+        "FOO=1 uv run pytest",
+        "A=1 B=2 python -m pytest",
+        "exec pytest",
+        "command pytest -q",
+        "xargs pytest",
     ],
 )
 def test_unnamed_runs_are_full(command: str) -> None:
@@ -86,6 +100,7 @@ def test_unnamed_runs_are_full(command: str) -> None:
         "pytest --cov=agile_team tests/test_x.py",
         "uv run pytest --cov-report=term",
         "coverage run -m pytest tests/test_x.py",
+        "COVERAGE_FILE=x pytest --cov",
     ],
 )
 def test_coverage_runs(command: str) -> None:
@@ -94,7 +109,7 @@ def test_coverage_runs(command: str) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["grep -n pytest x.py", "rg -- --cov", "echo pytest", "ls tests", "coverage report", ""],
+    ["grep -n pytest x.py", "rg -- --cov", "echo pytest", "ls tests", "coverage report", "", "FOO=1 echo pytest", "FOO=1"],
 )
 def test_other_commands_start_no_run(command: str) -> None:
     assert kind(command) is None
