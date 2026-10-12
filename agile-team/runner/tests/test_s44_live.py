@@ -226,8 +226,8 @@ def test_heartbeat_shape_and_atomic_write(tmp_path: Path) -> None:
     meter.take(reply("m1", usage(2, 7), ("Bash",), "claude-sonnet-4-5"))
     beat = beat_file(tmp_path)
     pulse2.end()
-    assert list(beat) == ["version", "pid", "beat", "at", "started_at", "chore", "step"]
-    assert beat["version"] == 1 and beat["pid"] == 4242 and beat["beat"] == "beating"
+    assert list(beat) == ["version", "pid", "beat", "at", "mono", "started_at", "chore", "step"]
+    assert beat["version"] == 2 and beat["pid"] == 4242 and beat["beat"] == "beating"
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
     assert list(beat["step"]) == [
         "role", "story", "step", "started_at", "turn", "model", "configured_model",
