@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import re
-import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from . import system
 from .state import RunStatus
 
 CRASH_LOG = "crash.log"
@@ -152,8 +152,7 @@ def classify(exc: BaseException) -> Halt:
 
 def log_traceback(run_dir: Path, exc: BaseException) -> None:
     """Append ``exc``'s traceback to ``crash.log`` under a timestamped header."""
-    run_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    system.make_dirs(run_dir)
+    stamp = system.local_time("%Y-%m-%d %H:%M:%S")
     entry = f"--- {stamp} {type(exc).__name__}\n" + "".join(traceback.format_exception(exc))
-    with (run_dir / CRASH_LOG).open("a") as log:
-        log.write(entry + "\n")
+    system.append_text(run_dir / CRASH_LOG, entry + "\n")

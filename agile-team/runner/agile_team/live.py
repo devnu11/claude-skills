@@ -15,6 +15,7 @@ from typing import Any
 
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
+from . import system
 from .events import INTERRUPTED, Event, EventKind
 from .ledger import Tokens
 from .providers import Billing
@@ -59,7 +60,7 @@ def estimate(model: str, tokens: Tokens) -> float | None:
 def read_heartbeat(run_dir: Path) -> dict[str, Any] | None:
     """The heartbeat file as parsed; ``None`` when missing, torn or not an object."""
     try:
-        data = json.loads((run_dir / HEARTBEAT).read_text())
+        data = json.loads(system.read_text(run_dir / HEARTBEAT))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None

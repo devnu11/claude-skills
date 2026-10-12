@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from . import system
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .config import PIPELINE_STEPS
 from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
@@ -190,21 +190,21 @@ def _nested(cls: Callable[..., Any], data: dict[str, Any] | None) -> Any:
 
 def load(run_dir: Path) -> RunState:
     path = run_dir / STATE_FILE
-    return RunState.from_json(path.read_text()) if path.is_file() else RunState()
+    return RunState.from_json(system.read_text(path)) if system.is_file(path) else RunState()
 
 
 def save(run_dir: Path, state: RunState) -> None:
     """Write atomically so a crash mid-write never leaves a torn state file."""
-    run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(run_dir)
     tmp = run_dir / f"{STATE_FILE}.tmp"
-    tmp.write_text(state.to_json())
-    tmp.replace(run_dir / STATE_FILE)
+    system.write_text(tmp, state.to_json())
+    system.replace(tmp, run_dir / STATE_FILE)
 
 
 def runner_pid(run_dir: Path) -> int | None:
     """The pid in ``runner.pid``; ``None`` when missing, unreadable or not positive."""
     try:
-        pid = int((run_dir / PID_FILE).read_text().strip())
+        pid = int(system.read_text(run_dir / PID_FILE).strip())
     except (OSError, ValueError):
         return None
     return pid if pid > 0 else None
@@ -213,7 +213,7 @@ def runner_pid(run_dir: Path) -> int | None:
 def pid_alive(pid: int) -> bool:
     """Whether a process with ``pid`` exists."""
     try:
-        os.kill(pid, 0)
+        system.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:

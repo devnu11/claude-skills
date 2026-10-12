@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import system
 from .commands import DEFAULT_TIMEOUT_S
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .providers import Billing, Provider, ProviderKind
@@ -189,10 +190,10 @@ def config_path(repo: Path) -> Path:
 def read_raw(repo: Path) -> dict[str, Any]:
     """Parse the config file into plain TOML data."""
     path = config_path(repo)
-    if not path.is_file():
+    if not system.is_file(path):
         raise ConfigError(f"{CONFIG_NAME} not found in {repo}; run `agile-team init`")
     try:
-        return tomllib.loads(path.read_text())
+        return tomllib.loads(system.read_text(path))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{CONFIG_NAME}: {exc}") from exc
 

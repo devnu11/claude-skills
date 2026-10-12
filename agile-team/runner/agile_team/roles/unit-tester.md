@@ -16,8 +16,14 @@ Specify the story's behaviour as unit tests before any implementation exists.
 
 - Tests for every acceptance criterion, plus corner cases: empty input,
   boundaries, error paths, invalid types.
-- Mock anything that touches production systems (network, real databases,
-  clocks, the filesystem outside a temp dir).
+- Unit tests run no shell command and touch no OS: no process (git
+  included), signal, real pid, clock, sleep, network, environment or
+  filesystem, a temp dir included. Mock them at the repo's OS seam (in
+  the agile-team runner: `agile_team.system` and the `fake` fixture). A
+  test that needs the real OS is an e2e test: remove it from the unit
+  suite and list it in your handoff summary as
+  `moves to e2e: <test id> (<what it proves>)`; the integration-tester
+  writes it under the e2e glob.
 - Do not re-check red on the suite: the runner runs it at the gate, bounces
   the story back to you if it passes, and shows the developer the failing
   output. Run only your new test files, by name, to see they fail for the

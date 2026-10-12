@@ -10,11 +10,11 @@ stories a question names are blocked while it is open.
 from __future__ import annotations
 
 import json
-import os
 import re
-import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from . import system
 
 WAIT_LINE = "{story} waits on {ids}"
 RUN_WAIT_LINE = "the run waits on {ids}"
@@ -89,20 +89,22 @@ class Relay:
 
     def tell(self, text: str) -> Told:
         """Queue ``text`` as the next ``t<N>.md``: written whole, never overwriting (T2)."""
-        self.messages_dir.mkdir(parents=True, exist_ok=True)
-        draft = self.messages_dir / f".draft-{os.getpid()}"
+        system.make_dirs(self.messages_dir)
+        draft = self.messages_dir / f".draft-{system.pid()}"
         try:
-            draft.write_text(text)
+            system.write_text(draft, text)
             return self._publish(draft)
         finally:
-            draft.unlink(missing_ok=True)
+            system.remove(draft)
 
     def told(self) -> list[Told]:
         """Every queued message, in number order; other files are ignored (T2)."""
-        if not self.messages_dir.is_dir():
+        if not system.is_dir(self.messages_dir):
             return []
         found = [
-            (int(m[1]), p) for p in self.messages_dir.iterdir() if (m := TOLD_NAME.match(p.name))
+            (int(m[1]), p)
+            for p in system.list_dir(self.messages_dir)
+            if (m := TOLD_NAME.match(p.name))
         ]
         return [Told(f"t{n}", p) for n, p in sorted(found)]
 
@@ -114,7 +116,7 @@ class Relay:
         n = self._next_number()
         while True:
             try:
-                self._told_at(n).path.hardlink_to(draft)
+                system.hard_link(self._told_at(n).path, draft)
                 return self._told_at(n)
             except FileExistsError:
                 n += 1
@@ -130,7 +132,7 @@ class Relay:
         if note.kind not in KINDS:
             raise RelayError(f"kind must be one of {KINDS}")
         msg_id = f"m{len(self.messages()) + 1}"
-        msg = Message(msg_id, note.kind, note.text, list(note.stories), time.time())
+        msg = Message(msg_id, note.kind, note.text, list(note.stories), system.now())
         _append(self.outbox, asdict(msg))
         return msg
 
@@ -139,7 +141,7 @@ class Relay:
         question = next((m for m in self.messages() if m.id == msg_id), None)
         if question is None or question.kind != "question":
             raise RelayError(f"no question with id {msg_id!r}")
-        ans = Answer(msg_id, text, time.time())
+        ans = Answer(msg_id, text, system.now())
         _append(self.inbox, asdict(ans))
         return ans
 
@@ -176,12 +178,11 @@ class Relay:
 
 
 def _append(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as fh:
-        fh.write(json.dumps(data) + "\n")
+    system.make_dirs(path.parent)
+    system.append_text(path, json.dumps(data) + "\n")
 
 
 def _read(path: Path) -> list[dict]:
-    if not path.is_file():
+    if not system.is_file(path):
         return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in system.read_text(path).splitlines() if line.strip()]

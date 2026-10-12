@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -11,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config as config_mod
-from . import health, relay
+from . import health, relay, system
 from . import state as state_mod
 from .relay import Message, Relay
 
@@ -33,16 +32,16 @@ class Seen:
     def load(cls, path: Path) -> Seen:
         """Read the memory; a missing or unreadable file means fresh memory."""
         try:
-            return cls(**json.loads(path.read_text()))
+            return cls(**json.loads(system.read_text(path)))
         except (OSError, ValueError, TypeError):
             return cls()
 
     def save(self, path: Path) -> None:
         """Write atomically (tmp + replace)."""
-        path.parent.mkdir(parents=True, exist_ok=True)
+        system.make_dirs(path.parent)
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(asdict(self)))
-        os.replace(tmp, path)
+        system.write_text(tmp, json.dumps(asdict(self)))
+        system.replace(tmp, path)
 
 
 @dataclass(frozen=True)
@@ -129,7 +128,10 @@ def line(triggers: list[str], basis: Basis) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class Pace:
-    """How the watch waits; tests pass fakes (V8)."""
+    """How a test-built watch waits (s62 tests); ``None`` on a Watcher means the ``system`` seam.
+
+    Deferred to s76 with ``test_s62_watch``: it goes once that file runs on the fake.
+    """
 
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
@@ -143,7 +145,7 @@ class Watcher:
     """Polls one run directory until something needs the liaison."""
 
     run_dir: Path
-    pace: Pace = DEFAULT_PACE
+    pace: Pace | None = None
 
     @property
     def memory(self) -> Path:
@@ -159,16 +161,22 @@ class Watcher:
                 now.seen().save(self.memory)
                 return line(ended, Basis(seen, now))
             seen = self._next(seen, now)
-            self.pace.sleep(POLL_S)
+            self._sleep(POLL_S)
+
+    def _sleep(self, seconds: float) -> None:
+        (self.pace.sleep if self.pace else system.sleep)(seconds)
+
+    def _clock(self) -> float:
+        return (self.pace.clock if self.pace else system.monotonic)()
 
     def _deadline(self, timeout_s: float | None) -> float | None:
-        return None if timeout_s is None else self.pace.clock() + timeout_s
+        return None if timeout_s is None else self._clock() + timeout_s
 
     def _ended(self, seen: Seen, now: Look | None, deadline: float | None) -> list[str]:
         if now is None:
             return []
         names = fired(seen, now)
-        late = deadline is not None and self.pace.clock() >= deadline
+        late = deadline is not None and self._clock() >= deadline
         return names or ([HEARTBEAT] if late else [])
 
     def _next(self, seen: Seen, now: Look | None) -> Seen:

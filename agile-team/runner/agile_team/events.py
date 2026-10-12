@@ -8,11 +8,12 @@ stay in the outbox and inbox; the dashboard merges them in by time.
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+
+from . import system
 
 EVENTS = "events.jsonl"
 INTERRUPTED = "interrupted"  # step-end status of a step cut short (s44)
@@ -64,16 +65,15 @@ class EventLog:
 
     def emit(self, event: Event) -> Event:
         self._count = self._next_number()
-        event.id, event.at = f"e{self._count}", event.at or time.time()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a") as fh:
-            fh.write(json.dumps(asdict(event)) + "\n")
+        event.id, event.at = f"e{self._count}", event.at or system.now()
+        system.make_dirs(self.path.parent)
+        system.append_text(self.path, json.dumps(asdict(event)) + "\n")
         return event
 
     def events(self) -> list[Event]:
-        if not self.path.is_file():
+        if not system.is_file(self.path):
             return []
-        lines = self.path.read_text().splitlines()
+        lines = system.read_text(self.path).splitlines()
         return [_event(json.loads(line)) for line in lines if line.strip()]
 
     def _next_number(self) -> int:

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from . import live
+from . import live, system
 from . import state as state_mod
 from .config import Config, HealthLimits
 from .state import RunStatus
@@ -239,4 +238,4 @@ def judge(vitals: Vitals) -> Health:
 
 def current(config: Config) -> Health:
     """The verdict for the run as it is now."""
-    return judge(Vitals.read(config, time.time()))
+    return judge(Vitals.read(config, system.now()))

@@ -31,6 +31,7 @@ from typing import Any
 
 import yaml
 
+from . import system
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 BUILTIN_DIR = Path(__file__).parent / "roles"
@@ -84,7 +85,7 @@ class Layer(StrEnum):
 def user_roles_dir(home: Path, env: Mapping[str, str]) -> Path:
     """The global role layer: ``$AGILE_TEAM_HOME/roles`` or ``~/.config/agile-team/roles``."""
     custom = env.get(HOME_ENV)
-    return Path(custom).expanduser() / "roles" if custom else home / USER_ROLES
+    return system.expand_user(Path(custom)) / "roles" if custom else home / USER_ROLES
 
 
 class RoleError(Exception):
@@ -215,9 +216,9 @@ def contribution(text: str | None) -> str | None:
 
 def load_dir(directory: Path) -> dict[str, str]:
     """Raw text of every ``*.md`` in ``directory``, keyed by stem."""
-    if not directory.is_dir():
+    if not system.is_dir(directory):
         return {}
-    return {p.stem: p.read_text() for p in sorted(directory.glob("*.md"))}
+    return {p.stem: system.read_text(p) for p in system.glob(directory, "*.md")}
 
 
 @dataclass
@@ -295,11 +296,11 @@ class RoleBook:
     def scaffold(self, directory: Path, layer: Layer) -> list[Path]:
         """Write a stub for ``_shared`` and each enabled role lacking a file in ``directory``."""
         missing = [
-            n for n in (SHARED, *self.enabled_names()) if not (directory / f"{n}.md").exists()
+            n for n in (SHARED, *self.enabled_names()) if not system.exists(directory / f"{n}.md")
         ]
-        directory.mkdir(parents=True, exist_ok=True)
+        system.make_dirs(directory)
         for name in missing:
-            (directory / f"{name}.md").write_text(self._stub(name, layer))
+            system.write_text(directory / f"{name}.md", self._stub(name, layer))
         return [directory / f"{n}.md" for n in missing]
 
     def _stub(self, name: str, layer: Layer) -> str:
@@ -385,7 +386,7 @@ def _section(title: str, text: str) -> str:
 
 
 def _read_optional(path: Path) -> str:
-    return path.read_text() if path.is_file() else ""
+    return system.read_text(path) if system.is_file(path) else ""
 
 
 def parse_handoff(text: str) -> Handoff:

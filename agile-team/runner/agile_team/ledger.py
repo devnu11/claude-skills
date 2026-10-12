@@ -11,11 +11,12 @@ session's running total (``SessionCost``, ADR-004).
 from __future__ import annotations
 
 import json
-import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
+
+from . import system
 
 LEDGER = "ledger.jsonl"
 USAGE_KEYS = {
@@ -146,10 +147,9 @@ class Ledger:
 
     def record(self, entry: Entry) -> None:
         if not entry.at:
-            entry.at = time.time()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a") as fh:
-            fh.write(json.dumps(asdict(entry)) + "\n")
+            entry.at = system.now()
+        system.make_dirs(self.path.parent)
+        system.append_text(self.path, json.dumps(asdict(entry)) + "\n")
 
     def entries(self) -> list[Entry]:
         """Entries with the PO overcount corrected (K4)."""
@@ -161,9 +161,9 @@ class Ledger:
         return sum(e.cost_usd for e in raw) - sum(e.cost_usd for e in corrected(raw))
 
     def _raw(self) -> list[Entry]:
-        if not self.path.is_file():
+        if not system.is_file(self.path):
             return []
-        lines = self.path.read_text().splitlines()
+        lines = system.read_text(self.path).splitlines()
         return [Entry.from_dict(json.loads(line)) for line in lines if line]
 
     def total(self) -> float:

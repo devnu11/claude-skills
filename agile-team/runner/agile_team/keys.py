@@ -7,10 +7,11 @@ child environment, so the interactive session's OAuth login is untouched.
 
 from __future__ import annotations
 
-import stat
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+
+from . import system
 
 ENV_VAR = "ANTHROPIC_API_KEY"
 # Blanked in the child so an inherited subscription token cannot win over the key.
@@ -55,7 +56,7 @@ class KeyLocations:
 
     def resolve(self) -> KeySource:
         """First existing key file, or ``KeyNotFound``."""
-        found = next((c for c in self.candidates() if c.path.is_file()), None)
+        found = next((c for c in self.candidates() if system.is_file(c.path)), None)
         if found is None:
             tried = ", ".join(str(c.path) for c in self.candidates())
             raise KeyNotFound(f"no API key file found (tried {tried})")
@@ -68,12 +69,12 @@ class KeyLocations:
 
 def mode_ok(path: Path) -> bool:
     """True when the file is readable by its owner only (mode 600)."""
-    return stat.S_IMODE(path.stat().st_mode) == REQUIRED_MODE
+    return system.stat(path).mode == REQUIRED_MODE
 
 
 def read_key(path: Path) -> str:
     """The key with surrounding whitespace removed."""
-    return path.read_text().strip()
+    return system.read_text(path).strip()
 
 
 def child_env(key: str) -> dict[str, str]:
@@ -83,5 +84,5 @@ def child_env(key: str) -> dict[str, str]:
 
 def deny_rules(paths: list[Path]) -> list[str]:
     """Claude Code permission rules denying Read of each path (and anything under it)."""
-    absolute = [p.resolve() for p in paths]
+    absolute = [system.resolve(p) for p in paths]
     return [rule for p in absolute for rule in (f"Read(/{p})", f"Read(/{p}/**)")]
