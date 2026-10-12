@@ -94,10 +94,11 @@ class RunState:
     checkout: CheckoutRecord | None = None
     told: list[str] = field(default_factory=list)
     unsaved: Cause | None = None
+    halt_kind: str | None = None  # the HaltKind value of the halt that set the status (s44)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
-        """Set the run status and why; no reason clears the old one."""
-        self.status, self.status_reason = status, reason
+        """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
+        self.status, self.status_reason, self.halt_kind = status, reason, None
 
     def runtime_overrides(self, role: str) -> dict[str, Any]:
         """Fields from a PO model override for ``role``, if any."""

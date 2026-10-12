@@ -73,6 +73,7 @@ class Vitals:
     beat: dict[str, Any] | None
     runner: Runner
     limits: HealthLimits
+    halt_kind: str | None = None
 
     @classmethod
     def read(cls, config: Config, now: float) -> Vitals:
@@ -80,11 +81,18 @@ class Vitals:
         state = state_mod.load(config.run_dir)
         status = state_mod.shown_status(config.run_dir, state)
         beat = live.read_heartbeat(config.run_dir)
-        return cls(now, status, state.status_reason, beat, _runner(beat), config.health)
+        return cls(now, status, state.status_reason, beat, _runner(beat), config.health, state.halt_kind)
+
+    @property
+    def resting(self) -> bool:
+        """A graceful stop: the human asked for it (R15)."""
+        return self.status is RunStatus.STOPPED and self.halt_kind is None
 
     @property
     def beating(self) -> bool:
-        return self.beat is not None and self.beat.get("beat") == live.Beat.BEATING
+        return (
+            self.beat is not None and self.beat.get("beat") == live.Beat.BEATING and not self.resting
+        )
 
     @property
     def pid(self) -> int | None:
@@ -115,11 +123,12 @@ class Vitals:
         """Seconds since the step's last turn (or start); ``None`` with no step or a chore."""
         if self.step is None or self.chore is not None:
             return None
-        return self.now - (self.last_turn_at or self.step["started_at"])
+        step = self.step
+        return self.now - step.get("quiet_since", self.last_turn_at or step["started_at"])
 
     @property
     def halted(self) -> bool:
-        return self.status in HALTED
+        return self.status in HALTED and not self.resting
 
     def quiet_over(self, limit: float) -> bool:
         """Whether the step has been quiet for more than ``limit`` seconds."""
@@ -156,8 +165,12 @@ def _not_running(v: Vitals) -> str:
     return f"the runner is not running (pid {v.pid})" if v.pid else "the runner is not running"
 
 
+def _quiet_words(v: Vitals) -> str:
+    return f"no turn for {age(v.quiet_for or 0)}"
+
+
 def _tool_words(v: Vitals) -> str:
-    return f"no turn for {age(v.quiet_for or 0)} while {(v.tool or {}).get('name')} runs"
+    return f"{_quiet_words(v)} while {(v.tool or {}).get('name')} runs"
 
 
 def _chore_words(v: Vitals) -> str:
@@ -180,7 +193,7 @@ RULES: tuple[Rule, ...] = (
     Rule(
         Level.RED,
         lambda v: v.quiet_over(v.limits.red_quiet_s),
-        lambda v: f"no turn for {age(v.quiet_for or 0)}",
+        _quiet_words,
     ),
     Rule(
         Level.RED,
@@ -191,7 +204,7 @@ RULES: tuple[Rule, ...] = (
     Rule(
         Level.AMBER,
         lambda v: not v.tool and v.quiet_over(v.limits.amber_quiet_s),
-        lambda v: f"no turn for {age(v.quiet_for or 0)}",
+        _quiet_words,
     ),
     Rule(Level.GREEN, lambda v: v.chore is not None, _chore_words),
     Rule(Level.GREEN, lambda v: v.step is not None and v.chore is None, lambda v: "turns arriving"),

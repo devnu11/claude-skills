@@ -43,6 +43,7 @@ from .state import ModelOverride, RunStatus
 
 SERVER = "team"
 POLL_S = 5.0
+WAIT_CHORE = "waiting for answers to {ids}"
 DEFAULT_WAIT_S = 1800
 RESUME_NOTE = "Resume the run from state."
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
@@ -224,14 +225,18 @@ class Tools:
     async def wait_for_answers(self, args: dict[str, Any]) -> dict[str, Any]:
         """Poll the inbox until the given questions are answered or time runs out."""
         ids, limit = list(args.get("ids", [])), float(args.get("timeout_s", DEFAULT_WAIT_S))
-        waited = 0.0
-        while not self._settled(ids) and waited < limit:
-            await self.sleep(POLL_S)
-            waited += POLL_S
+        with self.runtime.pulse.doing(WAIT_CHORE.format(ids=", ".join(ids) or "—")):
+            await self._poll(ids, limit)
         answers = self.runtime.relay.answers()
         given = {i: answers[i].text for i in ids if i in answers}
         self._mark_delivered(list(given))
         return text_result(given)
+
+    async def _poll(self, ids: list[str], limit: float) -> None:
+        waited = 0.0
+        while not self._settled(ids) and waited < limit:
+            await self.sleep(POLL_S)
+            waited += POLL_S
 
     def _mark_delivered(self, ids: list[str]) -> None:
         state = self.runtime.state

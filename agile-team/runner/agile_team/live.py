@@ -134,20 +134,28 @@ class Reading:
     last_turn_at: float | None = None
     tools: dict[str, tuple[str, float]] = field(default_factory=dict)
     counted: dict[str, Tokens] = field(default_factory=dict)
+    quiet_since: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.quiet_since = self.started_at
+
+    def wake(self, now: float) -> None:
+        """Control is back with the model: the quiet clock restarts (H7)."""
+        self.quiet_since = now
 
     def take(self, message: Any, now: float) -> Turn | None:
         """Fold in one message (T1-T6); a turn line when it started a turn or added news."""
         if isinstance(message, UserMessage):
-            self._close_tools(message)
+            self._close_tools(message, now)
         elif isinstance(message, AssistantMessage):
             return self._answer(message, now)
         return None
 
-    def _close_tools(self, message: UserMessage) -> None:
+    def _close_tools(self, message: UserMessage, now: float) -> None:
         blocks = message.content if isinstance(message.content, list) else []
         for block in blocks:
-            if isinstance(block, ToolResultBlock):
-                self.tools.pop(block.tool_use_id, None)
+            if isinstance(block, ToolResultBlock) and self.tools.pop(block.tool_use_id, None):
+                self.wake(now)
 
     def _answer(self, message: AssistantMessage, now: float) -> Turn | None:
         mid = message.message_id
@@ -167,6 +175,7 @@ class Reading:
     def _line(self, message: AssistantMessage, extra: Tokens, now: float) -> Turn:
         self.tokens += extra
         self.last_turn_at = now
+        self.wake(now)
         cost = self._price(message.model, extra)
         self.cost_usd = None if cost is None or self.cost_usd is None else self.cost_usd + cost
         tools = [b.name for b in message.content if isinstance(b, ToolUseBlock)]
@@ -198,6 +207,7 @@ class Reading:
             "model": self.model,
             "configured_model": who.configured_model,
             "last_turn_at": self.last_turn_at,
+            "quiet_since": self.quiet_since,
             "tool": self.tool(),
             "tokens": asdict(self.tokens),
             "cost_usd": self.cost_usd,
@@ -266,7 +276,12 @@ class Pulse:
         """Stop measuring ``meter``, wherever it is in the stack."""
         with self._lock:
             self._open = [m for m in self._open if m is not meter]
+            self._wake_innermost()
         self.write()
+
+    def _wake_innermost(self) -> None:
+        if self._open:
+            self._open[-1].reading.wake(self.pace.now())
 
     def take(self, meter: Meter, message: Any) -> None:
         """Feed ``message`` to ``meter``; log a turn line and beat when there is news."""
@@ -298,6 +313,7 @@ class Pulse:
         finally:
             with self._lock:
                 self._chore = previous
+                self._wake_innermost()
             self.write()
 
     def start(self) -> None:

@@ -663,6 +663,7 @@ class Runtime:
         self.halted_by = self.halted_by or found
         saved = self.save_interrupted(Cause(self.halted_by.kind.value))
         self.state.mark(self.halted_by.rule.status, self.halted_by.reason)
+        self.state.halt_kind = self.halted_by.kind.value
         self.save()
         if first:
             self.relay.post(
