@@ -99,6 +99,12 @@ move tells you who moved it. Then either:
   agile-team start --resume
   ```
 
+The runner keeps that record between runs. If you pull, merge, rebase or
+commit on the team branch while no run is going, the next `agile-team start`
+(new task or `--resume`) stops the same way until you run
+`agile-team accept-checkout`. A repo the team has never run in has no record
+and starts normally.
+
 `accept-checkout` is refused while the runner is still running, on a detached
 HEAD, or with a rebase or merge in progress. If a step was cut off, its edits
 stay in the tree uncommitted: they were made on the wrong tree, so look at

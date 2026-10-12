@@ -170,6 +170,11 @@ checkout changed: expected feat/x at a3cc264; found detached HEAD at 92a38ea; la
 progress`. `last HEAD move` is the newest HEAD reflog entry, or `no reflog
 entry`.
 
+The record outlives the run. Every `start` (with `--task`, `--resume` or
+both) compares it with the live checkout, so a change made between runs
+(a pull, merge, rebase or commit of your own) halts the next `start` with
+exit 78 too. Only a repo with no record yet starts without a comparison.
+
 `start --resume` checks again and halts again (exit 78) while the mismatch
 remains, without posting a second question. Two ways on:
 
