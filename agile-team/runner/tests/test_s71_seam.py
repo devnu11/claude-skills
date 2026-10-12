@@ -100,19 +100,20 @@ def test_config_missing_file_is_an_error(repo: Path) -> None:
 def test_watch_times_out_on_the_fake_clock(fake: FakeSystem, configured: Path) -> None:
     run_dir = configured / ".team" / "run"
     Relay(run_dir).post(Note("update", "first"))
-    first = watch.Watcher(run_dir).until(None)
-    assert "message" in first["triggers"]
-    fake.slept.clear()
-    second = watch.Watcher(run_dir).until(30.0)
-    assert second["triggers"] == [watch.HEARTBEAT]
+    first = watch.Watcher(run_dir).until(30.0)
+    assert first["triggers"] == [watch.HEARTBEAT]
     assert fake.slept and set(fake.slept) == {watch.POLL_S}
     assert sum(fake.slept) >= 30.0 - watch.POLL_S
+    fake.slept.clear()
+    Relay(run_dir).post(Note("update", "second"))
+    second = watch.Watcher(run_dir).until(None)
+    assert second["triggers"] == ["message"]
 
 
 def test_watch_memory_is_saved_through_the_seam(fake: FakeSystem, configured: Path) -> None:
     run_dir = configured / ".team" / "run"
     Relay(run_dir).post(Note("update", "x"))
-    watch.Watcher(run_dir).until(None)
+    watch.Watcher(run_dir).until(4.0)
     memory = run_dir / "liaison" / watch.WATCH_FILE
     assert json.loads(fake.text_of(memory))["messages"] == 1
     assert ("replace", memory) in fake.ops
