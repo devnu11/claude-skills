@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
 from . import halt, handover, loops, system
-from .boundary import BOUNDARY_STALL, Boundary, StepKind
+from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
 from .dispatch import FIX_KINDS_SET as FIX_STEPS
@@ -397,7 +397,9 @@ class Router:
 
 
 def _boundary_stall(b: Boundary) -> str:
-    return BOUNDARY_STALL.format(sprint=b.sprint, edge=b.edge, stage=b.stage, hold=b.hold)
+    return BOUNDARY_STALL.format(
+        sprint=b.sprint, edge=b.edge, stage=b.stage, hold=b.hold, hint=stall_hint(b.hold)
+    )
 
 
 def _why(story: StoryState) -> str:

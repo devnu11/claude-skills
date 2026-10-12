@@ -25,6 +25,7 @@ from .boundary import (
     NOT_PERMITTED,
     NOTHING_REPORT,
     PR_BODY,
+    PR_KIND,
     PUSHED_REPORT,
     SKIPPED_REPORT,
     SPRINT_TITLE,
@@ -46,6 +47,20 @@ from .boundary import (
     fix_brief,
     next_stage,
     setback,
+)
+from .ci import (
+    CI_NONE_REPORT,
+    CI_RED_REPORT,
+    CI_TIMEOUT,
+    NO_CHECKS_WHY,
+    NO_OPEN_PR_WHY,
+    CiResult,
+    CiVerdict,
+    CiWatch,
+    check_lines,
+    green_report,
+    overall,
+    prs_text,
 )
 from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
@@ -94,9 +109,11 @@ class BoundaryRunner:
     runtime: Runtime
     last: Event | None = field(default=None, init=False)
     rebuilder: Rebuilder = field(init=False)
+    watch: CiWatch = field(init=False)
 
     def __post_init__(self) -> None:
         rt = self.runtime
+        self.watch = CiWatch(rt.prs, rt.config.gates.ci_timeout_s)
         worktree = rt.config.run_dir / REVIEW_DIR
         self.rebuilder = Rebuilder(rt.git, worktree, self.remote.target)
 
@@ -204,9 +221,9 @@ class BoundaryRunner:
             self.mine.closed, self.mine.report = b.sprint, report
         self.runtime.state.boundary = None
 
-    def _finish(self, b: Boundary, report: str = "") -> None:
+    def _finish(self, b: Boundary, report: str = "", **data: Any) -> None:
         self._close(b, report)
-        self._emit(b, Out.DONE)
+        self._emit(b, Out.DONE, **data)
 
     def _advance(self, b: Boundary) -> None:
         following = next_stage(b)
@@ -389,7 +406,7 @@ class BoundaryRunner:
     def _local(self, b: Boundary, why: str) -> None:
         branches = ", ".join(e.branch for e in self.stack)
         text = LOCAL_REPORT.format(sprint=b.sprint, why=why, branches=branches)
-        self._emit(b, Out.LOCAL, note=why)
+        self._emit(b, Out.LOCAL, note=why, ci=CiVerdict.NONE)
         self._post(text)
         self._finish(b, text)
 
@@ -402,11 +419,52 @@ class BoundaryRunner:
         self._pushed(b)
 
     def _pushed(self, b: Boundary) -> None:
-        prs = "; ".join(f"#{e.pr} ({e.mode}, {e.branch}) {e.url}" for e in self.stack if e.pr)
+        kinds = ((e, PR_KIND[e.mode]) for e in self.stack if e.pr)
+        prs = "; ".join(f"#{e.pr} ({kind}, {e.branch}) {e.url}" for e, kind in kinds)
         text = PUSHED_REPORT.format(sprint=b.sprint, prs=prs)
         self._emit(b, Out.PUSHED, branches=[e.branch for e in self.stack])
         self._post(text)
-        self._finish(b, text)
+        self._advance(b)
+
+    # ----- ci
+
+    def _watched(self) -> list[StackEntry]:
+        return [e for e in self.stack if e.mode is PrMode.READY and e.pr]
+
+    def _ci(self, b: Boundary) -> None:
+        watched = self._watched()
+        results = self.watch.results(watched)
+        for entry, result in zip(watched, results, strict=True):
+            entry.ci = result
+        CI_OUTCOMES[overall(results)](self, b, results)
+
+    def _ci_green(self, b: Boundary, results: list[CiResult]) -> None:
+        text = green_report(b.sprint, results)
+        self._finish(b, text, ci=CiVerdict.GREEN, **_ci_fields(results))
+
+    def _ci_red(self, b: Boundary, results: list[CiResult]) -> None:
+        self._hold(b, BoundaryHold.CI_FAILED, Out.HELD, ci=CiVerdict.RED, **_ci_fields(results))
+
+    def _ci_pending(self, b: Boundary, results: list[CiResult]) -> None:
+        reason = CI_TIMEOUT.format(limit=self.watch.limit_s)
+        fields = {"ci": CiVerdict.PENDING, "reason": reason, **_ci_fields(results)}
+        self._hold(b, BoundaryHold.CI_PENDING, Out.HELD, **fields)
+
+    def _ci_none(self, b: Boundary, results: list[CiResult]) -> None:
+        why = NO_CHECKS_WHY if results else NO_OPEN_PR_WHY
+        prs = prs_text(results) or ", ".join(e.branch for e in self.stack)
+        text = CI_NONE_REPORT.format(sprint=b.sprint, prs=prs, why=why)
+        self._post(text)
+        self._finish(b, text, ci=CiVerdict.NONE, note=why, **_ci_fields(results))
+
+    def settle_bug(self, story: str) -> None:
+        """Close a boundary held on failed CI with its bug story recorded."""
+        b = self.runtime.state.boundary
+        self.mine.ci_bug = story
+        red = [e.ci for e in self.stack if e.ci and e.ci.verdict is CiVerdict.RED]
+        text = CI_RED_REPORT.format(sprint=b.sprint, story=story, prs=prs_text(red))  # type: ignore[union-attr,arg-type]
+        self._finish(b, text, ci=CiVerdict.RED, story=story, note=text)  # type: ignore[arg-type]
+        self.runtime.save()
 
     def _push_entry(self, entry: StackEntry, below: StackEntry | None) -> str | None:
         if entry.pushed != entry.head:
@@ -459,10 +517,25 @@ class BoundaryRunner:
         )
 
 
+def _ci_fields(results: list[CiResult]) -> dict[str, Any]:
+    return {
+        "prs": prs_text(results),
+        "checks": check_lines(results),
+        "results": [asdict(r) for r in results],
+    }
+
+
+CI_OUTCOMES = {
+    CiVerdict.GREEN: BoundaryRunner._ci_green,
+    CiVerdict.RED: BoundaryRunner._ci_red,
+    CiVerdict.PENDING: BoundaryRunner._ci_pending,
+    CiVerdict.NONE: BoundaryRunner._ci_none,
+}
 STAGE_RUNNERS = {
     Stage.SYNC: BoundaryRunner._sync,
     Stage.CHECK: BoundaryRunner._check,
     Stage.REVIEW: BoundaryRunner._review,
     Stage.PUSH: BoundaryRunner._push,
+    Stage.CI: BoundaryRunner._ci,
 }
 SYNCS = {Edge.START: BoundaryRunner._merge_in, Edge.END: BoundaryRunner._end_sync}

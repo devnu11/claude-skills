@@ -84,6 +84,9 @@ class Toolchain:
         return max(rows, key=lambda row: len(row.root), default=None)
 
 
+DEFAULT_CI_TIMEOUT_S = 1800.0
+
+
 @dataclass
 class Gates:
     """Thresholds and switches for the story pipeline."""
@@ -94,6 +97,7 @@ class Gates:
     repeat: int = 2
     backstop: int = 4
     command_timeout_s: float = DEFAULT_TIMEOUT_S
+    ci_timeout_s: float = DEFAULT_CI_TIMEOUT_S
 
 
 @dataclass
@@ -307,6 +311,7 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: g.repeat >= 2, "gates.repeat must be at least 2"),
     (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
     (lambda g: g.command_timeout_s > 0, "gates.command_timeout_s must be positive"),
+    (lambda g: g.ci_timeout_s > 0, "gates.ci_timeout_s must be positive"),
 )
 HEALTH_KEYS = tuple(HealthLimits.__dataclass_fields__)
 HEALTH_RULES: tuple[Rule, ...] = (

@@ -45,6 +45,9 @@ class Trigger(StrEnum):
     PUSH_REJECTED = "push_rejected"
     BOUNDARY_ERROR = "boundary_error"
     BOUNDARY_ESCALATED = "boundary_escalated"
+    CI_GREEN = "ci_green"
+    CI_FAILED = "ci_failed"
+    CI_PENDING = "ci_pending"
 
 
 @dataclass(frozen=True)
@@ -202,6 +205,26 @@ HANDOVERS: tuple[Rule, ...] = (
         "manager reviewed it: {summary}. Once something has changed (a fix, the human's "
         "answer), continue_boundary(note); your note reaches the next devops fix",
     ),
+    Rule(
+        Trigger.CI_GREEN,
+        lambda r: _boundary(r).get("ci") == "green",
+        '{story}: sprint {sprint}\'s CI passed: {prs} is ready to merge ("Rebase and merge"). '
+        "Tell the human.",
+    ),
+    Rule(
+        Trigger.CI_FAILED,
+        _held("ci_failed"),
+        "{story}: sprint {sprint}'s CI failed on {prs}; the PR is NOT ready. Failing checks:\n"
+        "{checks}\nOpen a bug story for it now (open_story), record it with "
+        "record_ci_bug(story), tell the human the PR is NOT ready, and list the story first "
+        "when you start the next sprint",
+    ),
+    Rule(
+        Trigger.CI_PENDING,
+        _held("ci_pending"),
+        "{story}: sprint {sprint}'s PR {prs} is NOT ready: {boundary_reason}:\n{checks}\n"
+        "Tell the human, then continue_boundary to wait again",
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -244,7 +267,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
 
 
-BOUNDARY_TEXT = ("sprint", "edge", "stage", "target", "team_branch", "branch")
+BOUNDARY_TEXT = ("sprint", "edge", "stage", "target", "team_branch", "branch", "prs", "checks")
 
 
 def _boundary_fields(report: dict) -> dict[str, str]:
