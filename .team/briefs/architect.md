@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done)
+**Last updated:** 2026-10-12 (s72 done)
+
+## s72: Timeout limits follow the world concept from s71
+
+Per-test limits are data-driven: `LIMIT_INI[world]` maps s71's world enum to pytest-timeout's ini keys. FAKE world (unit tests) → 1 second; REAL world (e2e + LEGACY) → 30 seconds. One function `limit_of(item)` reads the limit from config; one function `mark(items)` applies markers at collection. Conftest registers the e2e limit ini so pytest doesn't warn. No code branches on paths or test names—the world decides the limit (O1 from s71). Consequence: when s76/s77 move LEGACY files out, they inherit 1s with no further change.
 
 ## s71: Unit tests run no OS calls — one seam with fake and audit (P1: files, clock)
 

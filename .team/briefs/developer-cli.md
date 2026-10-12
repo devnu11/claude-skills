@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done)
+**Last updated:** 2026-10-12 (s72 done)
 
 See `developer.md` for the base conventions.
+
+## s72: A 1 second limit per unit test (configuration, no new dependency)
+
+Every unit test (outside `tests/e2e/`) now times out at 1 second via pytest-timeout. e2e tests and LEGACY files keep 30 seconds. The limit is in one place: `[tool.pytest.ini_options]` in `pyproject.toml` (`timeout = 1` for unit tests, `e2e_timeout = 30` for the real world). New `time_limit.py` module (two functions, one table) picks the right limit based on s71's "world" concept. `conftest.pytest_collection_modifyitems` wires the marker. No test is skipped, deleted, or marked; slow tests are fixed via fake clock or moved to e2e. Coverage 99.68%, all passing. No ADR (pytest-timeout already a dev dependency).
 
 ## s71: Unit tests run no OS calls — single seam with fake and audit (P1: files, clock)
 

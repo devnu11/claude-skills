@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s70 done)
+**Last updated:** 2026-10-12 (s72 done)
+
+## s72: Unit test timeout 1 second; slow tests fixed in implement gate
+
+Every unit test has a 1-second limit. The implement gate runs coverage with this limit active. If a test times out, the gate bounce names it (e.g., `Timeout (>1.0s) from pytest-timeout`). The developer fixes it by speeding up with a fake clock (`system.sleep`, `system.now`), faking the call, or moving to e2e. No tests are skipped. Configuration is in one place: `pyproject.toml` `[tool.pytest.ini_options]` → `timeout = 1`. What you'll see: if a test exceeds 1s, the gate bounces immediately and names the test; developer fixes it or disputes it. Design ruled by s71's "world" concept (FAKE world = unit tests, 1s; REAL world = e2e, 30s).
 
 ## s70: Test suite runs in parallel; gate cycle drops from 4 min to 1 min
 

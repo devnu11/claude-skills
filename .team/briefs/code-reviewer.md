@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done)
+**Last updated:** 2026-10-12 (s72 done)
+
+## s72: Per-test time limit (1s unit, 30s e2e) — no code branches, one table
+
+Configuration: `[tool.pytest.ini_options]` → `timeout = 1` (unit), `e2e_timeout = 30` (e2e/LEGACY). New module `time_limit.py` with:
+- **`LIMIT_INI`:** table (World → ini key); `FAKE` → `"timeout"`, `REAL` → `"e2e_timeout"`.
+- **`limit_of(item)`:** reads `float(item.config.getini(LIMIT_INI[world_of(item)]))`.
+- **`mark(items)`:** adds `pytest.mark.timeout(limit)` to each item.
+`conftest.pytest_addoption` registers `e2e_timeout` ini; `pytest_collection_modifyitems` calls `time_limit.mark()`. No marker added outside `time_limit.py` (L6). Pytest-timeout's `signal` method (L5) means the limit covers setup, call, teardown; message names the test and limit. Coverage 99.68%, ruff clean. No defects; ship. Two nits for later (e2e checklist not yet written; AC1 partial until s77 empties `LEGACY`).
 
 ## s71: Unit tests run no OS calls — single seam with fake and audit (P1: files, clock)
 

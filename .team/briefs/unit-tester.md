@@ -1,6 +1,16 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done)
+**Last updated:** 2026-10-12 (s72 done)
+
+## s72: A 1 second limit per unit test — measure in implement gate
+
+Unit tests now have a strict 1-second timeout (via pytest-timeout markers). The implement gate runs coverage with `-n auto --cov` and surfaces any `Timeout (>1.0s)` failure. Your job: read the timeout failure, identify the slow test, and fix it:
+- **Fake clock:** Use `system.sleep` and `system.now` on FakeSystem for test delays (no real wait).
+- **Fake reply:** Replace a real call (git, HTTP, subprocess) with a scripted fake via `system.reply()`.
+- **Move to e2e:** If a test must do real work, move it to `tests/e2e/` where the 30-second limit applies.
+- **Never skip/weaken:** Do not skip, xfail, deselect, or add a per-test marker to dodge the limit.
+
+The limit is in one place: `[tool.pytest.ini_options]` → `timeout = 1` (unit tests). See `time_limit.py` and `conftest.pytest_collection_modifyitems` for wiring. Coverage 99.68%, tests pass.
 
 ## s71: Unit tests touch no OS — fake system and audit hook (P1: seam, files, clock)
 
