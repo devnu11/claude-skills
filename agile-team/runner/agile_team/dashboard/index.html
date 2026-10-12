@@ -309,7 +309,7 @@ const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
   pass: "good", bounce: "serious", hold: "warning", return: "warning",
-  running: "accent", interrupted: "critical", stopped: "warning", idle: "", "sprint-end": "good", active: "",
+  running: "accent", interrupted: "critical", stopped: "", idle: "", "sprint-end": "good", active: "",
   needs_manager: "serious", escalate: "serious", "checkout-changed": "critical",
 };
 const TOKEN_KINDS = [
@@ -541,7 +541,7 @@ function restarted(events, act) {
 function pillText(view, now) {
   const step = liveStep(view), act = activeStep(view.events);
   if (!step) {
-    if (act && !view.heartbeat) return `▶${who(act)} · ${fmt.ago(act.at, now)}`;
+    if (act && !view.heartbeat) return `▶ ${who(act)} · ${fmt.ago(act.at, now)}`;
     return "● " + (view.health.reason || view.run.status);
   }
   const rate = fmt.tok(Math.round(tokensPerMin(view.turns, now))), spark = sparkline(view.turns, now);
@@ -641,15 +641,21 @@ function renderMeter(view) {
       <span class="meter-fill" style="width:${pct}%"></span>${ticks.join("")}</div>`;
 }
 
-function renderStatusRow(view) {
-  const act = activeStep(view.events), now = clockNow(view);
+/** The status row's pills as HTML strings, left to right (P1, S3). */
+function statusPills(view, now) {
+  const act = activeStep(view.events);
   const parts = [connectionPill(), pill(view.run.status, STATUS_TONE[view.run.status] ?? "")];
   if (act || liveStep(view) || healthLevel(view) !== "idle") parts.push(smartPill(view, now));
   const open = openQuestions(view).length;
   if (open) parts.push(pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning"));
   for (const why of view.run.manager_due ?? []) parts.push(pill(`⚑ manager due: ${why}`, "serious"));
   if (MOCK) parts.push(mockControls());
-  $("#status-row").innerHTML = parts.join("");
+  return parts;
+}
+
+/** Draws the status row and the live details under it. */
+function renderStatusRow(view) {
+  $("#status-row").innerHTML = statusPills(view, clockNow(view)).join("");
   renderLiveDetails(view);
 }
 
