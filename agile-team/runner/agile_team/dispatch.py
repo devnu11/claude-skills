@@ -97,6 +97,7 @@ REWORK_BRIEF = (
     '(you changed tests for this story) or "tests": "confirmed" '
     "(you checked the existing tests already cover it)."
 )
+GATE_CHORE = "gate: {step} on {story}"
 QUALITY_CHORE = "quality checks for {story}"
 QUALITY_COMMANDS = ("lint", "static")
 PROXY = "customer-proxy"
@@ -892,7 +893,12 @@ class Runtime:
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Evaluate the story's current step gate and advance the story."""
         self.verify_checkout()
-        return self._advance_and_log(plan, self.pipeline.evaluate(plan.story, handoff))
+        return self._advance_and_log(plan, self._evaluate(plan, handoff))
+
+    def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
+        chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
+        with self.pulse.doing(chore):
+            return self.pipeline.evaluate(plan.story, handoff)
 
     def _queue_done_renewal(self, story: Any) -> None:
         reason = f"{story.id} done"

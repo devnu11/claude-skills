@@ -7,7 +7,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -15,7 +15,7 @@ from typing import Any
 
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
-from . import system
+from . import halt, system
 from .events import INTERRUPTED, Event, EventKind
 from .ledger import Tokens
 from .providers import Billing
@@ -23,7 +23,7 @@ from .salvage import STOP_REASONS, Cause
 
 TURNS = "turns.jsonl"
 HEARTBEAT = "heartbeat.json"
-HEARTBEAT_VERSION = 1
+HEARTBEAT_VERSION = 2
 PER_MILLION = 1_000_000
 # $/Mtok: input, output, cache read, cache write.
 RATES: dict[str, tuple[float, float, float, float]] = {
@@ -243,6 +243,7 @@ class Pace:
 
     now: Callable[[], float] = time.time
     wait: Callable[[threading.Event, float], bool] = threading.Event.wait
+    mono: Callable[[], float] = time.monotonic
 
 
 @dataclass(frozen=True, eq=False)
@@ -270,6 +271,7 @@ class Pulse:
     _open: list[Meter] = field(init=False, default_factory=list)
     _chore: dict[str, Any] | None = field(init=False, default=None)
     _ended: bool = field(init=False, default=False)
+    _reported: bool = field(init=False, default=False)
     _stop: threading.Event = field(init=False, default_factory=threading.Event)
     _thread: threading.Thread | None = field(init=False, default=None)
 
@@ -344,9 +346,23 @@ class Pulse:
         self.write()
 
     def beats(self) -> None:
-        """The thread body: write every ``beat_s`` until told to stop."""
+        """The thread body: beat every ``beat_s``; a failed beat never ends it (H7)."""
         while not self.pace.wait(self._stop, self.beat_s):
+            self._beat()
+
+    def _beat(self) -> None:
+        try:
             self.write()
+        except Exception as exc:
+            self._report(exc)
+
+    def _report(self, exc: Exception) -> None:
+        """Leave one traceback in crash.log for the first failed beat."""
+        if self._reported:
+            return
+        self._reported = True
+        with suppress(OSError):
+            halt.log_traceback(self.run_dir, exc)
 
     def write(self) -> None:
         """Write the heartbeat atomically; a failed write is retried by the next beat (H4)."""
@@ -368,6 +384,7 @@ class Pulse:
             "pid": self.pid,
             "beat": str(Beat.BEATING if live else Beat.ENDED),
             "at": self.pace.now(),
+            "mono": self.pace.mono(),
             "started_at": self.started_at,
             "chore": self._chore if live else None,
             "step": step,

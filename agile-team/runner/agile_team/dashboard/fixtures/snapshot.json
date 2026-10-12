@@ -3113,10 +3113,11 @@
   }
  ],
  "heartbeat": {
-  "version": 1,
+  "version": 2,
   "pid": 4242,
   "beat": "beating",
   "at": 1791473157.0,
+  "mono": 523000.0,
   "started_at": 1791469560.0,
   "chore": null,
   "step": {
