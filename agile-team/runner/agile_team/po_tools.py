@@ -506,6 +506,7 @@ class PoRun:
         self.runtime.halted_by = None
         if state.delivered is None:
             state.delivered = list(self.runtime.relay.answers())
+        state.unsaved = None
         self._set_status(RunStatus.RUNNING)
         result = await self._turns()
         if state.status is RunStatus.RUNNING:

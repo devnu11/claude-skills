@@ -21,7 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import checkout, gates, halt, keys, onboard, presentation, recovery, sandbox
+from . import checkout, gates, halt, keys, onboard, presentation, recovery, sandbox, watch
 from . import config as config_mod
 from . import state as state_mod
 from .commands import shell_runner
@@ -44,6 +44,7 @@ from .roles import (
     expand_globs,
     user_roles_dir,
 )
+from .salvage import Cause
 from .upstream import GhPrs, command_runner
 
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
@@ -355,14 +356,19 @@ def _record_task(state: state_mod.RunState, start: Start) -> None:
         state.task = start.task
 
 
+RECOVERED_LEADS: dict[Cause, str] = {Cause.KILLED: "the last run was killed"}
+RECOVERED_LEAD = "the last run halted ({cause}) before its edits were saved"
+
+
 def _recover(config: config_mod.Config, start: Start) -> None:
     """On ``--resume`` after a kill, save the dead run's edits so preflight passes."""
     if start.mode is not StartMode.RESUME:
         return
-    found = recovery.recover_killed(config.run_dir, Git(config.repo))
+    found = recovery.recover_cut(config.run_dir, Git(config.repo))
     if found and found.sha:
+        lead = RECOVERED_LEADS.get(found.cause) or RECOVERED_LEAD.format(cause=found.cause)
         saved = f"{found.label}'s edits are saved in {found.sha} (reverted)"
-        print(f"agile-team start: the last run was killed; {saved}", file=sys.stderr)
+        print(f"agile-team start: {lead}; {saved}", file=sys.stderr)
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:
@@ -429,6 +435,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 def status_report(config: config_mod.Config) -> dict[str, Any]:
     """Run state, open questions and budget, for the liaison."""
     st = state_mod.load(config.run_dir)
+    unread = Relay(config.run_dir).unread(st.told)
     return {
         "status": state_mod.shown_status(config.run_dir, st),
         "status_reason": st.status_reason,
@@ -444,6 +451,7 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
         "boundary": asdict(st.boundary) if st.boundary else None,
         "upstream": asdict(st.upstream),
         "checkout": asdict(st.checkout) if st.checkout else None,
+        "queued_messages": [t.id for t in unread],
     }
 
 
@@ -454,6 +462,32 @@ def cmd_answer(args: argparse.Namespace) -> int:
     except RelayError as exc:
         raise CliError(str(exc)) from exc
     print(f"answered {args.id}")
+    return 0
+
+
+def _message_text(source: str) -> str:
+    try:
+        return sys.stdin.read() if source == "-" else Path(source).read_text()
+    except OSError as exc:
+        raise CliError(f"cannot read {source}: {exc.strerror}") from exc
+
+
+def cmd_tell(args: argparse.Namespace) -> int:
+    """Queue a message for the PO; the text is stored in a file, never on a command line."""
+    config = _load_config(repo_of(args))
+    text = _message_text(args.source)
+    if not text.strip():
+        raise CliError("the message is empty")
+    told = Relay(config.run_dir).tell(text)
+    print(f"queued {told.id} for the PO: {told.path.relative_to(config.repo)}")
+    return 0
+
+
+def cmd_watch(args: argparse.Namespace, pace: watch.Pace = watch.DEFAULT_PACE) -> int:
+    """Block until the liaison is needed; print one JSON line."""
+    config = _load_config(repo_of(args))
+    line = watch.Watcher(config.run_dir, pace).until(args.timeout_s)
+    print(json.dumps(line), flush=True)
     return 0
 
 
@@ -549,6 +583,10 @@ DASHBOARD_ARGS: tuple[Arg, ...] = (
     (("--no-open",), {"action": "store_const", "dest": "browser", "const": Browser.SKIP,
                       "default": Browser.OPEN, "help": "do not open a browser"}),
 )  # fmt: skip
+WATCH_ARGS: tuple[Arg, ...] = (
+    (("--timeout",), {"dest": "timeout_s", "type": float, "default": None,
+                      "help": "print a heartbeat line after this many seconds"}),
+)  # fmt: skip
 COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
@@ -557,6 +595,10 @@ COMMANDS = (
     Command("start", "run the team (blocks; run in the background)", cmd_start, START_ARGS),
     Command("status", "print run state as JSON", cmd_status),
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
+    Command("tell", "queue a message for the PO (a file, or - for stdin)", cmd_tell,
+            ((("source",), {"help": "file holding the message, or - to read stdin"}),)),
+    Command("watch", "wait until the liaison is needed; print one JSON line", cmd_watch,
+            WATCH_ARGS),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
     Command("accept-checkout", "keep the current branch and HEAD after a checkout halt",
             cmd_accept_checkout),

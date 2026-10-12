@@ -2,13 +2,16 @@
 
 The PO's ``ask_user`` / ``notify_user`` append to ``outbox.jsonl``; the liaison
 watches it and relays to the human. Answers come back through
-``agile-team answer`` into ``inbox.jsonl``. Only the stories a question names
-are blocked while it is open.
+``agile-team answer`` into ``inbox.jsonl``. ``agile-team tell`` queues the
+human's own messages for the PO as ``liaison/messages/t<N>.md`` files. Only the
+stories a question names are blocked while it is open.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -19,6 +22,10 @@ WAITING_HEAD = "waiting on answers: "
 KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped")
 OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"
+LIAISON_DIR = "liaison"
+MESSAGES_DIR = "messages"
+TOLD_NAME = re.compile(r"^t(\d+)\.md$")
+TOLD_LINE = "The human sent you a message ({id}): read {path}."
 
 
 class RelayError(Exception):
@@ -54,6 +61,14 @@ class Answer:
     at: float = 0.0
 
 
+@dataclass(frozen=True)
+class Told:
+    """A message the human queued for the PO with ``agile-team tell`` (s62)."""
+
+    id: str
+    path: Path
+
+
 @dataclass
 class Relay:
     """Outbox/inbox pair in the run directory."""
@@ -67,6 +82,48 @@ class Relay:
     @property
     def inbox(self) -> Path:
         return self.run_dir / INBOX
+
+    @property
+    def messages_dir(self) -> Path:
+        return self.run_dir / LIAISON_DIR / MESSAGES_DIR
+
+    def tell(self, text: str) -> Told:
+        """Queue ``text`` as the next ``t<N>.md``: written whole, never overwriting (T2)."""
+        self.messages_dir.mkdir(parents=True, exist_ok=True)
+        draft = self.messages_dir / f".draft-{os.getpid()}"
+        try:
+            draft.write_text(text)
+            return self._publish(draft)
+        finally:
+            draft.unlink(missing_ok=True)
+
+    def told(self) -> list[Told]:
+        """Every queued message, in number order; other files are ignored (T2)."""
+        if not self.messages_dir.is_dir():
+            return []
+        found = [
+            (int(m[1]), p) for p in self.messages_dir.iterdir() if (m := TOLD_NAME.match(p.name))
+        ]
+        return [Told(f"t{n}", p) for n, p in sorted(found)]
+
+    def unread(self, told: list[str]) -> list[Told]:
+        """Queued messages whose ids are not in ``told`` (T4)."""
+        return [t for t in self.told() if t.id not in told]
+
+    def _publish(self, draft: Path) -> Told:
+        n = self._next_number()
+        while True:
+            try:
+                self._told_at(n).path.hardlink_to(draft)
+                return self._told_at(n)
+            except FileExistsError:
+                n += 1
+
+    def _next_number(self) -> int:
+        return max((int(t.id[1:]) for t in self.told()), default=0) + 1
+
+    def _told_at(self, n: int) -> Told:
+        return Told(f"t{n}", self.messages_dir / f"t{n}.md")
 
     def post(self, note: Note) -> Message:
         """Append a message for the liaison and return it."""

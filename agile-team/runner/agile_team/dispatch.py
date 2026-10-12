@@ -644,9 +644,11 @@ class Runtime:
     def save_interrupted(self, cause: Cause) -> Interruption | None:
         """Save a cut-off step's edits (or the PO's) in a reverted commit and record it.
 
-        Nothing is saved when the checkout moved (K5): the tree is not the team's.
+        Nothing is saved when the checkout moved (K5): the tree is not the team's;
+        the cause is kept for ``start --resume`` (s62 R1).
         """
         if checkout.check(self.git, self.state.checkout) is not None:
+            self.state.unsaved = cause
             return None
         saved = recovery.Salvager(self.git, self.config.run_dir).save(self.state, cause)
         self.record_checkout()

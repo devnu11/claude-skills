@@ -16,7 +16,7 @@ from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
 from .ledger import SessionCost
 from .loops import Rule, Setback
 from .providers import DEFAULT as DEFAULT_PROVIDER
-from .salvage import RUN_ENDING, InFlight, Interruption
+from .salvage import RUN_ENDING, Cause, InFlight, Interruption
 
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
@@ -92,6 +92,8 @@ class RunState:
     in_flight: InFlight | None = None
     interrupted: list[Interruption] = field(default_factory=list)
     checkout: CheckoutRecord | None = None
+    told: list[str] = field(default_factory=list)
+    unsaved: Cause | None = None
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one."""
@@ -143,6 +145,7 @@ class RunState:
         data["in_flight"] = _nested(InFlight, data.get("in_flight"))
         data["interrupted"] = [Interruption(**i) for i in data.get("interrupted", [])]
         data["checkout"] = _nested(CheckoutRecord, data.get("checkout"))
+        data["unsaved"] = Cause(u) if (u := data.get("unsaved")) else None
         return cls(**data)
 
 

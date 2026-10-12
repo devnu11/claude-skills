@@ -19,7 +19,7 @@ from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
 from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
-from .relay import WAITING_HEAD, Answer
+from .relay import TOLD_LINE, WAITING_HEAD, Answer, Told
 
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
@@ -190,9 +190,9 @@ class Router:
     async def _tick(self) -> Pass | None:
         if self.runtime.checkout_moved():
             return None
-        news = self._news()
-        if news:
-            return self._deliver(news)
+        answers, told = self._news(), self._unread()
+        if answers or told:
+            return self._deliver(answers, told)
         work = self.next_work()
         if work:
             return await self._step(work)
@@ -313,15 +313,29 @@ class Router:
         delivered = self.runtime.state.delivered or []
         return [a for a in self.runtime.relay.answers().values() if a.id not in delivered]
 
-    def _deliver(self, answers: list[Answer]) -> Pass:
-        state, relay = self.runtime.state, self.runtime.relay
+    def _unread(self) -> list[Told]:
+        return self.runtime.relay.unread(self.runtime.state.told)
+
+    def _deliver(self, answers: list[Answer], told: list[Told]) -> Pass:
+        state = self.runtime.state
         self._clear_wait()
         state.delivered = [*(state.delivered or []), *(a.id for a in answers)]
+        state.told = [*state.told, *(t.id for t in told)]
         self.runtime.save()
-        asked = {m.id: m for m in relay.messages()}
-        lines = [f'The human answered {a.id} ("{asked[a.id].text}"): {a.text}' for a in answers]
-        stories = [s for a in answers for s in asked[a.id].stories]
-        return Pass([Trigger.HUMAN_MESSAGE], lines, list(dict.fromkeys(stories)))
+        lines = self._answer_lines(answers) + self._told_lines(told)
+        return Pass([Trigger.HUMAN_MESSAGE], lines, self._answer_stories(answers))
+
+    def _answer_lines(self, answers: list[Answer]) -> list[str]:
+        asked = {m.id: m for m in self.runtime.relay.messages()}
+        return [f'The human answered {a.id} ("{asked[a.id].text}"): {a.text}' for a in answers]
+
+    def _answer_stories(self, answers: list[Answer]) -> list[str]:
+        asked = {m.id: m for m in self.runtime.relay.messages()}
+        return list(dict.fromkeys(s for a in answers for s in asked[a.id].stories))
+
+    def _told_lines(self, told: list[Told]) -> list[str]:
+        repo = self.runtime.config.repo
+        return [TOLD_LINE.format(id=t.id, path=t.path.relative_to(repo)) for t in told]
 
     def _sprint_stories(self) -> list[StoryState]:
         state = self.runtime.state

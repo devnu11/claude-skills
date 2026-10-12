@@ -42,12 +42,20 @@ class Salvager:
         EventLog(self.run_dir / EVENTS).emit(event)
 
 
-def recover_killed(run_dir: Path, git: Git) -> Interruption | None:
-    """Save the edits of a run that was killed outright; ``None`` if it was not."""
+def _cut_cause(run_dir: Path, state: RunState) -> Cause | None:
+    if state_mod.shown_status(run_dir, state) is state_mod.RunStatus.INTERRUPTED:
+        return Cause.KILLED
+    return state.unsaved
+
+
+def recover_cut(run_dir: Path, git: Git) -> Interruption | None:
+    """Save the edits of a run that was killed or halted unsaved; ``None`` if it was not."""
     state = state_mod.load(run_dir)
-    if state_mod.shown_status(run_dir, state) is not state_mod.RunStatus.INTERRUPTED:
+    cause = _cut_cause(run_dir, state)
+    if cause is None:
         return None
-    found = Salvager(git, run_dir).save(state, Cause.KILLED)
+    found = Salvager(git, run_dir).save(state, cause)
+    state.unsaved = None
     state.checkout = checkout.recorded(git)
     state_mod.save(run_dir, state)
     return found
