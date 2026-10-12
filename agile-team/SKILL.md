@@ -203,6 +203,13 @@ command fails.
   (`run_tests`, `run_new_tests`). Those tools need `[[toolchain.targeted]]`
   in `.agile-team.toml`; if a developer reports they refuse, that is a config
   gap for DevOps or the human, not a team fault.
+- In this repo the runner's suite runs in parallel with pytest-xdist (s70):
+  the gate runs `uv run --directory agile-team/runner pytest -n auto --cov
+  --cov-report=term -q`, and named tests run with
+  `uv run --directory agile-team/runner pytest -q --no-header -n auto {tests}`.
+  If a gate reports "Different tests were collected between gw0 and gw1", a
+  test ID holds a live value (a pid, a clock). The unit-tester must fix that
+  test. It is not a runner fault.
 - Never answer a PO question on the human's behalf.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
 - With `auth = "api-key"` the key bills the repo's Console workspace, not the

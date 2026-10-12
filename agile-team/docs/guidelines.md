@@ -107,4 +107,11 @@ rule, update in the same story:
   `uv run --directory agile-team/runner pytest -q tests/test_x.py::test_y`.
 - Tests never touch the real home directory. The suite points
   `AGILE_TEAM_HOME` at a scratch dir.
+- The suite runs in parallel under pytest-xdist (s70), so a test ID never holds
+  a live value. No parametrize value or id comes from a pid, a process group,
+  the clock, a random number, a temp path or the environment. Parametrize with
+  a label or a template and resolve the live value in the test body. Inject
+  live process values (such as `process_groups.RunnerIds`) so tests can pass
+  fixed fakes. Tests share no fixed port or path outside `tmp_path`, and none
+  depends on another test having run first.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.

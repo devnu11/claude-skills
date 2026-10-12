@@ -199,6 +199,15 @@ With several projects in one repo, add one row each, e.g. `root = "api"` with
 is logged in `.team/run/events.jsonl` as a `tests-run` event with how long it
 took.
 
+To run your suite in parallel, add pytest-xdist to your dev dependencies and
+`-n auto` to your commands, e.g.
+`coverage = "uv run pytest -n auto --cov --cov-report=term"` and
+`command = "uv run pytest -q --no-header -n auto {tests}"`. pytest-cov merges
+the coverage of all workers, so the gate reads one total as before. If a
+gate says "Different tests were collected between gw0 and gw1", a test's ID
+holds a value that differs per process (a pid, the time). Change that test
+so its ID is fixed.
+
 ## When a story comes back to tests with its code done
 
 A ruling or a review can send a story back to `tests` after its code is

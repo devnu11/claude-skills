@@ -481,6 +481,13 @@ pragma = "# pragma: no cover"
 [[toolchain.targeted]]         # optional; how the runner runs named tests for a developer (s69)
 root = ""                      # repo-relative dir the ids are relative to; the longest holding root wins
 command = "uv run pytest -q --no-header {tests}"   # must hold {tests}: the quoted ids
+# A parallel suite (s70): with pytest-xdist in the dev dependencies, add `-n auto`
+# to `test`, `coverage` and the targeted `command`. pytest-cov merges the
+# workers' coverage into one TOTAL line, so the gate reads it unchanged. This repo
+# runs `uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q`
+# and `uv run --directory agile-team/runner pytest -q --no-header -n auto {tests}`.
+# Test IDs must not hold a live value (pid, clock, temp path): xdist refuses
+# to run when its workers collect different IDs.
 
 [toolchain.globs]              # {source} {tests} {e2e} {ci} in role globs
 source = ["src/**"]

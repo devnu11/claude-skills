@@ -44,6 +44,7 @@ one line here. Older designs are the sections at the end of this file.
 | s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
 | s68 The implement gate runs the suite once (the `coverage` command only); a non-zero exit never passes; failing tests vs coverage shortfall told apart by `TEST_FAILURES`, bounce texts unchanged | [design/s68.md](design/s68.md) |
 | s69 Only the runner runs the full suite: `SUITE_RULES` deny full pytest and coverage runs from role Bash; gate and pre-quality results kept per story and shown under `## Runner results`; the developer's `run_tests`/`run_new_tests` runner tools (`[[toolchain.targeted]]`); the quality czar has no shell | [design/s69.md](design/s69.md) |
+| s70 The runner's suite runs in parallel (pytest-xdist dev dependency, `-n auto` in the coverage, test and targeted commands and CI); `sandbox.stop_stale` takes injected `RunnerIds`, so no test ID holds a live pid; a two-process collection test checks it | [design/s70.md](design/s70.md) |
 
 ## Components
 
