@@ -1,10 +1,14 @@
 # Developer (API): Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 done, two open items)
+**Last updated:** 2026-10-12 (s74 done)
 
 See `developer.md` for base conventions.
 
-## s44: Live spend meter, heartbeat, and health (round 1 done; 2 items open)
+## s74: Dashboard pill fixes — N1 text, resting stopped pill styling
+
+Both open items from s44 are fixed. **N1:** `pillText` fallback branch now returns `` `▶ ${who(act)} · …` `` with a space after the arrow (was `▶${who(act)}`). **Resting pill:** Changed `STATUS_TONE.stopped` from `"warning"` to `""` (plain), so the run-status pill for `stopped` is not yellow. Extracted `statusPills(view, now)` to build pills as an array of HTML strings for unit testability. No changes to CSS, smart pill, health rules, or Python. See design `agile-team/docs/design/s74.md` (changes C1–C3, rules N1, S1–S3), ADR-0037.
+
+## s44: Live spend meter, heartbeat, and health (all items complete)
 
 The runner measures every turn and keeps a heartbeat file fresh; Python has one health rule table; the dashboard shows live spend rate, health colour, flow-box stats, and alerts. Round 1 (code, UI tests) is done. **Open:**
 

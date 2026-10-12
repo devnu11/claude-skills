@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done)
+**Last updated:** 2026-10-12 (s74 done)
+
+## s74: Dashboard pill fixes reviewed and shipped (no defects)
+
+**Verdict: ship.** Changes in `agile_team/dashboard/index.html`: `STATUS_TONE.stopped` from `"warning"` to `""`, `pillText` fallback with space after `▶`, new `statusPills(view, now)` pure function. Design updated protocol.md § Health. Node UI tests pass (three new, existing green). Python unchanged; coverage 99.68%; ruff clean. No defects. The pill-tone change affects only `status=stopped` (timeline step-end statuses are handoff/verdicts, not `stopped`). See `.team/reviews/s74.md`, ADR-0037.
 
 ## s72: Per-test time limit (1s unit, 30s e2e) — no code branches, one table
 

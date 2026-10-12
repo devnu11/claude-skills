@@ -1,6 +1,16 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s79 done; no ADR)
+**Last updated:** 2026-10-12 (s74 done)
+
+## s74: Dashboard pill UI tests—fallback text space, resting stopped pill, forced halts stay red
+
+Three new node UI tests written (in `test_dashboard_live_ui.py`, via `drive`), all passing:
+
+- **N1:** `test_fallback_pill_text_has_a_space_after_the_arrow`: `pillText(view, now)` with `view.heartbeat = null`, an open `step-start` event, and no live step returns exactly `"▶ developer-cli on s29 · 2 min"` (space after arrow).
+- **S1:** `test_resting_stopped_pill_is_plain`: With `view.run.status = "stopped"`, health `{level: "idle", reason: "stopped"}`, and no events, `statusPills(view, now)[1]` (the run-status pill) is exactly `'<span class="pill tone-"><span class="dot"></span>stopped</span>'` and no parts contain `tone-warning`, `h-amber`, `h-red`, or `⚠`.
+- **S2:** `test_forced_halts_stay_red_on_the_smart_pill`: Parametrized over `stopped` with `halt_kind: "sigterm"` (stop --now), `blocked`, `failed`, `interrupted`; each has health level `red` and heartbeat `null`. One part of `statusPills(view, now)` contains `pill smart h-red` and `● <reason>`.
+
+All three tests were written first and failed before the fix. Existing tests (`test_graceful_stop_is_idle_and_silent`, `test_pill_with_red_health_and_no_live_step`) stay green. Coverage 99.68%, ruff clean. See design `agile-team/docs/design/s74.md` test checklist, ADR-0037.
 
 ## s79: Git isolation for CI portability (GIT_ISOLATION, REPO_GIT_CONFIG, isolated_git fixture)
 

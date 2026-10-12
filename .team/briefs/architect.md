@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done)
+**Last updated:** 2026-10-12 (s74 done)
+
+## s74: Dashboard graceful vs forced stop display—run-status pill neutral for stopped
+
+The dashboard now visually distinguishes graceful and forced halts (refining ADR-0032 D4). The **run-status pill** for `stopped` shows tone `""` (plain), not `"warning"` (yellow). Health colour belongs to the **smart pill** (which is hidden at rest when health is `idle`). Graceful stops: plain `● stopped`. Forced halts: plain run-status pill + red smart pill with the reason. Fallback step text (`▶ <role> on <story> · <ago>`) restored with space after arrow. New **`statusPills(view, now)`** pure function builds the row's pills for unit testability (S3); `renderStatusRow` calls it and writes the result. No changes to CSS, smart pill, health rules, or snapshot. See ADR-0037, design `agile-team/docs/design/s74.md` (rules N1, S1–S3).
 
 ## s72: Timeout limits follow the world concept from s71
 
