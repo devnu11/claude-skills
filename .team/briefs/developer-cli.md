@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s75 done)
 
 See `developer.md` for the base conventions.
+
+## s75: DevOps scopes its test runs; exemption boundary documented (ADR-0039, no code change)
+
+Documentation only. `roles/devops.md` now has a `## Test runs` section stating: DevOps runs only what proves the change (normally one named test), never full suite or coverage. The exemption from s69 applies only to onboarding baseline. In boundary fixes, run the failing tests the brief names; the runner re-runs full checks. For changes to test/coverage commands, say in the summary it waits on the runner's next check. Docs updated (protocol.md, SKILL.md, routing.md). Suite_check.py unchanged (devops stays in FULL/COVERAGE allowed). No runtime change. New test `test_devops_scopes_its_test_runs` pins five key phrases. AC1–AC3 all pass; coverage 99.64%, ruff clean. See ADR-0039, design `agile-team/docs/design/s75.md`.
 
 ## s77: Unit tests touch no OS—P3 completion, LEGACY closed, ruff TID251 enforced (no new ADR)
 

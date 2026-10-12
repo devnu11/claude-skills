@@ -1,6 +1,10 @@
 # DevOps: Current context and conventions
 
-**Last updated:** 2026-10-11 (s62 done)
+**Last updated:** 2026-10-12 (s75 done)
+
+## s75: Test scoping rule documented; your exemption boundary established (ADR-0039)
+
+Your role file `agile-team/runner/agile_team/roles/devops.md` now has a `## Test runs` section (and one sentence added to `## Onboarding sprint`). The rule: **run only what proves your change, normally one named test.** Never run the full suite or a coverage run; the runner's gate does those. The exemption from s69 exists only so onboarding can record its baseline—that is the one step where you run full suite and coverage. In boundary fixes, run the failing tests the brief names; the runner re-runs full checks after. For changes to test or coverage commands themselves, say in your summary that the change waits on the runner's next check. No code change; the boundary is discipline, not enforcement. Test in `tests/test_roles.py` pins five key phrases. All ACs pass. See design `agile-team/docs/design/s75.md`, ADR-0039.
 
 ## s26: Service delivery configuration
 

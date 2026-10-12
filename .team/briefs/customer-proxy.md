@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s75 done)
+
+## s75: DevOps role file documents test scoping (documentation, no change to you)
+
+All three ACs pass. The runner's CLI and your acceptance scope are unchanged. DevOps scope only: new `## Test runs` section clarifies that DevOps runs only what proves the change (normally one named test), never full suite or coverage. The exemption from s69 applies only to onboarding baseline. Docs updated (protocol, SKILL.md, routing.md); suite_check.py unchanged. Test pins the rule in five phrases. See design `agile-team/docs/design/s75.md`, ADR-0039.
 
 ## s77: CLI works unchanged; unit-test seam complete (internal refactor, P3 of s71, no ADR)
 

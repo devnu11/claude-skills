@@ -1,6 +1,15 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s75 done)
+
+## s75: DevOps exemption boundary documented; no code change (ADR-0039)
+
+Documentation and test only. The human clarified that DevOps stays exempt from s69's full-suite/coverage deny, but must scope its test runs (normally one named test). The exemption exists only for onboarding baseline. All three ACs pass:
+- **AC1:** `devops.md` states the rule; placement and text match design exactly.
+- **AC2:** New test `test_devops_scopes_its_test_runs` in `tests/test_roles.py` pins five key phrases.
+- **AC3:** `protocol.md`, `SKILL.md`, `routing.md` all mention the rule (docs move with behaviour).
+
+No code change; suite_check.py stays unchanged (devops in FULL and COVERAGE allowed). Coverage 99.64%, ruff clean. ADR-0039 records the decision. See design `agile-team/docs/design/s75.md`, review `.team/reviews/s75.md`.
 
 ## s77: Ruff TID251 DevOps step—banned-api config enforcement (P3 phase, no new ADR)
 
