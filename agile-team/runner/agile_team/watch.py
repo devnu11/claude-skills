@@ -28,10 +28,12 @@ class Seen:
     health: str = ""
 
     @classmethod
-    def load(cls, path: Path) -> Seen:
-        """Read the memory; a missing or unreadable file means fresh memory."""
+    def load(cls, path: Path) -> Seen | None:
+        """Read the memory: ``None`` when there is none yet (a first watch, F1); fresh memory when unreadable."""
         try:
             return cls(**json.loads(system.read_text(path)))
+        except FileNotFoundError:
+            return None
         except (OSError, ValueError, TypeError):
             return cls()
 
@@ -137,7 +139,8 @@ class Watcher:
 
     def until(self, timeout_s: float | None) -> dict[str, Any]:
         """Poll until a trigger fires or ``timeout_s`` passes; save memory; return the line."""
-        seen, deadline = Seen.load(self.memory), self._deadline(timeout_s)
+        deadline = self._deadline(timeout_s)
+        seen = self._baseline()
         while True:
             now = look(self.run_dir)
             ended = self._ended(seen, now, deadline)
@@ -146,6 +149,23 @@ class Watcher:
                 return line(ended, Basis(seen, now))
             seen = self._next(seen, now)
             self._sleep(POLL_S)
+
+    def _baseline(self) -> Seen:
+        """The remembered look; a first watch (no memory file) records the current one first (F2)."""
+        remembered = Seen.load(self.memory)
+        return remembered if remembered is not None else self._record(self._whole_look())
+
+    def _record(self, now: Look) -> Seen:
+        """Save ``now`` as watch memory and return it (F2)."""
+        seen = now.seen()
+        seen.save(self.memory)
+        return seen
+
+    def _whole_look(self) -> Look:
+        """The first look with no torn outbox line, sleeping ``POLL_S`` between tries (F3)."""
+        while (now := look(self.run_dir)) is None:
+            self._sleep(POLL_S)
+        return now
 
     def _sleep(self, seconds: float) -> None:
         system.sleep(seconds)
