@@ -18,7 +18,7 @@ from agile_team.providers import Billing
 from agile_team.state import RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
-from .fake_system import FakeSystem
+from .fake_system import FAKE_IDS, START_CLOCK, FakeSystem
 
 LIMITS = cfg.HealthLimits()
 NOW = 1_000_000.0
@@ -169,42 +169,29 @@ def test_clock_read_gives_both_clocks_from_the_system(fake: FakeSystem) -> None:
 # ----- the pulse --------------------------------------------------------------------
 
 
-class Pace:
-    """Fake pace: ``wait`` answers from a script; ``mono`` is fixed."""
-
-    def __init__(self, stops: list[bool] | None = None) -> None:
-        self.stops = list(stops or [])
-        self.waits = 0
-
-    def wait(self, event: Any, seconds: float) -> bool:
-        self.waits += 1
-        return self.stops.pop(0)
-
-    def pace(self) -> live.Pace:
-        return live.Pace(now=lambda: NOW, wait=self.wait, mono=lambda: MONO)
-
-
-def make_pulse(stops: list[bool] | None = None) -> tuple[live.Pulse, list[int]]:
-    """A pulse whose ``write`` only counts and whose turn log is silent."""
-    pulse = live.Pulse(RUN_DIR, 20.0, Pace(stops).pace(), pid=4242)
+def make_pulse(fake: FakeSystem, ticks: int = 0) -> tuple[live.Pulse, list[int]]:
+    """A pulse whose ``write`` only counts and whose turn log is silent; ``ticks`` beats."""
+    fake.ticks = ticks
+    pulse = live.Pulse(RUN_DIR, 20.0)
     writes: list[int] = []
     pulse.write = lambda: writes.append(1)  # type: ignore[method-assign]
     pulse._log = lambda turn: None  # type: ignore[method-assign]
     return pulse, writes
 
 
-def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order() -> None:
-    pulse, _ = make_pulse()
+def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(fake)
     data = pulse.heartbeat()
     assert live.HEARTBEAT_VERSION == 2 and data["version"] == 2
-    assert data["mono"] == MONO
+    assert data["mono"] == fake.clock and data["at"] == fake.clock
+    assert data["pid"] == FAKE_IDS[0]
     assert list(data) == [
         "version", "pid", "beat", "at", "mono", "started_at", "chore", "step",
     ]  # fmt: skip
 
 
-def test_tool_calls_and_results_write_the_heartbeat() -> None:
-    pulse, writes = make_pulse()
+def test_tool_calls_and_results_write_the_heartbeat(fake: FakeSystem) -> None:
+    pulse, writes = make_pulse(fake)
     meter = pulse.open(WHO)
     writes.clear()
     use = AssistantMessage(
@@ -222,20 +209,20 @@ def test_tool_calls_and_results_write_the_heartbeat() -> None:
 
 
 def test_the_beat_thread_survives_failed_writes_and_logs_the_first(fake: FakeSystem) -> None:
-    pulse, _ = make_pulse([False, False, True])
+    pulse, _ = make_pulse(fake, ticks=2)
 
     def broken() -> None:
         raise RuntimeError("boom")
 
     pulse.write = broken  # type: ignore[method-assign]
     pulse.beats()
-    assert pulse.pace.wait.__self__.waits == 3  # type: ignore[attr-defined]
+    assert fake.ticks == 0 and fake.clock == START_CLOCK + 2 * 20.0  # two beats, then it stopped
     log = fake.text_of(RUN_DIR / "crash.log")
     assert log.count("--- ") == 1 and "RuntimeError" in log and "boom" in log
 
 
 def test_a_beat_that_works_after_a_failure_keeps_beating(fake: FakeSystem) -> None:
-    pulse, _ = make_pulse([False, False, True])
+    pulse, _ = make_pulse(fake, ticks=2)
     calls: list[int] = []
 
     def flaky() -> None:
@@ -251,7 +238,7 @@ def test_a_beat_that_works_after_a_failure_keeps_beating(fake: FakeSystem) -> No
 
 def test_reporting_into_an_unwritable_crash_log_raises_nothing(fake: FakeSystem) -> None:
     fake.fill_disk()
-    pulse, _ = make_pulse()
+    pulse, _ = make_pulse(fake)
     pulse._report(RuntimeError("x"))
     pulse._report(RuntimeError("y"))
 
@@ -259,8 +246,8 @@ def test_reporting_into_an_unwritable_crash_log_raises_nothing(fake: FakeSystem)
 # ----- wiring -----------------------------------------------------------------------
 
 
-def make_runtime(seen: list[Any]) -> tuple[Runtime, live.Pulse]:
-    pulse, _ = make_pulse()
+def make_runtime(seen: list[Any], fake: FakeSystem) -> tuple[Runtime, live.Pulse]:
+    pulse, _ = make_pulse(fake)
     runtime = object.__new__(Runtime)
     runtime.pulse = pulse
 
@@ -274,9 +261,9 @@ def make_runtime(seen: list[Any]) -> tuple[Runtime, live.Pulse]:
     return runtime, pulse
 
 
-def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one() -> None:
+def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one(fake: FakeSystem) -> None:
     seen: list[Any] = []
-    runtime, pulse = make_runtime(seen)
+    runtime, pulse = make_runtime(seen, fake)
     plan = SimpleNamespace(story=SimpleNamespace(step="implement", id="s71"))
     assert GATE_CHORE == "gate: {step} on {story}"
     with pulse.doing("settling developer-cli on s71"):

@@ -28,7 +28,7 @@ from agile_team.state import RunState
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
 from . import os_guard, time_limit
-from .fake_system import FAKE_HOME, FAKE_REPO, FakeSystem
+from .fake_system import FAKE_HEAD, FAKE_HOME, FAKE_REPO, FAKE_ROOT, Done, FakeSystem
 
 PY_CONFIG: dict[str, Any] = {
     "team": {"docs_dir": "docs", "budget_usd": 10.0, "manager_every_pct": 50},
@@ -174,10 +174,15 @@ def isolated_global_roles(
     }
     home = homes[world]()
     monkeypatch.setenv("AGILE_TEAM_HOME", str(home))
+    if world is os_guard.World.FAKE:
+        request.getfixturevalue("fake").env["AGILE_TEAM_HOME"] = str(home)
     return home / "roles"
 
 
-def _seed_fake_repo() -> Path:
+def _seed_fake_repo(fake: FakeSystem) -> Path:
+    fake.reply(("git", "rev-parse", "--git-dir"), Done(0, ".git\n"))
+    fake.reply(("git", "symbolic-ref"), Done(0, "main\n"))
+    fake.reply(("git", "rev-parse", "HEAD"), Done(0, FAKE_HEAD + "\n"))
     system.make_dirs(FAKE_REPO / "src")
     system.make_dirs(FAKE_REPO / ".git")
     system.write_text(FAKE_REPO / ".gitignore", ".team/run/\n")
@@ -203,10 +208,26 @@ def _real_repo(request: pytest.FixtureRequest) -> Path:
 def repo(world: os_guard.World, request: pytest.FixtureRequest) -> Path:
     """A repo with one commit and ``.team/run/`` ignored (in memory for unit tests)."""
     seeds: dict[os_guard.World, Callable[[], Path]] = {
-        os_guard.World.FAKE: _seed_fake_repo,
+        os_guard.World.FAKE: lambda: _seed_fake_repo(request.getfixturevalue("fake")),
         os_guard.World.REAL: lambda: _real_repo(request),
     }
     return seeds[world]()
+
+
+def _fake_scratch() -> Path:
+    path = FAKE_ROOT / "scratch"
+    system.make_dirs(path)
+    return path
+
+
+@pytest.fixture
+def scratch(world: os_guard.World, request: pytest.FixtureRequest) -> Path:
+    """An empty scratch dir: in memory for unit tests, ``tmp_path`` in the real world."""
+    makers: dict[os_guard.World, Callable[[], Path]] = {
+        os_guard.World.FAKE: _fake_scratch,
+        os_guard.World.REAL: lambda: request.getfixturevalue("tmp_path"),
+    }
+    return makers[world]()
 
 
 def _commit_config(repo: Path) -> None:

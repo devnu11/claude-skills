@@ -1,114 +1,96 @@
-"""s41: the runner signals only process groups it created (G1-G6)."""
+"""s41: the runner signals only process groups it created (G1-G6), on the fake (s76)."""
 
-import contextlib
-import os
 import signal
-import subprocess
-import time
-from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from agile_team import commands, process_groups, sandbox
-from agile_team.process_groups import Recorded, RunnerIds
+from agile_team import commands, process_groups, sandbox, system
+from agile_team.process_groups import PS_TIMEOUT_S, Recorded, RunnerIds
 
-FAKE = RunnerIds(4242, 4243)  # literals: test ids must not hold live values (s70)
+from .fake_system import FAKE_IDS, FAKE_ROOT, START_CLOCK, Done, FakeSystem, Hang
 
-
-@pytest.fixture
-def sent(monkeypatch) -> list[tuple[int, int]]:
-    """Record every killpg instead of sending it."""
-    calls: list[tuple[int, int]] = []
-    monkeypatch.setattr(os, "killpg", lambda pgid, sig: calls.append((pgid, sig)))
-    return calls
-
-
-def _spawn(new_session: bool) -> subprocess.Popen:
-    return subprocess.Popen(["sleep", "30"], start_new_session=new_session)
+FAKE = RunnerIds(*FAKE_IDS)  # literals: test ids must not hold live values (s70)
+SAME = 5000  # a child in the runner's own group
+OWN = 5001  # a child that leads its own group
+GONE = 5002  # a pid that has been reaped
+BASE = FAKE_ROOT / "sandboxes"
+PID_FILE = BASE / f"web{sandbox.PID_SUFFIX}"
+STARTED_5S_AGO = Done(0, "00:05\n")
 
 
-@pytest.fixture
-def same_group():
-    proc = _spawn(False)
-    yield proc
-    proc.kill()
-    proc.wait()
+@pytest.fixture(autouse=True)
+def children(fake: FakeSystem) -> None:
+    """One child in the runner's group, one in its own; ``GONE`` was never there."""
+    fake.groups[SAME] = FAKE_IDS[1]
+    fake.groups[OWN] = OWN
+    system.make_dirs(BASE)
 
 
-@pytest.fixture
-def own_group():
-    proc = _spawn(True)
-    yield proc
-    proc.kill()
-    proc.wait()
+def _sent(fake: FakeSystem) -> list[tuple[int, int]]:
+    return [(group, sig) for name, group, sig in fake.signals if name == "killpg"]
 
 
-@pytest.fixture
-def reaped_pid() -> int:
-    proc = _spawn(True)
-    proc.kill()
-    proc.wait()
-    return proc.pid
-
-
-def _kills(sent) -> list[tuple[int, int]]:
-    return [c for c in sent if c[1] != 0]
+def _proc(pid: int) -> SimpleNamespace:
+    return SimpleNamespace(pid=pid)
 
 
 # 1
-def test_same_group_child_is_never_signalled(sent, same_group) -> None:
-    process_groups.signal_child_group(same_group.pid, signal.SIGTERM)
-    sandbox._signal_group(same_group, signal.SIGTERM)
-    assert sent == []
+def test_same_group_child_is_never_signalled(fake: FakeSystem) -> None:
+    process_groups.signal_child_group(SAME, signal.SIGTERM)
+    sandbox._signal_group(_proc(SAME), signal.SIGTERM)  # type: ignore[arg-type]
+    assert fake.signals == []
 
 
-def test_runner_and_bad_pids_are_never_signalled(sent) -> None:
-    class Me:
-        pid = os.getpid()
-
-    sandbox._signal_group(Me(), signal.SIGTERM)  # type: ignore[arg-type]
-    for pid in (os.getpid(), os.getpgrp(), 0, 1, -5):
+def test_runner_and_bad_pids_are_never_signalled(fake: FakeSystem) -> None:
+    sandbox._signal_group(_proc(system.pid()), signal.SIGTERM)  # type: ignore[arg-type]
+    for pid in (*FAKE_IDS, 0, 1, -5):
         process_groups.signal_child_group(pid, signal.SIGKILL)
-    assert sent == []
+    assert fake.signals == []
 
 
 # 2
-def test_new_session_child_is_signalled(sent, own_group) -> None:
-    process_groups.signal_child_group(own_group.pid, signal.SIGTERM)
-    assert sent == [(own_group.pid, signal.SIGTERM)]
+def test_new_session_child_is_signalled(fake: FakeSystem) -> None:
+    process_groups.signal_child_group(OWN, signal.SIGTERM)
+    assert _sent(fake) == [(OWN, signal.SIGTERM)]
 
 
-def test_vanished_leader_is_signalled(sent, monkeypatch) -> None:
-    def gone(pid):
-        raise ProcessLookupError
-
-    monkeypatch.setattr(os, "getpgid", gone)
-    process_groups.signal_child_group(4242, signal.SIGKILL)
-    assert sent == [(4242, signal.SIGKILL)]
+def test_vanished_leader_is_signalled(fake: FakeSystem) -> None:
+    process_groups.signal_child_group(GONE, signal.SIGKILL)
+    assert _sent(fake) == [(GONE, signal.SIGKILL)]
 
 
 @pytest.mark.parametrize("error", [ProcessLookupError, PermissionError])
-def test_killpg_errors_are_suppressed(monkeypatch, own_group, error) -> None:
+def test_killpg_errors_are_suppressed(monkeypatch, error) -> None:
     def boom(pgid, sig):
         raise error
 
-    monkeypatch.setattr(os, "killpg", boom)
-    process_groups.signal_child_group(own_group.pid, signal.SIGTERM)
+    monkeypatch.setattr(system, "killpg", boom)
+    process_groups.signal_child_group(OWN, signal.SIGTERM)
+
+
+def test_other_errors_from_pgid_refuse_the_signal(fake: FakeSystem, monkeypatch) -> None:
+    def denied(pid):
+        raise PermissionError
+
+    monkeypatch.setattr(system, "pgid", denied)
+    process_groups.signal_child_group(OWN, signal.SIGTERM)
+    assert fake.signals == []
 
 
 # 3
-def test_leads_own_group(own_group, same_group, reaped_pid) -> None:
-    assert process_groups.leads_own_group(own_group.pid)
-    assert not process_groups.leads_own_group(same_group.pid)
-    assert not process_groups.leads_own_group(os.getpid())
-    assert not process_groups.leads_own_group(reaped_pid)
+def test_leads_own_group() -> None:
+    assert process_groups.leads_own_group(OWN)
+    assert not process_groups.leads_own_group(SAME)
+    assert not process_groups.leads_own_group(system.pid())
+    assert not process_groups.leads_own_group(GONE)
 
 
 # 4
-def test_in_runner_group(own_group, same_group, reaped_pid) -> None:
-    assert process_groups.in_runner_group(os.getpid())
-    assert process_groups.in_runner_group(same_group.pid)
-    assert not process_groups.in_runner_group(own_group.pid)
-    assert not process_groups.in_runner_group(reaped_pid)
+def test_in_runner_group() -> None:
+    assert process_groups.in_runner_group(system.pid())
+    assert process_groups.in_runner_group(SAME)
+    assert not process_groups.in_runner_group(OWN)
+    assert not process_groups.in_runner_group(GONE)
     assert not process_groups.in_runner_group(10**30)
 
 
@@ -132,87 +114,82 @@ def test_parse_etime(text: str, seconds) -> None:
 
 
 # 6
-def test_started_at_of_a_fresh_child(own_group) -> None:
-    started = process_groups.started_at(own_group.pid)
-    assert started is not None and abs(started - time.time()) < 3
+def test_started_at_asks_ps_for_the_pid(fake: FakeSystem) -> None:
+    fake.reply(("ps",), STARTED_5S_AGO)
+    assert process_groups.started_at(OWN) == START_CLOCK - 5
+    assert fake.commands == [
+        system.Command(("ps", "-o", "etime=", "-p", str(OWN)), timeout=PS_TIMEOUT_S)
+    ]
 
 
-def test_started_at_of_a_reaped_pid(reaped_pid) -> None:
-    assert process_groups.started_at(reaped_pid) is None
+def test_started_at_of_a_reaped_pid(fake: FakeSystem) -> None:
+    fake.reply(("ps",), Done(1, "", "no such process"))
+    assert process_groups.started_at(GONE) is None
 
 
 @pytest.mark.parametrize(
     "outcome",
     [
-        subprocess.TimeoutExpired("ps", 1),
+        system.TimeoutExpired("ps", 1),
         OSError("no ps"),
-        subprocess.CompletedProcess([], 1, "00:05\n", ""),
+        FileNotFoundError("ps"),
+        Done(1, "00:05\n"),
     ],
+    ids=["timeout", "oserror", "missing", "exit-1"],
 )
-def test_started_at_without_a_usable_ps(monkeypatch, outcome) -> None:
-    def run(*args, **kwargs):
-        if isinstance(outcome, BaseException):
-            raise outcome
-        return outcome
-
-    monkeypatch.setattr(subprocess, "run", run)
-    assert process_groups.started_at(os.getpid()) is None
+def test_started_at_without_a_usable_ps(fake: FakeSystem, outcome) -> None:
+    fake.reply(("ps",), outcome)
+    assert process_groups.started_at(system.pid()) is None
 
 
 # 7
-def test_recorded_is_ours(own_group, same_group, monkeypatch) -> None:
-    assert Recorded(own_group.pid, time.time()).is_ours()
-    assert not Recorded(own_group.pid, time.time() - 3600).is_ours()
-    assert not Recorded(same_group.pid, time.time()).is_ours()
-    assert not Recorded(os.getpid(), time.time()).is_ours()
-    monkeypatch.setattr(process_groups, "started_at", lambda pid: None)
-    assert not Recorded(own_group.pid, time.time()).is_ours()
+def test_recorded_is_ours(fake: FakeSystem) -> None:
+    fake.reply(("ps",), STARTED_5S_AGO)
+    assert Recorded(OWN, START_CLOCK).is_ours()
+    assert not Recorded(OWN, START_CLOCK - 3600).is_ours()
+    assert not Recorded(SAME, START_CLOCK).is_ours()
+    assert not Recorded(system.pid(), START_CLOCK).is_ours()
+    fake.reply(("ps",), Done(1))
+    assert not Recorded(OWN, START_CLOCK).is_ours()
 
 
 # 8
-def test_stale_pid_reused_after_the_file_was_written_is_left_alone(
-    tmp_path: Path, own_group
-) -> None:
-    root = tmp_path / "web"
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(own_group.pid))
-    old = time.time() - 3600
-    os.utime(pid_file, (old, old))
-    sandbox.stop_stale(root)
-    assert own_group.poll() is None
-    assert not pid_file.exists()
+def test_stale_pid_reused_after_the_file_was_written_is_left_alone(fake: FakeSystem) -> None:
+    fake.reply(("ps",), STARTED_5S_AGO)
+    fake.put(PID_FILE, str(OWN), mtime=START_CLOCK - 3600)
+    sandbox.stop_stale(BASE / "web")
+    assert OWN in fake.groups
+    assert _sent(fake) == []
+    assert not system.exists(PID_FILE)
 
 
 # 9
 @pytest.mark.parametrize("pid", [FAKE.pid, FAKE.pgrp], ids=["pid", "pgrp"])
-def test_stop_stale_never_signals_the_runner(tmp_path: Path, sent, monkeypatch, pid) -> None:
+def test_stop_stale_never_signals_the_runner(fake: FakeSystem, monkeypatch, pid) -> None:
     monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(pid))
-    sandbox.stop_stale(tmp_path / "web", FAKE)
-    assert sent == []
-    assert not pid_file.exists()
+    fake.put(PID_FILE, str(pid))
+    sandbox.stop_stale(BASE / "web", FAKE)
+    assert fake.signals == []
+    assert not system.exists(PID_FILE)
 
 
-def test_stop_stale_signals_a_pid_the_ids_do_not_name(tmp_path: Path, sent, monkeypatch) -> None:
+def test_stop_stale_signals_a_pid_the_ids_do_not_name(fake: FakeSystem, monkeypatch) -> None:
     monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
-    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.1)
-    (tmp_path / f"web{sandbox.PID_SUFFIX}").write_text("4244")
-    sandbox.stop_stale(tmp_path / "web", FAKE)
-    assert _kills(sent)[0] == (4244, signal.SIGTERM)
+    fake.put(PID_FILE, "4244")
+    sandbox.stop_stale(BASE / "web", FAKE)
+    assert _sent(fake)[0] == (4244, signal.SIGTERM)
 
 
-def test_stop_stale_defaults_to_the_live_runner_ids(tmp_path: Path, sent, monkeypatch) -> None:
+def test_stop_stale_defaults_to_the_live_runner_ids(fake: FakeSystem, monkeypatch) -> None:
     monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(os.getpid()))
-    sandbox.stop_stale(tmp_path / "web")
-    assert sent == []
-    assert not pid_file.exists()
+    fake.put(PID_FILE, str(system.pid()))
+    sandbox.stop_stale(BASE / "web")
+    assert fake.signals == []
+    assert not system.exists(PID_FILE)
 
 
 def test_runner_ids_current_reads_the_live_process() -> None:
-    assert RunnerIds.current() == RunnerIds(os.getpid(), os.getpgrp())
+    assert RunnerIds.current() == RunnerIds(*FAKE_IDS)
 
 
 def test_runner_ids_names_its_pid_and_group() -> None:
@@ -221,74 +198,59 @@ def test_runner_ids_names_its_pid_and_group() -> None:
     assert not ids.names(3)
 
 
-def test_is_ours_is_not_asked_when_the_ids_name_the_pid(tmp_path: Path, sent, monkeypatch) -> None:
+def test_is_ours_is_not_asked_when_the_ids_name_the_pid(fake: FakeSystem, monkeypatch) -> None:
     def boom(self):
         raise AssertionError("is_ours must not run")
 
     monkeypatch.setattr(Recorded, "is_ours", boom)
-    (tmp_path / f"web{sandbox.PID_SUFFIX}").write_text(str(FAKE.pid))
-    sandbox.stop_stale(tmp_path / "web", FAKE)
-    assert sent == []
+    fake.put(PID_FILE, str(FAKE.pid))
+    sandbox.stop_stale(BASE / "web", FAKE)
+    assert fake.signals == []
 
 
-def test_stop_stale_ends_a_group_it_recorded(tmp_path: Path, own_group) -> None:
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(own_group.pid))
-    sandbox.stop_stale(tmp_path / "web")
-    assert own_group.wait(timeout=5) == -signal.SIGTERM
-    assert not pid_file.exists()
+def test_stop_stale_ends_a_group_it_recorded(fake: FakeSystem) -> None:
+    fake.reply(("ps",), STARTED_5S_AGO)
+    fake.put(PID_FILE, str(OWN))
+    sandbox.stop_stale(BASE / "web")
+    assert _sent(fake) == [(OWN, signal.SIGTERM)]
+    assert OWN not in fake.groups
+    assert not system.exists(PID_FILE)
 
 
-def test_stop_stale_ignores_unreadable_pid_files(tmp_path: Path) -> None:
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text("not a pid")
-    sandbox.stop_stale(tmp_path / "web")
-    assert not pid_file.exists()
+def test_stop_stale_ignores_unreadable_pid_files(fake: FakeSystem) -> None:
+    fake.put(PID_FILE, "not a pid")
+    sandbox.stop_stale(BASE / "web")
+    assert fake.signals == []
+    assert not system.exists(PID_FILE)
 
 
 # 11
-def test_no_sigkill_when_the_group_stopped_being_ours(
-    tmp_path: Path, sent, own_group, monkeypatch
-) -> None:
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(own_group.pid))
-    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.1)
+def test_no_sigkill_when_the_group_stopped_being_ours(fake: FakeSystem, monkeypatch) -> None:
+    fake.put(PID_FILE, str(OWN))
+    fake.survivors.add(OWN)
     answers = iter([True, False])
     monkeypatch.setattr(Recorded, "is_ours", lambda self: next(answers))
-    sandbox.stop_stale(tmp_path / "web")
-    assert _kills(sent) == [(own_group.pid, signal.SIGTERM)]
+    sandbox.stop_stale(BASE / "web")
+    assert _sent(fake) == [(OWN, signal.SIGTERM)]
 
 
-def test_sigkill_when_the_group_is_still_ours(tmp_path: Path, sent, own_group, monkeypatch) -> None:
-    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
-    pid_file.write_text(str(own_group.pid))
-    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.1)
+def test_sigkill_when_the_group_is_still_ours(fake: FakeSystem, monkeypatch) -> None:
+    fake.put(PID_FILE, str(OWN))
+    fake.survivors.add(OWN)
     monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
-    sandbox.stop_stale(tmp_path / "web")
-    assert _kills(sent) == [
-        (own_group.pid, signal.SIGTERM),
-        (own_group.pid, signal.SIGKILL),
-    ]
+    sandbox.stop_stale(BASE / "web")
+    assert _sent(fake) == [(OWN, signal.SIGTERM), (OWN, signal.SIGKILL)]
+    assert fake.clock >= START_CLOCK + sandbox.STOP_WAIT_S
 
 
 # 12
-def test_kill_group_spares_the_runners_group(sent, same_group) -> None:
-    commands.kill_group(same_group)
-    assert sent == []
+def test_kill_group_spares_the_runners_group(fake: FakeSystem) -> None:
+    commands.kill_group(_proc(SAME))  # type: ignore[arg-type]
+    assert fake.signals == []
 
 
-def test_kill_group_kills_a_new_session(own_group) -> None:
-    commands.kill_group(own_group)
-    assert own_group.wait(timeout=5) == -signal.SIGKILL
-
-
-def test_no_other_module_calls_killpg() -> None:
-    pkg = Path(process_groups.__file__).parent
-    users = {
-        p.name
-        for p in pkg.glob("*.py")
-        if "os.killpg(" in p.read_text() and p.name != "process_groups.py"
-    }
-    assert users <= {"sandbox.py"}  # _ends_within polls with signal 0 only
-    with contextlib.suppress(OSError):
-        assert "killpg(pgid, 0)" in (pkg / "sandbox.py").read_text()
+def test_kill_group_kills_a_new_session(fake: FakeSystem) -> None:
+    fake.reply(("sleep",), Hang())
+    child = system.spawn_piped(system.ShellCommand("sleep 30", fake.cwd))
+    commands.kill_group(child)
+    assert child.poll() == -signal.SIGKILL

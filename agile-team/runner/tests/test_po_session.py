@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from agile_team import po_session, po_tools
+from agile_team import po_session, po_tools, system
 from agile_team import state as state_mod
 from agile_team.dispatch import StepResult, collect
 from agile_team.events import EventKind
@@ -52,8 +52,8 @@ class PoFake:
             yield BOUNDARY
         if prompt == HANDOFF_PROMPT and self.handoff is not None:
             path = self.rt.config.repo / HANDOFF_FILE
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(self.handoff)
+            system.make_dirs(path.parent)
+            system.write_text(path, self.handoff)
         yield result_message("ok", session=resume or f"fresh-{len(self.calls)}")
 
     @property
@@ -118,15 +118,15 @@ def test_with_carry_over_joins_non_empty_parts(make_runtime) -> None:
     assert out == po_session.carry_over(rt.relay) + "\n\nPROMPT"
 
 
-def test_read_and_clear_handoff(tmp_path) -> None:
-    assert po_session.read_handoff(tmp_path) == ""
-    po_session.clear_handoff(tmp_path)  # missing file is fine
-    path = tmp_path / HANDOFF_FILE
-    path.parent.mkdir(parents=True)
-    path.write_text("  keep s2\n\n")
-    assert po_session.read_handoff(tmp_path) == "keep s2"
-    po_session.clear_handoff(tmp_path)
-    assert not path.exists()
+def test_read_and_clear_handoff(repo) -> None:
+    assert po_session.read_handoff(repo) == ""
+    po_session.clear_handoff(repo)  # missing file is fine
+    path = repo / HANDOFF_FILE
+    system.make_dirs(path.parent)
+    system.write_text(path, "  keep s2\n\n")
+    assert po_session.read_handoff(repo) == "keep s2"
+    po_session.clear_handoff(repo)
+    assert not system.exists(path)
 
 
 def test_fresh_lead_formats_file_handoff_and_status() -> None:
@@ -282,12 +282,12 @@ def test_saved_handoff_path_is_used_from_the_start(make_runtime) -> None:
 def test_stale_handoff_is_deleted_and_a_silent_po_keeps_its_session(make_runtime) -> None:
     rt, _, run = setup(make_runtime, boundary=False, handoff=None)
     stale = rt.config.repo / HANDOFF_FILE
-    stale.parent.mkdir(parents=True, exist_ok=True)
-    stale.write_text("STALE")
+    system.make_dirs(stale.parent)
+    system.write_text(stale, "STALE")
     rt.state.po_renew_due = ["s1 done"]
     rt.relay.post(Note("question", "Which DB?", ["s2"]))
     turn = renew(run)
-    assert not stale.exists()
+    assert not system.exists(stale)
     assert turn.resume == "old"
     assert turn.prompt == po_session.carry_over(rt.relay) + "\n\nHANDOVER"
     (event,) = events(rt)

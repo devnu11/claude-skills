@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 from agile_team import config as cfg
-from agile_team import onboard
+from agile_team import onboard, system
 
-from .conftest import git
+from .fake_system import FAKE_HEAD, Done, FakeSystem
 
 PRESETS = onboard.load_presets()
 RECONFIGURE = onboard.WriteMode.RECONFIGURE
@@ -23,21 +23,21 @@ RECONFIGURE = onboard.WriteMode.RECONFIGURE
         ("Cargo.toml", "[package]\nname='x'\n", "rust", "package"),
     ],
 )
-def test_detect_fixture_repos(tmp_path: Path, marker, content, preset, kind) -> None:
-    (tmp_path / marker).write_text(content)
-    assert onboard.detect(tmp_path, PRESETS) == preset
-    assert onboard.suggest_kind(tmp_path, PRESETS[preset]) == kind
+def test_detect_fixture_repos(repo: Path, marker, content, preset, kind) -> None:
+    system.write_text(repo / marker, content)
+    assert onboard.detect(repo, PRESETS) == preset
+    assert onboard.suggest_kind(repo, PRESETS[preset]) == kind
 
 
-def test_detect_nothing(tmp_path: Path) -> None:
-    assert onboard.detect(tmp_path, PRESETS) is None
+def test_detect_nothing(repo: Path) -> None:
+    assert onboard.detect(repo, PRESETS) is None
 
 
-def test_presets_validate(tmp_path: Path) -> None:
+def test_presets_validate(repo: Path) -> None:
     for name, preset in PRESETS.items():
         data = onboard.build_config(preset, onboard.Answers(name, preset["delivery"]))
         known = cfg.Known(set(), {"package"})
-        assert cfg.validate(cfg.from_raw(tmp_path, data), known) == []
+        assert cfg.validate(cfg.from_raw(repo, data), known) == []
 
 
 def test_build_config_web_and_script() -> None:
@@ -59,62 +59,76 @@ def test_gitignore_lines() -> None:
     assert "!.team/roles/" in onboard.gitignore_lines("ignored")
 
 
-def test_ensure_lines(tmp_path: Path) -> None:
-    f = tmp_path / ".gitignore"
-    f.write_text("node_modules")
+def test_ensure_lines(repo: Path) -> None:
+    f = repo / ".gitignore"
+    system.write_text(f, "node_modules")
     onboard.ensure_lines(f, [".team/run/"])
     onboard.ensure_lines(f, [".team/run/"])
-    assert f.read_text() == "node_modules\n# agile-team\n.team/run/\n"
-    new = tmp_path / "new"
+    assert system.read_text(f) == "node_modules\n# agile-team\n.team/run/\n"
+    new = repo / "new"
     onboard.ensure_lines(new, ["a"])
-    assert new.read_text() == "# agile-team\na\n"
+    assert system.read_text(new) == "# agile-team\na\n"
 
 
-def test_onboard_writes_and_commits(repo: Path) -> None:
-    (repo / "pyproject.toml").write_text("[project]\nname='x'\n")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "py")
+def changes(fake: FakeSystem, status: str = "?? .agile-team.toml\0") -> None:
+    """Script git: ``status`` shows ``status``; no path is ignored; commits succeed."""
+    fake.reply(("git", "status"), Done(0, status))
+    fake.reply(("git", "check-ignore"), Done(1))
+
+
+def git_calls(fake: FakeSystem, word: str) -> list[tuple[str, ...]]:
+    return [c.argv for c in fake.commands if word in c.argv]
+
+
+def test_onboard_writes_and_commits(repo: Path, fake: FakeSystem) -> None:
+    system.write_text(repo / "pyproject.toml", "[project]\nname='x'\n")
+    changes(fake)
     sha = onboard.onboard(repo, onboard.Answers("python", "package", budget_usd=5))
-    assert sha
-    assert git(repo, "log", "-1", "--format=%s").strip() == onboard.COMMIT_MESSAGE
-    assert (repo / onboard.CHARTER).is_file()
-    assert (repo / ".team/roles/_shared.md").is_file() and (
-        repo / ".team/roles/architect.md"
-    ).is_file()
+    assert sha == FAKE_HEAD
+    (commit,) = git_calls(fake, "commit")
+    assert onboard.COMMIT_MESSAGE in commit[-1]
+    assert system.is_file(repo / onboard.CHARTER)
+    assert system.is_file(repo / ".team/roles/_shared.md")
+    assert system.is_file(repo / ".team/roles/architect.md")
     assert cfg.load(repo).team.budget_usd == 5
-    assert git(repo, "status", "--porcelain") == ""
+    (add,) = git_calls(fake, "add")
+    assert {cfg.CONFIG_NAME, ".gitignore", onboard.CHARTER, ".team/roles"} <= set(add)
     with pytest.raises(FileExistsError):
         onboard.onboard(repo, onboard.Answers("python", "package"))
 
 
-def test_reconfigure_keeps_edits(repo: Path) -> None:
+def test_reconfigure_keeps_edits(repo: Path, fake: FakeSystem) -> None:
+    changes(fake)
     onboard.onboard(repo, onboard.Answers("python", "package"))
     path = repo / cfg.CONFIG_NAME
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(system.read_text(path))
     data["toolchain"]["test"] = "make test"
     del data["gates"]["round_cap"]
     import tomli_w
 
-    path.write_text(tomli_w.dumps(data))
-    (repo / onboard.CHARTER).write_text("my charter")
-    git(repo, "commit", "-qam", "edit")
+    system.write_text(path, tomli_w.dumps(data))
+    system.write_text(repo / onboard.CHARTER, "my charter")
     onboard.onboard(repo, onboard.Answers("python", "package", budget_usd=99, mode=RECONFIGURE))
     c = cfg.load(repo)
     assert c.toolchain.commands["test"] == "make test"
     assert c.gates.round_cap == 3
     assert c.team.budget_usd == 20.0  # existing value kept
-    assert (repo / onboard.CHARTER).read_text() == "my charter"
+    assert system.read_text(repo / onboard.CHARTER) == "my charter"
 
 
-def test_reconfigure_no_change(repo: Path) -> None:
+def test_reconfigure_no_change(repo: Path, fake: FakeSystem) -> None:
+    changes(fake)
     onboard.onboard(repo, onboard.Answers("python", "package"))
+    changes(fake, status="")
     assert onboard.onboard(repo, onboard.Answers("python", "package", mode=RECONFIGURE)) is None
 
 
-def test_ignored_artifacts_keep_roles_tracked(repo: Path) -> None:
+def test_ignored_artifacts_keep_roles_tracked(repo: Path, fake: FakeSystem) -> None:
+    changes(fake)
     onboard.onboard(repo, onboard.Answers("python", "package", artifacts="ignored"))
-    tracked = git(repo, "ls-files").split()
-    assert onboard.CHARTER in tracked and ".team/roles/developer.md" in tracked
+    assert "!.team/roles/" in system.read_text(repo / ".gitignore")
+    (add,) = git_calls(fake, "add")
+    assert onboard.CHARTER in add and ".team/roles" in add
 
 
 def test_unknown_preset(repo: Path) -> None:

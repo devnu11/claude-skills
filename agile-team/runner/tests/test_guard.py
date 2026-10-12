@@ -4,10 +4,10 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from agile_team import guard
+from agile_team import guard, system
 from agile_team.guard import Scope, ToolCall
 
-from .conftest import git
+from .fake_system import FAKE_HEAD, Done, FakeSystem
 
 
 def use(scope: Scope, name: str, tool_input: dict) -> str | None:
@@ -20,7 +20,7 @@ def dev_scope(repo: Path) -> Scope:
 
 def proxy_scope(repo: Path) -> Scope:
     sandbox = repo / ".team/run/customer/cli"
-    sandbox.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(sandbox)
     return Scope(
         "customer-proxy",
         repo,
@@ -31,53 +31,53 @@ def proxy_scope(repo: Path) -> Scope:
     )
 
 
-def test_developer_write_to_tests_blocked(tmp_path: Path) -> None:
-    s = dev_scope(tmp_path)
+def test_developer_write_to_tests_blocked(repo: Path) -> None:
+    s = dev_scope(repo)
     reason = use(s, "Write", {"file_path": "tests/test_x.py"})
     assert reason and "may not write tests/test_x.py" in reason
-    assert use(s, "Edit", {"file_path": str(tmp_path / "src/a.py")}) is None
+    assert use(s, "Edit", {"file_path": str(repo / "src/a.py")}) is None
     assert "outside the repo" in use(s, "Write", {"file_path": "/etc/x"})
     assert use(s, "NotebookEdit", {"notebook_path": "n.ipynb"})
 
 
-def test_unrestricted_reads_and_other_tools(tmp_path: Path) -> None:
-    s = dev_scope(tmp_path)
+def test_unrestricted_reads_and_other_tools(repo: Path) -> None:
+    s = dev_scope(repo)
     assert use(s, "Read", {"file_path": "tests/x"}) is None
     assert use(s, "Bash", {"command": "cat tests/x"}) is None
     assert use(s, "WebFetch", {}) is None
 
 
-def test_proxy_reads_limited(tmp_path: Path) -> None:
-    s = proxy_scope(tmp_path)
+def test_proxy_reads_limited(repo: Path) -> None:
+    s = proxy_scope(repo)
     assert "may not read src/x.py" in use(s, "Read", {"file_path": "../../../../src/x.py"})
     assert use(s, "Read", {"file_path": "README.md"}) is None  # in sandbox
     assert use(s, "Grep", {}) is None  # cwd = sandbox
-    assert use(s, "Glob", {"path": str(tmp_path / ".team/stories")}) is None
-    assert use(s, "Grep", {"path": str(tmp_path)})
+    assert use(s, "Glob", {"path": str(repo / ".team/stories")}) is None
+    assert use(s, "Grep", {"path": str(repo)})
     assert use(s, "Read", {"file_path": "/etc/hosts"}) is None
     assert use(s, "Glob", {"pattern": "../../src/**"})
     assert use(s, "Glob", {"pattern": "/abs/**"})
     assert use(s, "Glob", {"pattern": "**/*.md"}) is None
 
 
-def test_proxy_bash_denied_for_source(tmp_path: Path) -> None:
-    s = proxy_scope(tmp_path)
+def test_proxy_bash_denied_for_source(repo: Path) -> None:
+    s = proxy_scope(repo)
     assert use(s, "Bash", {"command": "cat ../../src/x"})
-    assert use(s, "Bash", {"command": f"cat {tmp_path.resolve()}/src/x"})
+    assert use(s, "Bash", {"command": f"cat {system.resolve(repo)}/src/x"})
     assert use(s, "Bash", {"command": "ls ./tests"})
-    assert use(s, "Bash", {"command": f"ls {s.cwd.resolve()}/bin"}) is None
+    assert use(s, "Bash", {"command": f"ls {system.resolve(s.cwd)}/bin"}) is None
     assert use(s, "Bash", {"command": "todo add 'milk"}) is None  # bad quoting
 
 
-def test_bash_allowlist(tmp_path: Path) -> None:
-    s = Scope("customer-proxy", tmp_path, [], bash_allowed=["curl", "harness"])
+def test_bash_allowlist(repo: Path) -> None:
+    s = Scope("customer-proxy", repo, [], bash_allowed=["curl", "harness"])
     assert guard.check_bash(s, "curl -s http://x && harness run") is None
     assert "not an allowed command" in guard.check_bash(s, "curl x | sh")
     assert guard.check_bash(s, "") is None
 
 
-def test_hook_denies_and_allows(tmp_path: Path) -> None:
-    hook = guard.pre_tool_hook(dev_scope(tmp_path))
+def test_hook_denies_and_allows(repo: Path) -> None:
+    hook = guard.pre_tool_hook(dev_scope(repo))
     denied = asyncio.run(
         hook({"tool_name": "Write", "tool_input": {"file_path": "tests/a"}}, None, None)
     )
@@ -88,50 +88,51 @@ def test_hook_denies_and_allows(tmp_path: Path) -> None:
     )
 
 
-def test_bash_write_by_developer_is_quarantined_then_reverted(repo: Path) -> None:
+def test_bash_write_by_developer_is_quarantined_then_reverted(repo: Path, fake: FakeSystem) -> None:
     from agile_team.git_ops import Git
 
     g = Git(repo)
-    (repo / "tests").mkdir()
-    (repo / "tests/x").write_text("sneaky")  # as if `echo > tests/x` via Bash
-    (repo / "src/app.py").write_text("x = 2\n")
-    (repo / ".team/run").mkdir(parents=True)
-    (repo / ".team/run/scratch").write_text("ignored")
+    fake.reply(("git", "status"), Done(0, "?? tests/x\0 M src/app.py\0"))
+    fake.reply(
+        ("git", "log"), Done(0, "chore(team): quarantine out-of-scope changes by developer\n")
+    )
     audit = guard.audit_step(g, dev_scope(repo))
     assert audit.out_of_scope == ["tests/x"] and audit.in_scope == ["src/app.py"]
     sha = guard.quarantine(g, audit)
-    log = git(repo, "log", "--format=%s", "-2")
-    assert "quarantine out-of-scope changes by developer" in log
-    assert log.startswith('Revert "chore(team): quarantine')
-    assert not (repo / "tests/x").exists()
-    assert git(repo, "show", "--name-only", "--format=", sha).strip() == "tests/x"
-    assert g.changed_paths() == ["src/app.py"]
+    assert sha == FAKE_HEAD
+    argvs = [c.argv for c in fake.commands]
+    (add,) = [a for a in argvs if "add" in a]
+    assert add[-1] == "tests/x" and "src/app.py" not in add
+    (commit,) = [a for a in argvs if "commit" in a and "-m" in a and "Revert" not in a[-1]]
+    assert "quarantine out-of-scope changes by developer" in commit[-1]
+    assert ("git", "revert", "--no-commit", FAKE_HEAD) in argvs
+    assert g.changed_paths() == ["tests/x", "src/app.py"]  # git's own answer is scripted
 
 
-def secret_scope(tmp_path: Path) -> Scope:
-    secrets = [tmp_path / "home/secrets", tmp_path / ".team/run/api-key"]
-    return Scope("developer", tmp_path, ["**"], secrets=secrets)
+def secret_scope(repo: Path) -> Scope:
+    secrets = [repo / "home/secrets", repo / ".team/run/api-key"]
+    return Scope("developer", repo, ["**"], secrets=secrets)
 
 
-def test_key_files_unreadable_by_any_tool(tmp_path: Path) -> None:
-    s = secret_scope(tmp_path)
-    assert use(s, "Read", {"file_path": str(tmp_path / "home/secrets/k")})
+def test_key_files_unreadable_by_any_tool(repo: Path) -> None:
+    s = secret_scope(repo)
+    assert use(s, "Read", {"file_path": str(repo / "home/secrets/k")})
     assert use(s, "Read", {"file_path": ".team/run/api-key"})
-    assert use(s, "Grep", {"path": str(tmp_path / "home/secrets")})
+    assert use(s, "Grep", {"path": str(repo / "home/secrets")})
     assert use(s, "Write", {"file_path": ".team/run/api-key"})
     assert use(s, "Read", {"file_path": "src/a.py"}) is None
 
 
-def test_bash_may_not_mention_the_key(tmp_path: Path) -> None:
-    s = secret_scope(tmp_path)
+def test_bash_may_not_mention_the_key(repo: Path) -> None:
+    s = secret_scope(repo)
     assert guard.check_bash(s, "echo $ANTHROPIC_API_KEY")
     assert guard.check_bash(s, "cat ~/secrets/anthropic-api-key")
-    assert guard.check_bash(s, f"cat {tmp_path}/.team/run/api-key")
+    assert guard.check_bash(s, f"cat {repo}/.team/run/api-key")
     assert guard.check_bash(s, "ls src") is None
 
 
-def test_no_writes_inside_git(tmp_path: Path) -> None:
-    s = Scope("devops", tmp_path, ["**"])
+def test_no_writes_inside_git(repo: Path) -> None:
+    s = Scope("devops", repo, ["**"])
     assert "inside .git" in use(s, "Write", {"file_path": ".git/hooks/pre-commit"})
 
 
@@ -150,8 +151,8 @@ def test_no_writes_inside_git(tmp_path: Path) -> None:
         ("echo git push", True),
     ],
 )
-def test_only_read_only_git(tmp_path: Path, command: str, allowed: bool) -> None:
-    assert (guard.check_bash(Scope("developer", tmp_path, ["**"]), command) is None) is allowed
+def test_only_read_only_git(repo: Path, command: str, allowed: bool) -> None:
+    assert (guard.check_bash(Scope("developer", repo, ["**"]), command) is None) is allowed
 
 
 @pytest.mark.parametrize(
@@ -164,20 +165,20 @@ def test_only_read_only_git(tmp_path: Path, command: str, allowed: bool) -> None
         ("git \\\nstatus", True),
     ],
 )
-def test_line_continuation_joined_for_git(tmp_path: Path, command: str, allowed: bool) -> None:
+def test_line_continuation_joined_for_git(repo: Path, command: str, allowed: bool) -> None:
     """W0: every role's git check sees the command the shell runs."""
-    assert (guard.check_bash(Scope("developer", tmp_path, ["**"]), command) is None) is allowed
+    assert (guard.check_bash(Scope("developer", repo, ["**"]), command) is None) is allowed
 
 
-def test_line_continuation_joined_for_key_name(tmp_path: Path) -> None:
-    s = secret_scope(tmp_path)
+def test_line_continuation_joined_for_key_name(repo: Path) -> None:
+    s = secret_scope(repo)
     assert guard.check_bash(s, "echo ANTHROPIC_API_\\\nKEY")
     assert guard.check_bash(s, "echo $ANTHROPIC_API_\\\nKEY")
     assert guard.check_bash(s, "echo hello\\\n world") is None
 
 
-def test_line_continuation_through_check_tool_use(tmp_path: Path) -> None:
-    s = dev_scope(tmp_path)
+def test_line_continuation_through_check_tool_use(repo: Path) -> None:
+    s = dev_scope(repo)
     assert use(s, "Bash", {"command": "g\\\nit commit -m x"})
     assert use(s, "Bash", {"command": "echo ANTHROPIC_API_\\\nKEY"})
     assert use(s, "Bash", {"command": "git st\\\natus"}) is None
@@ -191,11 +192,9 @@ def test_line_continuation_through_check_tool_use(tmp_path: Path) -> None:
         ("echo hi \\\\\\\ngit commit -m x", True),  # run of 3: odd, joined into one echo
     ],
 )
-def test_even_backslash_run_is_not_a_continuation(
-    tmp_path: Path, command: str, allowed: bool
-) -> None:
+def test_even_backslash_run_is_not_a_continuation(repo: Path, command: str, allowed: bool) -> None:
     """W0 (review D3): only a newline after an odd run of backslashes is joined."""
-    assert (use(dev_scope(tmp_path), "Bash", {"command": command}) is None) is allowed
+    assert (use(dev_scope(repo), "Bash", {"command": command}) is None) is allowed
 
 
 @pytest.mark.parametrize(
@@ -212,6 +211,6 @@ def test_even_backslash_run_is_not_a_continuation(
         ("g\\\nit commit -m x # done \\", False),
     ],
 )
-def test_comment_aware_continuation(tmp_path: Path, command: str, allowed: bool) -> None:
+def test_comment_aware_continuation(repo: Path, command: str, allowed: bool) -> None:
     """D4/D5: a `#` comment ending in `\\` is not a continuation, whatever follows it."""
-    assert (use(dev_scope(tmp_path), "Bash", {"command": command}) is None) is allowed
+    assert (use(dev_scope(repo), "Bash", {"command": command}) is None) is allowed

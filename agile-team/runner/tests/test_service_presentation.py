@@ -2,21 +2,14 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
-import os
 import signal
-import socket
-import subprocess
-import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 import pytest
-from agile_team import cli, gates, handover, presentation, sandbox
+from agile_team import cli, gates, handover, presentation, sandbox, system
 from agile_team import config as cfg
 from agile_team.config import Delivery
 from agile_team.dispatch import StepRequest
@@ -26,6 +19,7 @@ from agile_team.roles import Handoff
 from agile_team.sandbox import NotUp, Order, PortBusy, Preparer, Start
 
 from .conftest import FakeQuery, FakeRunner, present
+from .fake_system import FAKE_REPO, FIRST_CHILD_PID, START_CLOCK, Done, FakeSystem, Hang
 
 PORT = 8799
 URL = f"http://127.0.0.1:{PORT}/"
@@ -37,40 +31,11 @@ DASHBOARD = Delivery(
     url=URL,
     probe="api/snapshot",
 )
+LEADER = FIRST_CHILD_PID  # the pid the first spawned child gets, and its group
+STARTED_5S_AGO = Done(0, "00:05\n")
 
 
 # ----- fakes ----------------------------------------------------------------
-
-
-class FakeProcess:
-    """A stand-in for ``Popen`` whose exit code the test chooses."""
-
-    def __init__(self, returncode: int | None = None):
-        self.pid = 4_000_001
-        self.returncode = returncode
-
-    def poll(self) -> int | None:
-        return self.returncode
-
-    def wait(self, timeout: float | None = None) -> int:
-        return self.returncode or 0
-
-
-class FakePopen:
-    """Records the launch; may write ``output`` into the log the runner handed over."""
-
-    def __init__(self, process: FakeProcess | None = None, output: bytes = b""):
-        self.process = process or FakeProcess()
-        self.output = output
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.seen: list[Any] = []
-
-    def __call__(self, command: str, **kw: Any) -> FakeProcess:
-        self.calls.append((command, kw))
-        if kw.get("stdout") is not None and self.output:
-            kw["stdout"].write(self.output)
-            kw["stdout"].flush()
-        return self.process
 
 
 class Probe:
@@ -85,17 +50,8 @@ class Probe:
         return self.up_on is not None and len(self.urls) >= self.up_on
 
 
-def preparer(popen: Any = None, probe: Any = None, *, busy: bool = False, **kw: Any) -> Preparer:
-    sleeps: list[float] = []
-    made = Preparer(
-        popen=popen or FakePopen(),
-        probe=probe or Probe(),
-        listening=lambda _h, _p: busy,
-        sleep=sleeps.append,
-        **kw,
-    )
-    made.slept = sleeps  # type: ignore[attr-defined]
-    return made
+def preparer(probe: Any = None, *, busy: bool = False, **kw: Any) -> Preparer:
+    return Preparer(probe=probe or Probe(), listening=lambda _h, _p: busy, **kw)
 
 
 @pytest.fixture
@@ -103,14 +59,6 @@ def config(configured: Path) -> cfg.Config:
     c = cfg.load(configured)
     c.deliveries = [DASHBOARD]
     return c
-
-
-@pytest.fixture
-def stopped(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Replace group signalling so a fake pid never reaches a real process."""
-    sent: list[int] = []
-    monkeypatch.setattr(sandbox, "_signal_group", lambda _proc, sig: sent.append(sig))
-    return sent
 
 
 def pid_file(config: cfg.Config) -> Path:
@@ -126,6 +74,17 @@ def story_of(step: str = "e2e", story_id: str = "s4", **kw: Any) -> StoryState:
     return StoryState(story_id, "A story", step, **kw)
 
 
+def killpgs(fake: FakeSystem) -> list[tuple[int, int]]:
+    return [(group, sig) for name, group, sig in fake.signals if name == "killpg"]
+
+
+def stale_service(fake: FakeSystem, config: cfg.Config, pid: int = LEADER) -> None:
+    """A pid file naming a running group that leads its own session, started just before it."""
+    fake.reply(("ps",), STARTED_5S_AGO)
+    fake.groups[pid] = pid
+    fake.put(pid_file(config), str(pid))
+
+
 # ----- config ---------------------------------------------------------------
 
 
@@ -135,9 +94,9 @@ def test_delivery_probe_defaults_to_empty_and_is_the_last_field() -> None:
 
 
 def test_probe_is_read_from_the_toml(configured: Path) -> None:
-    toml = (configured / ".agile-team.toml").read_text()
+    toml = system.read_text(configured / ".agile-team.toml")
     toml += '\n[[delivery]]\nname = "ui"\nkind = "web"\nurl = "http://h/"\nprobe = "api/x"\n'
-    (configured / ".agile-team.toml").write_text(toml)
+    system.write_text(configured / ".agile-team.toml", toml)
     assert cfg.load(configured).delivery("ui").probe == "api/x"
 
 
@@ -157,14 +116,11 @@ def bare(delivery: Delivery, repo: Path, root: Path) -> sandbox.Prepared:
     return sandbox.Prepared(delivery, sandbox.DELIVERY_KINDS["web"], repo, root, root)
 
 
-def test_expand_makes_repo_and_sandbox_absolute(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_expand_makes_repo_and_sandbox_absolute() -> None:
     p = bare(DASHBOARD, Path("."), Path(".team/run/customer/ui"))
-    out = p.expand("{repo}|{sandbox}")
-    repo, box = out.split("|")
-    assert Path(repo).is_absolute() and Path(box).is_absolute()
-    assert repo == str(tmp_path.resolve())
-    assert box == str((tmp_path / ".team/run/customer/ui").resolve())
+    repo, box = p.expand("{repo}|{sandbox}").split("|")
+    assert repo == str(FAKE_REPO)
+    assert box == str(FAKE_REPO / ".team/run/customer/ui")
 
 
 @pytest.mark.parametrize(
@@ -181,22 +137,14 @@ def test_expand_fills_host_and_port_from_the_url(url: str, host: str, port: str)
     assert p.expand("{host}:{port}") == f"{host}:{port}"
 
 
-def test_address_probe_url_and_service_files(tmp_path: Path) -> None:
-    root = tmp_path / "customer" / "ui"
-    p = bare(DASHBOARD, tmp_path, root)
+def test_address_probe_url_and_service_files(scratch: Path) -> None:
+    root = scratch / "customer" / "ui"
+    p = bare(DASHBOARD, scratch, root)
     assert p.address() == ("127.0.0.1", 8799)
     assert p.probe_url() == PROBE_URL
-    assert p.pid_file() == tmp_path / "customer/ui.pid"
-    assert p.log_file() == tmp_path / "customer/ui.log"
-    assert bare(Delivery("ui", "web", url=URL), tmp_path, root).probe_url() == URL
-
-
-def test_cli_resolves_the_repo_once(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    args = argparse.Namespace(repo=".", home=str(tmp_path / "h"))
-    assert cli.repo_of(args) == tmp_path.resolve()
-    assert cli.Place.of(args).repo == tmp_path.resolve()
-    assert cli.Place.of(args).repo.is_absolute()
+    assert p.pid_file() == scratch / "customer/ui.pid"
+    assert p.log_file() == scratch / "customer/ui.log"
+    assert bare(Delivery("ui", "web", url=URL), scratch, root).probe_url() == URL
 
 
 def test_make_pipeline_wires_the_trial(configured: Path) -> None:
@@ -240,93 +188,86 @@ def test_presented_source(config: cfg.Config) -> None:
 # ----- L4 / L5: start and probe ---------------------------------------------
 
 
-def test_prepare_starts_the_service_and_waits_for_the_probe(config: cfg.Config) -> None:
-    popen, probe = FakePopen(), Probe(up_on=3)
-    made = preparer(popen, probe)
+def test_prepare_starts_the_service_and_waits_for_the_probe(
+    config: cfg.Config, fake: FakeSystem, monkeypatch
+) -> None:
+    fake.reply(("serve",), Hang("up\n"))
+    probe = Probe(up_on=3)
     seen_copy: list[bool] = []
+    spawn = system.spawn_logged
 
-    def spying(command: str, **kw: Any) -> FakeProcess:
-        seen_copy.append((config.run_dir / "customer/ui/presentation/workspace/todo.txt").exists())
-        return popen(command, **kw)
+    def spying(command: system.ShellCommand, log: Path) -> system.Process:
+        seen_copy.append(
+            system.exists(config.run_dir / "customer/ui/presentation/workspace/todo.txt")
+        )
+        return spawn(command, log)
 
-    made.popen = spying
-    p = made.prepare(config, Order(DASHBOARD, present(config, "s4")))
-    assert probe.urls == [PROBE_URL] * 3 and made.slept == [sandbox.PROBE_EVERY_S] * 2  # type: ignore[attr-defined]
+    monkeypatch.setattr(system, "spawn_logged", spying)
+    p = preparer(probe).prepare(config, Order(DASHBOARD, present(config, "s4")))
+    assert probe.urls == [PROBE_URL] * 3 and fake.slept == [sandbox.PROBE_EVERY_S] * 2
     assert seen_copy == [True]
-    command, kw = popen.calls[0]
-    assert "--host 127.0.0.1 --port 8799" in command
-    assert f"--repo {p.root}/presentation/workspace" in command
-    assert kw["start_new_session"] is True and kw["shell"] is True
-    assert kw["cwd"] == config.repo and kw["stderr"] == subprocess.STDOUT
-    assert p.process is popen.process
-    assert pid_file(config).is_file() and log_file(config).is_file()
+    (command,) = fake.commands
+    assert "--host 127.0.0.1 --port 8799" in command.text
+    assert f"--repo {p.root}/presentation/workspace" in command.text
+    assert (command.cwd, command.env) == (config.repo, p.env)
+    assert p.process.pid == LEADER
+    assert system.read_text(pid_file(config)) == str(system.pgid(LEADER))
+    assert system.is_file(log_file(config))
 
 
 def test_prepare_with_a_relative_repo_still_gives_absolute_paths(
-    config: cfg.Config, monkeypatch
+    config: cfg.Config, fake: FakeSystem
 ) -> None:
-    monkeypatch.chdir(config.repo)
     config.repo = Path(".")
-    popen = FakePopen()
-    preparer(popen).prepare(config, Order(DASHBOARD))
-    command = popen.calls[0][0]
-    assert "--repo ." not in command and f"--repo {Path('.team').resolve().parent}" in command
+    preparer().prepare(config, Order(DASHBOARD))
+    command = fake.commands[0].text
+    assert "--repo ." not in command and f"--repo {FAKE_REPO}" in command
 
 
-def test_prepare_runs_a_real_service_with_pid_and_log(config: cfg.Config) -> None:
-    """L6: output reaches the log; wait for it before stop().
-
-    prepare returns before the shell echoes, so stopping at once could leave the log empty.
-    """
+def test_prepare_runs_a_service_with_pid_and_log(config: cfg.Config, fake: FakeSystem) -> None:
+    """L6: the child's output reaches the log, and stop() removes the pid file."""
+    fake.reply(("echo",), Hang("hello\n"))
     d = Delivery("ui", "web", prepare="echo hello; exec sleep 60", url=URL)
     config.deliveries = [d]
-    made = Preparer(probe=Probe(), listening=lambda _h, _p: False, sleep=lambda _s: None)
-    p = made.prepare(config, Order(d))
-    try:
-        assert p.process.poll() is None
-        assert pid_file(config).read_text().strip() == str(os.getpgid(p.process.pid))
-        wait_for_log(log_file(config), "hello")
-    finally:
-        p.stop()
-    assert not pid_file(config).exists()
-    assert "hello" in log_file(config).read_text()
+    p = preparer().prepare(config, Order(d))
+    assert p.process.poll() is None
+    assert system.read_text(pid_file(config)) == str(system.pgid(p.process.pid))
+    assert system.read_text(log_file(config)) == "hello\n"
+    p.stop()
+    assert not system.exists(pid_file(config))
+    assert system.read_text(log_file(config)) == "hello\n"
 
 
-def wait_for_log(path: Path, text: str, timeout: float = 5.0) -> None:
-    """Poll ``path`` until it contains ``text``; fail clearly on timeout."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if path.exists() and text in path.read_text():
-            return
-        time.sleep(0.02)
-    pytest.fail(f"{text!r} not in {path} after {timeout}s")
-
-
-def test_the_log_is_truncated_at_each_start(config: cfg.Config) -> None:
+def test_the_log_is_truncated_at_each_start(config: cfg.Config, fake: FakeSystem) -> None:
+    fake.reply(("echo", "first"), Done(0, "first\n"))
+    fake.reply(("echo", "second"), Done(0, "second\n"))
     d = Delivery("ui", "web", url=URL, prepare="echo first")
     config.deliveries = [d]
-    made = Preparer(probe=Probe(), listening=lambda _h, _p: False, sleep=lambda _s: None)
-    first = made.prepare(config, Order(d))
-    first.process.wait()
+    made = preparer()
+    made.prepare(config, Order(d))
     d.prepare = "echo second"
-    second = made.prepare(config, Order(d))
-    second.process.wait()
-    text = log_file(config).read_text()
+    made.prepare(config, Order(d))
+    text = system.read_text(log_file(config))
     assert "second" in text and "first" not in text
 
 
-def test_service_files_sit_beside_the_sandbox_not_inside_it(config: cfg.Config) -> None:
+def test_service_files_sit_beside_the_sandbox_not_inside_it(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
     p = preparer().prepare(config, Order(DASHBOARD))
     assert p.root == config.run_dir / "customer/ui"
     assert pid_file(config).parent == p.root.parent
-    assert not any(f.suffix in {".pid", ".log"} for f in p.root.rglob("*"))
+    inside = [Path(name) for name in fake.files if name.startswith(f"{p.root}/")]
+    assert not [f for f in inside if f.suffix in {".pid", ".log"}]
 
 
-def test_background_delivery_without_a_command_is_still_probed(config: cfg.Config) -> None:
+def test_background_delivery_without_a_command_is_still_probed(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
     d = Delivery("ui", "web", url=URL, probe="api/snapshot")
-    popen, probe = FakePopen(), Probe()
-    p = preparer(popen, probe).prepare(config, Order(d))
-    assert popen.calls == [] and p.process is None and probe.urls == [PROBE_URL]
+    probe = Probe()
+    p = preparer(probe).prepare(config, Order(d))
+    assert fake.commands == [] and p.process is None and probe.urls == [PROBE_URL]
 
 
 def test_background_delivery_without_a_command_that_never_answers_is_not_up(
@@ -334,14 +275,14 @@ def test_background_delivery_without_a_command_that_never_answers_is_not_up(
 ) -> None:
     d = Delivery("ui", "web", url=URL, probe="api/snapshot")
     with pytest.raises(NotUp, match="did not answer"):
-        preparer(probe=Probe(None), attempts=2).prepare(config, Order(d))
+        preparer(Probe(None), attempts=2).prepare(config, Order(d))
 
 
-def test_exited_process_fails_at_once_with_the_output(config: cfg.Config, stopped) -> None:
-    popen = FakePopen(FakeProcess(1), b"first\nagile-team dashboard: .agile-team.toml not found\n")
+def test_exited_process_fails_at_once_with_the_output(config: cfg.Config, fake: FakeSystem) -> None:
+    fake.reply(("serve",), Done(1, "first\nagile-team dashboard: .agile-team.toml not found\n"))
     probe = Probe(None)
     with pytest.raises(NotUp) as info:
-        preparer(popen, probe).prepare(config, Order(DASHBOARD))
+        preparer(probe).prepare(config, Order(DASHBOARD))
     assert len(probe.urls) == 1
     text = str(info.value)
     assert text.startswith(
@@ -349,53 +290,55 @@ def test_exited_process_fails_at_once_with_the_output(config: cfg.Config, stoppe
         f"before {PROBE_URL} answered. Last output:\n"
     )
     assert "agile-team dashboard: .agile-team.toml not found" in text
-    assert not pid_file(config).exists()
+    assert not system.exists(pid_file(config))
 
 
-def test_a_service_that_never_answers_is_stopped_and_reported(config: cfg.Config, stopped) -> None:
-    process = FakeProcess(None)
-    popen = FakePopen(process, b"warming up\n")
+def test_a_service_that_never_answers_is_stopped_and_reported(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    fake.reply(("serve",), Hang("warming up\n"))
     probe = Probe(None)
-    made = preparer(popen, probe, attempts=3)
     with pytest.raises(NotUp) as info:
-        made.prepare(config, Order(DASHBOARD))
+        preparer(probe, attempts=3).prepare(config, Order(DASHBOARD))
     assert len(probe.urls) == 3
     assert str(info.value).startswith(
         f"delivery 'ui' did not answer {PROBE_URL} within 0.75s. Last output:\n"
     )
     assert "warming up" in str(info.value)
-    assert stopped and stopped[0] == signal.SIGTERM
-    assert not pid_file(config).exists()
+    assert killpgs(fake)[0] == (LEADER, signal.SIGTERM)
+    assert not system.exists(pid_file(config))
 
 
-def test_a_real_hung_service_is_reported_as_not_answering_not_as_killed(
-    config: cfg.Config,
+def test_a_hung_service_is_reported_as_not_answering_not_as_killed(
+    config: cfg.Config, fake: FakeSystem
 ) -> None:
     """The runner's own SIGTERM must not turn a timeout into 'exited with code -15'."""
+    fake.reply(("exec",), Hang())
     d = Delivery("ui", "web", prepare="exec sleep 60", url=URL, probe="api/snapshot")
-    made = Preparer(probe=Probe(None), listening=lambda _h, _p: False, sleep=lambda _s: None)
-    made.attempts = 2
     with pytest.raises(NotUp) as info:
-        made.prepare(config, Order(d))
+        preparer(Probe(None), attempts=2).prepare(config, Order(d))
     assert str(info.value).startswith(f"delivery 'ui' did not answer {PROBE_URL} within 0.5s.")
     assert "exited with code" not in str(info.value)
+    assert killpgs(fake) == [(LEADER, signal.SIGTERM)]
 
 
-def test_empty_log_reads_no_output(config: cfg.Config, stopped) -> None:
+def test_empty_log_reads_no_output(config: cfg.Config, fake: FakeSystem) -> None:
+    fake.reply(("serve",), Done(2))
     with pytest.raises(NotUp, match=r"Last output:\n\(no output\)"):
-        preparer(FakePopen(FakeProcess(2)), Probe(None)).prepare(config, Order(DASHBOARD))
+        preparer(Probe(None)).prepare(config, Order(DASHBOARD))
 
 
-def test_only_the_last_twenty_log_lines_are_quoted(config: cfg.Config, stopped) -> None:
-    lines = b"".join(b"line%02d\n" % i for i in range(30))
+def test_only_the_last_twenty_log_lines_are_quoted(config: cfg.Config, fake: FakeSystem) -> None:
+    fake.reply(("serve",), Done(3, "".join(f"line{i:02d}\n" for i in range(30))))
     with pytest.raises(NotUp) as info:
-        preparer(FakePopen(FakeProcess(3), lines), Probe(None)).prepare(config, Order(DASHBOARD))
+        preparer(Probe(None)).prepare(config, Order(DASHBOARD))
     text = str(info.value)
     assert "line29" in text and "line10" in text
     assert "line09" not in text and "line00" not in text
 
 
-def test_foreground_kinds_are_unchanged(configured: Path) -> None:
+def test_foreground_kinds_are_unchanged(configured: Path, fake: FakeSystem) -> None:
+    fake.reply(("exit",), Done(3))
     d = Delivery("cli", "package", prepare="exit 3")
     probe = Probe()
     with pytest.raises(sandbox.SandboxError, match="prepare"):
@@ -411,44 +354,35 @@ def test_not_up_and_port_busy_are_sandbox_errors() -> None:
 # ----- L8: port conflict ----------------------------------------------------
 
 
-def test_a_busy_port_is_refused_before_anything_starts(config: cfg.Config) -> None:
-    popen = FakePopen()
+def test_a_busy_port_is_refused_before_anything_starts(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
     with pytest.raises(PortBusy) as info:
-        preparer(popen, busy=True).prepare(config, Order(DASHBOARD))
+        preparer(busy=True).prepare(config, Order(DASHBOARD))
     assert str(info.value) == (
         "delivery 'ui' cannot start: 127.0.0.1:8799 is already in use by a process "
         "the runner did not start; stop it or change the delivery's url"
     )
-    assert popen.calls == []
+    assert fake.commands == []
 
 
-def test_port_in_use_sees_a_listening_socket() -> None:
-    with socket.socket() as server:
-        server.bind(("127.0.0.1", 0))
-        server.listen()
-        port = server.getsockname()[1]
-        assert sandbox.port_in_use("127.0.0.1", port) is True
-    assert sandbox.port_in_use("127.0.0.1", port) is False
+def test_the_default_port_check_reads_the_listening_ports(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    fake.listening.add(("127.0.0.1", PORT))
+    with pytest.raises(PortBusy):
+        Preparer(probe=Probe()).prepare(config, Order(DASHBOARD))
+    assert fake.commands == []
+
+
+def test_port_in_use_sees_a_listening_address(fake: FakeSystem) -> None:
+    fake.listening.add(("127.0.0.1", PORT))
+    assert sandbox.port_in_use("127.0.0.1", PORT) is True
+    fake.listening.clear()
+    assert sandbox.port_in_use("127.0.0.1", PORT) is False
 
 
 # ----- L5: http_answers -----------------------------------------------------
-
-
-def serve(status: int, body: bytes, ctype: str) -> ThreadingHTTPServer:
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *_a: Any) -> None:
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
 
 
 @pytest.mark.parametrize(
@@ -463,128 +397,112 @@ def serve(status: int, body: bytes, ctype: str) -> ThreadingHTTPServer:
         (201, b"{}", "application/json", False),
     ],
 )
-def test_http_answers(status: int, body: bytes, ctype: str, answers: bool) -> None:
-    server = serve(status, body, ctype)
-    try:
-        assert sandbox.http_answers(f"http://127.0.0.1:{server.server_port}/x") is answers
-    finally:
-        server.shutdown()
-        server.server_close()
+def test_http_answers(
+    fake: FakeSystem, status: int, body: bytes, ctype: str, answers: bool
+) -> None:
+    fake.web[URL] = system.HttpReply(status, ctype, body)
+    assert sandbox.http_answers(URL) is answers
+
+
+def test_http_answers_asks_with_the_probe_timeout(fake: FakeSystem, monkeypatch) -> None:
+    asked: list[tuple[str, float]] = []
+
+    def get(url: str, timeout: float) -> system.HttpReply:
+        asked.append((url, timeout))
+        return system.HttpReply(200, "text/html", b"")
+
+    monkeypatch.setattr(system, "http_get", get)
+    assert sandbox.http_answers(URL)
+    assert asked == [(URL, sandbox.PROBE_TIMEOUT_S)]
 
 
 def test_http_answers_is_false_when_nothing_listens() -> None:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    assert sandbox.http_answers(f"http://127.0.0.1:{port}/") is False
+    assert sandbox.http_answers(URL) is False
 
 
-def test_http_answers_is_false_for_a_bad_url() -> None:
-    assert sandbox.http_answers("") is False
+@pytest.mark.parametrize("error", [OSError("boom"), ValueError("unknown url type")])
+def test_http_answers_is_false_for_a_failed_or_bad_url(fake: FakeSystem, error) -> None:
+    fake.web["not a url"] = error
     assert sandbox.http_answers("not a url") is False
 
 
 # ----- L7: stale services ---------------------------------------------------
 
 
-def test_a_stale_group_that_ignores_sigterm_is_killed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_stale_group_that_ignores_sigterm_is_killed(config: cfg.Config, fake: FakeSystem) -> None:
+    stale_service(fake, config)
+    fake.survivors.add(LEADER)
+    sandbox.stop_stale(config.run_dir / "customer/ui")
+    assert killpgs(fake) == [(LEADER, signal.SIGTERM), (LEADER, signal.SIGKILL)]
+    assert fake.clock >= START_CLOCK + sandbox.STOP_WAIT_S
+    assert not system.exists(pid_file(config))
+
+
+def test_stop_stale_ends_a_leftover_service(config: cfg.Config, fake: FakeSystem) -> None:
+    stale_service(fake, config)
+    sandbox.stop_stale(config.run_dir / "customer/ui")
+    assert killpgs(fake) == [(LEADER, signal.SIGTERM)]
+    assert LEADER not in fake.groups
+    assert not system.exists(pid_file(config))
+
+
+def test_stop_stale_with_a_dead_pid_just_removes_the_file(
+    config: cfg.Config, fake: FakeSystem
 ) -> None:
-    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.2)
-    proc = subprocess.Popen(
-        ["sh", "-c", 'trap "" TERM; echo ready; exec sleep 60'],
-        start_new_session=True,
-        stdout=subprocess.PIPE,
-    )
-    try:
-        assert proc.stdout is not None
-        proc.stdout.readline()  # the trap is set once it says ready
-        root = tmp_path / "box"
-        pid_file_ = tmp_path / "box.pid"
-        pid_file_.write_text(str(proc.pid))
-        sandbox.stop_stale(root)
-        assert proc.wait(timeout=5) == -signal.SIGKILL
-        assert not pid_file_.exists()
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-        if proc.stdout:
-            proc.stdout.close()
+    fake.put(pid_file(config), str(LEADER))
+    sandbox.stop_stale(config.run_dir / "customer/ui")
+    assert fake.signals == []
+    assert not system.exists(pid_file(config))
 
 
-def reaped(process: subprocess.Popen) -> subprocess.Popen:
-    """Reap ``process`` in the background so a killed group does not linger as a zombie."""
-    threading.Thread(target=process.wait, daemon=True).start()
-    return process
+def test_stop_stale_without_a_pid_file_does_nothing(config: cfg.Config, fake: FakeSystem) -> None:
+    sandbox.stop_stale(config.run_dir / "customer/ui")
+    assert fake.signals == []
 
 
-def test_stop_stale_ends_a_leftover_service(tmp_path: Path) -> None:
-    root = tmp_path / "customer" / "ui"
-    root.mkdir(parents=True)
-    proc = reaped(subprocess.Popen(["sleep", "60"], start_new_session=True))
-    root.with_suffix(".pid").write_text(str(proc.pid))
-    sandbox.stop_stale(root)
-    assert proc.wait(timeout=5) != 0
-    assert not root.with_suffix(".pid").exists()
+def test_stop_stale_never_signals_a_process_that_is_not_a_group_leader(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    fake.reply(("ps",), STARTED_5S_AGO)
+    fake.groups[LEADER] = fake.pgrp()  # a child in the runner's own group
+    fake.put(pid_file(config), str(LEADER))
+    sandbox.stop_stale(config.run_dir / "customer/ui")
+    assert fake.signals == []
+    assert LEADER in fake.groups
+    assert not system.exists(pid_file(config))
 
 
-def test_stop_stale_with_a_dead_pid_just_removes_the_file(tmp_path: Path) -> None:
-    root = tmp_path / "customer" / "ui"
-    root.mkdir(parents=True)
-    done = subprocess.Popen(["true"])
-    done.wait()
-    root.with_suffix(".pid").write_text(str(done.pid))
-    sandbox.stop_stale(root)
-    assert not root.with_suffix(".pid").exists()
-
-
-def test_stop_stale_without_a_pid_file_does_nothing(tmp_path: Path) -> None:
-    sandbox.stop_stale(tmp_path / "customer" / "ui")
-
-
-def test_stop_stale_never_signals_a_process_that_is_not_a_group_leader(tmp_path: Path) -> None:
-    root = tmp_path / "customer" / "ui"
-    root.mkdir(parents=True)
-    other = reaped(subprocess.Popen(["sleep", "60"]))  # shares the test's group
-    try:
-        root.with_suffix(".pid").write_text(str(other.pid))
-        sandbox.stop_stale(root)
-        assert other.poll() is None
-        assert not root.with_suffix(".pid").exists()
-    finally:
-        other.kill()
-
-
-def test_prepare_replaces_a_stale_service_before_starting(config: cfg.Config) -> None:
-    proc = reaped(subprocess.Popen(["sleep", "60"], start_new_session=True))
-    pid_file(config).parent.mkdir(parents=True, exist_ok=True)
-    pid_file(config).write_text(str(proc.pid))
+def test_prepare_replaces_a_stale_service_before_starting(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    stale_service(fake, config, pid=LEADER + 50)
     p = preparer().prepare(config, Order(DASHBOARD))
-    assert proc.wait(timeout=5) != 0
+    assert (LEADER + 50) not in fake.groups
     assert p.process is not None
 
 
 # ----- L9: teardown ---------------------------------------------------------
 
 
-def test_stop_deletes_the_pid_file_and_is_safe_twice(tmp_path: Path) -> None:
-    root = tmp_path / "customer" / "ui"
-    root.mkdir(parents=True)
-    p = bare(DASHBOARD, tmp_path, root)
-    p.pid_file().write_text("123")
+def test_stop_deletes_the_pid_file_and_is_safe_twice(scratch: Path) -> None:
+    root = scratch / "customer" / "ui"
+    system.make_dirs(root)
+    p = bare(DASHBOARD, scratch, root)
+    system.write_text(p.pid_file(), "123")
     p.stop()
     p.stop()
-    assert not p.pid_file().exists()
+    assert not system.exists(p.pid_file())
 
 
-def test_stop_with_a_real_process_ends_the_group_and_the_file(config: cfg.Config) -> None:
+def test_stop_with_a_started_process_ends_the_group_and_the_file(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    fake.reply(("exec",), Hang())
     d = Delivery("ui", "web", prepare="exec sleep 60", url=URL)
     config.deliveries = [d]
-    p = Preparer(probe=Probe(), listening=lambda _h, _p: False, sleep=lambda _s: None).prepare(
-        config, Order(d)
-    )
+    p = preparer().prepare(config, Order(d))
     p.stop()
-    assert p.process.poll() is not None and not pid_file(config).exists()
+    assert p.process.poll() is not None and not system.exists(pid_file(config))
 
 
 # ----- L10: Trial and the gate ----------------------------------------------

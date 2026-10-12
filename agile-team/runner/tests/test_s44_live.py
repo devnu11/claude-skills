@@ -1,14 +1,13 @@
 """s44: the live meter (turns, heartbeat, chores), health rules, config and stop reasons."""
 
 import json
-import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from agile_team import config as cfg
-from agile_team import health, live, salvage
+from agile_team import health, live, salvage, system
 from agile_team.events import INTERRUPTED, EventKind
 from agile_team.health import Level, Runner, Vitals
 from agile_team.ledger import Tokens
@@ -17,29 +16,27 @@ from agile_team.salvage import Cause
 from agile_team.state import RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
+from .fake_system import FAKE_IDS, START_CLOCK, FakeSystem
+
 LIMITS = cfg.HealthLimits()
-NOW = 1_000_000.0
+NOW = START_CLOCK
 WHO = live.Who("developer-cli", "s29", "implement", "sonnet", Billing.REPORTED)
 
 
 class Clock:
-    """A fake pace: ``wait`` never sleeps; it advances the clock and says stop after ``beats``."""
+    """The fake clock, and how many beats the heartbeat thread gets before it stops."""
 
-    def __init__(self, beats: int = 0) -> None:
-        self.t = NOW
-        self.beats = beats
-        self.waits: list[float] = []
+    def __init__(self, fake: FakeSystem, beats: int = 0) -> None:
+        self.fake = fake
+        fake.ticks = beats
 
-    def now(self) -> float:
-        return self.t
+    @property
+    def t(self) -> float:
+        return self.fake.clock
 
-    def wait(self, event: threading.Event, seconds: float) -> bool:
-        self.waits.append(seconds)
-        self.t += seconds
-        return len(self.waits) > self.beats
-
-    def pace(self) -> live.Pace:
-        return live.Pace(self.now, self.wait)
+    @t.setter
+    def t(self, value: float) -> None:
+        self.fake.clock = value
 
 
 def usage(i: int = 0, o: int = 0, r: int = 0, c: int = 0) -> dict[str, int]:
@@ -61,18 +58,19 @@ def tool_done(tool_id: str) -> UserMessage:
     return UserMessage(content=[ToolResultBlock(tool_use_id=tool_id, content="ok")])
 
 
-def make_pulse(tmp_path: Path, clock: Clock | None = None) -> tuple[live.Pulse, Clock]:
-    clock = clock or Clock()
-    return live.Pulse(tmp_path, 20.0, clock.pace(), pid=4242), clock
+def make_pulse(run_dir: Path, fake: FakeSystem, beats: int = 0) -> tuple[live.Pulse, Clock]:
+    return live.Pulse(run_dir, 20.0), Clock(fake, beats)
 
 
-def beat_file(tmp_path: Path) -> dict[str, Any]:
-    return json.loads((tmp_path / live.HEARTBEAT).read_text())
+def beat_file(scratch: Path) -> dict[str, Any]:
+    return json.loads(system.read_text(scratch / live.HEARTBEAT))
 
 
-def turn_lines(tmp_path: Path) -> list[dict[str, Any]]:
-    path = tmp_path / live.TURNS
-    return [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
+def turn_lines(scratch: Path) -> list[dict[str, Any]]:
+    path = scratch / live.TURNS
+    return (
+        [json.loads(x) for x in system.read_text(path).splitlines()] if system.exists(path) else []
+    )
 
 
 # ----- estimate, family, age ---------------------------------------------------------
@@ -116,14 +114,14 @@ def test_age(seconds: float, text: str) -> None:
 # ----- turns (T1-T7) -----------------------------------------------------------------
 
 
-def test_each_distinct_message_id_is_one_turn_line(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_each_distinct_message_id_is_one_turn_line(scratch: Path, fake: FakeSystem) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(3, 400, 80000, 1200), ("Bash",), "claude-sonnet-4-5"))
     clock.t += 5
     meter.take(reply("m2", usage(1, 10), ("Read", "Edit")))
     meter.take(reply("m3", usage(2, 20)))
-    lines = turn_lines(tmp_path)
+    lines = turn_lines(scratch)
     assert [x["turn"] for x in lines] == [1, 2, 3]
     assert list(lines[0]) == [
         "at", "role", "story", "step", "turn", "model", "tokens", "tools", "cost_usd", "message_id",
@@ -143,91 +141,89 @@ def test_each_distinct_message_id_is_one_turn_line(tmp_path: Path) -> None:
     assert meter.reading.turns == 3
 
 
-def test_same_message_id_folds_into_one_turn_and_counts_once(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_same_message_id_folds_into_one_turn_and_counts_once(
+    scratch: Path, fake: FakeSystem
+) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(1, 10)))
     meter.take(reply("m1", usage(1, 10), ("Bash",)))  # same usage, a tool: line, no new tokens
     meter.take(reply("m1", usage(1, 25)))  # larger output: only the excess
     assert meter.reading.turns == 1
     assert meter.reading.tokens == Tokens(1, 25, 0, 0)
-    lines = turn_lines(tmp_path)
+    lines = turn_lines(scratch)
     assert {x["turn"] for x in lines} == {1}
     assert sum(x["tokens"]["output"] for x in lines) == 25
     assert lines[1]["tokens"] == {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
 
 
-def test_a_message_without_news_writes_nothing(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_a_message_without_news_writes_nothing(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(1, 10)))
     meter.take(reply("m1", usage(1, 10)))
     meter.take(reply("m1", usage(0, 5)))  # lower than counted: no excess, no tool
     meter.take("not a message")
-    assert len(turn_lines(tmp_path)) == 1
+    assert len(turn_lines(scratch)) == 1
 
 
-def test_a_message_without_an_id_is_always_a_new_turn(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_a_message_without_an_id_is_always_a_new_turn(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply(None, usage(1, 1)))
     meter.take(reply(None, usage(1, 1)))
     assert meter.reading.turns == 2 and meter.reading.tokens == Tokens(2, 2, 0, 0)
 
 
-def test_off_story_turns_have_null_story_and_step(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_off_story_turns_have_null_story_and_step(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     pulse.open(live.Who("product-owner", None, None, "opus", Billing.REPORTED)).take(
         reply("m1", usage(1, 1))
     )
-    line = turn_lines(tmp_path)[0]
+    line = turn_lines(scratch)[0]
     assert line["story"] is None and line["step"] is None
 
 
-def test_free_billing_costs_zero_and_unknown_family_is_null(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_free_billing_costs_zero_and_unknown_family_is_null(
+    scratch: Path, fake: FakeSystem
+) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     free = pulse.open(live.Who("developer-cli", "s1", "implement", "local", Billing.FREE))
     free.take(reply("a", usage(10, 10)))
     unknown = pulse.open(live.Who("architect", "s1", "design", "gpt", Billing.REPORTED))
     unknown.take(reply("b", usage(10, 10), model="gpt-9"))
-    first, second = turn_lines(tmp_path)
+    first, second = turn_lines(scratch)
     assert first["cost_usd"] == 0.0 and second["cost_usd"] is None
     assert free.reading.cost_usd == 0.0 and unknown.reading.cost_usd is None
-    assert beat_file(tmp_path)["step"]["cost_usd"] is None
+    assert beat_file(scratch)["step"]["cost_usd"] is None
 
 
-def test_tools_open_and_close_and_the_earliest_is_current(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_tools_open_and_close_and_the_earliest_is_current(scratch: Path, fake: FakeSystem) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(1, 1), ("Bash",)))
     clock.t += 10
     meter.take(reply("m2", usage(1, 1), ("Read",)))
-    assert beat_file(tmp_path)["step"]["tool"] == {"name": "Bash", "started_at": NOW}
+    assert beat_file(scratch)["step"]["tool"] == {"name": "Bash", "started_at": NOW}
     meter.take(tool_done("id-Bash"))
-    assert beat_file(tmp_path)["step"]["tool"] == {"name": "Read", "started_at": NOW + 10}
+    assert beat_file(scratch)["step"]["tool"] == {"name": "Read", "started_at": NOW + 10}
     meter.take(tool_done("id-Read"))
-    assert beat_file(tmp_path)["step"]["tool"] is None
+    assert beat_file(scratch)["step"]["tool"] is None
 
 
 # ----- heartbeat (H1-H6) -------------------------------------------------------------
 
 
-def test_heartbeat_shape_and_atomic_write(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
-    pulse.start()
-    pulse.end()
-    clock = Clock()
-    # The beat thread must not move the shared clock: it just waits for end().
-    quiet = live.Pace(clock.now, lambda event, seconds: event.wait(5))
-    pulse2 = live.Pulse(tmp_path, 20.0, quiet, pid=4242)
+def test_heartbeat_shape_and_atomic_write(scratch: Path, fake: FakeSystem) -> None:
+    pulse2, clock = make_pulse(scratch, fake)  # no ticks: the beat thread stops at once
     pulse2.start()
     meter = pulse2.open(WHO)
     clock.t += 3
     meter.take(reply("m1", usage(2, 7), ("Bash",), "claude-sonnet-4-5"))
-    beat = beat_file(tmp_path)
+    beat = beat_file(scratch)
     pulse2.end()
     assert list(beat) == ["version", "pid", "beat", "at", "mono", "started_at", "chore", "step"]
-    assert beat["version"] == 2 and beat["pid"] == 4242 and beat["beat"] == "beating"
+    assert beat["version"] == 2 and beat["pid"] == FAKE_IDS[0] and beat["beat"] == "beating"
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
     assert list(beat["step"]) == [
         "role", "story", "step", "started_at", "turn", "model", "configured_model",
@@ -240,27 +236,29 @@ def test_heartbeat_shape_and_atomic_write(tmp_path: Path) -> None:
     assert step["model"] == "claude-sonnet-4-5" and step["configured_model"] == "sonnet"
     assert step["last_turn_at"] == NOW + 3 and step["tool"]["name"] == "Bash"
     assert step["tokens"] == {"input": 2, "output": 7, "cache_read": 0, "cache_creation": 0}
-    assert list(tmp_path.glob("*.tmp")) == []
+    assert [p for p in system.list_dir(scratch) if p.suffix == ".tmp"] == []
 
 
-def test_a_fresh_step_has_null_model_and_last_turn(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_a_fresh_step_has_null_model_and_last_turn(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     pulse.open(WHO)
-    step = beat_file(tmp_path)["step"]
+    step = beat_file(scratch)["step"]
     assert step["model"] is None and step["last_turn_at"] is None and step["turn"] == 0
     assert step["tool"] is None and step["cost_usd"] == 0.0
 
 
-def test_heartbeat_is_written_on_open_and_close(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_heartbeat_is_written_on_open_and_close(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
-    assert beat_file(tmp_path)["step"]["role"] == "developer-cli"
+    assert beat_file(scratch)["step"]["role"] == "developer-cli"
     pulse.close(meter)
-    assert beat_file(tmp_path)["step"] is None
+    assert beat_file(scratch)["step"] is None
 
 
-def test_beats_writes_each_time_with_the_beat_pace_and_keeps_a_long_tool(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path, Clock(beats=3))
+def test_beats_writes_each_time_with_the_beat_pace_and_keeps_a_long_tool(
+    scratch: Path, fake: FakeSystem
+) -> None:
+    pulse, _clock = make_pulse(scratch, fake, beats=3)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(1, 1), ("Bash",)))
     seen: list[dict[str, Any]] = []
@@ -268,92 +266,92 @@ def test_beats_writes_each_time_with_the_beat_pace_and_keeps_a_long_tool(tmp_pat
 
     def spy() -> None:
         real_write()
-        seen.append(beat_file(tmp_path))
+        seen.append(beat_file(scratch))
 
     pulse.write = spy  # type: ignore[method-assign]
     pulse.beats()
-    assert clock.waits == [20.0] * 4
+    assert fake.ticks == 0 and fake.clock == NOW + 60
     assert len(seen) == 3
     assert [x["at"] for x in seen] == [NOW + 20, NOW + 40, NOW + 60]
     assert all(x["step"]["tool"]["name"] == "Bash" for x in seen)
 
 
-def test_start_and_end_run_the_thread_and_mark_ended(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path, Clock(beats=0))
+def test_start_and_end_run_the_thread_and_mark_ended(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     pulse.start()
     pulse.end()
-    assert beat_file(tmp_path)["beat"] == "ended"
-    assert beat_file(tmp_path)["step"] is None and beat_file(tmp_path)["chore"] is None
+    assert beat_file(scratch)["beat"] == "ended"
+    assert beat_file(scratch)["step"] is None and beat_file(scratch)["chore"] is None
 
 
-def test_a_close_after_end_keeps_it_ended(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_a_close_after_end_keeps_it_ended(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     pulse.start()
     meter = pulse.open(WHO)
     pulse.end()
     pulse.close(meter)
     pulse.write()
-    assert beat_file(tmp_path)["beat"] == "ended"
+    assert beat_file(scratch)["beat"] == "ended"
 
 
-def test_a_failed_write_does_not_raise(tmp_path: Path) -> None:
-    pulse = live.Pulse(tmp_path / "missing" / "deeper", 20.0, Clock().pace(), pid=1)
+def test_a_failed_write_does_not_raise(scratch: Path, fake: FakeSystem) -> None:
+    pulse = live.Pulse(scratch / "missing" / "deeper", 20.0)
     pulse.write()
     pulse.open(WHO)  # also writes
 
 
-def test_doing_sets_and_restores_the_chore_nested(tmp_path: Path) -> None:
-    pulse, clock = make_pulse(tmp_path)
+def test_doing_sets_and_restores_the_chore_nested(scratch: Path, fake: FakeSystem) -> None:
+    pulse, clock = make_pulse(scratch, fake)
     with pulse.doing("outer"):
-        assert beat_file(tmp_path)["chore"] == {"what": "outer", "since": NOW}
+        assert beat_file(scratch)["chore"] == {"what": "outer", "since": NOW}
         clock.t += 1
         with pulse.doing("inner"):
-            assert beat_file(tmp_path)["chore"]["what"] == "inner"
-        assert beat_file(tmp_path)["chore"]["what"] == "outer"
-    assert beat_file(tmp_path)["chore"] is None
+            assert beat_file(scratch)["chore"]["what"] == "inner"
+        assert beat_file(scratch)["chore"]["what"] == "outer"
+    assert beat_file(scratch)["chore"] is None
 
 
-def test_doing_restores_after_an_exception(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_doing_restores_after_an_exception(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     with pytest.raises(ValueError), pulse.doing("x"):
         raise ValueError
-    assert beat_file(tmp_path)["chore"] is None
+    assert beat_file(scratch)["chore"] is None
 
 
-def test_nested_meters_show_the_innermost(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_nested_meters_show_the_innermost(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     po = pulse.open(live.Who("product-owner", None, None, "opus", Billing.REPORTED))
     role = pulse.open(WHO)
-    assert beat_file(tmp_path)["step"]["role"] == "developer-cli"
+    assert beat_file(scratch)["step"]["role"] == "developer-cli"
     pulse.close(role)
-    assert beat_file(tmp_path)["step"]["role"] == "product-owner"
+    assert beat_file(scratch)["step"]["role"] == "product-owner"
     pulse.close(po)
-    assert beat_file(tmp_path)["step"] is None
+    assert beat_file(scratch)["step"] is None
 
 
-def test_close_removes_a_reading_wherever_it_is(tmp_path: Path) -> None:
-    pulse, _ = make_pulse(tmp_path)
+def test_close_removes_a_reading_wherever_it_is(scratch: Path, fake: FakeSystem) -> None:
+    pulse, _ = make_pulse(scratch, fake)
     po = pulse.open(live.Who("product-owner", None, None, "opus", Billing.REPORTED))
     pulse.open(WHO)
     pulse.close(po)
-    assert beat_file(tmp_path)["step"]["role"] == "developer-cli"
+    assert beat_file(scratch)["step"]["role"] == "developer-cli"
     pulse.close(po)  # twice is harmless
 
 
-def test_read_heartbeat(tmp_path: Path) -> None:
-    assert live.read_heartbeat(tmp_path) is None
-    (tmp_path / live.HEARTBEAT).write_text("{torn")
-    assert live.read_heartbeat(tmp_path) is None
-    (tmp_path / live.HEARTBEAT).write_text("[1]")
-    assert live.read_heartbeat(tmp_path) is None
-    (tmp_path / live.HEARTBEAT).write_text('{"pid": 3}')
-    assert live.read_heartbeat(tmp_path) == {"pid": 3}
+def test_read_heartbeat(scratch: Path, fake: FakeSystem) -> None:
+    assert live.read_heartbeat(scratch) is None
+    system.write_text(scratch / live.HEARTBEAT, "{torn")
+    assert live.read_heartbeat(scratch) is None
+    system.write_text(scratch / live.HEARTBEAT, "[1]")
+    assert live.read_heartbeat(scratch) is None
+    system.write_text(scratch / live.HEARTBEAT, '{"pid": 3}')
+    assert live.read_heartbeat(scratch) == {"pid": 3}
 
 
 # ----- interrupted data --------------------------------------------------------------
 
 
-def test_interrupted_data_and_event(tmp_path: Path) -> None:
+def test_interrupted_data_and_event(scratch: Path, fake: FakeSystem) -> None:
     data = live.interrupted_data(live.Stop(Cause.SIGTERM, "stopped by stop --now"))
     assert data == {
         "status": INTERRUPTED,
@@ -361,7 +359,7 @@ def test_interrupted_data_and_event(tmp_path: Path) -> None:
         "cause": "sigterm",
         "halt": "stopped by stop --now",
     }
-    pulse, _ = make_pulse(tmp_path)
+    pulse, _ = make_pulse(scratch, fake)
     meter = pulse.open(WHO)
     meter.take(reply("m1", usage(1, 2), model="claude-sonnet-4-5"))
     event = meter.reading.interrupted(live.Stop(Cause.ERROR))
@@ -522,12 +520,12 @@ def test_read_vitals_from_disk(configured: Path) -> None:
     from agile_team import state as state_mod
 
     config = cfg.load(configured)
-    config.run_dir.mkdir(parents=True, exist_ok=True)
+    system.make_dirs(config.run_dir)
     state = state_mod.RunState()
     state.mark(RunStatus.RUNNING)
     state_mod.save(config.run_dir, state)
     assert health.Vitals.read(config, health.Clock(NOW)).runner is Runner.UP
-    (config.run_dir / live.HEARTBEAT).write_text(json.dumps(beat(pid=2_000_000_000)))
+    system.write_text(config.run_dir / live.HEARTBEAT, json.dumps(beat(pid=2_000_000_000)))
     assert health.Vitals.read(config, health.Clock(NOW)).runner is Runner.GONE
     current = health.current(config)
     assert current.level is Level.RED
@@ -536,12 +534,12 @@ def test_read_vitals_from_disk(configured: Path) -> None:
 # ----- config ------------------------------------------------------------------------
 
 
-def test_health_defaults_and_reading(tmp_path: Path) -> None:
-    default = cfg.from_raw(tmp_path, {}).health
+def test_health_defaults_and_reading(scratch: Path, fake: FakeSystem) -> None:
+    default = cfg.from_raw(scratch, {}).health
     assert (default.beat_s, default.stale_s, default.amber_tool_s) == (20.0, 90.0, 180.0)
     assert (default.amber_quiet_s, default.red_quiet_s) == (300.0, 600.0)
     raw = {"health": {"beat_s": 5, "stale_s": 30, "red_quiet_s": 900}}
-    read = cfg.from_raw(tmp_path, raw).health
+    read = cfg.from_raw(scratch, raw).health
     assert (read.beat_s, read.stale_s, read.red_quiet_s) == (5, 30, 900)
     assert read.amber_tool_s == 180.0
 
@@ -553,21 +551,21 @@ KNOWN = cfg.Known({"developer"}, {"package"})
     "key", ["beat_s", "stale_s", "amber_tool_s", "amber_quiet_s", "red_quiet_s"]
 )
 @pytest.mark.parametrize("bad", [0, -1])
-def test_health_values_must_be_positive(tmp_path: Path, key: str, bad: int) -> None:
-    config = cfg.from_raw(tmp_path, {"health": {key: bad}})
+def test_health_values_must_be_positive(scratch: Path, key: str, bad: int) -> None:
+    config = cfg.from_raw(scratch, {"health": {key: bad}})
     assert f"health.{key} must be positive" in cfg.validate(config, KNOWN)
 
 
-def test_health_cross_checks(tmp_path: Path) -> None:
-    config = cfg.from_raw(tmp_path, {"health": {"beat_s": 90, "stale_s": 90}})
+def test_health_cross_checks(scratch: Path, fake: FakeSystem) -> None:
+    config = cfg.from_raw(scratch, {"health": {"beat_s": 90, "stale_s": 90}})
     assert "health.beat_s must be below health.stale_s" in cfg.validate(config, KNOWN)
-    config = cfg.from_raw(tmp_path, {"health": {"amber_quiet_s": 700}})
+    config = cfg.from_raw(scratch, {"health": {"amber_quiet_s": 700}})
     problems = cfg.validate(config, KNOWN)
     assert (
         "health.amber_tool_s and health.amber_quiet_s must not exceed health.red_quiet_s"
         in problems
     )
-    assert not [p for p in cfg.validate(cfg.from_raw(tmp_path, {}), KNOWN) if "health" in p]
+    assert not [p for p in cfg.validate(cfg.from_raw(scratch, {}), KNOWN) if "health" in p]
 
 
 def test_providers_billing() -> None:

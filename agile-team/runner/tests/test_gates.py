@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from agile_team import gates
+from agile_team import gates, system
 from agile_team.config import PIPELINE_STEPS
 from agile_team.gates import StoryStatus, Verdict
 from agile_team.roles import Handoff
@@ -152,11 +152,11 @@ def test_handoff_gates() -> None:
     assert p.evaluate(story("tests"), Handoff("blocked", summary="?")).verdict is Verdict.HOLD
 
 
-def test_load_baseline(tmp_path: Path) -> None:
-    assert gates.load_baseline(tmp_path) == {}
-    (tmp_path / ".team").mkdir()
-    (tmp_path / gates.BASELINE).write_text(json.dumps({"coverage": 70}))
-    assert gates.load_baseline(tmp_path)["coverage"] == 70
+def test_load_baseline(repo: Path) -> None:
+    assert gates.load_baseline(repo) == {}
+    system.make_dirs(repo / ".team")
+    system.write_text(repo / gates.BASELINE, json.dumps({"coverage": 70}))
+    assert gates.load_baseline(repo)["coverage"] == 70
 
 
 BACKLOG = "story s1 is in the backlog; add it to a sprint"
