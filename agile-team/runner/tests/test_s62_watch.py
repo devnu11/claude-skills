@@ -72,7 +72,7 @@ def run_dir(tmp_path: Path) -> Path:
 
 
 def test_triggers_table_names() -> None:
-    assert tuple(name for name, _ in watch.TRIGGERS) == ("message", "status")
+    assert tuple(name for name, _ in watch.TRIGGERS) == ("message", "status", "health")
 
 
 def test_the_first_watch_reports_every_message(run_dir: Path) -> None:
@@ -84,7 +84,9 @@ def test_the_first_watch_reports_every_message(run_dir: Path) -> None:
     assert set(line["messages"][0]) == {"id", "kind", "text", "stories", "at"}
     assert line["status"] == "running" and line["status_reason"] is None
     assert line["was"] == {"status": None, "status_reason": None}
-    assert memory(run_dir) == {"messages": 1, "status": "running", "status_reason": None}
+    assert memory(run_dir) == {
+        "messages": 1, "status": "running", "status_reason": None, "health": "idle",
+    }  # fmt: skip
 
 
 def test_the_first_watch_reports_a_non_quiet_status(run_dir: Path) -> None:
@@ -108,7 +110,9 @@ def test_heartbeat_after_the_timeout(run_dir: Path) -> None:
     line = until(run_dir, fake, timeout=10)
     assert line["triggers"] == ["heartbeat"] and line["messages"] == []
     assert fake.sleeps and set(fake.sleeps) == {2.0} and sum(fake.sleeps) >= 10
-    assert memory(run_dir) == {"messages": 0, "status": "running", "status_reason": None}
+    assert memory(run_dir) == {
+        "messages": 0, "status": "running", "status_reason": None, "health": "idle",
+    }  # fmt: skip
 
 
 def test_a_zero_timeout_answers_at_the_first_look(run_dir: Path) -> None:

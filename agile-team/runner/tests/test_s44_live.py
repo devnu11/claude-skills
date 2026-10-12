@@ -216,7 +216,10 @@ def test_heartbeat_shape_and_atomic_write(tmp_path: Path) -> None:
     pulse, clock = make_pulse(tmp_path)
     pulse.start()
     pulse.end()
-    pulse2, clock = make_pulse(tmp_path)
+    clock = Clock()
+    # The beat thread must not move the shared clock: it just waits for end().
+    quiet = live.Pace(clock.now, lambda event, seconds: event.wait(5))
+    pulse2 = live.Pulse(tmp_path, 20.0, quiet, pid=4242)
     pulse2.start()
     meter = pulse2.open(WHO)
     clock.t += 3
@@ -458,7 +461,7 @@ def test_r6_red_stale_heartbeat_and_words_join_at_the_worst_level() -> None:
 
 def test_r6_alone() -> None:
     verdict = health.judge(vitals(heartbeat=beat(at=NOW - 91)))
-    assert (verdict.level, verdict.reason) == (Level.RED, "heartbeat 91 s old")
+    assert (verdict.level, verdict.reason) == (Level.RED, "heartbeat 1 min old")
 
 
 def test_r4_dead_runner_and_interrupted_status() -> None:

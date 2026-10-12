@@ -256,8 +256,8 @@ def test_dashboard_port_zero_prints_real_url_and_opens(configured: Path, capsys)
     assert cli.cmd_dashboard(args, io) == 0
     out = capsys.readouterr().out
     assert bound[0] != 0
-    assert out == f"dashboard: http://127.0.0.1:{bound[0]}/\n"
-    assert urls == [f"http://127.0.0.1:{bound[0]}/"]
+    assert out == f"dashboard: http://localhost:{bound[0]}/\n"
+    assert urls == [f"http://localhost:{bound[0]}/"]
 
 
 def test_dashboard_no_open_skips_browser(configured: Path, capsys, monkeypatch) -> None:
@@ -270,7 +270,7 @@ def test_dashboard_no_open_skips_browser(configured: Path, capsys, monkeypatch) 
     args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0", "--no-open")
     assert cli.cmd_dashboard(args, io) == 0
     assert opened == [] and len(served) == 1
-    assert capsys.readouterr().out.startswith("dashboard: http://127.0.0.1:")
+    assert capsys.readouterr().out.startswith("dashboard: http://localhost:")
 
 
 def test_dashboard_default_io_is_real_webbrowser_and_serve() -> None:

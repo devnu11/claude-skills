@@ -240,11 +240,12 @@ def test_default_host(monkeypatch: pytest.MonkeyPatch, platform: str, host: str)
     assert server.default_host() == host
 
 
-def test_display_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("socket.gethostname", lambda: "labbox")
-    assert server.display_url(ALL_INTERFACES, 8765) == "http://labbox:8765/"
-    assert server.display_url("", 1) == "http://labbox:1/"
-    assert server.display_url("127.0.0.1", 9) == "http://127.0.0.1:9/"
+def test_dashboard_urls_replace_display_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("socket.gethostname", lambda: "labbox.lan")
+    assert server.dashboard_urls(ALL_INTERFACES, 8765) == (
+        "http://localhost:8765/", "http://labbox.lan:8765/",
+    )  # fmt: skip
+    assert server.dashboard_urls("127.0.0.1", 9) == ("http://localhost:9/", None)
 
 
 def test_constants() -> None:

@@ -270,7 +270,7 @@ class Sink:
 def test_pump_pushes_when_only_the_vital_sign_changes(tmp_path: Path) -> None:
     file = tmp_path / "f"
     file.write_text("x")
-    signs = iter(["green|a", "green|a", "red|b", "red|b"])
+    signs = iter(["green|a", "green|a", "red|b", "red|b", "red|b"])
     snaps = iter(range(10))
     app = server.Dashboard(
         lambda: {"n": next(snaps)}, lambda: [file], poll_seconds=0.0, vital_sign=lambda: next(signs)

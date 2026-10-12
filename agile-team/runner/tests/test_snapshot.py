@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,9 @@ KEYS = [
     "messages",
     "answers",
     "upstream",
+    "turns",
+    "heartbeat",
+    "health",
 ]
 
 
@@ -157,6 +161,10 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     write_jsonl(config.run_dir / "ledger.jsonl", fixture["ledger"])
     write_jsonl(config.run_dir / "outbox.jsonl", fixture["messages"])
     write_jsonl(config.run_dir / "inbox.jsonl", fixture["answers"])
+    fresh = [{**t, "at": time.time()} for t in fixture["turns"]]  # inside the 600 s window
+    write_jsonl(config.run_dir / "turns.jsonl", fresh)
+    if fixture["heartbeat"] is not None:
+        (config.run_dir / "heartbeat.json").write_text(json.dumps(fixture["heartbeat"]))
     for s in fixture["stories"]:
         meta = json.dumps({"id": s["id"], "title": s["title"], "acceptance": s["acceptance"]})
         write_story_file(config, s["id"], meta + "\n")
@@ -518,6 +526,8 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
         run / "ledger.jsonl",
         run / "outbox.jsonl",
         run / "inbox.jsonl",
+        run / "heartbeat.json",
+        run / "turns.jsonl",
         config.repo / cfg.CONFIG_NAME,
         config.stories_dir / "s1.md",
         config.stories_dir / "s2.md",
@@ -526,7 +536,7 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
 
 
 def test_watched_files_without_dirs(config: cfg.Config) -> None:
-    assert len(snapshot.watched_files(config)) == 6
+    assert len(snapshot.watched_files(config)) == 8
 
 
 # ----- 10. D10 / config / ledger constants -----------------------------------
