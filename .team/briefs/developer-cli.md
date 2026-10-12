@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s64 done)
 
 See `developer.md` for the base conventions.
+
+## s64: Delivery names must be configured in .agile-team.toml (validation at open_story)
+
+`open_story` now rejects delivery names that are not configured, catching the error at the start instead of at acceptance. One function `Config.delivery_refusal(name)` returns None (accept) or a refusal reason. Empty/None names still mean "first delivery". Non-empty names must exactly match (case-sensitive). Any future tool that sets delivery must call this check. Rules V1–V9 in design. See `.team/reviews/s64.md`.
 
 ## s78: Health gives no false reds while work runs (health resilience, sleep detection, excuse logic)
 

@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s64 done)
+
+## s64: `open_story` now rejects invalid delivery names
+
+When you call `open_story`, the delivery name must match a configured `[[delivery]]` in `.agile-team.toml` exactly (case-sensitive, no prose). Empty or missing `delivery` still means "use the first one". The refusal lists the valid names so you can correct it. This catches delivery mistakes at the start, not at acceptance. See `product-owner.md` step 2 for the instruction and `.team/reviews/s64.md` for acceptance results.
 
 ## s78: Health gives no false reds while work is running (resilience, sleep detection, excuse)
 

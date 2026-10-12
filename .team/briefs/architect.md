@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s64 done)
+
+## s64: Delivery validation is now enforced in code (no ADR, no new dependency)
+
+A story's delivery must name a configured `[[delivery]]`. This refusal is added to `open_story` (and any future setter, checked by reviewer) via `Config.delivery_refusal(name)`. Returns None (accept) or reason. Empty names accepted; non-empty must exactly match (V3). Exact error texts (UNKNOWN_DELIVERY listing names, NO_DELIVERY if none configured). Rules V1–V9 in design. Docs updated: `SKILL.md` step 8 states the rule; `protocol.md` § deliveries and backlog list state the refusal; `product-owner.md` step 2 instructs delivery name usage. No ADR: existing PO tool, no new dependency, config-driven. See design `agile-team/docs/design/s64.md`, review `.team/reviews/s64.md`.
 
 ## s78: Heartbeat resilience, monotonic sleep detection, excuse logic for active work
 
