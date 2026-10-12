@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 from agile_team import commands, process_groups, sandbox
-from agile_team.process_groups import Recorded
+from agile_team.process_groups import Recorded, RunnerIds
+
+FAKE = RunnerIds(4242, 4243)  # literals: test ids must not hold live values (s70)
 
 
 @pytest.fixture
@@ -182,13 +184,51 @@ def test_stale_pid_reused_after_the_file_was_written_is_left_alone(
 
 
 # 9
-@pytest.mark.parametrize("pid", [os.getpid(), os.getpgrp()])
-def test_stop_stale_never_signals_the_runner(tmp_path: Path, sent, pid) -> None:
+@pytest.mark.parametrize("pid", [FAKE.pid, FAKE.pgrp], ids=["pid", "pgrp"])
+def test_stop_stale_never_signals_the_runner(tmp_path: Path, sent, monkeypatch, pid) -> None:
+    monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
     pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
     pid_file.write_text(str(pid))
+    sandbox.stop_stale(tmp_path / "web", FAKE)
+    assert sent == []
+    assert not pid_file.exists()
+
+
+def test_stop_stale_signals_a_pid_the_ids_do_not_name(tmp_path: Path, sent, monkeypatch) -> None:
+    monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
+    monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.1)
+    (tmp_path / f"web{sandbox.PID_SUFFIX}").write_text("4244")
+    sandbox.stop_stale(tmp_path / "web", FAKE)
+    assert _kills(sent)[0] == (4244, signal.SIGTERM)
+
+
+def test_stop_stale_defaults_to_the_live_runner_ids(tmp_path: Path, sent, monkeypatch) -> None:
+    monkeypatch.setattr(Recorded, "is_ours", lambda self: True)
+    pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
+    pid_file.write_text(str(os.getpid()))
     sandbox.stop_stale(tmp_path / "web")
     assert sent == []
     assert not pid_file.exists()
+
+
+def test_runner_ids_current_reads_the_live_process() -> None:
+    assert RunnerIds.current() == RunnerIds(os.getpid(), os.getpgrp())
+
+
+def test_runner_ids_names_its_pid_and_group() -> None:
+    ids = RunnerIds(1, 2)
+    assert ids.names(1) and ids.names(2)
+    assert not ids.names(3)
+
+
+def test_is_ours_is_not_asked_when_the_ids_name_the_pid(tmp_path: Path, sent, monkeypatch) -> None:
+    def boom(self):
+        raise AssertionError("is_ours must not run")
+
+    monkeypatch.setattr(Recorded, "is_ours", boom)
+    (tmp_path / f"web{sandbox.PID_SUFFIX}").write_text(str(FAKE.pid))
+    sandbox.stop_stale(tmp_path / "web", FAKE)
+    assert sent == []
 
 
 def test_stop_stale_ends_a_group_it_recorded(tmp_path: Path, own_group) -> None:
