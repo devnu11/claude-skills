@@ -81,7 +81,9 @@ class Vitals:
         state = state_mod.load(config.run_dir)
         status = state_mod.shown_status(config.run_dir, state)
         beat = live.read_heartbeat(config.run_dir)
-        return cls(now, status, state.status_reason, beat, _runner(beat), config.health, state.halt_kind)
+        return cls(
+            now, status, state.status_reason, beat, _runner(beat), config.health, state.halt_kind
+        )
 
     @property
     def resting(self) -> bool:
@@ -91,7 +93,9 @@ class Vitals:
     @property
     def beating(self) -> bool:
         return (
-            self.beat is not None and self.beat.get("beat") == live.Beat.BEATING and not self.resting
+            self.beat is not None
+            and self.beat.get("beat") == live.Beat.BEATING
+            and not self.resting
         )
 
     @property
