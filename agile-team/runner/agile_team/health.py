@@ -63,6 +63,19 @@ def model_note(step: dict[str, Any] | None) -> str | None:
 
 
 @dataclass(frozen=True)
+class Clock:
+    """The reader's wall and monotonic time; ``mono`` is ``None`` when unknown (s78)."""
+
+    wall: float
+    mono: float | None = None
+
+    @classmethod
+    def read(cls) -> Clock:
+        """Both clocks now, through the system seam."""
+        return cls(system.now(), system.monotonic())
+
+
+@dataclass(frozen=True)
 class Vitals:
     """Everything the rules look at (R0)."""
 
@@ -73,15 +86,23 @@ class Vitals:
     runner: Runner
     limits: HealthLimits
     halt_kind: str | None = None
+    mono: float | None = None
 
     @classmethod
-    def read(cls, config: Config, now: float) -> Vitals:
+    def read(cls, config: Config, clock: Clock) -> Vitals:
         """Read the run's state and heartbeat from disk."""
         state = state_mod.load(config.run_dir)
         status = state_mod.shown_status(config.run_dir, state)
         beat = live.read_heartbeat(config.run_dir)
         return cls(
-            now, status, state.status_reason, beat, _runner(beat), config.health, state.halt_kind
+            clock.wall,
+            status,
+            state.status_reason,
+            beat,
+            _runner(beat),
+            config.health,
+            state.halt_kind,
+            clock.mono,
         )
 
     @property
@@ -104,6 +125,35 @@ class Vitals:
     @property
     def beat_age(self) -> float:
         return self.now - (self.beat or {}).get("at", self.now)
+
+    @property
+    def slept(self) -> float | None:
+        """Wall seconds since the last beat that monotonic time did not see (R16)."""
+        mono = (self.beat or {}).get("mono")
+        if self.mono is None or isinstance(mono, bool) or not isinstance(mono, int | float):
+            return None
+        return self.beat_age - (self.mono - mono)
+
+    def slept_over(self, limit: float) -> bool:
+        """Whether the machine slept for more than ``limit`` seconds."""
+        slept = self.slept
+        return slept is not None and slept > limit
+
+    @property
+    def stale(self) -> bool:
+        """Beating, but the last beat is older than ``stale_s``."""
+        return self.beating and self.beat_age > self.limits.stale_s
+
+    @property
+    def busy(self) -> bool:
+        """Work was declared: a tool is open or a chore is set."""
+        return self.tool is not None or self.chore is not None
+
+    @property
+    def excused(self) -> bool:
+        """A late beat that work and an awake machine explain (R17)."""
+        awake = self.slept is not None and not self.slept_over(self.limits.stale_s)
+        return self.busy and awake and self.beat_age <= self.limits.red_quiet_s
 
     @property
     def step(self) -> dict[str, Any] | None:
@@ -181,6 +231,18 @@ def _chore_words(v: Vitals) -> str:
     return f"runner: {chore.get('what')} for {age(v.now - chore.get('since', v.now))}"
 
 
+def _sleep_words(v: Vitals) -> str:
+    return f"the machine slept for {age(v.slept or 0)}"
+
+
+def _doing(v: Vitals) -> str:
+    return _chore_words(v) if v.chore else f"{(v.tool or {}).get('name')} runs"
+
+
+def _late_words(v: Vitals) -> str:
+    return f"heartbeat {age(v.beat_age)} old while {_doing(v)}"
+
+
 RULES: tuple[Rule, ...] = (
     Rule(Level.RED, lambda v: v.halted, lambda v: f"halted: {_status_words(v)}"),
     Rule(
@@ -198,11 +260,13 @@ RULES: tuple[Rule, ...] = (
         lambda v: v.quiet_over(v.limits.red_quiet_s),
         _quiet_words,
     ),
+    Rule(Level.RED, lambda v: v.beating and v.slept_over(v.limits.stale_s), _sleep_words),
     Rule(
         Level.RED,
-        lambda v: v.beating and v.beat_age > v.limits.stale_s,
+        lambda v: v.stale and not v.excused and not v.slept_over(v.limits.stale_s),
         lambda v: f"heartbeat {age(v.beat_age)} old",
     ),
+    Rule(Level.AMBER, lambda v: v.stale and v.excused, _late_words),
     Rule(Level.AMBER, lambda v: bool(v.tool) and v.quiet_over(v.limits.amber_tool_s), _tool_words),
     Rule(
         Level.AMBER,
@@ -238,4 +302,4 @@ def judge(vitals: Vitals) -> Health:
 
 def current(config: Config) -> Health:
     """The verdict for the run as it is now."""
-    return judge(Vitals.read(config, system.now()))
+    return judge(Vitals.read(config, Clock.read()))

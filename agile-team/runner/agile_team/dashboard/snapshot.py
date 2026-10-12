@@ -43,12 +43,14 @@ class RunFiles:
     state: RunState
     events: list[dict]
     now: float = 0.0
+    mono: float | None = None
 
     @classmethod
     def load(cls, config: Config, book: RoleBook) -> RunFiles:
         """Read the state and the event log."""
         state = state_mod.load(config.run_dir)
-        return cls(config, book, state, read_jsonl(config.run_dir / EVENTS), time.time())
+        events = read_jsonl(config.run_dir / EVENTS)
+        return cls(config, book, state, events, time.time(), time.monotonic())
 
     def lines(self, name: str) -> list[dict]:
         """The objects of one JSONL file in the run directory."""
@@ -314,7 +316,7 @@ def _heartbeat(files: RunFiles) -> dict[str, Any] | None:
 
 
 def _health(files: RunFiles) -> dict[str, Any]:
-    verdict = health.judge(health.Vitals.read(files.config, files.now))
+    verdict = health.judge(health.Vitals.read(files.config, health.Clock(files.now, files.mono)))
     return {"level": str(verdict.level), "reason": verdict.reason, "model_note": verdict.model_note}
 
 
