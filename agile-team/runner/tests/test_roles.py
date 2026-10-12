@@ -298,3 +298,16 @@ def test_architect_names_the_developer_in_the_handoff(tmp_path: Path) -> None:
     assert '"developer": "developer-cli"' in body
     assert "in your summary" not in body
     assert "story index" in body
+
+
+def test_devops_scopes_its_test_runs(tmp_path: Path) -> None:
+    body = RoleBook.for_repo(tmp_path, {}).resolve("devops").body
+    text = " ".join(body.split())
+    for phrase in (
+        "Run only what proves your change, normally one named test",
+        "Never run the full suite or a coverage run; the runner's gate does those",
+        "only so the onboarding sprint can record its baseline",
+        "This is the one step where you run the full suite and the coverage command.",
+        "run the failing tests the brief names",
+    ):
+        assert phrase in text
