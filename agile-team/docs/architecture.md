@@ -946,8 +946,8 @@ design step. `index.html` is s5's and does not change here.
 `dashboard/fixtures/snapshot.json` is the contract (AC3). It holds **raw**
 sections, and the approved UI (`index.html`) derives the board, flow, tokens
 and questions views from them in the browser. `build()` therefore returns the
-fixture's eleven top-level keys (`upstream` was added by s29). AC1 and AC2 name views, and each one maps onto
-those keys like this:
+fixture's eleven top-level keys (`upstream` was added by s29). AC1 and AC2
+name views, and each one maps onto those keys like this:
 
 | AC view | Snapshot keys it comes from | Derived in `index.html` by |
 |---|---|---|
