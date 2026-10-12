@@ -56,5 +56,15 @@ def test_mark_adds_one_timeout_marker_per_item(request):
     assert calls == [("timeout", (1.0,)), ("timeout", (30.0,))]
 
 
+def test_mark_with_no_items_adds_nothing():
+    assert time_limit.mark([]) is None
+
+
+def test_limit_is_a_float_even_for_an_integer_ini_value():
+    config = _config({"timeout": "2", "e2e_timeout": "9"})
+    limit = time_limit.limit_of(_stub("tests/test_x.py", config))
+    assert isinstance(limit, float) and limit == 2.0
+
+
 def test_every_world_has_a_limit_key():
     assert set(time_limit.LIMIT_INI) == set(os_guard.World)
