@@ -292,6 +292,18 @@ def _step_refusal(role: str, story: StoryState) -> str | None:
     return f"story {story.id} is at step {story.step!r}, which needs {STEP_ROLES[story.step]}"
 
 
+TESTS_FAIL = "tests fail:\n{tail}"
+TEST_FAILURES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b[1-9]\d* (?:failed|errors?)\b"),  # pytest/cargo/jest summaries
+    re.compile(r"^--- FAIL:", re.MULTILINE),  # go test
+)
+
+
+def tests_failed(output: str) -> bool:
+    """Whether the output names a failing or erroring test (``TEST_FAILURES``)."""
+    return any(p.search(output) for p in TEST_FAILURES)
+
+
 def parse_coverage(output: str) -> float | None:
     """Total coverage from a coverage report: the ``TOTAL`` line, else the last ``N%``."""
     totals = [ln for ln in output.splitlines() if "TOTAL" in ln.upper()]
@@ -410,15 +422,25 @@ class Checks:
         if timeout := timed_out(code, out):
             return timeout
         if code != 0:
-            return Outcome(Verdict.BOUNCE, f"tests fail:\n{tail(out)}")
+            return Outcome(Verdict.BOUNCE, TESTS_FAIL.format(tail=tail(out)))
         return Outcome(Verdict.PASS)
 
     def tests_green_and_covered(self) -> Outcome:
-        green = self.green()
-        if green.verdict is not Verdict.PASS:
-            return green
+        """One coverage run proves green and gives the total (s68 C1-C5)."""
         code, out = self.run(self.commands["coverage"])
-        return timed_out(code, out) or self._coverage_outcome(parse_coverage(out))
+        if timeout := timed_out(code, out):
+            return timeout
+        if code == 0:
+            return self._coverage_outcome(parse_coverage(out))
+        return self._failed_run(out)
+
+    def _failed_run(self, out: str) -> Outcome:
+        """Bounce a non-zero run: shortfall text if only the total fell short, else tests fail."""
+        pct = parse_coverage(out)
+        short = pct is not None and pct < self.required_coverage()
+        if short and not tests_failed(out):
+            return self._coverage_outcome(pct)
+        return Outcome(Verdict.BOUNCE, TESTS_FAIL.format(tail=tail(out)))
 
     def _coverage_outcome(self, pct: float | None) -> Outcome:
         if pct is None:
