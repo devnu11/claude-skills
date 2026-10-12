@@ -29,7 +29,10 @@ class Seen:
 
     @classmethod
     def load(cls, path: Path) -> Seen | None:
-        """Read the memory: ``None`` when there is none yet (a first watch, F1); fresh memory when unreadable."""
+        """Read the memory: ``None`` when there is none yet (a first watch, F1).
+
+        Fresh memory when the file is unreadable.
+        """
         try:
             return cls(**json.loads(system.read_text(path)))
         except FileNotFoundError:
@@ -151,7 +154,7 @@ class Watcher:
             self._sleep(POLL_S)
 
     def _baseline(self) -> Seen:
-        """The remembered look; a first watch (no memory file) records the current one first (F2)."""
+        """The remembered look; a first watch (no memory file) records the current one (F2)."""
         remembered = Seen.load(self.memory)
         return remembered if remembered is not None else self._record(self._whole_look())
 
