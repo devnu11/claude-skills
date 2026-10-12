@@ -18,7 +18,7 @@ from agile_team.providers import Billing
 from agile_team.state import RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
-from fake_system import FakeSystem
+from .fake_system import FakeSystem
 
 LIMITS = cfg.HealthLimits()
 NOW = 1_000_000.0
@@ -300,6 +300,7 @@ def seed_run(fake: FakeSystem) -> cfg.Config:
         "step": step(last_turn_at=now - 240, tool={"name": "Bash", "started_at": now - 240}),
     }  # fmt: skip
     fake.put(config.run_dir / live.HEARTBEAT, json.dumps(late))
+    fake.put(config.run_dir / state_mod.PID_FILE, str(fake.pid()))
     return config
 
 
