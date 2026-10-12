@@ -1,6 +1,21 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s70 done)
+**Last updated:** 2026-10-12 (s71 done)
+
+## s71: Unit tests run no OS calls — single seam with fake and audit (P1: files, clock)
+
+All OS calls now flow through `agile_team/system.py`, a thin seam that unit tests swap for a fake. Code review focus:
+
+- **Import discipline:** Every module does `from agile_team import system` and calls `system.func(...)` at the use site. `from agile_team.system import x` is banned (binds the real function at import, defeats swap). Ruff `TID251` will enforce this in P3.
+- **System module:** Only `system.py` touches the OS. Functions are thin one-liners wrapping exactly one OS call each (e.g., `read_text(path)` → `path.read_text()`, `run(command)` → `subprocess.run(…)`). Every function in `system.__all__` is swappable.
+- **Fake and audit:** Unit tests install a `FakeSystem` (in-memory files, command scripting, package data) and an audit hook that fails any unit test reaching the real OS with guidance. The fake records write operations in `ops` (useful for test assertions) and can simulate failures (disk full, permission denied).
+- **LEGACY table:** Pre-s71 test files not yet migrated stay in `os_guard.LEGACY` and run on the real seam, unaffected. Each phase removes rows.
+- **P1 scope shipped:** `system.py` (P1 functions + `hard_link`), conversions of P1 modules (`state`, `ledger`, `events`, `relay`, `watch`, `halt`, `config`, `keys`, `roles`, `health`, and `live`'s heartbeat read), migrated tests (`test_state`, `test_ledger`, `test_events`, `test_relay`, `test_keys`, plus `test_system_fake`, `test_os_guard`, `test_s71_seam`, `test_s71_tell`), test infrastructure (`tests/fake_system.py`, `tests/os_guard.py`, conftest wiring).
+- **Deferred to s76/s77:** Twelve modules and their tests stay in `LEGACY`; conversions pair with test migrations in P2/P3.
+- **Code quality:** Coverage 99.56% (uncovered lines are e2e-only `system` wrappers, will be covered by `tests/e2e/test_system_e2e.py`). Ruff clean.
+- **Nits (non-blocking):** Fidelity gaps on `hard_link` (copies instead of shares; design justifies) and file permissions (read-check for denied files when real OS doesn't need it; same gap as `replace`). Noted in review.
+
+See ADR-0036, design `agile-team/docs/design/s71.md` (rules O1–O17, modules per phase, test checklist).
 
 ## s70: Parallel test suite with pytest-xdist; gate runs with `-n auto`
 

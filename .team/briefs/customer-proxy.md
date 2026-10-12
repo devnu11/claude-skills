@@ -1,6 +1,18 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 manual testing open)
+**Last updated:** 2026-10-12 (s71 done)
+
+## s71: Unit tests touch no OS (P1 seam, files, clock)
+
+The runner's unit tests are now isolated from the OS. What this means for you:
+
+- **No test pollution:** Unit tests run in a fake OS in memory. No tmp files left behind, no real git commands, no process signals. Clean isolation.
+- **Realistic failures:** Tests script disk-full, permissions, missing files, hung processes—scenarios hard to create in real tests.
+- **Safe refactors:** Moving OS calls or renaming functions is caught at test time by an audit hook.
+- **Real files separate:** Tests that need the real OS live in `tests/e2e/`. Acceptance tests are separate and always real.
+- **Three phases:** P1 (s71, done) covers files and clock. P2 (s76) covers processes and network. P3 (s77) covers runtime. During migration, P1 and earlier tests run on the real seam (LEGACY flag).
+
+If you find a test that shouldn't be isolated or should move to e2e, note it in your handoff. See ADR-0036, design `agile-team/docs/design/s71.md`.
 
 ## s44: Live spend meter and runner health manual testing (six items open)
 

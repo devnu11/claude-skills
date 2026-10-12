@@ -1,6 +1,18 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s70 done)
+**Last updated:** 2026-10-12 (s71 done)
+
+## s71: Unit tests touch no OS — fake system and audit hook (P1: seam, files, clock)
+
+Unit tests now run in a fake OS world. Your job: build the test infrastructure, migrate P1 tests, enforce the rule. Key changes:
+
+- **Test infrastructure:** `tests/fake_system.py` (in-memory files, command scripting, package data), `tests/os_guard.py` (audit hook, patch table, `RealOsCall`), `tests/conftest.py` wiring (autouse `fake` fixture, three pytest hook wrappers). `fake_system` records all write operations in `ops` (useful for assertions), can fail the disk or deny paths, and scripts git/HTTP replies via `reply()` rules.
+- **Infrastructure tests:** `test_system_fake.py` (round-trip, failures, ops recording), `test_os_guard.py` (audit hook firing, caller exemptions, patch wrapper behavior), `test_s71_seam.py` (end-to-end: state save/load, ledger append, relay publish, crash log, watch timeout).
+- **Migrated tests:** Move tests for converted modules (`state`, `ledger`, `events`, `relay`, `keys`) from the real OS to the fake. No `tmp_path`, no git commands, no `monkeypatch.chdir`. Patch OS calls through `system` instead (e.g., `monkeypatch.setattr(system, "sleep", fake.sleep)`).
+- **LEGACY:** Pre-s71 unit test files not yet migrated stay in `os_guard.LEGACY` and run on the real seam. Twelve files defer to s76. Each phase removes `LEGACY` rows.
+- **Rule:** Only `agile_team/system.py` and `tests/e2e/` touch the OS. Every unit test that reaches it fails with `RealOsCall` and guidance: "inject it, or move the test to tests/e2e/". The audit hook + patches catch it at runtime; `test_seam_e2e.py` checks it statically by AST.
+
+See ADR-0036, design `agile-team/docs/design/s71.md` (test checklist P1, rules O1–O6, fake docstring).
 
 ## s70: The test suite runs in parallel with pytest-xdist; no live values in test IDs
 

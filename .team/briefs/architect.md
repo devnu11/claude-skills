@@ -1,6 +1,32 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s70 done)
+**Last updated:** 2026-10-12 (s71 done)
+
+## s71: Unit tests run no OS calls — one seam with fake and audit (P1: files, clock)
+
+All OS calls now flow through `agile_team/system.py`, a thin seam that unit tests swap for a fake. Architectural patterns:
+
+**One module decides all OS:** `system.py` is the only place the real OS is touched. Thin functions with no logic (one call, maybe one line of shaping). Every function in `system.__all__` is swappable: `system.read_text(path)`, `system.run(command)`, `system.now()`, etc. This concentrates OS interaction in one place, making it auditable and testable.
+
+**Import discipline:** Every other module does `from agile_team import system` (never `from agile_team.system import func`, which binds at import before the test can swap). Calls go through `system.func(...)` at the use site. This discipline will be enforced by ruff `TID251` in P3.
+
+**Fake system for unit tests:** An autouse fixture installs a fresh `FakeSystem` (in-memory files, command scripting, package data) for every unit test. Files are normalised posixpaths with mtime and mode; the fake records every write in `ops` (useful for assertions). The fake can fail: `deny(path)` makes reads raise `PermissionError`; `fill_disk()` makes writes raise `ENOSPC`. Commands are scripted via a `reply()` rule table; unmatched commands return success by default.
+
+**Audit hook + patches at runtime:** `sys.addaudithook(os_guard.hook)` fires on every OS audit event. While a unit test (not `tests/e2e/`) runs:
+- If the event is audited and the caller is in `agile_team.*` or `tests.*`, raise `RealOsCall` with guidance: "inject it, or move the test to tests/e2e/".
+- Exempt callers (import machinery, `coverage`, etc.) pass through.
+- For calls with no audit event (pid, sleep, `platform`, `which`), a `PATCHED` table wraps them to raise for test code.
+- Violations are recorded; if the test swallows the `RealOsCall`, the guard fails at teardown.
+
+**Three phases keep the suite green:** P1 (s71) migrates P1 modules and tests; P2 (s76) migrates processes, signals, network; P3 (s77) migrates runtime, CLI, close. Until then, `LEGACY` files run on the real seam. Each phase removes LEGACY rows.
+
+**Consequences:**
+- Tests run in milliseconds; no tmp files left; clean isolation.
+- Realistic OS failures (full disk, missing files, permissions, hung processes) are scriptable.
+- Safe refactoring: moving OS calls or renaming functions is caught at test time.
+- Package data (roles, presets, dashboard HTML) live in both fake and real worlds, so the same reader code works in all tests.
+
+Pattern: One module (`system.py`) that all code uses. Two enforcement layers (fake at test time, audit hook + patches at runtime). Three phases to migrate without breaking. ADR-0036, design `agile-team/docs/design/s71.md` (rules O1–O17, modules per phase, test checklist).
 
 ## s70: Parallel test suite with pytest-xdist; gate cycle time drops to 1 minute
 

@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s70 done)
+**Last updated:** 2026-10-12 (s71 done)
 
 See `developer.md` for the base conventions.
+
+## s71: Unit tests run no OS calls — single seam with fake and audit (P1: files, clock)
+
+Every module now imports `system` as a module (`from agile_team import system`) and calls thin functions like `system.read_text(path)`, `system.now()`, `system.run(command)`. The P1 conversions cover `state`, `ledger`, `events`, `relay`, `watch`, `halt`, `config`, `keys`, `roles`, `health`, and `live`'s heartbeat read. You also added `system.hard_link()` for relay's draft publishing. Unit tests run in a fake OS: an autouse fixture swaps every function in `system.__all__` with an in-memory fake, and an audit hook fails any test that breaks the rule. The fake records writes, can simulate failures (full disk, permissions), and holds package data (built-in roles, presets, dashboard HTML). Twelve modules defer conversions to s76/s77; their tests stay in `LEGACY` until then. See ADR-0036, design `agile-team/docs/design/s71.md` (rules O1–O17, P1 module list).
 
 ## s70: The test suite runs in parallel with pytest-xdist
 
