@@ -926,6 +926,12 @@ The agile-team runner follows the rule itself (s71):
   `inject it, or move the test to tests/e2e/`. Tests under `tests/e2e/` run
   on the real OS.
 - Ruff `TID251` bans direct OS calls outside `system.py`.
+- The move runs in three phases, each with a green suite: files and the clock
+  (s71), processes, signals and the network (s76: `system.run`,
+  `spawn_piped`, `spawn_logged`, `killpg`, `http_get`, `listen_http`, …;
+  only `system.py` calls `os.killpg`), then the runtime, the CLI and ruff
+  `TID251` (s77). Until s77, the unit-test files named in
+  `os_guard.LEGACY` still run on the real OS.
 
 ### Repeated setbacks
 
@@ -1581,7 +1587,10 @@ merge**.
   `-<runner pgid>`, or a pid in the runner's group is denied. Stop your own
   work by the pid you saved (`cmd & PID=$!` … `kill $PID`). Residual risk:
   the hook cannot resolve a variable target (`kill $p`, `kill $PPID`), so
-  that passes.
+  that passes. The repo's own code and scripts never use `pkill` or
+  `killall` either (s76): `tests/e2e/test_kill_words_e2e.py` scans every
+  tracked code file (`tests/kill_words.py`) and fails CI on a use outside
+  the guard's denylist and its test tables.
 - Every role but DevOps: Bash may not run the full suite or coverage (s69,
   `suite_check.SUITE_RULES`). The check looks at segments that start with a
   launcher (`uv`, `python…`, `poetry`, `timeout`, `env`, `exec`, `command`,
