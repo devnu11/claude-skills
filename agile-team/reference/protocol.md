@@ -563,7 +563,12 @@ billing = "free"               # free (ledgered as 0) | reported (Claude-priced)
 ```
 
 Stories pick a delivery with `open_story(…, delivery="cli")`; the default is
-the first one.
+the first one. The name must equal a configured `[[delivery]]` `name`
+exactly (no prose, no case folding). Any other name is refused before the
+story opens: `delivery 'x' is not a configured [[delivery]]; use one of: cli,
+web`. With no `[[delivery]]` configured, the refusal says so and lists no
+names. One check (`Config.delivery_refusal`) serves every path that sets a
+story's delivery.
 
 ## Roles
 
@@ -1351,7 +1356,9 @@ with no reasons and the `compact` path.
 Each story in `state.json` has `sprint`: the number of the sprint it is
 committed to, or `null` when it is in the backlog.
 
-- `open_story` puts a story in the backlog.
+- `open_story` puts a story in the backlog. It refuses an existing id and a
+  `delivery` that is not a configured `[[delivery]]` name (empty means the
+  first one), and changes nothing when it refuses.
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
   go back to the backlog. Done stories never move; they keep the sprint they

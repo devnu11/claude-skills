@@ -120,6 +120,9 @@ command fails.
    (macOS verified). The service's output is in
    `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
    in use means another process holds the delivery's port. Tell the human.
+   A story's delivery must be the exact name of a `[[delivery]]` in
+   `.agile-team.toml`; `open_story` refuses any other name and lists the
+   valid ones.
    When the same setback repeats on a story, the runner stops the loop and
    runs the Manager on it (`⏸ manager` on the dashboard board). It
    does the same when a story bounces between the same two steps
