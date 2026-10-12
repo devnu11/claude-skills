@@ -5,8 +5,7 @@ Picks the next step, briefs it, runs it, and stops at a hand-over.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
@@ -57,8 +56,6 @@ SENT_BACK_LINES = {
     "return": "- Sent back to this step: {reason}",
     "escalate": "- The same setback repeated, so the manager ruled on it: {reason}",
 }
-
-Sleep = Callable[[float], Awaitable[None]]
 
 
 @dataclass
@@ -171,7 +168,6 @@ class Router:
     """Runs pipeline steps until something needs the PO."""
 
     runtime: Runtime
-    sleep: Sleep = asyncio.sleep
     steps: int = field(default=0, init=False)
     boundaries: BoundaryRunner = field(init=False)
 
@@ -377,7 +373,7 @@ class Router:
 
     async def _wait(self) -> None:
         self._show_wait()
-        await self.sleep(POLL_S)
+        await system.async_sleep(POLL_S)
 
     def _show_wait(self) -> None:
         """Name what the run waits on in `status_reason`, saving only on change (W3)."""

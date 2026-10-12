@@ -17,7 +17,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+
+from . import system
 
 DEFAULT = "anthropic"
 PLACEHOLDER_TOKEN = "agile-team"
@@ -112,9 +113,9 @@ def endpoint_env(provider: Provider, token: str) -> dict[str, str]:
 def reachable(url: str) -> bool:
     """True when anything answers at ``url``; an HTTP error status still counts."""
     try:
-        with urlopen(url, timeout=PROBE_TIMEOUT_S):
-            return True
+        system.http_get(url, PROBE_TIMEOUT_S)
     except HTTPError:
         return True
     except (URLError, OSError, ValueError):
         return False
+    return True

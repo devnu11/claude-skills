@@ -10,7 +10,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
 from urllib.parse import urlsplit
@@ -83,7 +83,7 @@ class Handler(BaseHTTPRequestHandler):
         """Quiet: the dashboard runs in the background."""
 
 
-def open_server(address: tuple[str, int], app: Dashboard) -> ThreadingHTTPServer:
+def open_server(address: tuple[str, int], app: Dashboard) -> system.HttpServer:
     """A threaded HTTP server for ``app`` (daemon threads; the handler reads ``server.app``)."""
     server = system.listen_http(address, Handler)
     server.app = app  # type: ignore[attr-defined]
@@ -171,7 +171,7 @@ def dashboard_urls(host: str, port: int) -> Urls:
     return Urls(f"http://{name}:{port}/", None)
 
 
-def serve(server: ThreadingHTTPServer) -> None:
+def serve(server: system.HttpServer) -> None:
     """Serve until interrupted; Ctrl-C propagates."""
     with server:
         server.serve_forever()

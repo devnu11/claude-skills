@@ -10,19 +10,27 @@ import argparse
 import asyncio
 import functools
 import json
-import os
 import signal
 import sys
-import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from . import checkout, gates, halt, keys, onboard, presentation, recovery, sandbox, watch
+from . import (
+    checkout,
+    gates,
+    halt,
+    keys,
+    onboard,
+    presentation,
+    recovery,
+    sandbox,
+    system,
+    watch,
+)
 from . import config as config_mod
 from . import state as state_mod
 from .commands import shell_runner
@@ -48,7 +56,6 @@ from .salvage import Cause
 from .upstream import GhPrs, command_runner
 
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
-Kill = Callable[[int, int], None]
 
 
 class CliError(Exception):
@@ -70,17 +77,6 @@ class Browser(StrEnum):
 
 
 @dataclass(frozen=True)
-class DashboardIO:
-    """Side effects of ``dashboard``, swappable in tests."""
-
-    browse: Callable[[str], object] = webbrowser.open
-    serve: Callable[[ThreadingHTTPServer], None] = server.serve
-
-
-DEFAULT_IO = DashboardIO()
-
-
-@dataclass(frozen=True)
 class Place:
     """Where the CLI works: the target repo and the home holding ``~/secrets``."""
 
@@ -89,12 +85,17 @@ class Place:
 
     @classmethod
     def of(cls, args: argparse.Namespace) -> Place:
-        return cls(repo_of(args), Path(args.home))
+        return cls(repo_of(args), home_of(args))
 
 
 def repo_of(args: argparse.Namespace) -> Path:
     """The ``--repo`` path, resolved once so every derived path is absolute."""
-    return Path(args.repo).resolve()
+    return system.resolve(Path(args.repo))
+
+
+def home_of(args: argparse.Namespace) -> Path:
+    """The ``--home`` path, or the user's home when it is absent."""
+    return Path(args.home) if args.home else system.home()
 
 
 def default_query() -> QueryFn:
@@ -109,7 +110,7 @@ def print_json(data: Any) -> None:
 
 def role_book(config: config_mod.Config, home: Path) -> RoleBook:
     """Built-in, global and repo roles; the global layer lives under ``home``."""
-    return RoleBook.for_repo(config.repo, config.roles, user_roles_dir(home, os.environ))
+    return RoleBook.for_repo(config.repo, config.roles, user_roles_dir(home, system.environ()))
 
 
 def _load_config(repo: Path) -> config_mod.Config:
@@ -122,7 +123,7 @@ def _load_config(repo: Path) -> config_mod.Config:
 # ----- dashboard ---------------------------------------------------------
 
 
-def cmd_dashboard(args: argparse.Namespace, io: DashboardIO = DEFAULT_IO) -> int:
+def cmd_dashboard(args: argparse.Namespace) -> int:
     """Serve the read-only dashboard until interrupted."""
     httpd = _dashboard_server(args)
     urls = server.dashboard_urls(*httpd.server_address[:2])
@@ -130,12 +131,12 @@ def cmd_dashboard(args: argparse.Namespace, io: DashboardIO = DEFAULT_IO) -> int
     if urls.lan:
         print(f"from other machines: {urls.lan}", flush=True)
     if args.browser is Browser.OPEN:
-        io.browse(urls.local)
-    io.serve(httpd)
+        system.open_browser(urls.local)
+    server.serve(httpd)
     return 0
 
 
-def _dashboard_server(args: argparse.Namespace) -> ThreadingHTTPServer:
+def _dashboard_server(args: argparse.Namespace) -> system.HttpServer:
     place = Place.of(args)
     config = _load_config(place.repo)
     app = server.Dashboard.for_run(config, role_book(config, place.home))
@@ -276,7 +277,7 @@ def roles_scaffold(args: argparse.Namespace) -> int:
 
 def scaffold_dir(place: Place, layer: Layer) -> Path:
     if layer is Layer.GLOBAL:
-        return user_roles_dir(place.home, os.environ)
+        return user_roles_dir(place.home, system.environ())
     return place.repo / REPO_ROLES
 
 
@@ -315,7 +316,7 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         state=state_mod.load(config.run_dir),
         env=auth_env(config, locations),
         secrets=locations.secret_paths(),
-        providers=Providers(config.providers, os.environ),
+        providers=Providers(config.providers, system.environ()),
         query_fn=query_fn,
         pipeline=make_pipeline(config),
         prs=GhPrs(command_runner(place.repo)),
@@ -391,7 +392,7 @@ def _run(runtime: Runtime, start: Start) -> int:
 async def _po_until_sigterm(runtime: Runtime, start: Start) -> StepResult:
     """Run the PO as a task that SIGTERM (``stop --now``) cancels."""
     task = asyncio.current_task()
-    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    system.on_signal(signal.SIGTERM, task.cancel)
     runtime.pulse.start()
     try:
         return await run_po(runtime, start)
@@ -420,14 +421,14 @@ def _report(found: halt.Halt) -> int:
 @contextmanager
 def pid_file(run_dir: Path) -> Iterator[None]:
     """Clear any stale stop request and record this process for ``stop --now``."""
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / state_mod.STOP_FILE).unlink(missing_ok=True)
+    system.make_dirs(run_dir)
+    system.remove(run_dir / state_mod.STOP_FILE)
     path = run_dir / state_mod.PID_FILE
-    path.write_text(str(os.getpid()))
+    system.write_text(path, str(system.pid()))
     try:
         yield
     finally:
-        path.unlink(missing_ok=True)
+        system.remove(path)
 
 
 # ----- status / answer / stop ----------------------------------------------
@@ -473,7 +474,7 @@ def cmd_answer(args: argparse.Namespace) -> int:
 
 def _message_text(source: str) -> str:
     try:
-        return sys.stdin.read() if source == "-" else Path(source).read_text()
+        return sys.stdin.read() if source == "-" else system.read_text(Path(source))
     except OSError as exc:
         raise CliError(f"cannot read {source}: {exc.strerror}") from exc
 
@@ -497,11 +498,11 @@ def cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_stop(args: argparse.Namespace, kill: Kill = os.kill) -> int:
+def cmd_stop(args: argparse.Namespace) -> int:
     """Ask the runner to stop after its step; ``--now`` also signals it."""
     pid = _request_stop(repo_of(args)) / state_mod.PID_FILE
-    if args.stop is StopMode.NOW and pid.is_file():
-        kill(int(pid.read_text()), signal.SIGTERM)
+    if args.stop is StopMode.NOW and system.is_file(pid):
+        system.kill(int(system.read_text(pid)), signal.SIGTERM)
         print("stop requested; runner signalled")
         return 0
     print("stop requested; the team stops after the current step")
@@ -523,8 +524,8 @@ def cmd_accept_checkout(args: argparse.Namespace) -> int:
 
 def _request_stop(repo: Path) -> Path:
     run_dir = _load_config(repo).run_dir
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / state_mod.STOP_FILE).touch()
+    system.make_dirs(run_dir)
+    system.write_text(run_dir / state_mod.STOP_FILE, "")
     return run_dir
 
 
@@ -545,7 +546,7 @@ class Command:
 
 GLOBAL_ARGS: tuple[Arg, ...] = (
     (("--repo",), {"default": ".", "help": "target repo root (default: cwd)"}),
-    (("--home",), {"default": str(Path.home()), "help": argparse.SUPPRESS}),
+    (("--home",), {"help": argparse.SUPPRESS}),
 )
 INIT_ARGS: tuple[Arg, ...] = (
     (("--detect",), {"action": "store_const", "dest": "func", "const": cmd_detect,
