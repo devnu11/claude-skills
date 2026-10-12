@@ -37,6 +37,9 @@ def test_trigger_values_are_snake_case() -> None:
         "push_rejected",
         "boundary_error",
         "boundary_escalated",
+        "ci_green",
+        "ci_failed",
+        "ci_pending",
     ]
 
 
@@ -60,6 +63,9 @@ def test_table_rows_are_in_design_order() -> None:
         T.PUSH_REJECTED,
         T.BOUNDARY_ERROR,
         T.BOUNDARY_ESCALATED,
+        T.CI_GREEN,
+        T.CI_FAILED,
+        T.CI_PENDING,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 

@@ -323,9 +323,10 @@ def test_permission_yes_pushes_branches_and_opens_pull_requests(env: Env, fake: 
     assert "Rebase and merge" in spec.body and "Stacked on" not in spec.body
     up = env.rt.state.upstream
     assert env.rt.state.boundary is None and up.closed == 1
-    assert up.report.startswith("Sprint 1 is up for review: #1 (ready, team/sprint-1)")
+    assert up.report.startswith("Sprint 1's CI passed on #1") and "ready to merge" in up.report
     assert env.outcomes()[-2:] == ["pushed", "done"]
-    assert any(m.kind == "update" and m.text == up.report for m in env.rt.relay.messages())
+    posted = [m.text for m in env.rt.relay.messages() if m.kind == "update"]
+    assert any("are pushed" in t and "ready to merge" not in t for t in posted)
 
 
 def test_permission_no_builds_locally_and_reports(env: Env, fake: FakeSystem) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from agile_team.ci import Bucket, Check
 from agile_team.upstream import Pr, PrMode, PrSpec, PrState, UpstreamError
 
 
@@ -15,6 +16,16 @@ class FakePrs:
     prs: dict[str, Pr] = field(default_factory=dict)
     calls: list[tuple] = field(default_factory=list)
     next_number: int = 1
+    check_list: list = field(default_factory=lambda: [Check("build", Bucket.PASS, "ci")])
+
+    def checks(self, number: int) -> list:
+        return self.check_list
+
+    def wait_checks(self, number: int, seconds: float) -> bool:
+        return True
+
+    def failed_log(self, link: str) -> str:
+        return ""
 
     def missing(self) -> str | None:
         return self.reason
