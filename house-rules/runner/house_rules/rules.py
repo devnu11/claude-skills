@@ -221,8 +221,9 @@ def describe_name_problem(site: FunctionSite, settings: Settings) -> str:
 
 
 def is_verb(word: str, settings: Settings) -> bool:
-    """A known verb, or its third-person form (``returns``, ``matches``)."""
-    stems = (word, word.removesuffix("s"), word.removesuffix("es"))
+    """A known verb, its third-person form (``returns``) or British spelling (``normalise``)."""
+    american = word[:-3] + "ize" if word.endswith("ise") else word
+    stems = (word, american, word.removesuffix("s"), word.removesuffix("es"))
     return any(stem in settings.known_verbs for stem in stems)
 
 
