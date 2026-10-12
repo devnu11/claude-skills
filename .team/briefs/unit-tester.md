@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
+
+## s58: Sandbox e2e test for local service binding on macOS
+
+Write `tests/e2e/test_proxy_sandbox_e2e.py` with a `pytest.mark.skipif` for non-macOS platforms. Test uses a scripted model (stdlib HTTP server on a thread) and real bundled claude CLI. Build real sandbox settings with a `web` delivery, run with and without the `network` key, and assert: (1) with key: exit 0, tool result contains `200 exit=0`; (2) without key: tool result contains `exit=7`. Write `tests/test_sandbox.py` unit tests: `web` delivery has `network: {"allowLocalBinding": True}` (N1, V2), non-service kinds have no `network` key (N2), filesystem keys unchanged (N2), returned dict mutation leaves module constant unchanged (N3), docstring lacks "Not verified" and names the e2e test (V2). Write dispatch Proxy plan tests: `Prepared.stop` called once, after `query_fn` returns or raises (L1). Coverage ≥95%, ruff clean. See ADR-0026, design `agile-team/docs/design/s58.md` (test checklist).
 
 ## s47: Router wait (W1–W6); status_reason shows waiting; halt note suffix
 

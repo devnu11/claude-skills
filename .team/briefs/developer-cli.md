@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
 
 See `developer.md` for the base conventions.
+
+## s58: Proxy sandbox reaches local services via allowLocalBinding
+
+Service deliveries (kinds with `Start.BACKGROUND`) get `network.allowLocalBinding: true` in their sandbox settings via a data-driven mapping. Non-service kinds have no `network` key. Changes to `sandbox.py`: constants `LOCAL_SERVICE_NETWORK` and `NETWORK_BY_START` (after `DELIVERY_KINDS`), new private `_network(prepared)` helper, `_sandbox_section` merges result with `**_network(prepared)`. Network dict is always a fresh copy. `os_sandbox_settings` docstring updated to say what the e2e test verifies and that Linux is not verified. No changes to `dispatch.py` or `presentation.py`; service lifecycle unchanged by design. See ADR-0026, design `agile-team/docs/design/s58.md` (rules N1–N4, V1–V2, L1).
 
 ## s47: Show what the run waits on; wake logic unchanged
 

@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
+
+## s58: Customer Proxy sandbox now reaches local services
+
+All five ACs pass: (1) `network.allowLocalBinding` set only for service deliveries (web, dashboard kinds with `Start.BACKGROUND`). (2) E2E test on macOS curls a live service from inside the sandbox: 200 with the setting, exit 7 without (proving sandbox active). (3) Docstring updated; says what is verified (macOS) and what is not (Linux). (4) Service lifecycle stated in docs: trial stops by design, Proxy gets fresh from `plan()`. (5) Docs moved with behaviour. E2E test skipped off macOS with stated reason; unit test pins the setting's presence. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s58.md`, ADR-0026. Customer Proxy acceptance step no longer bounces on "connection refused."
 
 ## s47: Status shows what the run waits on; halt notes include it
 

@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
+
+## s58: Your sandbox can reach the local service
+
+The runner now configures the OS sandbox to allow local binding (`network.allowLocalBinding: true`) for service deliveries (those serving on localhost). You can now curl the service from inside your sandboxed Bash commands without "connection refused". The service is fresh for each Proxy step (started by `plan()` in the `prepare_fn`). Docs updated: protocol.md, SKILL.md. See ADR-0026, design `agile-team/docs/design/s58.md`.
 
 ## s47: Halt notes show what run was waiting on when halted
 

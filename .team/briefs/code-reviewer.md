@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
+
+## Design decisions to verify
+
+**Proxy sandbox local service binding (s58):** Verify that service deliveries get the network setting and the e2e test is sound:
+- **N1–N4:** `LOCAL_SERVICE_NETWORK` and `NETWORK_BY_START` constants; `_network(prepared)` returns fresh dict; `_sandbox_section` merges with `**_network(prepared)`. Non-service kinds have no `network` key.
+- **V1–V2:** E2E test `pytest.mark.skipif(sys.platform != "darwin", ...)` with stated reason. Scripted model and real service on separate ports. Real settings, real CLI. With key: exit 0 + `200 exit=0`. Without key: `exit=7`.
+- **L1:** `Trial.liveness` starts and stops; Proxy gets fresh service from `plan()`. No code changes to lifecycle; documented to clarify design.
+- Service lifecycle unchanged by design (s26 already established it). See ADR-0026, design `agile-team/docs/design/s58.md`.
 
 ## Design decisions to verify
 

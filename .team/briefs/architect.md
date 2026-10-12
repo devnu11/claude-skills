@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s47 done)
+**Last updated:** 2026-10-11 (s58 done)
+
+## s58: Network sandbox settings by delivery kind; e2e verified on macOS
+
+Service deliveries (Start.BACKGROUND) get `network.allowLocalBinding: true` via data-driven mapping `NETWORK_BY_START`. Non-service kinds have no network key. Fresh dict per call prevents state pollution. E2E verification runs macOS only (Seatbelt); Linux (bubblewrap) not verified and documented as such. Service lifecycle pattern (s26) unchanged: trial starts and stops, Proxy gets fresh from `plan()`. Consequences: Proxy curl'ing local services no longer gets "connection refused"; sandbox settings are code-driven, not per-delivery magic strings. See ADR-0026, design `agile-team/docs/design/s58.md` (rules N1–N4, V1–V2, L1).
 
 ## s47: Waiting status is explicit; wake logic data-driven; halt notes include context
 
