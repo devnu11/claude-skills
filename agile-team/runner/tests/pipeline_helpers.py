@@ -83,13 +83,13 @@ class PipelineRunner:
 
     def __call__(self, command: str) -> tuple[int, str]:
         if command == "pytest --cov":
+            if self.failures:
+                self.failures -= 1
+                return 1, "boom: assertion failed"
             return 0, "TOTAL   10   0   100%"
         step = next(iter(s.step for s in self.rt.state.stories.values()), "")
         if step == "tests":
             return 1, "red"
-        if step == "implement" and self.failures:
-            self.failures -= 1
-            return 1, "boom: assertion failed"
         return 0, "ok"
 
 

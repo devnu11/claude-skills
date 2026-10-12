@@ -125,7 +125,7 @@ def test_green_gate() -> None:
     done = Handoff("done")
     ok = pipeline({"T": (0, ""), "C": (0, "TOTAL 96%")}).evaluate(story("implement"), done)
     assert ok.verdict is Verdict.PASS
-    red = pipeline({"T": (1, "boom")}).evaluate(story("implement"), done)
+    red = pipeline({"C": (1, "boom")}).evaluate(story("implement"), done)
     assert red.verdict is Verdict.BOUNCE and "boom" in red.reason
     assert red.bounce_to == "implement"
     low = pipeline({"C": (0, "TOTAL 80%")}).evaluate(story("implement"), done)
