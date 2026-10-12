@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -237,15 +235,6 @@ class Reading:
         return Event(EventKind.STEP_END, self.who.role, self.who.story, data)
 
 
-@dataclass(frozen=True)
-class Pace:
-    """Clock and wait, injectable so tests never sleep (H6); ``wait`` returns True to stop."""
-
-    now: Callable[[], float] = time.time
-    wait: Callable[[threading.Event, float], bool] = threading.Event.wait
-    mono: Callable[[], float] = time.monotonic
-
-
 @dataclass(frozen=True, eq=False)
 class Meter:
     """A handle on one open reading in its pulse; what ``collect`` feeds."""
@@ -264,8 +253,6 @@ class Pulse:
 
     run_dir: Path
     beat_s: float = 20.0
-    pace: Pace = field(default_factory=Pace)
-    pid: int = field(default_factory=os.getpid)
     started_at: float = field(init=False)
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
     _open: list[Meter] = field(init=False, default_factory=list)
@@ -276,11 +263,11 @@ class Pulse:
     _thread: threading.Thread | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
-        self.started_at = self.pace.now()
+        self.started_at = system.now()
 
     def open(self, who: Who) -> Meter:
         """Start measuring a query; the newest open meter is the one shown."""
-        meter = Meter(self, Reading(who, self.pace.now()))
+        meter = Meter(self, Reading(who, system.now()))
         with self._lock:
             self._open.append(meter)
         self.write()
@@ -295,13 +282,13 @@ class Pulse:
 
     def _wake_innermost(self) -> None:
         if self._open:
-            self._open[-1].reading.wake(self.pace.now())
+            self._open[-1].reading.wake(system.now())
 
     def take(self, meter: Meter, message: Any) -> None:
         """Feed ``message`` to ``meter``; log a turn line and beat when there is news."""
         with self._lock:
             before = len(meter.reading.tools)
-            turn = meter.reading.take(message, self.pace.now())
+            turn = meter.reading.take(message, system.now())
             self._log(turn)
             news = turn is not None or len(meter.reading.tools) < before
         if news:
@@ -310,17 +297,14 @@ class Pulse:
     def _log(self, turn: Turn | None) -> None:
         if turn is None:
             return
-        try:
-            with (self.run_dir / TURNS).open("a") as out:
-                out.write(turn.line() + "\n")
-        except OSError:
-            pass  # a lost turn line must never stop the run
+        with suppress(OSError):  # a lost turn line must never stop the run
+            system.append_text(self.run_dir / TURNS, turn.line() + "\n")
 
     @contextmanager
     def doing(self, what: str) -> Iterator[None]:
         """Mark runner-side work in progress (H5); restores the previous chore on exit."""
         with self._lock:
-            previous, self._chore = self._chore, {"what": what, "since": self.pace.now()}
+            previous, self._chore = self._chore, {"what": what, "since": system.now()}
         self.write()
         try:
             yield
@@ -347,7 +331,7 @@ class Pulse:
 
     def beats(self) -> None:
         """The thread body: beat every ``beat_s``; a failed beat never ends it (H7)."""
-        while not self.pace.wait(self._stop, self.beat_s):
+        while not system.wait_event(self._stop, self.beat_s):
             self._beat()
 
     def _beat(self) -> None:
@@ -370,8 +354,8 @@ class Pulse:
             data = self.heartbeat()
             try:
                 tmp = self.run_dir / (HEARTBEAT + ".tmp")
-                tmp.write_text(json.dumps(data))
-                os.replace(tmp, self.run_dir / HEARTBEAT)
+                system.write_text(tmp, json.dumps(data))
+                system.replace(tmp, self.run_dir / HEARTBEAT)
             except OSError:
                 pass  # the next beat retries; a heartbeat must never crash the runner
 
@@ -381,10 +365,10 @@ class Pulse:
         step = self._open[-1].reading.view() if live and self._open else None
         return {
             "version": HEARTBEAT_VERSION,
-            "pid": self.pid,
+            "pid": system.pid(),
             "beat": str(Beat.BEATING if live else Beat.ENDED),
-            "at": self.pace.now(),
-            "mono": self.pace.mono(),
+            "at": system.now(),
+            "mono": system.monotonic(),
             "started_at": self.started_at,
             "chore": self._chore if live else None,
             "step": step,

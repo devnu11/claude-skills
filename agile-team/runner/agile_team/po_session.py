@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
+from . import system
 from .relay import Relay
 
 HANDOFF_FILE = ".team/po/handoff.md"
@@ -52,12 +53,12 @@ def with_carry_over(relay: Relay, prompt: str) -> str:
 def read_handoff(repo: Path) -> str:
     """The PO's handoff file, stripped; empty when missing."""
     path = repo / HANDOFF_FILE
-    return path.read_text().strip() if path.is_file() else ""
+    return system.read_text(path).strip() if system.is_file(path) else ""
 
 
 def clear_handoff(repo: Path) -> None:
     """Delete a stale handoff file."""
-    (repo / HANDOFF_FILE).unlink(missing_ok=True)
+    system.remove(repo / HANDOFF_FILE)
 
 
 def fresh_lead(handoff: str, status: str) -> str:

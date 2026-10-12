@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import system
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
@@ -88,7 +89,9 @@ class Scope:
     def is_secret(self, raw: str) -> bool:
         """True when ``raw`` resolves to, or into, one of the secret paths."""
         path = resolve_in(self.base, raw)
-        return any(path == s.resolve() or s.resolve() in path.parents for s in self.secrets)
+        return any(
+            path == system.resolve(s) or system.resolve(s) in path.parents for s in self.secrets
+        )
 
 
 @dataclass(frozen=True)
@@ -282,8 +285,8 @@ def _token_forbidden(scope: Scope, token: str) -> bool:
 
 
 def _names_repo(scope: Scope, token: str) -> bool:
-    in_sandbox = bool(scope.cwd) and token.startswith(str(scope.base.resolve()))
-    return token.startswith(str(scope.repo.resolve())) and not in_sandbox
+    in_sandbox = bool(scope.cwd) and token.startswith(str(system.resolve(scope.base)))
+    return token.startswith(str(system.resolve(scope.repo))) and not in_sandbox
 
 
 def _names_forbidden_root(scope: Scope, token: str) -> bool:

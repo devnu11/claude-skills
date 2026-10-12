@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import os
-import subprocess
-import time
 from dataclasses import dataclass
+
+from . import system
 
 STARTED_SLACK_S = 2.0  # etime has 1 s resolution, and mtime and now are both truncated
 PS_TIMEOUT_S = 5.0
@@ -16,17 +15,17 @@ ETIME_COMMAND = ("ps", "-o", "etime=", "-p")
 def leads_own_group(pid: int) -> bool:
     """True for a live process, not the runner's group, that leads its own group."""
     try:
-        return pid > 1 and pid != os.getpgrp() and os.getpgid(pid) == pid
+        return pid > 1 and pid != system.pgrp() and system.pgid(pid) == pid
     except OSError:
         return False
 
 
 def may_signal_child_group(pid: int) -> bool:
     """True when ``pid`` is a child's group the runner may signal (G2)."""
-    if pid <= 1 or pid == os.getpgrp():
+    if pid <= 1 or pid == system.pgrp():
         return False
     try:
-        return os.getpgid(pid) == pid
+        return system.pgid(pid) == pid
     except ProcessLookupError:
         return True  # the leader exited; an unreaped Popen still holds the pid
     except OSError:
@@ -37,13 +36,13 @@ def signal_child_group(pid: int, sig: int) -> None:
     """Send ``sig`` to the group led by child ``pid``, if it is the child's own."""
     if may_signal_child_group(pid):
         with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(pid, sig)
+            system.killpg(pid, sig)
 
 
 def in_runner_group(pid: int) -> bool:
     """True when ``pid`` is alive and in the runner's process group."""
     try:
-        return os.getpgid(pid) == os.getpgrp()
+        return system.pgid(pid) == system.pgrp()
     except (OSError, OverflowError):
         return False
 
@@ -58,7 +57,7 @@ class RunnerIds:
     @classmethod
     def current(cls) -> RunnerIds:
         """The live process's ids, read now."""
-        return cls(os.getpid(), os.getpgrp())
+        return cls(system.pid(), system.pgrp())
 
     def names(self, pid: int) -> bool:
         """True when ``pid`` is the runner's pid or its process group."""
@@ -82,22 +81,16 @@ def parse_etime(text: str) -> float | None:
 def _elapsed(pid: int) -> str | None:
     """The ``etime`` text from ``ps``, or ``None`` when it cannot be read."""
     try:
-        done = subprocess.run(
-            [*ETIME_COMMAND, str(pid)],
-            timeout=PS_TIMEOUT_S,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        done = system.run(system.Command((*ETIME_COMMAND, str(pid)), timeout=PS_TIMEOUT_S))
+    except (OSError, system.TimeoutExpired):
         return None
-    return done.stdout if done.returncode == 0 else None
+    return done.out if done.code == 0 else None
 
 
 def started_at(pid: int) -> float | None:
     """When ``pid`` started (epoch seconds), or ``None`` when unknown."""
     elapsed = parse_etime(_elapsed(pid) or "")
-    return None if elapsed is None else time.time() - elapsed
+    return None if elapsed is None else system.now() - elapsed
 
 
 @dataclass(frozen=True)

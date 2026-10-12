@@ -18,6 +18,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,6 @@ from . import config as config_mod
 from . import state as state_mod
 from .commands import shell_runner
 from .dashboard import server
-from .dashboard.server import DashboardServer
 from .dispatch import QueryFn, Runtime, StepResult
 from .git_ops import Git
 from .ledger import LEDGER, Ledger, budget_status
@@ -74,7 +74,7 @@ class DashboardIO:
     """Side effects of ``dashboard``, swappable in tests."""
 
     browse: Callable[[str], object] = webbrowser.open
-    serve: Callable[[DashboardServer], None] = server.serve
+    serve: Callable[[ThreadingHTTPServer], None] = server.serve
 
 
 DEFAULT_IO = DashboardIO()
@@ -135,13 +135,13 @@ def cmd_dashboard(args: argparse.Namespace, io: DashboardIO = DEFAULT_IO) -> int
     return 0
 
 
-def _dashboard_server(args: argparse.Namespace) -> DashboardServer:
+def _dashboard_server(args: argparse.Namespace) -> ThreadingHTTPServer:
     place = Place.of(args)
     config = _load_config(place.repo)
     app = server.Dashboard.for_run(config, role_book(config, place.home))
     address = (args.host or server.default_host(), args.port)
     try:
-        return DashboardServer(address, app)
+        return server.open_server(address, app)
     except OSError as exc:
         raise CliError(f"cannot listen on {address[0]}:{address[1]}: {exc.strerror}") from exc
 

@@ -5,12 +5,11 @@ Where it lives, what it must hold, and the copy into the Proxy's sandbox.
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from . import sandbox
+from . import sandbox, system
 from .config import Config
 from .gates import READY, Outcome, StoryState, Verdict
 from .git_ops import Git
@@ -70,7 +69,7 @@ def presented_source(config: Config, story: StoryState | None) -> Path | None:
     if story is None:
         return None
     source = source_dir(config, story.id)
-    return source if source.is_dir() else None
+    return source if system.is_dir(source) else None
 
 
 @dataclass
@@ -116,7 +115,7 @@ def lay_out(config: Config, story: StoryState) -> Path:
 
 def _init_workspace(workspace: Path) -> None:
     # Its own .git, or every git command in it would climb to the team's repo.
-    workspace.mkdir()
+    system.make_dirs(workspace)
     Git(workspace).run("init", "-q")
 
 
@@ -137,16 +136,18 @@ def _reason(config: Config, path: Path, story: StoryState) -> str:
 
 def _guide_written(source: Path) -> bool:
     guide = source / GUIDE
-    return guide.is_file() and bool(guide.read_text().strip())
+    return system.is_file(guide) and bool(system.read_text(guide).strip())
 
 
 def _has_content(workspace: Path) -> bool:
-    return workspace.is_dir() and any(p.name != ".git" for p in workspace.iterdir())
+    return system.is_dir(workspace) and any(p.name != ".git" for p in system.list_dir(workspace))
 
 
 def copy_into(source: Path, root: Path) -> Path:
     """Copy the presentation into the sandbox ``root``; symlinks stay links."""
-    return Path(shutil.copytree(source, root / PRESENTATION_DIR, symlinks=True))
+    target = root / PRESENTATION_DIR
+    system.copy_tree(source, target)
+    return target
 
 
 def prompt_section(copied: Path | None) -> str:
@@ -158,5 +159,5 @@ def prompt_section(copied: Path | None) -> str:
         f"The team's presentation is in {copied}. The customer's workspace is "
         f"`{WORKSPACE}/` in it. If the presentation is missing or broken, return "
         "`changes_requested` with `next_role: integration-tester`.\n\n"
-        f"{GUIDE}:\n\n{(copied / GUIDE).read_text().strip()}"
+        f"{GUIDE}:\n\n{system.read_text(copied / GUIDE).strip()}"
     )

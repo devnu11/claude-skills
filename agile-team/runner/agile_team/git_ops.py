@@ -6,10 +6,11 @@ autosquashes; ``fixup!`` commits are left for a human to squash.
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from . import system
 
 CO_AUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
 RENAME_CODES = frozenset("RC")
@@ -29,32 +30,26 @@ class Git:
     def run(self, *args: str) -> str:
         """Run ``git <args>`` and return stdout; raise ``GitError`` on failure."""
         proc = self._exec(*args)
-        if proc.returncode != 0:
-            raise GitError(f"git {' '.join(args)}: {proc.stderr.strip()}")
-        return proc.stdout
+        if proc.code != 0:
+            raise GitError(f"git {' '.join(args)}: {proc.err.strip()}")
+        return proc.out
 
     def attempt(self, *args: str) -> tuple[int, str]:
         """Run ``git <args>``; the exit code and stdout+stderr, never raising."""
         proc = self._exec(*args)
-        return proc.returncode, proc.stdout + proc.stderr
+        return proc.code, proc.out + proc.err
 
     def branch(self) -> str | None:
         """The checked-out branch's name, or ``None`` on a detached HEAD."""
         code, out = self.attempt("symbolic-ref", "--quiet", "--short", "HEAD")
         return out.strip() if code == 0 else None
 
-    def _exec(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", *self.options, *args],
-            cwd=self.repo,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    def _exec(self, *args: str) -> system.Completed:
+        return system.run(system.Command(("git", *self.options, *args), self.repo))
 
     def is_repo(self) -> bool:
         """True when ``repo`` is a directory inside a git work tree."""
-        return self.repo.is_dir() and self._exec("rev-parse", "--git-dir").returncode == 0
+        return system.is_dir(self.repo) and self._exec("rev-parse", "--git-dir").code == 0
 
     def changed_paths(self) -> list[str]:
         """Paths with staged, unstaged or untracked changes (renames give both ends)."""
@@ -66,7 +61,7 @@ class Git:
 
     def is_ignored(self, path: str) -> bool:
         """True when ``path`` is covered by a gitignore rule."""
-        return self._exec("check-ignore", "-q", "--", path).returncode == 0
+        return self._exec("check-ignore", "-q", "--", path).code == 0
 
     def head(self) -> str:
         return self.run("rev-parse", "HEAD").strip()

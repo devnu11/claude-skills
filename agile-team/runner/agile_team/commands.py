@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import re
 import signal
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
+from . import system
 from .process_groups import signal_child_group
 
 CommandRunner = Callable[[str], tuple[int, str]]
@@ -25,15 +24,6 @@ NO_HUNG_LINE = (
     "no test is named in its output; a per-test timeout (pytest-timeout) "
     "or pytest's faulthandler_timeout would name it"
 )
-POPEN_OPTS: dict[str, Any] = {
-    "shell": True,
-    "stdin": subprocess.DEVNULL,
-    "stdout": subprocess.PIPE,
-    "stderr": subprocess.STDOUT,
-    "text": True,
-    "errors": "replace",
-    "start_new_session": True,
-}
 
 
 @dataclass(frozen=True)
@@ -69,16 +59,16 @@ def hung_line(output: str) -> str:
     return HUNG_LINE.format(test=test) if test else NO_HUNG_LINE
 
 
-def kill_group(proc: subprocess.Popen[str]) -> None:
+def kill_group(proc: system.Process) -> None:
     """SIGKILL the command's own process group, only if it is one (s41)."""
     signal_child_group(proc.pid, signal.SIGKILL)
 
 
-def drain(proc: subprocess.Popen[str]) -> str:
+def drain(proc: system.Process) -> str:
     """Collect what a killed group wrote, with a deadline."""
     try:
         return proc.communicate(timeout=DRAIN_S)[0] or ""
-    except subprocess.TimeoutExpired:
+    except system.TimeoutExpired:
         return ""
 
 
@@ -91,10 +81,10 @@ class CommandShell:
 
     def run(self, command: str) -> tuple[int, str]:
         """Run ``command``; on timeout kill its group and return ``TIMED_OUT``."""
-        with subprocess.Popen(command, cwd=self.repo, **POPEN_OPTS) as proc:
+        with system.spawn_piped(system.ShellCommand(command, self.repo)) as proc:
             try:
                 out, _ = proc.communicate(timeout=self.limit_s)
-            except subprocess.TimeoutExpired:
+            except system.TimeoutExpired:
                 kill_group(proc)
                 return TIMED_OUT, self.report_timeout(command, drain(proc))
             except BaseException:

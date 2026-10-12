@@ -40,6 +40,7 @@ from . import (
     runner_tools,
     salvage,
     sandbox,
+    system,
 )
 from . import results as results_mod
 from . import state as state_mod
@@ -280,7 +281,7 @@ def config_edit_allowed(git: Git) -> bool:
     """True when the working config differs from HEAD only in owned sections."""
     try:
         before = tomllib.loads(git.run("show", f"HEAD:{CONFIG_NAME}"))
-        after = tomllib.loads((git.repo / CONFIG_NAME).read_text())
+        after = tomllib.loads(system.read_text(git.repo / CONFIG_NAME))
     except (GitError, OSError, tomllib.TOMLDecodeError):
         return False
     return _without_owned(before) == _without_owned(after)
@@ -357,7 +358,7 @@ class Runtime:
         state_mod.save(self.config.run_dir, self.state)
 
     def stop_requested(self) -> bool:
-        return (self.config.run_dir / state_mod.STOP_FILE).exists()
+        return system.exists(self.config.run_dir / state_mod.STOP_FILE)
 
     def resolve(self, name: str) -> ResolvedRole:
         return self.book.resolve(name, self.state.runtime_overrides(name))

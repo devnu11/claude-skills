@@ -6,8 +6,6 @@ Read-only; the contract is ``fixtures/snapshot.json``.
 from __future__ import annotations
 
 import json
-import os
-import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -16,7 +14,7 @@ from typing import Any
 import yaml
 
 from .. import config as config_mod
-from .. import health, live, waits
+from .. import health, live, system, waits
 from .. import roles as roles_mod
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
@@ -50,7 +48,7 @@ class RunFiles:
         """Read the state and the event log."""
         state = state_mod.load(config.run_dir)
         events = read_jsonl(config.run_dir / EVENTS)
-        return cls(config, book, state, events, time.time(), time.monotonic())
+        return cls(config, book, state, events, system.now(), system.monotonic())
 
     def lines(self, name: str) -> list[dict]:
         """The objects of one JSONL file in the run directory."""
@@ -68,20 +66,18 @@ def _parse_line(line: str) -> dict | None:
 def read_jsonl(path: Path) -> list[dict]:
     """JSON objects of a JSONL file; blank, torn or non-object lines are skipped."""
     # The runner appends while we read, so the last line may be torn.
-    if not path.is_file():
+    if not system.is_file(path):
         return []
-    parsed = (_parse_line(line) for line in path.read_text().splitlines() if line.strip())
+    parsed = (_parse_line(line) for line in system.read_text(path).splitlines() if line.strip())
     return [item for item in parsed if item is not None]
 
 
 def read_tail(path: Path, size: int) -> list[dict]:
     """JSON objects in the last ``size`` bytes of a JSONL file; a cut first line is dropped."""
     try:
-        with path.open("rb") as fh:
-            end = fh.seek(0, os.SEEK_END)
-            fh.seek(max(0, end - size))
-            lines = fh.read().decode(errors="replace").splitlines()
-            cut = end > size
+        data, end = system.read_end(path, size)
+        lines = data.decode(errors="replace").splitlines()
+        cut = end > size
     except OSError:
         return []
     parsed = (_parse_line(line) for line in lines[1 if cut else 0 :] if line.strip())
@@ -91,8 +87,8 @@ def read_tail(path: Path, size: int) -> list[dict]:
 def watched_files(config: Config) -> list[Path]:
     """Every file a snapshot reads (missing ones included)."""
     run = [config.run_dir / name for name in RUN_FILES]
-    stories = sorted(config.stories_dir.glob("*.md"))
-    reqs = sorted(config.requirements_dir.glob("REQ-*.md"))
+    stories = system.glob(config.stories_dir, "*.md")
+    reqs = system.glob(config.requirements_dir, "REQ-*.md")
     return [*run, config_path(config.repo), *stories, *reqs]
 
 
@@ -139,10 +135,10 @@ def _roles(files: RunFiles) -> list[dict]:
 
 
 def _frontmatter(path: Path) -> tuple[dict, str]:
-    if not path.is_file():
+    if not system.is_file(path):
         return {}, ""
     try:
-        meta, body = roles_mod.split_frontmatter(path.name, path.read_text())
+        meta, body = roles_mod.split_frontmatter(path.name, system.read_text(path))
     except (yaml.YAMLError, RoleError):
         return {}, ""
     return meta or {}, body
@@ -231,7 +227,7 @@ def _requirement(path: Path, history: dict[str, list[dict]]) -> dict:
 
 def _requirements(files: RunFiles) -> list[dict]:
     history = _history(files.events)
-    paths = sorted(files.config.requirements_dir.glob("REQ-*.md"))
+    paths = system.glob(files.config.requirements_dir, "REQ-*.md")
     return [_requirement(path, history) for path in paths]
 
 

@@ -11,12 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import signal
-import socket
-import subprocess
-import time
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -151,7 +146,7 @@ class Prepared:
     root: Path
     workdir: Path
     env: dict[str, str] = field(default_factory=dict)
-    process: subprocess.Popen[bytes] | None = None
+    process: system.Process | None = None
     presentation: Path | None = None
 
     def stop(self) -> str | None:
@@ -160,7 +155,7 @@ class Prepared:
         Returns why the port is still in use at the deadline (PORT_HELD), else ``None``.
         """
         held = self._end() if self.process else None
-        self.pid_file().unlink(missing_ok=True)
+        system.remove(self.pid_file())
         return held
 
     def _end(self) -> str | None:
@@ -197,7 +192,7 @@ class Prepared:
 
     def _placeholders(self) -> dict[str, str]:
         host, port = self.address()
-        paths = {"{repo}": self.repo.resolve(), "{sandbox}": self.root.resolve()}
+        paths = {"{repo}": system.resolve(self.repo), "{sandbox}": system.resolve(self.root)}
         return {**{k: str(v) for k, v in paths.items()}, "{host}": host, "{port}": str(port)}
 
     def bash_allowed(self) -> list[str] | None:
@@ -210,7 +205,7 @@ class Prepared:
         return {name: dict(MCP_SERVERS[name]) for name in self.kind.mcp}
 
 
-def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
+def _signal_group(process: system.Process, sig: int) -> None:
     signal_child_group(process.pid, sig)
 
 
@@ -220,7 +215,7 @@ def _beside(root: Path, suffix: str) -> Path:
 
 def _recorded(pid_file: Path) -> Recorded | None:
     try:
-        return Recorded(int(pid_file.read_text().strip()), pid_file.stat().st_mtime)
+        return Recorded(int(system.read_text(pid_file).strip()), system.stat(pid_file).mtime)
     except (OSError, ValueError):
         return None
 
@@ -238,18 +233,18 @@ def wait_until(done: Callable[[], bool], seconds: float) -> bool:
 def _group_alive(pgid: int) -> bool:
     """True while group ``pgid`` has a process we may see (signal 0 sends nothing)."""
     try:
-        os.killpg(pgid, 0)
+        system.killpg(pgid, 0)
     except OSError:
         return False
     return True
 
 
-def _ended(process: subprocess.Popen[bytes]) -> bool:
+def _ended(process: system.Process) -> bool:
     """True once the leader is reaped (poll reaps it) and its group is empty."""
     return process.poll() is not None and not _group_alive(process.pid)
 
 
-def end_group(process: subprocess.Popen[bytes]) -> None:
+def end_group(process: system.Process) -> None:
     """SIGTERM the child's group and wait for it to end; SIGKILL what is left (Q2, Q3)."""
     if process.poll() is not None:
         return
@@ -271,7 +266,7 @@ def _ends_within(pgid: int, seconds: float) -> bool:
 
 def _end_group(recorded: Recorded) -> None:
     signal_child_group(recorded.pid, signal.SIGTERM)
-    if not _ends_within(recorded.pid, STOP_WAIT_S) and recorded.is_ours():
+    if not _ends_within(recorded.pid, STOP_WAIT_S):  # ownership was checked by _may_end
         signal_child_group(recorded.pid, signal.SIGKILL)
 
 
@@ -289,19 +284,18 @@ def stop_stale(root: Path, runner_ids: RunnerIds | None = None) -> None:
     recorded = _recorded(pid_file)
     if recorded and _may_end(recorded, runner_ids or RunnerIds.current()):
         _end_group(recorded)
-    pid_file.unlink(missing_ok=True)
+    system.remove(pid_file)
 
 
 def http_answers(url: str) -> bool:
     """True when ``GET url`` returns 200 (and valid JSON, if it says it is JSON)."""
     try:
-        with urllib.request.urlopen(url, timeout=PROBE_TIMEOUT_S) as response:
-            body = response.read()
-            if response.status != 200:
-                return False
-            if response.headers.get_content_type() == "application/json":
-                json.loads(body)
-            return True
+        reply = system.http_get(url, PROBE_TIMEOUT_S)
+        if reply.status != 200:
+            return False
+        if reply.content_type == "application/json":
+            json.loads(reply.body)
+        return True
     except (OSError, ValueError):
         return False
 
@@ -309,7 +303,7 @@ def http_answers(url: str) -> bool:
 def port_in_use(host: str, port: int) -> bool:
     """True when something accepts a TCP connection on ``host:port``."""
     try:
-        socket.create_connection((host, port), timeout=1).close()
+        system.connect((host, port))
     except OSError:
         return False
     return True
@@ -329,13 +323,11 @@ def port_released(prepared: Prepared, listening: Listening = port_in_use) -> str
 
 
 Runner = Callable[[str, Prepared], int]
-Popen = Callable[..., subprocess.Popen[bytes]]
 
 
 def run_shell(command: str, prepared: Prepared) -> int:
     """Default prepare runner: a blocking shell command in the repo."""
-    proc = subprocess.run(command, shell=True, cwd=prepared.repo, env=prepared.env, check=False)
-    return proc.returncode
+    return system.run_shell(system.ShellCommand(command, prepared.repo, prepared.env))
 
 
 def kind_of(delivery: Delivery) -> DeliveryKind:
@@ -348,15 +340,15 @@ def kind_of(delivery: Delivery) -> DeliveryKind:
 
 def fresh_dir(path: Path) -> Path:
     """Empty ``path`` and return it."""
-    if path.exists():
-        shutil.rmtree(path)
-    path.mkdir(parents=True)
+    if system.exists(path):
+        system.remove_tree(path)
+    system.make_dirs(path)
     return path
 
 
 def sandbox_env(delivery: Delivery, root: Path) -> dict[str, str]:
     """The current environment with the delivery's ``bin`` dirs prepended to PATH."""
-    env = dict(os.environ)
+    env = dict(system.environ())
     path = [str(root / b) for b in delivery.bin] + [env.get("PATH", "")]
     env["PATH"] = os.pathsep.join(p for p in path if p)
     return env
@@ -382,13 +374,11 @@ PrepareFn = Callable[[Config, "Order"], Prepared]
 
 @dataclass
 class Preparer:
-    """Builds sandboxes; the runner, popen, probe and clock are injectable for tests."""
+    """Builds sandboxes; the prepare runner, probe and port check are injectable."""
 
     runner: Runner = run_shell
-    popen: Popen = subprocess.Popen
     probe: Callable[[str], bool] = http_answers
     listening: Callable[[str, int], bool] = port_in_use
-    sleep: Callable[[float], None] = time.sleep
     attempts: int = PROBE_ATTEMPTS
 
     def prepare(self, config: Config, order: Order) -> Prepared:
@@ -412,17 +402,9 @@ class Preparer:
 
     def _start(self, prepared: Prepared, command: str) -> None:
         self._refuse_busy(prepared)
-        with prepared.log_file().open("wb") as log:
-            prepared.process = self.popen(
-                prepared.expand(command),
-                shell=True,
-                cwd=prepared.repo,
-                env=prepared.env,
-                start_new_session=True,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-            )
-        prepared.pid_file().write_text(str(prepared.process.pid))
+        shell = system.ShellCommand(prepared.expand(command), prepared.repo, prepared.env)
+        prepared.process = system.spawn_logged(shell, prepared.log_file())
+        system.write_text(prepared.pid_file(), str(prepared.process.pid))
 
     def _refuse_busy(self, prepared: Prepared) -> None:
         host, port = prepared.address()
@@ -439,7 +421,7 @@ class Preparer:
             if prepared.process and prepared.process.poll() is not None:
                 break
             if attempt + 1 < self.attempts:
-                self.sleep(PROBE_EVERY_S)
+                system.sleep(PROBE_EVERY_S)
         reason = self._not_up_reason(prepared)  # before stop(): it sets a signal exit code
         raise NotUp(_joined(reason, prepared.stop()))
 
@@ -457,7 +439,7 @@ class Preparer:
 
 
 def _log_tail(path: Path) -> str:
-    text = path.read_bytes().decode(errors="replace") if path.is_file() else ""
+    text = system.read_bytes(path).decode(errors="replace") if system.is_file(path) else ""
     lines = text.splitlines()[-LOG_TAIL_LINES:]
     return "\n".join(lines) if lines else "(no output)"
 
@@ -529,7 +511,7 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
     from a live local service, and exits 7 when the ``network`` key is removed.
     The Linux (bubblewrap) sandbox is not verified end to end.
     """
-    repo = config.repo.resolve()
+    repo = system.resolve(config.repo)
     return {
         "sandbox": _sandbox_section(config, prepared),
         "permissions": {"deny": [d for r in forbidden_roots(config) for d in _deny_reads(repo, r)]},
@@ -537,7 +519,7 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
 
 
 def _sandbox_section(config: Config, prepared: Prepared) -> dict[str, Any]:
-    repo = config.repo.resolve()
+    repo = system.resolve(config.repo)
     return {
         "enabled": True,
         "autoAllowBashIfSandboxed": True,
@@ -554,7 +536,7 @@ def _network(prepared: Prepared) -> dict[str, Any]:
 
 
 def _allowed_reads(config: Config, prepared: Prepared) -> list[str]:
-    repo = config.repo.resolve()
+    repo = system.resolve(config.repo)
     customer_docs = repo / config.team.docs_dir / "customer"
     stories, acceptance = repo / ".team/stories", repo / ACCEPTANCE_DIR
-    return [str(prepared.root.resolve()), str(stories), str(acceptance), str(customer_docs)]
+    return [str(system.resolve(prepared.root)), str(stories), str(acceptance), str(customer_docs)]

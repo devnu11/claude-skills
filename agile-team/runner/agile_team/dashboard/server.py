@@ -6,18 +6,16 @@ Never serves a directory.
 from __future__ import annotations
 
 import json
-import socket
 import sys
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib import resources
 from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
 from urllib.parse import urlsplit
 
+from .. import system
 from ..config import Config
 from ..roles import RoleBook
 from . import snapshot
@@ -28,7 +26,7 @@ KEEPALIVE = b": keepalive\n\n"
 HOSTS = {"win32": "127.0.0.1"}
 ALL_INTERFACES = {"0.0.0.0", ""}
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
-INDEX = resources.files(__package__) / "index.html"
+INDEX = Path(__file__).parent / "index.html"
 
 
 @dataclass(frozen=True)
@@ -56,10 +54,10 @@ Seen = tuple[Fingerprint, str]
 
 def _stat(path: Path) -> tuple[str, int, int] | None:
     try:
-        info = path.stat()
+        info = system.stat(path)
     except FileNotFoundError:
         return None
-    return (str(path), info.st_mtime_ns, info.st_size)
+    return (str(path), info.mtime_ns, info.size)
 
 
 def fingerprint(paths: list[Path]) -> Fingerprint:
@@ -85,14 +83,11 @@ class Handler(BaseHTTPRequestHandler):
         """Quiet: the dashboard runs in the background."""
 
 
-class DashboardServer(ThreadingHTTPServer):
-    """Threaded HTTP server carrying the ``Dashboard`` it shows."""
-
-    daemon_threads = True
-
-    def __init__(self, address: tuple[str, int], app: Dashboard) -> None:
-        self.app = app
-        super().__init__(address, Handler)
+def open_server(address: tuple[str, int], app: Dashboard) -> ThreadingHTTPServer:
+    """A threaded HTTP server for ``app`` (daemon threads; the handler reads ``server.app``)."""
+    server = system.listen_http(address, Handler)
+    server.app = app  # type: ignore[attr-defined]
+    return server
 
 
 def _send(handler: Handler, body: Body) -> None:
@@ -105,7 +100,7 @@ def _send(handler: Handler, body: Body) -> None:
 
 
 def _index(handler: Handler) -> None:
-    _send(handler, Body("text/html; charset=utf-8", INDEX.read_bytes()))
+    _send(handler, Body("text/html; charset=utf-8", system.read_bytes(INDEX)))
 
 
 def _snapshot(handler: Handler) -> None:
@@ -129,7 +124,7 @@ def _pump(out: BinaryIO, app: Dashboard) -> None:
         out.write(sse_data(app.snapshot()) if now != last else KEEPALIVE)
         out.flush()
         last = now
-        time.sleep(app.poll_seconds)
+        system.sleep(app.poll_seconds)
 
 
 def _stream(handler: Handler) -> None:
@@ -164,7 +159,7 @@ class Urls(NamedTuple):
 
 def lan_name() -> str:
     """This machine's name on the LAN: its hostname, with ``.local`` added when it has no dot."""
-    name = socket.gethostname()
+    name = system.hostname()
     return name if "." in name else f"{name}.local"
 
 
@@ -176,7 +171,7 @@ def dashboard_urls(host: str, port: int) -> Urls:
     return Urls(f"http://{name}:{port}/", None)
 
 
-def serve(server: DashboardServer) -> None:
+def serve(server: ThreadingHTTPServer) -> None:
     """Serve until interrupted; Ctrl-C propagates."""
     with server:
         server.serve_forever()

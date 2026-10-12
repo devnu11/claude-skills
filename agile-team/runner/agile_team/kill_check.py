@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 
+from . import system
 from .process_groups import in_runner_group
 
 BY_NAME = frozenset({"pkill", "killall"})
@@ -57,7 +58,7 @@ def kill_targets(args: list[str]) -> list[str]:
 def _protected(number: int) -> bool:
     if number in ALWAYS_PROTECTED:
         return True
-    return in_runner_group(number) if number > 0 else -number == os.getpgrp()
+    return in_runner_group(number) if number > 0 else -number == system.pgrp()
 
 
 def target_denial(target: str) -> str | None:
