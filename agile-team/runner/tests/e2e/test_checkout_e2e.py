@@ -7,14 +7,19 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from agile_team import cli
+from agile_team import cli, system
 from agile_team import state as state_mod
 from agile_team.relay import Relay
 from agile_team.state import RunStatus
 
 from ..conftest import FakeQuery, git
-from ..test_cli import any_tool, start_args
+from ..test_cli import start_args
 from ..test_s61 import CASES, accept_args, refs, sha7, stored, with_two_commits
+
+
+def any_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend every toolchain executable is on PATH (Z9: patch ``system.which``)."""
+    monkeypatch.setattr(system, "which", lambda name: f"/bin/{name}")
 
 
 @pytest.mark.parametrize("case", sorted(CASES))

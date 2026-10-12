@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
+from agile_team import system
 from agile_team.po_tools import PoRun, Start
 from agile_team.relay import Note
 
 from ..pipeline_helpers import Script, add_story, build, handover_events
 
 
-def test_an_answer_wakes_the_router_and_the_po_gets_it(make_runtime) -> None:
+def test_an_answer_wakes_the_router_and_the_po_gets_it(make_runtime, monkeypatch) -> None:
     async def ask(rt) -> None:
         rt.relay.post(Note("question", "Which DB?", ["s1"]))
 
@@ -26,7 +27,7 @@ def test_an_answer_wakes_the_router_and_the_po_gets_it(make_runtime) -> None:
         seen.append(rt.state.status_reason)
         rt.relay.answer("m1", "sqlite")
 
-    run.router.sleep = sleep
+    monkeypatch.setattr(system, "async_sleep", sleep)
     asyncio.run(run.run())
     assert slept == [5.0]
     assert seen == ["waiting on answers: s1 waits on m1"]
