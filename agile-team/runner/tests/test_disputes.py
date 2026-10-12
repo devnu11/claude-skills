@@ -312,7 +312,7 @@ def test_a_dispute_elsewhere_is_ignored() -> None:
 
 
 def test_a_dispute_with_tests_disabled_is_gated_as_today() -> None:
-    p = pipeline({"T": (1, "boom")}, steps=["implement", "review"])
+    p = pipeline({"C": (1, "boom")}, steps=["implement", "review"])
     out = p.evaluate(story(), raised())
     assert out.verdict is Verdict.BOUNCE and "boom" in out.reason
     assert LS not in p.checks.run.calls

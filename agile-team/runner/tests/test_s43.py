@@ -191,7 +191,8 @@ def test_coverage_timeout_is_not_unreadable_total() -> None:
 
 @pytest.mark.parametrize("step", ["implement", "tests"])
 def test_pipeline_bounces_a_timeout_at_the_step(step: str) -> None:
-    out = pipeline(TIMEOUT).evaluate(story(step), Handoff("done"))
+    script = {"C": TIMEOUT["T"]} if step == "implement" else TIMEOUT
+    out = pipeline(script).evaluate(story(step), Handoff("done"))
     assert out.verdict is Verdict.BOUNCE and out.bounce_to == step
     assert "did not finish in time" in out.reason
 
