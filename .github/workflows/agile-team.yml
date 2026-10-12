@@ -28,4 +28,4 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      - run: uv run --locked pytest --cov
+      - run: uv run --locked pytest -n auto --cov

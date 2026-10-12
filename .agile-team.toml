@@ -12,8 +12,8 @@ preset = "python"
 # Two runners share one toolchain (s37): agile-team/runner, then unattended/runner.
 # `&&` keeps the coverage gate sound: both pyprojects set fail_under = 95, so a
 # runner below it stops the chain and its TOTAL is the last one the gate reads.
-test = "uv run --directory agile-team/runner pytest -q && uv run --directory unattended/runner pytest -q"
-coverage = "uv run --directory agile-team/runner pytest --cov --cov-report=term -q && uv run --directory unattended/runner pytest --cov --cov-report=term -q"
+test = "uv run --directory agile-team/runner pytest -n auto -q && uv run --directory unattended/runner pytest -q"
+coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q &&uv run --directory unattended/runner pytest --cov --cov-report=term -q"
 lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check ."
 static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check ."
 pragma = "# pragma: no cover"
@@ -39,6 +39,15 @@ ci = [
     "unattended/runner/pyproject.toml",
     "unattended/runner/uv.lock",
 ]
+
+# Named-test runs (s69); the agile-team runner's suite runs in parallel (s70).
+[[toolchain.targeted]]
+root = "agile-team/runner"
+command = "uv run --directory agile-team/runner pytest -q --no-header -n auto {tests}"
+
+[[toolchain.targeted]]
+root = "unattended/runner"
+command = "uv run --directory unattended/runner pytest -q --no-header {tests}"
 
 [gates]
 coverage = 95
