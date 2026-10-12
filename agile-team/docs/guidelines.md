@@ -102,8 +102,9 @@ rule, update in the same story:
 
 - Coverage stays at 95% or more (currently 100%); `ruff check` and
   `ruff format --check` are clean.
-- Run tools from the repo root:
-  `uv run --directory agile-team/runner pytest --cov`.
+- Run tools from the repo root. Only the runner runs the full suite and
+  coverage (s69); roles run named tests:
+  `uv run --directory agile-team/runner pytest -q tests/test_x.py::test_y`.
 - Tests never touch the real home directory. The suite points
   `AGILE_TEAM_HOME` at a scratch dir.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.

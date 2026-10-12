@@ -197,6 +197,12 @@ command fails.
   the PO asks the human to merge `origin/main` into the team branch by hand.
   The runner waits and runs nothing meanwhile. The human, or you if they
   ask, merges and commits, and then the question is answered.
+- Only the runner runs the full suite and coverage. Roles get the results in
+  their briefs (`## Runner results`), a full `pytest` or `--cov` run from a
+  role's Bash is denied, and developers ask the runner for named tests
+  (`run_tests`, `run_new_tests`). Those tools need `[[toolchain.targeted]]`
+  in `.agile-team.toml`; if a developer reports they refuse, that is a config
+  gap for DevOps or the human, not a team fault.
 - Never answer a PO question on the human's behalf.
 - To stop: `$AT stop` (after the current step) or `$AT stop --now`.
 - With `auth = "api-key"` the key bills the repo's Console workspace, not the

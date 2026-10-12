@@ -175,6 +175,30 @@ timeout = 30
 Without one, pytest's built-in `faulthandler_timeout = 30` still prints a
 dump. With no dump at all, the reason gives the command and the limit.
 
+## Who runs the tests
+
+Only the runner runs your full test suite and coverage. The roles get the
+results in their briefs, under `## Runner results`: the developer sees the
+failing tests from the tests gate, and the quality czar sees lint, static
+analysis and coverage, which the runner runs just before its step. A role
+that tries `pytest` with no test named, or any `--cov` run, is told no and
+told what to do instead. Running named tests is fine
+(`pytest -q tests/test_x.py::test_y`).
+
+A developer can also ask the runner to run named tests, or all of the
+story's new tests. Tell the runner how, per test root, in `.agile-team.toml`:
+
+```toml
+[[toolchain.targeted]]
+root = ""                     # the ids are relative to this directory
+command = "uv run pytest -q --no-header {tests}"
+```
+
+With several projects in one repo, add one row each, e.g. `root = "api"` with
+`command = "uv run --directory api pytest -q --no-header {tests}"`. Each run
+is logged in `.team/run/events.jsonl` as a `tests-run` event with how long it
+took.
+
 ## When a story comes back to tests with its code done
 
 A ruling or a review can send a story back to `tests` after its code is

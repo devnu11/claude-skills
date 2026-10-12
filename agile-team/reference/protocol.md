@@ -478,6 +478,10 @@ lint = "uv run ruff check ."
 static = "uv run ruff format --check ."
 pragma = "# pragma: no cover"
 
+[[toolchain.targeted]]         # optional; how the runner runs named tests for a developer (s69)
+root = ""                      # repo-relative dir the ids are relative to; the longest holding root wins
+command = "uv run pytest -q --no-header {tests}"   # must hold {tests}: the quoted ids
+
 [toolchain.globs]              # {source} {tests} {e2e} {ci} in role globs
 source = ["src/**"]
 tests = ["tests/**", "!tests/e2e/**"]
@@ -808,6 +812,31 @@ start the Proxy. The runner moves the story back to `e2e` **without** a round
 same happens when a `web` delivery's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
+
+### Runner results and runner tools
+
+Only the runner runs the full suite and coverage (s69). Roles get the
+results in their briefs instead:
+
+- The tests gate's `test` run and the implement gate's `coverage` run are
+  kept per story, whatever the verdict, in `.team/run/results/<story>/<name>.json`
+  (exit code, the last 60 output lines, the HEAD they ran at, where they ran).
+- Before a quality-czar step the runner runs `lint` and `static` (when set),
+  and `coverage` only when the kept run is missing or not at HEAD. That time
+  is a runner chore on the heartbeat. The quality czar has no shell; it judges
+  these results.
+- A brief carries `## Runner results` with the kept runs its step needs:
+  implement: `test`, `coverage`; quality: `coverage`, `lint`, `static`;
+  review: `coverage` (`results.BRIEF_RESULTS`).
+- A developer step has two runner tools: `run_tests` (named test files or
+  node ids, repo-relative or as pytest prints them) and `run_new_tests` (the
+  test files the unit-tester committed for the story). They refuse a
+  directory, an empty list and an unresolvable id, so they never run the
+  full suite. The runner runs each `[[toolchain.targeted]]` command (the row
+  whose `root` holds the test) under `command_timeout_s`, as a runner chore,
+  and logs a `tests-run` event with the tests, exit codes and seconds. With
+  no `[[toolchain.targeted]]` rows the tools refuse, and the developer names
+  tests in Bash.
 
 ### Time limits
 
@@ -1480,6 +1509,16 @@ merge**.
   work by the pid you saved (`cmd & PID=$!` … `kill $PID`). Residual risk:
   the hook cannot resolve a variable target (`kill $p`, `kill $PPID`), so
   that passes.
+- Every role but DevOps: Bash may not run the full suite or coverage (s69,
+  `suite_check.SUITE_RULES`). A segment that starts with a launcher (`uv`,
+  `python…`, `poetry`, `timeout`, `env`, a shell's `-c` string, `pytest`
+  itself, …) and runs `pytest` with no test file or node id (`tests/` and
+  `tests/*.py` count as none) is denied, and so is any `--cov…` flag or
+  `coverage run`. The reason says how to ask the runner (`run_tests`,
+  `run_new_tests`). A run that names tests (`pytest -q tests/test_x.py::test_y`)
+  passes, except for the code reviewer and the quality czar, who run no tests.
+  Residual risk: pytest run from a script, a `make` target or a `$VAR`, and
+  other test tools, are not seen.
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could

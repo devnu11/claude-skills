@@ -43,6 +43,7 @@ one line here. Older designs are the sections at the end of this file.
 | s44 Live spend meter: every turn in `turns.jsonl`, a thread-written `heartbeat.json`, an `interrupted` `step-end` for every step cut short, one `health.RULES` table (`[health]` thresholds), the smart pill, flow-box scope totals, red alerts, localhost URL first; quiet clock restarts on hand-back, the PO's wait is a chore, a graceful stop is neutral (`state.halt_kind`); the page's functions run under node through a boot guard (U1–U3) | [design/s44.md](design/s44.md) |
 | s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
 | s68 The implement gate runs the suite once (the `coverage` command only); a non-zero exit never passes; failing tests vs coverage shortfall told apart by `TEST_FAILURES`, bounce texts unchanged | [design/s68.md](design/s68.md) |
+| s69 Only the runner runs the full suite: `SUITE_RULES` deny full pytest and coverage runs from role Bash; gate and pre-quality results kept per story and shown under `## Runner results`; the developer's `run_tests`/`run_new_tests` runner tools (`[[toolchain.targeted]]`); the quality czar has no shell | [design/s69.md](design/s69.md) |
 
 ## Components
 
@@ -76,6 +77,9 @@ one line here. Older designs are the sections at the end of this file.
 | `live.py` | the live meter (s44): `Reading` (turns, tokens, tools, model of one open query), `Meter`, `Pulse` (stack of open readings, chores, `turns.jsonl` lines, `heartbeat.json` from a daemon thread), `RATES` estimates | ledger (`Tokens`), providers (`Billing`), salvage (`Cause`, `STOP_REASONS`), events |
 | `health.py` | runner health (s44): `Vitals` (heartbeat, shown status, pid, halt kind), the `RULES` table, `judge`, `current`, `model_note` | live, state, config |
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
+| `suite_check.py` | which test runs a Bash segment starts (s69): `Run`, `run_kind`, `is_target`, the `SUITE_RULES` table, `suite_denial`; no I/O | none |
+| `results.py` | the runner's toolchain results per story (s69): `Ran`, `Results` (`.team/run/results/<story>/<name>.json`), `BRIEF_RESULTS`, the `## Runner results` section | none |
+| `runner_tools.py` | a developer step's MCP tools (s69): `run_tests`, `run_new_tests` (named tests only, a runner chore, a `tests-run` event), `Batch`, `text_result` | gates (`Checks`), config (`Targeted`), live, events |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26; loopback reachable from the OS sandbox, s58), key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |
