@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
 
 See `developer.md` for the base conventions.
+
+## s77: Unit tests touch no OS—P3 completion, LEGACY closed, ruff TID251 enforced (no new ADR)
+
+P3 of s71 (P1 done in s71, P2 done in s76): The remaining OS calls (runtime, CLI, process args) now flow through `system.py`. Modules: `system.py` gains 6 P3 functions (`home`, `which`, `on_signal`, `open_browser`, `async_sleep`, `HttpServer` type); `cli`, `router`, `po_tools`, `preflight` call them instead of the OS. `LEGACY` table deleted; all 31 files migrated to fake or e2e. Tests at 95%+ coverage; ruff clean with `TID251` banned-api config (DevOps step). No new ADR; extends ADR-0036 (s71 seam). See design `agile-team/docs/design/s77.md` (Z1–Z13 rules, per-module changes, LEGACY closure).
 
 ## s76: Unit tests touch no process/signal/network (s71 phase P2, no new ADR)
 

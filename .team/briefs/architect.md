@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s76 done)
+**Last updated:** 2026-10-12 (s77 done)
+
+## s77: Seam completion—P3 closes s71's three-phase architecture (no new ADR)
+
+P3 completes the s71 seam architecture. All OS calls in `agile_team/` and test code now flow through `system.py`. The pattern repeats across three phases: (1) P1 (s71) files, clock; (2) P2 (s76) processes, signals, network, HTTP; (3) P3 (s77) runtime, CLI, all remaining calls. **Six new names** (Z2): `home`, `which`, `on_signal`, `open_browser`, `async_sleep`, `HttpServer` type. **Enforcement via ruff TID251** (Z11): banned-api config bans `from agile_team.system import …` across all code, enforced at DevOps step, not manually. **LEGACY migration** (Z8): All 31 pre-P1 test files moved to fake or e2e; LEGACY table deleted; seam now enforces one world: FAKE (unit tests) or REAL (e2e). **Consequence:** The seam is complete. Every OS interaction is auditable and testable. All code follows one import pattern. No branching on test type needed (world enum decides timeout, not test path). The design and implementation are unified via rules O1–O17 (s71) + rules by phase + one ruff config. See ADR-0036 (s71 architecture), design `agile-team/docs/design/s77.md` (Z1–Z13 rules, three phases).
 
 ## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
 
