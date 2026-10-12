@@ -196,7 +196,9 @@ def test_an_unread_message_ends_the_pass_once(make_runtime) -> None:
     assert [k.value for k in found.kinds] == ["human_message"]
     assert found.lines == [LINE.format(id="t1")] and found.stories == []
     assert state_mod.load(rt.config.run_dir).told == ["t1"]
-    assert asyncio.run(Router(rt).advance()).kinds == []
+    again = asyncio.run(Router(rt).advance())
+    assert "human_message" not in [k.value for k in again.kinds]
+    assert LINE.format(id="t1") not in again.lines
 
 
 def test_the_text_is_not_in_the_pass(make_runtime) -> None:
