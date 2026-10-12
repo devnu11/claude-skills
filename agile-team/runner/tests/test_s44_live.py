@@ -231,7 +231,7 @@ def test_heartbeat_shape_and_atomic_write(tmp_path: Path) -> None:
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
     assert list(beat["step"]) == [
         "role", "story", "step", "started_at", "turn", "model", "configured_model",
-        "last_turn_at", "tool", "tokens", "cost_usd",
+        "last_turn_at", "quiet_since", "tool", "tokens", "cost_usd",
     ]  # fmt: skip
     step = beat["step"]
     assert (step["role"], step["story"], step["step"], step["turn"]) == (
@@ -402,8 +402,9 @@ def vitals(
     heartbeat: dict[str, Any] | None = None,
     reason: str | None = None,
     runner: Runner = Runner.UP,
+    halt_kind: str | None = None,
 ) -> Vitals:
-    return Vitals(NOW, status, reason, heartbeat, runner, LIMITS)
+    return Vitals(NOW, status, reason, heartbeat, runner, LIMITS, halt_kind)
 
 
 def test_r11_idle_without_a_heartbeat() -> None:
@@ -478,14 +479,15 @@ def test_r4_dead_runner_and_interrupted_status() -> None:
     [RunStatus.BLOCKED, RunStatus.FAILED, RunStatus.STOPPED, RunStatus.CHECKOUT_CHANGED],
 )
 def test_r2_a_halted_run_is_red_with_its_reason(status: RunStatus) -> None:
-    verdict = health.judge(vitals(status, reason="session limit, resets 9pm"))
+    verdict = health.judge(vitals(status, reason="session limit, resets 9pm", halt_kind="limit"))
     assert verdict.level is Level.RED
     assert verdict.reason == "halted: session limit, resets 9pm"
-    assert health.judge(vitals(status)).reason == f"halted: {status}"
+    assert health.judge(vitals(status, halt_kind="limit")).reason == f"halted: {status}"
 
 
 def test_r3_turns_arriving_while_halted() -> None:
-    verdict = health.judge(vitals(RunStatus.STOPPED, heartbeat=beat(), reason="stop"))
+    stopped = vitals(RunStatus.STOPPED, heartbeat=beat(), reason="stop", halt_kind="sigterm")
+    verdict = health.judge(stopped)
     assert verdict.reason == "halted: stop, turns arriving while the run is stopped"
 
 

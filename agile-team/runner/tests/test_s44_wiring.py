@@ -241,7 +241,8 @@ def test_heartbeat_section_and_health_match_judge(tmp_path: Path, monkeypatch) -
 
 def test_vital_sign_is_the_level_and_reason(tmp_path: Path) -> None:
     config = make_config(tmp_path / "repo")
-    state_mod.save(config.run_dir, RunState(status=RunStatus.STOPPED, status_reason="stop --now"))
+    state = RunState(status=RunStatus.STOPPED, status_reason="stop --now", halt_kind="sigterm")
+    state_mod.save(config.run_dir, state)
     assert snapshot.vital_sign(config) == "red|halted: stop --now"
 
 
@@ -357,6 +358,7 @@ def test_watch_memory_and_line_carry_health(tmp_path: Path) -> None:
 
 def test_look_reads_health_from_the_run(configured: Path) -> None:
     config = cfg.load(configured)
-    state_mod.save(config.run_dir, RunState(status=RunStatus.STOPPED, status_reason="stop"))
+    state = RunState(status=RunStatus.STOPPED, status_reason="stop", halt_kind="sigterm")
+    state_mod.save(config.run_dir, state)
     found = watch.look(config.run_dir)
     assert found is not None and found.health == "red"
