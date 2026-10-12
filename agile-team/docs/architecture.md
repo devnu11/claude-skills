@@ -39,6 +39,7 @@ one line here. Older designs are the sections at the end of this file.
 | s58 The Proxy's OS sandbox gets `network.allowLocalBinding` for a delivery that serves locally (`Start.BACKGROUND`); verified on macOS by an e2e test with the bundled CLI; service lifecycle stated | [design/s58.md](design/s58.md) |
 | s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
 | s61 The runner records the branch and HEAD it expects and halts (`checkout-changed`, exit 78, a question) when anyone else moves the checkout; `accept-checkout` keeps a new HEAD | [design/s61.md](design/s61.md) |
+| s41 Why s29's step got SIGTERM (its agent `kill`ed its own CLI, found by `ps \| grep pytest`); role Bash may not signal the runner's group or kill by name/run-time target; the runner signals only groups it created (pid-file start time checked) | [design/s41.md](design/s41.md) |
 | s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
 
 ## Components

@@ -944,7 +944,13 @@ to `integration-tester`).
   next to it. Before each start, the runner stops a group still named
   there (left by an earlier step or a killed runner). It stops the service
   when the Proxy's step ends (pass, fail, halt or crash) and deletes the pid
-  file. It never kills a process it did not start.
+  file. It never kills a process it did not start (s41). It signals a group
+  only when the pgid is the leader's own pid and is not the runner's own
+  group. It signals a pid from the pid file only when that process still
+  leads its group and started no later than the file was written (checked
+  with `ps -o etime=`). A stale or reused pid is ignored and the file is
+  deleted. If the leader is gone but other members of its group still hold
+  the port, the start holds on the busy port.
 - Service lifecycle (s58). The e2e gate's trial stops its service on purpose,
   because a gate leaves nothing running. The Proxy step does not reuse that
   service. Planning the step (`plan()`) starts a fresh one from the copied
@@ -1340,6 +1346,14 @@ merge**.
   that ends with its input) and `for` loops pass. Run a suite in the
   foreground, or give the wait a deadline (see the "Never wait without a
   deadline" role rule).
+- Every role: Bash may not signal the runner's process group, which holds
+  the runner and the agent CLIs it starts (s41). `pkill` and `killall` are
+  denied, because the agent's command line holds its whole prompt and can
+  match. `kill $(…)`, `` kill `…` `` and `xargs kill` are denied, because
+  their targets are picked at run time. A `kill` target of `0`, `-1`,
+  `-<runner pgid>`, or a pid in the runner's group is denied. Stop your own
+  work by the pid you saved (`cmd & PID=$!` … `kill $PID`). Residual risk:
+  the hook cannot resolve a variable target (`kill $p`), so that passes.
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
