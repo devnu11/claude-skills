@@ -380,10 +380,11 @@ stays the truth.
 thread in the runner. It is written when a query opens or closes, after each
 turn and tool end, when runner-side work starts or ends, and every
 `[health] beat_s` (20 s) in between, including while a tool or the tests
-gate runs:
+gate runs. A failed write never stops the thread. Its first failure goes to
+`crash.log`:
 
 ```json
-{"version": 1, "pid": 4242, "beat": "beating", "at": 1791800020.0, "started_at": 1791799000.0,
+{"version": 2, "pid": 4242, "beat": "beating", "at": 1791800020.0, "mono": 523000.0, "started_at": 1791799000.0,
  "chore": null,
  "step": {"role": "developer-cli", "story": "s29", "step": "implement", "started_at": 1791799500.0,
           "turn": 12, "model": "claude-sonnet-4-5-20250929", "configured_model": "sonnet",
@@ -395,11 +396,15 @@ gate runs:
 
 `beat` is `beating`, or `ended` once the runner has exited through Python
 (done, halted, stopped, crashed). After a `kill -9` it stays `beating`
-and goes stale. `at` is the last write. `step` is the innermost open query
-(a role step inside the PO's `run_role` call), else `null`. `chore` is
-runner-side work such as `{"what": "settling developer-cli on s29",
-"since": …}` (also `sprint boundary: <stage>` and, while the PO waits on
-the human, `waiting for answers to m3`), else `null`. `quiet_since` is when
+and goes stale. `at` is the last write (wall clock). `mono` is the
+system's monotonic clock at the same moment. That clock stops while the
+machine sleeps, so a reader can tell a sleep from a late beat. `step` is the
+innermost open query (a role step inside the PO's `run_role` call), else
+`null`. `chore` is runner-side work such as `{"what": "settling
+developer-cli on s29", "since": …}`, else `null`. Other chores are
+`gate: implement on s29` while a gate runs, `sprint boundary: <stage>`,
+`quality checks for s29`, `running named tests for <role> on s29`, and
+`waiting for answers to m3` while the PO waits on the human. `quiet_since` is when
 the query last had the floor back: its last turn, a tool's end, the end of
 an inner query (a role step inside `run_role`), or the end of a chore.
 
@@ -422,7 +427,9 @@ those rows' words.
 | red | turns still arriving while the run is halted |
 | red | the runner is gone (`interrupted`, or the heartbeat's pid is dead) |
 | red | no turn for `red_quiet_s` (10 min) |
-| red | heartbeat older than `stale_s` (90 s) |
+| red | the machine slept: wall time since the last beat exceeds the monotonic time since it by more than `stale_s`: `the machine slept for 11 min` |
+| red | heartbeat older than `stale_s` (90 s), unless the excuse below applies (and not when the machine slept) |
+| amber | heartbeat older than `stale_s` but excused: the last beat showed a tool open or runner-side work, the machine was awake, and the beat is no older than `red_quiet_s`: `heartbeat 2 min old while runner: gate: implement on s29 for 2 min` |
 | amber | no turn for `amber_tool_s` (3 min) while a tool runs |
 | amber | no turn for `amber_quiet_s` (5 min) with no tool running |
 | green | runner-side work in progress (`runner: settling … for 2 min`, `runner: waiting for answers to m3 for 12 min`); the quiet rows do not apply during it |
@@ -436,7 +443,9 @@ says, with no red, no `⚠` and no `health` trigger. `state.json`'s
 `limit`, `crash`, `budget`, `checkout`) that set the status, and is `null`
 otherwise. "No turn" counts from `quiet_since` (the last time the query had
 the floor back), or from the query's start before its first turn. A red reason reads, for example, `no turn for 11 min, heartbeat
-4 min old`. Any other watcher can apply the same rules to
+4 min old`. A late beat during a long tool or a gate is amber, not red. Under load
+the beat thread can fall behind, and the last beat already says what is
+running. A heartbeat without `mono` (version 1) is never excused. Any other watcher can apply the same rules to
 `heartbeat.json` and `state.json`. `agile-team watch` does this for you
 (the `health` trigger).
 
@@ -515,7 +524,7 @@ steps = ["design", "tests", "implement", "quality", "review",
 
 [health]                       # optional; the live meter's thresholds in seconds (see Live meter and health)
 beat_s = 20                    # heartbeat.json rewrite interval; must be below stale_s
-stale_s = 90                   # heartbeat older than this: red
+stale_s = 90                   # heartbeat older than this: red (amber while a tool or chore runs, awake); also the sleep threshold
 amber_tool_s = 180             # no turn this long while a tool runs: amber
 amber_quiet_s = 300            # no turn this long, no tool: amber
 red_quiet_s = 600              # no turn this long: red
