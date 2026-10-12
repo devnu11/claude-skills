@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s64 done)
+
+## s64: Delivery validation—`Config.delivery_refusal()` and `Tools._open_refusal()` (test_s64_delivery.py)
+
+New tests: `Config.delivery_refusal` (V1–V5): accepts valid names and empty, reuses exact-match lookup, refuses unknown names with list, refuses on no deliveries with NO_DELIVERY text. `Tools._open_refusal` (V6): refuses duplicate id first, then runs delivery check. `Tools.open_story` (V7–V8): valid/empty delivery opens as today, prose/bad delivery refuses without state change, no events. `SCHEMAS["open_story"]` mentions `[[delivery]]` (AC2). Stray test file deleted round 2. All rules V1–V9 covered. Coverage 100% (config.py, po_tools.py); ruff clean. See design `agile-team/docs/design/s64.md` test checklist.
 
 ## s78: Health gives no false reds—beat resilience, monotonic time, excuse logic (test_s78_health.py)
 

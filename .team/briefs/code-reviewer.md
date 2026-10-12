@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s64 done)
+
+## s64: Delivery names validated—verdict ship round 2 (stray test file deleted, no defects)
+
+Scope: `config.py`, `po_tools.py`, test_s64_delivery.py, docs (`SKILL.md`, `protocol.md`, `product-owner.md`). Changes: `Config.delivery_refusal(name)` (V1–V5) returns None or reason; `Tools._open_refusal(args)` (V6) checks duplicate then delivery; `Tools.open_story` calls `_open_refusal` (V7–V8); `SCHEMAS["open_story"]` updated (AC2); docs state the rule and refusal (AC6). Exact error messages (UNKNOWN_DELIVERY, NO_DELIVERY) pinned by test. V8 (only setter is open_story) verified via grep. V9 (no hard-coded names) checked. All nine rules V1–V9 satisfied. Coverage 100% (config, po_tools), 99.64% overall; ruff clean. Round 1 D1 (stray test file) fixed. No other defects. See design `agile-team/docs/design/s64.md`, review `.team/reviews/s64.md`.
 
 ## s78: Health resilience, sleep detection, excuse logic — verdict ship (no defects)
 
