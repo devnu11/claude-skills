@@ -16,8 +16,16 @@ from typing import Any, ClassVar
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
 from . import handover, po_session, priority, salvage, system
-from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
-from .boundary_runner import boundary_event
+from .boundary import (
+    CI_BUG_FIRST,
+    Boundary,
+    BoundaryHold,
+    BoundaryOutcome,
+    Edge,
+    Permission,
+    held_text,
+)
+from .boundary_runner import BoundaryRunner, boundary_event
 from .checkout import CheckoutChanged
 from .dispatch import (
     PO,
@@ -31,7 +39,7 @@ from .dispatch import (
     refused,
 )
 from .events import Event, EventKind
-from .gates import StoryState, continue_refusal, role_fits_step
+from .gates import StoryState, StoryStatus, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
 from .priority import Change, Placement, Reorder
@@ -51,6 +59,9 @@ SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
 )
 NO_BOUNDARY = "no sprint boundary is pending"
+NO_CI_HOLD = "no boundary is held on failed CI; record_ci_bug applies after a ci_failed hand-over"
+UNKNOWN_BUG = "unknown story {story!r}; open it with open_story first"
+DONE_BUG = "story {story} is done; open a new story for the failing CI"
 NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it"
 PERMISSION_REFUSAL = 'answer must be "yes" or "no"'
 AFTER_REVIEW = frozenset({BoundaryHold.ESCALATED, BoundaryHold.REVIEWED})
@@ -128,11 +139,20 @@ class Tools:
         unknown = self.runtime.state.unknown_stories(ids)
         if unknown:
             return priority.UNKNOWN.format(ids=", ".join(unknown))
+        return self._bug_first(ids)
+
+    def _bug_first(self, ids: list[str]) -> str | None:
+        state = self.runtime.state
+        bug = state.upstream.ci_bug
+        story = state.stories.get(bug)
+        if bug and story and story.status is not StoryStatus.DONE and ids[:1] != [bug]:
+            return CI_BUG_FIRST.format(story=bug)
         return None
 
     def _begin_sprint(self, goal: str, ids: list[str]) -> None:
         state = self.runtime.state
         state.begin_sprint(ids)
+        state.upstream.ci_bug = ""
         state.goal, state.boundary = goal, Boundary(Edge.START, state.sprint)
         state.status = RunStatus.RUNNING
         state.manager_due.append(f"sprint {state.sprint} start: {goal} ({', '.join(ids)})")
@@ -188,6 +208,24 @@ class Tools:
         boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
         self.runtime.save()
         return text_result({"status": "continued", "stage": b.stage})
+
+    async def record_ci_bug(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Record the bug story for a PR whose CI failed; the boundary then finishes."""
+        story = args["story"]
+        reason = self._bug_refusal(story)
+        if reason:
+            return text_result(refused(reason))
+        BoundaryRunner(self.runtime).settle_bug(story)
+        return text_result({"status": "recorded", "story": story})
+
+    def _bug_refusal(self, story: str) -> str | None:
+        b = self.runtime.state.boundary
+        if b is None or b.hold is not BoundaryHold.CI_FAILED:
+            return NO_CI_HOLD
+        found = self.runtime.state.stories.get(story)
+        if found is None:
+            return UNKNOWN_BUG.format(story=story)
+        return DONE_BUG.format(story=story) if found.status is StoryStatus.DONE else None
 
     def _not_held(self, b: Boundary | None) -> str:
         if b is None:
@@ -409,8 +447,15 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "continue_boundary": (
         "Release a held sprint boundary (sync, checks, review branches, push) so the runner "
-        "retries its stage; your note reaches the next devops fix.",
+        "retries its stage; your note reaches the next devops fix; at the CI stage it waits "
+        "for the checks again.",
         {"note": str},
+    ),
+    "record_ci_bug": (
+        "After a ci_failed hand-over: record the bug story you opened for the failing CI (it "
+        "must exist and not be done). The boundary then finishes; list the story first in the "
+        "next start_sprint.",
+        {"story": str},
     ),
     "set_push_permission": (
         "Record the human's answer to: may the team push review branches and open or update "

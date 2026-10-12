@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from . import loops
+from .ci import CiResult
 from .loops import Author, Setback
 
 if TYPE_CHECKING:
@@ -30,20 +31,21 @@ CLOSED_NOTE = "PR #{pr} for sprint {sprint} is {state}; left alone"
 BOUNDARY_DUE = (
     "sprint {sprint} {edge} boundary failed {count} times at {stage}; see repeated_boundary"
 )
-BOUNDARY_STALL = (
-    "Sprint {sprint} {edge} is held at {stage} ({hold}); continue_boundary once it is resolved."
-)
+BOUNDARY_STALL = "Sprint {sprint} {edge} is held at {stage} ({hold}); {hint}."
+DEFAULT_HINT = "continue_boundary once it is resolved"
+CI_BUG_FIRST = "story {story} fixes the failing CI of the last review PR; list it first"
 BOUNDARY_REFUSAL = (
     "sprint {sprint} {edge} boundary is at {stage}{held}; the sprint's stories move once it passes"
 )
 SKIPPED_REPORT = "sync and pull requests skipped: {why}"
 NOTHING_REPORT = "nothing to review: every sprint is in {target}"
 PUSHED_REPORT = (
-    'Sprint {sprint} is up for review: {prs}. Merge the ready one with "Rebase and merge"; '
-    "the next one becomes ready after it."
+    "Sprint {sprint}'s review branches are pushed: {prs}. The runner now waits for CI on the "
+    "non-draft PR; nothing is called ready before CI passes."
 )
 LOCAL_REPORT = (
     "Sprint {sprint}'s review branches are built and checked but not pushed ({why}): {branches}."
+    " No CI result exists."
 )
 NOT_PERMITTED = "the human said no to pushing"
 CHECK_FAILED = "{name} failed ({why}): {command}\n{tail}"
@@ -73,6 +75,7 @@ class Stage(StrEnum):
     CHECK = "check"
     REVIEW = "review"
     PUSH = "push"
+    CI = "ci"
 
 
 class StepKind(StrEnum):
@@ -92,6 +95,8 @@ class BoundaryHold(StrEnum):
     REVIEWED = "reviewed"
     PUSH_PERMISSION = "push_permission"
     PUSH_REJECTED = "push_rejected"
+    CI_FAILED = "ci_failed"
+    CI_PENDING = "ci_pending"
     ERROR = "error"
 
 
@@ -148,8 +153,17 @@ class PrMode(StrEnum):
     CLOSED = "closed"
 
 
-STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH)
-RESTACK_ONLY = frozenset({Stage.REVIEW, Stage.PUSH})
+PR_KIND = {
+    PrMode.NONE: "none",
+    PrMode.READY: "open",
+    PrMode.DRAFT: "draft",
+    PrMode.CLOSED: "closed",
+}
+
+
+STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.CI)
+RESTACK_ONLY = frozenset({Stage.REVIEW, Stage.PUSH, Stage.CI})
+STALL_HINTS = {BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)"}
 FIX_KINDS = {
     FixCase.TEAM_CHECK: StepKind.TEAM_FIX,
     FixCase.REVIEW_CHECK: StepKind.TEAM_FIX,
@@ -234,6 +248,7 @@ class StackEntry:
     url: str = ""
     base: str = ""
     mode: PrMode = PrMode.NONE
+    ci: CiResult | None = None
 
     def __post_init__(self) -> None:
         self.check, self.mode = CheckState(self.check), PrMode(self.mode)
@@ -250,6 +265,7 @@ class UpstreamState:
     checked: str = ""
     closed: int = 0
     report: str = ""
+    ci_bug: str = ""
 
     def __post_init__(self) -> None:
         self.push = Permission(self.push)
@@ -343,3 +359,8 @@ def manager_view(b: Boundary, events: list[Event]) -> dict[str, Any]:
         "history": [asdict(s) for s in b.streak],
         "events": [asdict(e) for e in events if _in_history(e, first)],
     }
+
+
+def stall_hint(hold: BoundaryHold | None) -> str:
+    """What the PO should do about a boundary held for ``hold``."""
+    return STALL_HINTS.get(hold, DEFAULT_HINT) if hold else DEFAULT_HINT

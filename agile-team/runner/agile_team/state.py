@@ -11,6 +11,7 @@ from typing import Any
 
 from . import system
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
+from .ci import CiResult
 from .config import PIPELINE_STEPS
 from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
 from .ledger import SessionCost
@@ -180,7 +181,9 @@ def _boundary(data: dict[str, Any] | None) -> Boundary | None:
 
 def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
     data = data or {}
-    stack = [StackEntry(**e) for e in data.get("stack", [])]
+    stack = [
+        StackEntry(**{**e, "ci": _nested(CiResult, e.get("ci"))}) for e in data.get("stack", [])
+    ]
     return UpstreamState(**{**data, "stack": stack})
 
 

@@ -8,7 +8,6 @@ use bare repos for the first and a fake for the second; they never run ``gh``.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -16,6 +15,8 @@ from typing import Protocol
 
 from . import system
 from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, PrMode
+from .ci import Check, UpstreamError, checks_of, job_of
+from .commands import TIMED_OUT
 from .config import UpstreamSettings
 from .git_ops import Git, GitError, with_trailer
 
@@ -24,10 +25,10 @@ GH_LOGGED_OUT = "gh is not logged in"
 NO_PR_SERVICE = "no pull request service is configured"
 REFUSED_PUSH = "refusing to push {branch}: only review branches ({prefix}*) are pushed"
 GH_TIMEOUT = 120
+GH_TIMED_OUT = "gh timed out after {limit:.0f}s"
+CHECK_FIELDS = "name,state,bucket,link,workflow"
 
-
-class UpstreamError(Exception):
-    """The remote or the PR service refused or failed."""
+__all__ = ["UpstreamError"]
 
 
 class MergeOutcome(StrEnum):
@@ -101,18 +102,32 @@ class Prs(Protocol):
     def edit(self, pr: Pr, spec: PrSpec) -> None:
         """Change only what differs from ``spec``."""
 
+    def wait_checks(self, number: int, limit_s: float) -> bool:
+        """Wait for the PR's checks to finish; False when ``limit_s`` ran out."""
 
-Exec = Callable[[list[str]], tuple[int, str]]
+    def checks(self, number: int) -> list[Check]:
+        """The PR's checks now ([] when none are reported)."""
+
+    def failed_log(self, link: str) -> str:
+        """The failed steps' log of the Actions job at ``link``; "" when there is none."""
+
+
+class Exec(Protocol):
+    """Runs a command line and returns its exit code and output."""
+
+    def __call__(self, argv: list[str], limit_s: float = GH_TIMEOUT) -> tuple[int, str]: ...
 
 
 def command_runner(repo: Path) -> Exec:
     """An ``Exec`` that runs argv in ``repo``; a missing binary gives exit 127."""
 
-    def run(argv: list[str]) -> tuple[int, str]:
+    def run(argv: list[str], limit_s: float = GH_TIMEOUT) -> tuple[int, str]:
         try:
-            done = system.run(system.Command(tuple(argv), repo, GH_TIMEOUT))
+            done = system.run(system.Command(tuple(argv), repo, limit_s))
         except FileNotFoundError as exc:
             return 127, str(exc)
+        except system.TimeoutExpired:
+            return TIMED_OUT, GH_TIMED_OUT.format(limit=limit_s)
         return done.code, done.out + done.err
 
     return run
@@ -134,6 +149,15 @@ class NoPrs:
         raise UpstreamError(self.why)
 
     def edit(self, pr: Pr, spec: PrSpec) -> None:
+        raise UpstreamError(self.why)
+
+    def wait_checks(self, number: int, limit_s: float) -> bool:
+        raise UpstreamError(self.why)
+
+    def checks(self, number: int) -> list[Check]:
+        raise UpstreamError(self.why)
+
+    def failed_log(self, link: str) -> str:
         raise UpstreamError(self.why)
 
 
@@ -174,6 +198,24 @@ class GhPrs:
             self._gh("pr", "ready", number)
         if not pr.draft and spec.mode is PrMode.DRAFT:
             self._gh("pr", "ready", number, "--undo")
+
+    def wait_checks(self, number: int, limit_s: float) -> bool:
+        """Watch the PR's checks; False when the limit ran out first."""
+        argv = ["gh", "pr", "checks", str(number), "--watch"]
+        return self.run(argv, limit_s)[0] != TIMED_OUT
+
+    def checks(self, number: int) -> list[Check]:
+        """The PR's checks now; gh's exit code says only pass or fail, so it is ignored."""
+        argv = ["gh", "pr", "checks", str(number), "--json", CHECK_FIELDS]
+        return checks_of(self.run(argv)[1])
+
+    def failed_log(self, link: str) -> str:
+        """The failed steps' log for the check's Actions job; "" when unavailable."""
+        job = job_of(link)
+        if job is None:
+            return ""
+        code, out = self.run(["gh", "run", "view", "--job", job, "--log-failed"])
+        return out if code == 0 else ""
 
     def _gh(self, *args: str) -> str:
         code, out = self.run(["gh", *args])
