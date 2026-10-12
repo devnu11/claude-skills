@@ -27,7 +27,7 @@ from urllib.parse import urljoin, urlsplit
 from .config import Config, Delivery
 from .guard import Scope
 from .paths import literal_root, under_root
-from .process_groups import Recorded, signal_child_group
+from .process_groups import Recorded, RunnerIds, signal_child_group
 
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -230,11 +230,19 @@ def _end_group(recorded: Recorded) -> None:
         signal_child_group(recorded.pid, signal.SIGKILL)
 
 
-def stop_stale(root: Path) -> None:
-    """End a service an earlier step left (by its pid file) and delete the file."""
+def _may_end(recorded: Recorded, runner_ids: RunnerIds) -> bool:
+    """True when the recorded group is not the runner's and is still ours."""
+    return not runner_ids.names(recorded.pid) and recorded.is_ours()
+
+
+def stop_stale(root: Path, runner_ids: RunnerIds | None = None) -> None:
+    """End a service an earlier step left (by its pid file) and delete the file.
+
+    A pid the runner's ids name is never ended (s70); ``None`` reads them now.
+    """
     pid_file = _beside(root, PID_SUFFIX)
     recorded = _recorded(pid_file)
-    if recorded and recorded.is_ours():
+    if recorded and _may_end(recorded, runner_ids or RunnerIds.current()):
         _end_group(recorded)
     pid_file.unlink(missing_ok=True)
 

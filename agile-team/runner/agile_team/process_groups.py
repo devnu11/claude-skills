@@ -48,6 +48,23 @@ def in_runner_group(pid: int) -> bool:
         return False
 
 
+@dataclass(frozen=True)
+class RunnerIds:
+    """The runner's own pid and process group: never a signal target (s70)."""
+
+    pid: int
+    pgrp: int
+
+    @classmethod
+    def current(cls) -> RunnerIds:
+        """The live process's ids, read now."""
+        return cls(os.getpid(), os.getpgrp())
+
+    def names(self, pid: int) -> bool:
+        """True when ``pid`` is the runner's pid or its process group."""
+        return pid in (self.pid, self.pgrp)
+
+
 def parse_etime(text: str) -> float | None:
     """Seconds in ``ps`` elapsed time ``[[dd-]hh:]mm:ss``, or ``None``."""
     days, _, clock = text.strip().rpartition("-")
