@@ -5,6 +5,7 @@ Pure and stdlib only. The guard feeds it the words of each Bash segment.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
@@ -55,6 +56,9 @@ LAUNCHERS = frozenset(
         "time",
         "nohup",
         "coverage",
+        "exec",
+        "command",
+        "xargs",
         *SHELLS,
         *TEST_TOOLS,
     }
@@ -72,8 +76,17 @@ VALUE_OPTIONS = frozenset(
         "-m",
         "-p",
         "-o",
+        "--tb",
+        "--maxfail",
+        "--durations",
+        "-W",
+        "-r",
+        "-n",
+        "--timeout",
     }
 )
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+REDIRECT = re.compile(r"^\d*[<>]")  # `2>` is what `2>&1` leaves after the guard splits on `&`
 NODE_MARK = "::"
 GLOB_CHARS = ("*", "?", "[")
 PYTHON_PREFIX = "python"
@@ -139,14 +152,26 @@ def _is_coverage_run(words: list[str], tool: int | None) -> bool:
     return runs or flagged
 
 
-def _targets_after(words: list[str]) -> bool:
-    """Whether a word is a target that is not the value of a value option (S4)."""
-    before = ["", *words]
-    return any(is_target(w) and p not in VALUE_OPTIONS for p, w in zip(before, words, strict=False))
+def _command_words(words: list[str]) -> list[str]:
+    """``words`` without leading ``NAME=value`` words (S1)."""
+    start = next((i for i, w in enumerate(words) if not ASSIGNMENT.match(w)), len(words))
+    return words[start:]
+
+
+def _positionals_after(words: list[str], index: int) -> list[str]:
+    """Words after the tool at ``index`` that are neither options nor option values (S4)."""
+    after = words[index + 1 :]
+    before = ["", *after]
+    return [w for p, w in zip(before, after, strict=False) if _is_positional(p, w)]
+
+
+def _is_positional(previous: str, word: str) -> bool:
+    return not word.startswith("-") and not REDIRECT.match(word) and previous not in VALUE_OPTIONS
 
 
 def run_kind(words: list[str]) -> Run | None:
     """The kind of test run one Bash segment starts, or None (S1-S6)."""
+    words = _command_words(words)
     if not words or not _launcher(words):
         return None
     words = _expanded(words)
@@ -155,7 +180,11 @@ def run_kind(words: list[str]) -> Run | None:
         return Run.COVERAGE
     if tool is None:
         return None
-    return Run.TARGETED if _targets_after(words[tool + 1 :]) else Run.FULL
+    return _targeted_or_full(_positionals_after(words, tool))
+
+
+def _targeted_or_full(positionals: list[str]) -> Run:
+    return Run.TARGETED if positionals and all(map(is_target, positionals)) else Run.FULL
 
 
 def suite_denial(role: str, words: list[str]) -> str | None:
