@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
+
+P2 of s71: e2e tests for all 13 new `system.py` functions (P2 rows): `connect`, `environ`, `hostname`, `http_get`, `killpg`, `listen_http`, `pgid`, `pgrp`, `run`, `run_shell`, `spawn_logged`, `spawn_piped`, `wait_event`. New `tests/e2e/test_system_e2e.py` tests each on real OS (stdlib `true`/`sh`, real HTTP, real session). Moves to e2e: 4 whole files (`test_s70_ids`, `test_dashboard_ui`, `test_dashboard_live_ui`, `test_docs_commands`). Key fix (J7): `test_service_stop_e2e.py:93` patches `system.killpg`, not `process_groups.os.killpg`. AC2 e2e checklist verified: 4 files moved with new paths (parent level +1, e.g., `parents[3]` → `parents[4]`). Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s76.md` (J7–J9, e2e checklist), ADR-0036 (s71).
 
 ## s78: Health e2e tests—tool activity and gate activity show as amber, not red (no new test file; refined existing)
 

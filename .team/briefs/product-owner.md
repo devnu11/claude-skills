@@ -1,6 +1,16 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s64 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no ADR needed)
+
+Phase P2 of s71 is done. The P1 seam (files, clock, system module) is extended to cover processes, signals, network, and HTTP. No new ADR; this is implementation of ADR-0036 (s71). What this means for the run:
+
+- **Tests are faster:** Unit tests no longer spawn real processes, make real HTTP calls, or touch the network. They run via a fake (in-memory, scriptable). Tests complete in milliseconds.
+- **Safe refactoring:** Moving process or network calls around is caught at test time, not in production.
+- **No new user-facing changes:** The CLI, the dashboard, the runner work exactly as before. This is internal test infrastructure.
+
+Four whole test files moved to e2e (`test_s70_ids`, `test_dashboard_ui`, `test_dashboard_live_ui`, `test_docs_commands`) because they need the real system. Everything else stays in unit tests with the fake. See design `agile-team/docs/design/s76.md`, ADR-0036 (s71).
 
 ## s64: `open_story` now rejects invalid delivery names
 

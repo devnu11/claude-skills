@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s64 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
+
+Phase P2 of s71 (system seam architecture): P2 modules now import only from the seam (`system`) for process, signal, network, HTTP operations. No branching on module name; all calls go through `system.<func>`. P2 functions extend the seam with 13 names (J2): `connect`, `environ`, `hostname`, `http_get`, `killpg`, `listen_http`, `pgid`, `pgrp`, `run`, `run_shell`, `spawn_logged`, `spawn_piped`, `wait_event`. Key rules: (O1) Only `system.py` touches the OS. (J3) Only `system.killpg` calls `os.killpg`. (J5) Unit tests script processes via fake, never monkeypatch helpers. (J7) Tests that patched removed names now patch `system.<name>`. Four test files move to e2e (J8: parent paths +1). Kill-word check (AC5) pure and standalone: `pkill`/`killall` denied everywhere except `kill_check.py` and its test. Pattern architecture: same seam import discipline, same audit hook at runtime, same three-phase migration (P1/P2/P3). Consequence: all three phases (files, processes/network/signals, runtime/CLI) follow the same architectural pattern. See ADR-0036 (s71 architecture), design `agile-team/docs/design/s76.md` (J1–J9 rules, per-module changes).
 
 ## s64: Delivery validation is now enforced in code (no ADR, no new dependency)
 

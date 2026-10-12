@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s64 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
+
+P2 of s71: migrated 16 inherited P1 unit files and 11 P2 files to fake world; moved 4 whole files to e2e (`test_s70_ids`, `test_dashboard_ui`, `test_dashboard_live_ui`, `test_docs_commands`). New P2 functions added to `tests/fake_system.py`: `Hang`, `Done`, signal ending with `ProcessLookupError`, port holding/release. New pure module `tests/kill_words.py` (AC5: grep check for `pkill`/`killall`). Key fix (J7): patching removed name now uses `system.killpg`, not `process_groups.os.killpg`. New file `tests/test_s76_seam.py` covers P2 imports; `test_s78.py` renamed. All three phases P1/P2/P3 tested at unit level (mocks, pure). AC2 (test checklist) verified: 27 test files leaving LEGACY, 4 moving to e2e, all rules O1–O17 covered. Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s76.md` (J1–J9, test checklist), ADR-0036 (s71).
 
 ## s64: Delivery validation—`Config.delivery_refusal()` and `Tools._open_refusal()` (test_s64_delivery.py)
 
