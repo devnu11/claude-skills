@@ -26,8 +26,14 @@ If you haven't merged earlier sprints yet, their pull requests form a
 | #13 | `team/sprint-10` | `team/sprint-9` | draft |
 | #14 | `team/sprint-11` | `team/sprint-10` | draft |
 
-- Review and merge the **ready** one (the bottom). Use **Rebase and
-  merge**.
+- The bottom one is open for review. After pushing, the runner waits for
+  its CI checks, by default up to 30 minutes. The team tells you it is
+  **ready to merge** only when every check passed. Then merge it with
+  **Rebase and merge**.
+- If CI fails, the team tells you the PR is **not** ready. You get the
+  failing jobs and test lines, and the team opens a bug story that comes
+  first in the next sprint. If CI is still running when the wait ends, the
+  team tells you it is not ready yet and waits again.
 - The others are drafts. CI skips drafts, so CI runs once per merge however
   deep the stack is.
 - At the next sprint boundary, the runner sees that #12's changes are in
@@ -56,6 +62,8 @@ every later sprint.
 | The PO asks you to merge `origin/main` by hand | Merging upstream into the team branch conflicts. The runner aborted the merge, so nothing changed. | Merge `origin/main` into the team branch, resolve, commit, then answer. |
 | The dashboard shows a `boundary` row "check: fail" and a devops step follows | A check failed after the sync or on a review branch. DevOps fixes it on the team branch. | Nothing. The runner checks again after the fix. |
 | "failed the same way again … the manager reviewed it" | The same failure came back after a fix. | The PO asks you what to do. |
+| "CI failed on #12 … NOT ready" with failing test lines | The PR's CI checks failed (for example, a test passes only on your machine). | Don't merge it. The team's bug story fixes it next sprint, and a later sprint end reports it ready. |
+| "No CI result exists" | Nothing was pushed (you said no, or `gh` is missing), or the PR reported no checks. | Nothing is called ready. Check the branch yourself before you merge. |
 | The sprint-end note says "skipped: no remote 'origin'" | The repo has no upstream, or `gh` is missing. | Nothing. The team works as before. Add a remote (and log in to `gh`) to get pull requests. |
 
 ## Configuration
@@ -67,6 +75,9 @@ Defaults suit most repos. To change them, add to `.agile-team.toml`:
 remote = "origin"        # "" turns sync and pull requests off
 branch = "main"          # what the team merges in and what PRs target
 prefix = "team/sprint-"  # review branch names: <prefix><sprint>
+
+[gates]
+ci_timeout_s = 1800      # how long a sprint end waits for the PR's CI checks
 
 [[delivery]]
 name = "cli"

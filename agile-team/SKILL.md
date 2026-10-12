@@ -140,12 +140,20 @@ command fails.
    sprint end it builds a review branch per unmerged sprint
    (`team/sprint-<N>`, rebased onto the latest main in
    `.team/run/review/`), checks it, and pushes it as a stacked PR: the
-   bottom one is ready and the rest are drafts. The dashboard's Board tab
+   bottom one is open for review and the rest are drafts. The dashboard's Board tab
    shows the **Review stack**. The PO asks the human **once** whether the
-   team may push and open PRs; relay it like any question. The runner posts
-   an `update` with the PR numbers; tell the human to merge the ready one
-   with **Rebase and merge**. A repo with no remote or no `gh` skips this
-   with a note. The runner never pushes the team branch or main.
+   team may push and open PRs; relay it like any question. After the push
+   the runner waits for the bottom PR's CI checks (`gh pr checks --watch`,
+   up to `[gates] ci_timeout_s`, 30 min by default). The boundary is done
+   only when CI is green or the PO has opened a bug story for the failure.
+   Only a green result says **ready to merge**; tell the human to merge
+   that PR with **Rebase and merge**. Red CI comes with the failing jobs
+   and test lines. The PO opens a bug story, records it with
+   `record_ci_bug`, and puts it first in the next sprint. Both red and
+   still-running CI mean the PR is **NOT** ready: never relay those as
+   ready. A repo with no remote or no `gh`, or a "no" to pushing, skips
+   this with a note that no CI result exists. The runner never pushes the
+   team branch or main.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets
    `status` and `status_reason`, and prints one line saying what to do:
    - `blocked` with a limit (e.g. "session limit, resets 2:20pm

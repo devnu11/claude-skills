@@ -519,6 +519,7 @@ round_cap = 3
 repeat = 2                     # the same setback this many times in a row escalates to the Manager
 backstop = 4                   # this many bounces/returns in a row between two steps, any reasons, escalate too
 command_timeout_s = 300        # each gate/check command; at the limit its process group is killed and the gate bounces
+ci_timeout_s = 1800            # how long the sprint boundary waits for the review PR's CI checks (s81)
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
@@ -1262,6 +1263,9 @@ The pass ends at the first step whose report matches a row of the
 | `push_rejected` | a review branch push was refused (its remote branch moved) |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
+| `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready |
+| `ci_failed` | the review PR's CI failed; the line names each failing check (workflow / job), its link and its failing test lines. The PO opens a bug story at once, records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint |
+| `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
@@ -1434,7 +1438,7 @@ not prompts, that no role can skip. It is saved as `state.json` `boundary`
 `rounds`, `escalated`, `restack`, `note`) until it finishes. Each stage logs
 a `boundary` event (`edge`, `sprint`, `stage`, `outcome`, plus `note`,
 `reason`, `sha`, `files`, `branch`, `branches`, `checks`, `hold`, `key`,
-`count`, `history` where they apply). While a boundary is pending, no story
+`count`, `history`, `ci`, `prs`, `results`, `story` where they apply). While a boundary is pending, no story
 in the current sprint moves: `run_role` of a gated role on one is refused
 with `sprint N <edge> boundary is at <stage>…; the sprint's stories move
 once it passes`.
@@ -1457,8 +1461,9 @@ Manager):
    amended.
 2. **check**: the full checks on the team branch (skipped when HEAD is the
    sha that last passed them).
-3. **review** and **push**, only when an entry was dropped (a PR was
-   merged): the stack is rebuilt and pushed so the next PR is retargeted.
+3. **review**, **push** and **ci**, only when an entry was dropped (a PR was
+   merged): the stack is rebuilt and pushed so the next PR is retargeted,
+   and the PR that is no longer a draft has its CI watched.
 
 **End** (opened when every sprint story is done, before the `sprint_end`
 hand-over):
@@ -1478,8 +1483,40 @@ hand-over):
    is created or updated: the bottom one is **ready** with base `main`, and
    each other one is a **draft** based on the branch below. A PR that is
    closed (or merged elsewhere) is left alone. The runner posts an `update`
-   to the human with the PRs. The sprint-end hand-over then says `Review:
-   …`.
+   to the human with the PRs (`open` or `draft`). That update never calls a
+   PR ready.
+5. **ci** (s81, after a push): for each non-draft PR the runner runs
+   `gh pr checks <n> --watch`, all under one deadline of `[gates]
+   ci_timeout_s` (default 1800 s). It then reads `gh pr checks <n> --json
+   name,state,bucket,link,workflow`. While no checks are reported yet (right
+   after a push), it looks again every 10 s, at most 12 times. For each
+   failing or cancelled Actions check it reads `gh run view --job <id>
+   --log-failed` and keeps the failing test lines (pytest `FAILED …` and
+   `ERROR …::`, go `--- FAIL:`, `N failed`; at most 20; else the last 10
+   lines). The result is saved per stack entry as `ci` (`pr`, `url`,
+   `head`, `verdict`, `checks` with `name`, `workflow`, `bucket`, `link`,
+   `lines`). It is also logged on the stage's `boundary` event (`ci`, `prs`,
+   `checks`, `results`). Verdicts:
+   - **green** (every check passed or was skipped, at least one passed):
+     the boundary finishes. The PO gets `ci_green` ("ready to merge") and
+     tells the human.
+   - **red** (any check failed or was cancelled, even with others still
+     pending): the boundary is held `ci_failed`. The PO gets the failing
+     checks with job names and test lines, opens a bug story at once,
+     calls `record_ci_bug(story)` and tells the human the PR is NOT ready.
+     `continue_boundary` waits for the checks again, for when the human
+     re-ran them. Only green or a recorded bug story finishes the
+     boundary.
+   - **pending** (the deadline passed): held `ci_pending`, naming the
+     running checks. The PR is not ready; `continue_boundary` waits again.
+   - **none** (no checks reported, only skipped ones, or no non-draft PR):
+     the boundary finishes. The human is told that no CI result exists, and
+     the PR is not called ready.
+
+   The CI stage blocks the router while it waits, as a runner chore
+   (`sprint boundary: ci`), so health stays green. If the run is stopped
+   during the wait, resume waits again. The sprint-end hand-over then says
+   `Review: …` with the CI text.
 
 **Full checks**: the `[toolchain]` `lint`, `static`, `test` and `coverage`
 commands (coverage must reach the gate or the baseline), then each
@@ -1504,8 +1541,9 @@ repeated_boundary`, and the Manager's context carries `repeated_boundary`
 **Permission.** The first push asks: the PO gets `push_permission`, asks
 the human once, and records the answer with `set_push_permission` (`yes`
 or `no`). `state.json` keeps it in `upstream.push` for every later sprint.
-With `no`, or without `gh`, the branches are built and checked locally,
-and the human is told their names.
+With `no`, or without `gh` (missing or logged out), the branches are built
+and checked locally, and the human is told their names and that no CI
+result exists (`local` event with `ci: none`).
 
 **Safety.** The runner pushes only branches that start with `[upstream]
 prefix`, never the team branch, never `[upstream] branch`. The only force
@@ -1514,18 +1552,30 @@ write.
 
 **PO tools.** `continue_boundary(note)` releases a held boundary. Its stage
 reruns, and the note reaches the next fix brief. After an escalation it
-also resets the streak and rounds. `set_push_permission(answer)`.
+also resets the streak and rounds. At the `ci` stage it waits for the checks
+again. `set_push_permission(answer)`. `record_ci_bug(story)` works only
+while the boundary is held `ci_failed`, and only for a story that exists
+and is not done. It records the story in `upstream.ci_bug` and finishes the
+boundary with a `done` event (`ci: red`, `story`). The `Review:` text reads
+`checks failed, story sN opened`. While `ci_bug` names a story that is not
+done, `start_sprint` is refused unless that story is listed first. The
+sprint that lists it clears `ci_bug`.
+
+**Ready.** Only a green CI result produces the words "ready to merge": the
+`ci_green` hand-over and its `Review:` text. A red, pending, missing or
+unwatched result is always reported as NOT ready.
 
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
 `stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,
-`head`, `checked`, `check`, `pushed`, `pr`, `url`, `base`, `mode`),
+`head`, `checked`, `check`, `pushed`, `pr`, `url`, `base`, `mode`, `ci`),
 `last_end`, `checked` (the last team sha that passed), `closed` (the last
-sprint whose end boundary finished) and `report`.
+sprint whose end boundary finished), `report` and `ci_bug` (the bug story
+for a failed CI, until a sprint lists it first).
 
 CI: the repo's workflows skip draft PRs (`if:
 github.event.pull_request.draft == false`, with the `ready_for_review`
-trigger), so only the ready bottom PR runs CI. Merge it with **Rebase and
-merge**.
+trigger), so only the bottom, non-draft PR runs CI, and only it is watched.
+Once `ci_green` says it is ready, merge it with **Rebase and merge**.
 
 ## Enforcement
 
