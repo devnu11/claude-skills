@@ -124,6 +124,10 @@ rule, update in the same story:
   `tests/e2e/`". A test whose point is real git, a real process or real files
   belongs in `tests/e2e/`. Test helpers write through `system`, so one helper
   serves both worlds.
+- **A unit test runs in under 1 s** (s72; `timeout = 1` in `pyproject.toml`,
+  `e2e_timeout = 30` for `tests/e2e/` and `LEGACY`). Over it, make the test
+  fast with the fake clock or a fake, or move it to `tests/e2e/`. Never add a
+  `pytest.mark.timeout`, raise the limit, skip or weaken the test.
 - The suite runs in parallel under pytest-xdist (s70), so a test ID never holds
   a live value. No parametrize value or id comes from a pid, a process group,
   the clock, a random number, a temp path or the environment. Parametrize with

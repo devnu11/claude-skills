@@ -867,8 +867,15 @@ group wrote, for at most 5 s more. The command counts as exit code 124.
   format or the traceback format pytest-timeout prints. Set a per-test
   timeout (pytest-timeout) or pytest's `faulthandler_timeout` below the gate
   limit so there is a frame to find. This repo's runner suite uses
-  `pytest-timeout` with `timeout = 30`, so a hanging test fails by itself
-  and the suite goes on.
+  `pytest-timeout`, so a hanging test fails by itself and the suite goes on.
+- The runner suite's per-test limit (s72) is **1 s for a unit test**
+  (`timeout = 1` in `[tool.pytest.ini_options]`) and 30 s for a test in
+  `tests/e2e/` or a not-yet-migrated `os_guard.LEGACY` file
+  (`e2e_timeout = 30`, same table). `tests/time_limit.py` marks each test
+  with its world's limit at collection, covering setup, call and teardown. A
+  test over it fails as `FAILED <test id> - Failed: Timeout (>1.0s) from
+  pytest-timeout.` A slow unit test is made fast (fake clock, a fake instead
+  of the real call) or moved to `tests/e2e/`; no test sets its own limit.
 - At a sprint boundary a timed-out check fails with `timed out`.
 - `[gates]` is human-owned: a role's edit to it is quarantined.
 
