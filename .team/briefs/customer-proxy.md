@@ -1,6 +1,16 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
+
+## s41: Sandbox cannot kill the runner; your Bash cannot kill by name or runtime
+
+The runner found what SIGTERM'd a prior step: the agent's own `ps aux | grep` matched its CLI, so it ran `kill`. Two fixes now in code prevent this. For your acceptance testing:
+
+**Runner side (AC2, AC3):** The sandbox signals only process groups it created (pgid == pid). Reused pids are detected via start time check and rejected. Test: `stop_stale` with old pid file mtime leaves process alive (reused pid); with runner's own pid sends nothing; with same-group pid sends nothing.
+
+**Your side (AC4):** Bash commands with `pkill`, `killall`, `kill $(…)`, `kill <runner_pid>`, or `kill <same-group_pid>` are denied at dispatch with a clear error message. You cannot accidentally kill the runner or agent. Test: `kill <own pid>` denied (reproduces incident); `ps aux | grep python | awk '{print $2}' | xargs kill` denied as run-time target; `cmd & PID=$!` … `kill $PID` allowed.
+
+**In acceptance:** Verify the guard works: try a denied command and check you see the error before it runs. Verify the sandbox safety: capture a `ps` output showing multiple processes, verify that `stop_stale` with an old pid file doesn't kill them (reused pid safety). See design `agile-team/docs/design/s41.md`, ADR-0031.
 
 ## s43: Gate timeouts; hung tests named; wait rules enforced
 

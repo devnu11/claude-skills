@@ -1,6 +1,32 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
+
+## s41: Signal safety and guard rules prevent self-kill
+
+Investigation and fix for the SIGTERM that killed s29's develop step. The agent's own `ps aux | grep` matched its CLI (system prompt on argv), and `kill` ran on itself. Root cause fixed twice over: runner-side signal safety and guard-side process name rules.
+
+**Architectural pattern: one module decides all signals**
+
+No code outside `agile_team/process_groups.py` calls `os.killpg` (G1). New functions:
+- `may_signal_child_group(pid)`: gate check for sendability (child's session leader, not runner's own group, not stale reused pid)
+- `signal_child_group(pid, sig)`: send the signal; never compute pgid from `getpgid` (always use `pid` as-is)
+- `Recorded(pid, written)`: pid file value + mtime; `is_ours()` checks both leads own session and started before file written (reused pid detection via process start time)
+
+**Consequence:** Sandbox calls `signal_child_group`, commands calls it, `Prepared.stop` delegates to it. Stale and reused pids are automatically rejected. SIGKILL escalation re-checks safety (G5) to catch races.
+
+**Architectural pattern: guard rules block common kill mistakes**
+
+New module `agile_team/kill_check.py` (K1–K5):
+- K1: `pkill`/`killall` denied (match by name; agent's argv holds whole prompt)
+- K4: `kill <0, -1, runner_pid, same-group_pid>` denied; also deny run-time targets (`$(…)`, backticks, `xargs` fed)
+- Pass: saved pids (`$PID`, `$!`, `%1`), new-session children, stale pids
+
+**Consequence:** Guard hook runs last (after git, checkout, syntax checks); first denial wins. Role rule in `roles/_shared.md` (K5) names the fix: "Stop only what you started, by the pid you saved."
+
+**Residual risk (documented):** Variable targets like `kill $PPID` cannot be parsed (PPID resolves at runtime in role Bash to agent CLI). Requires either rule change or follow-up story to deny specific variables.
+
+Pattern: Two tight modules (process_groups, kill_check) + guard hook enforce safety in code. The rules are reinforced in prompts and docs but enforced by code, not trust. See ADR-0031, design `agile-team/docs/design/s41.md` (G1–G6, K1–K5).
 
 ## s43: Process group timeouts; hung test naming
 

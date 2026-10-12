@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
 
 See `developer.md` for the base conventions.
 
@@ -23,6 +23,20 @@ Gate commands now run in their own process group under a time limit. When a test
 **Role rule (T11):** `roles/_shared.md` gets "Never wait without a deadline" section: run suites in the foreground, give every wait a deadline (`timeout N` or bounded `for` loop), name hung tests in your handoff.
 
 See ADR-0030, design `agile-team/docs/design/s43.md` (rules T1–T14, exact strings, test checklist).
+
+## s41: Signal only process groups the runner created; stop killing by name
+
+The runner found what SIGTERMed a prior develop step: the agent's own `ps aux | grep "[p]ytest"` matched its CLI (system prompt on argv), so it ran `kill` on itself. Two fixes now prevent this, both enforced in code:
+
+**Runner side (signal safety):** The sandbox signals only a group it created. New `process_groups.py` module ensures: (1) no `killpg` on the runner's own group or a non-leader, (2) reused pids rejected by checking start time (G1–G6). Sandbox's `_signal_group`, `_end_group`, and `stop_stale` all go through `signal_child_group`. Commands calls it too.
+
+**Your side (guard on Bash):** Commands with `pkill`, `killall`, `kill $(…)`, `xargs kill` are now denied at dispatch (K1–K4). Also denied: `kill <runner pid>`, `kill <same-group child pid>`, `kill 0`, `kill -1`. Targets like `$PID` (saved variable) pass; run-time targets do not. Role rule in `roles/_shared.md`: "Stop only what you started, by the pid you saved: `cmd & PID=$!` … `kill $PID`."
+
+**What you'll see:** If you try `ps aux | grep python` to find and kill a process, it will be denied with a message naming the problem and how to fix it. Save the pid upfront instead: `cmd & PID=$!` … `kill $PID`.
+
+**Residual risk (documented):** A variable target like `kill $PPID` (which in your Bash is the agent CLI) cannot be resolved at parse time and passes. K1 and K4 block common forms. This is a rule to stop mistakes, not a hostile gate.
+
+See ADR-0031, design `agile-team/docs/design/s41.md` (rules G1–G6, K1–K5, test checklist).
 
 ## s62: Liaison commands in the runner; self-hosting and frozen uv
 

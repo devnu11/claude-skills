@@ -1,6 +1,18 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
+
+## s41: The sandbox signals only groups it created; roles cannot kill by name or at runtime
+
+The runner found what SIGTERM'd a developer step in s29: the agent's own `ps aux | grep` matched its CLI, so it ran `kill` on itself. Two fixes now in code:
+
+**Runner side (safety):** The sandbox signals only process groups with pgid == pid (children it created with `start_new_session=True`). Reused pids after a long time are rejected by checking start time. All sandbox kills go through one module (`process_groups.signal_child_group`), never directly to `os.killpg`. SIGTERM escalates to SIGKILL only after re-checking the group is still ours (not gone in between).
+
+**Developer side (guard):** Commands with `pkill`, `killall`, `kill $(…)`, `kill <runner_pid>`, or `kill <same-group_pid>` are denied at dispatch. Developers must save the pid upfront (`cmd & PID=$!`) and kill it later (`kill $PID`). The error message names the problem and how to fix it.
+
+**What you'll see:** The incident is now auditable; rules are in code, not just prompt. If a developer's command is denied, the brief will say so and they fix it by saving pids explicitly.
+
+See ADR-0031, design `agile-team/docs/design/s41.md` (rules G1–G6, K1–K5).
 
 ## s43: Gate commands time out; hung tests are named and fixed, not waited on
 

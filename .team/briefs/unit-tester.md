@@ -1,6 +1,20 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
+
+## s41: Signal only process groups the runner created; guard against kill by name/runtime
+
+Sandbox and guard rules prevent the runner from killing itself and roles from killing the runner.
+
+**process_groups (AC2, AC3):** New module with `signal_child_group`, `may_signal_child_group`, `leads_own_group`, `in_runner_group`, `parse_etime`, `started_at`, `Recorded` (rules G1–G6). Signals only groups with pgid == pid (children with own session), rejects non-leaders and reused pids (checked via start time). Tests 1–7: `signal_child_group` sends nothing to runner/same-group/stale pids; sends to new-session child or reaped-leader case; `leads_own_group`, `in_runner_group`, `parse_etime`, `started_at`, `Recorded.is_ours()` all tested with edge cases (reaped pids, overflow, bad time formats).
+
+**sandbox (AC2, AC3):** Tests 8–11: `stop_stale` leaves new-session child alive when pid mtime is old (reused pid); sends nothing for runner/group pids; escalates SIGTERM→SIGKILL for live groups; re-checks `is_ours()` before SIGKILL (no SIGKILL if group dies between SIGTERM and deadline). Tests 10 (existing) stay green: stale leader killed, dead pid file deleted, non-leader never signalled.
+
+**commands (AC2, AC3):** Test 12: `kill_group` with same-group proc sends nothing; new-session proc gets SIGKILL. s43 timeout tests green (both use `signal_child_group`).
+
+**guard / kill_check (AC4):** New module with `kill_denial`, `kill_targets`, `target_denial` (rules K1–K5). Tests 13–18: `kill <pid>` where pid is runner/same-group denied (reproduces incident); `pkill`/`killall` denied by name; `kill $(…)` / backticks / `xargs kill` denied as run-time targets; `kill $PID`, `kill $!`, `kill %1`, new-session pid, reaped pid pass; `kill_targets` drops signal/`--` correctly; order check (`_check_kills` runs last, so git reason appears first if both apply).
+
+**Config/quality:** Coverage ≥95% (99.67% on s41 code), ruff clean. See ADR-0031, design `agile-team/docs/design/s41.md` (test checklist 19 areas).
 
 ## s43: Gate command timeout; hung test naming and per-test timeout
 

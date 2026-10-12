@@ -1,8 +1,17 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s41 done)
 
 ## Design decisions to verify
+
+**Signal only groups the runner created; stop killing by name (s41):** Verify process_groups and kill_check rules enforce safely:
+- **G1–G6:** `signal_child_group(pid, sig)` sends `os.killpg` only when `may_signal_child_group(pid)` holds: `pid > 1`, `pid != os.getpgrp()`, and either `getpgid(pid) == pid` (child leads own group) or lookup raises `ProcessLookupError` (leader exited, reused pid impossible). Never uses `getpgid(…)` for target. Tests patch `os.killpg` to record calls; no real signals sent (except where tests use `Popen` with `start_new_session=True`). Function names match: `leads_own_group`, `may_signal_child_group`, `signal_child_group`, `in_runner_group`, `parse_etime`, `started_at`, `Recorded.is_ours()`.
+- **G3:** Pid from pid file (via `Recorded`) is signalled only if both `leads_own_group(pid)` AND `started_at(pid) <= written + STARTED_SLACK_S` (2.0s: etime has 1s resolution). Stale/reused pids rejected.
+- **G4:** `started_at(pid)` runs `ps -o etime= -p <pid>` with stdlib subprocess; timeout 5.0s; any error returns `None`. `parse_etime` handles `[[dd-]hh:]mm:ss` format.
+- **G5:** `_end_group(recorded)` sends SIGTERM, waits up to `STOP_WAIT_S`, polls with `killpg(pid, 0)`, then sends SIGKILL only if `recorded.is_ours()` still true. Re-check prevents racing.
+- **G6:** `_signal_group(process, sig)` → `signal_child_group(process.pid, sig)`. `commands.kill_group(proc)` → `signal_child_group(proc.pid, SIGKILL)`.
+- **K1–K5:** `kill_denial(words)` in guard; denies `pkill`/`killall` (by name), `kill $(…)`/backticks/`xargs kill` (run-time), `kill <0, -1, runner_pid, same-group_pid>` (protected targets). Passes: `$PID`, `$!`, `%1`, new-session pid, stale pid.
+- **Coverage/quality:** `process_groups.py` line 32–33 (PermissionError branch) uncovered; follow-up test noted. `leads_own_group` misses `OverflowError` (same gap as old code; runner only writes pids via `sandbox.py:359`). No mutation of constants; fresh dicts on `_network`. See review at `.team/reviews/s41.md` (verdict: ship, three non-blocking follow-ups).
 
 **Gate command timeout and hung test naming (s43):** Verify that timeouts work, hung tests are named, and guard rules are enforced:
 - **T1–T3:** `[gates] command_timeout_s` configurable (default 300.0); all gate commands use it. Commands start with `start_new_session=True`, stdin `/dev/null`, stdout+stderr merged.
