@@ -41,6 +41,11 @@ PIPELINE_STEPS = (
 )
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 GLOB_KEYS = ("source", "tests", "e2e", "ci")
+UNKNOWN_DELIVERY = "delivery {name!r} is not a configured [[delivery]]; use one of: {names}"
+NO_DELIVERY = (
+    "delivery {name!r} is not a configured [[delivery]]; .agile-team.toml configures none, "
+    "so leave delivery empty or ask the human to add a [[delivery]]"
+)
 
 
 class ConfigError(Exception):
@@ -181,6 +186,15 @@ class Config:
         if not name:
             return self.deliveries[0] if self.deliveries else None
         return next((d for d in self.deliveries if d.name == name), None)
+
+    def delivery_refusal(self, name: str | None) -> str | None:
+        """Why ``name`` cannot be a story's delivery, or None when it can (s64 V1-V5)."""
+        if not name or self.delivery(name):
+            return None
+        names = ", ".join(d.name for d in self.deliveries)
+        if names:
+            return UNKNOWN_DELIVERY.format(name=name, names=names)
+        return NO_DELIVERY.format(name=name)
 
 
 def config_path(repo: Path) -> Path:

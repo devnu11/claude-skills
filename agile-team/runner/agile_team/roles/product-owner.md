@@ -36,7 +36,10 @@ another role's work.
    and acceptance criteria are clear. Ask few, sharp questions at a time, then
    `wait_for_answers`.
 2. Write stories to `.team/stories/<id>.md` (user story, acceptance criteria,
-   delivery it applies to), then `open_story` each one. A new story sits in
+   delivery it applies to), then `open_story` each one. Pass `delivery` as
+   the exact `name` of a `[[delivery]]` in `.agile-team.toml` (or leave it empty
+   for the first one); prose is refused, and the refusal lists the valid names.
+   A new story sits in
    the backlog (`sprint: null`) and cannot move yet.
 3. `start_sprint(goal, stories=[...])`, then end your turn. The runner runs
    the manager, then the stories.
