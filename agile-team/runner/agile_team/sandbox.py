@@ -8,7 +8,6 @@ build the three read-blocking layers (tool globs, Bash hook, OS sandbox).
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import re
@@ -28,6 +27,7 @@ from urllib.parse import urljoin, urlsplit
 from .config import Config, Delivery
 from .guard import Scope
 from .paths import literal_root, under_root
+from .process_groups import Recorded, signal_child_group
 
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -198,38 +198,44 @@ class Prepared:
 
 
 def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(os.getpgid(process.pid), sig)
+    signal_child_group(process.pid, sig)
 
 
 def _beside(root: Path, suffix: str) -> Path:
     return root.parent / f"{root.name}{suffix}"
 
 
-def _group_leader(pid: int) -> bool:
+def _recorded(pid_file: Path) -> Recorded | None:
     try:
-        return os.getpgid(pid) == pid
-    except (ProcessLookupError, PermissionError):
-        return False
+        return Recorded(int(pid_file.read_text().strip()), pid_file.stat().st_mtime)
+    except (OSError, ValueError):
+        return None
 
 
-def _end_group(pgid: int) -> None:
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(pgid, signal.SIGTERM)
-        deadline = time.monotonic() + STOP_WAIT_S
-        while time.monotonic() < deadline:
+def _ends_within(pgid: int, seconds: float) -> bool:
+    """True once the group is gone (or not ours to signal); False at the deadline."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
             os.killpg(pgid, 0)
-            time.sleep(0.05)
-        os.killpg(pgid, signal.SIGKILL)
+        except OSError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _end_group(recorded: Recorded) -> None:
+    signal_child_group(recorded.pid, signal.SIGTERM)
+    if not _ends_within(recorded.pid, STOP_WAIT_S) and recorded.is_ours():
+        signal_child_group(recorded.pid, signal.SIGKILL)
 
 
 def stop_stale(root: Path) -> None:
     """End a service an earlier step left (by its pid file) and delete the file."""
     pid_file = _beside(root, PID_SUFFIX)
-    with contextlib.suppress(OSError, ValueError):
-        pid = int(pid_file.read_text().strip())
-        if _group_leader(pid):
-            _end_group(pid)
+    recorded = _recorded(pid_file)
+    if recorded and recorded.is_ours():
+        _end_group(recorded)
     pid_file.unlink(missing_ok=True)
 
 

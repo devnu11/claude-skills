@@ -5,8 +5,6 @@ A hung test is named from the command's output.
 
 from __future__ import annotations
 
-import contextlib
-import os
 import re
 import signal
 import subprocess
@@ -14,6 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .process_groups import signal_child_group
 
 CommandRunner = Callable[[str], tuple[int, str]]
 TIMED_OUT = 124
@@ -70,9 +70,8 @@ def hung_line(output: str) -> str:
 
 
 def kill_group(proc: subprocess.Popen[str]) -> None:
-    """SIGKILL the process group the command started (its pid is its pgid)."""
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(proc.pid, signal.SIGKILL)
+    """SIGKILL the command's own process group, only if it is one (s41)."""
+    signal_child_group(proc.pid, signal.SIGKILL)
 
 
 def drain(proc: subprocess.Popen[str]) -> str:

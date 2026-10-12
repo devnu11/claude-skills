@@ -9,6 +9,8 @@ Layers:
 * Every role: no writes under ``.git/``, no tool or Bash access to the API key
   files, and Bash may only run read-only git subcommands (the runner owns
   commits, so a role cannot rewrite history or hide changes from the audit).
+  No ``kill`` of the runner's process group, no kill by name or by run-time
+  target (s41).
 * ``audit_step`` / ``quarantine`` — after every step the runner diffs the tree.
   Bash cannot be path-guarded, so out-of-scope changes are committed on their
   own and immediately reverted: the work stays in history, the tree stays clean
@@ -25,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from .git_ops import Git
+from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
@@ -196,8 +199,14 @@ def _check_view(scope: Scope, command: str) -> str | None:
         lambda: _check_allowlist(scope, segments),
         lambda: _check_tokens(scope, _tokens(command)),
         lambda: _check_waits(segments),
+        lambda: _check_kills(segments),
     )
     return next((reason for reason in (c() for c in checks) if reason), None)
+
+
+def _check_kills(segments: list[list[str]]) -> str | None:
+    """Deny signalling the runner's group, or choosing kill targets by name or at run time (s41)."""
+    return next((r for r in map(kill_denial, segments) if r), None)
 
 
 def _check_waits(segments: list[list[str]]) -> str | None:

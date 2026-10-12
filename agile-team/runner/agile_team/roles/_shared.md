@@ -39,6 +39,10 @@ the most.
 - Give every wait a deadline: run it under `timeout N`, or loop a bounded
   number of times (`for i in $(seq 60); do …; done`). An open `until` or
   `while` loop with no deadline is denied.
+- Stop only what you started, by the pid you saved (`cmd & PID=$!` … `kill $PID`).
+  `pkill`, `killall`, `kill $(…)`, `xargs kill` and a pid in the runner's process
+  group are denied: the agent running you has your prompt on its command line, so
+  `ps | grep` or `pkill -f` can find, and kill, yourself.
 - If a run hangs, stop it, name the test that hung in your handoff, and fix
   that test (or dispute it). Don't wait on it.
 
