@@ -494,7 +494,25 @@ const nowS = () => Date.now() / 1000 + data.skew;
 const clockNow = (view) => (MOCK ? view.generated_at : nowS());
 
 /** The heartbeat's step while the runner is beating, else null. */
-const liveStep = (view) => (view.heartbeat?.beat === "beating" ? view.heartbeat.step ?? null : null);
+function liveStep(view) {
+  const beating = view.heartbeat?.beat === "beating" && healthLevel(view) !== "idle";
+  return beating ? view.heartbeat.step ?? null : null;
+}
+
+/** The health level, mapped through the whitelist so nothing unknown reaches HTML (P2). */
+function healthLevel(view) {
+  return HEALTH_LEVELS.includes(view.health.level) ? view.health.level : "idle";
+}
+
+/** "role on story" for a step (C5). */
+function who(step) {
+  return short(step.role) + (step.story ? " on " + step.story : "");
+}
+
+/** An estimated dollar amount, prefixed with ≈ (C6). */
+function approxUsd(cost) {
+  return "≈" + (cost == null ? "—" : fmt.usd(cost));
+}
 
 /** Tokens per minute over the last five minutes of `turns`. */
 function tokensPerMin(turns, now) {
@@ -523,13 +541,12 @@ function restarted(events, act) {
 function pillText(view, now) {
   const step = liveStep(view), act = activeStep(view.events);
   if (!step) {
-    if (act) return `▶ ${short(act.role)}${act.story ? " on " + act.story : ""} · ${fmt.ago(act.at, now)}`;
+    if (act && !view.heartbeat) return `▶${who(act)} · ${fmt.ago(act.at, now)}`;
     return "● " + (view.health.reason || view.run.status);
   }
   const rate = fmt.tok(Math.round(tokensPerMin(view.turns, now))), spark = sparkline(view.turns, now);
   const again = act && act.role === step.role && act.story === step.story && restarted(view.events, act);
-  const where = `${short(step.role)}${step.story ? " on " + step.story : ""}`;
-  return `● ${where} · ${rate}/min ${spark} · ${fmt.age(now - (step.last_turn_at ?? step.started_at))}${again ? " · ↻ restarted" : ""}`;
+  return `● ${who(step)} · ${rate}/min ${spark} · ${fmt.age(now - (step.last_turn_at ?? step.started_at))}${again ? " · ↻ restarted" : ""}`;
 }
 
 /** The lines shown on hover or tap (P5). */
@@ -538,17 +555,17 @@ function pillDetails(view, now) {
   const lines = !step ? [] : [
     `step ${step.step ?? "—"} · turn ${step.turn}`,
     `model ${step.model ?? "—"}${note ? " — " + note : ""}`,
-    `${fmt.tok(sumTok(step.tokens))} tokens · ≈${step.cost_usd == null ? "—" : fmt.usd(step.cost_usd)}`,
+    `${fmt.tok(sumTok(step.tokens))} tokens · ${approxUsd(step.cost_usd)}`,
     step.tool ? `tool ${step.tool.name} for ${fmt.age(now - step.tool.started_at)}` : "no tool running",
     `last turn ${step.last_turn_at == null ? "—" : fmt.time(step.last_turn_at)}`,
   ];
-  if (["amber", "red"].includes(view.health.level)) lines.push(`health: ${view.health.reason}`);
+  if (["amber", "red"].includes(healthLevel(view))) lines.push(`health: ${view.health.reason}`);
   return lines;
 }
 
 /** The smart pill: the whole pill takes the health colour (P2). */
 function smartPill(view, now) {
-  return `<button class="pill smart h-${view.health.level}" data-live-details>${esc(pillText(view, now))}</button>`;
+  return `<button class="pill smart h-${healthLevel(view)}" data-live-details>${esc(pillText(view, now))}</button>`;
 }
 
 /** The story the flow chart is about (F2). */
@@ -597,7 +614,7 @@ function flowContext(view) {
   const step = liveStep(view);
   return {
     stats: flowStats(view), totals: scopeTotals(view), focus: focusStory(view), step,
-    liveRole: step?.role ?? null, level: view.health.level,
+    liveRole: step?.role ?? null, level: healthLevel(view),
   };
 }
 
@@ -627,7 +644,7 @@ function renderMeter(view) {
 function renderStatusRow(view) {
   const act = activeStep(view.events), now = clockNow(view);
   const parts = [connectionPill(), pill(view.run.status, STATUS_TONE[view.run.status] ?? "")];
-  if (act || liveStep(view) || view.health.level !== "idle") parts.push(smartPill(view, now));
+  if (act || liveStep(view) || healthLevel(view) !== "idle") parts.push(smartPill(view, now));
   const open = openQuestions(view).length;
   if (open) parts.push(pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning"));
   for (const why of view.run.manager_due ?? []) parts.push(pill(`⚑ manager due: ${why}`, "serious"));
@@ -682,7 +699,7 @@ function liveLines(view, ctx, name) {
   const mine = view.turns.filter((t) => t.role === name), now = clockNow(view);
   const rate = `${fmt.tok(Math.round(tokensPerMin(mine, now)))}/min ${sparkline(mine, now)}`;
   const turn = `turn ${step.turn}${step.tool ? " · " + step.tool.name : ""}`;
-  const spent = `step ≈${step.cost_usd == null ? "—" : fmt.usd(step.cost_usd)} · ${fmt.tok(sumTok(step.tokens))}`;
+  const spent = `step ${approxUsd(step.cost_usd)} · ${fmt.tok(sumTok(step.tokens))}`;
   return [rate, turn, spent].map((l) => "<br/>" + mmdText(l)).join("");
 }
 
@@ -1503,7 +1520,7 @@ const canNotify = () => window.isSecureContext && "Notification" in window;
 
 /** Tab title and, on a change into red, a desktop notification (A1, A2, A4). */
 function applyAlert(view) {
-  const level = view.health.level;
+  const level = healthLevel(view);
   document.title = (level === "red" ? "⚠ " : "") + BASE_TITLE;
   const changed = data.lastLevel && data.lastLevel !== "red" && level === "red";
   if (changed && canNotify() && Notification.permission === "granted") {
@@ -1620,9 +1637,11 @@ async function boot() {
   data.snap = normalize(await res.json());
   mock.start();
 }
-boot().catch((err) => {
-  $("#status-row").innerHTML = pill("could not load data: " + err.message, "critical");
-});
+if (!globalThis.AGILE_TEAM_NO_BOOT) {
+  boot().catch((err) => {
+    $("#status-row").innerHTML = pill("could not load data: " + err.message, "critical");
+  });
+}
 </script>
 </body>
 </html>

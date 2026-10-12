@@ -181,9 +181,9 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         repo=repo,
         team=_team(raw.get("team", {})),
         toolchain=_toolchain(raw.get("toolchain", {})),
-        gates=_gates(raw.get("gates", {})),
+        gates=_section(Gates, raw.get("gates", {})),
         upstream=_upstream(raw.get("upstream", {})),
-        health=_health(raw.get("health", {})),
+        health=_section(HealthLimits, raw.get("health", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
         roles=dict(raw.get("roles", {})),
         providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
@@ -209,12 +209,9 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
     )
 
 
-def _gates(raw: dict[str, Any]) -> Gates:
-    return Gates(**{k: v for k, v in raw.items() if k in Gates.__dataclass_fields__})
-
-
-def _health(raw: dict[str, Any]) -> HealthLimits:
-    return HealthLimits(**{k: v for k, v in raw.items() if k in HealthLimits.__dataclass_fields__})
+def _section[T](cls: type[T], raw: dict[str, Any]) -> T:
+    """Build the dataclass ``cls`` from the keys of ``raw`` it declares."""
+    return cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__})  # type: ignore[attr-defined]
 
 
 def _upstream(raw: dict[str, Any]) -> UpstreamSettings:

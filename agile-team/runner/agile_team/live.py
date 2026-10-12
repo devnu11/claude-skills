@@ -51,8 +51,9 @@ def estimate(model: str, tokens: Tokens) -> float | None:
     rates = RATES.get(family(model))
     if rates is None:
         return None
-    counts = (tokens.input, tokens.output, tokens.cache_read, tokens.cache_creation)
-    return sum(rate * count for rate, count in zip(rates, counts, strict=True)) / PER_MILLION
+    return (
+        sum(rate * count for rate, count in zip(rates, _counts(tokens), strict=True)) / PER_MILLION
+    )
 
 
 def read_heartbeat(run_dir: Path) -> dict[str, Any] | None:
@@ -121,6 +122,15 @@ def _counts(tokens: Tokens) -> tuple[int, int, int, int]:
     return (tokens.input, tokens.output, tokens.cache_read, tokens.cache_creation)
 
 
+@dataclass(frozen=True)
+class News:
+    """What one answer adds: new tokens, its tool uses and the time (C3)."""
+
+    extra: Tokens
+    uses: list[ToolUseBlock]
+    now: float
+
+
 @dataclass(eq=False)
 class Reading:
     """The counts of one open query (pure: no I/O)."""
@@ -170,15 +180,16 @@ class Reading:
             self.counted[mid] = self.counted.get(mid, Tokens()) + extra
         for use in uses:
             self.tools.setdefault(use.id, (use.name, now))
-        return self._line(message, extra, now)
+        return self._line(message, News(extra, uses, now))
 
-    def _line(self, message: AssistantMessage, extra: Tokens, now: float) -> Turn:
+    def _line(self, message: AssistantMessage, news: News) -> Turn:
+        extra, now = news.extra, news.now
         self.tokens += extra
         self.last_turn_at = now
         self.wake(now)
         cost = self._price(message.model, extra)
         self.cost_usd = None if cost is None or self.cost_usd is None else self.cost_usd + cost
-        tools = [b.name for b in message.content if isinstance(b, ToolUseBlock)]
+        tools = [u.name for u in news.uses]
         who = self.who
         return Turn(
             now, who.role, who.story, who.step, self.turns, message.model,
