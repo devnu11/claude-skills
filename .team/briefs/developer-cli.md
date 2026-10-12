@@ -1,8 +1,19 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
 
 See `developer.md` for the base conventions.
+
+## s4: Dashboard backend - snapshot builder, read-only SSE server, CLI
+
+The dashboard service is built. Key decisions: the snapshot builder returns raw data only (no aggregation); the browser derives all views (board, flow, tokens, questions) in JavaScript. The API contract is the fixture (`snapshot.json`), not the views in AC1/AC2. Modules:
+
+- **`dashboard/snapshot.py`:** `build(config, book)` reads explicit files (state, events, ledger, outbox, inbox, stories, requirements) and assembles sections (raw arrays/objects). Each builder is pure and under 8 lines.
+- **`dashboard/server.py`:** Read-only HTTP + SSE. `Handler.do_GET()` routes three exact paths: `/` (index.html), `/api/snapshot` (JSON), `/api/stream` (SSE). Any other path is 404. No directory serving, no file paths built from requests. `_stream()` watches files and polls for changes, sending snapshots and keepalives.
+- **`cli.py` `cmd_dashboard`:** Binds to host/port, prints URL with bound port, opens browser (unless `--no-open`), serves. Uses stdlib `ThreadingHTTPServer` and `webbrowser` only.
+- **Config:** `stories_dir`, `requirements_dir` properties added.
+
+See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend" (rules S1–S7, section shapes).
 
 ## s58: Proxy sandbox reaches local services via allowLocalBinding
 

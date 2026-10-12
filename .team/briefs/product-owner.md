@@ -1,6 +1,18 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
+
+## s4: Dashboard backend – snapshot builder and read-only server
+
+The dashboard backend is now live. When you run `agile-team dashboard [--host HOST] [--port 8765] [--no-open]`, it:
+- Binds to the given host:port (default `0.0.0.0:8765`; Windows defaults to `127.0.0.1`).
+- Prints the URL with the **bound** port (so `--port 0` shows the real port).
+- Opens the browser (unless `--no-open`) to view the live dashboard.
+- Serves `index.html` on `/`, the snapshot JSON on `/api/snapshot`, and an SSE stream on `/api/stream` that pushes updates every second if files change.
+
+The snapshot builder reads only explicit files (state, events, ledger, messages, requirements) and returns raw data. The browser derives all views (board, flow, tokens, questions) in JavaScript. The fixture is the API contract. No new runtime dependencies. Covered at 99.68% (14 e2e tests); ruff clean. See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend".
+
+## Recent decisions
 
 ## s58: Customer Proxy sandbox now reaches local services
 

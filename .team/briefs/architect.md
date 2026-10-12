@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
 
 ## s58: Network sandbox settings by delivery kind; e2e verified on macOS
 
@@ -138,6 +138,17 @@ Five related changes:
 Impact: s4, s5, s8 (legacy, at acceptance) return to e2e on missing presentation (no round), tester builds presentation, gate passes, Proxy accepts. Same pattern scales to harness, manual, library, web kinds. ADR-0008 documents the strategy.
 
 **Clean halt on limits, crashes, SIGTERM (s8):** Data-driven halt handling via `HALTS` table (kind → status, note_kind, exit_code, advice) and `LIMIT_PATTERNS` table (regex, template). `classify()` returns the detected halt; first halt wins in a process. Partial edits left uncommitted so human can see what was in progress. Exit codes: 75 (EX_TEMPFAIL limit), 70 (EX_SOFTWARE crash), 143 (SIGTERM). s9 will save interrupted step edits as a commit; s10 will record partial cost. ADR-0007 documents the strategy.
+
+**Dashboard backend: snapshot as raw data contract (s4):** The snapshot builder (`snapshot.py`) returns raw, unaggregated data directly from run files. The UI (`index.html`) derives all views (board, flow, tokens, questions) in the browser from this raw data. The fixture (`snapshot.json`) is the API contract, not the views named in AC1/AC2.
+
+Key architectural choices:
+- **Pure snapshot building:** `build(config, book)` reads only explicit files (state, ledger, events, outbox, inbox, stories, requirements). No writes, no git, no network. Consequence: snapshot is stateless and always fresh.
+- **No Python aggregation:** Board columns, token totals, requirement coverage are computed in JavaScript. Consequence: server is simple; UI can evolve without server changes.
+- **Exact routes:** Three literal paths (`/`, `/api/snapshot`, `/api/stream`). No file paths built from requests. Consequence: no directory traversal risk.
+- **SSE file watching:** Server polls file fingerprints (mtimes, sizes) every 1 second; sends snapshots on change, keepalives otherwise. Consequence: clients stay live without polling.
+- **Stdlib only:** Uses `ThreadingHTTPServer` and `webbrowser` from the stdlib. No new runtime dependencies.
+
+This separates concerns cleanly: the runner focuses on reading files correctly and building a canonical snapshot; the UI focuses on presenting that data. See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend" (rules S1–S7).
 
 **Dashboard live UI (s5):** Vanilla JS with EventSource for live updates, Mermaid 11.4.1 flowchart from CDN (lazy-loaded), CSS tokens for themes, defensive rendering with per-row error handling. Five ADRs (0002–0006) document the choices. This completes the frontend half of the dashboard; s4 provides the backend (snapshot, SSE server, CLI). Known gaps: no executable test for animated features (verified by hand in headless Chrome); follow-up story recommended.
 

@@ -1,6 +1,21 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
+
+## s4: Dashboard backend – snapshot builder, read-only SSE server
+
+The dashboard backend is live. For acceptance testing, you need to understand the snapshot contract:
+
+- **The snapshot is raw data:** The server returns exactly 11 keys: `generated_at, run, pipeline, roles, stories, requirements, events, ledger, messages, answers, upstream`. Each key holds arrays or objects as they are, with no aggregation.
+- **Views are derived in the browser:** The dashboard's UI (`index.html`) reads the snapshot and computes board columns, flow stats, token totals, requirement coverage, and questions lists from the raw data.
+- **What this means for your AC testing:** You test the snapshot format (AC1–AC3, AC4), the server routes and SSE (AC4), and the CLI (AC5–AC6). The UI rendering is tested by s5 (the live UI); you do not test views here.
+- **Snapshot shape:** The fixture `agile-team/dashboard/fixtures/snapshot.json` is the API contract. After a JSON round-trip, value types and keys match the fixture. Missing run files give empty sections.
+- **Server is read-only:** Three exact routes: `GET /` (index.html), `GET /api/snapshot` (JSON), `GET /api/stream` (SSE). Any other path is 404. No file paths built from requests.
+- **CLI command:** `agile-team dashboard [--host 0.0.0.0] [--port 8765] [--no-open]`. Binds first, prints the bound URL (so `--port 0` shows the real port), opens the browser (unless `--no-open`), and serves.
+
+See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend", and review `.team/reviews/s4.md` for AC coverage and captured-tests.txt for the 14 e2e test cases (99.68% coverage).
+
+## Recent steps
 
 ## s58: Your sandbox can reach the local service
 

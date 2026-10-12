@@ -1,6 +1,6 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
 
 ## Design decisions to verify
 
@@ -145,6 +145,16 @@ Function by function: ledger (`corrected`, `_own_share`, `Ledger.entries`, `.las
 - `git init` outside git: `Git.is_repo()` probes, `_require_init_inputs()` checks first, raises `CliError` with exact message (no traceback)
 - Story id safety checked in `lay_out()` before wiping (refuses unsafe id with `SandboxError`)
 - See ADR-0008 for the full strategy.
+
+**Dashboard backend snapshot and read-only server (s4):** Verify that the snapshot builder is pure and the server is secure:
+- **S1–S2:** `build(config, book)` returns exactly 11 keys in order (`generated_at, run, pipeline, roles, stories, requirements, events, ledger, messages, answers, upstream`). Pure function: only reads files (state, events, ledger, outbox, inbox, stories, REQs). No writes, no git, no network (only `time.time()`).
+- **S3:** No aggregation in Python; views (board, flow, tokens, questions) are derived in the browser from raw snapshot keys.
+- **D3–D4:** Missing files give empty sections or defaults. Blank/malformed JSONL lines skipped. Torn lines at end are normal.
+- **D5:** Routes are exact literal lookups: `/` (index.html), `/api/snapshot` (JSON), `/api/stream` (SSE). Any other path 404. No file paths built from requests. No directory serving.
+- **D6:** SSE polls file fingerprints (mtimes, sizes) every 1 second. On first tick or change, sends snapshot. Otherwise keepalive. Loop ends on socket errors.
+- **D7:** `default_host()` returns `0.0.0.0` except Windows (`127.0.0.1`). All-interfaces URL uses `socket.gethostname()`. `--port 0` finds free port and prints actual. `--no-open` skips browser. Bind error → exit 1 with exact message.
+- **Fixture as contract:** `snapshot.json` defines the API contract (not AC1/AC2 view names). Each snapshot build matches the fixture shape and types after JSON round-trip.
+- **Known gaps (accepted, not blockers):** Typed input validation, some socket errors, hostname resolution. See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend".
 
 **Clean halt on limits, crashes, SIGTERM (s8):** Verify that halt handling is data-driven:
 - `HALTS` table (kind → status, note_kind, exit_code, advice) with no code branches outside it

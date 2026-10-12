@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s58 done)
+**Last updated:** 2026-10-11 (s4 documented, s58 done)
 
 ## s58: Sandbox e2e test for local service binding on macOS
 
@@ -223,6 +223,20 @@ Check that tests match the HALTS table values exactly: statuses `blocked`, `fail
 - Escaping rule (ADR-0005): all snapshot strings in HTML must go through `esc()`. Tests check string presence, not injection prevention. Consider adding a test that verifies no unescaped interpolations exist in the shipping `index.html`.
 
 Review round 1 found two defects (D1: bad Mermaid selector, D2: unescaped strings) that were fixed and verified by round 3. Round 4 fixed a crash on empty sprint-start data, verified by the customer. Tests are green at 100% coverage.
+
+## s4: Dashboard backend – snapshot builder and read-only server
+
+Test the snapshot builder (`build(config, book)`) against the fixture shape (AC3). Each section builder is under 8 lines and reads only its source files: `state.json`, `ledger.jsonl`, `events.jsonl`, `outbox.jsonl`, `inbox.jsonl`, story frontmatter, requirement files. Missing files give empty sections; torn JSONL lines are skipped (D3, D4). Coverage areas:
+
+1. **Fixture match (AC3):** `test_build_matches_fixture_shape` checks all 11 keys exist in correct order and value types match after round-trip.
+2. **Section builders (S2):** Each builder is pure (no writes, no git, no network except `time.time()`). Test: run from temp dir, no side effects.
+3. **Missing files (D3):** Missing `state.json` → `RunState()` defaults; missing story file → frontmatter empty; missing REQ → row with defaults; torn ledger line → skipped.
+4. **Server routes (AC4, D5):** Three exact routes: `GET /` (index.html from package), `GET /api/snapshot` (JSON), `GET /api/stream` (SSE). Any other path → 404. No file paths built from requests.
+5. **SSE file watching (AC4, D6):** Fingerprint (mtimes, sizes) triggers on first tick and when changed, otherwise keepalive. 5 concurrent clients, each gets fresh snapshot on connect, both reconnect without hanging.
+6. **CLI host/port (AC5, AC6, D7):** `default_host()` returns `0.0.0.0` except Windows (`127.0.0.1`). `--port 0` finds free port. Hostname URL when all-interfaces. `--no-open` skips browser. Bind error → exit 1 with exact error message.
+7. **Coverage ≥95%, ruff clean.**
+
+Known gaps (accepted at review, not contract changes): typed input (`covers: 5`), some disconnect errors, hostname resolution on the network. See ADR-0027, design `agile-team/docs/architecture.md` § "s4: Dashboard backend" (rules S1–S7).
 
 ## s26: Service lifecycle and liveness testing
 
