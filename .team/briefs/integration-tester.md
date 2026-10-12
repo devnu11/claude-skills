@@ -1,6 +1,17 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done)
+**Last updated:** 2026-10-12 (s69 done; s67 recorded)
+
+## s67: E2E test—first watch records, then waits (liaison behavior)
+
+One e2e test in `tests/e2e/test_liaison_e2e.py` updated for AC4 (first watch with populated outbox waits instead of reporting history):
+
+- Tell posts m1 (the history).
+- `watch --timeout 1` (no `.team/run/liaison/watch.json` yet) → exit 0, `triggers == ["heartbeat"]`, `messages == []`; `.team/run/liaison/watch.json` now exists with `messages == 1`.
+- Post m2; `watch --timeout 5` → `"message"` in triggers, message ids `== ["m2"]` only.
+- `watch --timeout 1` → `["heartbeat"]` (as today, no change).
+
+All in the `configured` scratch repo. The watch.json now always exists after the first watch, with the baseline count and status. Docs updated: SKILL.md § `watch` command and `reference/protocol.md` § Watch section say a first run records before waiting.
 
 ## s69: Run e2e tests by file name only; full suite denied
 

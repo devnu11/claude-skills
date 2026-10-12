@@ -1,6 +1,27 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s71 done)
+**Last updated:** 2026-10-12 (s71 done; s67 recorded)
+
+## s67: First watch records the current state, then waits
+
+The liaison's `agile-team watch` command is now smarter on a first run (no `.team/run/liaison/watch.json` file yet): it records the current outbox count, status, and health, saves them to `watch.json`, then waits for new messages. You are no longer woken by the entire history.
+
+**What you'll see:**
+
+- **First `watch` (no memory yet):** The command exits 0 with `triggers: ["heartbeat"]`, `messages: []`. The status is shown (running/stopped, with reason if any). No history is reported. A `watch.json` file is created with the count and baseline status.
+- **Later `watch`:** New messages and status changes after the first record fire normally. If a message arrives during the wait, you see it. If status changes, you see it.
+- **Unreadable `watch.json`:** If the file is corrupted, the watch treats it as missing and records the current state again (fresh baseline). This is safe; the liaison will be woken on the next change after recording.
+
+**For your manual acceptance testing (AC4):**
+
+1. `tell` posts m1 (history).
+2. `watch --timeout 1` → exit 0, `triggers == ["heartbeat"]`, no messages, `.team/run/liaison/watch.json` exists with baseline.
+3. Post m2; `watch --timeout 5` → message m2 fires, reported alone.
+4. `watch --timeout 1` → heartbeat only (no change).
+
+**Docs updated:** `reference/protocol.md` § Watch describes the first-run baseline. `SKILL.md` step 6 (`watch` command) notes that a first run records before waiting. Liaison layout rules and § Rules section are unchanged (you edit those with the human).
+
+See design `agile-team/docs/design/s67.md` (rules F1–F7), acceptance criteria 1–6.
 
 ## s71: Unit tests touch no OS (P1 seam, files, clock)
 

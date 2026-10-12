@@ -1,6 +1,22 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done)
+**Last updated:** 2026-10-12 (s72 done; s67 recorded)
+
+## s67: First watch records current state, then waits (watch refinement, no ADR)
+
+The liaison's `agile-team watch` command now treats a first run intelligently: instead of reporting the entire outbox history to you, it records the current state as baseline and then waits for new messages. This is a refinement to s62 (the existing watch behavior stays for subsequent runs).
+
+**What changes:** On a repo's first `watch` (when `.team/run/liaison/watch.json` does not yet exist), the command:
+1. Records the current outbox count, status, and health.
+2. Saves them to `watch.json` immediately.
+3. Waits for triggers (new messages, status changes) exactly as before.
+4. **Does not report the baseline state as new events**—only things that change after recording fire.
+
+**Why:** The liaison has already seen the history when they first check status. Flooding them with old messages was noise. Now they see only what's new.
+
+**For acceptance (AC4):** The e2e test verifies: (1) first watch with outbox does not report history; (2) later watch reports new message alone; (3) unreadable watch.json replays as today (acts as fresh baseline, reports whole outbox).
+
+**Docs updated:** `SKILL.md` step 6 and `reference/protocol.md` § Watch both note the first-run behaviour. No changes to the rules or layout. Coverage ≥95%, ruff clean. No new dependencies. See design `agile-team/docs/design/s67.md` (AC1–6, rules F1–F7).
 
 ## s72: Unit test timeout 1 second; slow tests fixed in implement gate
 

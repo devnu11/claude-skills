@@ -1,6 +1,33 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done)
+**Last updated:** 2026-10-12 (s72 done; s67 recorded)
+
+## s67: First watch records state, then waits (watch.py tests rewritten)
+
+Rewrite four existing tests in `tests/test_s62_watch.py` to match the new behavior where a first `watch` records the current outbox/status as already seen:
+
+- `test_the_first_watch_reports_every_message` → **does not report populated outbox:** no memory, one note, timeout=4 gives `triggers == ["heartbeat"]`, `messages == []`, `was == {"status": "running", "status_reason": None}`, and `memory(run_dir) == {"messages": 1, "status": "running", "status_reason": None, "health": "idle"}` (F2 record saved).
+- `test_the_first_watch_reports_a_non_quiet_status` → **takes non-quiet status as seen:** no memory, stopped/stop requested, timeout=4 gives `heartbeat`, and line's status/status_reason are stopped/stop requested (F7).
+- `test_two_messages_between_watches_are_both_reported` → **start with `remember(run_dir, 0, "running")`** so its first watch still reports m1 (the test covers two watches in a row, not first run).
+- `test_seen_defaults_and_atomic_save` → **`Seen.load(missing)` is `None`** (F1); save/load round trip stays, single file stays.
+
+New tests (design checklist):
+- **F2 record written before wait:** no memory, one note; `FakePace` act reads `memory(run_dir)` at first sleep, finds `messages == 1` (file exists while waiting).
+- **AC2 message after record is new:** no memory, m1; act adds m2 → triggers `["message"]`, ids `["m2"]` only, memory has `messages == 2`.
+- **F5 status after record fires:** no memory, running; act puts stopped → triggers `["status"]`, was running (not null).
+- **F5 health not at record:** a first watch on already-red run does not fire `health` (assert on `fired(look.seen(), look)`).
+- **F3 torn first look:** no memory, torn line; act completes m1 → record after one sleep is `messages == 1`, no report m1, heartbeat at timeout.
+- **F4 deadline from call:** no memory, torn for one poll then whole, timeout=2 → heartbeat within 2s total; `POLL_S` counted toward deadline (sleeps `== [POLL_S]`).
+- **F6 garbage memory:** `watch.json` is directory (`IsADirectoryError`) → `Seen.load` returns `Seen()` (fresh, reports outbox).
+- **F1 other read errors fresh:** same as F6 with any `OSError`.
+
+E2E (`tests/e2e/test_liaison_e2e.py`, AC4):
+- Tell posts m1 (history).
+- `watch --timeout 1` (no `.watch.json` yet) → exit 0, `triggers == ["heartbeat"]`, `messages == []`; `.team/run/liaison/watch.json` now exists with `messages == 1`.
+- Post m2; `watch --timeout 5` → `"message"` in triggers, ids `== ["m2"]`.
+- `watch --timeout 1` → `["heartbeat"]` (as today).
+
+All in the `configured` scratch repo; `AGILE_TEAM_HOME` stays the suite's scratch dir. See design `agile-team/docs/design/s67.md` (test checklist).
 
 ## s72: A 1 second limit per unit test — measure in implement gate
 

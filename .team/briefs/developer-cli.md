@@ -1,8 +1,20 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done)
+**Last updated:** 2026-10-12 (s72 done; s67 recorded)
 
 See `developer.md` for the base conventions.
+
+## s67: First watch records current state before waiting (watch.py, no ADR)
+
+On a repo's first `agile-team watch` (no `.team/run/liaison/watch.json` yet), the current outbox and status are recorded immediately and saved to `watch.json`. Then the watch waits for new messages—the liaison is not flooded with history. Key changes to `agile_team/watch.py`:
+
+- **`Seen.load(path)`:** Returns `None` when file doesn't exist (not `Seen()`). Other read errors, invalid JSON, or wrong keys still return fresh `Seen()`. Distinguishes "missing" from "unreadable".
+- **`Watcher.until(timeout_s)`:** Deadline computed first (F4), then baseline (F2). If baseline needs recording, `_baseline()` calls `_record()` at once before the wait loop.
+- **New private methods:** `_baseline()` checks `Seen.load()`; if `None`, records the current whole look. `_record(look)` turns `look` into `Seen`, saves to `watch.json`, returns it. `_whole_look()` polls until outbox is not torn, sleeping `POLL_S` between (F3).
+- **Status on halt:** Graceful timeout still shows status/reason via heartbeat (F7); nothing changes there.
+- **Existing behavior:** Readable `watch.json` acts as today (V3–V7). Unreadable still acts as fresh memory, reporting the whole outbox. TRIGGERS table and all other watch behavior unchanged.
+
+No new imports or runtime dependencies. All seven rules (F1–F7) tested; first watch with outbox doesn't report history, messages after the record fire (AC2), torn line handled, deadline honored. See design `agile-team/docs/design/s67.md` (rules F1–F7).
 
 ## s72: A 1 second limit per unit test (configuration, no new dependency)
 
