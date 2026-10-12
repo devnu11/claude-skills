@@ -50,6 +50,7 @@ PRESENTATIONS: dict[str, Recipe] = {
     "harness": Recipe(Need.WORKSPACE),
     "manual": Recipe(Need.GUIDE_ONLY),
 }
+STOP_HELD = "story {story} presentation did not stop: {held}"
 TRIAL_VERDICTS = {sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
 
 
@@ -92,8 +93,15 @@ class Trial:
         except (sandbox.NotUp, sandbox.PortBusy) as exc:
             reason = f"story {story.id} presentation is not up: {exc}"
             return Outcome(TRIAL_VERDICTS[type(exc)], reason)
-        prepared.stop()
-        return Outcome(Verdict.PASS, f"{READY}; {prepared.probe_url()} answered")
+        return _stopped(prepared, story)
+
+
+def _stopped(prepared: sandbox.Prepared, story: StoryState) -> Outcome:
+    """PASS once the service is stopped and its port is free; HOLD if the port stays in use."""
+    held = prepared.stop()
+    if held:
+        return Outcome(Verdict.HOLD, STOP_HELD.format(story=story.id, held=held))
+    return Outcome(Verdict.PASS, f"{READY}; {prepared.probe_url()} answered")
 
 
 def lay_out(config: Config, story: StoryState) -> Path:

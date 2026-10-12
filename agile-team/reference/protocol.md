@@ -1154,6 +1154,17 @@ to `integration-tester`).
   with `ps -o etime=`). A stale or reused pid is ignored and the file is
   deleted. If the leader is gone but other members of its group still hold
   the port, the start holds on the busy port.
+- Stopping a service (s82) ends its whole process group, not just the shell
+  the runner started. It sends SIGTERM to the group and returns only once the
+  leader is reaped and no process is left in the group (the shell, `uv` and
+  the server alike). A group still alive after 10 s gets SIGKILL and 5 s more.
+  Then the stop waits up to 5 s for the delivery's port to refuse
+  connections. It never waits more than 20 s, and it never signals a leader
+  that had already exited before the stop. If the port is still in use at the
+  deadline, the trial puts the gate on **hold**:
+  `story sN presentation did not stop: delivery '<name>' did not let go of <host>:<port>: it was still in use 5s after the service was stopped; keep the service in its start command's process group`.
+  A start that never came up adds that line to its bounce reason. After the
+  Proxy's step, the next start holds on the busy port.
 - Service lifecycle (s58). The e2e gate's trial stops its service on purpose,
   because a gate leaves nothing running. The Proxy step does not reuse that
   service. Planning the step (`plan()`) starts a fresh one from the copied

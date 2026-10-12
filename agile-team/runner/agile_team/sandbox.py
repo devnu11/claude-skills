@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from . import system
 from .config import Config, Delivery
 from .guard import Scope
 from .paths import literal_root, under_root
@@ -38,6 +39,15 @@ PROBE_ATTEMPTS = 120
 PROBE_EVERY_S = 0.25
 PROBE_TIMEOUT_S = 2
 STOP_WAIT_S = 10
+KILL_WAIT_S = 5
+PORT_WAIT_S = 5
+POLL_EVERY_S = 0.05
+PORT_HELD = (
+    "delivery {name!r} did not let go of {host}:{port}: it was still in use "
+    "{seconds:g}s after the service was stopped; keep the service in its start "
+    "command's process group"
+)
+Listening = Callable[[str, int], bool]
 LOG_TAIL_LINES = 20
 PID_SUFFIX = ".pid"
 LOG_SUFFIX = ".log"
@@ -144,15 +154,18 @@ class Prepared:
     process: subprocess.Popen[bytes] | None = None
     presentation: Path | None = None
 
-    def stop(self) -> None:
-        """Stop the background process and its process group, and drop the pid file."""
-        if self.process and self.process.poll() is None:
-            _signal_group(self.process, signal.SIGTERM)
-            try:
-                self.process.wait(timeout=STOP_WAIT_S)
-            except subprocess.TimeoutExpired:
-                _signal_group(self.process, signal.SIGKILL)
+    def stop(self) -> str | None:
+        """End the service's whole process group, wait for its port and drop the pid file.
+
+        Returns why the port is still in use at the deadline (PORT_HELD), else ``None``.
+        """
+        held = self._end() if self.process else None
         self.pid_file().unlink(missing_ok=True)
+        return held
+
+    def _end(self) -> str | None:
+        end_group(self.process)  # type: ignore[arg-type]
+        return port_released(self)
 
     def pid_file(self) -> Path:
         """Where the service's process group id is kept, beside the sandbox."""
@@ -212,16 +225,48 @@ def _recorded(pid_file: Path) -> Recorded | None:
         return None
 
 
+def wait_until(done: Callable[[], bool], seconds: float) -> bool:
+    """Poll ``done`` every POLL_EVERY_S; True once it holds, False at the deadline."""
+    deadline = system.monotonic() + seconds
+    while not done():
+        if system.monotonic() >= deadline:
+            return False
+        system.sleep(POLL_EVERY_S)
+    return True
+
+
+def _group_alive(pgid: int) -> bool:
+    """True while group ``pgid`` has a process we may see (signal 0 sends nothing)."""
+    try:
+        os.killpg(pgid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _ended(process: subprocess.Popen[bytes]) -> bool:
+    """True once the leader is reaped (poll reaps it) and its group is empty."""
+    return process.poll() is not None and not _group_alive(process.pid)
+
+
+def end_group(process: subprocess.Popen[bytes]) -> None:
+    """SIGTERM the child's group and wait for it to end; SIGKILL what is left (Q2, Q3)."""
+    if process.poll() is not None:
+        return
+    _signal_group(process, signal.SIGTERM)
+    if not wait_until(lambda: _ended(process), STOP_WAIT_S):
+        _signal_group(process, signal.SIGKILL)
+        wait_until(lambda: _ended(process), KILL_WAIT_S)
+
+
+def _joined(reason: str, note: str | None) -> str:
+    """``reason``, plus ``note`` on its own line when there is one."""
+    return f"{reason}\n{note}" if note else reason
+
+
 def _ends_within(pgid: int, seconds: float) -> bool:
     """True once the group is gone (or not ours to signal); False at the deadline."""
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        try:
-            os.killpg(pgid, 0)
-        except OSError:
-            return True
-        time.sleep(0.05)
-    return False
+    return wait_until(lambda: not _group_alive(pgid), seconds)
 
 
 def _end_group(recorded: Recorded) -> None:
@@ -268,6 +313,19 @@ def port_in_use(host: str, port: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def port_released(prepared: Prepared, listening: Listening = port_in_use) -> str | None:
+    """Wait up to PORT_WAIT_S until nothing listens on the delivery's port (Q4).
+
+    Returns PORT_HELD filled in when the port is still in use, else ``None``.
+    """
+    host, port = prepared.address()
+    if not host or not port:
+        return None
+    if wait_until(lambda: not listening(host, int(port)), PORT_WAIT_S):
+        return None
+    return PORT_HELD.format(name=prepared.delivery.name, host=host, port=port, seconds=PORT_WAIT_S)
 
 
 Runner = Callable[[str, Prepared], int]
@@ -383,8 +441,7 @@ class Preparer:
             if attempt + 1 < self.attempts:
                 self.sleep(PROBE_EVERY_S)
         reason = self._not_up_reason(prepared)  # before stop(): it sets a signal exit code
-        prepared.stop()
-        raise NotUp(reason)
+        raise NotUp(_joined(reason, prepared.stop()))
 
     def _not_up_reason(self, prepared: Prepared) -> str:
         name, url = prepared.delivery.name, prepared.probe_url()
