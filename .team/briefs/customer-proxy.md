@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s79 done; no ADR)
+**Last updated:** 2026-10-12 (s74 done)
+
+## s74: Resting pill verified live—plain neutral `● stopped`, no warning styling
+
+Your manual acceptance testing verified the two regressions from s44 are fixed. After a graceful `agile-team stop`, the run-status pill reads plain `● stopped` with no yellow warning tone and no `⚠` in the pill or tab title. The pill appears without any smart health indicator, confirming the design (idle health does not render). All 20 e2e tests pass. See design `agile-team/docs/design/s74.md`, ADR-0037.
 
 ## s79: E2E tests pass on CI runners—no git identity, any timezone
 

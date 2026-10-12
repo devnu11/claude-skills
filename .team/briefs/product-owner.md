@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s79 done; no ADR)
+**Last updated:** 2026-10-12 (s74 done)
+
+## s74: Dashboard pill fixes — graceful stops neutral, fallback text has space
+
+The two regressions left open by s44 are fixed. **N1:** Fallback step pill text (`▶ <role> on <story> · <ago>`) now has the required space after the arrow. **Resting pill:** After a graceful `agile-team stop`, the run-status pill shows plain `● stopped` (no yellow warning), and no smart pill appears. Forced halts (stop --now, limit, crash, dead runner) still show red on the smart pill. The implementation extracts `statusPills` as a pure function, making the visual contract testable. See ADR-0037, design `agile-team/docs/design/s74.md` (rules N1, S1–S3). All ACs pass; coverage 99.68%; ruff clean.
 
 ## s79: E2E tests pass on CI—git isolation and timezone independence (test-only changes)
 
