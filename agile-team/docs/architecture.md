@@ -42,6 +42,7 @@ one line here. Older designs are the sections at the end of this file.
 | s41 Why s29's step got SIGTERM (its agent `kill`ed its own CLI, found by `ps \| grep pytest`); role Bash may not signal the runner's group or kill by name/run-time target; the runner signals only groups it created (pid-file start time checked) | [design/s41.md](design/s41.md) |
 | s44 Live spend meter: every turn in `turns.jsonl`, a thread-written `heartbeat.json`, an `interrupted` `step-end` for every step cut short, one `health.RULES` table (`[health]` thresholds), the smart pill, flow-box scope totals, red alerts, localhost URL first; quiet clock restarts on hand-back, the PO's wait is a chore, a graceful stop is neutral (`state.halt_kind`); the page's functions run under node through a boot guard (U1–U3) | [design/s44.md](design/s44.md) |
 | s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
+| s68 The implement gate runs the suite once (the `coverage` command only); a non-zero exit never passes; failing tests vs coverage shortfall told apart by `TEST_FAILURES`, bounce texts unchanged | [design/s68.md](design/s68.md) |
 
 ## Components
 

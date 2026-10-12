@@ -787,7 +787,11 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 design (architect) → tests (unit-tester; gate: test command **fails**, or
 see "Back at tests with the code in") →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
-`.team/baseline.json` coverage when old debt keeps the total lower) → quality
+`.team/baseline.json` coverage when old debt keeps the total lower; the gate
+runs the suite **once**, through the `coverage` command only: a zero exit
+with a high enough total passes, and a non-zero exit never passes. It
+bounces as a coverage shortfall when the output shows a total below the
+requirement and no failing test, and as `tests fail` otherwise) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
 is enabled: a `done` handoff passes only with a complete presentation and,
 for a `web` delivery, a service that starts from it and answers its probe)
