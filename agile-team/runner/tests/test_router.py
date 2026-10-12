@@ -519,7 +519,8 @@ def test_a_red_implement_gate_reruns_the_same_developer_with_the_test_tail(make_
     add_story(rt, "s1", "implement", developer="developer-api")
     drive(rt)
     assert step_roles(rt)[:3] == ["developer-api", "developer-api", "code-reviewer"]
-    retry = script.prompts["developer-api"][1]
+    first, retry = script.prompts["developer-api"][:2]
+    assert "Sent back to this step" not in first
     assert "- Sent back to this step: tests fail:" in retry and "boom: assertion failed" in retry
     assert rt.state.stories["s1"].rounds == 1
 
