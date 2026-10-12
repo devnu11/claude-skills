@@ -6,7 +6,6 @@ every other role runs as a fresh query inside ``run_role``.
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import json
 from collections.abc import Awaitable, Callable
@@ -16,7 +15,7 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import handover, po_session, priority, salvage
+from . import handover, po_session, priority, salvage, system
 from .boundary import Boundary, BoundaryHold, BoundaryOutcome, Edge, Permission, held_text
 from .boundary_runner import boundary_event
 from .checkout import CheckoutChanged
@@ -56,8 +55,6 @@ NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it
 PERMISSION_REFUSAL = 'answer must be "yes" or "no"'
 AFTER_REVIEW = frozenset({BoundaryHold.ESCALATED, BoundaryHold.REVIEWED})
 
-Sleep = Callable[[float], Awaitable[None]]
-
 
 class StartMode(StrEnum):
     """How ``agile-team start`` begins the PO loop."""
@@ -80,7 +77,6 @@ class Tools:
     """Tool implementations bound to one runtime; plain async methods for testing."""
 
     runtime: Runtime
-    sleep: Sleep = asyncio.sleep
 
     async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
@@ -237,7 +233,7 @@ class Tools:
     async def _poll(self, ids: list[str], limit: float) -> None:
         waited = 0.0
         while not self._settled(ids) and waited < limit:
-            await self.sleep(POLL_S)
+            await system.async_sleep(POLL_S)
             waited += POLL_S
 
     def _mark_delivered(self, ids: list[str]) -> None:

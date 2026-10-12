@@ -6,14 +6,12 @@ at once instead of stopping at the first.
 
 from __future__ import annotations
 
-import os
 import shlex
-import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import keys
+from . import keys, system
 from .config import LOGIN_AUTH, Config
 from .git_ops import Git
 from .providers import Probe, Provider, reachable
@@ -30,14 +28,13 @@ def executable_of(command: str) -> str:
 
 @dataclass
 class Preflight:
-    """The pre-run checks for one repo; ``which`` is injectable for tests."""
+    """The pre-run checks for one repo; the provider probe is injectable."""
 
     config: Config
     git: Git
     home: Path
-    which: Which = field(default=shutil.which)
+    which: Which | None = None  # deprecated: system.which is the seam; removed in the e2e step
     probe: Probe = field(default=reachable)
-    environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
 
     def run_all(self) -> list[str]:
         """All preflight failures; empty means the run may start."""
@@ -56,7 +53,7 @@ class Preflight:
 
     def login(self) -> list[str]:
         """An inherited key would win over the login and bill a Console workspace."""
-        if self.environ.get(keys.ENV_VAR):
+        if system.environ().get(keys.ENV_VAR):
             return [f"team.auth is login but ${keys.ENV_VAR} is set; unset it or use api-key"]
         return []
 
@@ -85,7 +82,7 @@ class Preflight:
         return [
             f"{name}: `{exe}` not found on PATH"
             for name, exe in sorted(exes.items())
-            if exe and self.which(exe) is None
+            if exe and (self.which or system.which)(exe) is None
         ]
 
     def providers(self) -> list[str]:
@@ -95,7 +92,7 @@ class Preflight:
         return [failure for provider in used for failure in self.provider_problems(provider)]
 
     def used_providers(self) -> set[str]:
-        user_dir = user_roles_dir(self.home, self.environ)
+        user_dir = user_roles_dir(self.home, system.environ())
         book = RoleBook.for_repo(self.config.repo, self.config.roles, user_dir)
         try:
             return {book.resolve(name).provider for name in book.enabled_names()}
@@ -104,7 +101,7 @@ class Preflight:
 
     def provider_problems(self, provider: Provider) -> list[str]:
         failures = []
-        if provider.token_env and not self.environ.get(provider.token_env):
+        if provider.token_env and not system.environ().get(provider.token_env):
             failures.append(f"providers.{provider.name}: ${provider.token_env} is not set")
         if not self.probe(provider.base_url):
             failures.append(f"providers.{provider.name}: nothing answers at {provider.base_url}")

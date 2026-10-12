@@ -7,6 +7,7 @@ every function in ``__all__`` for an in-memory fake. Functions are thin: one cal
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import socket
@@ -15,7 +16,8 @@ import subprocess
 import threading
 import time
 import urllib.request
-from collections.abc import Mapping
+import webbrowser
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,13 +25,16 @@ from typing import NamedTuple
 
 __all__ = [
     "append_text",
+    "async_sleep",
     "connect",
     "copy_tree",
+    "cwd",
     "environ",
     "exists",
     "expand_user",
     "glob",
     "hard_link",
+    "home",
     "hostname",
     "http_get",
     "is_dir",
@@ -42,6 +47,8 @@ __all__ = [
     "make_dirs",
     "monotonic",
     "now",
+    "on_signal",
+    "open_browser",
     "pgid",
     "pgrp",
     "pid",
@@ -59,11 +66,13 @@ __all__ = [
     "spawn_piped",
     "stat",
     "wait_event",
+    "which",
     "write_text",
 ]
 
 TimeoutExpired = subprocess.TimeoutExpired
 Process = subprocess.Popen
+HttpServer = ThreadingHTTPServer
 
 
 class Completed(NamedTuple):
@@ -330,10 +339,38 @@ def hostname() -> str:
     return socket.gethostname()
 
 
-def listen_http(
-    address: tuple[str, int], handler: type[BaseHTTPRequestHandler]
-) -> ThreadingHTTPServer:
+def listen_http(address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> HttpServer:
     """Bind a threaded HTTP server (daemon threads) on ``address``."""
-    server = ThreadingHTTPServer(address, handler)
+    server = HttpServer(address, handler)
     server.daemon_threads = True
     return server
+
+
+async def async_sleep(seconds: float) -> None:
+    """Wait for ``seconds`` without blocking the event loop."""
+    await asyncio.sleep(seconds)
+
+
+def which(name: str) -> str | None:
+    """The path of an executable on ``PATH``, or None."""
+    return shutil.which(name)
+
+
+def home() -> Path:
+    """The user's home directory."""
+    return Path.home()
+
+
+def cwd() -> Path:
+    """The current working directory."""
+    return Path.cwd()
+
+
+def open_browser(url: str) -> bool:
+    """Ask the desktop to open ``url``; whether it did."""
+    return webbrowser.open(url)
+
+
+def on_signal(sig: int, callback: Callable[[], object]) -> None:
+    """Call ``callback`` on the running loop when ``sig`` arrives."""
+    asyncio.get_running_loop().add_signal_handler(sig, callback)
