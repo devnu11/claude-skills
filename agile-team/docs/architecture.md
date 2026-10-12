@@ -70,7 +70,7 @@ one line here. Older designs are the sections at the end of this file.
 | `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |
 | `state.py` | `RunState` (with the PO's story `order`, s40) and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
-| `relay.py` | outbox/inbox with the liaison; the human's queued messages `liaison/messages/t<N>.md` (`tell`, `told`, s62) | none |
+| `relay.py` | outbox/inbox with the liaison; the human's queued messages `liaison/messages/t<N>.md` (`tell`, `told`, `unread`, s62) | none |
 | `watch.py` | `agile-team watch` (s62): `Look` at the outbox and shown status, the `TRIGGERS` table, `Seen` memory in `liaison/watch.json`, `Watcher.until` | relay, state |
 | `live.py` | the live meter (s44): `Reading` (turns, tokens, tools, model of one open query), `Meter`, `Pulse` (stack of open readings, chores, `turns.jsonl` lines, `heartbeat.json` from a daemon thread), `RATES` estimates | ledger (`Tokens`), providers (`Billing`), salvage (`Cause`, `STOP_REASONS`), events |
 | `health.py` | runner health (s44): `Vitals` (heartbeat, shown status, pid), the `RULES` table, `judge`, `current`, `model_note` | live, state, config |
