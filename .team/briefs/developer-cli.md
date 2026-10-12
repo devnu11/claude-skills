@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s79 done; no ADR)
+**Last updated:** 2026-10-12 (s82 done; no ADR)
 
 See `developer.md` for the base conventions.
 
@@ -98,6 +98,10 @@ The runner found what SIGTERMed a prior develop step: the agent's own `ps aux | 
 **Residual risk (documented):** A variable target like `kill $PPID` (which in your Bash is the agent CLI) cannot be resolved at parse time and passes. K1 and K4 block common forms. This is a rule to stop mistakes, not a hostile gate.
 
 See ADR-0031, design `agile-team/docs/design/s41.md` (rules G1–G6, K1–K5, test checklist).
+
+## s82: Service stop waits for the whole process group and port release (no new ADR)
+
+The trial's `stop()` now waits for the entire service process group to end, not just the shell leader. On Linux (dash), the leader dies at SIGTERM before `uv` and Python exit, so the port stayed in use. Fix: SIGTERM → wait 10s for group → SIGKILL → wait 5s → wait 5s for port release. If port still in use, `stop()` returns a note (`PORT_HELD`); Trial turns this into a HOLD verdict. Modules: `sandbox.py` (wait_until, end_group, port_released, Prepared.stop, Preparer._await_answer), `presentation.py` (STOP_HELD, _stopped). Extends ADR-0013 (lifecycle), keeps ADR-0031 G1 (signals only through process_groups). No new dependency. Docs updated: `reference/protocol.md` § service lifecycle, `architecture.md` § Prepared contract. Coverage 100% (sandbox, presentation); ruff clean.
 
 ## s62: Liaison commands in the runner; self-hosting and frozen uv
 
