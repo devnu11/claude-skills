@@ -219,7 +219,9 @@ def test_no_sigkill_when_the_group_stopped_being_ours(
     assert _kills(sent) == [(own_group.pid, signal.SIGTERM)]
 
 
-def test_sigkill_when_the_group_is_still_ours(tmp_path: Path, sent, own_group, monkeypatch) -> None:
+def test_sigkill_when_the_group_is_still_ours(
+    tmp_path: Path, sent, own_group, monkeypatch
+) -> None:
     pid_file = tmp_path / f"web{sandbox.PID_SUFFIX}"
     pid_file.write_text(str(own_group.pid))
     monkeypatch.setattr(sandbox, "STOP_WAIT_S", 0.1)
