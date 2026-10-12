@@ -20,7 +20,6 @@ def _start_collect(home: Path) -> subprocess.Popen:
         "-m",
         "pytest",
         "--collect-only",
-        "-q",
         "--no-cov",
         "-p",
         "no:cacheprovider",
