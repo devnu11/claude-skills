@@ -1,25 +1,36 @@
 """Preflight refusals."""
 
-import os
 from pathlib import Path
 
+import pytest
 from agile_team import config as cfg
-from agile_team import preflight
+from agile_team import keys, preflight, system
 from agile_team.git_ops import Git
 from agile_team.providers import Provider
 
+from .fake_system import Done, FakeSystem
 
-def check(repo: Path, home: Path, which=lambda e: e) -> preflight.Preflight:
-    return preflight.Preflight(cfg.load(repo), Git(repo), home, which)
+TOOLS = {"pytest": "/bin/pytest", "ruff": "/bin/ruff"}
+
+
+@pytest.fixture(autouse=True)
+def on_path(fake: FakeSystem) -> None:
+    """The python preset's executables are installed."""
+    fake.programs.update(TOOLS)
+
+
+def check(repo: Path, home: Path) -> preflight.Preflight:
+    return preflight.Preflight(cfg.load(repo), Git(repo), home)
 
 
 def test_clean_tree_passes(configured: Path, key_home: Path) -> None:
     assert check(configured, key_home).clean_tree() == []
 
 
-def test_dirty_tree_refused(configured: Path, key_home: Path) -> None:
+def test_dirty_tree_refused(configured: Path, key_home: Path, fake: FakeSystem) -> None:
+    fake.track()
     for i in range(7):
-        (configured / f"f{i}").write_text("x")
+        system.write_text(configured / f"f{i}", "x")
     [msg] = check(configured, key_home).clean_tree()
     assert "dirty" in msg and "…" in msg
 
@@ -28,17 +39,18 @@ def test_key_falls_back_to_home(configured: Path, key_home: Path) -> None:
     assert check(configured, key_home).key() == []
 
 
-def test_key_missing(configured: Path, tmp_path: Path) -> None:
-    [msg] = check(configured, tmp_path / "none").key()
+def test_key_missing(configured: Path, scratch: Path) -> None:
+    [msg] = check(configured, scratch / "none").key()
     assert "no API key" in msg
 
 
-def test_repo_key_not_ignored_and_bad_mode(configured: Path, key_home: Path) -> None:
+def test_repo_key_not_ignored_and_bad_mode(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
     pre = check(configured, key_home)
     pre.config.team.key_file = "secret.key"
-    key = configured / "secret.key"
-    key.write_text("k")
-    os.chmod(key, 0o644)
+    fake.put(configured / "secret.key", "k", mode=0o644)
+    fake.reply(("git", "check-ignore"), Done(1))
     problems = pre.key()
     assert any("not gitignored" in p for p in problems)
     assert any("mode 600" in p for p in problems)
@@ -49,9 +61,9 @@ def test_executable_of() -> None:
     assert preflight.executable_of("") == ""
 
 
-def test_toolchain_missing(configured: Path, key_home: Path) -> None:
-    found = {"pytest"}
-    problems = check(configured, key_home, lambda exe: exe if exe in found else None).toolchain()
+def test_toolchain_missing(configured: Path, key_home: Path, fake: FakeSystem) -> None:
+    del fake.programs["ruff"]
+    problems = check(configured, key_home).toolchain()
     assert problems == ["toolchain.lint: `ruff` not found on PATH"]
 
 
@@ -68,7 +80,6 @@ def with_providers(repo: Path, home: Path, roles: dict) -> preflight.Preflight:
     }
     pf.config.roles = roles
     pf.probe = lambda url: url != "http://localhost:11434"
-    pf.environ = {}
     return pf
 
 
@@ -87,22 +98,29 @@ def test_providers_skip_a_broken_role(configured: Path, key_home: Path) -> None:
 
 
 def test_login_auth_needs_no_key_but_refuses_an_inherited_one(
-    configured: Path, tmp_path: Path
+    configured: Path, scratch: Path, fake: FakeSystem
 ) -> None:
-    pre = check(configured, tmp_path / "no-home")
+    pre = check(configured, scratch / "no-home")
     pre.config.team.auth = cfg.LOGIN_AUTH
-    pre.environ = {}
     assert pre.key() == []
-    pre.environ = {"ANTHROPIC_API_KEY": "sk-x"}
+    fake.env[keys.ENV_VAR] = "sk-x"
     [msg] = pre.key()
     assert "team.auth is login" in msg
 
 
 def test_toolchain_checks_each_delivery_e2e_executable(configured: Path, key_home: Path) -> None:
-    pre = check(configured, key_home, lambda exe: None if exe == "e2erunner" else exe)
+    pre = check(configured, key_home)
     pre.config.deliveries[0].e2e = "e2erunner --all"
     assert pre.toolchain() == ["delivery.cli.e2e: `e2erunner` not found on PATH"]
 
 
 def test_toolchain_ignores_an_empty_e2e(configured: Path, key_home: Path) -> None:
     assert check(configured, key_home).toolchain() == []
+
+
+def test_provider_token_is_read_from_the_environment(
+    configured: Path, key_home: Path, fake: FakeSystem
+) -> None:
+    roles = {"devops": {"provider": "proxy"}}
+    fake.env["PROXY_TOKEN"] = "t"
+    assert with_providers(configured, key_home, roles).providers() == []

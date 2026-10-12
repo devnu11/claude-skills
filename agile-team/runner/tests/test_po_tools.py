@@ -4,13 +4,14 @@ import asyncio
 import json
 
 import pytest
-from agile_team import po_tools
+from agile_team import po_tools, system
 from agile_team.gates import StoryStatus
 from agile_team.po_tools import Start, StartMode, Tools
 from agile_team.providers import Provider, Providers
 from agile_team.state import RunStatus
 
 from .conftest import FakeQuery
+from .fake_system import FakeSystem
 
 
 def call(coro) -> dict:
@@ -112,7 +113,7 @@ def test_start_sprint_listing_done_story_leaves_it(make_runtime) -> None:
 
 def snapshot(rt) -> tuple:
     state_file = rt.config.run_dir / "state.json"
-    text = state_file.read_text() if state_file.is_file() else None
+    text = system.read_text(state_file) if system.is_file(state_file) else None
     return (rt.state.to_json(), text, len(rt.events.events()))
 
 
@@ -159,32 +160,25 @@ def test_start_sprint_schema_takes_stories_list() -> None:
     assert "backlog" in desc
 
 
-def test_ask_notify_and_wait(make_runtime) -> None:
+def test_ask_notify_and_wait(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
-    slept: list[float] = []
-
-    async def sleep(s: float) -> None:
-        slept.append(s)
-        rt.relay.answer("m1", "sqlite")
-
-    t = Tools(rt, sleep=sleep)
+    fake.on_sleep = [lambda: rt.relay.answer("m1", "sqlite")]
+    t = Tools(rt)
     q = call(t.ask_user({"text": "DB?", "stories": ["s1"]}))
     assert q == {"id": "m1", "blocks": ["s1"]}
     assert call(t.wait_for_answers({"ids": ["m1"]})) == {"m1": "sqlite"}
-    assert slept == [po_tools.POLL_S]
+    assert fake.slept == [po_tools.POLL_S]
     call(t.notify_user({"text": "progress"}))
     assert rt.state.status != "sprint-end"
     call(t.notify_user({"text": "review", "kind": "sprint-end"}))
     assert rt.state.status == "sprint-end"
 
 
-def test_wait_times_out(make_runtime) -> None:
-    async def sleep(_s: float) -> None:
-        return None
-
-    t = Tools(make_runtime(), sleep=sleep)
+def test_wait_times_out(make_runtime, fake: FakeSystem) -> None:
+    t = Tools(make_runtime())
     call(t.ask_user({"text": "?"}))
     assert call(t.wait_for_answers({"ids": ["m1"], "timeout_s": 10})) == {}
+    assert sum(fake.slept) >= 10
 
 
 OVERRIDE = {
@@ -281,7 +275,7 @@ def test_continue_story_releases_the_hold_and_sets_the_note(make_runtime) -> Non
     out = call(t.continue_story({"story": "s1", "note": "use sqlite"}))
     assert out == {"status": "continued", "story": "s1", "step": "design"}
     assert story.hold is None and story.note == "use sqlite"
-    saved = json.loads((rt.config.run_dir / "state.json").read_text())
+    saved = json.loads(system.read_text(rt.config.run_dir / "state.json"))
     assert saved["stories"]["s1"]["note"] == "use sqlite"
 
 
@@ -326,7 +320,9 @@ def test_set_developer_records_the_choice(make_runtime) -> None:
     assert out == {"status": "set", "story": "s1", "developer": "developer-gui"}
     assert rt.state.stories["s1"].po_developer == "developer-gui"
     assert (
-        json.loads((rt.config.run_dir / "state.json").read_text())["stories"]["s1"]["po_developer"]
+        json.loads(system.read_text(rt.config.run_dir / "state.json"))["stories"]["s1"][
+            "po_developer"
+        ]
         == "developer-gui"
     )
     assert call(t.set_developer({"story": "s1", "role": "developer"}))["status"] == "set"
@@ -368,20 +364,16 @@ def test_story_status_serializes_the_new_story_fields(make_runtime) -> None:
     )
 
 
-def test_wait_for_answers_marks_returned_answers_delivered(make_runtime) -> None:
+def test_wait_for_answers_marks_returned_answers_delivered(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
-
-    async def sleep(_s: float) -> None:
-        rt.relay.answer("m1", "a")
-        rt.relay.answer("m2", "b")
-
-    t = Tools(rt, sleep=sleep)
+    fake.on_sleep = [lambda: (rt.relay.answer("m1", "a"), rt.relay.answer("m2", "b"))]
+    t = Tools(rt)
     call(t.ask_user({"text": "one"}))
     call(t.ask_user({"text": "two"}))
     rt.state.delivered = ["m0"]
     assert call(t.wait_for_answers({"ids": ["m1", "m2"]})) == {"m1": "a", "m2": "b"}
     assert rt.state.delivered == ["m0", "m1", "m2"]
-    assert json.loads((rt.config.run_dir / "state.json").read_text())["delivered"] == [
+    assert json.loads(system.read_text(rt.config.run_dir / "state.json"))["delivered"] == [
         "m0",
         "m1",
         "m2",
@@ -391,11 +383,8 @@ def test_wait_for_answers_marks_returned_answers_delivered(make_runtime) -> None
 
 
 def test_wait_for_answers_that_time_out_deliver_nothing(make_runtime) -> None:
-    async def sleep(_s: float) -> None:
-        return None
-
     rt = make_runtime()
-    t = Tools(rt, sleep=sleep)
+    t = Tools(rt)
     call(t.ask_user({"text": "?"}))
     rt.state.delivered = []
     call(t.wait_for_answers({"ids": ["m1"], "timeout_s": 5}))

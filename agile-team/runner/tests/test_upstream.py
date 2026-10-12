@@ -1,6 +1,4 @@
-"""s29 U4/U5/U17/U19/U24: Upstream over bare repos, GhPrs over a fake Exec."""
-
-from pathlib import Path
+"""s29 U4/U5/U17/U19/U24: Upstream on a scripted git, GhPrs over a fake Exec."""
 
 import pytest
 from agile_team import upstream as up
@@ -19,164 +17,138 @@ from agile_team.upstream import (
     UpstreamError,
 )
 
-from .conftest import git
-from .s29_helpers import commit, is_ancestor, land_upstream, make_origin, rev
+from .fake_system import FAKE_REPO, Done, FakeSystem
 
 MSG = "chore(team): merge origin/main at sprint 2 start"
+OLD, NEW = "a" * 40, "b" * 40
 
 
-def upstream_for(work: Path, **kw) -> Upstream:
-    return Upstream(Git(work), UpstreamSettings(**kw))
+def upstream_for(**kw) -> Upstream:
+    return Upstream(Git(FAKE_REPO), UpstreamSettings(**kw))
 
 
-def test_target(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    assert upstream_for(work).target == "origin/main"
-    assert upstream_for(work, remote="up", branch="dev").target == "up/dev"
+def issued(fake: FakeSystem, *words: str) -> list[tuple[str, ...]]:
+    """The argv of every command whose words contain ``words`` in order."""
+    found = []
+    for command in fake.commands:
+        rest = iter(command.argv)
+        if all(word in rest for word in words):
+            found.append(tuple(command.argv))
+    return found
 
 
-def test_missing_none_when_everything_is_there(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    assert upstream_for(work).missing() is None
+def test_target() -> None:
+    assert upstream_for().target == "origin/main"
+    assert upstream_for(remote="up", branch="dev").target == "up/dev"
 
 
-def test_missing_sync_off(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    assert upstream_for(work, remote="").missing() == "[upstream] remote is empty"
+def test_missing_none_when_everything_is_there(fake: FakeSystem) -> None:
+    assert upstream_for().missing() is None
+    assert issued(fake, "fetch", "--prune", "origin")
 
 
-def test_missing_no_remote(repo: Path) -> None:
-    assert upstream_for(repo).missing() == "no remote 'origin'"
+def test_missing_sync_off(fake: FakeSystem) -> None:
+    assert upstream_for(remote="").missing() == "[upstream] remote is empty"
+    assert fake.commands == []
 
 
-def test_missing_fetch_failed(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    reason = upstream_for(work).missing()
-    assert reason.startswith("git fetch origin failed: ")
-    assert len(reason) > len("git fetch origin failed: ")
+def test_missing_no_remote(fake: FakeSystem) -> None:
+    fake.reply(("git", "remote", "get-url"), Done(2))
+    assert upstream_for().missing() == "no remote 'origin'"
+    assert not issued(fake, "fetch")
 
 
-def test_missing_no_target(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    assert upstream_for(work, branch="nope").missing() == "origin/nope does not exist"
+def test_missing_fetch_failed(fake: FakeSystem) -> None:
+    fake.reply(("git", "fetch"), Done(128, "", "fatal: 'gone.git' does not appear to be a repo"))
+    reason = upstream_for().missing()
+    assert reason == "git fetch origin failed: fatal: 'gone.git' does not appear to be a repo"
 
 
-def test_team_branch_and_detached(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    assert upstream_for(work).team_branch() == "agile-team"
-    git(work, "checkout", "-q", "--detach")
+def test_missing_no_target(fake: FakeSystem) -> None:
+    fake.reply(("git", "rev-parse", "--verify"), Done(1))
+    assert upstream_for(branch="nope").missing() == "origin/nope does not exist"
+    [verify] = issued(fake, "rev-parse", "--verify")
+    assert verify[-1] == "origin/nope"
+
+
+def test_team_branch_and_detached(fake: FakeSystem) -> None:
+    fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
+    assert upstream_for().team_branch() == "agile-team"
+    fake.reply(("git", "symbolic-ref"), Done(1))
     with pytest.raises(UpstreamError, match="detached HEAD; check out the team branch"):
-        upstream_for(work).team_branch()
+        upstream_for().team_branch()
 
 
-def test_merge_in_current_makes_no_commit(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    before = rev(work, "HEAD")
-    merge = upstream_for(work).merge_in(MSG)
-    assert merge.outcome is MergeOutcome.CURRENT and rev(work, "HEAD") == before
+def test_merge_in_current_makes_no_commit(fake: FakeSystem) -> None:
+    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"))
+    merge = upstream_for().merge_in(MSG)
+    assert merge.outcome is MergeOutcome.CURRENT and not merge.sha
 
 
-def test_merge_in_merges_and_keeps_old_hashes(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    mine = commit(work, "mine.txt")
-    land_upstream(tmp_path, origin, "theirs.txt")
-    u = upstream_for(work)
-    assert u.missing() is None
-    merge = u.merge_in(MSG)
-    assert merge.outcome is MergeOutcome.MERGED and merge.sha == rev(work, "HEAD")
-    assert is_ancestor(work, mine, "HEAD")
-    assert (work / "theirs.txt").exists()
-    body = git(work, "log", "-1", "--format=%B")
+def test_merge_in_merges_the_target_with_the_message(fake: FakeSystem) -> None:
+    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"), Done(0, NEW + "\n"))
+    merge = upstream_for().merge_in(MSG)
+    assert merge.outcome is MergeOutcome.MERGED and merge.sha == NEW
+    [argv] = issued(fake, "merge", "--no-edit")
+    assert argv[-1] == "origin/main" and "--no-verify" in argv
+    body = argv[argv.index("-m") + 1]
     assert body.startswith(MSG) and "Co-Authored-By" in body
-    assert u.merge_in(MSG).outcome is MergeOutcome.CURRENT
 
 
-def test_merge_in_fast_forward_counts_as_merged(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    git(work, "reset", "-q", "--hard", "origin/main")
-    land_upstream(tmp_path, origin, "theirs.txt")
-    upstream_for(work).missing()
-    assert upstream_for(work).merge_in(MSG).outcome is MergeOutcome.MERGED
-
-
-def test_merge_in_conflict_aborts_and_lists_files(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    commit(work, "base.txt", "mine\n")
-    land_upstream(tmp_path, origin, "base.txt", "theirs\n")
-    u = upstream_for(work)
-    u.missing()
-    before = rev(work, "HEAD")
-    merge = u.merge_in(MSG)
+def test_merge_in_conflict_aborts_and_lists_files(fake: FakeSystem) -> None:
+    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"))
+    fake.reply(("git", "merge", "--no-edit"), Done(1, "CONFLICT (content)"))
+    fake.reply(("git", "diff", "--name-only"), Done(0, "base.txt\n"))
+    merge = upstream_for().merge_in(MSG)
     assert merge.outcome is MergeOutcome.CONFLICT and list(merge.files) == ["base.txt"]
-    assert rev(work, "HEAD") == before and (work / "base.txt").read_text() == "mine\n"
-    assert not (work / ".git" / "MERGE_HEAD").exists()
-    assert git(work, "status", "--porcelain").strip() == ""
+    assert "CONFLICT" in merge.output
+    assert issued(fake, "merge", "--abort")
 
 
-def test_merge_in_failure_without_conflict_is_a_git_error(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    u = upstream_for(work, branch="nope")
-    with pytest.raises(GitError):
-        u.merge_in(MSG)
+def test_merge_in_failure_without_conflict_is_a_git_error(fake: FakeSystem) -> None:
+    fake.reply(("git", "merge", "--no-edit"), Done(128, "fatal: not something we can merge"))
+    fake.reply(("git", "diff", "--name-only"), Done(0, ""))
+    with pytest.raises(GitError, match="not something we can merge"):
+        upstream_for(branch="nope").merge_in(MSG)
+    assert issued(fake, "merge", "--abort")
 
 
-def test_merge_base(tmp_path: Path) -> None:
-    _, work = make_origin(tmp_path)
-    base = rev(work, "origin/main")
-    commit(work, "mine.txt")
-    assert upstream_for(work).merge_base() == base
+def test_merge_base(fake: FakeSystem) -> None:
+    fake.reply(("git", "merge-base"), Done(0, OLD + "\n"))
+    assert upstream_for().merge_base() == OLD
+    [argv] = issued(fake, "merge-base")
+    assert argv[-2:] == ("HEAD", "origin/main")
 
 
-def branch_to_push(work: Path, name: str = "team/sprint-1") -> str:
-    git(work, "branch", "-f", name, "HEAD")
-    return name
+def test_push_sends_the_branch_with_its_lease(fake: FakeSystem) -> None:
+    fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
+    assert upstream_for().push(Lease("team/sprint-1", OLD)) is None
+    [argv] = issued(fake, "push")
+    ref = "refs/heads/team/sprint-1"
+    assert f"--force-with-lease={ref}:{OLD}" in argv and "--no-verify" in argv
+    assert argv[-2:] == ("origin", f"{ref}:{ref}")
 
 
-def test_push_new_branch_with_empty_expectation(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    commit(work, "mine.txt")
-    name = branch_to_push(work)
-    assert upstream_for(work).push(Lease(name, "")) is None
-    assert rev(origin, name) == rev(work, name)
-    assert rev(origin, "main") != rev(work, name)
+def test_push_with_an_empty_expectation_leases_the_absent_branch(fake: FakeSystem) -> None:
+    fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
+    assert upstream_for().push(Lease("team/sprint-1", "")) is None
+    [argv] = issued(fake, "push")
+    assert "--force-with-lease=refs/heads/team/sprint-1:" in argv
 
 
-def test_push_with_matching_lease_updates_and_stale_lease_is_rejected(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    commit(work, "a.txt")
-    name = branch_to_push(work)
-    u = upstream_for(work)
-    assert u.push(Lease(name, "")) is None
-    first = rev(work, name)
-    commit(work, "b.txt")
-    branch_to_push(work)
-    assert u.push(Lease(name, first)) is None
-    assert rev(origin, name) == rev(work, name)
-    commit(work, "c.txt")
-    branch_to_push(work)
-    out = u.push(Lease(name, first))
-    assert out and rev(origin, name) != rev(work, name)
-
-
-def test_push_rejected_when_someone_else_created_the_branch(tmp_path: Path) -> None:
-    origin, work = make_origin(tmp_path)
-    commit(work, "a.txt")
-    name = branch_to_push(work)
-    git(origin, "branch", name, "main")
-    assert upstream_for(work).push(Lease(name, "")) is not None
+def test_a_rejected_push_returns_gits_output(fake: FakeSystem) -> None:
+    fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
+    fake.reply(("git", "push"), Done(1, "! [rejected] (stale info)"))
+    out = upstream_for().push(Lease("team/sprint-1", OLD))
+    assert out == "! [rejected] (stale info)"
 
 
 @pytest.mark.parametrize("branch", ["main", "agile-team", "feature/x", "teamsprint-1"])
-def test_push_refuses_main_team_and_unprefixed_branches(tmp_path: Path, branch: str) -> None:
-    origin, work = make_origin(tmp_path)
-    main_before = rev(origin, "main")
-    commit(work, "a.txt")
-    git(work, "branch", "-f", "feature/x", "HEAD")
-    git(work, "branch", "-f", "teamsprint-1", "HEAD")
+def test_push_refuses_main_team_and_unprefixed_branches(fake: FakeSystem, branch: str) -> None:
+    fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
     with pytest.raises(UpstreamError, match="refusing to push"):
-        upstream_for(work).push(Lease(branch, ""))
-    assert rev(origin, "main") == main_before
+        upstream_for().push(Lease(branch, ""))
+    assert not issued(fake, "push")
 
 
 def test_refused_push_text() -> None:
@@ -310,9 +282,12 @@ def test_gh_edit_failure() -> None:
         )
 
 
-def test_command_runner_runs_argv_and_maps_missing_binary(tmp_path: Path) -> None:
-    run = up.command_runner(tmp_path)
+def test_command_runner_runs_argv_and_maps_missing_binary(fake: FakeSystem) -> None:
+    fake.reply(("git", "--version"), Done(0, "git version 2.50\n"))
+    fake.reply(("definitely-not-a-binary-xyz",), FileNotFoundError(2, "No such file"))
+    run = up.command_runner(FAKE_REPO)
     code, out = run(["git", "--version"])
     assert code == 0 and "git version" in out
     code, out = run(["definitely-not-a-binary-xyz"])
     assert code == 127 and out
+    assert fake.commands[0].cwd == FAKE_REPO

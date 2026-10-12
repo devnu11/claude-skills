@@ -1,11 +1,11 @@
 """CLI wiring for every subcommand."""
 
 import json
-from functools import partial
+import signal
 from pathlib import Path
 
 import pytest
-from agile_team import cli, preflight
+from agile_team import cli, system
 from agile_team import config as cfg
 from agile_team.dispatch import StepRequest
 from agile_team.providers import Provider
@@ -13,6 +13,7 @@ from agile_team.relay import Note, Relay
 from agile_team.state import PID_FILE, STOP_FILE
 
 from .conftest import FakeQuery
+from .fake_system import FAKE_IDS, FAKE_REPO, FREE_PORT, Done, FakeSystem
 
 
 def run(*argv: str) -> int:
@@ -22,7 +23,7 @@ def run(*argv: str) -> int:
 def test_init_detect(repo: Path, capsys) -> None:
     assert run("--repo", str(repo), "init", "--detect") == 0
     assert json.loads(capsys.readouterr().out)["preset"] is None
-    (repo / "Cargo.toml").write_text("")
+    system.write_text(repo / "Cargo.toml", "")
     run("--repo", str(repo), "init", "--detect")
     assert json.loads(capsys.readouterr().out)["preset"] == "rust"
 
@@ -32,7 +33,9 @@ def test_init_requires_answers(repo: Path, capsys) -> None:
     assert "--preset" in capsys.readouterr().err
 
 
-def test_init_and_reinit(repo: Path, capsys) -> None:
+def test_init_and_reinit(repo: Path, capsys, fake: FakeSystem) -> None:
+    clean, dirty = Done(0, ""), Done(0, "?? .agile-team.toml\0")
+    fake.reply(("git", "status"), clean, dirty, clean, clean, clean)
     args = ["--repo", str(repo), "init", "--preset", "python", "--delivery", "package"]
     assert run(*args) == 0
     assert "onboarded" in capsys.readouterr().out
@@ -45,30 +48,30 @@ def test_config_check(configured: Path, capsys) -> None:
     assert run("--repo", str(configured), "config", "check") == 0
     assert "config ok" in capsys.readouterr().out
     roles = configured / ".team/roles"
-    roles.mkdir(parents=True)
-    (roles / "architect.md").write_text("Prefer hexagonal architecture.")
-    (roles / "broken.md").write_text("---\nextends: nope\n---\nx")
+    system.make_dirs(roles)
+    system.write_text(roles / "architect.md", "Prefer hexagonal architecture.")
+    system.write_text(roles / "broken.md", "---\nextends: nope\n---\nx")
     assert run("--repo", str(configured), "config", "check") == 1
     out = capsys.readouterr().out
     assert "role broken" in out
 
 
-def test_config_missing(tmp_path: Path, capsys) -> None:
-    assert run("--repo", str(tmp_path), "config", "check") == 1
+def test_config_missing(scratch: Path, capsys) -> None:
+    assert run("--repo", str(scratch), "config", "check") == 1
     assert "not found" in capsys.readouterr().err
 
 
 def test_addendum_reaches_architect_prompt(configured: Path, key_home: Path) -> None:
-    (configured / ".team/roles").mkdir(parents=True)
-    (configured / ".team/roles/architect.md").write_text("Prefer hexagonal architecture.")
+    system.make_dirs(configured / ".team/roles")
+    system.write_text(configured / ".team/roles/architect.md", "Prefer hexagonal architecture.")
     rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
     plan = rt.plan(StepRequest("architect", "b"))
     assert "Prefer hexagonal architecture." in plan.options.system_prompt
 
 
-def any_tool(monkeypatch) -> None:
+def any_tool(fake: FakeSystem) -> None:
     """Pretend every toolchain executable is on PATH."""
-    monkeypatch.setattr(cli, "Preflight", partial(preflight.Preflight, which=lambda e: e))
+    fake.programs.update({"pytest": "/bin/pytest", "ruff": "/bin/ruff"})
 
 
 def start_args(repo: Path, home: Path, *extra: str):
@@ -77,34 +80,33 @@ def start_args(repo: Path, home: Path, *extra: str):
     )
 
 
-def test_start_runs_po(configured: Path, key_home: Path, capsys, monkeypatch) -> None:
-    any_tool(monkeypatch)
+def test_start_runs_po(configured: Path, key_home: Path, capsys, fake: FakeSystem) -> None:
+    any_tool(fake)
     q = FakeQuery("PO finished")
     args = start_args(configured, key_home, "--task", "todo app", "--cadence", "until-blocker")
     assert cli.cmd_start(args, q) == 0
     assert "PO finished" in capsys.readouterr().out
     assert q.calls[0]["options"].env["ANTHROPIC_API_KEY"] == "sk-test"
-    assert not (configured / ".team/run" / PID_FILE).exists()
-    state = json.loads((configured / ".team/run/state.json").read_text())
+    assert not system.exists(configured / ".team/run" / PID_FILE)
+    state = json.loads(system.read_text(configured / ".team/run/state.json"))
     assert state["cadence"] == "until-blocker"
 
 
-def test_start_refuses_dirty_tree(configured: Path, key_home: Path) -> None:
-    (configured / "dirty").write_text("x")
+def test_start_refuses_dirty_tree(configured: Path, key_home: Path, fake: FakeSystem) -> None:
+    any_tool(fake)
+    fake.reply(("git", "status"), Done(0, "?? dirty\0"))
     with pytest.raises(cli.CliError, match="dirty"):
         cli.cmd_start(start_args(configured, key_home, "--task", "t"), FakeQuery())
 
 
-def test_start_needs_task(configured: Path, key_home: Path, monkeypatch) -> None:
-    any_tool(monkeypatch)
+def test_start_needs_task(configured: Path, key_home: Path, fake: FakeSystem) -> None:
+    any_tool(fake)
     with pytest.raises(cli.CliError, match="--task"):
         cli.cmd_start(start_args(configured, key_home), FakeQuery())
 
 
-def test_start_via_main_reports_missing_key(configured: Path, tmp_path: Path, capsys) -> None:
-    assert (
-        run("--repo", str(configured), "--home", str(tmp_path / "x"), "start", "--task", "t") == 1
-    )
+def test_start_via_main_reports_missing_key(configured: Path, scratch: Path, capsys) -> None:
+    assert run("--repo", str(configured), "--home", str(scratch / "x"), "start", "--task", "t") == 1
     assert "no API key" in capsys.readouterr().err
 
 
@@ -117,7 +119,7 @@ def test_status_answer_stop(configured: Path, capsys) -> None:
     assert run("--repo", str(configured), "answer", "m1", "sqlite") == 0
     assert run("--repo", str(configured), "answer", "m9", "x") == 1
     assert run("--repo", str(configured), "stop") == 0
-    assert (run_dir / STOP_FILE).exists()
+    assert system.exists(run_dir / STOP_FILE)
 
 
 def test_status_shows_story_sprints(configured: Path, capsys) -> None:
@@ -135,14 +137,21 @@ def test_status_shows_story_sprints(configured: Path, capsys) -> None:
     assert status["stories"]["s2"]["sprint"] is None
 
 
-def test_stop_now_signals(configured: Path) -> None:
+def test_stop_now_signals(configured: Path, fake: FakeSystem) -> None:
     run_dir = configured / ".team/run"
-    run_dir.mkdir(parents=True)
-    (run_dir / PID_FILE).write_text("4242")
-    sent = []
+    system.make_dirs(run_dir)
+    system.write_text(run_dir / PID_FILE, str(FAKE_IDS[0]))
     args = cli.build_parser().parse_args(["--repo", str(configured), "stop", "--now"])
-    cli.cmd_stop(args, kill=lambda pid, sig: sent.append(pid))
-    assert sent == [4242]
+    assert cli.cmd_stop(args) == 0
+    assert fake.signals == [("kill", FAKE_IDS[0], signal.SIGTERM)]
+    assert system.exists(run_dir / STOP_FILE)
+
+
+def test_stop_now_without_a_pid_file_signals_nothing(configured: Path, fake: FakeSystem) -> None:
+    args = cli.build_parser().parse_args(["--repo", str(configured), "stop", "--now"])
+    assert cli.cmd_stop(args) == 0
+    assert fake.signals == []
+    assert system.exists(configured / ".team/run" / STOP_FILE)
 
 
 def test_keyboard_interrupt(monkeypatch, configured: Path) -> None:
@@ -175,11 +184,12 @@ def test_check_config_flags_unknown_provider(configured: Path) -> None:
     assert cli.check_config(c, configured) == []
 
 
-def test_init_refuses_dirty_tree(repo: Path, capsys) -> None:
-    (repo / "wip.txt").write_text("x")
+def test_init_refuses_dirty_tree(repo: Path, capsys, fake: FakeSystem) -> None:
+    system.write_text(repo / "wip.txt", "x")
+    fake.reply(("git", "status"), Done(0, "?? wip.txt\0"))
     assert run("--repo", str(repo), "init", "--preset", "python", "--delivery", "package") == 1
     assert "dirty" in capsys.readouterr().err
-    assert (repo / "wip.txt").read_text() == "x"
+    assert system.read_text(repo / "wip.txt") == "x"
 
 
 def test_make_runtime_lists_secrets(configured: Path, key_home: Path) -> None:
@@ -188,10 +198,10 @@ def test_make_runtime_lists_secrets(configured: Path, key_home: Path) -> None:
 
 
 def test_roles_list_shows_layers(configured: Path, isolated_global_roles: Path, capsys) -> None:
-    isolated_global_roles.mkdir(parents=True)
-    (isolated_global_roles / "scribe.md").write_text("Keep ADRs short.")
-    (configured / ".team/roles").mkdir(parents=True)
-    (configured / ".team/roles/scribe.md").write_text("---\nextends: nope\n---\nbroken")
+    system.make_dirs(isolated_global_roles)
+    system.write_text(isolated_global_roles / "scribe.md", "Keep ADRs short.")
+    system.make_dirs(configured / ".team/roles")
+    system.write_text(configured / ".team/roles/scribe.md", "---\nextends: nope\n---\nbroken")
     assert run("--repo", str(configured), "roles", "list") == 0
     out = json.loads(capsys.readouterr().out)
     assert out["_shared"] == {"layers": {"builtin": "base", "global": None, "repo": None}}
@@ -204,18 +214,18 @@ def test_roles_scaffold_repo_and_global(
     configured: Path, isolated_global_roles: Path, capsys
 ) -> None:
     assert run("--repo", str(configured), "roles", "scaffold") == 0
-    assert (configured / ".team/roles/product-owner.md").is_file()
+    assert system.is_file(configured / ".team/roles/product-owner.md")
     assert "stub(s) in" in capsys.readouterr().out
     assert run("--repo", str(configured), "roles", "scaffold") == 0
     assert "nothing to add" in capsys.readouterr().out
     assert run("--repo", str(configured), "roles", "scaffold", "--global") == 0
-    assert (isolated_global_roles / "_shared.md").is_file()
+    assert system.is_file(isolated_global_roles / "_shared.md")
 
 
-def test_login_auth_runtime_carries_no_key(configured: Path, tmp_path: Path) -> None:
+def test_login_auth_runtime_carries_no_key(configured: Path, scratch: Path) -> None:
     path = configured / cfg.CONFIG_NAME
-    path.write_text(path.read_text().replace("[team]\n", '[team]\nauth = "login"\n'))
-    rt = cli.make_runtime(cli.Place(configured, tmp_path / "no-home"), FakeQuery())
+    system.write_text(path, system.read_text(path).replace("[team]\n", '[team]\nauth = "login"\n'))
+    rt = cli.make_runtime(cli.Place(configured, scratch / "no-home"), FakeQuery())
     assert "ANTHROPIC_API_KEY" not in rt.env
 
 
@@ -243,81 +253,51 @@ def test_dashboard_is_the_last_command() -> None:
     assert cli.COMMANDS[-1].name == "dashboard"
 
 
-def test_dashboard_port_zero_prints_real_url_and_opens(configured: Path, capsys) -> None:
-    urls: list[str] = []
-    bound: list[int] = []
-
-    def serve(httpd) -> None:
-        bound.append(httpd.server_address[1])
-        httpd.server_close()
-
-    io = cli.DashboardIO(browse=urls.append, serve=serve)
+def test_dashboard_port_zero_prints_real_url_and_opens(
+    configured: Path, capsys, fake: FakeSystem
+) -> None:
     args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0")
-    assert cli.cmd_dashboard(args, io) == 0
+    assert cli.cmd_dashboard(args) == 0
     out = capsys.readouterr().out
-    assert bound[0] != 0
-    assert out == f"dashboard: http://localhost:{bound[0]}/\n"
-    assert urls == [f"http://localhost:{bound[0]}/"]
+    assert out == f"dashboard: http://localhost:{FREE_PORT}/\n"
+    assert fake.opened == [f"http://localhost:{FREE_PORT}/"]
+    assert fake.servers[0].closed
 
 
-def test_dashboard_no_open_skips_browser(configured: Path, capsys, monkeypatch) -> None:
-    import webbrowser
-
-    opened: list[str] = []
-    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url))
-    served: list[object] = []
-    io = cli.DashboardIO(browse=opened.append, serve=lambda s: (served.append(s), s.server_close()))
+def test_dashboard_no_open_skips_browser(configured: Path, capsys, fake: FakeSystem) -> None:
     args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0", "--no-open")
-    assert cli.cmd_dashboard(args, io) == 0
-    assert opened == [] and len(served) == 1
+    assert cli.cmd_dashboard(args) == 0
+    assert fake.opened == [] and len(fake.servers) == 1
     assert capsys.readouterr().out.startswith("dashboard: http://localhost:")
 
 
-def test_dashboard_default_io_is_real_webbrowser_and_serve() -> None:
-    import webbrowser
-
-    from agile_team.dashboard import server
-
-    io = cli.DashboardIO()
-    assert io.browse is webbrowser.open and io.serve is server.serve
-    assert io == cli.DEFAULT_IO
-
-
-def test_dashboard_default_host_on_windows(configured: Path, monkeypatch) -> None:
+def test_dashboard_default_host_on_windows(configured: Path, monkeypatch, fake: FakeSystem) -> None:
     monkeypatch.setattr("sys.platform", "win32")
-    seen: list[tuple] = []
-    io = cli.DashboardIO(
-        browse=lambda u: None, serve=lambda s: (seen.append(s.server_address), s.server_close())
-    )
-    assert cli.cmd_dashboard(dashboard_args(configured, "--port", "0", "--no-open"), io) == 0
-    assert seen[0][0] == "127.0.0.1"
+    assert cli.cmd_dashboard(dashboard_args(configured, "--port", "0", "--no-open")) == 0
+    assert fake.listened == [("127.0.0.1", 0)]
 
 
-def test_dashboard_port_in_use(configured: Path, capsys) -> None:
-    import socket
-
-    with socket.socket() as busy:
-        busy.bind(("127.0.0.1", 0))
-        busy.listen()
-        port = busy.getsockname()[1]
-        code = run(
-            "--repo", str(configured), "dashboard", "--host", "127.0.0.1",
-            "--port", str(port), "--no-open",
-        )  # fmt: skip
+def test_dashboard_port_in_use(configured: Path, capsys, fake: FakeSystem) -> None:
+    fake.listening.add(("127.0.0.1", 8123))
+    code = run(
+        "--repo", str(configured), "dashboard", "--host", "127.0.0.1",
+        "--port", "8123", "--no-open",
+    )  # fmt: skip
     assert code == 1
     err = capsys.readouterr().err
-    assert err.startswith(f"agile-team dashboard: cannot listen on 127.0.0.1:{port}:")
+    assert err.startswith("agile-team dashboard: cannot listen on 127.0.0.1:8123:")
+    assert "in use" in err
 
 
-def test_dashboard_needs_config(tmp_path: Path, capsys) -> None:
-    assert run("--repo", str(tmp_path), "dashboard", "--no-open") == 1
+def test_dashboard_needs_config(scratch: Path, capsys) -> None:
+    assert run("--repo", str(scratch), "dashboard", "--no-open") == 1
     assert "not found" in capsys.readouterr().err
 
 
-def test_start_stores_task_but_resume_keeps_it(configured: Path, key_home: Path, monkeypatch):
+def test_start_stores_task_but_resume_keeps_it(configured: Path, key_home: Path, fake: FakeSystem):
     from agile_team import state as state_mod
 
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = configured / ".team/run"
     assert cli.cmd_start(start_args(configured, key_home, "--task", "todo app"), FakeQuery()) == 0
     assert state_mod.load(run_dir).task == "todo app"
@@ -329,11 +309,11 @@ def test_start_stores_task_but_resume_keeps_it(configured: Path, key_home: Path,
 
 
 @pytest.fixture
-def plain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A directory outside any git work tree (git may not climb above it)."""
-    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.resolve()))
-    path = tmp_path / "plain"
-    path.mkdir()
+def plain(scratch: Path, fake: FakeSystem) -> Path:
+    """A directory outside any git work tree (git says so)."""
+    fake.reply(("git", "rev-parse", "--git-dir"), Done(128, "", "fatal: not a git repository"))
+    path = scratch / "plain"
+    system.make_dirs(path)
     return path
 
 
@@ -346,7 +326,7 @@ def test_init_outside_git_prints_the_message_and_exits_1(plain: Path, capsys) ->
     expected = f"agile-team init: not a git repository: {plain}; run git init first\n"
     assert captured.err == expected
     assert "Traceback" not in captured.err and captured.out == ""
-    assert list(plain.iterdir()) == []
+    assert list(system.list_dir(plain)) == []
 
 
 def test_init_on_a_missing_path_prints_the_same_message(plain: Path, capsys) -> None:
@@ -407,12 +387,62 @@ def test_make_runtime_wires_the_gh_pr_service(configured: Path, key_home: Path) 
     assert rt.upstream.target == "origin/main"
 
 
-def test_cli_resolves_the_repo_once(tmp_path: Path, monkeypatch) -> None:
-    """s26 L1 (cli resolves paths itself until s77, so this stays in the real world)."""
+def test_cli_resolves_the_repo_once(fake: FakeSystem) -> None:
+    """s26 L1: a relative ``--repo`` becomes an absolute path from the working directory."""
     import argparse
 
-    monkeypatch.chdir(tmp_path)
-    args = argparse.Namespace(repo=".", home=str(tmp_path / "h"))
-    assert cli.repo_of(args) == tmp_path.resolve()
-    assert cli.Place.of(args).repo == tmp_path.resolve()
+    fake.workdir = FAKE_REPO / "sub"
+    args = argparse.Namespace(repo=".", home=str(FAKE_REPO / "h"))
+    assert cli.repo_of(args) == FAKE_REPO / "sub"
+    assert cli.Place.of(args).repo == FAKE_REPO / "sub"
     assert cli.Place.of(args).repo.is_absolute()
+
+
+def test_home_defaults_to_the_users_home(fake: FakeSystem) -> None:
+    import argparse
+
+    from .fake_system import FAKE_HOME
+
+    absent = argparse.Namespace(repo=".", home=None)
+    given = argparse.Namespace(repo=".", home="/elsewhere")
+    assert cli.home_of(absent) == FAKE_HOME
+    assert cli.home_of(given) == Path("/elsewhere")
+    assert cli.build_parser().parse_args(["status"]).home is None
+
+
+def test_pid_file_records_the_runner_and_clears_a_stale_stop(fake: FakeSystem) -> None:
+    run_dir = FAKE_REPO / ".team" / "run"
+    system.make_dirs(run_dir)
+    system.write_text(run_dir / STOP_FILE, "")
+    with cli.pid_file(run_dir):
+        assert system.read_text(run_dir / PID_FILE) == str(FAKE_IDS[0])
+        assert not system.exists(run_dir / STOP_FILE)
+    assert not system.exists(run_dir / PID_FILE)
+
+
+def test_pid_file_is_removed_when_the_run_raises(fake: FakeSystem) -> None:
+    run_dir = FAKE_REPO / ".team" / "run"
+    with pytest.raises(RuntimeError), cli.pid_file(run_dir):
+        raise RuntimeError("boom")
+    assert not system.exists(run_dir / PID_FILE)
+
+
+def test_request_stop_leaves_a_stop_marker(configured: Path) -> None:
+    run_dir = cli._request_stop(configured)
+    assert system.is_file(run_dir / STOP_FILE)
+    assert system.read_text(run_dir / STOP_FILE) == ""
+
+
+def test_sigterm_handler_is_registered_for_the_po_task(monkeypatch, fake: FakeSystem) -> None:
+    import asyncio
+
+    class Quiet:
+        pulse = type("P", (), {"start": lambda self: None, "end": lambda self: None})()
+
+    async def noop(runtime, start):
+        return "done"
+
+    monkeypatch.setattr(cli, "run_po", noop)
+    assert asyncio.run(cli._po_until_sigterm(Quiet(), None)) == "done"
+    [(sig, callback)] = fake.handlers
+    assert sig == signal.SIGTERM and callback.__name__ == "cancel"

@@ -1,11 +1,11 @@
-"""run_role end to end against a real repo with a fake query()."""
+"""run_role end to end against a modelled repo (fake git) with a fake query()."""
 
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from agile_team import dispatch, gates, guard, sandbox
+from agile_team import dispatch, gates, guard, sandbox, system
 from agile_team.config import Delivery
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus, Verdict
@@ -14,7 +14,19 @@ from agile_team.providers import Provider, Providers
 from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from .conftest import GUIDE_TEXT, FakeQuery, FakeRunner, git, handoff, present
+from .conftest import GUIDE_TEXT, FakeQuery, FakeRunner, handoff, present
+from .fake_system import Done, FakeSystem
+
+
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake: FakeSystem) -> None:
+    """Model the working tree: status, commit and revert follow the files."""
+    fake.track()
+
+
+def subjects(fake: FakeSystem, count: int) -> list[str]:
+    """The newest ``count`` commit subjects, newest first."""
+    return [c.subject() for c in reversed(fake.tree.commits)][:count]
 
 
 def run(rt, role, brief="go", story=None):
@@ -29,8 +41,8 @@ def open_story(rt, step="design", **kw):
 
 def write(repo: Path, rel: str, text: str = "x"):
     def action() -> None:
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text(text)
+        system.make_dirs((repo / rel).parent)
+        system.write_text(repo / rel, text)
 
     return action
 
@@ -68,21 +80,21 @@ def test_refusals(make_runtime, configured: Path) -> None:
     rt.state.status, rt.state.cadence = RunStatus.SPRINT_END, "sprint"
     assert "the run is sprint-end" in run(rt, "architect")["reason"]
     rt.state.status = RunStatus.RUNNING
-    rt.config.run_dir.mkdir(parents=True, exist_ok=True)
-    (rt.config.run_dir / STOP_FILE).touch()
+    system.make_dirs(rt.config.run_dir)
+    system.write_text(rt.config.run_dir / STOP_FILE, "")
     assert "stop was requested" in run(rt, "architect")["reason"]
 
 
-def test_storyless_step_commits_chore(make_runtime, configured: Path) -> None:
+def test_storyless_step_commits_chore(make_runtime, configured: Path, fake: FakeSystem) -> None:
     rt = make_runtime(FakeQuery(action=write(configured, "docs/architecture.md")))
     report = run(rt, "architect")
     assert report["status"] == "done" and report["commit"]
-    assert git(configured, "log", "-1", "--format=%s").strip() == "chore(team): architect step"
+    assert subjects(fake, 1) == ["chore(team): architect step"]
     assert rt.ledger.total() == pytest.approx(0.1)
     assert rt.ledger.entries()[0].tokens == Tokens(100, 20, 300, 40)
 
 
-def test_story_commits_feat_then_fixup(make_runtime, configured: Path) -> None:
+def test_story_commits_feat_then_fixup(make_runtime, configured: Path, fake: FakeSystem) -> None:
     runner = FakeRunner({"pytest": (1, "")})
     q = FakeQuery(action=write(configured, "docs/design.md"))
     rt = make_runtime(q, runner)
@@ -92,12 +104,13 @@ def test_story_commits_feat_then_fixup(make_runtime, configured: Path) -> None:
     q.action = write(configured, "tests/test_todo.py")
     second = run(rt, "unit-tester", story="s1")
     assert second["gate"]["verdict"] is Verdict.PASS and second["gate"]["now_at"] == "implement"
-    log = git(configured, "log", "--format=%s", "-2").splitlines()
-    assert log == ["fixup! feat(s1): Add todo", "feat(s1): Add todo"]
+    assert subjects(fake, 2) == ["fixup! feat(s1): Add todo", "feat(s1): Add todo"]
     assert rt.state.stories["s1"].commit == first["commit"]
 
 
-def test_developer_bash_write_to_tests_is_quarantined(make_runtime, configured: Path) -> None:
+def test_developer_bash_write_to_tests_is_quarantined(
+    make_runtime, configured: Path, fake: FakeSystem
+) -> None:
     def action() -> None:
         write(configured, "src/todo.py")()
         write(configured, "tests/x", "sneaky")()
@@ -106,13 +119,13 @@ def test_developer_bash_write_to_tests_is_quarantined(make_runtime, configured: 
     open_story(rt, "implement")
     report = run(rt, "developer-cli", story="s1")
     assert report["quarantine"] and report["commit"]
-    log = git(configured, "log", "--format=%s", "-3").splitlines()
+    log = subjects(fake, 3)
     assert log[0] == "feat(s1): Add todo"
     assert log[1].startswith(
         'Revert "chore(team): quarantine out-of-scope changes by developer-cli'
     )
     assert log[2] == "chore(team): quarantine out-of-scope changes by developer-cli"
-    assert rt.git.is_clean() and not (configured / "tests/x").exists()
+    assert rt.git.is_clean() and not system.exists(configured / "tests/x")
     assert report["gate"]["verdict"] is Verdict.PASS
     events = rt.events.events()
     assert [e.kind for e in events] == ["step-start", "quarantine", "step-end", "gate"]
@@ -312,8 +325,9 @@ def test_proxy_service_stops_once_when_the_query_raises(make_runtime) -> None:
     assert events == ["query", "stop"]
 
 
-def test_shell_runner(tmp_path: Path) -> None:
-    code, out = dispatch.shell_runner(tmp_path)("echo hi; exit 4")
+def test_shell_runner(scratch: Path, fake: FakeSystem) -> None:
+    fake.reply(("echo", "hi;", "exit", "4"), Done(4, "hi\n"))
+    code, out = dispatch.shell_runner(scratch)("echo hi; exit 4")
     assert (code, out.strip()) == (4, "hi")
 
 
@@ -331,20 +345,21 @@ def test_run_halted(status, cadence, halted) -> None:
     assert RunState(cadence=cadence, status=RunStatus(status)).halted() is halted
 
 
-def test_po_story_edits_committed_before_next_role(make_runtime, configured: Path) -> None:
+def test_po_story_edits_committed_before_next_role(
+    make_runtime, configured: Path, fake: FakeSystem
+) -> None:
     rt = make_runtime(FakeQuery(action=write(configured, "docs/a.md")))
     write(configured, ".team/stories/s1.md", "As a user…")()
     run(rt, "architect")
-    log = git(configured, "log", "--format=%s", "-2").splitlines()
-    assert log == ["chore(team): architect step", "chore(team): product-owner step"]
-    assert "s1.md" in git(configured, "show", "--name-only", "--format=", "HEAD~1")
+    assert subjects(fake, 2) == ["chore(team): architect step", "chore(team): product-owner step"]
+    assert ".team/stories/s1.md" in fake.tree.commits[-2].paths()
     assert rt.git.is_clean()
 
 
 def edit_config(repo: Path, old: str, new: str):
     def action() -> None:
         path = repo / ".agile-team.toml"
-        path.write_text(path.read_text().replace(old, new))
+        system.write_text(path, system.read_text(path).replace(old, new))
 
     return action
 
@@ -360,29 +375,29 @@ def test_devops_may_not_widen_roles(make_runtime, configured: Path) -> None:
     rt = make_runtime(FakeQuery(action=widen))
     report = run(rt, "devops")
     assert report["quarantine"] and not report["commit"]
-    assert "roles.devops" not in (configured / ".agile-team.toml").read_text()
+    assert "roles.devops" not in system.read_text(configured / ".agile-team.toml")
 
 
 def test_config_edit_unreadable_is_refused(configured: Path) -> None:
     from agile_team.git_ops import Git
 
-    (configured / ".agile-team.toml").write_text("not = [toml")
+    system.write_text(configured / ".agile-team.toml", "not = [toml")
     assert not dispatch.config_edit_allowed(Git(configured))
 
 
-def test_secret_denials_merge(tmp_path: Path) -> None:
+def test_secret_denials_merge(scratch: Path) -> None:
     assert dispatch.with_secret_denials(None, []) is None
-    merged = dispatch.with_secret_denials({"permissions": {"deny": ["X"]}}, [tmp_path / "k"])
+    merged = dispatch.with_secret_denials({"permissions": {"deny": ["X"]}}, [scratch / "k"])
     assert merged["permissions"]["deny"][0] == "X"
-    assert f"Read(/{tmp_path.resolve()}/k)" in merged["permissions"]["deny"]
+    assert f"Read(/{system.resolve(scratch)}/k)" in merged["permissions"]["deny"]
 
 
-def test_roles_get_secret_denials(make_runtime, tmp_path: Path) -> None:
+def test_roles_get_secret_denials(make_runtime, scratch: Path) -> None:
     q = FakeQuery()
-    rt = make_runtime(q, secrets=[tmp_path / "secrets"])
+    rt = make_runtime(q, secrets=[scratch / "secrets"])
     run(rt, "architect")
     assert "secrets" in q.calls[0]["options"].settings
-    assert rt.scope_for(rt.book.resolve("developer")).secrets == [tmp_path / "secrets"]
+    assert rt.scope_for(rt.book.resolve("developer")).secrets == [scratch / "secrets"]
 
 
 def test_story_blocked_on_open_question(make_runtime) -> None:
@@ -500,7 +515,7 @@ def test_proxy_gets_the_copy_and_the_guide_in_its_prompt(make_runtime) -> None:
     present(rt.config)
     run(rt, "customer-proxy", story="s1")
     box = rt.config.run_dir / "customer/cli"
-    assert (box / "presentation/workspace/todo.txt").read_text() == "milk\n"
+    assert system.read_text(box / "presentation/workspace/todo.txt") == "milk\n"
     prompt = q.calls[0]["prompt"]
     assert "## What the team presents" in prompt and str(box / "presentation") in prompt
     assert GUIDE_TEXT.strip() in prompt
@@ -533,19 +548,21 @@ def test_without_a_presentation_dir_the_order_carries_none(make_runtime) -> None
     open_story(rt, "acceptance")
     run(rt, "customer-proxy", story="s1")
     assert orders[0].presentation is None
-    assert not (rt.config.run_dir / "customer/cli/presentation").exists()
+    assert not system.exists(rt.config.run_dir / "customer/cli/presentation")
 
 
-def test_integration_tester_gets_a_fresh_presentation_to_fill(make_runtime) -> None:
+def test_integration_tester_gets_a_fresh_presentation_to_fill(
+    make_runtime, fake: FakeSystem
+) -> None:
     seen = {}
     rt = make_runtime()
     source = present(rt.config)
-    (source / "stale.txt").write_text("old")
+    system.write_text(source / "stale.txt", "old")
 
     def build() -> None:
-        seen["stale"] = (source / "stale.txt").exists()
-        seen["git"] = (source / "workspace/.git").exists()
-        seen["old"] = (source / "PRESENTATION.md").exists()
+        seen["stale"] = system.exists(source / "stale.txt")
+        seen["git"] = any(c.argv[1:3] == ("init", "-q") for c in fake.commands)
+        seen["old"] = system.exists(source / "PRESENTATION.md")
         present(rt.config)
 
     rt.query_fn = FakeQuery(action=build)
@@ -565,7 +582,7 @@ def test_e2e_done_without_presentation_bounces_to_e2e(make_runtime) -> None:
 
 def test_e2e_with_only_the_empty_workspace_bounces(make_runtime) -> None:
     def guide_only() -> None:
-        (rt.config.run_dir / "presentation/s1/PRESENTATION.md").write_text(GUIDE_TEXT)
+        system.write_text(rt.config.run_dir / "presentation/s1/PRESENTATION.md", GUIDE_TEXT)
 
     rt = make_runtime(FakeQuery(action=guide_only))
     s = open_story(rt, "e2e")
@@ -576,12 +593,12 @@ def test_e2e_with_only_the_empty_workspace_bounces(make_runtime) -> None:
 def test_e2e_for_an_unsafe_story_id_is_refused_before_wiping(make_runtime) -> None:
     q = FakeQuery()
     rt = make_runtime(q)
-    (rt.config.run_dir / "x").mkdir(parents=True)
-    (rt.config.run_dir / "x/keep.txt").write_text("keep")
+    system.make_dirs(rt.config.run_dir / "x")
+    system.write_text(rt.config.run_dir / "x/keep.txt", "keep")
     rt.state.stories["../x"] = gates.StoryState("../x", "Bad", "e2e", sprint=1)
     report = run(rt, "integration-tester", story="../x")
     assert report["status"] == "refused" and "must match" in report["reason"]
-    assert (rt.config.run_dir / "x/keep.txt").exists() and q.calls == []
+    assert system.exists(rt.config.run_dir / "x/keep.txt") and q.calls == []
 
 
 def test_integration_tester_may_write_the_presentation(make_runtime) -> None:
@@ -672,7 +689,7 @@ def test_a_refused_po_step_leaves_state_events_and_hold_alone(make_runtime) -> N
     rt = make_runtime()
     s = open_story(rt, hold="stopped")
     rt.save()
-    (rt.config.run_dir / STOP_FILE).write_text("")
+    system.write_text(rt.config.run_dir / STOP_FILE, "")
     before = (rt.state.to_json(), len(rt.events.events()))
     assert run(rt, "architect", story="s1")["status"] == "refused"
     assert (rt.state.to_json(), len(rt.events.events())) == before and s.hold == "stopped"

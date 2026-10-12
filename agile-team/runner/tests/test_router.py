@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from agile_team import cli, po_tools, router
+from agile_team import cli, po_tools, router, system
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.handover import Trigger as T
 from agile_team.po_tools import RESUME_NOTE, Start, StartMode, Tools
@@ -11,6 +11,7 @@ from agile_team.relay import Note
 from agile_team.router import Router, Work, standard_brief
 from agile_team.state import RunStatus
 
+from .fake_system import Done, FakeSystem
 from .pipeline_helpers import (
     PO_ROLE,
     Script,
@@ -27,9 +28,15 @@ LIMIT = RuntimeError("You've hit your session limit · resets 2:20pm (America/Ed
 HEADING = "Standard brief from the runner. Read the files below; they hold the details."
 
 
-def advance(rt, sleep=None):
-    r = Router(rt, sleep=sleep) if sleep else Router(rt)
-    return asyncio.run(r.advance())
+@pytest.fixture(autouse=True)
+def tracked(configured, fake: FakeSystem) -> None:
+    """A modelled working tree and no remote, so sprint boundaries are skipped."""
+    fake.track()
+    fake.reply(("git", "remote", "get-url"), Done(2))
+
+
+def advance(rt):
+    return asyncio.run(Router(rt).advance())
 
 
 def blocked_reply(summary="stuck"):
@@ -337,8 +344,8 @@ def test_stall_reasons_table() -> None:
 def test_stop_request_ends_the_pass_with_no_kinds(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt)
-    (rt.config.run_dir).mkdir(parents=True, exist_ok=True)
-    (rt.config.run_dir / "stop").write_text("")
+    system.make_dirs(rt.config.run_dir)
+    system.write_text(rt.config.run_dir / "stop", "")
     p = advance(rt)
     assert p.kinds == [] and p.steps == 0
     assert step_roles(rt) == []
@@ -379,48 +386,43 @@ def test_delivered_answers_are_not_handed_over_again(make_runtime) -> None:
     assert advance(rt).kinds == [T.SPRINT_END]
 
 
-def test_waiting_for_an_answer_polls_until_it_arrives(make_runtime) -> None:
+def test_waiting_for_an_answer_polls_until_it_arrives(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     add_story(rt, "s1", "implement")
     rt.relay.post(Note("question", "Which DB?", ["s1"]))
     rt.state.delivered = []
-    slept = []
+    fake.on_sleep = [lambda: None, lambda: rt.relay.answer("m1", "sqlite")]
 
-    async def sleep(seconds: float) -> None:
-        slept.append(seconds)
-        if len(slept) == 2:
-            rt.relay.answer("m1", "sqlite")
-
-    p = advance(rt, sleep)
-    assert slept == [5.0, 5.0]
+    p = advance(rt)
+    assert fake.slept == [5.0, 5.0]
     assert p.kinds == [T.HUMAN_MESSAGE]
     assert p.lines == ['The human answered m1 ("Which DB?"): sqlite']
     assert rt.state.delivered == ["m1"]
 
 
-def test_waiting_ends_on_a_stop_request(make_runtime) -> None:
+def test_waiting_ends_on_a_stop_request(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     add_story(rt, "s1", "implement")
     rt.relay.post(Note("question", "?", ["s1"]))
     rt.state.delivered = []
 
-    async def sleep(_s: float) -> None:
-        (rt.config.run_dir / "stop").write_text("")
+    fake.on_sleep = [lambda: system.write_text(rt.config.run_dir / "stop", "")]
 
-    p = advance(rt, sleep)
+    p = advance(rt)
     assert p.kinds == []
 
 
-def test_a_question_that_blocks_nothing_still_makes_the_router_wait(make_runtime) -> None:
+def test_a_question_that_blocks_nothing_still_makes_the_router_wait(
+    make_runtime, fake: FakeSystem
+) -> None:
     rt = make_runtime()
     add_story(rt, "s1", hold="stopped")
     rt.relay.post(Note("question", "?", []))
     rt.state.delivered = []
 
-    async def sleep(_s: float) -> None:
-        rt.relay.answer("m1", "ok")
+    fake.on_sleep = [lambda: rt.relay.answer("m1", "ok")]
 
-    assert advance(rt, sleep).kinds == [T.HUMAN_MESSAGE]
+    assert advance(rt).kinds == [T.HUMAN_MESSAGE]
 
 
 # ----- the pass runs steps (AC1) ------------------------------------------------------
@@ -611,7 +613,7 @@ def test_a_crash_in_a_step_hands_over_an_error_and_holds(make_runtime) -> None:
     assert story.hold == "error"
     assert "s1: architect crashed: crashed: RuntimeError: boom" in script.po_prompts[1]
     assert "details in .team/run/crash.log" in script.po_prompts[1]
-    assert (rt.config.run_dir / "crash.log").is_file()
+    assert system.is_file(rt.config.run_dir / "crash.log")
     assert handover_events(rt)[0].data == {"triggers": ["error"], "stories": ["s1"], "steps": 1}
 
 
@@ -740,8 +742,8 @@ def test_a_human_message_hands_over_and_is_marked_delivered(make_runtime) -> Non
 
 def test_a_stop_during_the_po_turn_ends_the_run(make_runtime) -> None:
     async def stop(rt) -> None:
-        rt.config.run_dir.mkdir(parents=True, exist_ok=True)
-        (rt.config.run_dir / "stop").write_text("")
+        system.make_dirs(rt.config.run_dir)
+        system.write_text(rt.config.run_dir / "stop", "")
 
     script = Script(po=[stop])
     rt = build(make_runtime, script)
@@ -857,21 +859,17 @@ def test_a_held_boundary_picks_nothing_and_stalls_the_pass(make_runtime) -> None
     )
 
 
-def test_a_held_boundary_waits_when_a_question_is_open(make_runtime) -> None:
+def test_a_held_boundary_waits_when_a_question_is_open(make_runtime, fake: FakeSystem) -> None:
     from agile_team import boundary as bd
 
     rt = make_runtime()
     add_story(rt, "s1")
     rt.state.boundary = bd.Boundary(bd.Edge.START, 1, hold=bd.BoundaryHold.SYNC_CONFLICT)
     rt.relay.post(Note("question", "merge by hand?", ["s1"]))
-    slept = []
+    fake.on_sleep = [lambda: rt.relay.answer("m1", "ok")]
 
-    async def sleep(_s: float) -> None:
-        slept.append(_s)
-        rt.relay.answer("m1", "ok")
-
-    p = advance(rt, sleep)
-    assert slept == [5.0]
+    p = advance(rt)
+    assert fake.slept == [5.0]
     assert p.kinds == [T.HUMAN_MESSAGE]
 
 
@@ -885,16 +883,12 @@ def test_stories_do_not_move_while_a_boundary_is_pending(make_runtime) -> None:
     assert works == [None]
 
 
-def test_the_complete_sprint_opens_an_end_boundary_first(make_runtime) -> None:
+def test_the_complete_sprint_opens_an_end_boundary_first(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     add_story(rt, "s1", status=StoryStatus.DONE)
-    slept = []
 
-    async def sleep(seconds: float) -> None:
-        slept.append(seconds)
-
-    p = advance(rt, sleep)
-    assert slept == []  # opening the boundary is work to do, not a reason to wait
+    p = advance(rt)
+    assert fake.slept == []  # opening the boundary is work to do, not a reason to wait
     assert rt.state.upstream.closed == 1 and rt.state.boundary is None
     assert p.steps == 1 and p.kinds == [T.SPRINT_END]
     [event] = [e for e in rt.events.events() if e.kind == "boundary"]

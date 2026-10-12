@@ -2,7 +2,7 @@
 
 Unit tests run in the FAKE world (s71): an autouse fixture swaps ``agile_team.system``
 for ``FakeSystem`` and ``os_guard`` fails any test that reaches the real OS. Tests in
-``tests/e2e/`` (and the ``os_guard.LEGACY`` files, until P3) run in the REAL world.
+``tests/e2e/`` run in the REAL world.
 Unit tests have a 1 s limit, the real world ``e2e_timeout`` (s72).
 """
 
@@ -107,7 +107,7 @@ def isolated_git(world: os_guard.World, monkeypatch: pytest.MonkeyPatch) -> None
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register the e2e time limit's ini key (s72 L2)."""
-    parser.addini(time_limit.E2E_LIMIT_INI, "per-test time limit (s) for tests/e2e/ and LEGACY")
+    parser.addini(time_limit.E2E_LIMIT_INI, "per-test time limit (s) for tests/e2e/")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -138,7 +138,7 @@ def pytest_runtest_teardown(item: pytest.Item) -> Any:
 
 @pytest.fixture
 def world(request: pytest.FixtureRequest) -> os_guard.World:
-    """Which world this test runs in: the fake (unit) or the real OS (e2e, LEGACY)."""
+    """Which world this test runs in: the fake (unit) or the real OS (e2e)."""
     return os_guard.world_of(request.node)
 
 
@@ -173,9 +173,13 @@ def isolated_global_roles(
         os_guard.World.REAL: lambda: _real_home(request),
     }
     home = homes[world]()
-    monkeypatch.setenv("AGILE_TEAM_HOME", str(home))
-    if world is os_guard.World.FAKE:
-        request.getfixturevalue("fake").env["AGILE_TEAM_HOME"] = str(home)
+    sets: dict[os_guard.World, Callable[[], None]] = {
+        os_guard.World.FAKE: lambda: request.getfixturevalue("fake").env.update(
+            AGILE_TEAM_HOME=str(home)
+        ),
+        os_guard.World.REAL: lambda: monkeypatch.setenv("AGILE_TEAM_HOME", str(home)),
+    }
+    sets[world]()
     return home / "roles"
 
 

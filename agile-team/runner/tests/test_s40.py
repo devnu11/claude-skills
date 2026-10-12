@@ -6,7 +6,7 @@ import asyncio
 import json
 
 import pytest
-from agile_team import po_tools
+from agile_team import po_tools, system
 from agile_team.gates import StoryStatus
 from agile_team.loops import Setback
 from agile_team.po_tools import Tools
@@ -36,7 +36,7 @@ def test_prioritise_sets_full_queue_and_emits_one_event(make_runtime) -> None:
     out = call(t.prioritise({"stories": ["s3", "s3", "s2"], "reason": "gate fixes"}))
     assert out == {"status": "ordered", "order": ["s3", "s2", "s1"]}
     assert t.runtime.state.order == ["s3", "s2", "s1"]
-    saved = json.loads((t.runtime.config.run_dir / "state.json").read_text())
+    saved = json.loads(system.read_text(t.runtime.config.run_dir / "state.json"))
     assert saved["order"] == ["s3", "s2", "s1"]
     [ev] = priority_events(t)
     assert (ev.role, ev.story) == ("product-owner", None)
@@ -172,7 +172,7 @@ def test_repeat_work_picks_by_ranking(make_runtime) -> None:
 def test_page_source_shows_position_waits_and_priority_events() -> None:
     from agile_team.dashboard import snapshot
 
-    html = (snapshot.Path(snapshot.__file__).parent / "index.html").read_text()
+    html = system.read_text(snapshot.Path(snapshot.__file__).parent / "index.html")
     for needle in ("WAIT_TONE", "priority:", "#${s.position}", "waits on:", "(unchanged)"):
         assert needle in html
     assert "view.stories.sort(" not in html and "view.stories.slice().sort(" not in html

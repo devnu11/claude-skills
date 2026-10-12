@@ -5,10 +5,10 @@ files, a clock and a list of records, so a unit test never reaches the OS.
 Paths are normalised with ``posixpath`` (pure string work); no ``Path`` method
 that touches the OS is ever called here, because the guard would fail it.
 
-Only the functions of the phases that exist are implemented; a phase adds its
-own rows (P3: machine and browser). P2 adds scripted commands, children that
-run until their group is signalled, process groups, the environment and the
-network (s76).
+Every function of ``system.__all__`` is implemented (P3 closed the seam): scripted
+commands, children that run until their group is signalled, process groups, the
+environment, the network, the machine, the browser and signals. ``track()`` adds a
+small git working-tree model (``fake_git.py``) for tests that follow commits.
 """
 
 from __future__ import annotations
@@ -20,13 +20,15 @@ import posixpath
 import signal
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import agile_team
 import pytest
 from agile_team import system
+
+from .fake_git import FakeTree, tree_reply
 
 FAKE_ROOT = Path("/fake")
 FAKE_REPO = FAKE_ROOT / "repo"
@@ -41,7 +43,12 @@ FAKE_HOSTNAME = "fakehost"
 FREE_PORT = 50000  # what a server asked for port 0 is given
 
 PACKAGE_DIR = Path(agile_team.__file__).parent
-PACKAGE_DATA = ("roles/*.md", "presets.toml", "dashboard/index.html")
+PACKAGE_DATA = (
+    "roles/*.md",
+    "presets.toml",
+    "dashboard/index.html",
+    "dashboard/fixtures/*.json",
+)
 
 
 def _snapshot_package_data() -> dict[Path, bytes]:
@@ -155,7 +162,7 @@ class FakeSystem:
     """In-memory files, clock and signals standing in for ``agile_team.system``."""
 
     def __init__(self) -> None:
-        self.cwd = FAKE_REPO
+        self.workdir = FAKE_REPO
         self.files: dict[str, bytes] = {}
         self.modes: dict[str, int] = {}
         self.mtimes: dict[str, float] = {}
@@ -179,6 +186,11 @@ class FakeSystem:
         self.web: dict[str, Any] = {}
         self.listened: list[tuple[str, int]] = []
         self.servers: list[FakeServer] = []
+        self.programs: dict[str, str] = {}
+        self.opened: list[str] = []
+        self.handlers: list[tuple[int, Callable[[], object]]] = []
+        self.on_sleep: list[Callable[[], object]] = []
+        self.tree: FakeTree | None = None
         self._add_dirs(str(FAKE_REPO))
         for path, data in PACKAGE_FILES.items():
             self.put(path, data)
@@ -216,6 +228,13 @@ class FakeSystem:
         """Script a command: the last matching rule wins; results go in turn, the last repeats."""
         self.rules.append(_Rule(words, results or (Done(),)))
 
+    def track(self) -> FakeTree:
+        """Model the repo's working tree: status, add, commit, revert and log follow the files."""
+        seeded = (("git", "rev-parse", "HEAD"), ("git", "symbolic-ref"))
+        self.rules = [r for r in self.rules if r.words not in seeded]
+        self.tree = FakeTree(self, FAKE_HEAD)
+        return self.tree
+
     def text_of(self, path: Path) -> str:
         """The text stored at ``path`` (a test helper; ``FileNotFoundError`` if absent)."""
         return self.files[self._key(path)].decode()
@@ -223,7 +242,7 @@ class FakeSystem:
     # -- paths ----------------------------------------------------------------
 
     def _key(self, path: Path | str) -> str:
-        return posixpath.normpath(posixpath.join(str(self.cwd), os.fspath(path)))
+        return posixpath.normpath(posixpath.join(str(self.workdir), os.fspath(path)))
 
     def _add_dirs(self, key: str) -> None:
         while key not in self.dirs:
@@ -431,9 +450,36 @@ class FakeSystem:
         return time.strftime(fmt, time.gmtime(self.clock))
 
     def sleep(self, seconds: float) -> None:
-        """Record the sleep and advance the clock by it."""
+        """Record the sleep, advance the clock, run the next ``on_sleep`` callback."""
         self.slept.append(seconds)
         self.clock += seconds
+        if self.on_sleep:
+            self.on_sleep.pop(0)()
+
+    async def async_sleep(self, seconds: float) -> None:
+        """Behave as ``sleep`` (no real wait)."""
+        self.sleep(seconds)
+
+    def cwd(self) -> Path:
+        """The fake working directory (the fake repo)."""
+        return FAKE_REPO
+
+    def home(self) -> Path:
+        """The fake home directory."""
+        return FAKE_HOME
+
+    def which(self, name: str) -> str | None:
+        """The path scripted for ``name`` in ``programs``, else ``None``."""
+        return self.programs.get(name)
+
+    def open_browser(self, url: str) -> bool:
+        """Record the url; report success."""
+        self.opened.append(url)
+        return True
+
+    def on_signal(self, sig: int, callback: Callable[[], object]) -> None:
+        """Record the handler; no signal is ever delivered."""
+        self.handlers.append((sig, callback))
 
     def pid(self) -> int:
         """The runner's pid in the fake."""
@@ -501,7 +547,8 @@ class FakeSystem:
         for rule in reversed(self.rules):
             if rule.matches(argv):
                 return rule.next()
-        return Done()
+        modelled = tree_reply(self.tree, argv[1:]) if self.tree and argv[:1] == ["git"] else None
+        return modelled or Done()
 
     def _scripted(self, command: Any, argv: list[str]) -> Any:
         self.commands.append(command)

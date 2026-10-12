@@ -13,7 +13,7 @@ from agile_team.config import Delivery
 from agile_team.gates import READY, StoryState, Verdict
 from agile_team.presentation import Trial
 
-from .fake_system import Done, FakeSystem, Hang
+from .fake_system import FAKE_REPO, Done, FakeSystem, Hang
 
 PORT = 8799
 URL = f"http://127.0.0.1:{PORT}/"
@@ -150,7 +150,7 @@ ADDRESS = ("127.0.0.1", PORT)
 def started(fake: FakeSystem) -> system.Process:
     """A running service that leads its own group."""
     fake.reply(("serve",), Hang("up\n"))
-    return system.spawn_piped(system.ShellCommand("serve", fake.cwd))
+    return system.spawn_piped(system.ShellCommand("serve", FAKE_REPO))
 
 
 def sent(fake: FakeSystem) -> list[int]:
@@ -166,7 +166,7 @@ def test_end_group_on_a_hung_child_sends_only_sigterm(fake: FakeSystem) -> None:
 
 def test_end_group_on_an_exited_child_sends_nothing(fake: FakeSystem) -> None:
     fake.reply(("serve",), Done(0))
-    sandbox.end_group(system.spawn_piped(system.ShellCommand("serve", fake.cwd)))
+    sandbox.end_group(system.spawn_piped(system.ShellCommand("serve", FAKE_REPO)))
     assert fake.signals == []
 
 
@@ -203,9 +203,9 @@ def test_end_group_waits_for_a_member_that_outlives_its_leader(fake: FakeSystem)
 
 
 def stoppable(fake: FakeSystem) -> sandbox.Prepared:
-    root = fake.cwd / "customer" / "ui"
+    root = FAKE_REPO / "customer" / "ui"
     return sandbox.Prepared(
-        UI, sandbox.DELIVERY_KINDS["web"], fake.cwd, root, root, process=started(fake)
+        UI, sandbox.DELIVERY_KINDS["web"], FAKE_REPO, root, root, process=started(fake)
     )
 
 

@@ -33,9 +33,8 @@ def test_e2e_file_gets_the_e2e_limit(request):
     assert time_limit.limit_of(_stub("tests/e2e/test_x.py", request.config)) == 30.0
 
 
-def test_legacy_file_gets_the_e2e_limit(request, monkeypatch):
-    monkeypatch.setattr(os_guard, "LEGACY", frozenset({"test_legacy.py"}))
-    assert time_limit.limit_of(_stub("tests/test_legacy.py", request.config)) == 30.0
+def test_a_former_legacy_file_gets_one_second(request):
+    assert time_limit.limit_of(_stub("tests/test_cli.py", request.config)) == 1.0
 
 
 def test_limit_is_read_from_the_ini():

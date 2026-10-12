@@ -2,10 +2,9 @@
 
 import asyncio
 import functools
-import subprocess
 
 import pytest
-from agile_team import fingerprint, gates, roles
+from agile_team import fingerprint, gates, roles, system
 from agile_team.config import PIPELINE_STEPS
 from agile_team.dispatch import StepRequest
 from agile_team.events import Event, EventKind
@@ -230,12 +229,12 @@ def test_test_file_is_the_id_up_to_the_first_separator() -> None:
     assert gates.test_file("tests/t.py") == "tests/t.py"
 
 
-def test_read_repo_file(tmp_path) -> None:
-    (tmp_path / "d").mkdir()
-    (tmp_path / "d" / "t.py").write_text("x = 1\n")
-    assert gates.read_repo_file(tmp_path, "d/t.py") == "x = 1\n"
-    assert gates.read_repo_file(tmp_path, "d") is None
-    assert gates.read_repo_file(tmp_path, "gone.py") is None
+def test_read_repo_file(scratch) -> None:
+    system.make_dirs(scratch / "d")
+    system.write_text(scratch / "d" / "t.py", "x = 1\n")
+    assert gates.read_repo_file(scratch, "d/t.py") == "x = 1\n"
+    assert gates.read_repo_file(scratch, "d") is None
+    assert gates.read_repo_file(scratch, "gone.py") is None
 
 
 def test_load_dispute_drops_the_legacy_base() -> None:
@@ -513,14 +512,18 @@ def open_story(rt, step="implement", **kw) -> StoryState:
 RESULTS = {LS: (0, FILE + "\n"), "pytest --cov": (0, "TOTAL 96%")}
 
 
+@pytest.fixture(autouse=True)
+def tracked(configured, fake) -> None:
+    """Model the working tree so commits and reverts follow the files."""
+    fake.track()
+
+
 def write_test_file(rt, text=OLD) -> None:
     path = rt.config.repo / FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    system.make_dirs(path.parent)
+    system.write_text(path, text)
     # Committed: the developer step quarantines and reverts out-of-scope changes.
-    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
-    subprocess.run(["git", "add", FILE], cwd=rt.config.repo, check=True)
-    subprocess.run(["git", *ident, "commit", "-qm", "test file"], cwd=rt.config.repo, check=True)
+    rt.git.commit([FILE], "test file")
 
 
 def dispute_runtime(make_runtime, **kw):

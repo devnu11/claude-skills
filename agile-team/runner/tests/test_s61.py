@@ -2,14 +2,12 @@
 
 import asyncio
 import json
-import os
-import subprocess
 from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
 
 import pytest
-from agile_team import checkout, cli, events, halt, po_tools, recovery, router
+from agile_team import checkout, cli, events, halt, po_tools, recovery, router, system
 from agile_team import state as state_mod
 from agile_team.dispatch import StepRequest
 from agile_team.git_ops import Git
@@ -19,7 +17,8 @@ from agile_team.relay import Note
 from agile_team.salvage import Cause
 from agile_team.state import CheckoutRecord, RunState, RunStatus
 
-from .conftest import FakeQuery, FakeRunner, git
+from .conftest import FakeQuery, FakeRunner
+from .fake_system import FAKE_IDS, FakeSystem
 from .pipeline_helpers import Script, add_story, build
 from .test_cli import any_tool, start_args
 from .test_halt import notes
@@ -27,6 +26,17 @@ from .test_s9 import STEP, dirty, run_dir_of
 
 TEST_CMD = "pytest"
 DESIGN = "docs/architecture.md"
+
+
+def git(repo: Path, *args: str) -> str:
+    """Run a modelled git command (``FakeSystem.track``) in ``repo``."""
+    return Git(repo).run(*args)
+
+
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake: FakeSystem) -> None:
+    """Model the repo: branch, HEAD, commits and the reflog follow git commands."""
+    fake.track()
 
 
 def sha7(repo: Path) -> str:
@@ -38,15 +48,15 @@ def refs(repo: Path) -> str:
 
 
 def commit_file(repo: Path, name: str = "foreign.txt") -> None:
-    (repo / name).write_text("x\n")
+    system.write_text(repo / name, "x\n")
     git(repo, "add", name)
     git(repo, "commit", "-q", "-m", f"foreign {name}")
 
 
 def write_design(repo: Path, text: str) -> None:
     """Write the design file, creating ``docs/`` (the scratch repo has none)."""
-    (repo / DESIGN).parent.mkdir(exist_ok=True)
-    (repo / DESIGN).write_text(text)
+    system.make_dirs((repo / DESIGN).parent)
+    system.write_text(repo / DESIGN, text)
 
 
 def detach(repo: Path) -> None:
@@ -63,14 +73,13 @@ def reset(repo: Path) -> None:
 
 def start_rebase(repo: Path) -> None:
     """A rebase stopped on a conflict; HEAD is detached, a rebase is in progress."""
-    git(repo, "checkout", "-q", "-b", "other", "HEAD~1")
-    (repo / "src" / "app.py").write_text("x = 3\n")
-    git(repo, "commit", "-q", "-am", "theirs")
-    subprocess.run(["git", "rebase", "main"], cwd=repo, capture_output=True, check=False)
+    git(repo, "checkout", "-q", "--detach")
+    system.make_dirs(repo / ".git" / "rebase-merge")
+    system.write_text(repo / ".git" / "rebase-merge" / "head-name", "refs/heads/other\n")
 
 
 def with_two_commits(repo: Path) -> None:
-    (repo / "src" / "app.py").write_text("x = 2\n")
+    system.write_text(repo / "src" / "app.py", "x = 2\n")
     git(repo, "commit", "-q", "-am", "two")
 
 
@@ -100,14 +109,14 @@ def test_status_value_and_halted() -> None:
     assert not RunState(status=RunStatus.RUNNING).halted()
 
 
-def test_legacy_state_loads_without_checkout(tmp_path: Path) -> None:
-    (tmp_path / "state.json").write_text(json.dumps({"status": "idle"}))
-    assert state_mod.load(tmp_path).checkout is None
+def test_legacy_state_loads_without_checkout(scratch: Path) -> None:
+    system.write_text(scratch / "state.json", json.dumps({"status": "idle"}))
+    assert state_mod.load(scratch).checkout is None
 
 
-def test_checkout_round_trips(tmp_path: Path) -> None:
-    state_mod.save(tmp_path, RunState(checkout=CheckoutRecord("main", "f" * 40)))
-    assert state_mod.load(tmp_path).checkout == CheckoutRecord("main", "f" * 40)
+def test_checkout_round_trips(scratch: Path) -> None:
+    state_mod.save(scratch, RunState(checkout=CheckoutRecord("main", "f" * 40)))
+    assert state_mod.load(scratch).checkout == CheckoutRecord("main", "f" * 40)
 
 
 def test_halt_table_and_budget_advice() -> None:
@@ -126,7 +135,7 @@ def test_halt_table_and_budget_advice() -> None:
 
 
 def test_dashboard_shows_the_status_red() -> None:
-    page = resources.files("agile_team.dashboard").joinpath("index.html").read_text()
+    page = system.read_text(resources.files("agile_team.dashboard").joinpath("index.html"))
     assert '"checkout-changed": "critical"' in page
 
 
@@ -144,7 +153,7 @@ def test_read_attached_and_detached(configured: Path) -> None:
 @pytest.mark.parametrize(("path", "name"), checkout.OPERATIONS)
 def test_read_names_each_operation(configured: Path, path: str, name: str) -> None:
     git_dir = Path(git(configured, "rev-parse", "--absolute-git-dir").strip())
-    (git_dir / path).write_text("x")
+    system.write_text(git_dir / path, "x")
     assert checkout.read(Git(configured)).operation == name
     assert checkout.operation(Git(configured)) == name
 
@@ -207,9 +216,9 @@ def test_last_move_names_the_checkout(configured: Path) -> None:
     assert "checkout: moving from main to" in checkout.last_move(Git(configured))
 
 
-def test_last_move_without_a_reflog_entry(tmp_path: Path) -> None:
-    empty = tmp_path / "empty"
-    empty.mkdir()
+def test_last_move_without_a_reflog_entry(scratch: Path) -> None:
+    empty = scratch / "empty"
+    system.make_dirs(empty)
     git(empty, "init", "-q")
     assert checkout.last_move(Git(empty)) == checkout.NO_MOVE
 
@@ -274,7 +283,7 @@ def test_a_changed_checkout_halts_before_the_step(make_runtime, case: str) -> No
     assert refs(repo) == before
     kinds = {e.kind for e in rt.events.events()}
     assert not kinds & {"quarantine", "gate", "step-end"}
-    assert not (rt.config.run_dir / halt.CRASH_LOG).exists()
+    assert not system.exists(rt.config.run_dir / halt.CRASH_LOG)
     assert state_mod.load(rt.config.run_dir).status is RunStatus.CHECKOUT_CHANGED
 
 
@@ -302,11 +311,11 @@ def test_a_move_during_the_step_halts_without_committing(make_runtime) -> None:
     report = step(rt)
     assert report["status"] == "halted"
     assert rt.ledger.total() == pytest.approx(0.25)
-    assert (rt.config.repo / DESIGN).read_text() == "design\n"
+    assert system.read_text(rt.config.repo / DESIGN) == "design\n"
     assert not Git(rt.config.repo).is_clean()
     assert refs(rt.config.repo) == before
     assert rt.state.in_flight is not None
-    assert not (rt.config.run_dir / halt.CRASH_LOG).exists()
+    assert not system.exists(rt.config.run_dir / halt.CRASH_LOG)
     assert rt.state.status is RunStatus.CHECKOUT_CHANGED
 
 
@@ -387,17 +396,15 @@ def test_verify_checkout_raises_with_the_halt(make_runtime) -> None:
 # ----- Router, PoRun, pass_tests, boundary, recovery ---------------------------------
 
 
-def test_a_move_during_a_wait_poll_halts_the_run(make_runtime) -> None:
+def test_a_move_during_a_wait_poll_halts_the_run(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     add_story(rt, "s1", "implement")
     rt.relay.post(Note("question", "Which DB?", ["s1"]))
     rt.state.delivered = []
     rt.record_checkout()
 
-    async def sleep(_s: float) -> None:
-        detach(rt.config.repo)
-
-    asyncio.run(router.Router(rt, sleep=sleep).advance())
+    fake.on_sleep = [lambda: detach(rt.config.repo)]
+    asyncio.run(router.Router(rt).advance())
     assert rt.state.status is RunStatus.CHECKOUT_CHANGED
     assert rt.halted_by and rt.halted_by.kind is HaltKind.CHECKOUT
 
@@ -424,7 +431,7 @@ def test_a_move_during_the_po_turn_halts_at_settle_with_no_commit(make_runtime) 
     asyncio.run(PoRun(rt, Start("go")).run())
     assert refs(rt.config.repo) == before
     assert rt.state.status is RunStatus.CHECKOUT_CHANGED
-    assert not (rt.config.run_dir / halt.CRASH_LOG).exists()
+    assert not system.exists(rt.config.run_dir / halt.CRASH_LOG)
 
 
 def test_pass_tests_on_a_moved_checkout_runs_no_gate(make_runtime) -> None:
@@ -459,11 +466,11 @@ def stored(repo: Path, **kw) -> Path:
 
 
 def test_resume_on_a_changed_checkout_exits_78(
-    configured: Path, key_home: Path, capsys, monkeypatch
+    configured: Path, key_home: Path, capsys, fake: FakeSystem
 ) -> None:
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = stored(configured, status=RunStatus.RUNNING, in_flight=STEP)
-    (run_dir / state_mod.PID_FILE).write_text("999999999")
+    system.write_text(run_dir / state_mod.PID_FILE, "999999999")
     dirty(configured)
     detach(configured)
     before = refs(configured)
@@ -484,11 +491,11 @@ def test_resume_on_a_changed_checkout_exits_78(
 
 
 def test_restoring_the_branch_resumes_and_answers_the_question(
-    configured: Path, key_home: Path, monkeypatch
+    configured: Path, key_home: Path, fake: FakeSystem
 ) -> None:
     from agile_team.relay import Relay
 
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = stored(configured)
     detach(configured)
     assert cli.cmd_start(start_args(configured, key_home, "--resume"), FakeQuery()) == 78
@@ -503,11 +510,11 @@ def accept_args(repo: Path, home: Path) -> list[str]:
 
 
 def test_accept_checkout_keeps_the_new_head(
-    configured: Path, key_home: Path, capsys, monkeypatch
+    configured: Path, key_home: Path, capsys, fake: FakeSystem
 ) -> None:
     from agile_team.relay import Relay
 
-    any_tool(monkeypatch)
+    any_tool(fake)
     run_dir = stored(configured, status=RunStatus.IDLE)
     old = state_mod.load(run_dir).checkout
     commit_file(configured)
@@ -538,7 +545,7 @@ def test_accept_leaves_another_status_alone(configured: Path, key_home: Path) ->
 
 def test_accept_refuses_a_live_runner(configured: Path, key_home: Path, capsys) -> None:
     run_dir = stored(configured, status=RunStatus.RUNNING)
-    (run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
+    system.write_text(run_dir / state_mod.PID_FILE, str(FAKE_IDS[0]))
     commit_file(configured)
     before = state_mod.load(run_dir)
     assert cli.main(accept_args(configured, key_home)) == 1

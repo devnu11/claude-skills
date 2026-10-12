@@ -39,18 +39,16 @@ def test_world_of_an_e2e_path_is_real() -> None:
     assert os_guard.world_of(item_at("/r/tests/e2e/test_x_e2e.py")) is World.REAL
 
 
-def test_world_of_a_legacy_name_is_real() -> None:
-    name = sorted(os_guard.LEGACY)[0]
-    assert os_guard.world_of(item_at(f"/r/tests/{name}")) is World.REAL
+def test_world_of_a_former_legacy_name_is_fake() -> None:
+    assert os_guard.world_of(item_at("/r/tests/test_cli.py")) is World.FAKE
 
 
 def test_world_of_a_plain_unit_file_is_fake() -> None:
     assert os_guard.world_of(item_at("/r/tests/test_state.py")) is World.FAKE
 
 
-def test_legacy_names_are_test_files_that_exist() -> None:
-    assert all(n.startswith("test_") and n.endswith(".py") for n in os_guard.LEGACY)
-    assert "test_os_guard.py" not in os_guard.LEGACY
+def test_there_is_no_legacy_table() -> None:
+    assert not hasattr(os_guard, "LEGACY")
 
 
 def test_the_message_names_the_call_and_the_way_out() -> None:

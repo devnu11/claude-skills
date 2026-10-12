@@ -2,11 +2,10 @@
 
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 from agile_team import boundary as bd
-from agile_team import handover
+from agile_team import handover, system
 from agile_team.boundary import BoundaryHold, Edge, Stage, StepKind
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState
@@ -15,16 +14,9 @@ from agile_team.handover import Trigger as T
 from agile_team.po_tools import Tools
 from agile_team.roles import Handoff
 
-from .s29_helpers import make_origin
-
 
 def call(coro) -> dict:
     return json.loads(asyncio.run(coro)["content"][0]["text"])
-
-
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    return make_origin(tmp_path)[1]
 
 
 def writable(scope, path: str) -> bool:
@@ -197,7 +189,7 @@ def test_a_team_fix_may_write_source_and_tests_but_not_elsewhere(make_runtime) -
 def test_a_review_fix_works_in_the_worktree_and_writes_only_the_files(make_runtime) -> None:
     rt = make_runtime()
     wt = rt.config.run_dir / "review"
-    wt.mkdir(parents=True)
+    system.make_dirs(wt)
     rt.state.boundary = bd.Boundary(Edge.END, 1, stage=Stage.REVIEW)
     rt.state.boundary.failure = bd.Failure(
         Stage.REVIEW, bd.FixCase.REVIEW_CONFLICT, "c", files=["a.py"]

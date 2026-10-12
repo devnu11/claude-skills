@@ -3,13 +3,14 @@
 import asyncio
 
 import pytest
-from agile_team import halt
+from agile_team import halt, system
 from agile_team.dispatch import halt_note
 from agile_team.po_tools import PoRun, Start
 from agile_team.relay import WAITING_HEAD, Note
 from agile_team.router import Router
 from agile_team.state import RunStatus
 
+from .fake_system import FakeSystem
 from .pipeline_helpers import Script, add_story, build, handover_events
 
 
@@ -80,57 +81,52 @@ def waiting_rt(make_runtime):
     return rt
 
 
-def test_the_wait_is_shown_then_cleared(make_runtime) -> None:
+def test_the_wait_is_shown_then_cleared(make_runtime, fake: FakeSystem) -> None:
     rt = waiting_rt(make_runtime)
     seen = []
 
-    async def sleep(_s: float) -> None:
+    def sleep() -> None:
         seen.append((rt.state.status, rt.state.status_reason))
         rt.relay.answer("m1", "sqlite")
 
+    fake.on_sleep = [sleep]
     status = rt.state.status
-    asyncio.run(Router(rt, sleep=sleep).advance())
+    asyncio.run(Router(rt).advance())
     assert seen == [(status, "waiting on answers: s1 waits on m1")]
     assert rt.state.status is status and rt.state.status_reason is None
 
 
-def test_the_reason_is_saved_and_a_new_question_updates_it(make_runtime) -> None:
+def test_the_reason_is_saved_and_a_new_question_updates_it(make_runtime, fake: FakeSystem) -> None:
     import json
 
     rt = waiting_rt(make_runtime)
     seen = []
 
-    async def sleep(_s: float) -> None:
-        saved = json.loads((rt.config.run_dir / "state.json").read_text())
+    def poll(action) -> None:
+        saved = json.loads(system.read_text(rt.config.run_dir / "state.json"))
         seen.append((rt.state.status_reason, saved["status_reason"]))
-        if len(seen) == 1:
-            return
-        if len(seen) == 2:
-            q(rt, "Colour?", ["s1"])
-        else:
-            rt.relay.answer("m1", "a")
+        action()
 
-    asyncio.run(Router(rt, sleep=sleep).advance())
+    fake.on_sleep = [
+        lambda: poll(lambda: None),
+        lambda: poll(lambda: q(rt, "Colour?", ["s1"])),
+        lambda: poll(lambda: rt.relay.answer("m1", "a")),
+    ]
+    asyncio.run(Router(rt).advance())
     first = "waiting on answers: s1 waits on m1"
     second = "waiting on answers: s1 waits on m1, m2"
     assert seen == [(first, first), (first, first), (second, second)]
 
 
-def test_an_unchanged_reason_is_not_saved_again(make_runtime) -> None:
+def test_an_unchanged_reason_is_not_saved_again(make_runtime, fake: FakeSystem) -> None:
     rt = waiting_rt(make_runtime)
     saves = []
     real = rt.save
     rt.save = lambda: (saves.append(1), real())[1]
-    polls = []
-
-    async def sleep(_s: float) -> None:
-        polls.append(1)
-        if len(polls) == 3:
-            rt.relay.answer("m1", "a")
-
-    asyncio.run(Router(rt, sleep=sleep).advance())
-    during = len(saves)
-    assert during <= 2  # one to show, one to clear; never one per poll
+    fake.on_sleep = [lambda: None, lambda: None, lambda: rt.relay.answer("m1", "a")]
+    asyncio.run(Router(rt).advance())
+    assert len(fake.slept) == 3
+    assert len(saves) <= 2  # one to show, one to clear; never one per poll
 
 
 def test_end_wait_leaves_other_reasons_alone(make_runtime) -> None:
@@ -170,7 +166,7 @@ def test_a_halt_without_a_question_is_unchanged(make_runtime) -> None:
 # ----- driver level: no PO session, an answer wakes the run (W1) ----------------
 
 
-def test_an_answer_wakes_the_run_when_no_po_session_runs(make_runtime) -> None:
+def test_an_answer_wakes_the_run_when_no_po_session_runs(make_runtime, fake: FakeSystem) -> None:
     async def ask(rt) -> None:
         q(rt, "Which DB?", ["s1"])
 
@@ -178,15 +174,9 @@ def test_an_answer_wakes_the_run_when_no_po_session_runs(make_runtime) -> None:
     rt = build(make_runtime, script, steps=["design"])
     add_story(rt)
     run = PoRun(rt, Start("go"))
-    slept = []
-
-    async def sleep(seconds: float) -> None:
-        slept.append(seconds)
-        rt.relay.answer("m1", "sqlite")
-
-    run.router.sleep = sleep
+    fake.on_sleep = [lambda: rt.relay.answer("m1", "sqlite")]
     asyncio.run(run.run())
-    assert slept == [5.0]
+    assert fake.slept == [5.0]
     assert 'The human answered m1 ("Which DB?"): sqlite' in script.po_prompts[1]
     assert ["human_message"] in [e.data["triggers"] for e in handover_events(rt)]
     assert any(s.step != "design" or s.status.value == "done" for s in rt.state.stories.values())

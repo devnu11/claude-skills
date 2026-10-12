@@ -35,7 +35,7 @@ class World(Enum):
     """Which world a test runs in."""
 
     FAKE = "fake"  # unit tests: the fake is installed and the guard is on
-    REAL = "real"  # tests/e2e/ (and LEGACY files until P3)
+    REAL = "real"  # tests/e2e/
 
 
 class Patched(NamedTuple):
@@ -142,43 +142,6 @@ EXEMPT_CALLERS: tuple[str, ...] = (
 # Callers whose patched calls are refused; every other caller gets the real function.
 GUARDED_CALLERS: tuple[str, ...] = ("agile_team", "tests")
 
-# Unit-test files not yet migrated to the fake (s71 P1 to P3); they run in the real world.
-LEGACY: frozenset[str] = frozenset(
-    {
-        "test_boundary.py",
-        "test_boundary_runner.py",
-        "test_boundary_wiring.py",
-        "test_cli.py",
-        "test_dispatch.py",
-        "test_disputes.py",
-        "test_fullcheck.py",
-        "test_halt.py",
-        "test_lean_context.py",
-        "test_po_cost.py",
-        "test_po_tools.py",
-        "test_preflight.py",
-        "test_router.py",
-        "test_s24.py",
-        "test_s27_backstop.py",
-        "test_s30.py",
-        "test_s38.py",
-        "test_s40.py",
-        "test_s44_wiring.py",
-        "test_s45.py",
-        "test_s46.py",
-        "test_s47.py",
-        "test_s61.py",
-        "test_s62_pin.py",
-        "test_s62_resume.py",
-        "test_s62_tell.py",
-        "test_s69_runtime.py",
-        "test_s69_suite.py",
-        "test_s9.py",
-        "test_stack.py",
-        "test_upstream.py",
-    }
-)
-
 
 class _Guard:
     """Whether the guard is on, and the violations recorded while it was."""
@@ -272,6 +235,5 @@ WORLDS = {True: World.REAL, False: World.FAKE}
 
 
 def world_of(item: Any) -> World:
-    """``REAL`` for ``tests/e2e/`` and ``LEGACY`` files, else ``FAKE``."""
-    is_real = item.path.parent.name == "e2e" or item.path.name in LEGACY
-    return WORLDS[is_real]
+    """``REAL`` for ``tests/e2e/``, else ``FAKE``."""
+    return WORLDS[item.path.parent.name == "e2e"]

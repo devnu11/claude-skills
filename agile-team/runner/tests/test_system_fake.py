@@ -3,7 +3,6 @@
 import errno
 import signal
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -164,8 +163,7 @@ def test_sleep_advances_now_and_monotonic(fake: FakeSystem) -> None:
 
 
 def test_local_time_formats_the_fake_clock() -> None:
-    expected = time.strftime("%H:%M", time.gmtime(START_CLOCK))
-    assert system.local_time("%H:%M") == expected
+    assert system.local_time("%H:%M") == "08:00"
 
 
 def test_pid_and_kill(fake: FakeSystem) -> None:
@@ -394,3 +392,56 @@ def test_wait_event_gives_the_scripted_number_of_beats(fake: FakeSystem) -> None
     answers = [system.wait_event(event, 3.0) for _ in range(3)]
     assert answers == [False, False, True]
     assert fake.clock == START_CLOCK + 6.0
+
+
+# ----- s77: machine, browser, signals, async sleep ---------------------------------------
+
+P3_NAMES = ("async_sleep", "cwd", "home", "on_signal", "open_browser", "which")
+
+
+def test_the_p3_names_are_in_the_seam() -> None:
+    assert all(name in system.__all__ for name in P3_NAMES)
+
+
+def test_cwd_and_home_are_fixed_paths() -> None:
+    assert system.cwd() == FAKE_REPO
+    assert system.home() == FAKE_HOME
+
+
+def test_which_answers_from_programs(fake: FakeSystem) -> None:
+    fake.programs["uv"] = "/usr/bin/uv"
+    assert system.which("uv") == "/usr/bin/uv"
+    assert system.which("nope") is None
+
+
+def test_open_browser_records_and_succeeds(fake: FakeSystem) -> None:
+    assert system.open_browser("http://h:1/") is True
+    assert fake.opened == ["http://h:1/"]
+
+
+def test_on_signal_records_the_handler(fake: FakeSystem) -> None:
+    def callback() -> None:
+        return None
+
+    system.on_signal(signal.SIGTERM, callback)
+    assert fake.handlers == [(signal.SIGTERM, callback)]
+
+
+def test_async_sleep_advances_the_clock_and_records(fake: FakeSystem) -> None:
+    import asyncio
+
+    asyncio.run(system.async_sleep(4.0))
+    assert fake.slept == [4.0]
+    assert system.now() == START_CLOCK + 4.0
+
+
+def test_on_sleep_callbacks_run_once_each_in_order(fake: FakeSystem) -> None:
+    import asyncio
+
+    seen: list[str] = []
+    fake.on_sleep = [lambda: seen.append("a"), lambda: seen.append("b")]
+    system.sleep(1.0)
+    asyncio.run(system.async_sleep(1.0))
+    system.sleep(1.0)
+    assert seen == ["a", "b"]
+    assert fake.slept == [1.0, 1.0, 1.0]

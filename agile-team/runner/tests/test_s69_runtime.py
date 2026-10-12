@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agile_team import runner_tools
+from agile_team import runner_tools, system
 from agile_team.config import Targeted
 from agile_team.dispatch import Runtime, StepRequest
 from agile_team.gates import LS_FILES_COMMAND, StoryState, StoryStatus
@@ -28,6 +28,7 @@ from agile_team.runner_tools import (
 )
 
 from .conftest import FakeQuery, FakeRunner
+from .fake_system import FakeSystem
 from .pipeline_helpers import add_story
 
 PKG = "agile-team/runner"
@@ -44,8 +45,8 @@ def tracked(path: str) -> dict[str, tuple[int, str]]:
 
 def write(repo: Path, rel: str, text: str = "x\n"):
     def action() -> None:
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text(text)
+        system.make_dirs((repo / rel).parent)
+        system.write_text(repo / rel, text)
 
     return action
 
@@ -196,7 +197,11 @@ def test_other_roles_get_none(make_runtime) -> None:
 # ----- R7: test_files ----------------------------------------------------
 
 
-def test_unit_tester_commit_records_test_files(make_runtime, configured: Path) -> None:
+def test_unit_tester_commit_records_test_files(
+    make_runtime, configured: Path, fake: FakeSystem
+) -> None:
+    fake.track()
+
     def both() -> None:
         write(configured, "tests/test_a.py")()
         write(configured, "tests/test_b.py")()
@@ -212,7 +217,10 @@ def test_unit_tester_commit_records_test_files(make_runtime, configured: Path) -
     assert st.test_files == ["tests/test_a.py", "tests/test_b.py"]
 
 
-def test_developer_commit_records_no_test_files(make_runtime, configured: Path) -> None:
+def test_developer_commit_records_no_test_files(
+    make_runtime, configured: Path, fake: FakeSystem
+) -> None:
+    fake.track()
     rt = make_runtime(FakeQuery(action=write(configured, "src/a.py")), FakeRunner())
     st = add_story(rt, step="implement")
     run_step(rt, "developer-cli")

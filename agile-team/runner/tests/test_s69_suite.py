@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from agile_team import config as config_mod
-from agile_team import gates, guard
+from agile_team import gates, guard, system
 from agile_team.config import Targeted, Toolchain
 from agile_team.guard import Scope
 from agile_team.results import (
@@ -176,15 +176,15 @@ def test_reasons_name_the_runner_tools() -> None:
     assert [r.run for r in SUITE_RULES] == [Run.FULL, Run.COVERAGE, Run.TARGETED]
 
 
-def test_guard_denies_in_a_pipeline(tmp_path: Path) -> None:
-    s = Scope("developer-cli", tmp_path, ["src/**"])
+def test_guard_denies_in_a_pipeline(scratch: Path) -> None:
+    s = Scope("developer-cli", scratch, ["src/**"])
     assert guard.check_bash(s, "cd x && uv run pytest -q 2>&1 | tail -5") == FULL_DENIED
     assert guard.check_bash(s, "cd x && uv run pytest -q tests/test_x.py 2>&1 | tail -5") is None
     assert guard.check_bash(s, "uv run pytest -q  # everything") == FULL_DENIED
 
 
-def test_guard_hook_denies_with_the_reason(tmp_path: Path) -> None:
-    hook = guard.pre_tool_hook(Scope("developer-cli", tmp_path, ["src/**"]))
+def test_guard_hook_denies_with_the_reason(scratch: Path) -> None:
+    hook = guard.pre_tool_hook(Scope("developer-cli", scratch, ["src/**"]))
     out = asyncio.run(hook({"tool_name": "Bash", "tool_input": {"command": "pytest"}}, None, None))
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert FULL_DENIED in out["hookSpecificOutput"]["permissionDecisionReason"]
@@ -197,30 +197,30 @@ def ran(name: str = "coverage", code: int = 0, tail: str = "TOTAL 99%", **kw: st
     return Ran(name, code, tail, kw.get("at", "1234567890"), kw.get("where", "implement gate"))
 
 
-def test_keep_and_latest_round_trip(tmp_path: Path) -> None:
-    store = Results(tmp_path)
+def test_keep_and_latest_round_trip(scratch: Path) -> None:
+    store = Results(scratch)
     store.keep("s1", ran())
     assert store.latest("s1", "coverage") == ran()
-    assert (tmp_path / "results" / "s1" / "coverage.json").is_file()
+    assert system.is_file(scratch / "results" / "s1" / "coverage.json")
 
 
-def test_keep_replaces_the_same_command(tmp_path: Path) -> None:
-    store = Results(tmp_path)
+def test_keep_replaces_the_same_command(scratch: Path) -> None:
+    store = Results(scratch)
     store.keep("s1", ran(tail="old"))
     store.keep("s1", ran(tail="new"))
     assert store.latest("s1", "coverage").tail == "new"
 
 
-def test_latest_missing_or_corrupt_is_none(tmp_path: Path) -> None:
-    store = Results(tmp_path)
+def test_latest_missing_or_corrupt_is_none(scratch: Path) -> None:
+    store = Results(scratch)
     assert store.latest("s1", "test") is None
     store.keep("s1", ran("test"))
-    (tmp_path / "results" / "s1" / "test.json").write_text("{not json")
+    system.write_text(scratch / "results" / "s1" / "test.json", "{not json")
     assert store.latest("s1", "test") is None
 
 
-def test_shown_follows_the_table_and_skips_missing(tmp_path: Path) -> None:
-    store = Results(tmp_path)
+def test_shown_follows_the_table_and_skips_missing(scratch: Path) -> None:
+    store = Results(scratch)
     for name in ("static", "coverage"):
         store.keep("s1", ran(name))
     assert [r.name for r in store.shown("s1", "quality")] == ["coverage", "static"]
@@ -305,28 +305,28 @@ def raw(rows: list[dict]) -> dict:
     return {**PY_CONFIG, "toolchain": {**PY_CONFIG["toolchain"], "targeted": rows}}
 
 
-def test_targeted_rows_load(tmp_path: Path) -> None:
+def test_targeted_rows_load(scratch: Path) -> None:
     cfg = config_mod.from_raw(
-        tmp_path, raw([{"root": "r", "command": "x {tests}"}, {"command": "y {tests}"}])
+        scratch, raw([{"root": "r", "command": "x {tests}"}, {"command": "y {tests}"}])
     )
     assert cfg.toolchain.targeted == [Targeted("r", "x {tests}"), Targeted("", "y {tests}")]
-    assert config_mod.from_raw(tmp_path, raw([])).toolchain.targeted == []
+    assert config_mod.from_raw(scratch, raw([])).toolchain.targeted == []
 
 
-def test_targeted_row_without_tests_placeholder_is_an_error(tmp_path: Path) -> None:
-    bad = config_mod.from_raw(tmp_path, raw([{"root": "r", "command": "pytest"}]))
+def test_targeted_row_without_tests_placeholder_is_an_error(scratch: Path) -> None:
+    bad = config_mod.from_raw(scratch, raw([{"root": "r", "command": "pytest"}]))
     assert "toolchain.targeted commands must hold {tests}" in config_mod.broken(
         config_mod.TOOLCHAIN_RULES, bad.toolchain
     )
-    ok = config_mod.from_raw(tmp_path, raw([{"root": "r", "command": "pytest {tests}"}]))
+    ok = config_mod.from_raw(scratch, raw([{"root": "r", "command": "pytest {tests}"}]))
     assert config_mod.broken(config_mod.TOOLCHAIN_RULES, ok.toolchain) == []
 
 
 # ----- role files --------------------------------------------------------
 
 
-def test_role_texts(tmp_path: Path) -> None:
-    book = RoleBook.for_repo(tmp_path, {})
+def test_role_texts(scratch: Path) -> None:
+    book = RoleBook.for_repo(scratch, {})
     czar = book.resolve("quality-czar")
     assert czar.tools == ["Read", "Grep", "Glob"] and "Run nothing" in czar.body
     assert "run_tests" in book.resolve("developer").body

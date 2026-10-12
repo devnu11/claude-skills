@@ -7,7 +7,7 @@ import pytest
 from agile_team import commands, process_groups, sandbox, system
 from agile_team.process_groups import PS_TIMEOUT_S, Recorded, RunnerIds
 
-from .fake_system import FAKE_IDS, FAKE_ROOT, START_CLOCK, Done, FakeSystem, Hang
+from .fake_system import FAKE_IDS, FAKE_REPO, FAKE_ROOT, START_CLOCK, Done, FakeSystem, Hang
 
 FAKE = RunnerIds(*FAKE_IDS)  # literals: test ids must not hold live values (s70)
 SAME = 5000  # a child in the runner's own group
@@ -251,6 +251,6 @@ def test_kill_group_spares_the_runners_group(fake: FakeSystem) -> None:
 
 def test_kill_group_kills_a_new_session(fake: FakeSystem) -> None:
     fake.reply(("sleep",), Hang())
-    child = system.spawn_piped(system.ShellCommand("sleep 30", fake.cwd))
+    child = system.spawn_piped(system.ShellCommand("sleep 30", FAKE_REPO))
     commands.kill_group(child)
     assert child.poll() == -signal.SIGKILL
