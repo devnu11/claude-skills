@@ -1,6 +1,16 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s69 done)
+
+## s69: Read tests; runner's coverage is in your brief; no test runs allowed
+
+You cannot run any tests, including targeted runs. The runner runs the test suite at gates and the coverage command before your step. Your brief under `## Runner results` shows coverage output; read it to verify coverage is adequate.
+
+- **Read tests:** Read the test code to understand intent and coverage strategy.
+- **Deny on test runs:** Any attempt to run tests (even by name) is denied with a message explaining the rule.
+- **Judge from brief:** The brief carries the coverage result from the implement or quality gate. Coverage % is already computed; you judge whether it is adequate given code changes.
+
+This rule makes your review faster and audit-proof: all tests run through the same runner path. See ADR-0034, design `agile-team/docs/design/s69.md` (rules S7–S8, AC3).
 
 ## s68: Implement gate runs coverage once; test failure from output patterns
 

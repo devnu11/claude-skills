@@ -1,6 +1,14 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 E2E tests open)
+**Last updated:** 2026-10-12 (s69 done)
+
+## s69: Run e2e tests by file name only; full suite denied
+
+You can run e2e tests from your test directory by file name (e.g., `pytest -q tests/e2e/test_x.py`), but you cannot run:
+- The full suite (`pytest` with no arguments, or a directory like `pytest tests/`)
+- Any coverage check (`pytest --cov`)
+
+Both are denied with a message. The runner runs the full suite at gates. Use file-name runs to verify your e2e tests work before handing off. See ADR-0034, design `agile-team/docs/design/s69.md` (rules S1–S8).
 
 ## s44: Live meter E2E tests (six items open)
 

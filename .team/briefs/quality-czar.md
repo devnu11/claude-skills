@@ -1,6 +1,16 @@
 # Quality Czar: Current context and conventions
 
-**Last updated:** 2026-10-10 (s25 done)
+**Last updated:** 2026-10-12 (s69 done)
+
+## s69: Judge the runner's lint, static, and coverage results only; no Bash
+
+Your tools are now Read, Grep, and Glob only. The runner pre-runs lint and static checks before your step and shows results in your brief under `## Runner results`. Coverage is also there (reused from the implement gate if at HEAD).
+
+- **Mission:** Judge whether the code violates any quality standard based on the runner's results (lint, static, coverage).
+- **No shell:** You have no access to Bash. All analysis is via reading code and output.
+- **Results in brief:** Each result shows command, exit code, and output tail. Your brief guides you to which ones need judgment.
+
+This design keeps your step fast and lets the runner maintain consistency across all lint/static runs. See ADR-0034, design `agile-team/docs/design/s69.md` (rules B1–B6, Q1–Q4, AC3).
 
 ## Test quality for s25: Cost delta tracking
 

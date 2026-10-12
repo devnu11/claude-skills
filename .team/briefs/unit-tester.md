@@ -1,6 +1,17 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s69 done)
+
+## s69: Your test files are recorded; full suite denied; run your tests by name
+
+When you commit test files, the runner records their paths in `story.test_files`. Full pytest runs and coverage checks are now denied to all roles. Your mission: write and verify your own tests only.
+
+- **Record:** When you commit, every new test file (matching `test_*.py` or `*_test.py`) is recorded automatically; legacy stories load with `[]`.
+- **Don't re-check:** The runner bounces the story back with test output if they fail at the gate. You don't need to run the full suite yourself.
+- **Run your tests by name:** Either use Bash (`pytest -q tests/test_x.py::test_y`) or ask the developer to call `run_new_tests` (runs all your recorded files for this story) or `run_tests` (specific ids).
+- **Verify they fail first:** For new tests, run by name to confirm they fail for the right reason (assertion or missing name, not syntax error).
+
+Full suite and coverage runs are denied; guide appears in your brief. See ADR-0034, design `agile-team/docs/design/s69.md` (rules R6–R7, AC2–AC3).
 
 ## s68: Implement gate runs coverage once; test failure detected from output
 

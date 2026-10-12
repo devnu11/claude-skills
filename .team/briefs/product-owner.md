@@ -1,6 +1,24 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s69 done)
+
+## s69: Agents never run the full suite; runner does and shows results in briefs
+
+Agents spend ~62% of their step time in tools, mostly running full pytest suites. This story moves all suite and coverage runs to the runner alone. **What you see:**
+
+- **Faster cycles:** Implement → quality gate drops to ~4 min (one coverage run, s68 already improved this).
+- **Consistent results:** Every role sees the same test output in their brief under `## Runner results`.
+- **Developer tools:** Developers can still run named tests (`pytest -q tests/test_x.py::test_y` in Bash, or `run_tests` tool for specific ids).
+- **Config required:** You (or devops) must add `[[toolchain.targeted]]` rows to `.agile-team.toml` so developers can use the `run_tests` tool:
+  ```toml
+  [[toolchain.targeted]]
+  root = "agile-team/runner"
+  command = "uv run --directory agile-team/runner pytest -q --no-header {tests}"
+  ```
+  Without it, `run_tests` refuses until configured.
+- **Quality czar isolated:** No Bash access; judges lint/static/coverage results from brief only. Role is fast and audit-proof.
+
+See ADR-0034, design `agile-team/docs/design/s69.md` (rules S1–S10, B1–B6, AC1–AC6).
 
 ## s68: Implement gate now takes ~4 minutes (not 7–9); runs coverage once
 

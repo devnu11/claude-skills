@@ -1,8 +1,17 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s69 done)
 
 See `developer.md` for the base conventions.
+
+## s69: Only the runner runs the full suite; you have `run_tests` and `run_new_tests` tools
+
+Full pytest and coverage runs are now denied to all roles except devops. The runner runs them at gates and shows results in your brief (`## Runner results`). You can still run named tests:
+- **`run_tests` tool:** Pass test file paths or pytest node ids (e.g., `tests/test_x.py::test_y`). The runner runs them via `[[toolchain.targeted]]` config and returns output.
+- **`run_new_tests` tool:** Runs only the story's new test files (committed in this story by unit-tester).
+- **Bash:** Named tests allowed: `pytest -q tests/test_x.py::test_y` passes. Full suite or `--cov` denied.
+
+Suite denial is enforced by a guard rule: `pytest` with no specific targets, or any `--cov` flag, is denied with a message pointing to these tools. See ADR-0034, design `agile-team/docs/design/s69.md` (rules S1–S9, R1–R10).
 
 ## s68: The implement gate runs coverage once, not test then coverage
 
