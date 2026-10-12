@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-12 (s43 done)
+**Last updated:** 2026-10-12 (s68 done)
+
+## s68: Implement gate cycle time reduced to ~4 minutes (no new Manager context)
+
+Gate now runs coverage command once instead of test then coverage. Cycle time improves from 7–9 minutes to ~4 minutes. Test failure detection is now pattern-based from coverage output instead of a separate run. No impact on escalation, ruling, or your decision-making logic. See ADR-0033.
 
 ## s43: Gate command timeouts (no new Manager context)
 

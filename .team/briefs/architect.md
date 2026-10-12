@@ -1,6 +1,21 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 done)
+**Last updated:** 2026-10-12 (s68 done)
+
+## s68: Single coverage run replaces test + coverage gate command pair
+
+**Architectural pattern:** Gate command compression. The implement gate was calling two sequential commands (test, then coverage), each full-suite run. Coverage run already runs tests, so its exit code is redundant with the test command's exit code. New design: **one coverage run** proves both test pass and coverage figure.
+
+**Test failure detection via patterns (C6):** Instead of relying on a separate test command, the gate detects test failures from the coverage command's output using regex patterns (`TEST_FAILURES` tuple). Known formats: pytest `N failed`, go `--- FAIL:`, etc. Unknown tools fall to the safe side: bounce `tests fail:` and keep the output tail.
+
+**Branching (C4–C5):** Non-zero exit from coverage command:
+- If test failure detected (pattern match) → bounce `tests fail:\n{tail}` (C5)
+- Else if coverage below threshold → bounce `coverage {pct}% is below {req}%` (C4: shortfall-only case)
+- Else → bounce `tests fail:\n{tail}` (C5: unknown, safe side)
+
+**Consequence:** Cycle time ~4 minutes (one suite run) instead of 7–9 minutes. Known consequence: a repo with baseline coverage debt *and* a coverage command's own `fail_under` above that baseline will now bounce `tests fail` instead of passing (correct behavior; repo must fix its config).
+
+**Gate interface unchanged:** bounce_to, round counting, and event shape all stay the same. Shared constant `TESTS_FAIL` for DRY bounce text. See ADR-0033, design `agile-team/docs/design/s68.md`.
 
 ## s44: Live meter, heartbeat, and health rules (decisions verified)
 

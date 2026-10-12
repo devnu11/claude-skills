@@ -1,6 +1,19 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 done)
+**Last updated:** 2026-10-12 (s68 done)
+
+## s68: Implement gate runs coverage once; test failure from output patterns
+
+Reviewed and shipped: `gates.py` (implement gate, constants, helper). Key decisions (C1–C7):
+- **C1:** Gate calls `run(commands["coverage"])` exactly once; timeout unchanged.
+- **C3:** Exit 0 → `_coverage_outcome(parse_coverage(out))`, unchanged.
+- **C4:** Non-zero + low coverage + no test failure → shortfall bounce, unchanged text.
+- **C5:** Non-zero + test failure detected (or unknown) → `tests fail:\n{tail(out)}`.
+- **C6:** `tests_failed(output)` True if `TEST_FAILURES` patterns match; `[1-9]` guards against `0 failed`.
+- **C7:** Shared constant `TESTS_FAIL` used by `green()` and `_failed_run()` (DRY).
+- **Known consequence:** Repo with baseline + `fail_under > baseline` now bounces `tests fail` (correct; config fix is repo's problem).
+
+Diff reviewed: tests moved to coverage command path; coverage stays 100%; ruff clean. See ADR-0033.
 
 ## s44: Live spend meter, heartbeat, and health rules (all decisions verified)
 

@@ -1,8 +1,21 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s68 done)
 
 See `developer.md` for the base conventions.
+
+## s68: The implement gate runs coverage once, not test then coverage
+
+The implement → quality gate now calls `run(commands["coverage"])` exactly once. Coverage run already runs tests and provides the exit code, so no separate test run is needed. Cycle time drops from 7–9 minutes to ~4 minutes.
+
+**Test failure detection (C6):** Test failures are detected via regex patterns `TEST_FAILURES` in the output (pytest `N failed`, go `--- FAIL:`, etc.). If a pattern matches, the bounce text is `tests fail:\n{tail(out)}`. The constant `TESTS_FAIL` is shared with `green()` for DRY.
+
+**Coverage shortfall (C4) vs test failure (C5):** Non-zero exit can be:
+- Shortfall only (coverage below threshold, no test failure detected) → bounce with coverage text
+- Test failure (pattern detected) → bounce with tests fail text
+- Unknown (no pattern, no coverage info) → bounce with tests fail (safe side)
+
+**Changed methods:** `Checks.tests_green_and_covered()` now runs only coverage. `_failed_run(out)` handles non-zero exits. `green()` updated to use `TESTS_FAIL`. No gate interface change; bounce_to and event shape unchanged. See ADR-0033, design `agile-team/docs/design/s68.md`.
 
 ## s43: Gate commands have a timeout; hung tests are named, not waited on
 

@@ -1,6 +1,17 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 done, one open item)
+**Last updated:** 2026-10-12 (s68 done)
+
+## s68: Implement gate runs coverage once; test failure detected from output
+
+**Gate change:** `tests_green_and_covered()` now calls `run(commands["coverage"])` once (C1). Coverage exit code 0 → pass with percentage. Non-zero → branch via `_failed_run()`:
+- If `tests_failed(output)` is True (pattern in `TEST_FAILURES`) → bounce `tests fail:\n{tail(out)}`
+- Else if coverage below threshold and no test failure → bounce `coverage {pct}% is below {req}%` (C4)
+- Else → bounce `tests fail:\n{tail(out)}` (C5, safe side)
+
+**Test failure detection (C6):** Regex patterns in `TEST_FAILURES` tuple (pytest/cargo/jest `N failed`, go `--- FAIL:`). Note `[1-9]`: `0 failed` does not count. Shared constant `TESTS_FAIL` used by both `green()` and `_failed_run()` for DRY (C7).
+
+**Moved/updated tests:** Tests expecting old two-run contract (test command then coverage) now use coverage command only. `test_green_gate` and others make the coverage command fail. `PipelineRunner.failures` updated. Existing logic pins shared constant. See design `agile-team/docs/design/s68.md` test checklist; ADR-0033.
 
 ## s44: Live spend meter, heartbeat, and health (Python/UI tests done; E2E open)
 

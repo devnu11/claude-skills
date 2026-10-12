@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s44 done)
+**Last updated:** 2026-10-12 (s68 done)
+
+## s68: Implement gate now takes ~4 minutes (not 7–9); runs coverage once
+
+The implement → quality gate was running two commands (test 4 min, then coverage 4 min = 7–9 min total). Coverage run already runs every test, so the first run was wasted. **New behavior:** Gate calls the coverage command once. Its exit code proves green or red, and its output provides the coverage figure.
+
+**What you see:** Cycle time for implement → quality drops to ~4 minutes (one test run). On a gate bounce:
+- If tests failed (pattern detected in output) → bounce reason starts `tests fail:`, same as before.
+- If coverage is low and tests passed → bounce reason is `coverage {pct}% is below {req}%`, same as before.
+- If neither case (unknown failure) → bounce starts `tests fail:` (safe side).
+
+No change to gate interface, bounce_to logic, or event shape. No user-facing commands or config changes. See ADR-0033.
 
 ## s44: Live spend meter and runner health—your decision on graceful stop (D4)
 
