@@ -45,7 +45,7 @@ one line here. Older designs are the sections at the end of this file.
 | s68 The implement gate runs the suite once (the `coverage` command only); a non-zero exit never passes; failing tests vs coverage shortfall told apart by `TEST_FAILURES`, bounce texts unchanged | [design/s68.md](design/s68.md) |
 | s69 Only the runner runs the full suite: `SUITE_RULES` deny full pytest and coverage runs from role Bash; gate and pre-quality results kept per story and shown under `## Runner results`; the developer's `run_tests`/`run_new_tests` runner tools (`[[toolchain.targeted]]`); the quality czar has no shell | [design/s69.md](design/s69.md) |
 | s70 The runner's suite runs in parallel (pytest-xdist dev dependency, `-n auto` in the coverage, test and targeted commands and CI); `sandbox.stop_stale` takes injected `RunnerIds`, so no test ID holds a live pid; a two-process collection test checks it | [design/s70.md](design/s70.md) |
-| s71 Unit tests touch no OS: `agile_team/system.py` is the one OS seam (imported as a module); the in-memory `tests/fake_system.FakeSystem` swapped in by an autouse fixture; an audit hook and a patch table (`tests/os_guard.py`) fail a unit test that reaches the real OS; ruff `TID251`; real OS only in `tests/e2e/`; three green phases | [design/s71.md](design/s71.md) |
+| s71 Unit tests touch no OS: `agile_team/system.py` is the one OS seam (imported as a module); the in-memory `tests/fake_system.FakeSystem` swapped in by an autouse fixture; an audit hook and a patch table (`tests/os_guard.py`) fail a unit test that reaches the real OS; ruff `TID251`; real OS only in `tests/e2e/`; three green phases (s71 ships P1, s76 P2, s77 P3) | [design/s71.md](design/s71.md) |
 
 ## Components
 
