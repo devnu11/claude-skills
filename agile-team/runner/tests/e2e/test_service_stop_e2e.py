@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import tomli_w
 from agile_team import config as config_mod
-from agile_team import process_groups, sandbox
+from agile_team import sandbox, system
 from agile_team.sandbox import Order, Preparer, port_in_use
 
 from ..conftest import PY_CONFIG, git
@@ -90,6 +90,6 @@ def test_stop_on_an_already_reaped_leader_sends_no_signal(
     prepared = start(config)
     assert prepared.stop() is None
     sent: list[tuple[int, int]] = []
-    monkeypatch.setattr(process_groups.os, "killpg", lambda pid, sig: sent.append((pid, sig)))
+    monkeypatch.setattr(system, "killpg", lambda pid, sig: sent.append((pid, sig)))
     sandbox.end_group(prepared.process)
     assert sent == []
