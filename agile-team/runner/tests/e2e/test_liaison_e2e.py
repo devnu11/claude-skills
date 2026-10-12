@@ -34,10 +34,18 @@ def test_tell_from_stdin_then_watch_reports_the_outbox_message(configured: Path)
     assert told.returncode == 0 and "queued t1 for the PO" in told.stdout
     stored = configured / ".team" / "run" / "liaison" / "messages" / "t1.md"
     assert stored.read_text() == "please hurry\n"
-    Relay(configured / ".team" / "run").post(Note("update", "hello"))
-    first = run_cli(configured, "watch", "--timeout", "5")
+    relay = Relay(configured / ".team" / "run")
+    relay.post(Note("update", "history"))
+    first = run_cli(configured, "watch", "--timeout", "1")
     line = json.loads(first.stdout)
-    assert first.returncode == 0 and "message" in line["triggers"]
+    assert first.returncode == 0 and line["triggers"] == ["heartbeat"]
+    assert line["messages"] == []
+    seen = configured / ".team" / "run" / "liaison" / "watch.json"
+    assert json.loads(seen.read_text())["messages"] == 1
+    relay.post(Note("update", "hello"))
+    fresh = json.loads(run_cli(configured, "watch", "--timeout", "5").stdout)
+    assert "message" in fresh["triggers"]
+    assert [m["id"] for m in fresh["messages"]] == ["m2"]
     second = run_cli(configured, "watch", "--timeout", "1")
     assert json.loads(second.stdout)["triggers"] == ["heartbeat"]
 
