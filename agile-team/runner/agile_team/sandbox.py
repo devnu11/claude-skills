@@ -266,7 +266,8 @@ def _ends_within(pgid: int, seconds: float) -> bool:
 
 def _end_group(recorded: Recorded) -> None:
     signal_child_group(recorded.pid, signal.SIGTERM)
-    if not _ends_within(recorded.pid, STOP_WAIT_S):  # ownership was checked by _may_end
+    still_ours = recorded.is_ours()  # read before the wait: the group may change hands meanwhile
+    if not _ends_within(recorded.pid, STOP_WAIT_S) and still_ours:
         signal_child_group(recorded.pid, signal.SIGKILL)
 
 
