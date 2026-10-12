@@ -107,9 +107,13 @@ and starts normally.
 
 `accept-checkout` is refused while the runner is still running, on a detached
 HEAD, or with a rebase or merge in progress. If a step was cut off, its edits
-stay in the tree uncommitted: they were made on the wrong tree, so look at
-them before you commit, stash or discard them. `start --resume` keeps
-stopping, at no cost, until the checkout is back or accepted.
+stay in the tree uncommitted. They were made on a moved tree, so look at
+them first. Once the checkout is back or accepted, `start --resume` saves
+them like any cut-off step (a reverted commit; see below) and carries on.
+You don't need to stash them. `start --resume` keeps stopping, at no cost,
+until the checkout is back or accepted. A message you queued with
+`agile-team tell` in the meantime is kept and reaches the Product Owner
+after the resume.
 
 ## After an error
 
@@ -152,3 +156,28 @@ agile-team start: the last run was killed; developer-cli on s7's edits are saved
 
 A dirty tree that no interrupted run left behind is still refused. Commit
 or stash your own changes first.
+
+## Telling the team something
+
+To pass the Product Owner something it did not ask for, write it to a file
+and queue it:
+
+```sh
+agile-team tell note.md        # or: agile-team tell - < note.md
+```
+
+```text
+queued t1 for the PO: .team/run/liaison/messages/t1.md
+```
+
+You don't need to stop anything. A running team hands it over when the
+current step ends. A stopped or halted one hands it over on the next
+`agile-team start --resume`. `agile-team status` lists messages not yet
+handed over under `queued_messages`.
+
+## Waiting for the team
+
+`agile-team watch --timeout 7200` waits, at no token cost, until a new
+outbox message arrives or the run's status changes. Then it prints one JSON
+line saying what happened, or a heartbeat after the timeout. Run it again
+for the next event; it remembers what it already reported.

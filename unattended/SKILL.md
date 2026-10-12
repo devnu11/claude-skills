@@ -11,8 +11,10 @@ minutes (5 h if no reset time is given), then resumes. A deadline, a maximum
 number of resumes and a cost cap stop it.
 
 ```sh
-UN="uv run --quiet --project ~/.claude/skills/unattended/runner unattended"
+UN="uv run --frozen --quiet --project ~/.claude/skills/unattended/runner unattended"
 ```
+
+`--frozen` runs the skill's tested `uv.lock` as it is; never drop it.
 
 Every flag, the job files, limit detection and the command contract are in
 `reference/protocol.md` next to this file. Read it before wrapping a command.

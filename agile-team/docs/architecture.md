@@ -39,6 +39,7 @@ one line here. Older designs are the sections at the end of this file.
 | s58 The Proxy's OS sandbox gets `network.allowLocalBinding` for a delivery that serves locally (`Start.BACKGROUND`); verified on macOS by an e2e test with the bundled CLI; service lifecycle stated | [design/s58.md](design/s58.md) |
 | s43 Gate commands run in their own process group under `[gates] command_timeout_s`; a timeout bounces naming the hung test; per-test pytest timeout; open wait loops denied in role Bash | [design/s43.md](design/s43.md) |
 | s61 The runner records the branch and HEAD it expects and halts (`checkout-changed`, exit 78, a question) when anyone else moves the checkout; `accept-checkout` keeps a new HEAD | [design/s61.md](design/s61.md) |
+| s62 Liaison commands: `tell` queues a message the router hands the PO as `human_message`; `watch` blocks token-free and prints one JSON line; `start --resume` saves a checkout halt's leftover edits; self-hosting pin script and doc; `--frozen` docs, `--locked` CI | [design/s62.md](design/s62.md) |
 
 ## Components
 
@@ -58,7 +59,7 @@ one line here. Older designs are the sections at the end of this file.
 | `halt.py` | `Halt`, `HaltKind`, `HALTS`, `LIMIT_PATTERNS`: exception → halt; `crash.log` | state (`RunStatus`) |
 | `checkout.py` | the checkout guard (s61): `Found`, `Drift`, `OPERATIONS`, `check`, `recorded`, `CheckoutChanged`; `Guard` for `start` and `accept-checkout` | git, halt, state, relay, events |
 | `salvage.py` | a step cut short (s9): `Cause`, `InFlight`, `Interruption`; save the tree as a reverted commit; the note, brief and resume texts | git |
-| `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_killed` for `start --resume` after a kill | salvage, state, halt, events, git |
+| `recovery.py` | `Salvager` (save and record an interrupted step, s9), `recover_cut` for `start --resume` after a kill or a checkout halt that left edits unsaved (s62) | salvage, state, halt, events, git |
 | `gates.py` | `StoryState`, `Pipeline` (step machine; the repeat screen and fault rulings, s27; `pass_tests`, s30), `dispatch_refusal`, command gates, the dispute gate (resolve and fingerprint at raise, compare at tests, s30) | roles (`Handoff`), loops, fingerprint |
 | `commands.py` | shell commands the runner runs (s43): `CommandShell`/`shell_runner` (own process group, `[gates] command_timeout_s`, group kill, `TIMED_OUT`), `HUNG_PATTERNS` and `hung_test` | none (stdlib) |
 | `fingerprint.py` | content fingerprints that ignore whitespace and comments (s30): `of`, `normalise`, `LINE_COMMENTS`; no I/O | none |
@@ -67,7 +68,8 @@ one line here. Older designs are the sections at the end of this file.
 | `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |
 | `state.py` | `RunState` (with the PO's story `order`, s40) and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
-| `relay.py` | outbox/inbox with the liaison | none |
+| `relay.py` | outbox/inbox with the liaison; the human's queued messages `liaison/messages/t<N>.md` (`tell`, `told`, s62) | none |
+| `watch.py` | `agile-team watch` (s62): `Look` at the outbox and shown status, the `TRIGGERS` table, `Seen` memory in `liaison/watch.json`, `Watcher.until` | relay, state |
 | `ledger.py` | per-step cost, tokens and turns; turns and re-sent context per turn (s23); budget checkpoints; `SessionCost`, a resumed PO query's own share of the session's running cost (s25) | none |
 | `guard.py`, `sandbox.py`, `keys.py` | write scopes, quarantine, Customer Proxy sandbox (a `web` delivery's service: stale stop, start, probe, teardown, s26; loopback reachable from the OS sandbox, s58), key hygiene | git |
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |
@@ -77,7 +79,7 @@ one line here. Older designs are the sections at the end of this file.
 
 ```mermaid
 flowchart LR
-  liaison[[liaison / human]] -- answer, stop, status --> cli
+  liaison[[liaison / human]] -- answer, tell, stop, status, watch --> cli
   cli -- start --> po[po_tools.PoRun driver]
   po -- PO turn: MCP tool calls --> tools[po_tools.Tools]
   po -- router pass --> router[router.Router]

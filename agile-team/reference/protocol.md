@@ -5,7 +5,11 @@ Loaded on demand by the liaison. Everything here is implemented in
 
 ## CLI
 
-Run from the target repo root, or pass `--repo PATH`.
+Run from the target repo root, or pass `--repo PATH`. The installed skill
+runs as `uv run --frozen --quiet --project ~/.claude/skills/agile-team/runner agile-team`.
+`--frozen` uses the skill's tested `uv.lock` and never rewrites it. When the
+team works on this runner itself, it runs on a pinned copy instead (see
+`self-hosting.md`).
 
 | Command | What it does |
 |---|---|
@@ -16,8 +20,10 @@ Run from the target repo root, or pass `--repo PATH`.
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries") and `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
 | `answer ID TEXT` | Answer PO question `ID`. |
+| `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
+| `watch [--timeout S]` | Block, polling the run files every 2 s (no tokens), until something needs the liaison. Then print one JSON line and exit 0. See "Watch". |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `accept-checkout` | Keep the current branch and HEAD as the team's after a `checkout-changed` halt (see "Checkout guard"). Refused (exit 1) while a runner is alive, on a detached HEAD, or with a git operation in progress. |
 | `dashboard [--host H] [--port 8765] [--no-open]` | Serve the read-only live dashboard until interrupted (the liaison backgrounds it). Prints `dashboard: <url>` once it is listening, then opens it in a browser unless `--no-open`. Default host: `0.0.0.0` (all interfaces; the URL uses the machine's hostname), `127.0.0.1` on Windows. `--port 0` picks a free port and prints the real one. Exit 1 if the address can't be bound. See "Dashboard". |
@@ -25,8 +31,9 @@ Run from the target repo root, or pass `--repo PATH`.
 `init` (without `--detect`) in a directory that is not a git work tree prints
 `agile-team init: not a git repository: <repo>; run git init first` and exits 1.
 
-Preflight refuses to start when: the tree is dirty (except after a kill, see
-"Interrupted steps"); with `auth = "api-key"`,
+Preflight refuses to start when: the tree is dirty (except on `--resume`
+after a kill or a checkout halt that left a step's edits, see "Interrupted
+steps"); with `auth = "api-key"`,
 no key file exists, the repo key file is not gitignored, or a key file is not
 mode 600; with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
 command's executable is missing; `config check` fails.
@@ -58,13 +65,66 @@ session's last running cost, see "Ledger cost"; `in_flight` the role step
 running now as `{role, story, brief}`, else `null`; `interrupted` the
 interrupted steps not yet shown to the PO, see "Interrupted steps";
 `checkout` the `{branch, head}` the runner expects, `null` until the first
-check, see "Checkout guard"),
+check, see "Checkout guard"; `told` the `tell` message ids already handed to
+the PO; `unsaved` the cause of a halt whose salvage was skipped because the
+checkout moved, else `null`, see "Interrupted steps"),
 `ledger.jsonl` (per-step cost), `runner.pid` (the live runner's pid; a
 stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
 (what the Integration Tester presents to the Customer Proxy: see
 "Presentation"), `api-key` (default key location).
+
+### Liaison messages
+
+`tell` writes the text to a draft in `.team/run/liaison/messages/`, then
+links it to the next free `t<N>.md` (one more than the highest number there).
+A concurrent `tell` never overwrites one, and the router never sees a
+half-written file. Other files in that folder are ignored. `tell` never
+touches `state.json`.
+
+At each router pass, right after the checkout check, the router reads the
+inbox answers and the messages not yet in `state.json` `told`. Either one
+ends the pass with a `human_message` hand-over. Answer lines come first,
+then one line per message:
+
+```text
+The human sent you a message (t3): read .team/run/liaison/messages/t3.md.
+```
+
+The text itself is not in the prompt; the PO reads the file. So a running
+team gets a message when its current role step ends, or within one 5 s poll
+while it waits on answers. A message sent while the PO is mid-turn waits for
+that turn to end. A stopped or halted run (including `checkout-changed`)
+keeps it, and `start --resume` hands it over at its first router pass. That
+pass is before the PO's first turn unless a `--task` or pending interrupted
+steps give the PO a turn first. `start --resume --task T` still works.
+
+### Watch
+
+`watch` polls every 2 s. Each poll reads `outbox.jsonl` and the shown status
+(`status` and `status_reason`, with `interrupted` for a dead runner). A torn
+outbox line counts as no poll. Triggers, in order:
+
+| Trigger | Fires when |
+|---|---|
+| `message` | the outbox has entries after the ones already reported (all of them when the outbox got shorter) |
+| `status` | the status is not plain `running` (`running` with no reason) and `(status, status_reason)` differs from the last one seen: halted, waiting on answers, budget, limit, interrupted, done, sprint end, idle |
+
+When one fires, or at the first poll after `--timeout S` with nothing fired,
+it prints one line and exits 0:
+
+```json
+{"triggers": ["message", "status"], "messages": [{"id": "m7", "kind": "blocked", "text": "…", "stories": [], "at": 1791800000.0}], "status": "blocked", "status_reason": "session limit, resets 9pm (Europe/Berlin)", "was": {"status": "running", "status_reason": null}}
+```
+
+A heartbeat has `"triggers": ["heartbeat"]` and `"messages": []`. `was` is
+the status seen before (its `status` is `null` the first time). What was
+reported is kept in `.team/run/liaison/watch.json`
+(`{messages, status, status_reason}`), so nothing is lost between two
+watches. The first watch in a repo reports the whole outbox. Run one watch
+at a time. Every halt and every PO `notify_user` also posts an outbox entry,
+so `message` catches a halt even when the status ends up as it was.
 
 ## Run status and stops
 
@@ -159,7 +219,8 @@ On a mismatch the run halts at once: status `checkout-changed`, a
 `status_reason`, one `question` note (`<reason>; <advice>`), exit 78. Nothing
 else runs on the changed tree: no commit, quarantine, gate, salvage or
 further step. A role step that already ran keeps its cost in the ledger, and
-its edits stay uncommitted in the tree for the human to judge. The PO's
+its edits stay uncommitted in the tree for the human to judge, until the
+next `start --resume` saves them (see "Interrupted steps"). The PO's
 `run_role` returns `{"status": "halted", …}`. The reason reads:
 
 ```text
@@ -200,6 +261,7 @@ that ends without settling is **interrupted**. Its cause is one of:
 | `error` | at once, when a role step raises an error that is not a limit (the PO still gets the error text) |
 | `limit`, `crash`, `sigterm` | when the run halts (see the table above) |
 | `killed` | on `start --resume`, when `state.json` says `running` and `runner.pid` is missing or dead |
+| `checkout` (or any cause whose halt found the checkout moved) | not at the halt: the tree is not the team's (s61). The cause goes in `state.json` `unsaved`. The edits are saved on the next `start --resume`, once the checkout is back or accepted. Any run that starts clears `unsaved`. |
 
 Saving means: every changed path, in scope or not, goes into one commit
 `chore(team): interrupted step by <role> on <story>` (body `cause: <cause>`),
@@ -218,8 +280,11 @@ on the story (`interrupted`) and logged as a `step-interrupted` event
   before any router pass.
 - `start --resume` after a kill prints
   `agile-team start: the last run was killed; <role> on <story>'s edits are saved in <sha> (reverted)`
-  before preflight. A dirty tree with no interrupted run behind it (any other
-  status, a live pid, or a plain `start`) is still refused.
+  before preflight. After a checkout halt it prints
+  `agile-team start: the last run halted (checkout) before its edits were saved; <role> on <story>'s edits are saved in <sha> (reverted)`.
+  A dirty tree with no interrupted run behind it (any other status with no
+  `unsaved`, a live pid, or a plain `start`) is still refused. No wrapper
+  should stash or clean the tree before a resume.
 - If git fails while saving, the error goes to `crash.log`, the tree is
   left as it is, and preflight refuses it on the next start.
 
@@ -950,7 +1015,8 @@ The pass ends at the first step whose report matches a row of the
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
-not seen; they are listed by id with the question), `sprint_end` (every story
+not seen, listed by id with the question, or `tell` messages it has not
+been handed, each as a path to read; see "Liaison messages"), `sprint_end` (every story
 in the sprint is done and the sprint's end boundary has finished; a
 `Review: …` line says what was pushed) and `stalled` (nothing can move; the
 reason for each story is listed, or the held boundary). Gate bounces, `changes_requested` to a pipeline role, a

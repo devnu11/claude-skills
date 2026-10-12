@@ -1,7 +1,9 @@
 # unattended: protocol
 
 Runner: `unattended/runner` (Python ≥ 3.12, `uv`, `claude-agent-sdk`). Run it
-as `uv run --quiet --project ~/.claude/skills/unattended/runner unattended`.
+as `uv run --frozen --quiet --project ~/.claude/skills/unattended/runner unattended`
+(`--frozen`: install the tested `uv.lock` as it is, never re-resolve or
+rewrite it).
 
 ## Commands
 

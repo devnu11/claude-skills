@@ -13,8 +13,12 @@ questions and updates word for word, and send answers back.
 Runner command (run from the target repo's root):
 
 ```sh
-AT="uv run --quiet --project ~/.claude/skills/agile-team/runner agile-team"
+AT="uv run --frozen --quiet --project ~/.claude/skills/agile-team/runner agile-team"
 ```
+
+`--frozen` runs the skill's tested `uv.lock` as it is; never drop it. When
+the repo is `claude-skills` itself (the team works on its own runner), run
+the pinned copy instead: see `reference/self-hosting.md`.
 
 Message formats, every CLI flag and the config schema are in
 `reference/protocol.md` next to this file. Read it before `init` or when a
@@ -57,8 +61,19 @@ command fails.
    port is taken, a dashboard is probably already running, so reuse its URL
    or pass `--port 0`. Leave it running across resumes. It never changes
    anything.
-6. **Watch** `.team/run/outbox.jsonl` with the Monitor tool
-   (`tail -n +1 -F .team/run/outbox.jsonl`). For each new line, relay `text`
+   **Long runs** survive usage limits under the `unattended` skill. Make the
+   job's command the `start` above, and make its resume command plain
+   `<AT> start --resume`, where `<AT>` is the full command in `$AT`. Never
+   use a wrapper script: messages go through `tell` (step 7), and the runner
+   saves an interrupted step's edits itself.
+6. **Watch:** run `$AT watch --timeout 7200` in the background. It spends
+   no tokens and exits with one JSON line when something needs you:
+   `triggers` lists `message` (new outbox entries, in full under
+   `messages`), `status` (the run's `status`/`status_reason` changed: halted,
+   waiting, budget, limit, interrupted, done; `was` holds the old one) or
+   `heartbeat` (nothing happened within the timeout). Act on it, then start
+   the next watch at once. It remembers what it reported, so nothing is lost
+   in between. Run one at a time. For each new message, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
    entries, include the id. The PO speaks only when the runner needs its
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
@@ -74,8 +89,15 @@ command fails.
    that cannot move shows `⏸ <reason>` and what it waits on; it keeps its
    place and runs once it is released.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
-   something the PO did not ask for, stop the runner and resume with it:
-   `$AT stop`, then `$AT start --resume --task "<the human's words, verbatim>"`.
+   something the PO did not ask for, write the human's words verbatim to a
+   file with the Write tool (for example `.team/run/liaison/draft.md`), then
+   run `$AT tell .team/run/liaison/draft.md` (or `-` to read stdin). Never put
+   the text itself on a command line: a role's `pkill -f` once matched one.
+   The message is queued in `.team/run/liaison/messages/t<N>.md`. A running
+   team hands it to the PO when the current step ends (within 5 s while it
+   waits on answers), with no stop. A stopped or halted run hands it over on
+   the next `$AT start --resume`. `$AT status` lists undelivered ids under
+   `queued_messages`.
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
@@ -141,7 +163,9 @@ command fails.
      them), `$AT accept-checkout` keeps the new HEAD. Then
      `$AT start --resume`. Resuming while it is still changed halts again.
      The cut-off step's edits stay uncommitted in the tree; show them to the
-     human before anything is committed or discarded.
+     human before they decide. `$AT start --resume` then saves them like any
+     cut-off step (below). A message queued with `tell` meanwhile is kept
+     and delivered after the resume.
    A step cut off mid-way keeps its edits: the runner commits them as
    `chore(team): interrupted step by <role> on <story>`, reverts that commit
    at once, and names the sha in the note. The next step on the story is
