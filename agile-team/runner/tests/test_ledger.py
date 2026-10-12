@@ -1,13 +1,15 @@
 """Cost ledger and budget checkpoints."""
 
 import json
-from pathlib import Path
 
+from agile_team import system
 from agile_team.ledger import Budget, Entry, Ledger, Tokens, budget_status
 
+from .fake_system import FAKE_REPO
 
-def test_record_and_totals(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "run" / "ledger.jsonl")
+
+def test_record_and_totals() -> None:
+    led = Ledger(FAKE_REPO / "run" / "ledger.jsonl")
     assert led.total() == 0
     led.record(Entry("developer", "sonnet", 1.5, "s1"))
     led.record(Entry("developer", "sonnet", 0.5))
@@ -21,8 +23,8 @@ def test_record_and_totals(tmp_path: Path) -> None:
     assert list(status["by_role"]) == ["architect", "developer"]
 
 
-def test_budget_status_zero_budget(tmp_path: Path) -> None:
-    assert budget_status(Ledger(tmp_path / "l"), 0)["pct_used"] == 0.0
+def test_budget_status_zero_budget() -> None:
+    assert budget_status(Ledger(FAKE_REPO / "l"), 0)["pct_used"] == 0.0
 
 
 def test_checkpoint_crossed() -> None:
@@ -41,14 +43,16 @@ def test_tokens_from_usage_and_sum() -> None:
     assert Tokens.from_usage(None) == Tokens()
 
 
-def test_old_lines_without_tokens_still_load(tmp_path: Path) -> None:
-    path = tmp_path / "ledger.jsonl"
-    path.write_text(json.dumps({"role": "scribe", "model": "haiku", "cost_usd": 0.1}) + "\n")
+def test_old_lines_without_tokens_still_load() -> None:
+    path = FAKE_REPO / "ledger.jsonl"
+    system.write_text(
+        path, json.dumps({"role": "scribe", "model": "haiku", "cost_usd": 0.1}) + "\n"
+    )
     assert Ledger(path).entries()[0].tokens == Tokens()
 
 
-def test_totals_group_cost_tokens_and_steps(tmp_path: Path) -> None:
-    led = Ledger(tmp_path / "ledger.jsonl")
+def test_totals_group_cost_tokens_and_steps() -> None:
+    led = Ledger(FAKE_REPO / "ledger.jsonl")
     led.record(Entry("developer", "sonnet", 1.0, "s1", tokens=Tokens(10, 5)))
     led.record(Entry("developer", "sonnet", 0.5, "s2", tokens=Tokens(1, 1)))
     by_role = led.totals("role")["developer"]

@@ -1,16 +1,16 @@
 """Activity log."""
 
-from pathlib import Path
-
 from agile_team.events import Event, EventKind, EventLog
+
+from .fake_system import FAKE_REPO
 
 
 def kinds(log: EventLog) -> list[str]:
     return [e.kind for e in log.events()]
 
 
-def test_emit_numbers_and_round_trips(tmp_path: Path) -> None:
-    log = EventLog(tmp_path / "run" / "events.jsonl")
+def test_emit_numbers_and_round_trips() -> None:
+    log = EventLog(FAKE_REPO / "run" / "events.jsonl")
     assert log.events() == []
     first = log.emit(Event(EventKind.GATE, None, "s1", {"verdict": "pass"}))
     assert first.id == "e1" and first.at > 0

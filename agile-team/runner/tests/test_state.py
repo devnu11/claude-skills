@@ -1,13 +1,15 @@
 """Run state round trip."""
 
 import json
-from pathlib import Path
 
-from agile_team import state
+from agile_team import state, system
 from agile_team.gates import StoryState, StoryStatus
 
+from .fake_system import FAKE_REPO
 
-def test_round_trip(tmp_path: Path) -> None:
+
+def test_round_trip() -> None:
+    tmp_path = FAKE_REPO
     assert state.load(tmp_path).status == "idle"
     st = state.RunState(cadence="until-blocker", sprint=2)
     st.stories["s1"] = StoryState("s1", "Add", "tests", rounds=1)
@@ -168,12 +170,13 @@ def test_older_state_loads_with_no_boundary_and_empty_upstream() -> None:
     assert back.upstream.push == "unasked" and back.upstream.closed == 0
 
 
-def test_order_round_trips_and_legacy_loads_empty(tmp_path: Path) -> None:
+def test_order_round_trips_and_legacy_loads_empty() -> None:
+    tmp_path = FAKE_REPO / "run"
     st = state.RunState(order=["s3", "s1"])
     state.save(tmp_path, st)
     assert state.load(tmp_path).order == ["s3", "s1"]
     path = tmp_path / "state.json"
-    raw = json.loads(path.read_text())
+    raw = json.loads(system.read_text(path))
     del raw["order"]
-    path.write_text(json.dumps(raw))
+    system.write_text(path, json.dumps(raw))
     assert state.load(tmp_path).order == []

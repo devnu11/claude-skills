@@ -1,9 +1,15 @@
-"""Shared fixtures: throwaway git repos and a configured runtime with a fake query()."""
+"""Shared fixtures: an in-memory ``system`` for unit tests, real git repos for e2e.
+
+Unit tests run in the FAKE world (s71): an autouse fixture swaps ``agile_team.system``
+for ``FakeSystem`` and ``os_guard`` fails any test that reaches the real OS. Tests in
+``tests/e2e/`` (and the ``os_guard.LEGACY`` files, until P3) run in the REAL world.
+"""
 
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
@@ -11,7 +17,7 @@ from typing import Any
 import pytest
 import tomli_w
 from agile_team import config as config_mod
-from agile_team import gates
+from agile_team import gates, system
 from agile_team.dispatch import Runtime
 from agile_team.git_ops import Git
 from agile_team.ledger import Ledger
@@ -19,6 +25,9 @@ from agile_team.relay import Relay
 from agile_team.roles import RoleBook
 from agile_team.state import RunState
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+
+from . import os_guard
+from .fake_system import FAKE_HOME, FAKE_REPO, FakeSystem
 
 PY_CONFIG: dict[str, Any] = {
     "team": {"docs_dir": "docs", "budget_usd": 10.0, "manager_every_pct": 50},
@@ -37,24 +46,89 @@ PY_CONFIG: dict[str, Any] = {
     "delivery": [{"name": "cli", "kind": "package", "prepare": "", "bin": ["bin"]}],
 }
 
+# The audit hook is installed once per process; it acts only inside a unit test's phases.
+sys.addaudithook(os_guard.hook)
+
 
 def git(repo: Path, *args: str) -> str:
+    """Run real git (REAL world only)."""
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, capture_output=True, text=True
     ).stdout
 
 
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_setup(item: pytest.Item) -> Any:
+    """Run fixture setup with the guard on for unit tests."""
+    with os_guard.watching(os_guard.world_of(item)):
+        return (yield)
+
+
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_call(item: pytest.Item) -> Any:
+    """Run the test body with the guard on for unit tests."""
+    with os_guard.watching(os_guard.world_of(item)):
+        return (yield)
+
+
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_teardown(item: pytest.Item) -> Any:
+    """Run fixture teardown with the guard on for unit tests."""
+    with os_guard.watching(os_guard.world_of(item)):
+        return (yield)
+
+
+@pytest.fixture
+def world(request: pytest.FixtureRequest) -> os_guard.World:
+    """Which world this test runs in: the fake (unit) or the real OS (e2e, LEGACY)."""
+    return os_guard.world_of(request.node)
+
+
 @pytest.fixture(autouse=True)
-def isolated_global_roles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def fake(world: os_guard.World, monkeypatch: pytest.MonkeyPatch) -> FakeSystem | None:
+    """A fresh in-memory ``system`` for every unit test; ``None`` in the real world."""
+
+    def install() -> FakeSystem:
+        fresh = FakeSystem()
+        fresh.install(monkeypatch)
+        return fresh
+
+    makers: dict[os_guard.World, Callable[[], FakeSystem | None]] = {
+        os_guard.World.FAKE: install,
+        os_guard.World.REAL: lambda: None,
+    }
+    return makers[world]()
+
+
+def _real_home(request: pytest.FixtureRequest) -> Path:
+    tmp_path: Path = request.getfixturevalue("tmp_path")
+    return tmp_path / "agile-team-home"
+
+
+@pytest.fixture(autouse=True)
+def isolated_global_roles(
+    world: os_guard.World, request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Path:
     """Point the global role layer at a scratch dir so no test reads the real home."""
-    home = tmp_path / "agile-team-home"
+    homes: dict[os_guard.World, Callable[[], Path]] = {
+        os_guard.World.FAKE: lambda: FAKE_HOME / "agile-team",
+        os_guard.World.REAL: lambda: _real_home(request),
+    }
+    home = homes[world]()
     monkeypatch.setenv("AGILE_TEAM_HOME", str(home))
     return home / "roles"
 
 
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    """A git repo with one commit and ``.team/run/`` ignored."""
+def _seed_fake_repo() -> Path:
+    system.make_dirs(FAKE_REPO / "src")
+    system.make_dirs(FAKE_REPO / ".git")
+    system.write_text(FAKE_REPO / ".gitignore", ".team/run/\n")
+    system.write_text(FAKE_REPO / "src" / "app.py", "x = 1\n")
+    return FAKE_REPO
+
+
+def _real_repo(request: pytest.FixtureRequest) -> Path:
+    tmp_path: Path = request.getfixturevalue("tmp_path")
     path = tmp_path / "repo"
     path.mkdir()
     git(path, "init", "-q", "-b", "main")
@@ -70,11 +144,29 @@ def repo(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def configured(repo: Path) -> Path:
-    """``repo`` with a committed Python ``.agile-team.toml``."""
-    (repo / config_mod.CONFIG_NAME).write_text(tomli_w.dumps(PY_CONFIG))
+def repo(world: os_guard.World, request: pytest.FixtureRequest) -> Path:
+    """A repo with one commit and ``.team/run/`` ignored (in memory for unit tests)."""
+    seeds: dict[os_guard.World, Callable[[], Path]] = {
+        os_guard.World.FAKE: _seed_fake_repo,
+        os_guard.World.REAL: lambda: _real_repo(request),
+    }
+    return seeds[world]()
+
+
+def _commit_config(repo: Path) -> None:
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "config")
+
+
+@pytest.fixture
+def configured(repo: Path, world: os_guard.World) -> Path:
+    """``repo`` with a Python ``.agile-team.toml`` (committed in the real world)."""
+    system.write_text(repo / config_mod.CONFIG_NAME, tomli_w.dumps(PY_CONFIG))
+    commits: dict[os_guard.World, Callable[[Path], None]] = {
+        os_guard.World.FAKE: lambda path: None,
+        os_guard.World.REAL: _commit_config,
+    }
+    commits[world](repo)
     return repo
 
 
@@ -176,22 +268,38 @@ GUIDE_TEXT = "Run `todo add milk`, then `todo list`: milk is listed.\n"
 
 
 def present(config: config_mod.Config, story_id: str = "s1", workspace: bool = True) -> Path:
-    """Write a complete presentation for ``story_id`` straight to disk (E1, E5)."""
+    """Write a complete presentation for ``story_id`` through ``system`` (E1, E5, O15)."""
     source = config.run_dir / "presentation" / story_id
-    source.mkdir(parents=True, exist_ok=True)
-    (source / "PRESENTATION.md").write_text(GUIDE_TEXT)
+    system.make_dirs(source)
+    system.write_text(source / "PRESENTATION.md", GUIDE_TEXT)
     if workspace:
-        (source / "workspace").mkdir(exist_ok=True)
-        (source / "workspace" / "todo.txt").write_text("milk\n")
+        system.make_dirs(source / "workspace")
+        system.write_text(source / "workspace" / "todo.txt", "milk\n")
     return source
 
 
-@pytest.fixture
-def key_home(tmp_path: Path) -> Path:
-    """A home dir holding a mode-600 fallback key."""
+def _fake_key_home(fake: FakeSystem) -> Path:
+    fake.put(FAKE_HOME / "secrets" / "anthropic-api-key", "sk-test\n", mode=0o600)
+    return FAKE_HOME
+
+
+def _real_key_home(request: pytest.FixtureRequest) -> Path:
+    tmp_path: Path = request.getfixturevalue("tmp_path")
     home = tmp_path / "home"
     (home / "secrets").mkdir(parents=True)
     key = home / "secrets" / "anthropic-api-key"
     key.write_text("sk-test\n")
     os.chmod(key, 0o600)
     return home
+
+
+@pytest.fixture
+def key_home(
+    world: os_guard.World, fake: FakeSystem | None, request: pytest.FixtureRequest
+) -> Path:
+    """A home dir holding a mode-600 fallback key."""
+    makers: dict[os_guard.World, Callable[[], Path]] = {
+        os_guard.World.FAKE: lambda: _fake_key_home(fake),  # type: ignore[arg-type]
+        os_guard.World.REAL: lambda: _real_key_home(request),
+    }
+    return makers[world]()

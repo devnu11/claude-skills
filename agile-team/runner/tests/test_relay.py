@@ -1,13 +1,13 @@
 """PO <-> liaison relay files."""
 
-from pathlib import Path
-
 import pytest
 from agile_team.relay import Note, Relay, RelayError
 
+from .fake_system import FAKE_REPO
 
-def test_post_answer_and_blocking(tmp_path: Path) -> None:
-    r = Relay(tmp_path / "run")
+
+def test_post_answer_and_blocking() -> None:
+    r = Relay(FAKE_REPO / "run")
     q = r.post(Note("question", "Which DB?", ["s1"]))
     r.post(Note("update", "started"))
     q2 = r.post(Note("question", "Name?", ["s2"]))
@@ -19,8 +19,8 @@ def test_post_answer_and_blocking(tmp_path: Path) -> None:
     assert r.blocked_stories() == {"s2"}
 
 
-def test_bad_kind_and_unknown_id(tmp_path: Path) -> None:
-    r = Relay(tmp_path)
+def test_bad_kind_and_unknown_id() -> None:
+    r = Relay(FAKE_REPO / "run")
     with pytest.raises(RelayError):
         r.post(Note("chat", "x"))
     r.post(Note("update", "x"))
