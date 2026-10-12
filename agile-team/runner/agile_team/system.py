@@ -20,6 +20,7 @@ __all__ = [
     "exists",
     "expand_user",
     "glob",
+    "hard_link",
     "is_dir",
     "is_file",
     "kill",

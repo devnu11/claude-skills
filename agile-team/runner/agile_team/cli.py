@@ -489,10 +489,10 @@ def cmd_tell(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_watch(args: argparse.Namespace, pace: watch.Pace | None = None) -> int:
+def cmd_watch(args: argparse.Namespace) -> int:
     """Block until the liaison is needed; print one JSON line."""
     config = _load_config(repo_of(args))
-    line = watch.Watcher(config.run_dir, pace).until(args.timeout_s)
+    line = watch.Watcher(config.run_dir).until(args.timeout_s)
     print(json.dumps(line), flush=True)
     return 0
 

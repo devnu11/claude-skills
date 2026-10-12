@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -126,26 +125,11 @@ def line(triggers: list[str], basis: Basis) -> dict[str, Any]:
     }
 
 
-@dataclass(frozen=True)
-class Pace:
-    """How a test-built watch waits (s62 tests); ``None`` on a Watcher means the ``system`` seam.
-
-    Deferred to s76 with ``test_s62_watch``: it goes once that file runs on the fake.
-    """
-
-    sleep: Callable[[float], None] = time.sleep
-    clock: Callable[[], float] = time.monotonic
-
-
-DEFAULT_PACE = Pace()
-
-
 @dataclass
 class Watcher:
     """Polls one run directory until something needs the liaison."""
 
     run_dir: Path
-    pace: Pace | None = None
 
     @property
     def memory(self) -> Path:
@@ -164,10 +148,10 @@ class Watcher:
             self._sleep(POLL_S)
 
     def _sleep(self, seconds: float) -> None:
-        (self.pace.sleep if self.pace else system.sleep)(seconds)
+        system.sleep(seconds)
 
     def _clock(self) -> float:
-        return (self.pace.clock if self.pace else system.monotonic)()
+        return system.monotonic()
 
     def _deadline(self, timeout_s: float | None) -> float | None:
         return None if timeout_s is None else self._clock() + timeout_s
