@@ -183,7 +183,10 @@ failing tests from the tests gate, and the quality czar sees lint, static
 analysis and coverage, which the runner runs just before its step. A role
 that tries `pytest` with no test named, or any `--cov` run, is told no and
 told what to do instead. Running named tests is fine
-(`pytest -q tests/test_x.py::test_y`).
+(`pytest -q tests/test_x.py::test_y`). DevOps may run the full suite and
+coverage, but only in the onboarding sprint, to record your coverage
+baseline; otherwise it runs only what proves its change, normally one named
+test.
 
 A developer can also ask the runner to run named tests, or all of the
 story's new tests. Tell the runner how, per test root, in `.agile-team.toml`:

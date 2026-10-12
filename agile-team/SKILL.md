@@ -204,7 +204,9 @@ command fails.
   role's Bash is denied, and developers ask the runner for named tests
   (`run_tests`, `run_new_tests`). Those tools need `[[toolchain.targeted]]`
   in `.agile-team.toml`; if a developer reports they refuse, that is a config
-  gap for DevOps or the human, not a team fault.
+  gap for DevOps or the human, not a team fault. DevOps is exempt from the
+  deny only so onboarding can record the coverage baseline; otherwise it
+  runs only what proves its change, normally one named test (s75).
 - In this repo the runner's suite runs in parallel with pytest-xdist (s70):
   the gate runs `uv run --directory agile-team/runner pytest -n auto --cov
   --cov-report=term -q`, and named tests run with

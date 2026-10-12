@@ -1598,7 +1598,10 @@ merge**.
   (`pytest -q tests/test_x.py::test_y`) passes, except for the code reviewer
   and the quality czar, who run no tests. Residual risk: pytest run from a
   script, a `make` target, a `$VAR` or `python -mpytest`, and other test
-  tools, are not seen.
+  tools, are not seen. DevOps is exempt only so the onboarding sprint can
+  record its coverage baseline; its role file (s75) tells it to run only
+  what proves its change, normally one named test, and to leave the full
+  suite and coverage to the runner's gate.
 - A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
   quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
