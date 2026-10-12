@@ -293,11 +293,11 @@ def test_salvager_survives_git_error(configured: Path, monkeypatch) -> None:
     assert "GitError" in (run_dir / halt.CRASH_LOG).read_text()
 
 
-def test_recover_killed_saves_the_tree(configured: Path) -> None:
+def test_recover_cut_saves_the_tree(configured: Path) -> None:
     run_dir = run_dir_of(configured)
     dirty(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    found = recovery.recover_killed(run_dir, Git(configured))
+    found = recovery.recover_cut(run_dir, Git(configured))
     assert found and found.cause is Cause.KILLED and found.sha
     assert Git(configured).is_clean()
     saved = state_mod.load(run_dir)
@@ -305,14 +305,14 @@ def test_recover_killed_saves_the_tree(configured: Path) -> None:
     assert saved.status is RunStatus.RUNNING  # never rewritten to interrupted
 
 
-def test_recover_killed_does_nothing_when_run_is_alive_or_idle(configured: Path) -> None:
+def test_recover_cut_does_nothing_when_run_is_alive_or_idle(configured: Path) -> None:
     run_dir = run_dir_of(configured)
     dirty(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.IDLE))
-    assert recovery.recover_killed(run_dir, Git(configured)) is None
+    assert recovery.recover_cut(run_dir, Git(configured)) is None
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
     (run_dir / state_mod.PID_FILE).write_text(str(os.getpid()))
-    assert recovery.recover_killed(run_dir, Git(configured)) is None
+    assert recovery.recover_cut(run_dir, Git(configured)) is None
     assert not Git(configured).is_clean()
 
 

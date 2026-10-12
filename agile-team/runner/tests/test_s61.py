@@ -440,11 +440,11 @@ def test_pass_tests_on_a_moved_checkout_runs_no_gate(make_runtime) -> None:
     assert runner.calls == [] and rt.state.stories["s1"].step == "tests"
 
 
-def test_recover_killed_records_the_head_after_its_salvage(configured: Path) -> None:
+def test_recover_cut_records_the_head_after_its_salvage(configured: Path) -> None:
     run_dir = run_dir_of(configured)
     dirty(configured)
     state_mod.save(run_dir, RunState(status=RunStatus.RUNNING, in_flight=STEP))
-    recovery.recover_killed(run_dir, Git(configured))
+    recovery.recover_cut(run_dir, Git(configured))
     saved = state_mod.load(run_dir)
     assert saved.checkout == CheckoutRecord("main", Git(configured).head())
 
