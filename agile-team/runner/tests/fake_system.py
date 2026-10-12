@@ -179,6 +179,17 @@ class FakeSystem:
         self._drop(src)
         self._record("replace", dst)
 
+    def hard_link(self, link: Path, target: Path) -> None:
+        """Make ``link`` another name for ``target``; fails if ``link`` exists."""
+        self._write_check()
+        name, src = self._key(link), self._key(target)
+        data = self.read_bytes(target)
+        if name in self.files or name in self.dirs:
+            raise FileExistsError(errno.EEXIST, "File exists", name)
+        self._store(name, data)
+        self.modes[name] = self.modes[src]
+        self._record("hard_link", name)
+
     def make_dirs(self, path: Path) -> None:
         """Create a directory and its parents."""
         self._write_check()

@@ -10,7 +10,6 @@ from agile_team import cli
 from agile_team import state as state_mod
 from agile_team.git_ops import Git
 from agile_team.po_tools import PoRun, Start, StartMode
-from agile_team.relay import Relay, Told
 from agile_team.router import Router
 from agile_team.salvage import Interruption
 from agile_team.state import RunState, RunStatus
@@ -26,74 +25,6 @@ LINE = "The human sent you a message ({id}): read .team/run/liaison/messages/{id
 
 def messages_dir(run_dir: Path) -> Path:
     return run_dir / "liaison" / "messages"
-
-
-# ----- Relay.tell / told (T2) -------------------------------------------------------
-
-
-def test_tell_writes_the_text_whole(tmp_path: Path) -> None:
-    relay = Relay(tmp_path / "run")
-    told = relay.tell("hi\n")
-    assert told == Told("t1", messages_dir(tmp_path / "run") / "t1.md")
-    assert told.path.read_text() == "hi\n"
-    assert relay.tell("again").id == "t2"
-
-
-def test_tell_keeps_the_text_unstripped(tmp_path: Path) -> None:
-    told = Relay(tmp_path).tell("  \n body \n\n")
-    assert told.path.read_text() == "  \n body \n\n"
-
-
-def test_next_number_follows_the_largest_and_ignores_other_files(tmp_path: Path) -> None:
-    relay = Relay(tmp_path)
-    folder = relay.messages_dir
-    folder.mkdir(parents=True)
-    for name in ("t1.md", "t5.md", "msg-1791761013.md", ".draft-9", "t7.txt", "tx.md"):
-        (folder / name).write_text("x")
-    assert relay.tell("new").id == "t6"
-
-
-def test_told_lists_in_number_order(tmp_path: Path) -> None:
-    relay = Relay(tmp_path)
-    relay.messages_dir.mkdir(parents=True)
-    for name in ("t10.md", "t9.md", "t1.md", "msg-1.md", ".draft-3"):
-        (relay.messages_dir / name).write_text("x")
-    assert [t.id for t in relay.told()] == ["t1", "t9", "t10"]
-
-
-def test_told_is_empty_without_a_folder(tmp_path: Path) -> None:
-    assert Relay(tmp_path / "none").told() == []
-
-
-def test_a_lost_race_lands_in_the_next_number(tmp_path: Path, monkeypatch) -> None:
-    relay = Relay(tmp_path)
-    relay.messages_dir.mkdir(parents=True)
-    (relay.messages_dir / "t1.md").write_text("first")
-    monkeypatch.setattr(Relay, "_next_number", lambda self: 1)
-    told = relay.tell("second")
-    assert told.id == "t2" and told.path.read_text() == "second"
-    assert (relay.messages_dir / "t1.md").read_text() == "first"
-    assert sorted(p.name for p in relay.messages_dir.iterdir()) == ["t1.md", "t2.md"]
-
-
-def test_the_draft_is_removed_when_publishing_fails(tmp_path: Path, monkeypatch) -> None:
-    relay = Relay(tmp_path)
-
-    def boom(self, target):
-        raise PermissionError("no")
-
-    monkeypatch.setattr(Path, "hardlink_to", boom)
-    with pytest.raises(PermissionError):
-        relay.tell("x")
-    assert list(relay.messages_dir.iterdir()) == []
-
-
-def test_unread_drops_the_delivered_ids(tmp_path: Path) -> None:
-    relay = Relay(tmp_path)
-    for _ in range(3):
-        relay.tell("x")
-    assert [t.id for t in relay.unread(["t2"])] == ["t1", "t3"]
-    assert relay.unread(["t1", "t2", "t3"]) == []
 
 
 # ----- RunState (T4, R1, legacy) -----------------------------------------------------

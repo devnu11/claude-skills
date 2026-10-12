@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import pytest
-from agile_team import cli, watch
+from agile_team import cli, system, watch
 from agile_team import state as state_mod
 from agile_team.relay import Note, Relay
 from agile_team.state import RunState, RunStatus
@@ -34,8 +34,10 @@ class FakePace:
     def clock(self) -> float:
         return self.now
 
-    def pace(self) -> watch.Pace:
-        return watch.Pace(self.sleep, self.clock)
+    def patch(self, mp: pytest.MonkeyPatch) -> None:
+        """Make the watch sleep and read the clock through this fake (LEGACY file: patch system)."""
+        mp.setattr(system, "sleep", self.sleep)
+        mp.setattr(system, "monotonic", self.clock)
 
 
 def put(run_dir: Path, status: RunStatus, reason: str | None = None) -> None:
@@ -61,7 +63,9 @@ def note(run_dir: Path, kind: str = "update", text: str = "hello") -> None:
 
 
 def until(run_dir: Path, fake: FakePace, timeout=None) -> dict:
-    return watch.Watcher(run_dir, fake.pace()).until(timeout)
+    with pytest.MonkeyPatch.context() as mp:
+        fake.patch(mp)
+        return watch.Watcher(run_dir).until(timeout)
 
 
 @pytest.fixture
@@ -250,10 +254,7 @@ def test_the_line_is_json_ready(run_dir: Path) -> None:
     json.dumps(until(run_dir, FakePace()))
 
 
-def test_default_pace_uses_the_real_clock() -> None:
-    import time
-
-    assert watch.DEFAULT_PACE.sleep is time.sleep and watch.DEFAULT_PACE.clock is time.monotonic
+def test_the_poll_interval() -> None:
     assert watch.POLL_S == 2.0
 
 
@@ -265,7 +266,9 @@ def test_cmd_watch_prints_one_json_line(configured: Path, capsys) -> None:
     put(run_dir, RunStatus.BLOCKED, BUDGET)
     args = cli.build_parser().parse_args(["--repo", str(configured), "watch", "--timeout", "0"])
     assert args.timeout_s == 0.0
-    assert cli.cmd_watch(args, FakePace().pace()) == 0
+    with pytest.MonkeyPatch.context() as mp:
+        FakePace().patch(mp)
+        assert cli.cmd_watch(args) == 0
     out = capsys.readouterr().out
     assert out.count("\n") == 1
     assert json.loads(out)["status"] == "blocked"
