@@ -1,8 +1,21 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done; no ADR)
+**Last updated:** 2026-10-12 (s78 done)
 
 See `developer.md` for the base conventions.
+
+## s78: Health gives no false reds while work runs (health resilience, sleep detection, excuse logic)
+
+False reds are fixed. The heartbeat now includes monotonic time to detect sleep vs. delay, the beat thread logs failures instead of dying, gate runs set a chore to declare activity, and stale beats are amber (not red) when work is active and the machine is awake.
+
+**What you changed:**
+- **`live.py`:** `HEARTBEAT_VERSION = 2`. `Pace` gains `mono: Callable[[], float]`. `Pulse._beat()` and `_report()` added (H7: beat thread outlives failed writes, logging first failure to crash.log). `Pulse.heartbeat()` adds `"mono"` after `"at"` in the key order.
+- **`health.py`:** `Clock` class (reader's wall and monotonic time). `Vitals.read(config, clock: Clock)` signature changed from `now: float`. New properties: `slept` (sleep duration or None), `slept_over()`, `stale`, `busy`, `excused`. Helper words: `_sleep_words()`, `_doing()`, `_late_words()`. `RULES` gains three rows: R16 (red: sleep), R18 (red: stale not excused), R19 (amber: stale excused). `current(config)` uses `Clock.read()` (H10).
+- **`dispatch.py`:** `GATE_CHORE = "gate: {step} on {story}"`. `Runtime.gate()` runs `pipeline.evaluate()` inside `self.pulse.doing(GATE_CHORE.format(...))` (H9).
+- **`dashboard/snapshot.py`:** `RunFiles.mono`, `load()` reads both clocks, `_health()` passes `Clock(now, mono)` to `health.judge()`.
+- **Docs:** `reference/protocol.md` (heartbeat v2, health table R16–R19), `customer/dashboard.md` (colour rules), `architecture.md` (gate chore).
+
+**Key rules (AC1–5):** (1) Tool calls write the beat (unchanged). (2) Gate chore is green when beat is fresh, amber when late. (3) Sleep, dead runner, and real stalls stay red. (4) Watch and snapshot judge the same way. (5) Docs moved with behaviour; coverage 99.68%; ruff clean. See ADR-0038, design `agile-team/docs/design/s78.md`.
 
 ## s79: Git isolation for REAL-world tests (no-op developer step; implementation by unit/integration testers)
 

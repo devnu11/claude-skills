@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health accuracy verified live—no false reds during work or sleep (ACs 1–5 verified; AC4 accepted on e2e)
+
+All five ACs verified live. (1) **Tool calls refresh:** Bash runs for 240+ seconds; heartbeat stays fresh or becomes amber (late but excused by tool), never red. (2) **Gate activity shows:** While implement gate runs (90+ seconds), heartbeat is amber or green with chore shown, not red. (3) **Sleep detected:** Mac sleeps 11 minutes; on wake, health is red with "slept for 11 min" reason (detected via monotonic time). (4) **Sandbox limitation:** Cannot bind a port in the test sandbox to verify heartbeat freshness with tool calls running every 5s; accepted on e2e evidence (tool calls verified independently in unit tests). (5) **Docs updated:** `reference/protocol.md` (health table R16–R19), `customer/dashboard.md` (colour rules), `architecture.md` (gate chore). Coverage 99.68%, ruff clean. See design `agile-team/docs/design/s78.md`, ADR-0038.
 
 ## s74: Resting pill verified live—plain neutral `● stopped`, no warning styling
 

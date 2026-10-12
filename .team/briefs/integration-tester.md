@@ -1,6 +1,16 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done; no ADR)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health e2e tests—tool activity and gate activity show as amber, not red (no new test file; refined existing)
+
+The existing health e2e tests stay green with one context update. S44 rules R0–R15 remain; three new rules (R16, R18, R19) are tested in unit tests (`test_s78_health.py`). For e2e scenarios:
+
+- **Tool activity:** A role's tool (Bash, etc.) opening and running for 240+ seconds shows as amber in the dashboard ("heartbeat N old while Bash runs"), not red. Unit tests cover the rules; e2e acceptance testing verified it live.
+- **Gate activity:** While the implement gate runs (90+ seconds), the heartbeat is amber or green with chore shown ("heartbeat N old while runner: gate: implement on s71 for N min"), not red. Verified live.
+- **Sleep:** When a Mac sleeps 11+ minutes, on wake health is red with reason "the machine slept for 11 min". Unit tests pin the calculation; e2e acceptance verified detection.
+
+No new e2e test file; existing health.e2e.py tests stay green. The accuracy of health (no false reds) is now tested unit-level via the new health rules; e2e focuses on the dashboard rendering and UI responsiveness. See design `agile-team/docs/design/s78.md`, ADR-0038.
 
 ## s79: Zone-independent tests and git isolation guard
 

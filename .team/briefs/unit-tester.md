@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health gives no false reds—beat resilience, monotonic time, excuse logic (test_s78_health.py)
+
+New test file `tests/test_s78_health.py` covers the health redesign with FAKE world (1s limit). Test areas: `Pace.mono` (injectable), `Pulse.beats` thread loop, `_beat` (write + exception catch), `_report` (log first failure), `Pulse.heartbeat` (mono after at), `Clock` (both times), `Vitals.read(config, clock)`, `slept` and `slept_over` properties, `stale`/`busy`/`excused` logic, health rules R16–R19 (sleep red, stale red, stale amber), and both sources (watch and snapshot) give the same verdict. Pinned cases: tool open stale beat (amber), gate chore stale beat (amber), sleeping machine (red), dead runner (red), stale no activity (red), beyond red_quiet_s (red), version-1 beat (red), non-numeric mono (slept None). S44 tests updated to pass `Clock(NOW)` instead of `NOW: float`. All 11 new tests + existing coverage ≥99.68%, ruff clean. See ADR-0038, design `agile-team/docs/design/s78.md` (test checklist).
 
 ## s74: Dashboard pill UI tests—fallback text space, resting stopped pill, forced halts stay red
 

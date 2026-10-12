@@ -1,6 +1,12 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-12 (s68 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health accuracy improves—red now means truly stuck, not just busy (no new Manager context)
+
+Health is now accurate in active scenarios. While a role calls tools or while the runner gates, health is green or amber, not red. Real stalls (the runner stuck with no activity) stay red. Sleep is detected (red with "slept for {time}").
+
+**What changes for you:** Red health in the alerts is now trustworthy. You can respond to it as a real failure, not a false alert triggered by legitimate work. If a story shows `needs_manager` due to repeated escalations, the health will be clean (green/amber during work, red only on real stalls). See ADR-0038, design `agile-team/docs/design/s78.md`.
 
 ## s68: Implement gate cycle time reduced to ~4 minutes (no new Manager context)
 
