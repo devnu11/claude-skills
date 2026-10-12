@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
 
 See `developer.md` for the base conventions.
+
+## s61: Runner halts when checkout changes under it
+
+The runner now guards the branch and commit it runs on. It records them in `state.checkout` and checks at every opportunity (start, resume, before/after steps, gates, commits). On any mismatch (external rebase, checkout, reset), it halts with status `checkout-changed` and escalates to the human. The human can accept the new state with `agile-team accept-checkout` or restore the branch and commit, then resume. Rules K1–K10 in `agile-team/docs/design/s61.md`. New `checkout.py` module (pure, no dispatch/recovery/cli imports); `state.CheckoutRecord`; `RunStatus.CHECKOUT_CHANGED`; `cmd_accept_checkout`; `Guard` class for start/accept outside a run. Steps that already ran cost money (not refunded). See ADR-0028.
 
 ## s4: Dashboard backend - snapshot builder, read-only SSE server, CLI
 

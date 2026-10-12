@@ -1,8 +1,17 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
 
 ## Design decisions to verify
+
+**Checkout guard halts on external changes (s61):** Verify that the checkout record and guard are safe and comprehensive:
+- **K1–K2:** `state.checkout` persists branch and head; written only by runner (record, record_checkout, accept-checkout). Checkout matches when attached, no operation in progress, and (with record) branch/head equal recorded.
+- **K3–K4:** Checked at start/resume, before/after every step, before gates/commits; in-run mismatch posts question and halts with kind `CHECKOUT`, status `checkout-changed`, exit 78. `CheckoutChanged` exception caught in `run_role` before generic Exception (no crash.log). 
+- **K5:** `save_interrupted` returns None on moved checkout (no salvage). Step cost still ledgered. K6–K10: Guard for start/accept, accept command validation, reason text exact, status/dashboard red, budget advice.
+- Every runner git write followed by `record_checkout`: `settle_tree` (K3), `save_interrupted` after salvage, `_merge_in` after MERGED, `recover_killed` after salvage. No salvage on moved checkout (K5).
+- Function by function: `checkout.py` (Found.text, Drift.reason/halt, operation, read, last_move, matches, check, recorded, answer_open, Guard.on_start/accept), state changes, halt table (CHECKOUT kind), status (CHECKOUT_CHANGED), dispatch/router/po_tools/boundary/recovery changes, cli (cmd_start guard, cmd_accept_checkout, status_report checkout field), dashboard STATUS_TONE. See ADR-0028, design `agile-team/docs/design/s61.md`.
+
+## Previous design decisions to verify
 
 **Proxy sandbox local service binding (s58):** Verify that service deliveries get the network setting and the e2e test is sound:
 - **N1–N4:** `LOCAL_SERVICE_NETWORK` and `NETWORK_BY_START` constants; `_network(prepared)` returns fresh dict; `_sandbox_section` merges with `**_network(prepared)`. Non-service kinds have no `network` key.

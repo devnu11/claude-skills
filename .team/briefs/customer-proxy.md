@@ -1,6 +1,18 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
+
+## s61: Halt on external checkout changes
+
+The runner now halts immediately when the checkout changes under it (branch switched, commit reset, HEAD detached, rebase in progress). This prevents silent corruption when the human or another script modifies the tree during a run.
+
+**What you'll see:** Halt with status `checkout-changed` (red on the dashboard). Reason says what was expected and what was found, plus the reflog entry that moved HEAD. The human then either:
+- Accepts the new state: `agile-team accept-checkout`, then `agile-team start --resume`
+- Restores the branch/commit: `git checkout <branch>`, then `agile-team start --resume`
+
+**In your acceptance tests:** Verify the halt mechanism works: that the runner stops before running further steps, that the question text is exact, that `accept-checkout` updates the record, and that the dashboard shows red. See design `agile-team/docs/design/s61.md` (rules K1–K10, AC1–AC7).
+
+See ADR-0028.
 
 ## s4: Dashboard backend – snapshot builder, read-only SSE server
 

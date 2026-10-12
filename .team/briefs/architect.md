@@ -1,6 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
+
+## s61: Checkout guard prevents silent corruption
+
+The runner now records the branch and commit it expects and halts immediately when either changes without the runner's own git operation. Key architectural patterns:
+
+**Single-source-of-truth:** `state.checkout` (branch, head) is the only record. Written only by: (1) first passing check when unrecorded (K1), (2) `Runtime.record_checkout()` after every runner git write (settle_tree, save_interrupted, merge_in, recover_killed), (3) `accept-checkout` command (K7). No record → no check until first match (K6).
+
+**Deterministic checks:** K2 predicates are pure: attached (via `symbolic-ref`), no operation in progress (paths in `.git/`), branch and head match record. K3: checked at start/resume, before/after every step, before gates, every router tick (including waits).
+
+**Immediate halt:** K4–K5: Mismatch halts with kind `CHECKOUT` and status `checkout-changed`. `CheckoutChanged` exception in `run_role` before generic Exception (not crash.log). Salvage skips moved checkouts (K5).
+
+**Clear escalation:** K8: reason names expected (branch or "unrecorded"), found (branch/detached + operation), and last HEAD move from reflog. K6: at start, post question only when no exact duplicate is open.
+
+**Human control:** K7: `accept-checkout` refuses while runner is alive, detached, or operation in progress. Else: record, set status (if checkout-changed), log event, answer questions, exit 0.
+
+Pattern: role Bash is read-only (s7), so any HEAD move is foreign. Budget advice (K10) routes through the acceptance flow. See ADR-0028, design `agile-team/docs/design/s61.md` (rules K1–K10, modules).
 
 ## s58: Network sandbox settings by delivery kind; e2e verified on macOS
 

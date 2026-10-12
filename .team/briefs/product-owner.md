@@ -1,6 +1,18 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
+
+## s61: Accept the checkout when branch or commit changes
+
+The runner now detects and halts when the checkout changes under it (your rebase, another script's checkout, or a conflict merge left in progress). It halts with status `checkout-changed` and a liaison question showing exactly what was expected and what was found.
+
+**What to do:** (1) Inspect the change (`git log`, `git status`). (2) Either restore the original branch and commit and run `agile-team start --resume`, OR accept the new state consciously with `agile-team accept-checkout`, then run `agile-team start --resume`. The halt is immediate and clear; no steps run on the wrong tree.
+
+**For budget raises:** After editing `.agile-team.toml` and committing the raise, run `agile-team accept-checkout`, then `agile-team start --resume`. (The raise commit is a foreign commit the runner must accept.)
+
+**Cost not refunded:** Steps that already ran still cost money, even if they ran on the wrong tree. The runner records when each step finished, before checking the checkout.
+
+See ADR-0028, design `agile-team/docs/design/s61.md` (rules K1–K10).
 
 ## s4: Dashboard backend – snapshot builder and read-only server
 

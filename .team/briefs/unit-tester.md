@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s4 documented, s58 done)
+**Last updated:** 2026-10-11 (s61 done, s4 documented)
+
+## s61: Checkout guard halts when branch or commit changes externally
+
+The runner now detects when the checkout changes under it (branch switched, commit reset, HEAD detached, or a git operation in progress). Test checklist from design section 8: `checkout.py` functions (read, operation, matches, check, last_move, answer_open, recorded), `Found` and `Drift` dataclasses, `Guard` class (on_start, accept); `CheckoutRecord` and `RunStatus.CHECKOUT_CHANGED`; halt table and budget advice; five parametrised runtime test cases (detached, branch switched, reset, foreign commit, rebase in progress); each halts before next step with no crash.log, no commit, no gate, reason exact. CLI tests: start --resume exits 78 twice with one question, restore answers, accept-checkout keeps HEAD and updates record, both refuse live runner / detached HEAD / operation. All coverage ≥95%, ruff clean. See ADR-0028, design `agile-team/docs/design/s61.md` test checklist.
 
 ## s58: Sandbox e2e test for local service binding on macOS
 
