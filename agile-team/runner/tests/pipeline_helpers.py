@@ -47,7 +47,7 @@ class Script:
         return out
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
-        role = PO_ROLE if options.mcp_servers else self.rt.events.events()[-1].role
+        role = PO_ROLE if "team" in (options.mcp_servers or {}) else self.rt.events.events()[-1].role
         if self.answers_compact and prompt.startswith("/compact"):
             self.compacts.append(prompt)
             return self._compact()

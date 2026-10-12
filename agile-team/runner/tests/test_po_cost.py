@@ -28,7 +28,7 @@ class Totals:
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
         self.calls.append(options)
-        return self._gen(bool(options.mcp_servers))
+        return self._gen("team" in (options.mcp_servers or {}))
 
     async def _gen(self, is_po: bool) -> AsyncIterator[Any]:
         yield AssistantMessage(content=[TextBlock(text="t")], model="m")

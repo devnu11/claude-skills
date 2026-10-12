@@ -57,7 +57,7 @@ class Router:
         self.po, self.role = po, role
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
-        target = self.po if options.mcp_servers else self.role
+        target = self.po if "team" in (options.mcp_servers or {}) else self.role
         return target(prompt=prompt, options=options)
 
 
