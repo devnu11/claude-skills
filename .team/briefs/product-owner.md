@@ -1,6 +1,24 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s44 done)
+
+## s44: Live spend meter and runner health—your decision on graceful stop (D4)
+
+The runner now shows you how fast tokens are being spent, at what rate, and turns red when something goes wrong. The dashboard has a live pill, flow-chart stats, alerts, and the liaison watches for red. Your role:
+
+**D4 decision (yours, round 1):** A halted run is **red** "from across the room" (stop --now, limit, crash, dead runner—all alert you). But `agile-team stop` is your own request, not an error. So a graceful stop is **neutral** (`idle`): plain `● stopped` pill, no `⚠`, no alert, no watch trigger. The runner records which is which via `state.halt_kind` (set on halt, cleared on graceful status changes). This affects:
+- Tab title: no `⚠` on graceful stop, only on halt.
+- Notification: none on graceful stop (even if you see it seconds later).
+- Watch trigger: watch doesn't fire on graceful stop → red. The liaison stays quiet.
+- Leftover heartbeat: a stale heartbeat from an earlier run does not turn a fresh graceful stop red.
+
+**What you see:**
+- **Live pill:** Shows `● {role} on {story} · {rate}/min ▂▃▅▇▆▅▃▂▁▂ · {age}` with the role's model, spend rate, sparkline of last 10 minutes, and time since last turn. Hover shows tokens, dollars, current tool, and last turn time.
+- **Flow-chart boxes:** Show per-role totals for the selected scope (Story/Sprint/Run), matching the ledger exactly. Active step box also shows live rate and turn number.
+- **Alerts:** `⚠` on tab title when red (secure context also fires a notification with permission). Over LAN (hostname, not localhost), notifications blocked by browser, so only tab title changes.
+- **Manual acceptance:** Watch the pill during a real step (green, possibly amber if tool runs), then `stop --now` to see it turn red with the halt reason. Graceful `stop` shows plain `● stopped`.
+
+**For E2E tests (integration-tester):** Six items: fake silence (green→amber→red), SIGKILL (not running), graceful stop (idle), scope toggle, URL lines, coverage. See ADR-0032, design `agile-team/docs/design/s44.md`.
 
 ## s41: The sandbox signals only groups it created; roles cannot kill by name or at runtime
 

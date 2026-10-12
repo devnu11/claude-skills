@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s44 done)
+
+## s44: Live spend meter, heartbeat, and health rules (all decisions verified)
+
+The runner measures every turn, keeps a heartbeat file fresh, and judges health from one rule table. Key design decisions (D1–D9) recorded in ADR-0032:
+
+- **D2:** Heartbeat by daemon thread (survives blocking gates) not asyncio task.
+- **D3:** One health rule table in Python (`health.RULES`, R2–R11); verdict in snapshot.
+- **D4:** Halted run red; graceful stop neutral (`halt_kind=None` vs `set`).
+- **D8:** Quiet clock resets when model gets the floor (turn, tool close, inner close, chore end).
+- **D9:** Wait for human is a chore (silences quiet rules but not dead-runner rules).
+
+All round-1 items verified: Python tests 100%, UI tests under node, no leftover copies (C1–C6 fixed). E2E and N1 regression open (developer/integration-tester scope). See ADR-0032, design `agile-team/docs/design/s44.md` (D1–D9, H1–H7, R0–R15).
 
 ## Design decisions to verify
 

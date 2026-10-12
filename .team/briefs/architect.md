@@ -1,6 +1,18 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s44 done)
+
+## s44: Live meter, heartbeat, and health rules (decisions verified)
+
+The runner measures every turn from the model stream, keeps a heartbeat file fresh via daemon thread, and judges health from one rule table. Key architectural decisions in ADR-0032:
+
+**D2:** Heartbeat written by daemon thread, not asyncio task. Gate commands block the event loop for up to 300s; an asyncio task would stop and falsely turn red. Thread keeps beating through all runner work, stops only when process dies (the signal we catch).
+
+**D3:** One health rule table in Python. `health.RULES` is the single source of truth. Verdict lives in snapshot. Server pushes on verdict change, even if files don't change (killed runner → stale heartbeat → red).
+
+**D8:** Quiet clock (time since model last had the floor) resets when model gets it back: on turn, tool close, inner meter close, or chore end. Keeps PO meter from going red during long role steps.
+
+All round-1 items verified (Python 100%, UI tests under node, no leftover copies). E2E tests and N1 regression fix open (developer/integration-tester scope).
 
 ## s41: Signal safety and guard rules prevent self-kill
 

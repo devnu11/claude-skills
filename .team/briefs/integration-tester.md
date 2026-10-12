@@ -1,6 +1,19 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-11 (s30 done)
+**Last updated:** 2026-10-12 (s44 E2E tests open)
+
+## s44: Live meter E2E tests (six items open)
+
+Python unit tests and UI tests pass. E2E tests for the health rules are now your responsibility. From design section E2E test checklist:
+
+1. **Green→Amber→Red:** Fake step process opens a Pulse and meter, streams fake `AssistantMessage`s, then goes silent. `state.json` says running. Config: `[health] beat_s = 0.5, stale_s = 30, amber_quiet_s = 2, amber_tool_s = 1, red_quiet_s = 4`. `/api/stream` shows `health.level` green (turns arriving), then amber (no turn for 2s while tool runs), then red (no turn for 4s; "no turn for…").
+2. **SIGKILL:** Kill the fake step process (stale_s = 2). Stream turns red with `the runner is not running (pid…)`, then heartbeat goes stale. Verify both reasons appear.
+3. **Graceful stop (R15):** Same killed setup, but `state.json` has status `stopped` and no `halt_kind`. Stream stays `idle` (`stopped`) past `stale_s` and never shows red or notification.
+4. **Scope toggle:** Served snapshot through `run_page(driver)` node harness. For story/sprint/run scope, `scopeTotals` matches ledger sum (F3 entries), idle role dimmed in Story scope, PO never dimmed.
+5. **URL lines:** `agile-team dashboard` prints `dashboard: http://localhost:<port>/` first, then `from other machines: http://<host>.local:<port>/` (or nothing if loopback).
+6. **Coverage ≥95%, ruff clean.**
+
+Use `conftest.FakePulse` with configurable pace and real Pulse/Meter. Write to `tests/e2e/test_dashboard_e2e.py`. See ADR-0032, design `agile-team/docs/design/s44.md` (E2E checklist).
 
 ## s30: Dispute gate compares content, not commits
 

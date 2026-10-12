@@ -1,6 +1,25 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s44 done, one open item)
+
+## s44: Live spend meter, heartbeat, and health (Python/UI tests done; E2E open)
+
+Round 1: `test_s44_live.py`, `test_s44_round1.py`, `test_s44_wiring.py` (202 passed, 100% coverage on code), and `test_dashboard_live_ui.py` cover Python and UI (node). **Open:**
+
+**N1 (regression):** `pillText` with no heartbeat lost the space. Test: call `pillText(view, now)` with `view.heartbeat = null` and an open step from `view.events`, assert text starts `▶ ` (space after arrow).
+
+**E2E (integration-tester):** Six checklist items (design section E2E) are open: fake step silence (green→amber→red), SIGKILL (the runner is not running), graceful stop (idle stays neutral), scope toggle, URL lines, coverage/ruff.
+
+Key test areas:
+- **Live rules (R0–R15):** One test per RULES row. Halted run → red. Graceful stop with `halt_kind=None` → idle. Resting status hides stale heartbeat.
+- **Chores and quiet clock (H5–H7):** `doing` context sets/restores `chore`. Quiet clock moves on turn/tool close/inner close/chore exit. PO meter not red after long role step.
+- **Nested meters:** PO meter opens, role meter inside it, role closes, PO reading wakes.
+- **Interrupted steps:** Every cause (error, limit, crash, sigterm, killed) emits `step-end` with `interrupted` status, turn/token counts, no `cost_usd`.
+- **Config (R13):** `[health]` thresholds load; validation rules pass (positive, beat_s < stale_s, amber <= red_quiet_s).
+- **Snapshot:** `turns` tail, `heartbeat` shape, `health` verdict, `generated_at` sync.
+- **Watch (s62 integration):** health trigger fires on change to red, line carries level.
+
+See ADR-0032, design `agile-team/docs/design/s44.md` (rules R0–R15, H1–H7, test checklist).
 
 ## s41: Signal only process groups the runner created; guard against kill by name/runtime
 

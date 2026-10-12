@@ -1,6 +1,26 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s41 done)
+**Last updated:** 2026-10-12 (s44 manual testing open)
+
+## s44: Live spend meter and runner health manual testing (six items open)
+
+Unit and E2E tests pass. Your manual acceptance testing verifies the smart pill, flow-box stats, and alerts work in a real run. From design section Manual test checklist:
+
+1. **Smart pill live (P3):** During a real step, the pill shows `● {role} on {story} · {rate}/min {sparkline} · {age}` with health colour (green/amber/red), and its details show model, tokens, dollars, current tool, and last turn time.
+2. **Flow-chart stats (F4–F6):** Boxes show `{model} · {tokens} · {cost}` totaling the ledger for Story/Sprint/Run scope. Active step box shows live rate, sparkline, turn number, and scope total. A role never touching the focus story is dimmed.
+3. **Red alert on tab (A1):** When health turns red, tab title gets `⚠ ` prefix. When it clears, prefix is removed.
+4. **Desktop notification (A2):** On `localhost` (secure context), clicking anywhere on the page asks for permission once; a change into red fires a notification with the reason.
+5. **LAN fallback (A2, A7):** Over the LAN by hostname (not `localhost`), notifications are blocked by the browser (not secure). Instead, the tab title gets `⚠` (same as localhost). Both show the reason in the pill details.
+6. **Graceful stop is neutral (D4, R15):** Use `agile-team stop` (not `stop --now`). The pill shows `● stopped` in plain (idle) colour with no `⚠`, no notification, no watch alert. A later `stop --now` or halt does show red.
+
+Check:
+- Pill text correct format, colour matches health level, hover shows details
+- Flow boxes show right scope totals, active box has live sparkline and rate
+- Tab title `⚠` on red, plain otherwise
+- Notification (localhost) or tab title (LAN) on red, clears on green
+- Graceful stop neutral; halt red
+
+See ADR-0032, design `agile-team/docs/design/s44.md` (rules P1–P8, F4–F6, A1–A4, R15).
 
 ## s41: Sandbox cannot kill the runner; your Bash cannot kill by name or runtime
 
