@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s64 done)
+**Last updated:** 2026-10-12 (s76 done)
 
 See `developer.md` for the base conventions.
+
+## s76: Unit tests touch no process/signal/network (s71 phase P2, no new ADR)
+
+P2 of s71 (phase 1 done in s71): modules calling `system.killpg`, `system.spawn_*`, `system.connect`, `system.http_get`, `system.listen_http`, `system.run`, `system.run_shell` now pass through the seam. Tests that mock these names now patch `system.<name>`, not module.os.<name>. Key change: J7 fix (test dispute confirmed) patched the patching line: `monkeypatch.setattr(system, "killpg", …)` not `process_groups.os.killpg`. Affected modules: `process_groups`, `commands`, `sandbox`, `kill_check`, `guard`, `git_ops`, `upstream`, `dashboard/server`, `cli` (one call site). See design `agile-team/docs/design/s76.md` (J1–J9 rules), ADR-0036 (s71).
 
 ## s64: Delivery names must be configured in .agile-team.toml (validation at open_story)
 

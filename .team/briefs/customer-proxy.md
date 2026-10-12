@@ -1,6 +1,16 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no ADR)
+
+Phase P2 of s71: All unit tests for processes, signals, network, and HTTP now run on a fake. What this means for your acceptance testing:
+
+- **No change to what you test:** The CLI works exactly as before. Dashboard, commands, sandbox—all unchanged from the outside.
+- **No change to your sandbox:** You still get the real runner, real files, real network access (as permitted). This change is unit-test infrastructure only.
+- **Faster development:** Developers can iterate faster because unit tests don't spawn real processes or wait on network. This makes the runner team more efficient.
+
+The design document (s76) confirms: "The CLI is unchanged and works as documented, and the presentation is intact." All e2e tests pass. See design `agile-team/docs/design/s76.md`, ADR-0036 (s71 architecture).
 
 ## s78: Health accuracy verified live—no false reds during work or sleep (ACs 1–5 verified; AC4 accepted on e2e)
 

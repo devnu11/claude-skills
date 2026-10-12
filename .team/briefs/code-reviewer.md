@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s64 done)
+**Last updated:** 2026-10-12 (s76 done)
+
+## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
+
+Phase P2 (s71 P1 done in s71): All P2 modules (process_groups, commands, sandbox, kill_check, guard, git_ops, upstream, dashboard/server, cli) now call `system.<name>` for process, signal, network, HTTP. No module imports OS calls directly. Key review points: (J2) All 13 P2 names in `system.__all__` (signatures exact), (J3) only `system.py` calls `os.killpg`, (J4) `live.py` now uses `system.now()`, `system.monotonic()`, `system.pid()`, `system.wait_event()` (no `Pace` class), (J7) test patching fixed: `system.killpg`, not `process_groups.os.killpg`. Design changes per module: `sandbox.py` (`system.resolve`, `system.remove`, `system.wait_event`), `live.py` (no `Pace`, `__post_init__: system.now()`, `_log: system.append_text`, `write: system.write_text / system.replace`), `dashboard/server.py` and `cli.py` (`system.open_server`), etc. Moved 4 test files to e2e (paths +1 parent). Coverage ≥95%; ruff clean. No new ADR; extends ADR-0036 (s71). See design `agile-team/docs/design/s76.md` (J1–J9, changes per module).
 
 ## s64: Delivery names validated—verdict ship round 2 (stray test file deleted, no defects)
 
