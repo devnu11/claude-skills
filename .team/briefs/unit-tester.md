@@ -1,6 +1,16 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s72 done; s67 recorded)
+**Last updated:** 2026-10-12 (s79 done; no ADR)
+
+## s79: Git isolation for CI portability (GIT_ISOLATION, REPO_GIT_CONFIG, isolated_git fixture)
+
+REAL-world tests (e2e/ and LEGACY) run with git isolation: no global/system config, no guessed identity from hostname. The fixture `isolated_git` (autouse) sets `GIT_ISOLATION` env vars and deletes `AMBIENT_IDENTITY` variables before each REAL test. FAKE tests run with normal git.
+
+Every test repo that commits must have its own identity via `set_git_identity(repo)` (writes `user.name=Test`, `user.email=t@example.com`, `commit.gpgsign=false` to `.git/config`). Call it after `git init` or in `_real_repo` and `present_workspace`.
+
+The guard: with isolation in place, a commit in a repo without local identity fails on every machine (CI and dev) with `useConfigOnly is disabled` error. This gap cannot return unseen.
+
+See design `agile-team/docs/design/s79.md` (rules G1–G3).
 
 ## s67: First watch records state, then waits (watch.py tests rewritten)
 

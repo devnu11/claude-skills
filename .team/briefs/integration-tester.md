@@ -1,6 +1,14 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s69 done; s67 recorded)
+**Last updated:** 2026-10-12 (s79 done; no ADR)
+
+## s79: Zone-independent tests and git isolation guard
+
+**Z1, Z2:** Tests that depend on local time must compare instants, not time-of-day strings. For `test_halt_line_reset_wins_over_po_text`, parse `next_wake` with `datetime.fromisoformat()`, assert it is zone-aware, convert to the target zone (`ZoneInfo("America/Chicago")`), then assert the time-of-day is correct. Parametrize tests over zones with static labels `["UTC", "Asia/Kolkata"]`; set `TZ` with `monkeypatch.setenv("TZ", zone)` before the test starts. The child process inherits TZ; the pytest process itself does not call `time.tzset()`.
+
+**G3 guard test:** `tests/e2e/test_ci_git_e2e.py` verifies git isolation cannot be accidentally broken. Import `AMBIENT_IDENTITY`, `git`, `set_git_identity` from `..conftest`. Write five guard tests: (1) repo with no identity cannot commit (stderr has `auto-detection is disabled`), (2) no global identity is read from a fresh repo, (3) ambient identity variables are cleared, (4) `set_git_identity` lets a new repo commit with expected author, (5) the `repo` fixture has its own identity in local config.
+
+See design `agile-team/docs/design/s79.md` (rules Z1–Z2, G3, test checklist).
 
 ## s67: E2E test—first watch records, then waits (liaison behavior)
 
