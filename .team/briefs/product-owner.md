@@ -1,6 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health gives no false reds while work is running (resilience, sleep detection, excuse)
+
+Health is now accurate. While a role makes tool calls or while the runner is gating, the heartbeat can be late without turning red. The runner detects machine sleep directly (monotonic time) and shows it in red. Real stalls—the runner stuck or dead with no activity—stay red.
+
+**What changed (AC1–5):** (1) Tool calls write the beat (unchanged, tested). (2) Gates set a chore to show activity; stale beat while gating is amber, not red. (3) Sleep detected via monotonic time; red with "slept for {time}". (4) Stale beat with active work is amber; no work and stale is red. (5) Watch and snapshot judge the same way (one code path).
+
+**For your workflow:** Running `agile-team watch` while a step executes will show green (or amber if beat is slightly late during heavy work), not red. Red now means the runner is stuck or dead, not just busy. Graceful stop still shows plain `stopped` (unchanged from s74). See ADR-0038, design `agile-team/docs/design/s78.md`.
 
 ## s74: Dashboard pill fixes — graceful stops neutral, fallback text has space
 

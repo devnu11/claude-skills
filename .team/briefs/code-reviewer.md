@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Health resilience, sleep detection, excuse logic — verdict ship (no defects)
+
+**Verdict: ship.** Scope: s78 commits `1cbb109`, `7340abd`, `a6b5d34`, `3dbe2fb` (s82 `sandbox.py`, `presentation.py`, `test_s82.py` reviewed separately in s82). Changes span `live.py`, `health.py`, `dispatch.py`, `dashboard/snapshot.py`, docs. Coverage 99.68%, `health.py` at 100%. Ruff clean.
+
+**Design review (H1–H10, R16–R20):** Beat thread resilience (H7): `_beat()` catches exceptions and logs first to crash.log via `_report()`, then keeps running. Monotonic stamps (H8): `Pace.mono`, `Clock` reads both times, `Vitals.slept` detects sleep. Excuse logic (R17): stale beats are amber when work (tool/chore) is declared and machine is awake and beat age ≤ 10 min. Sleep red (R16): `slept > stale_s` → red with "slept for…" reason. Gate chore (H9): `Runtime.gate` runs evaluate inside `pulse.doing(GATE_CHORE)`. Tool activity (H10): unchanged, tested. Both sources match (R20): watch and snapshot use same `health.judge(Vitals.read(clock))`.
+
+**Function review:** `Pulse._beat()`, `_report()` logic sound; `Clock(wall, mono=None)` safe; `Vitals.slept` returns None for missing/non-numeric/bool mono; `sleet_over` boundary is `>`; `stale`, `busy`, `excused` properties correct; `RULES` table R16/R18/R19 exact; heartbeat key order pinned; gate chore format exact; snapshot passes both clocks. No cycles (`halt` imports only `system` and `state`).
+
+**Tests:** All rule cases pinned: tool activity (amber), gate activity (amber), sleep (red), dead runner (red), stale no activity (red), beyond red_quiet_s (red), version-1 beat (red), non-numeric mono. Pulse thread test checks resilience on exception. Both sources compared. No test deleted or weakened.
+
+See `.team/reviews/s78.md`, ADR-0038, design `agile-team/docs/design/s78.md` (rules H7–H10, R16–R20).
 
 ## s74: Dashboard pill fixes reviewed and shipped (no defects)
 

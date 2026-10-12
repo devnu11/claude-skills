@@ -1,6 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s82 done)
+**Last updated:** 2026-10-12 (s78 done)
+
+## s78: Heartbeat resilience, monotonic sleep detection, excuse logic for active work
+
+Health accuracy is now foundational. Three architectural decisions:
+
+1. **Beat thread resilience (H7):** The beat thread can no longer die silently. Any exception in `write()` is caught; the first failure is logged to `crash.log` via `halt.log_traceback()`. Later failures are silent. The thread loop continues beating (it is heartbeats; it must not stop). This is enforced via `Pulse._beat()` serving the loop in its docstring: "a failed beat never ends it (H7)".
+
+2. **Sleep vs. delay detection (H8, R16):** Heartbeat now carries monotonic time (`"mono"` after `"at"`). The reader (watch, snapshot) compares its wall time with monotonic time to detect machine sleep (monotonic stops, wall continues). A late beat during sleep is red with reason "slept for {age}"; a late beat during work is amber. This is reliable on all POSIX systems (macOS `mach_absolute_time`, Linux `CLOCK_MONOTONIC` both exclude suspend).
+
+3. **Activity declaration (H9, R17, R19):** Gates now set a chore inside `pulse.doing()` (like quality checks and boundary stages). Tool calls already refresh via the `step.tool` field. A late beat during declared work is amber ("heartbeat N old while {activity}"), not red. This excuses natural OS delays (beat thread starvation under load) from false-red alerts, while keeping real stalls (no activity for 10+ minutes) red.
+
+**Separation of concerns:** The beat writes on every tool message (existing). The gate mechanism (`pulse.doing()`) is orthogonal to the gate's logic (pipeline.evaluate). Health judgment is pure: `judge(Vitals.read(config, clock))` with no state writes. Watch and snapshot both call the same `health.judge()`, so they are guaranteed to agree.
+
+**No new concurrency:** The beat thread is unchanged (still one thread, still writes). Sleep detection is from the reader, not the writer. The excuse logic is a property of Vitals, not a live lookup.
+
+See ADR-0038, design `agile-team/docs/design/s78.md` (rules H7–H10, R16–R20).
 
 ## s74: Dashboard graceful vs forced stop display—run-status pill neutral for stopped
 
