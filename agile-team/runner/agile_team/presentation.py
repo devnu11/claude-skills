@@ -51,7 +51,7 @@ PRESENTATIONS: dict[str, Recipe] = {
     "manual": Recipe(Need.GUIDE_ONLY),
 }
 STOP_HELD = "story {story} presentation did not stop: {held}"
-TRIAL_VERDICTS ={sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
+TRIAL_VERDICTS = {sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
 
 
 def source_dir(config: Config, story_id: str) -> Path:
