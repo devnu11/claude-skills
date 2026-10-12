@@ -358,6 +358,34 @@ def test_scope_toggle_totals_match_the_ledger(dash) -> None:
     assert out["run"]["developer-cli"] == {"tokens": 60, "cost": 6.0}
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_stopped_pill_is_plain_and_fallback_pill_has_a_space(dash, step) -> None:
+    """s74 AC1/AC2: graceful stop is a plain ``● stopped``; fallback pill is ``▶ role``."""
+    _set_health(dash, stale=2)
+    proc = _fake_step(dash[2], state_mod.RunStatus.STOPPED)
+    step.append(proc)
+    proc.send_signal(signal.SIGKILL)
+    proc.wait(timeout=10)
+    served = json.loads(_get(dash[1], "/api/snapshot")[1])
+    driver = f"""
+    const view = {json.dumps(served)};
+    const now = view.now ?? Date.now() / 1000;
+    const text = pillText(view, now);
+    const row = statusPills(view, now).join("");
+    const bare = JSON.parse(JSON.stringify(view));
+    bare.heartbeat = null;
+    bare.turns = [];
+    bare.events = [
+      {{id: "x", kind: "step-start", role: "developer", story: "s9", at: now - 5, data: {{}}}}];
+    console.log(JSON.stringify({{text, row, fallback: pillText(bare, now)}}));
+    """
+    out = dashboard_node.run_page(driver)
+    assert "stopped" in out["text"] and "⚠" not in out["row"]
+    assert "h-amber" not in out["row"] and "h-red" not in out["row"]
+    assert 'class="pill tone-"><span class="dot"></span>stopped' in out["row"]
+    assert out["fallback"].startswith("▶ developer")
+
+
 def test_cli_prints_local_link_then_other_machines(configured: Path, tmp_path: Path) -> None:
     """s44 AC7: ``dashboard`` prints the localhost link first, then the LAN link."""
     env = {**os.environ, "AGILE_TEAM_HOME": str(tmp_path / "home")}
