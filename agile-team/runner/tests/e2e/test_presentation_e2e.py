@@ -71,7 +71,7 @@ def test_e2e_gate_fails_without_a_presentation_and_passes_with_one(make_runtime)
 
 
 def test_each_delivery_gets_its_own_presentation_dir(make_runtime) -> None:
-    """AC1: the runner lays out a fresh dir per story; a second story is unaffected."""
+    """AC1/G9: each story has its own dir; laying out never wipes existing files."""
     rt = make_runtime(FakeQuery())
     rt.pipeline.steps = ["e2e", "acceptance"]
     open_story(rt, "e2e")
@@ -79,7 +79,7 @@ def test_each_delivery_gets_its_own_presentation_dir(make_runtime) -> None:
     stale = present(rt.config, "s1")
     run(rt, "integration-tester")
     assert (rt.config.run_dir / "presentation/s2/PRESENTATION.md").exists()
-    assert not (stale / "PRESENTATION.md").exists()  # s1's old presentation was wiped
+    assert (stale / "PRESENTATION.md").exists()  # G9: lay_out never wipes
 
 
 def test_proxy_on_an_unpresented_story_is_returned_free(make_runtime) -> None:
