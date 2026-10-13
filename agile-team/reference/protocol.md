@@ -2206,7 +2206,9 @@ was available). If a failure could be flakiness in our code, it is a bug
 story, and the sprint is not done. The PO role file states it too (s110):
 on `ci_failed` the PO reads the failing lines first and asks for a re-run
 only when they show `no runner was assigned` or a cancel whose steps never
-started; otherwise it opens the bug story and `record_ci_bug`s it.
+started; otherwise it opens the bug story and `record_ci_bug`s it. The
+runner does not check this rule: `continue_boundary` at a `ci_failed` hold
+is not refused, and a re-run that turns green finishes the boundary green.
 
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
 `stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,
