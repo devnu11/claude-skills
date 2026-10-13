@@ -29,6 +29,7 @@ KEYS = [
     "reorders",
     "events",
     "ledger",
+    "steps",
     "messages",
     "answers",
     "thread",
