@@ -886,7 +886,10 @@ id>", "reason": "…"}` with status `changes_requested` when a test contradicts
 the design (see "Test disputes"). A dispute without `test` and `rule`, or
 with another status, is a malformed handoff. The unit-tester may add
 `"tests": "changed"` or `"tests": "confirmed"` when a story is back at
-`tests` with its code in (see "Back at tests with the code in"). The Manager adds `"ruling"` (`rescope`,
+`tests` with its code in (see "Back at tests with the code in"). A role on
+a gate fix step may add `"asserts": "<AC or design rule>"` when its fix
+changes what a test asserts (see "Gate fix steps"); a non-string `asserts`
+is a malformed handoff. The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`, `advance`), optionally
 `"ruling_reason": "<why>"` (a string; it defaults to the summary and is
 logged on the `ruling` event), and may add `"followups":
@@ -1050,8 +1053,10 @@ for a `web` delivery, a service that starts from it and answers its probe)
 → acceptance (customer-proxy).
 
 A failed gate or `changes_requested` moves the story back and adds a round
-(a test dispute is the exception: see "Test disputes"; the same setback
-twice in a row escalates instead: see "Repeated setbacks"). At
+(a test dispute is the exception: see "Test disputes"; a failure in a file
+another role owns is routed to that role without a round: see "Gate fix
+steps"; the same setback twice in a row escalates instead: see "Repeated
+setbacks"). At
 `round_cap` the runner refuses every role but the Manager on that story.
 `blocked` and `failed` do not count a round. When `e2e` is enabled,
 `run_role(customer-proxy)` on a story with no complete presentation does not
@@ -1164,7 +1169,8 @@ The agile-team runner follows the rule itself (s71):
 ### Repeated setbacks
 
 A **setback** is a gate outcome that sends a story back or holds it:
-`bounce`, `return` or `hold`, including a gated role's malformed handoff
+`bounce`, `return`, `hold` or `route` (s92; it stays at its step, so the
+backstop does not count it), including a gated role's malformed handoff
 (which now logs a `gate` event like any bounce). Passes and test disputes
 are not setbacks. For each setback the runner records, on the story's
 `streak` in `state.json`: step, step sent to, role, verdict, `author`
@@ -1346,6 +1352,69 @@ How "changed" is checked (s30):
   brief as a note. It logs a `tests-passed` event and queues a Manager
   review.
 
+### Gate fix steps (s92)
+
+When the **implement** gate fails in a file another role owns, the runner
+sends that item to the owner instead of bouncing the developer. No other
+gate routes.
+
+- **Owners.** The owner of a file is the pipeline role whose write globs
+  (the same globs the guard enforces) match it: the step's own role first,
+  then the first role in pipeline order. `developer` means the story's
+  named developer. Nothing else says who owns a file.
+- **Items.** The gate reads failing tests from the coverage run's summary
+  (pytest `FAILED`/`ERROR` lines, jest `FAIL` lines) and lint findings
+  from each configured `lint` and `static` command that fails (ruff,
+  flake8, mypy, eslint `path:line:` lines, ruff's `-->` lines,
+  `Would reformat:`). Findings for the same path and source make one item,
+  with at most 40 output lines. Its printed path is matched against
+  `git ls-files` (the exact path, else every tracked path ending
+  `/<path>`). If all matches have one owner, that role owns the item.
+  Otherwise the item stays with the step's role. A timed-out run is not
+  routed.
+- **Kept at implement.** A failing test in a unit-test file stays with the
+  developer (the unit-tester's red tests are the developer's to make
+  green). A lint finding counts only in a file the story touched (`files`,
+  every path a step committed on the story). Lint never fails the gate by
+  itself: a lint item the developer owns is left to the quality step.
+- **Verdict.** With no foreign items, the gate verdict is unchanged. With
+  foreign items it is **`route`**: the story stays at `implement`, counts
+  no round, and its `fixes` queue holds one fix step per owner, in
+  pipeline order. The reason is `routed to <role> (<files>); …; the story
+  comes back to this step after their fix steps`. If the developer also
+  has its own failing test (or the failure is a coverage shortfall with no
+  test item), the verdict stays `bounce` with a round, and the reason adds
+  `also routed to <role> (<files>); their fix steps run first`. The gate
+  event carries `fixes` (`[{role, files}]`). Every gate result replaces
+  the queue. A ruling, a fault or `pass_tests` empties it.
+- **Dispute on a foreign test.** A developer's dispute on a test another
+  role owns (e.g. an e2e test) opens no dispute. It is a `route` to the
+  test's owner, and the fix brief cites the dispute's rule and reason. A
+  dispute on a unit test works as in "Test disputes".
+- **Fix step.** The router runs the head of the queue first, as a step of
+  kind `gate-fix` for that role, with the role's own scope and none of its
+  set-ups (no presentation lay-out), but with git confinement. Its brief
+  starts `Gate fix on story sN: the implement gate failed on files you
+  own…` and lists only that role's items and their output lines. A
+  `run_role` for a gate fix is refused unless the role is the head fix's.
+- **Settling a fix step.** `done` pops the head and runs no gate; after the
+  last fix step the developer runs again, with `Other roles fix items in
+  their files first, then this step runs again: <reason>` in its brief.
+  `changes_requested` bounces the story to `implement` with a round
+  (`<role> says the failure is not theirs to fix: <summary>`). `blocked`
+  or `failed` holds the story and hands over (`stopped`); a malformed
+  handoff is settled as `failed`. A bounce or hold empties the queue.
+- **Repeats.** The same `route` twice in a row escalates to the Manager
+  (see "Repeated setbacks").
+- **Assertions (`asserts`).** Each settled fix step adds a record to the
+  story's `fixed` (role, files, commit, `asserts`, whether the commit's
+  diff changed assertion lines) and logs a `gate-fix` event
+  (`{status, files, commit, asserts, assertions_changed, left}`, `left`
+  the roles still queued). The code-reviewer's brief lists each record:
+  `Gate fix by <role> (commit <sha>) on <files>: <note>`. A fix that
+  changed assertion lines without naming a rule is flagged there, not
+  refused; the reviewer judges it.
+
 ## Presentation
 
 The Integration Tester presents each story to the Customer Proxy; the Proxy
@@ -1472,6 +1541,8 @@ involved, in this order:
    dependencies"). A story that is not
    movable keeps its place in the order and is skipped until it is released.
    Step 2 also takes the escalated story that comes first in the ranking.
+   When that story has gate fix steps queued, its next step is the head
+   fix step (s92; see "Gate fix steps").
 
 The role for a story step is the first of these that fits the step: the PO's
 `set_developer` choice, the role a bounce named (`next_role`), the role that
@@ -1570,8 +1641,11 @@ story.
   row between one pair of steps), `repeated` (the repeated reason while
   escalated, else `null`), `escalated_by` (`repeat`, `backstop` or
   `null`), `interrupted` (saved work from an interrupted step, offered to
-  the next step; see "Interrupted steps") and `depends_on` (the validated
-  copy of the story file's list, s86; see "Story dependencies"); run-level `order` (the PO's
+  the next step; see "Interrupted steps"), `depends_on` (the validated
+  copy of the story file's list, s86; see "Story dependencies"), `files`
+  (every path a step committed on the story), `fixes` (the queued gate fix
+  steps: role, items, cited rule) and `fixed` (the settled ones, s92; see
+  "Gate fix steps"); run-level `order` (the PO's
   story order; see "Story priority"), `scribe_due`, `delivered` (answer ids the
   PO has seen), `goal` (the current sprint's goal), `boundary` and
   `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after

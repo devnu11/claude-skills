@@ -139,6 +139,32 @@ ordinary bounces reach the round cap first. The dashboard timeline shows
 **back and forth → needs manager**, and `agile-team status` shows the run
 under `"run"`.
 
+## When the gate fails in another role's file
+
+Each role may only write certain files, so a developer can't fix a failing
+end-to-end test or a lint finding in a unit-test file. When the implement
+gate fails there, the runner doesn't send the developer round again. It
+sends each failing item to the role that may write that file, as a
+**gate fix step**:
+
+1. The gate's verdict is `route`. The story stays at `implement` and
+   counts no round. The timeline shows **implement → fix by
+   integration-tester** (or whichever roles own the files).
+2. Each owner runs once, in pipeline order, with a brief listing only its
+   own items and their output. The timeline shows **gate fix done** with
+   the files.
+3. Then the developer runs again, and its brief says other roles fixed
+   their items first.
+
+Some failures stay with the developer: a failing unit test (the
+unit-tester's red tests are the developer's to make green), a lint finding
+in the developer's own files (the quality step judges it), and lint in
+files the story never touched (old lint debt is not routed). If an owner
+says the failure isn't theirs to fix, the story goes back to the developer
+with a round. If a fix changes what a test asserts, the role names the
+acceptance criterion or design rule that makes the old assertion wrong,
+and the code-reviewer checks it.
+
 ## When a test hangs
 
 The runner never waits on a gate command forever. Each command (tests,

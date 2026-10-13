@@ -96,6 +96,12 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   each new brief, handoff, question or answer sends a dot along its arrow.
   If your system asks for reduced motion, the role glows steadily and the
   arrow lights up briefly instead.
+  When the implement gate sends failures to the roles that own the files,
+  the timeline shows a yellow **implement → fix by <roles>** row, then a
+  **gate fix <status>** row per fix step with its files. Its second line
+  names the rule the role cited for changing a test's assertion, or says
+  `assertion lines changed, no rule named` (see
+  [routing](routing.md#when-the-gate-fails-in-another-roles-file)).
   Above the chart, **Story / Sprint / Run** picks what each role's box
   totals: its tokens, dollars and time on one story, one sprint or the
   whole run. Tokens and dollars come from the ledger. Time is the awake time

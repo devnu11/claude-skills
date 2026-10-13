@@ -235,7 +235,11 @@ command fails.
 - **Never edit project files while the team is running.** Not even a typo.
   A test that contradicts the design is the team's to settle: the developer
   sends the story back to the unit-tester (a `test-dispute` on the
-  dashboard), and the Manager can rule on a stuck story at any step. A story
+  dashboard), and the Manager can rule on a stuck story at any step. When
+  the implement gate fails in a file another role owns (an e2e test, lint
+  in a test file), the runner sends it to that role as a gate fix step
+  with no round (`fix by …` and `gate fix` on the timeline), then the
+  developer runs again. A story
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit
