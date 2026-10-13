@@ -3,8 +3,8 @@
 import pytest
 from agile_team import boundary as bd
 from agile_team import rewrite
-from agile_team.boundary import BoundaryHold, Edge
-from agile_team.boundary_runner import SYNCS, BoundaryRunner
+from agile_team.boundary import BoundaryHold, Edge, Stage
+from agile_team.boundary_runner import STAGE_RUNNERS, SYNCS, BoundaryRunner
 from agile_team.upstream import Rebase, SyncOutcome, UpstreamError
 
 from .fake_system import FAKE_HEAD
@@ -55,8 +55,9 @@ CONFLICT = Rebase(
 )
 
 
-def test_start_syncs_with_the_rebase_method_and_end_does_not() -> None:
-    assert SYNCS[Edge.START] is BoundaryRunner._rebase
+def test_start_only_reports_and_the_rebase_is_its_own_stage() -> None:
+    assert SYNCS[Edge.START] is BoundaryRunner._start_sync
+    assert STAGE_RUNNERS[Stage.REBASE] is BoundaryRunner._rebase
     assert SYNCS[Edge.END] is BoundaryRunner._end_sync
 
 
@@ -64,7 +65,7 @@ def test_a_conflict_holds_with_files_commit_and_subject(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     install(env, monkeypatch, CONFLICT)
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     [report] = env.drive()
     data = report["boundary"]
     assert env.rt.state.boundary.hold is BoundaryHold.SYNC_CONFLICT
@@ -80,7 +81,7 @@ def test_a_conflict_remaps_and_records_nothing(env: Env, monkeypatch: pytest.Mon
     calls = []
     monkeypatch.setattr(rewrite, "remap_state", lambda *a: calls.append(a) or 0)
     monkeypatch.setattr(env.rt, "record_checkout", lambda: calls.append("record"))
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     assert calls == []
 
@@ -89,7 +90,7 @@ def test_sync_from_is_set_once_and_reused_after_continue(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     script = install(env, monkeypatch, CONFLICT, Rebase(SyncOutcome.CURRENT))
-    b = env.open(Edge.START)
+    b = env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     assert b.sync_from == FAKE_HEAD
     b.hold = None
@@ -101,7 +102,7 @@ def test_sync_from_is_not_replaced_when_already_set(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     script = install(env, monkeypatch, Rebase(SyncOutcome.CURRENT))
-    env.open(Edge.START, sync_from="1" * 40)
+    env.open(Edge.END, stage=Stage.REBASE, sync_from="1" * 40)
     env.drive()
     assert script.olds == ["1" * 40]
 
@@ -122,7 +123,7 @@ def test_sync_from_is_saved_before_the_rebase_runs(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     order = _trace_save_and_rebase(env, monkeypatch)
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     assert order[:2] == ["save", "rebase"]
 
@@ -131,7 +132,7 @@ def test_nothing_is_saved_before_the_rebase_when_sync_from_is_already_set(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     order = _trace_save_and_rebase(env, monkeypatch)
-    env.open(Edge.START, sync_from="1" * 40)
+    env.open(Edge.END, stage=Stage.REBASE, sync_from="1" * 40)
     env.drive()
     assert order[0] == "rebase"
 
@@ -146,9 +147,9 @@ def test_current_emits_current_without_remapping(env: Env, monkeypatch: pytest.M
     install(env, monkeypatch, Rebase(SyncOutcome.CURRENT))
     spy = []
     monkeypatch.setattr(rewrite, "remap_state", lambda *a: spy.append(a) or 0)
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
-    assert env.outcomes() == ["current", "pass", "done"] and spy == []
+    assert env.outcomes()[:1] == ["current"] and spy == []
 
 
 def test_rebased_remaps_records_and_saves_before_the_event(
@@ -170,7 +171,7 @@ def test_rebased_remaps_records_and_saves_before_the_event(
     monkeypatch.setattr(rewrite, "remap_state", remap)
     monkeypatch.setattr(env.rt, "record_checkout", lambda: note("record_checkout"))
     monkeypatch.setattr(env.rt, "save", lambda: note("save"))
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     assert script.log[:3] == ["remap", "record_checkout", "save"]
     assert [early for name, early in seen_at[:3]] == [False, False, False]
@@ -183,22 +184,19 @@ def test_the_rebased_event_has_the_new_head_and_the_rewrite_count(
     install(env, monkeypatch, rebased(o1="n1", o2="n2"))
     env.rt.state.stories["s1"].commit = "o1"
     env.rt.state.stories["s1"].code_commits = ["o2"]
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     first = env.events()[0].data
     assert first["outcome"] == "rebased" and first["sha"] == NEW_HEAD
     assert first["rewritten"] == 2
     assert "merged" not in env.outcomes()
-    assert env.outcomes()[-1] == "done"
 
 
-def test_a_rebased_start_records_the_new_checkout(
-    env: Env, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_rebased_end_records_the_new_checkout(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     install(env, monkeypatch, rebased())
     called = []
     monkeypatch.setattr(env.rt, "record_checkout", lambda: called.append(1))
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
     assert called
 
@@ -207,7 +205,52 @@ def test_a_failure_of_the_rebase_is_an_error_hold(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     install(env, monkeypatch, UpstreamError("rebasing x changed paths only one side touched"))
-    env.open(Edge.START)
+    env.open(Edge.END, stage=Stage.REBASE)
     [report] = env.drive()
     assert env.rt.state.boundary.hold is BoundaryHold.ERROR
     assert "only one side touched" in report["boundary"]["reason"]
+
+
+def test_sync_from_is_cleared_and_saved_after_rebased(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install(env, monkeypatch, rebased())
+    b = env.open(Edge.END, stage=Stage.REBASE)
+    env.br.step()
+    assert b.sync_from == ""
+
+
+def test_sync_from_is_cleared_after_current(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    install(env, monkeypatch, Rebase(SyncOutcome.CURRENT))
+    b = env.open(Edge.END, stage=Stage.REBASE)
+    env.br.step()
+    assert b.sync_from == ""
+
+
+def test_a_conflict_keeps_sync_from_and_the_rebase_stage(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install(env, monkeypatch, CONFLICT)
+    b = env.open(Edge.END, stage=Stage.REBASE)
+    env.br.step()
+    assert b.sync_from == FAKE_HEAD and b.stage is Stage.REBASE
+
+
+def test_the_conflict_handover_line_says_the_sprint_end() -> None:
+    import inspect
+
+    from agile_team import handover
+
+    source = inspect.getsource(handover)
+    assert "sprint {sprint} end: rebasing" in source
+    assert "start: rebasing" not in source
+
+
+def test_a_failed_fetch_at_rebase_holds_an_error(env: Env, fake) -> None:
+    from .fake_system import Done
+
+    fake.reply(("git", "fetch"), Done(1, "network down"))
+    b = env.open(Edge.END, stage=Stage.REBASE)
+    env.br.step()
+    assert b.hold is BoundaryHold.ERROR
+    assert "network down" in env.events()[-1].data["reason"]

@@ -8,7 +8,7 @@ from agile_team import boundary as bd
 from agile_team.boundary import StackEntry
 from agile_team.config import UpstreamSettings
 from agile_team.git_ops import Git
-from agile_team.restack import FollowOutcome, Plan, Restacker
+from agile_team.restack import Plan, Restacker
 from agile_team.stack import Move, Rebuilder
 from agile_team.upstream import Pr, PrState
 
@@ -39,10 +39,12 @@ def same_tree(fake: FakeSystem, new: str, old: str, *, equal: bool = True) -> No
 # ----- texts and enums -------------------------------------------------------
 
 
-def test_outcomes_and_follow_outcomes() -> None:
+def test_outcomes() -> None:
     assert bd.BoundaryOutcome.RESTACKED == "restacked"
     assert bd.BoundaryOutcome.REBUILD == "rebuild"
-    assert [o.value for o in FollowOutcome] == ["none", "restacked", "rebuild", "rejected"]
+    from agile_team import restack
+
+    assert not hasattr(restack, "FollowOutcome")
 
 
 def test_texts_are_exact() -> None:
@@ -51,11 +53,6 @@ def test_texts_are_exact() -> None:
         "PR #{pr} ({branch}) has {commits} commits, more than the {limit} GitHub allows for "
         '"Rebase and merge". When it is the bottom of the stack, merge it by fast-forward: '
         "git fetch {remote} && git push {remote} {remote}/{branch}:{target}"
-    )
-    assert bd.RESTACKED_UPDATE == (
-        "Merged into {target}: {merged}. The PRs above were rebased onto it with the same tree "
-        "and pushed: {prs}. The bottom one is now based on {target}; nothing is called ready "
-        "before CI passes."
     )
     assert bd.PUSHED_REPORT == (
         "Sprint {sprint}'s review branches are pushed: {prs}. The runner now waits for CI on "
@@ -211,23 +208,35 @@ def test_all_merged_entries_are_returned_bottom_first(rb: Rebuilder) -> None:
     assert finds(prs) == 3
 
 
-# ----- Restacker.plan (M6) ---------------------------------------------------
+# ----- Restacker.merge_base / plan (M10) -------------------------------------
+
+
+def test_merge_base_is_the_git_merge_base_with_the_target(rb: Rebuilder, fake: FakeSystem) -> None:
+    fake.reply(("git", "merge-base"), Done(0, H1 + "\n"))
+    assert rb.merge_base(H2) == H1
+    [argv] = issued(fake, "merge-base")
+    assert argv[-2:] == (H2, TARGET)
+
+
+def script(fake: FakeSystem, *new: str, left: str = "2\n") -> None:
+    """Each rebase gives a new head with the old tree and ``left`` commits above its base."""
+    fake.reply(("git", "rev-parse", "HEAD"), *[lines(n) for n in new])
+    for n in new:
+        same_tree(fake, n, "")
+    fake.reply(("rev-list", "--count"), Done(0, left))
 
 
 def test_an_empty_rest_gives_an_empty_plan(rb: Rebuilder, fake: FakeSystem) -> None:
-    [top] = stacked(H1)
-    assert Restacker(FakePrs(), rb).plan([], top) == Plan()
+    assert Restacker(FakePrs(), rb).plan([], H1) == Plan()
     assert issued(fake, "worktree", "add")  # prepare() ran first
 
 
 def test_the_chain_is_rebased_bottom_first_each_onto_the_new_head_below(
     rb: Rebuilder, fake: FakeSystem
 ) -> None:
-    top, a, b = stacked(H1, H2, H3)
-    fake.reply(("git", "rev-parse", "HEAD"), lines(N1), lines(N2))
-    same_tree(fake, N1, H2)
-    same_tree(fake, N2, H3)
-    plan = Restacker(FakePrs(), rb).plan([a, b], top)
+    a, b = stacked(H2, H3)
+    script(fake, N1, N2)
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
     assert plan == Plan(heads=[N1, N2], refused="")
     first, second = issued(fake, "--onto")
     assert first[-3:] == ("--onto", TARGET, H1)
@@ -235,40 +244,67 @@ def test_the_chain_is_rebased_bottom_first_each_onto_the_new_head_below(
     assert not issued(fake, "branch")  # no ref moved while planning
 
 
+def test_nothing_merged_the_first_entry_is_rebased_from_the_merge_base(
+    rb: Rebuilder, fake: FakeSystem
+) -> None:
+    """With nothing dropped the caller passes the merge-base; main unmoved means no-ops."""
+    [a] = stacked(H2)
+    script(fake, H2)
+    plan = Restacker(FakePrs(), rb).plan([a], H1)
+    assert plan.heads == [H2] and plan.refused == ""
+
+
+def test_an_entry_with_no_commits_left_is_listed_as_emptied(
+    rb: Rebuilder, fake: FakeSystem
+) -> None:
+    a, b = stacked(H2, H3)
+    script(fake, N1, N2, left="0\n")
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
+    assert plan.emptied == [a.branch, b.branch]
+
+
+def test_an_entry_with_commits_left_is_not_emptied(rb: Rebuilder, fake: FakeSystem) -> None:
+    a, b = stacked(H2, H3)
+    script(fake, N1, N2)
+    assert Restacker(FakePrs(), rb).plan([a, b], H1).emptied == []
+
+
 def test_a_stopped_rebase_refuses_the_whole_plan(rb: Rebuilder, fake: FakeSystem) -> None:
-    top, a, b = stacked(H1, H2, H3)
+    a, b = stacked(H2, H3)
     fake.reply(("git", "rebase"), Done(1, "CONFLICT"))
-    plan = Restacker(FakePrs(), rb).plan([a, b], top)
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
     assert plan.heads == []
-    assert plan.refused == f"team/sprint-10 did not rebase cleanly onto {TARGET}"
+    assert plan.refused == f"team/sprint-9 did not rebase cleanly onto {TARGET}"
     assert len(issued(fake, "--onto")) == 1 and not issued(fake, "branch")
 
 
 def test_a_changed_tree_refuses_the_plan_naming_the_target(rb: Rebuilder, fake: FakeSystem) -> None:
-    top, a, b = stacked(H1, H2, H3)
+    a, b = stacked(H2, H3)
     fake.reply(("git", "rev-parse", "HEAD"), lines(N1))
     same_tree(fake, N1, H2, equal=False)
-    plan = Restacker(FakePrs(), rb).plan([a, b], top)
-    assert plan.refused == f"team/sprint-10 rebased onto {TARGET} has a different tree"
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
+    assert plan.refused == f"team/sprint-9 rebased onto {TARGET} has a different tree"
     assert plan.heads == [] and len(issued(fake, "--onto")) == 1
 
 
 def test_a_changed_tree_higher_up_names_the_new_head_below(rb: Rebuilder, fake: FakeSystem) -> None:
-    top, a, b = stacked(H1, H2, H3)
+    a, b = stacked(H2, H3)
     fake.reply(("git", "rev-parse", "HEAD"), lines(N1), lines(N2))
+    fake.reply(("rev-list", "--count"), Done(0, "2\n"))
     same_tree(fake, N1, H2)
     same_tree(fake, N2, H3, equal=False)
-    plan = Restacker(FakePrs(), rb).plan([a, b], top)
-    assert plan.refused == f"team/sprint-11 rebased onto {N1[:12]} has a different tree"
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
+    assert plan.refused == f"team/sprint-10 rebased onto {N1[:12]} has a different tree"
     assert plan.heads == []
 
 
 def test_a_stopped_rebase_higher_up_names_the_new_head_below(
     rb: Rebuilder, fake: FakeSystem
 ) -> None:
-    top, a, b = stacked(H1, H2, H3)
+    a, b = stacked(H2, H3)
     fake.reply(("git", "rev-parse", "HEAD"), lines(N1))
+    fake.reply(("rev-list", "--count"), Done(0, "2\n"))
     same_tree(fake, N1, H2)
     fake.reply(("git", "rebase"), Done(0), Done(1, "CONFLICT"))
-    plan = Restacker(FakePrs(), rb).plan([a, b], top)
-    assert plan.refused == f"team/sprint-11 did not rebase cleanly onto {N1[:12]}"
+    plan = Restacker(FakePrs(), rb).plan([a, b], H1)
+    assert plan.refused == f"team/sprint-10 did not rebase cleanly onto {N1[:12]}"
