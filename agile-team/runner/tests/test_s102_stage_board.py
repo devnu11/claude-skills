@@ -269,7 +269,9 @@ def test_the_fixture_has_the_two_new_runner_stage_events() -> None:
 def test_the_new_events_sit_in_at_order() -> None:
     events = json.loads(FIXTURE_TEXT)["events"]
     ids = [e["id"] for e in events]
-    assert ids.index("e34") < ids.index("rs4") < ids.index("e35") < ids.index("rs5") < ids.index("e36")
+    order = ["e34", "rs4", "e35", "rs5", "e36"]
+    positions = [ids.index(i) for i in order]
+    assert positions == sorted(positions)
     ats = [e["at"] for e in events]
     assert ats == sorted(ats)
 
