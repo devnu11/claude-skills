@@ -141,7 +141,7 @@ def _dashboard_server(args: argparse.Namespace) -> system.HttpServer:
     place = Place.of(args)
     config = _load_config(place.repo)
     app = server.Dashboard.for_run(config, role_book(config, place.home))
-    app = replace(app, token=args.token or system.token())
+    app = replace(app, token=args.token or config.dashboard.token or system.token())
     address = (args.host or server.default_host(), args.port)
     try:
         return server.open_server(address, app)

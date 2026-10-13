@@ -40,7 +40,8 @@ PIPELINE_STEPS = (
     "acceptance",
 )
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
-GLOB_KEYS = ("source", "tests", "e2e", "ci")
+DASHBOARD_TOKEN = "[dashboard] token must be a string"
+GLOB_KEYS =("source", "tests", "e2e", "ci")
 UNKNOWN_DELIVERY = "delivery {name!r} is not a configured [[delivery]]; use one of: {names}"
 NO_DELIVERY = (
     "delivery {name!r} is not a configured [[delivery]]; .agile-team.toml configures none, "
@@ -151,6 +152,13 @@ class HealthLimits:
 
 
 @dataclass
+class DashboardSettings:
+    """``[dashboard]``: a fixed write token for presentations (s83 B19); empty means random."""
+
+    token: str = ""
+
+
+@dataclass
 class Config:
     """Parsed ``.agile-team.toml`` for one repo."""
 
@@ -160,6 +168,7 @@ class Config:
     gates: Gates = field(default_factory=Gates)
     upstream: UpstreamSettings = field(default_factory=UpstreamSettings)
     health: HealthLimits = field(default_factory=HealthLimits)
+    dashboard: DashboardSettings = field(default_factory=DashboardSettings)
     deliveries: list[Delivery] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
@@ -225,6 +234,7 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         gates=_section(Gates, raw.get("gates", {})),
         upstream=_upstream(raw.get("upstream", {})),
         health=_section(HealthLimits, raw.get("health", {})),
+        dashboard=_dashboard(raw.get("dashboard", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
         roles=dict(raw.get("roles", {})),
         providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
@@ -257,6 +267,14 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
 def _section[T](cls: type[T], raw: dict[str, Any]) -> T:
     """Build the dataclass ``cls`` from the keys of ``raw`` it declares."""
     return cls(**{k: v for k, v in raw.items() if k in cls.__dataclass_fields__})  # type: ignore[attr-defined]
+
+
+def _dashboard(raw: dict[str, Any]) -> DashboardSettings:
+    """Build ``[dashboard]``; the token must be a string."""
+    settings = _section(DashboardSettings, raw)
+    if not isinstance(settings.token, str):
+        raise ConfigError(DASHBOARD_TOKEN)
+    return settings
 
 
 def _upstream(raw: dict[str, Any]) -> UpstreamSettings:
