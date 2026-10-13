@@ -127,10 +127,23 @@ def previous_from(wait: dict[str, Any] | None) -> PreviousStep | None:
 ROLES_WITH_PREVIOUS = ("architect", "unit-tester", "developer", "reviewer", "integration-tester")
 
 
+def pulled_in(events: list[dict[str, Any]]) -> list[str]:
+    """The ids the last priority event in the fixture says are pulled (s51)."""
+    rows = [e["data"].get("pulled", []) for e in events if e["kind"] == "priority"]
+    return list(rows[-1]) if rows else []
+
+
+def commit_for(story: dict[str, Any], pulled: list[str]) -> str | None:
+    """A started story has a commit; a not-started or pulled one has none (s51 G1)."""
+    started = story["tier"] in ("in progress", "held") and story["id"] not in pulled
+    return "abc" if started else None
+
+
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
     config = make_config(root, steps=fixture["pipeline"])
     run = fixture["run"]
+    pulled = pulled_in(fixture["events"])
     stories = {
         s["id"]: StoryState(
             s["id"],
@@ -143,6 +156,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             repeated=s.get("repeated"),
             hold=s.get("hold"),
             previous=previous_from(s.get("wait")),
+            commit=commit_for(s, pulled),
         )
         for s in fixture["stories"]
     }
@@ -152,6 +166,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
         status=RunStatus(run["status"]),
         stories=stories,
         order=run["order"],
+        pulled=pulled,
         manager_due=run["manager_due"],
         task=run["task"],
     )
@@ -305,7 +320,7 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "acceptance": [],
         "repeated": None,
         "position": 1,
-        "in_progress": False,
+        "tier": "in progress",
         "hold": None,
         "wait": None,
     }
@@ -349,8 +364,9 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, scratch: Pa
     prev = PreviousStep("architect", "done", "Asked which")
     stories = {
         "s1": StoryState("s1", "A", "tests", status=StoryStatus.DONE),
-        "s2": StoryState("s2", "B", "tests", hold="questions", previous=prev),
+        "s2": StoryState("s2", "B", "tests", hold="questions", previous=prev, commit="abc"),
         "s3": StoryState("s3", "C", "design"),
+        "s4": StoryState("s4", "D", "tests", commit="def"),
     }
     state_mod.save(config.run_dir, RunState(stories=stories))
     write_jsonl(config.run_dir / "outbox.jsonl", [
@@ -358,13 +374,15 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, scratch: Pa
     ])  # fmt: skip
     by_id = {s["id"]: s for s in build(config, scratch)["stories"]}
     assert by_id["s1"]["position"] is None and by_id["s1"]["wait"] is None
-    assert by_id["s2"]["position"] == 1 and by_id["s2"]["in_progress"] is True
+    assert by_id["s1"]["tier"] is None and "in_progress" not in by_id["s1"]
+    assert by_id["s4"]["tier"] == "in progress" and by_id["s4"]["position"] == 1
+    assert by_id["s2"]["position"] == 2 and by_id["s2"]["tier"] == "held"
     assert by_id["s2"]["hold"] == "questions"
     assert by_id["s2"]["wait"] == {
         "reason": "questions",
         "on": ["m1: Which DB?", "architect: Asked which"],
     }
-    assert by_id["s3"]["in_progress"] is False and by_id["s3"]["hold"] is None
+    assert by_id["s3"]["tier"] == "not started" and by_id["s3"]["hold"] is None
     assert by_id["s3"]["wait"] is None
 
 

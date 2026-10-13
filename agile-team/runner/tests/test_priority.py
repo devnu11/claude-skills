@@ -11,9 +11,11 @@ from agile_team.priority import (
     UNKNOWN,
     Placement,
     Priority,
+    Tier,
     moves,
     natural,
     order_refusal,
+    started,
 )
 from agile_team.waits import WAITS, Wait, WaitReason, wait
 
@@ -35,57 +37,62 @@ def test_natural_compares_digit_runs_as_numbers() -> None:
     assert natural("a") < natural("b")
 
 
-def test_legacy_empty_order_in_progress_then_natural_id() -> None:
-    s9, s29, s3 = story("s9"), story("s29", "tests"), story("s3")
-    ranked = Priority([], "design").ranked([s9, s29, s3])
+def test_legacy_empty_order_started_then_natural_id() -> None:
+    s9, s29, s3 = story("s9"), story("s29", "tests", commit="abc"), story("s3")
+    ranked = Priority([], []).ranked([s9, s29, s3])
     assert ids(ranked) == ["s29", "s3", "s9"]
 
 
-def test_previous_step_counts_as_in_progress() -> None:
-    p = Priority([], "design")
+def test_a_step_that_ran_without_a_commit_is_not_started() -> None:
+    p = Priority([], [])
     ran = story("s5", previous=PreviousStep("architect", "done"))
-    assert p.in_progress(ran) and not p.in_progress(story("s1"))
-    assert ids(p.ranked([story("s1"), ran])) == ["s5", "s1"]
+    assert not started(ran) and p.tier(ran) is Tier.NOT_STARTED
+    assert ids(p.ranked([story("s6", commit="abc"), ran, story("s1")])) == ["s6", "s1", "s5"]
 
 
 def test_done_stories_rank_last_even_when_listed() -> None:
     done = story("s1", "tests", status=StoryStatus.DONE)
-    ranked = Priority(["s1"], "design").ranked([done, story("s2")])
+    ranked = Priority(["s1"], []).ranked([done, story("s2")])
     assert ids(ranked) == ["s2", "s1"]
 
 
-def test_explicit_position_beats_in_progress() -> None:
-    p = Priority(["s9"], "design")
-    assert ids(p.ranked([story("s2", "tests"), story("s9")])) == ["s9", "s2"]
+def test_started_beats_explicit_position_of_a_not_started_story() -> None:
+    p = Priority(["s9"], [])
+    assert ids(p.ranked([story("s2", "tests", commit="abc"), story("s9")])) == ["s2", "s9"]
+
+
+def test_pulled_story_is_ranked_as_started() -> None:
+    p = Priority(["s9", "s2"], ["s9"])
+    assert ids(p.ranked([story("s2", "tests", commit="abc"), story("s9")])) == ["s9", "s2"]
 
 
 def test_unlisted_after_listed_and_unknown_ids_ignored() -> None:
-    p = Priority(["ghost", "s5", "s7"], "design")
+    p = Priority(["ghost", "s5", "s7"], [])
     ranked = p.ranked([story("s1"), story("s7"), story("s5")])
     assert ids(ranked) == ["s5", "s7", "s1"]
 
 
 def test_queue_excludes_done_and_is_ranked() -> None:
     items = [story("s1", status=StoryStatus.DONE), story("s3"), story("s2")]
-    assert Priority(["s3"], "design").queue(items) == ["s3", "s2"]
+    assert Priority(["s3"], []).queue(items) == ["s3", "s2"]
 
 
 def test_worked_ranking_example() -> None:
     items = [
         story("s9"),
         story("s26"),
-        story("s29", "tests"),
+        story("s29", "tests", commit="abc"),
         story("s30"),
         story("s1", status=StoryStatus.DONE),
     ]
-    p = Priority(["s30", "s26"], "design")
-    assert p.queue(items) == ["s30", "s26", "s29", "s9"]
+    p = Priority(["s30", "s26"], [])
+    assert p.queue(items) == ["s29", "s30", "s26", "s9"]
     assert ids(p.ranked(items))[-1] == "s1"
 
 
 def test_with_first_lists_ids_then_rest_in_queue_order() -> None:
     items = [story("s1"), story("s2"), story("s3"), story("s4", status=StoryStatus.DONE)]
-    p = Priority([], "design")
+    p = Priority([], [])
     assert p.with_first(["s3", "s4"], items) == ["s3", "s1", "s2"]
 
 
@@ -95,7 +102,7 @@ def test_with_first_lists_ids_then_rest_in_queue_order() -> None:
 )
 def test_with_move(position: int, want: list[str]) -> None:
     items = [story("s1"), story("s2"), story("s3")]
-    p = Priority(["s1", "s2", "s3"], "design")
+    p = Priority(["s1", "s2", "s3"], [])
     assert p.with_move(Placement("s3", position), items) == want
 
 
@@ -110,13 +117,13 @@ def test_order_refusal_texts() -> None:
 @pytest.mark.parametrize("position", [0, 3, "2", True, None, 1.5])
 def test_move_refusal_bad_positions(position) -> None:
     items = stories_of(story("s1"), story("s2"))
-    p = Priority([], "design")
+    p = Priority([], [])
     assert p.move_refusal(Placement("s1", position), items) == BAD_POSITION.format(count=2)
 
 
 def test_move_refusal_accepts_bounds_and_refuses_unknown_and_done() -> None:
     items = stories_of(story("s1"), story("s2"), story("s3", status=StoryStatus.DONE))
-    p = Priority([], "design")
+    p = Priority([], [])
     assert p.move_refusal(Placement("s1", 1), items) is None
     assert p.move_refusal(Placement("s2", 2), items) is None
     assert p.move_refusal(Placement("zz", 1), items) == UNKNOWN.format(ids="zz")

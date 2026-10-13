@@ -124,16 +124,16 @@ def test_router_follows_the_order_not_creation(make_runtime) -> None:
 def test_router_prefers_in_progress_when_unlisted(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt, "s9")
-    add_story(rt, "s29", "tests")
+    add_story(rt, "s29", "tests", commit="abc")
     assert Router(rt).next_work().story.id == "s29"
 
 
-def test_explicit_order_beats_in_progress(make_runtime) -> None:
+def test_started_story_beats_an_explicit_order_of_a_not_started_one(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt, "s9")
-    add_story(rt, "s29", "tests")
+    add_story(rt, "s29", "tests", commit="abc")
     rt.state.order = ["s9"]
-    assert Router(rt).next_work().story.id == "s9"
+    assert Router(rt).next_work().story.id == "s29"
 
 
 def test_held_story_is_skipped_and_keeps_its_place(make_runtime) -> None:
