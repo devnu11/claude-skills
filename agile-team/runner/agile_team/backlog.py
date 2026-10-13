@@ -15,7 +15,7 @@ from .gates import StoryState
 from .priority import Placement, Priority
 from .state import RunState
 
-STORY_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+STORY_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 STALE = "the order changed since the dashboard showed it; reload"
 SPRINT_STORY = "{story} is in the current sprint; only backlog stories can be moved"
 BAD_PLACE = "position must be a whole number from 1 to {count} (the backlog's length)"

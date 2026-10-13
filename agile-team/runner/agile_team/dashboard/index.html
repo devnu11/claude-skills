@@ -1193,7 +1193,7 @@ function moveHandles(story, place, count, view) {
 function backlogRow(story, place, count, view) {
   const open = ui.expanded.has(story.id);
   const movable = place !== null && TOKEN !== "";
-  const drag = place !== null && TOKEN !== "" ? `draggable="true" data-place="${place}"` : "";
+  const drag = movable && !reorderPending(view) ? `draggable="true" data-place="${place}"` : "";
   return `<div class="brow" data-expand="${esc(story.id)}" aria-expanded="${open}" ${drag}>
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
@@ -1254,8 +1254,8 @@ function renderBacklog(view) {
 function reorderNote(view) {
   if (TOKEN === "") return esc(READ_ONLY);
   if (ui.note) return esc(ui.note);
+  if (reorderPending(view)) return esc(WAITING);
   const found = ui.reorder ? view.reorders.find((r) => r.id === ui.reorder.id) : null;
-  if (ui.reorder && (!found || found.status === "pending")) return esc(WAITING);
   if (found?.status !== "refused") return "";
   const reload = found.reason === STALE_TEXT ? ` <button class="ctl" data-reload>reload</button>` : "";
   return esc(found.reason) + reload;
@@ -1317,7 +1317,7 @@ document.addEventListener("dragover", (ev) => {
 });
 document.addEventListener("drop", (ev) => {
   const row = ev.target.closest?.("[data-place]");
-  if (!row || !ui.drag || ui.drag === row.dataset.expand) return;
+  if (!row || !ui.drag || ui.drag === row.dataset.expand || reorderPending(data.view)) return;
   ev.preventDefault();
   postReorder(ui.drag, Number(row.dataset.place));
   ui.drag = "";
