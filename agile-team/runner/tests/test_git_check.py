@@ -58,7 +58,13 @@ def test_write_denied_text_is_the_old_one() -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["git status", "X=1 git log", "env git diff", "git cherry-pick -n abc", "git cherry-pick --no-commit a"],
+    [
+        "git status",
+        "X=1 git log",
+        "env git diff",
+        "git cherry-pick -n abc",
+        "git cherry-pick --no-commit a",
+    ],
 )
 def test_unconfined_read_only_git_is_allowed(repo: Path, command: str) -> None:
     assert denial(unconfined(repo), command) is None
@@ -159,7 +165,8 @@ def test_rule_table_has_a_row_per_place() -> None:
 
 
 def site_of(repo: Path, ws: Path) -> Site:
-    return Site("integration-tester", system.resolve(repo), system.resolve(repo), system.resolve(ws))
+    root = system.resolve(repo)
+    return Site("integration-tester", root, root, system.resolve(ws))
 
 
 def where_of(repo: Path, ws: Path, command: str, base: Path | None = None) -> Where:

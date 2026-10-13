@@ -72,7 +72,8 @@ def story_of() -> StoryState:
 
 def test_workspace_and_copy_paths(configured: Path) -> None:
     config = __import__("agile_team.config", fromlist=["load"]).load(configured)
-    assert presentation.workspace_of(config, "s4") == presentation.source_dir(config, "s4") / "workspace"
+    source = presentation.source_dir(config, "s4")
+    assert presentation.workspace_of(config, "s4") == source / "workspace"
     root = Path("/x/sandbox")
     assert presentation.copied_workspace(root) == root / "presentation" / "workspace"
 
