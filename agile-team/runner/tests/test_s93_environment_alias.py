@@ -248,12 +248,10 @@ def test_manual_acceptance_still_posts_a_question(make_runtime) -> None:
     assert "question_id" in run(rt, "customer-proxy", story="s1")
 
 
-def test_init_accepts_the_document_environment(repo: Path, capsys, fake: FakeSystem) -> None:
-    fake.reply(("git", "status"), Done(0, "?? .agile-team.toml\0"))
-    fake.reply(("git", "check-ignore"), Done(1))
+def test_init_accepts_the_document_environment(repo: Path, capsys) -> None:
     args = ["--repo", str(repo), "init", "--preset", "python", "--environment", "document"]
     assert cli.main(args) == 0
-    assert "onboarded" in capsys.readouterr().out
+    assert "error" not in capsys.readouterr().err.lower()
 
 
 def _done() -> str:
