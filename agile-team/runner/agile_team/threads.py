@@ -176,10 +176,18 @@ def _object(line: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _well_formed(record: dict) -> bool:
+def has_time(record: dict) -> bool:
+    """Whether the record's ``at`` is a number (a bool is not)."""
     at = record.get("at")
-    numeric = isinstance(at, int | float) and not isinstance(at, bool)
-    return isinstance(record.get("story"), str) and isinstance(record.get("text"), str) and numeric
+    return isinstance(at, int | float) and not isinstance(at, bool)
+
+
+def _well_formed(record: dict) -> bool:
+    return (
+        isinstance(record.get("story"), str)
+        and isinstance(record.get("text"), str)
+        and has_time(record)
+    )
 
 
 def _entries(path: Path, prefix: str, authors: tuple[Party, Party]) -> list[Entry]:

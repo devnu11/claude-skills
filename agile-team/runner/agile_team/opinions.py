@@ -17,7 +17,7 @@ from .backlog import Ask, View
 from .priority import first_refusal
 from .relay import LIAISON_DIR
 from .reorders import MAX_VERSION, Requests
-from .threads import BACKLOG, Entry, Party, Post, Threads, append_line, read_lines
+from .threads import BACKLOG, Entry, Party, Post, Threads, append_line, has_time, read_lines
 
 
 class Kind(StrEnum):
@@ -185,13 +185,8 @@ def route_of(opinion: Opinion, view: View) -> Route:
 
 def watched(run_dir: Path) -> list[Path]:
     """The files opinions change."""
-    folder = run_dir / LIAISON_DIR
-    return [folder / OPINIONS, folder / REVIEWS, folder / ACTS]
-
-
-def _number(record: dict) -> bool:
-    at = record.get("at")
-    return isinstance(at, int | float) and not isinstance(at, bool)
+    files = Opinions(run_dir)
+    return [files.opinions_file, files.reviews_file, files.acts_file]
 
 
 def _strings(record: dict, *keys: str) -> bool:
@@ -199,12 +194,14 @@ def _strings(record: dict, *keys: str) -> bool:
 
 
 def _opinion_ok(record: dict) -> bool:
-    return _strings(record, "story", "text") and record.get("kind") in set(Kind) and _number(record)
+    return (
+        _strings(record, "story", "text") and record.get("kind") in set(Kind) and has_time(record)
+    )
 
 
 def _act_ok(record: dict) -> bool:
     known = record.get("act") in set(Act) and record.get("route") in set(Route)
-    return _strings(record, "opinion", "story", "route", "ref") and known and _number(record)
+    return _strings(record, "opinion", "story", "route", "ref") and known and has_time(record)
 
 
 @dataclass(frozen=True)
@@ -263,14 +260,17 @@ class Opinions:
 
     @property
     def opinions_file(self) -> Path:
+        """The file the liaison's opinions are appended to."""
         return self.run_dir / LIAISON_DIR / OPINIONS
 
     @property
     def reviews_file(self) -> Path:
+        """The file the human's review requests are appended to."""
         return self.run_dir / LIAISON_DIR / REVIEWS
 
     @property
     def acts_file(self) -> Path:
+        """The file the acts taken on opinions are appended to."""
         return self.run_dir / LIAISON_DIR / ACTS
 
     def record(self, story: str, kind: Kind, text: str) -> Opinion:
@@ -295,7 +295,7 @@ class Opinions:
 
     def reviews(self) -> list[Review]:
         """Every well-formed review, in line order."""
-        records = [r for r in read_lines(self.reviews_file) if _strings(r, "text") and _number(r)]
+        records = [r for r in read_lines(self.reviews_file) if _strings(r, "text") and has_time(r)]
         return [Review(f"v{n}", r["text"], r["at"]) for n, r in enumerate(records, 1)]
 
     def acts(self) -> list[Settled]:
