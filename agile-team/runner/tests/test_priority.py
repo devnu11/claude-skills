@@ -90,7 +90,7 @@ def test_worked_ranking_example() -> None:
     assert ids(p.ranked(items))[-1] == "s1"
 
 
-def test_with_first_lists_ids_then_rest_in_queue_order() -> None:
+def test_with_first_lists_ids_then_rest_in_plan_order() -> None:
     items = [story("s1"), story("s2"), story("s3"), story("s4", status=StoryStatus.DONE)]
     p = Priority([], [])
     assert p.with_first(["s3", "s4"], items) == ["s3", "s1", "s2"]
@@ -103,7 +103,7 @@ def test_with_first_lists_ids_then_rest_in_queue_order() -> None:
 def test_with_move(position: int, want: list[str]) -> None:
     items = [story("s1"), story("s2"), story("s3")]
     p = Priority(["s1", "s2", "s3"], [])
-    assert p.with_move(Placement("s3", position), items) == want
+    assert p.with_move(Placement("s3", position), stories_of(*items)) == want
 
 
 def test_order_refusal_texts() -> None:

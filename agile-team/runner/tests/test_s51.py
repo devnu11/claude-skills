@@ -16,6 +16,7 @@ from agile_team.priority import (
     Priority,
     Pull,
     Tier,
+    first_refusal,
     held,
     pull_refusal,
     pulls,
@@ -264,7 +265,7 @@ def test_move_story_of_a_started_story_behind_others_keeps_order_and_notes(make_
     note = RANKED_ELSEWHERE.format(story="s21", landed=2, position=4)
     assert out["note"] == note and note.startswith("s21 ranks #2, not #4")
     assert out["order"] == ["s38", "s21", "s45", "s50"]
-    assert t.runtime.state.order == ["s38", "s45", "s50", "s21"]
+    assert t.runtime.state.order == ["s45", "s38", "s21", "s50"]  # G16 rule 1
     assert t.runtime.state.pulled == []
 
 
@@ -382,3 +383,120 @@ def test_product_owner_role_states_the_groups() -> None:
 
     text = system.read_text(roles.BUILTIN_DIR / "product-owner.md")
     assert "Started stories (with commits) always go first" in text
+
+
+# ----- round 1: changes build on the plan, not the queue (G15-G17) --------------------------
+
+
+def test_plan_is_listed_then_natural_with_no_groups_and_no_done() -> None:
+    items = [
+        story("s3", commit="a"),
+        story("s2"),
+        story("s10"),
+        story("s1", status=StoryStatus.DONE),
+        story("s9"),
+    ]
+    p = Priority(["s9", "s3", "s1"], [])
+    assert p.plan(items) == ["s9", "s3", "s2", "s10"]
+
+
+def test_with_first_keeps_a_held_started_story_before_a_later_in_progress_one() -> None:
+    held_one = story("s38", commit="a", hold="quarantine")
+    items = [story("s45"), held_one, story("s21", commit="b"), story("s50")]
+    p = Priority(["s45", "s38", "s21", "s50"], [])
+    assert p.with_first(["s50"], items) == ["s50", "s45", "s38", "s21"]
+
+
+def test_board_move_is_the_queue_move() -> None:
+    items = book(story("s1"), story("s2"), story("s3"))
+    p = Priority(["s1", "s2", "s3"], [])
+    assert p.board_move(Placement("s3", 1), items) == ["s3", "s1", "s2"]
+    assert p.board_move(Placement("s3", 3), items) == ["s1", "s2", "s3"]
+
+
+def held_board() -> tuple[Priority, dict[str, StoryState]]:
+    """Queue s21, s38 (held), s45, s50; plan s45, s38, s21, s50."""
+    items = book(
+        story("s45"),
+        story("s38", commit="a", hold="quarantine"),
+        story("s21", commit="b"),
+        story("s50"),
+    )
+    return Priority(["s45", "s38", "s21", "s50"], []), items
+
+
+def test_with_move_rule_1_goes_after_the_nearest_same_group_story_before() -> None:
+    p, items = held_board()
+    # board without s45: s21, s38, s50; s45 at 4 -> after s50 (same group)
+    assert p.with_move(Placement("s45", 4), items) == ["s38", "s21", "s50", "s45"]
+
+
+def test_with_move_rule_2_goes_before_the_nearest_same_group_story_after() -> None:
+    p, items = held_board()
+    # D1 repro: s50 at 3 has no same-group story before it; s45 is next
+    assert p.with_move(Placement("s50", 3), items) == ["s50", "s45", "s38", "s21"]
+
+
+def test_with_move_rule_3_alone_in_group_goes_before_the_next_on_the_board() -> None:
+    p, items = held_board()
+    # s38 is the only held story; at 1 it is before s21 on the board
+    assert p.with_move(Placement("s38", 1), items) == ["s45", "s38", "s21", "s50"]
+    # alone in its group and last on the board: at the end of the plan
+    assert p.with_move(Placement("s38", 4), items) == ["s45", "s21", "s50", "s38"]
+
+
+def test_with_move_of_a_pulled_story_lands_after_the_in_progress_one() -> None:
+    p, items = held_board()
+    p = Priority(p.order, ["s50"])
+    # queue s21, s50(pulled), s38, ... : s50 to 2 is after s21 (same group)
+    assert p.with_move(Placement("s50", 2), items) == ["s45", "s38", "s21", "s50"]
+
+
+def test_move_pull_judges_board_move() -> None:
+    p, items = held_board()
+    assert p.move_pull(Placement("s45", 1), items) == Pull(("s45",), ("s45",))
+    assert p.move_pull(Placement("s45", 4), items) == Pull(("s45",), ())
+
+
+def test_first_refusal_returns_the_first_refusal_and_stops() -> None:
+    calls: list[str] = []
+
+    def check(name: str, result: str | None):
+        def run() -> str | None:
+            calls.append(name)
+            return result
+
+        return run
+
+    assert first_refusal([]) is None
+    assert first_refusal([check("a", None), check("b", None)]) is None
+    calls.clear()
+    assert first_refusal([check("a", None), check("b", "no"), check("c", "later")]) == "no"
+    assert calls == ["a", "b"]
+
+
+def test_prioritise_while_a_started_story_is_held_keeps_its_place(make_runtime) -> None:
+    t = origin_tools(make_runtime)
+    t.runtime.state.stories["s38"].hold = "quarantine"
+    out = call(t.prioritise({"ids": ["s50"], "reason": ""}))
+    assert out["status"] == "ordered"
+    assert t.runtime.state.order == ["s50", "s45", "s38", "s21"]
+    t.runtime.state.stories["s38"].hold = None
+    assert t.runtime.priority().queue(t.runtime.state.stories.values())[0] == "s38"
+
+
+def test_move_story_while_a_started_story_is_held_keeps_its_place(make_runtime) -> None:
+    t = origin_tools(make_runtime)
+    t.runtime.state.stories["s38"].hold = "quarantine"
+    out = call(t.move_story({"story": "s50", "position": 3, "reason": ""}))
+    assert out["status"] == "ordered"
+    assert t.runtime.state.order == ["s50", "s45", "s38", "s21"]
+    t.runtime.state.stories["s38"].hold = None
+    assert t.runtime.priority().queue(t.runtime.state.stories.values())[0] == "s38"
+
+
+def test_a_refused_pull_is_returned_once_and_unknown_ids_are_not_pulled_on(make_runtime) -> None:
+    t = origin_tools(make_runtime)
+    out = call(t.prioritise({"ids": ["s45", "s38"], "reason": ""}))
+    assert out["status"] == "refused"
+    assert out["reason"] == PULL_NEEDS_REASON.format(ids="s45")
