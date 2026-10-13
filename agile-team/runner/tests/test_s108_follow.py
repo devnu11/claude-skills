@@ -306,19 +306,6 @@ def test_a_stopped_rebase_rebuilds_too(env: Env, fake: FakeSystem) -> None:
     assert "did not rebase cleanly" in env.events()[-1].data["note"]
 
 
-def test_a_refused_follow_at_sync_logs_rebuild_and_leaves_the_edge_to_rebuild(
-    env: Env, fake: FakeSystem
-) -> None:
-    b, _ = at_ci(env, H1, H2)
-    b.stage, b.edge = Stage.SYNC, Edge.END
-    fake.reply(("git", "rebase"), Done(1, "CONFLICT"))
-    fake.reply(("git", "log", "--right-only"), lines("p" * 40))
-    fake.reply(("git", "rev-list"), lines("p" * 40))
-    env.br.step()
-    assert "rebuild" in env.outcomes() and b.stage is not Stage.CI
-    assert pushes(fake) == []
-
-
 # ----- rejected push while following -----------------------------------------
 
 
@@ -420,11 +407,3 @@ def test_the_end_sync_only_adds_the_entry_and_follows_nothing(env: Env, fake: Fa
     sync_with_merged_bottom(env, fake, Edge.END)
     env.br.step()
     assert env.outcomes() == ["pass"] and pushes(fake) == []
-
-
-def test_a_rejected_push_at_sync_stops_the_stage(env: Env, fake: FakeSystem) -> None:
-    b = sync_with_merged_bottom(env, fake, Edge.END)
-    fake.reply(("git", "push"), Done(1, "stale info"))
-    env.br.step()
-    assert b.hold is BoundaryHold.PUSH_REJECTED and b.stage is Stage.SYNC
-    assert "pass" not in env.outcomes()

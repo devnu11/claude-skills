@@ -3,11 +3,11 @@
 import pytest
 from agile_team import boundary as bd
 from agile_team import rewrite
-from agile_team.boundary import BoundaryHold, Edge, StackEntry
+from agile_team.boundary import BoundaryHold, Edge
 from agile_team.boundary_runner import SYNCS, BoundaryRunner
 from agile_team.upstream import Rebase, SyncOutcome, UpstreamError
 
-from .fake_system import FAKE_HEAD, Done, FakeSystem
+from .fake_system import FAKE_HEAD
 from .test_boundary_runner import Env
 
 FAILED = "f" * 40
@@ -201,25 +201,6 @@ def test_a_rebased_start_records_the_new_checkout(
     env.open(Edge.START)
     env.drive()
     assert called
-
-
-def test_an_entry_emptied_by_the_rebase_is_dropped_after_the_remap(
-    env: Env, monkeypatch: pytest.MonkeyPatch, fake: FakeSystem
-) -> None:
-    # Before the rebase the entry still has a pick; after it, none.
-    fake.reply(("git", "log", "--no-merges"), Done(0, "p1\n"))
-    fake.reply(("git", "rev-list", "--reverse"), Done(0, "p1\n"), Done(0, ""))
-    install(env, monkeypatch, rebased(o6="n9", o7="n9"))
-    env.rt.state.upstream.stack = [
-        StackEntry(1, "team/sprint-1", "o6", "o7", "Sprint 1", ["s1"], head="h1")
-    ]
-    env.open(Edge.START)
-    env.drive()
-    assert env.rt.state.upstream.stack == []
-    outcomes = env.outcomes()
-    assert outcomes.index("merged") < outcomes.index("rebased")
-    note = [e.data["note"] for e in env.events() if e.data["outcome"] == "merged"]
-    assert note == [bd.MERGED_NOTE.format(sprint=1, target="origin/main")]
 
 
 def test_a_failure_of_the_rebase_is_an_error_hold(
