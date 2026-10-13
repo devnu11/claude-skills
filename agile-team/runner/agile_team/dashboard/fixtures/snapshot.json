@@ -2043,7 +2043,9 @@
      }
     ],
     "reason": "moved on the dashboard (r1)",
-    "pulled": [],
+    "pulled": [
+     "s5"
+    ],
     "source": "human (dashboard)"
    }
   }
