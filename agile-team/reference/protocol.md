@@ -1468,9 +1468,14 @@ Manager):
    branch is unchanged, and the PO gets `sync_conflict` with the stopping
    commit and its files grouped by directory. The human rebases by hand and
    the PO calls `continue_boundary`. The runner remaps from the HEAD it
-   recorded at that boundary's first sync (`boundary.sync_from`), so a hand
-   rebase is rewritten too. Hashes quoted in reviews and stories are not
-   rewritten.
+   recorded at that boundary's first sync (`boundary.sync_from`, saved
+   before the rebase starts), so a hand rebase is rewritten too, and so is
+   a rebase that a crash cut off before the hashes were saved. If git stops
+   the rebase for a reason other than a conflict (for example, an untracked
+   file would be overwritten), the boundary holds `error` and the rebase is
+   left stopped. The human finishes it (`git rebase --continue`) or aborts
+   it (`git rebase --abort`), then the PO calls `continue_boundary`. Hashes
+   quoted in reviews and stories are not rewritten.
 2. **check**: the full checks on the team branch (skipped when HEAD is the
    sha that last passed them).
 3. **review**, **push** and **ci**, only when an entry was dropped (a PR was
