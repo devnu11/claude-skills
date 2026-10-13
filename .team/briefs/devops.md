@@ -1,6 +1,10 @@
 # DevOps: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s75 done)
+**Last updated:** 2026-10-13 (s99 done; s103 done; s75 done)
+
+## s99 complete: Repo tools are now data in config (no new runtime work)
+
+You own `[[tool]]` entries in `.agile-team.toml`. Each tool has `name`, `description`, `command`. Names must match `[a-z0-9][a-z0-9_+-]*(\.[a-z0-9][a-z0-9_+-]*)*` and cannot clash with built-in stages (gate.*, boundary.*, env.*, presentation.*, po.*, runner-tool.*). Empty description or command is refused. Duplicate names refused. Run `agile-team tools` (new CLI command) to see the 21 built-in stages and your repo tools as JSON (built_in and repo lists). **What you don't do:** Repo tools are defined but not executed in s99. No changes to delivery or boundary configuration. A future story will execute tools by name (not guessed from command text). **Your role:** Ensure tool names are unique, descriptive, and non-conflicting. See design `agile-team/docs/design/s99.md` (RS11–RS13).
 
 ## s103 complete: Guard refusal messages standardized (no change to DevOps work)
 

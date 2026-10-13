@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s99 complete: Runner stages table, timing, config loading (coverage ≥95%, ruff clean, all pass)
+
+New modules `stages.py` and `stage_log.py`. Test areas: **AC1 table:** 21 stages with unique names, descriptions, when/attach enums, exact table match (env.prepare, presentation.layout, checkout.guard, gate.tests+coverage, boundary.sync, runner-tool.run_tests, etc.). Unlisted stages fail KeyError. Mappings (QUALITY, BOUNDARY, RUNNER_TOOL) cover their sources. **RS3:** notes with no open stage do nothing; inside unlogged block reach run; after block reach nothing; asyncio.to_thread inside stage reaches it. **RS5:** notes (a,0), (b,0) → detail b, code 0; (a,0), (b,2), (c,0) → b, 2; no notes → detail "", code 0 or null. Masking: TOKEN=abc → TOKEN=*** in 80-char detail. **RS6:** raise GitError → event with raised "GitError", exception propagates. **AC4 awake:** fake Marker, POSIX monotonic delta, Windows wall minus sleep, rounded to 3 decimals. **RS7/RS8:** event keys in order, role "runner", story/step from Place. **RS10:** OSError suppressed. **AC2 tools:** [[tool]] loads, name clash refused (gate.*, po.*, etc.), empty description/command refused. **AC2 agile-team tools:** prints JSON with built_in (21 rows) and repo lists. All checklist items pass. No test deleted. See design `agile-team/docs/design/s99.md` (RS1–RS14).
 
 ## s105 complete: Seed tests—delivery config, planting, checks, problem reporting (coverage ≥95%, ruff clean, all pass)
 

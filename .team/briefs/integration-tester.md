@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s99 complete: Runner stages—naming, timing, events (all ACs verified; P1 e2e with real repo)
+
+**Verdict:** Unit/code-review done (all pass). Design rules RS1–RS14, AC1–AC4 verified on captured test runs. **Your P1 work:** Write `tests/e2e/test_s99_stages_e2e.py` to verify: (1) Runner-stage events written to events.jsonl during a step; (2) Each stage run produces one event with exact keys/order; (3) Timing (started_at, started_mono, started_slept, seconds) is positive and reasonable; (4) Command detail masked secrets, clipped to 80 chars; (5) Real choke points (Git.\_exec, CommandShell.run, upstream.run, sandbox.run\_shell, Preparer.\_serve) write notes. Fixture schema available. No new sandbox changes.
 
 ## s98 complete: Snapshot tools section, served correctly (all ACs verified; P1 e2e pending)
 

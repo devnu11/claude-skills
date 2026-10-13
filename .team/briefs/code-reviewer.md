@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s99 complete: Runner stages as data (1 round, all ACs pass) — verdict ship (P1 e2e pending)
+
+**Scope:** `stages.py` (new pure module, ~180 LOC), `stage_log.py` (new, ~150 LOC), `config.py` (Tool dataclass, TOOL_RULES, _tools), `cli.py` (tools_report, cmd_tools), changes to gates, dispatch, commands, git_ops, upstream, sandbox, boundary_runner, runner_tools, po_tools, roles/devops.md. **Verdict: ship (P1 e2e pending).**
+
+**Design rules enforced (RS1–RS14):** RS1 STAGES dict matches Name enum, unique names. RS2 opened(name) KeyError for unlisted. RS3 note() does nothing with no stage open. RS5 keeps first non-zero code or latest command. RS6 raised is exception class name. RS7 awake_gap computes awake time per platform. RS8 Place (story, step) from StageLog.within. RS9 when/attach from table. RS10 OSError suppressed. RS11 Tool rules enforce name pattern, no clash, non-empty fields. RS12 DevOps owns [[tool]]. RS13 [[tool]] not executed (future). RS14 agile-team tools prints JSON. AC1–AC4 all pass: table pins (21 exact), unlisted fails, one event per run, choke points note, tools loads/clashes refused, agile-team tools outputs JSON.
+
+**Module structure:** `stages.py` pure, exports Name enum (21 members), Stage/When/Attach/Place/Run dataclasses, STAGES dict, QUALITY/BOUNDARY/RUNNER_TOOL mappings, opened/unlogged/note functions. `stage_log.py` logs events via Marker interface. `config.py` Tool/TOOL_RULES/tool_problems pure. `cli.py` tools_report (JSON builder). Modules call stage_log.open/note at runtime; test with FakeSystem.
+
+**Coverage ≥95%, ruff clean. No tests deleted.**
+
+See design `agile-team/docs/design/s99.md` (RS1–RS14, per-module changes, test checklist), ADR-0048.
 
 ## s98 complete: Tool-call recording (TC1–TC18, all pass) — verdict ship (P1 e2e pending)
 

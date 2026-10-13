@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s99 complete: Runner stages named, timed, and data-driven (ADR-0048, no new ADR per design extends s44/s98)
+
+The runner's internal stages (quality checks, boundary syncs, service starts, presentation trials) are now named and timed. **What changes for you:** New CLI command `agile-team tools` lists the 21 built-in runner stages and any repo tools defined in `.agile-team.toml`. Each stage run is logged to `events.jsonl` as a `runner-stage` event with timing, command detail (80 chars, secrets masked), exit code, and exception name if raised. **Modules changed:** New `stages.py` (pure data), new `stage_log.py` (timing/events). Changes to gates, dispatch, commands, git_ops, upstream, sandbox (all add stage opens/notes). **Test scope:** Stage table pins (21 members, unique names matching regex), unlisted stages fail, one event per run, choke-point notes (Git, shell, upstream, sandbox, Preparer). No new dependency, no ADR (extends s44 meter and s98 span patterns). See design `agile-team/docs/design/s99.md`.
 
 ## s105 complete: Dashboard presentation seeds config in empty workspace (no new ADR, extends s26)
 

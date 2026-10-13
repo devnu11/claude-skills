@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s99 complete: Runner stages named and timed (all ACs verified; no changes to acceptance)
+
+The runner's stages (quality checks, boundary operations, service starts, e2e gate trials) are now named, timed, and recorded as events. **What you see:** When the runner runs the `env.prepare` stage (your sandbox startup), it's logged with timing and details. When presentation trial runs (service liveness check), that's logged too. **Your scope unchanged:** Same sandbox procedure, service startup, Presentation.md contract. Stage events are backend data (events.jsonl); they don't affect your acceptance workflow. When a stage fails, the gate reason still names what went wrong—no change to your visibility there. Runner-stage events enable future observability views (A6 sprint), but don't impact acceptance acceptance today. See design `agile-team/docs/design/s99.md`.
 
 ## s98 complete: Every agent's tool calls recorded with time split (all ACs pass)
 

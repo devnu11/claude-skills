@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s99 complete: Runner stages are named and timed (no new tool, no new hand-over)
+
+The runner's internal work (quality gates, boundary syncs, service preparation, e2e trials) is now broken down into named stages and timed. Each stage is logged as an event with timing, command, and result. **What you see:** The dashboard will eventually show runner stages on a timeline (A6 sprint work). Today, you see the benefit in debugging: gate output names which stage failed and how long it took. **Your scope unchanged:** Your tools work as before. Gate verdicts are unchanged. No new hand-overs. Stage events are backend data enabling future observability—they don't affect your decisions or workflow. See design `agile-team/docs/design/s99.md`.
 
 ## s98 complete: Your tool calls are now recorded with time accounting (no new tool, no new ADR)
 

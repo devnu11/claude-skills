@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s98 done; s105 docs due; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s99 done; s98 done; s105 docs due; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s99 complete: Runner stages—named data, timed events, repo tools config (ADR-0048, extends s44/s98, no new ADR per design)
+
+**Decision:** Stages are first-class, ordered data (21 members in STAGES table: env.prepare, gate.tests+coverage, boundary.sync, etc.). Each stage has name, description, when (before/after/during), attach (step/story/boundary). Opened by callers (not inferred), commands noted at choke points (Git._exec, CommandShell.run, upstream.run, sandbox.run_shell, Preparer._serve). One runner-stage event per run with timing, detail (80 chars, masked), code, raised exception name. Repo tools (`[[tool]]` in .agile-team.toml) are data-driven, owned by DevOps, listed by `agile-team tools`, not executed in s99. No new dependency (stdlib contextvars). Modules: `stages.py` (pure, STAGES/Place/Run), `stage_log.py` (timing/events). Changes to gates, dispatch, commands, git_ops, upstream, sandbox, boundary_runner, runner_tools, po_tools, config, cli. **Your docs work (due with ship):** `reference/protocol.md` (runner-stage event keys RS4–RS9, stage mechanism RS2–RS3, [[tool]] RS11–RS13, tools command), SKILL.md (tools command, [[tool]] DevOps-owned), `docs/customer/` (runner-stages.md, config page), `docs/architecture.md` (stages.py, stage_log.py, noting modules). ADR-0048 captures decisions. See design `agile-team/docs/design/s99.md` (RS1–RS14, stage table, rules).
 
 ## s98 complete: Tool-call recording—spans, labels, detail, time split (no new ADR, extends s44/s96/s97)
 
