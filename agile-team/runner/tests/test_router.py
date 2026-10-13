@@ -4,8 +4,10 @@ import asyncio
 
 import pytest
 from agile_team import cli, po_tools, router, system
+from agile_team import state as state_mod
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.handover import Trigger as T
+from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import RESUME_NOTE, Start, StartMode, Tools
 from agile_team.relay import Note
 from agile_team.router import Router, Work, standard_brief
@@ -275,6 +277,48 @@ def test_story_work_uses_the_chosen_developer(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt, "s1", "implement", developer="developer-api")
     assert Router(rt).next_work().role == "developer-api"
+
+
+def test_a_po_held_story_is_skipped_and_the_next_one_runs(make_runtime) -> None:
+    rt = make_runtime()
+    add_story(rt, "s1", po_hold=PoHold(HoldKind.HOLD, "waits on s38"))
+    add_story(rt, "s2")
+    assert Router(rt).next_work().story.id == "s2"
+    assert rt.state.stories["s1"].status is StoryStatus.ACTIVE
+
+
+def test_a_po_held_scribe_story_and_escalation_are_skipped(make_runtime) -> None:
+    rt = make_runtime()
+    hold = PoHold(HoldKind.HOLD, "r")
+    add_story(rt, "s1", status=StoryStatus.DONE, po_hold=hold)
+    add_story(rt, "s2", status=StoryStatus.NEEDS_MANAGER, repeated="same", po_hold=hold)
+    rt.state.scribe_due = ["s1"]
+    assert Router(rt).next_work() is None
+
+
+def test_a_cancelled_story_is_never_picked_after_a_resume(make_runtime) -> None:
+    rt = make_runtime()
+    add_story(rt, "s1", status=StoryStatus.CANCELLED)
+    rt.save()
+    rt.state = state_mod.load(rt.config.run_dir)
+    assert Router(rt).next_work() is None
+
+
+def test_tick_settles_an_answered_cancel_before_any_news_or_work(make_runtime) -> None:
+    rt = build(make_runtime, Script())
+    add_story(rt)
+    rt.state.delivered = []
+    rt.state.stories["s1"].po_hold = PoHold(HoldKind.CANCEL, "dup", "m1")
+    ask_and_answer(rt, "Cancel s1?", ["s1"], "cancel")
+    p = advance(rt)
+    assert p.kinds == [T.HUMAN_MESSAGE] and step_roles(rt) == []
+    assert rt.state.stories["s1"].status is StoryStatus.CANCELLED
+
+
+def test_why_names_the_po_hold(make_runtime) -> None:
+    rt = make_runtime()
+    story = add_story(rt, po_hold=PoHold(HoldKind.HOLD, "waits on s38"))
+    assert router._why(story, rt.state.stories) == "PO hold: waits on s38"
 
 
 def test_no_work_when_nothing_is_movable(make_runtime) -> None:

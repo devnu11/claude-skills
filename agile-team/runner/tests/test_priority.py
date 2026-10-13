@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
+from agile_team.holds import HoldKind, PoHold
 from agile_team.priority import (
     BAD_POSITION,
     DONE,
@@ -145,8 +146,10 @@ def test_moves_lists_only_changed_stories_one_based() -> None:
 PREV = PreviousStep("architect", "done", "Asked which")
 
 
-def test_waits_table_has_the_six_rows_in_order() -> None:
+def test_waits_table_has_the_eight_rows_in_order() -> None:
     assert [r.reason for r in WAITS] == [
+        WaitReason.CANCEL_REQUESTED,
+        WaitReason.PO_HOLD,
         WaitReason.HUMAN,
         WaitReason.MANAGER,
         WaitReason.ROUND_CAP,
@@ -158,38 +161,58 @@ def test_waits_table_has_the_six_rows_in_order() -> None:
 
 def test_wait_blocked_needs_the_human() -> None:
     s = story("s1", status=StoryStatus.BLOCKED, previous=PREV)
-    assert wait(s, []) == Wait(WaitReason.HUMAN, ["architect: Asked which"])
+    assert wait(s, []) == Wait(WaitReason.HUMAN, ["architect: Asked which"], str(WaitReason.HUMAN))
 
 
 def test_wait_needs_manager_with_repeated_uses_first_line() -> None:
     s = story("s1", status=StoryStatus.NEEDS_MANAGER, repeated="same reason\nmore")
-    assert wait(s, []) == Wait(WaitReason.MANAGER, ["same reason"])
+    assert wait(s, []) == Wait(WaitReason.MANAGER, ["same reason"], str(WaitReason.MANAGER))
 
 
 def test_wait_needs_manager_without_repeated_is_round_cap() -> None:
     s = story("s1", status=StoryStatus.NEEDS_MANAGER, rounds=3)
-    assert wait(s, []) == Wait(WaitReason.ROUND_CAP, ["round 3: the manager must rule"])
+    assert wait(s, []) == Wait(
+        WaitReason.ROUND_CAP, ["round 3: the manager must rule"], str(WaitReason.ROUND_CAP)
+    )
 
 
 def test_wait_questions_from_combined_hold() -> None:
     s = story("s1", hold="gate_hold, questions", previous=PREV)
-    assert wait(s, ["m1: Q"]) == Wait(WaitReason.QUESTIONS, ["m1: Q", "architect: Asked which"])
+    assert wait(s, ["m1: Q"]) == Wait(
+        WaitReason.QUESTIONS, ["m1: Q", "architect: Asked which"], str(WaitReason.QUESTIONS)
+    )
 
 
 def test_s27_worked_example() -> None:
     s = story("s27", hold="questions", previous=PREV)
     got = wait(s, ["m38: Which?"])
-    assert got == Wait("questions", ["m38: Which?", "architect: Asked which"])
+    assert got == Wait("questions", ["m38: Which?", "architect: Asked which"], "questions")
 
 
 def test_wait_held_detail_has_hold_and_summary() -> None:
     s = story("s1", hold="quarantine", previous=PREV)
-    assert wait(s, []) == Wait(WaitReason.HELD, ["quarantine · architect: Asked which"])
-    assert wait(story("s2", hold="quarantine"), []) == Wait(WaitReason.HELD, ["quarantine"])
+    assert wait(s, []) == Wait(
+        WaitReason.HELD, ["quarantine · architect: Asked which"], str(WaitReason.HELD)
+    )
+    assert wait(story("s2", hold="quarantine"), []) == Wait(
+        WaitReason.HELD, ["quarantine"], str(WaitReason.HELD)
+    )
 
 
 def test_wait_unheld_with_open_question() -> None:
-    assert wait(story("s1"), ["m2: Q"]) == Wait(WaitReason.HUMAN, ["m2: Q"])
+    assert wait(story("s1"), ["m2: Q"]) == Wait(WaitReason.HUMAN, ["m2: Q"], str(WaitReason.HUMAN))
+
+
+def test_wait_po_hold_and_cancel_request_titles() -> None:
+    held = story("s1", po_hold=PoHold(HoldKind.HOLD, "waits on s38"))
+    assert wait(held, []) == Wait(WaitReason.PO_HOLD, ["waits on s38"], "PO hold: waits on s38")
+    ask = story("s1", po_hold=PoHold(HoldKind.CANCEL, "dup", "m1"))
+    got = wait(ask, ["m1: Cancel?"])
+    assert got == Wait(WaitReason.CANCEL_REQUESTED, ["m1: Cancel?", "dup"], "cancel requested: dup")
+
+
+def test_wait_none_for_cancelled() -> None:
+    assert wait(story("s1", status=StoryStatus.CANCELLED), ["m1: Q"]) is None
 
 
 def test_wait_none_for_done_and_for_free_stories() -> None:

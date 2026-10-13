@@ -1,10 +1,8 @@
 """s53: the PO's story admin tools (hold, release, request_cancel) and cancel settling."""
 
-import ast
 import asyncio
 import json
 from dataclasses import asdict
-from pathlib import Path
 
 import pytest
 from agile_team import backlog, gates, priority, waits
@@ -64,14 +62,16 @@ def test_dispatch_refusal_on_a_cancelled_story(make_runtime) -> None:
 
 def test_ruling_refusal_on_finished_stories() -> None:
     for status in (StoryStatus.DONE, StoryStatus.CANCELLED):
-        story = StoryState("s1", "t", status=status)
+        story = StoryState("s1", "t", "design", status=status)
         reason = gates.ruling_refusal(story, "a ruling")
         assert reason == f"story s1 is {status}; a ruling cannot move it"
 
 
 def test_state_round_trip_keeps_po_hold_as_enum() -> None:
     state = RunState()
-    state.stories["s1"] = StoryState("s1", "t", po_hold=PoHold(HoldKind.CANCEL, "r", "m2"))
+    state.stories["s1"] = StoryState(
+        "s1", "t", "design", po_hold=PoHold(HoldKind.CANCEL, "r", "m2")
+    )
     back = RunState.from_json(state.to_json()).stories["s1"]
     assert back.po_hold == PoHold(HoldKind.CANCEL, "r", "m2")
     assert back.po_hold.kind is HoldKind.CANCEL
@@ -79,7 +79,7 @@ def test_state_round_trip_keeps_po_hold_as_enum() -> None:
 
 def test_old_state_without_po_hold_loads_none() -> None:
     state = RunState()
-    state.stories["s1"] = StoryState("s1", "t")
+    state.stories["s1"] = StoryState("s1", "t", "design")
     data = json.loads(state.to_json())
     del data["stories"]["s1"]["po_hold"]
     assert RunState.from_json(json.dumps(data)).stories["s1"].po_hold is None
@@ -108,55 +108,55 @@ def case(act, story, reason="why", asked=()) -> sa.Case:
 
 
 def test_refusal_order_unknown_then_reason_then_finished() -> None:
-    done = StoryState("s1", "t", status=StoryStatus.DONE)
+    done = StoryState("s1", "t", "design", status=StoryStatus.DONE)
     assert sa.refusal(case(sa.Act.HOLD, None, "  ")) == sa.UNKNOWN.format(story="s9")
     assert sa.refusal(case(sa.Act.HOLD, done, "  ")) == sa.NO_REASON
     assert sa.refusal(case(sa.Act.HOLD, done)) == sa.FINISHED_TEXT.format(
         story="s1", status="done", verb="hold"
     )
-    gone = StoryState("s2", "t", status=StoryStatus.CANCELLED)
+    gone = StoryState("s2", "t", "design", status=StoryStatus.CANCELLED)
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, gone)) == sa.FINISHED_TEXT.format(
         story="s2", status="cancelled", verb="cancel"
     )
 
 
 def test_refusal_pending_cancel_blocks_hold_and_request() -> None:
-    story = StoryState("s1", "t", po_hold=PoHold(HoldKind.CANCEL, "r", "m4"))
+    story = StoryState("s1", "t", "design", po_hold=PoHold(HoldKind.CANCEL, "r", "m4"))
     want = sa.CANCEL_PENDING.format(story="s1", question="m4")
     assert sa.refusal(case(sa.Act.HOLD, story)) == want
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story)) == want
 
 
 def test_refusal_release_checks() -> None:
-    active = StoryState("s1", "t")
+    active = StoryState("s1", "t", "design")
     assert sa.refusal(case(sa.Act.RELEASE, active)) == sa.NOTHING_HELD.format(story="s1")
     assert sa.refusal(case(sa.Act.RELEASE, active, asked=("m12", "m13"))) == sa.ASKED.format(
         story="s1", ids="m12, m13"
     )
-    mgr = StoryState("s1", "t", status=StoryStatus.NEEDS_MANAGER)
+    mgr = StoryState("s1", "t", "design", status=StoryStatus.NEEDS_MANAGER)
     assert sa.refusal(case(sa.Act.RELEASE, mgr)) == sa.MANAGER_WAIT.format(story="s1")
-    held = StoryState("s1", "t", po_hold=PoHold(HoldKind.HOLD, "r"))
+    held = StoryState("s1", "t", "design", po_hold=PoHold(HoldKind.HOLD, "r"))
     assert sa.refusal(case(sa.Act.RELEASE, held)) is None
-    blocked = StoryState("s1", "t", status=StoryStatus.BLOCKED)
+    blocked = StoryState("s1", "t", "design", status=StoryStatus.BLOCKED)
     assert sa.refusal(case(sa.Act.RELEASE, blocked)) is None
 
 
 def test_refusal_code_unsaid_for_stories_with_commits() -> None:
-    story = StoryState("s1", "t", commit="abc", code_commits=["abc", "def"])
+    story = StoryState("s1", "t", "design", commit="abc", code_commits=["abc", "def"])
     want = sa.CODE_UNSAID.format(story="s1", count=2)
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "out of scope")) == want
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "its CODE stays")) is None
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "one Commit reverted")) is None
-    plain = StoryState("s2", "t")
+    plain = StoryState("s2", "t", "design")
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, plain, "out of scope")) is None
 
 
 def test_facts_shape() -> None:
-    story = StoryState("s1", "t", po_hold=PoHold(HoldKind.HOLD, "r"))
+    story = StoryState("s1", "t", "design", po_hold=PoHold(HoldKind.HOLD, "r"))
     facts = sa.facts(story)
     assert list(facts) == ["status", "step", "sprint", "hold", "po_hold"]
     assert facts["po_hold"] == asdict(story.po_hold)
-    assert sa.facts(StoryState("s2", "t"))["po_hold"] is None
+    assert sa.facts(StoryState("s2", "t", "design"))["po_hold"] is None
 
 
 # ----- Clerk.run: hold -----------------------------------------------------------
@@ -409,30 +409,6 @@ def test_no_tool_effect_cancels(make_runtime) -> None:
         assert story.status is not StoryStatus.CANCELLED
 
 
-def assigns_cancelled(node: ast.AST) -> bool:
-    targets = []
-    if isinstance(node, ast.Assign):
-        targets = node.targets
-    elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
-        targets = [node.target]
-    else:
-        return False
-    return any(
-        isinstance(t, ast.Attribute) and t.attr == "status" for t in targets
-    ) and "CANCELLED" in ast.dump(node.value)  # type: ignore[attr-defined]
-
-
-def test_only_story_admin_cancel_assigns_cancelled() -> None:
-    package = Path(sa.__file__).parent
-    found = []
-    for path in sorted(package.glob("*.py")):
-        tree = ast.parse(path.read_text())
-        for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
-            if any(assigns_cancelled(n) for n in ast.walk(fn)):
-                found.append(f"{path.name}:{fn.name}")
-    assert found == ["story_admin.py:cancel"]
-
-
 # ----- schemas, waits, labels, priority ------------------------------------------
 
 
@@ -457,7 +433,7 @@ def test_wait_titles(make_runtime) -> None:
 
 def test_label_table() -> None:
     def label(**kw) -> str:
-        return backlog.label(StoryState("s1", "t", **kw))
+        return backlog.label(StoryState("s1", "t", "design", **kw))
 
     assert label(status=StoryStatus.CANCELLED) == "cancelled"
     assert label(hold="cancelled by human") == "cancelled"

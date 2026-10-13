@@ -371,6 +371,7 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "position": 1,
         "tier": "in progress",
         "hold": None,
+        "po_hold": None,
         "wait": None,
         "disputes": 0,
         "developer": None,
@@ -438,6 +439,7 @@ def test_story_fields_for_progress_hold_and_done(config: cfg.Config, scratch: Pa
     assert by_id["s2"]["wait"] == {
         "reason": "questions",
         "on": ["m1: Which DB?", "architect: Asked which"],
+        "title": "questions",
     }
     assert by_id["s3"]["tier"] == "not started" and by_id["s3"]["hold"] is None
     assert by_id["s3"]["wait"] is None
@@ -765,3 +767,18 @@ def test_fresh_config_returns_new_values(config: cfg.Config) -> None:
     fresh = snapshot.fresh_config(config)
     assert fresh.team.budget_usd == 3.0
     assert fresh is not config
+
+
+def test_po_hold_and_title_reach_the_snapshot(scratch, config) -> None:
+    from agile_team.holds import HoldKind, PoHold
+
+    hold = PoHold(HoldKind.HOLD, "waits on s38")
+    stories = {"s1": StoryState("s1", "A", "design", sprint=1, po_hold=hold)}
+    state_mod.save(config.run_dir, RunState(stories=stories))
+    story = build(config, scratch)["stories"][0]
+    assert story["po_hold"] == {"kind": "PO hold", "reason": "waits on s38", "question": None}
+    assert story["wait"] == {
+        "reason": "PO hold",
+        "on": ["waits on s38"],
+        "title": "PO hold: waits on s38",
+    }
