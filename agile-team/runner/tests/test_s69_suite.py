@@ -225,7 +225,7 @@ def test_shown_follows_the_table_and_skips_missing(scratch: Path) -> None:
         store.keep("s1", ran(name))
     assert [r.name for r in store.shown("s1", "quality")] == ["coverage", "static"]
     assert store.shown("s1", "design") == []
-    assert BRIEF_RESULTS["implement"] == ("test", "coverage")
+    assert BRIEF_RESULTS["implement"] == ("test", "coverage", "suite-runs")
     assert BRIEF_RESULTS["review"] == ("coverage",)
 
 
