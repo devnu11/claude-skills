@@ -1,6 +1,21 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 docs done; s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s108 docs due; s93 docs done; s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s108 due: Review stack rebase moved to sprint end (docs at ship)
+
+**Decision:** Team branch rebase moved from sprint start (s59) to sprint end, after PUSH and before RESTACK. Start sync now only fetches and reports main movement (behind count); nothing rebases or changes mid-sprint. Reason: the human's rule pulls main into the team branch once per sprint at the end, when stack is updated in same pass, so mid-sprint merges don't rewrite hashes in work.
+
+**Architecture:** `restack.py` (new pure module, ~180 LOC): Plan class, Restacker class with merged/plan methods, _next/_note helpers. Stage enum gains REBASE, RESTACK. `boundary_runner.py` SYNCS table maps START→_start_sync (reports), END→_end_sync (adds entry). PUSH pushes sprint's branch only (no PR call). REBASE rebases team branch (clears sync_from). RESTACK brings stack up to date (merge-base on first, rebase, check tree, emptied drop, push with lease, retarget). `boundary.py` END_ONLY includes REBASE, RESTACK. `stack.py` Rebuilder gains merge_base. `upstream.py` Upstream gains behind. M1–M18 rules data-driven (no branching).
+
+**Your docs work (due with ship, "Docs at ship" section in design):**
+1. `SKILL.md` (line ~182, sprint boundaries section): every PR is ready; the team rebases onto main and updates the stack at sprint end only; the start sync only reports that main moved.
+2. `reference/protocol.md` (sprint boundaries, hold table, stage table): START sync reports only (behind note), END is push→rebase→restack→ci; every PR ready; every PR watched; over-100 note; sync_conflict at sprint end; stage rows `boundary.rebase` and `boundary.restack`.
+3. `docs/customer/review-stack.md`: all PRs ready, start sync reports, END order, merged drop, branches rebase/tree check/push/retarget/fallback, over-100 command.
+4. `docs/customer/runner-stages.md`: new stage rows.
+5. `docs/architecture.md`: `restack.py` row (merged finding, plan, fast rebase), `stack.py` merge_base, `boundary_runner.py` rows note rebase moved to END, s59 row references END.
+
+See design `agile-team/docs/design/s108.md` (AC6 "Docs at ship"), ADR-0041 amendment (AC6 text).
 
 ## s93 complete: Rename "delivery" to "acceptance environment" (docs done in round 1, no new ADR)
 

@@ -1,6 +1,15 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s108 complete: Sprint-end rebase and restack—e2e and presentation done (all ACs pass, coverage 99.52%, ruff clean)
+
+**Files:** `tests/e2e/test_s108_restack_e2e.py`, `tests/e2e/test_s108_start_e2e.py`, `.team/run/presentation/s108/PRESENTATION.md`. **What you did:**
+- **AC4 (real-git e2e):** Five test cases run real git: rebase-merge bottom PR drops and next rebases with tree kept, conflict aborts and REBASE_HEAD absent, plan refuses on tree change, emptied entry dropped, lease and retarget work. Covers checklist 4–6, 8. Over-100 note stays unit test (allowed).
+- **AC5 (START sync e2e):** Main 2 commits ahead → behind=2, team branch unchanged; main unmoved → behind=0. Covers checklist 3, 3a with real git.
+- **Presentation:** `.team/run/presentation/s108/PRESENTATION.md` shows AC1–AC5 in scratch repo: every PR ready on parent, START with main ahead changes nothing (behind note), END rebase-merge drops bottom PR and retargets next to main.
+
+Acceptance round 2 passes on e2e, presentation, and docs (customer-proxy verified).
 
 ## s93 complete: A14a—"delivery" renamed to "acceptance environment" (AC1–AC5 all pass; no new ADR)
 

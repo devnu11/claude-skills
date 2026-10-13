@@ -1,6 +1,16 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s108 complete: Review stack ready at sprint end (no new tools, amends ADR-0041)
+
+**What changed for boundary work:** The team branch rebase moved from `START` boundary to `END` boundary (after PUSH stage). The `END` boundary now has stages: PUSH (sprint's branch only, no PR call), REBASE (team branch onto main, clears sync_from), RESTACK (bring stack up to date with fast rebase, check tree, merge-base on first entry, push with lease, retarget to main or parent, drop merged PRs). The `START` boundary now only fetches and reports: if main moved N commits ahead, emits `pass` with note and `behind: N` in event data. Nothing rebases or changes mid-sprint, so stack PRs stay ready between pushes.
+
+**Key rules (M1–M18):** Every PR is ready (READY mode). PUSH pushes sprint's branch only. REBASE clears sync_from after rebase (pins before, saves before rebase on first run). RESTACK finds merged PRs (same leading, same number), plans fast rebase (all entries from merge_base), checks tree (refuses if changed), drops emptied entries (commits in main already), pushes with lease, retargets, or goes local. Fallback (refused plan): rebuild from (rebased) team branch, CHECK, PUSH, REBASE, RESTACK again. CI watches all ready PRs; nothing changes if no open PR or gh permission is no.
+
+**When to use:** After sprint-end PUSH, REBASE, RESTACK complete and before calling the boundary done, verify: (1) Every review branch head is new (rebased), (2) every PR is ready and based on its parent or main, (3) CI is green on all, or ci_pending (still waiting) or ci_none (no checks—local boundary). If RESTACK is refused, the boundary rebuilds—you see a `rebuild` event and the stage stays RESTACK (M12). Push rejected holds `push_rejected`; `continue_boundary` reruns.
+
+See design `agile-team/docs/design/s108.md` (M1–M18, "The human's rule").
 
 ## s93 complete: A14a—rename "delivery" to "acceptance environment" (no new ADR, no new tools)
 

@@ -1,8 +1,14 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s108 complete: Review stack after a merge—rebase moved to sprint end (no new ADR, amends ADR-0041)
+
+**What changed:** The team branch rebase moved from sprint start (s59) to sprint end (after PUSH, before RESTACK). Start sync now only reports whether main moved; nothing changes mid-sprint. **New stages:** `Stage.REBASE` (rebase team branch) and `Stage.RESTACK` (bring stack up to date). **Module M1–M18 rules enforced:** M1: every PR ready. M2: PUSH, REBASE, RESTACK at END edge. M3: START sync reports only (M3a: `Upstream.behind()`). M4: mid-sprint nothing due. M5–M11: REBASE/RESTACK order, merged drop, rebase plan. M12: fallback to REVIEW. M13: push rejected holds. M14–M18: data-driven, no branching. **Modules changed:** boundary.py (Stage enum, END_ONLY), boundary_runner.py (SYNCS table, _rebase, _start_sync, _restack, _deliver, _ci), restack.py (new pure module, Plan class, merged/plan/emptied), stack.py (Rebuilder.merge_base), upstream.py (Upstream.behind), stages.py (two rows), handover.py (SYNC_CONFLICT text), dashboard/index.html (stage nodes). Tests changed per "Who moves what" table in design. Coverage 99.52%, ruff clean.
+
+See design `agile-team/docs/design/s108.md` (M1–M18, test checklist), ADR-0041 amendment (AC6: start sync rebases nothing; only END rebases).
 
 ## s93 complete: A14a—"delivery" renamed to "acceptance environment" (no new ADR)
 

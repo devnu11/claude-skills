@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s108 complete: Review stack rebase at sprint end (4 rounds, all defects fixed, ship) — verdict ship
+
+**Scope:** `boundary.py`, `boundary_runner.py`, `restack.py` (new), `stack.py`, `upstream.py`, `stages.py`, `handover.py`, `ci.py`, `dashboard/index.html`, tests. **Verdict: ship.** Coverage 99.52%, ruff clean. All tests passing. **Round 1–4:** D1, D2 (test assertions fixed with branch command detection and MUTATING set with worktree), D3 (e2e real-git test added). M1–M2 (minor, don't block).
+
+**Design rules enforced (M1–M18):** M1 every PR ready (PrMode.READY). M2 two new stages REBASE, RESTACK between PUSH and CI. M3 START sync fetches, records team branch, emits pass with note and behind count (M3a: Upstream.behind). M4 mid-sprint nothing due. M5 END SYNC adds entry only. M6 REVIEW builds sprint's own entry (all after fallback). M7 PUSH pushes sprint's branch only. M8 REBASE rebases team branch, clears sync_from. M9 merged entries found and dropped. M10 fast rebase all entries with tree check. M11 emptied dropped, push, retarget, deliver or local. M12 refused plan → rebuild. M13 push rejected holds. M14 CI no follow. M15 local delivery. M16 all watched. M17 over-100 note. M18 data-driven.
+
+See design `agile-team/docs/design/s108.md` (M1–M18, per-module, test checklist, known limits), review round 4 (ship).
 
 ## s93 complete: Rename "delivery" to "acceptance environment" (all ACs pass; no new ADR)
 

@@ -1,6 +1,19 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s108 complete: Sprint-end rebase and stack restack—unit tests for M1–M18 (coverage 99.52%, ruff clean, all pass)
+
+**Files:** `test_s108_follow.py`, `test_s108_restack.py`, `test_s108_start.py` (rewritten s59 tests moved to END/REBASE), plus changes to `test_s59_sync.py`, `test_boundary.py`, `test_s81_boundary.py`, `test_s99_stages.py`, `test_s81_ci.py`. **Coverage (all pass):**
+- **M1:** Every created PR is `PrMode.READY`; base chain unchained.
+- **M3 (START):** Fetches, records team branch, emits `pass` with `note` and `behind` count; no rebase, reset, merge, checkout; every recorded hash unchanged.
+- **M7 (PUSH):** Empty stack → `pass`, already pushed → `pass`, local/permission → stay/hold. Only sprint's own branch pushed.
+- **M8 (REBASE):** Fetches (raises `UpstreamError` on error); runs rebase; `_settle_rebase` clears `sync_from` after `rebased`/`current`.
+- **M9–M11 (RESTACK):** Merged entries found and dropped; plan refuses on stop/tree change; all entries rebase with tree check; emptied entries dropped; push with lease; retarget; deliver or local.
+- **M14:** Empty stack → `NOTHING_REPORT`; watch and verdict unchanged.
+- **Checklist 2, 7, 8:** Mid-sprint nothing due; nothing merged/main unmoved → no moves; main unrelated → refused with TREE_CHANGED.
+
+See design `agile-team/docs/design/s108.md` (test checklist), review round 4 (ship).
 
 ## s93 complete: "delivery" renamed to "environment" (test renames only, coverage ≥95%, ruff clean)
 

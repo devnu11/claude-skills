@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s103 done; s78 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s103 done; s78 done)
+
+## s108 complete: Review stack rebase moved to sprint end (no change to Manager context)
+
+The END boundary now has stages REBASE (team branch onto main) and RESTACK (bring stack up to date), before CI. The START boundary only fetches and reports whether main moved (behind count). Nothing changes mid-sprint. This is a boundary stage reordering with no new holds, new escalation logic, or new Manager decisions. The `sync_conflict` hold still applies (at END REBASE now, not START). The PO judges whether RESTACK is refused (tree changed, stopped rebase) and runs fallback or continues. Your escalation rules (s27 repeated, s45 fault/ruling, s29 boundary repeated) apply unchanged to these new stages. No new ADR (amends s59 rebase method, extends s29 boundary pattern).
 
 ## s93 complete: Config section renamed; no change to Manager role
 

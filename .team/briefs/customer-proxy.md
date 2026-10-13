@@ -1,6 +1,18 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s108 complete: Review stack rebase at sprint end—all ACs verified (all pass)
+
+**Verdict: all six criteria pass.** Presented: real-git e2e test results (6 passed), customer docs on review-stack.md and runner-stages.md. **What you verified:**
+- **AC1 (ready PRs, base chain):** review-stack.md states "Every pull request is ready (none is a draft). Each is based on the one below." Pinned by fake-gh unit tests per presentation.
+- **AC2 (restack at sprint end only):** E2e passes (6 tests): bottom merged/found/dropped, next rebased onto main/tree kept, conflict aborts/no rebase, tree/stop refuse/fallback. Docs list boundary.rebase and boundary.restack as sprint-end stages only.
+- **AC3 (CI wait, over-100):** Docs: ci_timeout_s, "ready to merge" only after CI, section "More than 100 commits" with merge command. Not run live (docs evidence).
+- **AC4 (scratch repo + fake gh):** E2e passed (real-git); fake-gh unit tests earlier steps.
+- **AC5 (start sync changes nothing):** test_s108_start_e2e.py passes (main 2 ahead: reports 2, HEAD unchanged; unmoved: 0). Docs: "origin/main moved N commits since the last sprint-end rebase; nothing changes until the next sprint end."
+- **AC6 (ADR/docs):** Docs consistent (customer/review-stack.md, runner-stages.md, SKILL.md, protocol.md checked by code-reviewer). ADR-0041 amended by Scribe.
+
+Report in `.team/acceptance/s108.md` (round 2).
 
 ## s93 complete: A14a—"delivery" renamed to "acceptance environment" (AC1–AC4 verified; no new ADR)
 

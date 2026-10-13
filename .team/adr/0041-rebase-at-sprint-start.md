@@ -1,10 +1,12 @@
 # ADR-0041: Rebase the team branch at sprint start
 
-**Decision:** The sprint-start sync rebases the team branch onto the target branch (origin/main) instead of merging, dropping commits whose patches are already upstream. Hash rewrites keep the runner's recorded hashes consistent; no commits are lost.
+**Decision:** ~~The sprint-start sync~~ **The sprint-end boundary** rebases the team branch onto the target branch (origin/main) instead of merging, dropping commits whose patches are already upstream. Hash rewrites keep the runner's recorded hashes consistent; no commits are lost.
+
+**Amendment (s108):** The rebase moved from sprint start to sprint end, after the sprint's own branch is pushed and before the review stack is brought up to date. The start sync now only reports whether the target moved and changes nothing. Reason: the human's rule (t58, m118 option b) pulls main into the team branch once per sprint at a point where the stack is updated in the same pass, so a mid-sprint or start merge never rewrites hashes the sprint is working on. R1–R11 below still apply to the END rebase; R12 is reversed.
 
 **Date:** 2026-10-12  
-**Status:** Accepted  
-**Affected:** Runner git model; sprint boundaries; state tracking
+**Status:** Accepted (amended s108)  
+**Affected:** Runner git model; sprint boundaries; state tracking; review stack (moved to sprint end)
 
 ## Context
 
@@ -38,7 +40,7 @@ A rebase drops commits whose patches are already upstream. The false conflicts d
 
 **R11: Push unchanged.** `push` keeps `--force-with-lease=<ref>:<expect>` and `_guard` refuses anything but review branches (never team branch, never target branch). (AC4)
 
-**R12: End edge unchanged.** Only `Edge.START` maps to the new rebase method. The end sync still adds the stack entry and never rebases. (AC1)
+**R12: End edge rebases (reversed by s108).** Only `Edge.END` maps to the rebase method at the REBASE stage, after PUSH and before RESTACK. The start sync no longer rebases; it only fetches and reports. (AC1, s108)
 
 ### Implementation
 
