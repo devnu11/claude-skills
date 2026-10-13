@@ -1,5 +1,6 @@
 """s94: open_story, the pre-acceptance read, state and the view follow the story file (SF4-SF9)."""
 
+import contextlib
 import json
 from functools import partial
 from pathlib import Path
@@ -106,7 +107,7 @@ def test_bad_file_at_acceptance_holds_the_story_and_runs_nothing(make_runtime) -
     assert report["gate"]["verdict"] == "hold"
     assert "the story file must be fixed before acceptance:" in report["reason"]
     assert ".team/stories/s1.md: AC AC1:" in report["reason"]
-    assert story.hold and ".team/stories/s1.md" in story.hold
+    assert story.hold == "gate_hold"
     assert q.calls == [] and prepared == [] and rt.ledger.total() == 0
     assert story.step == "acceptance" and story.status is StoryStatus.ACTIVE
 
@@ -114,7 +115,8 @@ def test_bad_file_at_acceptance_holds_the_story_and_runs_nothing(make_runtime) -
 def test_a_missing_file_at_acceptance_is_a_hold_not_a_fault(make_runtime) -> None:
     rt = make_runtime()
     wire(rt)
-    story = open_story(rt, "acceptance")
+    story = StoryState("s1", "Add todo", "acceptance", sprint=1)
+    rt.state.stories["s1"] = story
     report = run(rt, "customer-proxy", story="s1")
     assert report["gate"]["verdict"] == "hold" and story.hold
     assert "no story file" in report["reason"]
@@ -181,10 +183,8 @@ def test_an_edited_environment_between_e2e_and_acceptance_is_used(make_runtime) 
     present(rt.config)
     write_story(rt.config, "s1", "cli")
     write_story(rt.config, "s1", "dashboard")  # the PO edited the file
-    try:
+    with contextlib.suppress(RuntimeError):
         run(rt, "customer-proxy", story="s1")
-    except RuntimeError:
-        pass
     assert orders == ["dashboard"]
 
 
@@ -218,7 +218,7 @@ def test_state_drops_environment_and_delivery_keys(scratch: Path) -> None:
 
 
 def test_state_dropped_keys_are_the_two_names() -> None:
-    assert state.STORY_DROPPED == frozenset({"environment", "delivery"})
+    assert frozenset({"environment", "delivery"}) == state.STORY_DROPPED
     assert state._kept({"id": "s1", "environment": "x", "delivery": "y"}) == {"id": "s1"}
 
 

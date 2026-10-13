@@ -176,7 +176,6 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             s["step"],
             rounds=s["rounds"],
             status=StoryStatus(s["status"]),
-            environment=s["environment"],
             sprint=s["sprint"],
             repeated=s.get("repeated"),
             hold=s.get("hold"),
@@ -357,7 +356,7 @@ def put_story(config: cfg.Config, story: StoryState) -> None:
 
 
 def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
-    put_story(config, StoryState("s1", "One", "design", environment=None, commit="abc", sprint=1))
+    put_story(config, StoryState("s1", "One", "design", commit="abc", sprint=1))
     (story,) = build(config, scratch)["stories"]
     assert story == {
         "id": "s1",

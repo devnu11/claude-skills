@@ -10,7 +10,7 @@ from agile_team.po_tools import Start, StartMode, Tools
 from agile_team.providers import Provider, Providers
 from agile_team.state import RunStatus
 
-from .conftest import FakeQuery
+from .conftest import FakeQuery, write_story
 from .fake_system import FakeSystem
 
 
@@ -20,12 +20,11 @@ def call(coro) -> dict:
 
 def test_open_story_and_status(make_runtime) -> None:
     t = Tools(make_runtime())
-    assert (
-        call(t.open_story({"id": "s1", "title": "Add", "environment": "cli"}))["step"] == "design"
-    )
+    write_story(t.runtime.config, "s1", "cli")
+    assert call(t.open_story({"id": "s1", "title": "Add"}))["step"] == "design"
     assert call(t.open_story({"id": "s1", "title": "Add"}))["status"] == "refused"
     status = call(t.story_status({}))
-    assert status["stories"]["s1"]["environment"] == "cli"
+    assert "environment" not in status["stories"]["s1"]
     opened = t.runtime.events.events()
     want = {"title": "Add", "step": "design", "depends_on": []}
     assert len(opened) == 1 and opened[0].data == want
@@ -34,6 +33,7 @@ def test_open_story_and_status(make_runtime) -> None:
 
 def open_stories(t: Tools, *ids: str) -> None:
     for sid in ids:
+        write_story(t.runtime.config, sid, "cli")
         call(t.open_story({"id": sid, "title": sid}))
 
 

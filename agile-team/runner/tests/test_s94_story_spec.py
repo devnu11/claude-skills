@@ -116,7 +116,9 @@ def test_the_first_three_checks_stop_the_read(text) -> None:
 
 def test_wrong_id() -> None:
     text = doc("id: s999\ntitle: T\n", acc(item()))
-    assert lines(text) == [f"{FILE}: " + PROBLEMS[Problem.WRONG_ID].format(found="s999", story="s120")]
+    assert lines(text) == [
+        f"{FILE}: " + PROBLEMS[Problem.WRONG_ID].format(found="s999", story="s120")
+    ]
 
 
 @pytest.mark.parametrize("title", ["title: ''\n", "title: 5\n", ""])
@@ -210,9 +212,7 @@ def test_problems_text_table_is_exact() -> None:
 
 def test_two_bad_items_report_all_lines_in_file_order() -> None:
     body = (
-        "acceptance:\n"
-        "  - id: AC1\n    text: ''\n    environment: mars\n"
-        "  - id: AC2\n    text: ok\n"
+        "acceptance:\n  - id: AC1\n    text: ''\n    environment: mars\n  - id: AC2\n    text: ok\n"
     )
     assert lines(doc(acceptance=body)) == [
         f"{FILE}: AC AC1: " + PROBLEMS[Problem.NO_TEXT],

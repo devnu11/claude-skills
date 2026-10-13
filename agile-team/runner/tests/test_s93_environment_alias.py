@@ -15,7 +15,7 @@ from agile_team.config import Environment
 from agile_team.gates import StoryState
 from agile_team.presentation import Check, Need, Recipe
 
-from .conftest import PY_CONFIG, FakeQuery, present
+from .conftest import PY_CONFIG, FakeQuery, present, write_story
 from .fake_system import FAKE_REPO, Done, FakeSystem
 from .test_dispatch import open_story, run
 
@@ -121,27 +121,20 @@ def saved_text(story: StoryState) -> str:
     return system.read_text(FAKE_REPO / "run" / state.STATE_FILE)
 
 
-def test_state_with_the_old_key_loads_and_saves_the_new_one() -> None:
-    text = saved_text(StoryState("s1", "A", "design", environment="cli"))
-    old = text.replace('"environment"', f'"{OLD}"')
-    assert f'"{OLD}"' in old
-    system.write_text(FAKE_REPO / "run" / state.STATE_FILE, old)
+def test_state_with_the_old_key_loads_and_drops_it() -> None:
+    text = saved_text(StoryState("s1", "A", "design"))
+    data = json.loads(text)
+    data["stories"]["s1"][OLD] = "cli"
+    data["stories"]["s1"]["environment"] = "cli"
+    system.write_text(FAKE_REPO / "run" / state.STATE_FILE, json.dumps(data))
     loaded = state.load(FAKE_REPO / "run")
-    assert loaded.stories["s1"].environment == "cli"
     state.save(FAKE_REPO / "run", loaded)
     again = system.read_text(FAKE_REPO / "run" / state.STATE_FILE)
-    assert '"environment": "cli"' in again and f'"{OLD}"' not in again
+    assert f'"{OLD}"' not in again and '"environment"' not in again
 
 
-def test_state_with_both_keys_prefers_environment() -> None:
-    data = json.loads(saved_text(StoryState("s1", "A", "design", environment="new")))
-    data["stories"]["s1"][OLD] = "old"
-    system.write_text(FAKE_REPO / "run" / state.STATE_FILE, json.dumps(data))
-    assert state.load(FAKE_REPO / "run").stories["s1"].environment == "new"
-
-
-def test_story_renames_table() -> None:
-    assert state.STORY_RENAMES == {OLD: "environment"}
+def test_state_dropped_keys_table() -> None:
+    assert frozenset({"environment", OLD}) == state.STORY_DROPPED
 
 
 # ----- E6: DevOps may migrate -------------------------------------------------
@@ -208,7 +201,8 @@ def test_document_presentation_recipe() -> None:
 def test_document_needs_the_guide_and_a_workspace(configured: Path) -> None:
     c = cfg.load(configured)
     c.environments = [Environment("review", "document")]
-    story = StoryState("s4", "A", "e2e", sprint=1, environment="review")
+    write_story(c, "s4", "review")
+    story = StoryState("s4", "A", "e2e", sprint=1)
     assert presentation.missing(c, story) is not None
     present(c, "s4", workspace=False)
     assert presentation.missing(c, story) is not None
@@ -223,7 +217,8 @@ def test_document_liveness_passes_without_preparing(configured: Path) -> None:
     def never(*_a):
         raise AssertionError("prepare must not run")
 
-    story = StoryState("s4", "A", "e2e", sprint=1, environment="review")
+    write_story(c, "s4", "review")
+    story = StoryState("s4", "A", "e2e", sprint=1)
     outcome = presentation.Trial(c, never).liveness(story)
     assert outcome.verdict.name == "PASS"
 
@@ -231,7 +226,8 @@ def test_document_liveness_passes_without_preparing(configured: Path) -> None:
 def test_document_acceptance_posts_no_question_and_has_no_bash(make_runtime) -> None:
     rt = make_runtime(FakeQuery("judged\n" + _done()))
     rt.config.environments = [Environment("review", "document")]
-    open_story(rt, "acceptance", environment="review")
+    open_story(rt, "acceptance")
+    write_story(rt.config, "s1", "review")
     present(rt.config)
     report = run(rt, "customer-proxy", story="s1")
     assert "question_id" not in report
@@ -243,7 +239,8 @@ def test_document_acceptance_posts_no_question_and_has_no_bash(make_runtime) -> 
 def test_manual_acceptance_still_posts_a_question(make_runtime) -> None:
     rt = make_runtime(FakeQuery("1. Plug in.\n" + _done()))
     rt.config.environments = [Environment("hw", "manual")]
-    open_story(rt, "acceptance", environment="hw")
+    open_story(rt, "acceptance")
+    write_story(rt.config, "s1", "hw")
     present(rt.config, workspace=False)
     assert "question_id" in run(rt, "customer-proxy", story="s1")
 

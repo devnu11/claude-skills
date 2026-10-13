@@ -14,7 +14,7 @@ from agile_team.providers import Provider, Providers
 from agile_team.state import STOP_FILE, ModelOverride, RunState, RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from .conftest import GUIDE_TEXT, FakeQuery, FakeRunner, handoff, present
+from .conftest import GUIDE_TEXT, FakeQuery, FakeRunner, handoff, present, write_story
 from .fake_system import Done, FakeSystem
 
 
@@ -36,6 +36,8 @@ def run(rt, role, brief="go", story=None):
 def open_story(rt, step="design", **kw):
     kw.setdefault("sprint", 1)
     rt.state.stories["s1"] = gates.StoryState("s1", "Add todo", step, **kw)
+    if rt.config.environments:
+        write_story(rt.config, "s1", rt.config.environments[0].name)
     return rt.state.stories["s1"]
 
 

@@ -9,17 +9,26 @@ from agile_team.config import Environment
 from agile_team.gates import StoryState
 from agile_team.presentation import Need
 
-from .conftest import GUIDE_TEXT, present
+from .conftest import GUIDE_TEXT, present, write_story
 from .fake_system import FAKE_ROOT, FakeSystem
+
+CURRENT: list[cfg.Config] = []
 
 
 def story_of(story_id: str = "s4", environment: str | None = None) -> StoryState:
-    return StoryState(story_id, "A story", "e2e", sprint=1, environment=environment)
+    """A story whose file names ``environment`` (default: the first configured one)."""
+    config = CURRENT[0]
+    names = [environment] if environment else [e.name for e in config.environments[:1]]
+    if names and "/" not in story_id:
+        write_story(config, story_id, *names)
+    return StoryState(story_id, "A story", "e2e", sprint=1)
 
 
 @pytest.fixture
 def config(configured: Path) -> cfg.Config:
-    return cfg.load(configured)
+    loaded = cfg.load(configured)
+    CURRENT[:] = [loaded]
+    return loaded
 
 
 # ----- E1 / the table -------------------------------------------------------

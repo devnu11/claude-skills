@@ -18,7 +18,7 @@ from agile_team.presentation import Check, Need, Recipe, Trial
 from agile_team.roles import Handoff
 from agile_team.sandbox import NotUp, Order, PortBusy, Preparer, Start
 
-from .conftest import FakeQuery, FakeRunner, present
+from .conftest import FakeQuery, FakeRunner, present, write_story
 from .fake_system import FAKE_REPO, FIRST_CHILD_PID, START_CLOCK, Done, FakeSystem, Hang
 
 PORT = 8799
@@ -58,6 +58,7 @@ def preparer(probe: Any = None, *, busy: bool = False, **kw: Any) -> Preparer:
 def config(configured: Path) -> cfg.Config:
     c = cfg.load(configured)
     c.environments = [DASHBOARD]
+    CURRENT[:] = [c]
     return c
 
 
@@ -69,7 +70,16 @@ def log_file(config: cfg.Config) -> Path:
     return config.run_dir / "customer/ui.log"
 
 
+CURRENT: list[cfg.Config] = []
+
+
 def story_of(step: str = "e2e", story_id: str = "s4", **kw: Any) -> StoryState:
+    """A story whose file names ``environment`` (default: the first configured one)."""
+    config = CURRENT[0]
+    name = kw.pop("environment", None)
+    names = [name] if name else [e.name for e in config.environments[:1]]
+    if names:
+        write_story(config, story_id, *names)
     kw.setdefault("sprint", 1)
     return StoryState(story_id, "A story", step, **kw)
 
@@ -149,6 +159,7 @@ def test_address_probe_url_and_service_files(scratch: Path) -> None:
 
 def test_make_pipeline_wires_the_trial(configured: Path) -> None:
     config = cfg.load(configured)
+    CURRENT[:] = [config]
     live = cli.make_pipeline(config).checks.liveness
     assert isinstance(live.__self__, Trial) and live.__self__.config is config  # type: ignore[attr-defined]
     out = live(story_of())
@@ -717,6 +728,7 @@ def run(rt, role, story="s1"):
 def open_acceptance(rt) -> StoryState:
     rt.state.stories["s1"] = StoryState("s1", "Add todo", "acceptance", sprint=1, rounds=1)
     present(rt.config, "s1")
+    write_story(rt.config, "s1", rt.config.environments[0].name)
     return rt.state.stories["s1"]
 
 

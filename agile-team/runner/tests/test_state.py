@@ -105,7 +105,7 @@ def test_new_fields_default_for_old_state_files() -> None:
 
 def test_story_defaults_come_after_sprint() -> None:
     s = StoryState(
-        "s1", "t", "design", 0, StoryStatus.ACTIVE, None, None, 1, "dev", "po", "held", None, "n"
+        "s1", "t", "design", 0, StoryStatus.ACTIVE, None, 1, "dev", "po", "held", None, "n"
     )
     assert (s.sprint, s.developer, s.po_developer, s.hold, s.po_hold, s.note, s.previous) == (
         1,
