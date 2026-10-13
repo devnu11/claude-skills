@@ -76,8 +76,8 @@ another role's work.
      - `hold_story(story, reason)` parks a story (the router skips it; it keeps its place). Never park one
        with an `ask_user` nobody should answer. It stops only the router: `run_role` still works on it.
      - `release_story(story, reason)` releases your hold, or a blocked story with no open question. A
-       refusal naming `mN` means the human's answer is due: relay it. A held `needs_manager` story is
-       released by `run_role` of the manager.
+       refusal naming `mN` means the human's answer is due: relay it. A held `needs_manager` story: `run_role` the manager first,
+       then `release_story` (a ruling does not clear your hold).
      - `request_cancel(story, reason)` whenever anyone, you included, thinks a story should go. A role or
        the Manager that says so is telling you to call it. Never treat a story as cancelled until a
        `story-admin` event shows the human's "cancel". For a story with commits, say what happens to its code.

@@ -325,8 +325,18 @@
    "position": 6,
    "tier": "not started",
    "hold": null,
-   "po_hold": null,
-   "wait": null,
+   "po_hold": {
+    "kind": "PO hold",
+    "reason": "waiting for the scheduler design to settle",
+    "question": null
+   },
+   "wait": {
+    "reason": "PO hold",
+    "on": [
+     "waiting for the scheduler design to settle"
+    ],
+    "title": "PO hold"
+   },
    "disputes": 0,
    "developer": null,
    "commits": [],
@@ -376,6 +386,38 @@
     "story"
    ],
    "label": "",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
+  },
+  {
+   "id": "s8",
+   "title": "Export to XML",
+   "sprint": null,
+   "delivery": "cli",
+   "step": "design",
+   "status": "cancelled",
+   "rounds": 0,
+   "opened_at": 1791450406.7,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "An export can be written as XML"
+    }
+   ],
+   "repeated": null,
+   "position": null,
+   "tier": null,
+   "hold": null,
+   "po_hold": null,
+   "wait": null,
+   "disputes": 0,
+   "developer": null,
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": "cancelled",
    "depends_on": [],
    "waiting_on": [],
    "dependency_warnings": []
@@ -2427,6 +2469,36 @@
     "waiting_s": 312.5,
     "mono": 5400.0,
     "slept": 0.0
+   }
+  },
+  {
+   "id": "e104",
+   "at": 1791473200.0,
+   "kind": "story-admin",
+   "role": "product-owner",
+   "story": "s6",
+   "data": {
+    "tool": "hold_story",
+    "reason": "waiting for the scheduler design to settle",
+    "question": null,
+    "before": {
+     "status": "active",
+     "step": "design",
+     "sprint": null,
+     "hold": null,
+     "po_hold": null
+    },
+    "after": {
+     "status": "active",
+     "step": "design",
+     "sprint": null,
+     "hold": null,
+     "po_hold": {
+      "kind": "PO hold",
+      "reason": "waiting for the scheduler design to settle",
+      "question": null
+     }
+    }
    }
   }
  ],
