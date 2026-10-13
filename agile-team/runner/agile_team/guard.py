@@ -8,7 +8,9 @@ Layers:
   paths or fall outside an allowlist.
 * Every role: no writes under ``.git/``, no tool or Bash access to the API key
   files, and Bash may only run read-only git subcommands (the runner owns
-  commits, so a role cannot rewrite history or hide changes from the audit).
+  commits, so a role cannot rewrite history or hide changes from the audit;
+  s65: seen through ``X=1``, ``env``, ``command``; a confined step may change
+  only its workspace's repos, see ``git_check``).
   No ``kill`` of the runner's process group, no kill by name or by run-time
   target (s41).
 * ``audit_step`` / ``quarantine`` — after every step the runner diffs the tree.
@@ -26,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import system
+from . import git_check, system
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
@@ -37,15 +39,11 @@ READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
 PATH_KEYS = {**WRITE_TOOLS, **READ_TOOLS}
 ALWAYS_IGNORED = [".team/run/**"]
 PROTECTED = [".git", ".git/**"]
-SAFE_GIT = frozenset(
-    {"status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe"}
-)
-NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
 # A backslash-newline continues the line only when preceded by an odd run of backslashes.
 LINE_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\n")
-_SEGMENT_SPLIT = re.compile(r"\|\||&&|[;|&\n]")
+_LINK_SPLIT = re.compile(r"(\|\||&&|[;|&\n])")
 UNQUOTE = str.maketrans("", "", "'\"\\")
 WAIT_LOOPS = frozenset({"until", "while"})
 DEADLINES = frozenset({"timeout", "gtimeout"})
@@ -71,6 +69,7 @@ class Scope:
     bash_forbidden: list[str] = field(default_factory=list)
     bash_allowed: list[str] | None = None
     secrets: list[Path] = field(default_factory=list)
+    git_workspace: Path | None = None
 
     @property
     def base(self) -> Path:
@@ -197,10 +196,11 @@ def _join_unless_comment(match: re.Match[str], command: str) -> str:
 
 
 def _check_view(scope: Scope, command: str) -> str | None:
-    segments = [_tokens(s) for s in _SEGMENT_SPLIT.split(command)]
+    links = _links(command)
+    segments = [list(link.words) for link in links]
     checks = (
         lambda: _check_secret_mention(scope, command),
-        lambda: _check_git(segments),
+        lambda: git_check.git_denial(_site(scope), links),
         lambda: _check_allowlist(scope, segments),
         lambda: _check_tokens(scope, _tokens(command)),
         lambda: _check_waits(segments),
@@ -244,17 +244,20 @@ def _check_secret_mention(scope: Scope, command: str) -> str | None:
     return f"{scope.role} may not reference the API key ({hit})" if hit else None
 
 
-def _check_git(segments: list[list[str]]) -> str | None:
-    """Only read-only git subcommands (and ``cherry-pick -n``) are allowed."""
-    for words in segments:
-        sub = words[1] if len(words) > 1 else ""
-        if words[:1] == ["git"] and not _git_allowed(sub, words):
-            return f"`git {sub}` is not allowed; the runner commits for you"
-    return None
+def _links(command: str) -> list[git_check.Link]:
+    """Each segment's words paired with the separator after it (``""`` at the end)."""
+    parts = [*_LINK_SPLIT.split(command), ""]
+    return [
+        git_check.Link(tuple(_tokens(parts[i])), parts[i + 1]) for i in range(0, len(parts) - 1, 2)
+    ]
 
 
-def _git_allowed(sub: str, words: list[str]) -> bool:
-    return sub in SAFE_GIT or (sub == "cherry-pick" and bool(NO_COMMIT_FLAGS & set(words)))
+def _site(scope: Scope) -> git_check.Site | None:
+    """The confined step's git context, or ``None`` for an unconfined step (G1)."""
+    if scope.git_workspace is None:
+        return None
+    base = system.resolve(scope.base)
+    return git_check.Site(scope.role, system.resolve(scope.repo), base, scope.git_workspace)
 
 
 def _check_allowlist(scope: Scope, segments: list[list[str]]) -> str | None:

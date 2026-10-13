@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 from . import (
     boundary,
     checkout,
+    git_check,
     guard,
     halt,
     handover,
@@ -426,11 +427,27 @@ class Runtime:
         setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
         if plan.role.name in setups:
             setups[plan.role.name](plan)
-        step = next((s for s in STEP_SETUPS if role_fits_step(plan.role.name, s)), None)
+        step = fitting_step(plan.role.name, STEP_SETUPS)
         if step:
             STEP_SETUPS[step](self, plan)
         if kind in FIX_SETUPS:
             FIX_SETUPS[kind](self, plan)
+        self._confine_git(plan)
+
+    def _confine_git(self, plan: Plan) -> None:
+        """Confine a GIT_CONFINED step's git to its workspace and set git's ceiling (G2)."""
+        step = fitting_step(plan.role.name, GIT_CONFINED)
+        if step is None:
+            return
+        plan.scope.git_workspace = system.resolve(GIT_CONFINED[step](self, plan))
+        env = {**(plan.launch.env or self.env), **git_check.git_env(self.config.run_dir)}
+        plan.launch.env = env
+
+    def _presentation_workspace(self, plan: Plan) -> Path:
+        return presentation.workspace_of(self.config, plan.story.id)  # type: ignore[union-attr]  # story-bound role
+
+    def _proxy_workspace(self, plan: Plan) -> Path:
+        return presentation.copied_workspace(plan.prepared.root)  # type: ignore[union-attr]  # proxy has a sandbox
 
     def _attach_runner_tools(self, plan: Plan) -> None:
         """Give a developer step the runner's named-test tools (R1)."""
@@ -1025,6 +1042,11 @@ def _add_test_files(story: StoryState, sha: str, paths: list[str]) -> None:
     story.test_files.extend(p for p in paths if p not in story.test_files)
 
 
+def fitting_step(role: str, table: Mapping[str, object]) -> str | None:
+    """The first key of ``table`` whose step ``role`` works on."""
+    return next((s for s in table if role_fits_step(role, s)), None)
+
+
 COMMIT_RECORDS: tuple[tuple[str, Callable[[StoryState, str, list[str]], None]], ...] = (
     ("implement", _add_code_commit),
     ("tests", _add_test_files),
@@ -1033,6 +1055,11 @@ COMMIT_RECORDS: tuple[tuple[str, Callable[[StoryState, str, list[str]], None]], 
 STEP_SETUPS = {
     "implement": Runtime._attach_runner_tools,
     "quality": Runtime._run_quality_checks,
+}
+
+GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
+    "e2e": Runtime._presentation_workspace,
+    "acceptance": Runtime._proxy_workspace,
 }
 
 FIX_SETUPS = {

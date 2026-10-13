@@ -103,20 +103,32 @@ def _stopped(prepared: sandbox.Prepared, story: StoryState) -> Outcome:
     return Outcome(Verdict.PASS, f"{READY}; {prepared.probe_url()} answered")
 
 
+def workspace_of(config: Config, story_id: str) -> Path:
+    """The git workspace inside ``story_id``'s presentation dir."""
+    return source_dir(config, story_id) / WORKSPACE
+
+
+def copied_workspace(root: Path) -> Path:
+    """Where ``copy_into`` puts the workspace under the sandbox ``root``."""
+    return root / PRESENTATION_DIR / WORKSPACE
+
+
 def lay_out(config: Config, story: StoryState) -> Path:
-    """Wipe and recreate the story's presentation dir, with a git workspace when needed."""
+    """Create the presentation dir and git workspace when missing; keep what is there (s65)."""
     if not sandbox.SAFE_NAME.fullmatch(story.id):
         raise sandbox.SandboxError(f"story id {story.id!r} must match {sandbox.SAFE_NAME.pattern}")
-    source = sandbox.fresh_dir(source_dir(config, story.id))
+    source = source_dir(config, story.id)
+    system.make_dirs(source)
     if recipe_of(config, story).need is Need.WORKSPACE:
-        _init_workspace(source / WORKSPACE)
+        _ensure_workspace(source / WORKSPACE)
     return source
 
 
-def _init_workspace(workspace: Path) -> None:
+def _ensure_workspace(workspace: Path) -> None:
     # Its own .git, or every git command in it would climb to the team's repo.
     system.make_dirs(workspace)
-    Git(workspace).run("init", "-q")
+    if not system.exists(workspace / ".git"):
+        Git(workspace).run("init", "-q")
 
 
 def missing(config: Config, story: StoryState) -> str | None:
