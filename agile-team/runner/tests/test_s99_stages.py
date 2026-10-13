@@ -37,6 +37,7 @@ EXPECTED = [
     "gate.tests-red",
     "gate.tests-rework",
     "gate.tests+coverage",
+    "gate.suite-runs",
     "gate.dispute-output",
     "gate.route-lint",
     "presentation.trial",
