@@ -18,12 +18,18 @@ SECONDS = [0.01, 0.02, 0.03, 0.05, 2.0]
 
 def five() -> list[dict[str, Any]]:
     # file order is not time order; `at` runs 5, 4, 3, 2, 1 (longest first)
-    return [row(s, at=float(5 - i), tool="Bash" if s == 0.02 else "Read") for i, s in enumerate(SECONDS)]
+    return [
+        row(s, at=float(5 - i), tool="Bash" if s == 0.02 else "Read") for i, s in enumerate(SECONDS)
+    ]
 
 
 def test_the_shortest_calls_are_gathered_up_to_the_limit_and_the_next_stays_out() -> None:
     gathered, shipped = tg.gather(five(), 0.1)
-    assert [r["seconds"] for r in sorted(gathered, key=lambda r: r["seconds"])] == [0.01, 0.02, 0.03]
+    assert [r["seconds"] for r in sorted(gathered, key=lambda r: r["seconds"])] == [
+        0.01,
+        0.02,
+        0.03,
+    ]
     assert [r["seconds"] for r in shipped] == [2.0, 0.05]  # by `at`: 2.0 has at=1, 0.05 at=2
     assert [r["at"] for r in shipped] == [1.0, 2.0]
 
