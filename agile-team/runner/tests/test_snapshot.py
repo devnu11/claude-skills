@@ -516,7 +516,8 @@ def names(snap: dict[str, Any]) -> list[str]:
 def test_roles_sorted_with_fields(config: cfg.Config, scratch: Path) -> None:
     snap = build(config, scratch)
     assert names(snap) == sorted(names(snap))
-    assert all(set(r) == {"name", "model", "provider"} for r in snap["roles"])
+    keys = {"name", "model", "provider", "used"}
+    assert all(set(r) == keys for r in snap["roles"])
     assert "architect" in names(snap)
 
 
