@@ -118,7 +118,7 @@ def test_other_paths_are_404(path: str) -> None:
 
 
 def test_routes_are_exactly_four() -> None:
-    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file"}
+    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file", "/api/misc"}
 
 
 @pytest.mark.parametrize("method", ["PUT", "DELETE"])
