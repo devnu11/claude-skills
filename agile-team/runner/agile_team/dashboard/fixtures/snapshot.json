@@ -398,7 +398,7 @@
    "step": "design",
    "status": "cancelled",
    "rounds": 0,
-   "opened_at": 1791450406.7,
+   "opened_at": null,
    "acceptance": [
     {
      "id": "AC1",
