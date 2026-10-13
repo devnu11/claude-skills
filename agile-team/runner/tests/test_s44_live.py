@@ -233,7 +233,8 @@ def test_heartbeat_shape_and_atomic_write(scratch: Path, fake: FakeSystem) -> No
         "chore",
         "step",
         "calls",
-    ]  # fmt: skip (s97 AW2 adds "slept"; s101 N11 adds "calls")
+        "stages",
+    ]  # fmt: skip (s97 AW2 adds "slept"; s101 N11 adds "calls"; s102 HB3 adds "stages")
     assert beat["version"] == 2 and beat["pid"] == FAKE_IDS[0] and beat["beat"] == "beating"
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
     assert list(beat["step"]) == [
