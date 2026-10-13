@@ -1258,7 +1258,7 @@ The pass ends at the first step whose report matches a row of the
 | `runner_fault` | the Manager put a setback on the runner; the story is blocked and the human was told |
 | `off_pipeline_fault` | the Manager put a setback on a role with no pipeline step; brief it, then `continue_story` |
 | `fault_not_applied` | the Manager's `fault` was not applied (missing, unknown role, no story or a done story); the reason is in the line |
-| `sync_conflict` | merging upstream into the team branch at sprint start conflicts (files named; the merge was aborted) |
+| `sync_conflict` | rebasing the team branch onto upstream at sprint start conflicts (the stopping commit and its files, grouped by directory with a count; the rebase was aborted and the branch is unchanged) |
 | `push_permission` | the review branches are built and checked, and the human has not yet said whether the team may push |
 | `push_rejected` | a review branch push was refused (its remote branch moved) |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
@@ -1452,13 +1452,25 @@ fetch failed, the sprint is still added to the stack.)
 Manager):
 
 1. **sync**: fetch. Drop stack entries whose commits are all in main (see
-   below). Then `git merge --no-edit --no-verify <remote>/<branch>` into
-   the team branch, with message `chore(team): merge origin/main at sprint
-   N start`. If nothing is new, no commit is made. On a conflict the merge
-   is aborted, the team branch is unchanged, and the PO gets
-   `sync_conflict` with the files. The human merges by hand, and the PO
-   calls `continue_boundary`. The team branch is never rebased, reset or
-   amended.
+   below). Then rebase the team branch onto `<remote>/<branch>`
+   (non-interactive, no autosquash, no autostash; commits already upstream,
+   merge commits and commits that become empty are dropped). There is never
+   a merge, `-s ours` or `-X ours` (s59, ADR-012). After a rebase the
+   runner pairs each old commit with its copy (author, date and message, in
+   order; a dropped commit maps to the last kept copy, or to the target)
+   and rewrites the team hashes in `state.json`: each story's `commit`,
+   `code_commits` and interrupted sha, the run's interrupted shas,
+   `upstream.last_end` and each stack entry's `start`/`end`. Then it
+   records the checkout and saves. `upstream.checked` is not rewritten, so
+   the full checks run again. A path only one side touched must keep that
+   side's version. Otherwise the branch is reset to where it was and the
+   boundary holds `error`. On a conflict the rebase is aborted, the team
+   branch is unchanged, and the PO gets `sync_conflict` with the stopping
+   commit and its files grouped by directory. The human rebases by hand and
+   the PO calls `continue_boundary`. The runner remaps from the HEAD it
+   recorded at that boundary's first sync (`boundary.sync_from`), so a hand
+   rebase is rewritten too. Hashes quoted in reviews and stories are not
+   rewritten.
 2. **check**: the full checks on the team branch (skipped when HEAD is the
    sha that last passed them).
 3. **review**, **push** and **ci**, only when an entry was dropped (a PR was

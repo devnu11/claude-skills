@@ -1,12 +1,15 @@
 # Staying current with upstream, and reviewing each sprint as a pull request
 
-The team works on its own branch (the **team branch**). It never rewrites
-that branch. At every sprint boundary the runner does the git work itself
-and checks that everything still works:
+The team works on its own branch (the **team branch**). At every sprint
+boundary the runner does the git work itself and checks that everything
+still works:
 
-- **Sprint start**: it fetches `origin` and merges `origin/main` into the
-  team branch. If nothing is new, no commit is made. Then it runs the full
-  checks. The sprint's stories move only once they pass.
+- **Sprint start**: it fetches `origin` and rebases the team branch onto
+  `origin/main`. Commits you already merged (as rebased copies) drop out,
+  so they never conflict. The runner then updates the commit hashes it
+  keeps in `.team/run/state.json` itself. It never merges, so the history
+  stays linear. Then it runs the full checks. The sprint's stories move
+  only once they pass.
 - **Sprint end**: it builds a **review branch** for the sprint. This is a
   copy of the sprint's own commits on top of the latest `origin/main`.
   Commits already in main are left out. It runs the full checks on that
@@ -59,7 +62,7 @@ every later sprint.
 
 | What you see | What it means | What to do |
 |---|---|---|
-| The PO asks you to merge `origin/main` by hand | Merging upstream into the team branch conflicts. The runner aborted the merge, so nothing changed. | Merge `origin/main` into the team branch, resolve, commit, then answer. |
+| The PO asks you to rebase onto `origin/main` by hand | A new commit on main changes the same lines differently from the team. The runner aborted the rebase, so nothing changed. The message names the commit it stopped at and the files, grouped by directory. | `git rebase origin/main` on the team branch, resolve, `git rebase --continue`. Run `agile-team accept-checkout` if the run halted on the moved checkout, then answer. The runner rewrites its recorded hashes itself. |
 | The dashboard shows a `boundary` row "check: fail" and a devops step follows | A check failed after the sync or on a review branch. DevOps fixes it on the team branch. | Nothing. The runner checks again after the fix. |
 | "failed the same way again … the manager reviewed it" | The same failure came back after a fix. | The PO asks you what to do. |
 | "CI failed on #12 … NOT ready" with failing test lines | The PR's CI checks failed (for example, a test passes only on your machine). | Don't merge it. The team's bug story fixes it next sprint, and a later sprint end reports it ready. |

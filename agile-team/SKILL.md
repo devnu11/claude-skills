@@ -135,8 +135,9 @@ command fails.
    300 s) is killed along with everything it started, and the story
    bounces. The reason names the hung test, so a hanging test costs
    minutes and never stalls the run.
-   **Sprint boundaries.** At each sprint start the runner merges
-   `origin/main` into the team branch and runs the full checks. At each
+   **Sprint boundaries.** At each sprint start the runner rebases the
+   team branch onto `origin/main` (never a merge), rewrites the commit
+   hashes it recorded in `state.json`, and runs the full checks. At each
    sprint end it builds a review branch per unmerged sprint
    (`team/sprint-<N>`, rebased onto the latest main in
    `.team/run/review/`), checks it, and pushes it as a stacked PR: the
@@ -207,9 +208,12 @@ command fails.
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit
   `state.json` to move a story. The one exception is a **sync conflict** at sprint start:
-  the PO asks the human to merge `origin/main` into the team branch by hand.
+  the PO asks the human to rebase the team branch onto `origin/main` by hand.
   The runner waits and runs nothing meanwhile. The human, or you if they
-  ask, merges and commits, and then the question is answered.
+  ask, rebases and resolves (`git rebase origin/main`, `git rebase
+  --continue`), runs `agile-team accept-checkout` if the run halts on the
+  moved checkout, and then the question is answered. The runner rewrites
+  the recorded hashes itself; never edit `state.json` for them.
 - Only the runner runs the full suite and coverage. Roles get the results in
   their briefs (`## Runner results`), a full `pytest` or `--cov` run from a
   role's Bash is denied, and developers ask the runner for named tests

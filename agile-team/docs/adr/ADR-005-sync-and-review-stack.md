@@ -1,6 +1,8 @@
 # ADR-005: Merge upstream in, review on rebuilt branches, stack the PRs as drafts
 
 Status: accepted (s29). Date: 2026-10-10. Design: [`../design/s29.md`](../design/s29.md).
+Decision 1 is superseded by [ADR-012](ADR-012-rebase-at-sprint-start.md) (s59):
+the sprint-start sync rebases and rewrites the recorded hashes.
 
 ## Context
 
