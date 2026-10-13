@@ -1927,6 +1927,22 @@
    }
   },
   {
+   "id": "e87b",
+   "at": 1791472300.0,
+   "kind": "step-end",
+   "role": "code-reviewer",
+   "story": "s2",
+   "data": {
+    "status": "done",
+    "summary": "Re-review clean.",
+    "turns": 3,
+    "next_role": null,
+    "open_questions": [],
+    "mono": 472180.0,
+    "slept": 120.0
+   }
+  },
+  {
    "id": "e88",
    "at": 1791471900.0,
    "kind": "story-opened",
@@ -2159,17 +2175,65 @@
    }
   },
   {
-   "id": "e103",
+   "id": "opinion-o1",
+   "at": 1791472300.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o1",
+    "kind": "move-up"
+   }
+  },
+  {
+   "id": "opinion-o2",
+   "at": 1791472350.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o2",
+    "kind": "move-down"
+   }
+  },
+  {
+   "id": "opinion-o3",
+   "at": 1791472360.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "kind": "scope"
+   }
+  },
+  {
+   "id": "opinion-act-a1",
+   "at": 1791472420.0,
+   "kind": "opinion-act",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "act": "apply",
+    "route": "product-owner",
+    "ref": "t2"
+   }
+  },
+  {
+   "id": "e99",
    "at": 1791472640.0,
    "kind": "step-start",
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB."
+    "brief": "Memory test fails at 412MB.",
+    "mono": 472520.0,
+    "slept": 120.0
    }
   },
   {
-   "id": "e104",
+   "id": "e100",
    "at": 1791472830.0,
    "kind": "step-end",
    "role": "developer-cli",
@@ -2195,7 +2259,7 @@
    }
   },
   {
-   "id": "e105",
+   "id": "e101",
    "at": 1791472960.0,
    "kind": "step-start",
    "role": "developer-cli",
@@ -2205,7 +2269,43 @@
    }
   },
   {
-   "id": "e106",
+   "id": "e102",
+   "at": 1791472965.0,
+   "kind": "priority",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "change": "move",
+    "order": [
+     "s3",
+     "s2",
+     "s4",
+     "s7",
+     "s5",
+     "s6"
+    ],
+    "moves": [
+     {
+      "story": "s6",
+      "from": 6,
+      "to": 5
+     },
+     {
+      "story": "s5",
+      "from": 5,
+      "to": 6
+     }
+    ],
+    "reason": "moved on the dashboard (r1)",
+    "pulled": [
+     "s5"
+    ],
+    "source": "human (dashboard)",
+    "warnings": []
+   }
+  },
+  {
+   "id": "e103",
    "at": 1791473100.0,
    "kind": "po-turn",
    "role": "product-owner",
@@ -3884,10 +3984,11 @@
   }
  ],
  "heartbeat": {
-  "version": 1,
+  "version": 2,
   "pid": 4242,
   "beat": "beating",
   "at": 1791473157.0,
+  "mono": 523000.0,
   "started_at": 1791469560.0,
   "chore": null,
   "step": {
@@ -3910,7 +4011,8 @@
     "cache_creation": 43906
    },
    "cost_usd": 1.0767
-  }
+  },
+  "slept": 0.0
  },
  "health": {
   "level": "green",
