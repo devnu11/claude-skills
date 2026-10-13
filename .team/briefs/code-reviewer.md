@@ -1,6 +1,17 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s93 complete: Rename "delivery" to "acceptance environment" (all ACs pass; no new ADR)
+
+**Verdict: AC1–AC5 all pass.** Rename is complete; backward compatibility works. **What to verify on re-review:**
+- **AC1 (config):** `[[environment]]` section; old `[[delivery]]` loads as environment with warning; both sections error.
+- **AC2 (code):** `Config.environment()`, `sandbox.ENVIRONMENT_KINDS`, `Environment` dataclass; error/refusal texts say "acceptance environment".
+- **AC3 (docs + grep):** `SKILL.md`, `protocol.md`, `architecture.md`, customer pages all say "acceptance environment". Grep pin: `config.OLD_ENVIRONMENT_NAME` (one line) and `test_s93_environment_alias.py` only.
+- **AC4 (dashboard):** Snapshot has `environment` key; fixture and Backlog detail updated.
+- **AC5 (new kind):** `ENVIRONMENT_KINDS["document"]` has Read/Grep/Glob/Write tools, correct guidance. `document` presentations include files. No question posted for `document` steps.
+
+Coverage ≥99.48%, ruff clean. No assertion changed; all refusals cite E1/E8 design rules. See design E10 (rename table), E11 (document kind), E13 (grep scope).
 
 ## s110 complete: CI rule documented in three places (1 round, all ACs pass) — verdict ship
 

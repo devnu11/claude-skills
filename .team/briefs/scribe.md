@@ -1,11 +1,12 @@
 # Scribe: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 recorded, no ADR)
+**Last updated:** 2026-10-13 (s93 recorded, no ADR)
 
 ## Your mission: record decisions and refresh briefs
 
 After each completed story, create an ADR and refresh affected role briefs (under 30 lines each, no append). Recent stories and their decisions:
 
+- **s93 (done):** A14a rename—"delivery" becomes "acceptance environment" (short form "environment"). Backward compatible: old `[[delivery]]` sections load as `[[environment]]` with warning; both set is an error. New `document` environment kind for documentation-only ACs (Read, Grep, Glob, Write tools only). Rule E1–E13 enforced in config, state, cli, snapshot, dashboard, role files, and customer docs. Grep pin enforces the old word appears only in `config.OLD_ENVIRONMENT_NAME` and its test. No new dependency, no ADR (pure rename with backward compatibility pattern). Affects: developer-cli, integration-tester, customer-proxy, unit-tester, code-reviewer, devops, architect, manager, product-owner.
 - **s65 (done):** Git confinement (s61 incident fixed)—presentations and acceptance run isolated git. Two layers: GIT_CEILING_DIRECTORIES in env, new git_check module in guard. Data-driven tables (GIT_CONFINED, WRAPPERS, GIT_RULES). No new dependency, no ADR (extends s41/s43/s69 guard pattern). Affects: developer-cli, unit-tester, integration-tester, customer-proxy, product-owner, architect, code-reviewer.
 - **s67 (done):** First watch records current outbox as seen, then waits. Refinement to s62. No new dependency, no ADR (narrow change to watch.py). Affects: developer-cli, unit-tester, integration-tester, customer-proxy, product-owner.
 - **s4 (done):** Dashboard backend - snapshot builder, read-only SSE server, CLI. Raw data contract: Python builds snapshot, browser derives views. Pure snapshot building, no aggregation in Python, exact server routes, file watching SSE. **ADR-0027.** Affects: developer-cli, unit-tester, code-reviewer, product-owner, architect, customer-proxy.

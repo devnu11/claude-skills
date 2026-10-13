@@ -1,6 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s93 complete: A14a—rename "delivery" to "acceptance environment" (no new ADR, no new tools)
+
+**What changed for your work:** When you call `open_story(…, environment=…)`, the argument is the name of a configured `[[environment]]` (not the old `[[delivery]]` section). Old config files load the same way; `config check` warns about the old section name and suggests renaming it.
+
+**New environment kind:** `document` is for stories with nothing to run (prompts, docs, design changes). When you open a `document` story, the customer proxy gets Read/Grep/Glob/Write tools over the presentation (workspace holds the changed files), judges each AC against them, and writes a report—no service, no question to you.
+
+**Backward compatibility:** Old state files load fine; old sections migrate during reconfig. DevOps can use `config edit` to auto-migrate. No change to your tools, your hand-overs, or your workflow. See design `agile-team/docs/design/s93.md` (E9: "Environments are the repo's; kinds are the skill's").
 
 ## s110 complete: CI rule documented in role file, SKILL.md, protocol.md (no new ADR)
 

@@ -1,6 +1,19 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s93 complete: A14a—"delivery" renamed to "acceptance environment" (AC1–AC4 verified; no new ADR)
+
+**Verdict: All ACs pass.** Customer docs now use "acceptance environment" everywhere. **What you see:**
+- **AC1:** Config section is `[[environment]]` (old `[[delivery]]` loads as environment with a warning). Both sections in one file error.
+- **AC2:** All identifiers say "environment": prompts, refusals, error texts. Example: `"acceptance environment {name!r} is not configured"`. The `manual` kind is unchanged; `document` kind is new (see AC5).
+- **AC3:** All docs say "acceptance environment"; `grep` pin verifies the old word appears only in config constant and its test. Design explains: "Environments are the repo's (names, prepare, url, commands); kinds are the skill's (sandbox.ENVIRONMENT_KINDS)."
+- **AC4:** Dashboard shows `environment` (not old key); Backlog detail line reads `acceptance environment: <name>`.
+- **AC5 (new kind):** `document` environment—for ACs with nothing to run (prompts, docs, design). Your tools are Read, Grep, Glob, Write (no Bash). You read the guide and changed files in the presentation, judge each AC against them, write a report. No service starts, no question posted. If story needs one, mark it with environment kind `document`.
+
+**Your scope unchanged:** Same sandbox procedure, same service startup for web/manual. Presentation.md contract unchanged. When a story's environment is `document`, your sandbox gets Read/Grep/Glob/Write instead of the configured delivery's tools.
+
+See design `agile-team/docs/design/s93.md` (rules E1–E13, the "document" kind in E11).
 
 ## s110 complete: CI rule documented in role file, SKILL.md, protocol.md (AC1–AC2 pass, no new ADR)
 

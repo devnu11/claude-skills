@@ -1,8 +1,19 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s93 complete: A14a—"delivery" renamed to "acceptance environment" (no new ADR)
+
+The word "delivery" is now "acceptance environment" (short form "environment") everywhere. **What changed:**
+- Config section is `[[environment]]`; old `[[delivery]]` sections load the same way with a warning. Both set in one file is an error.
+- All identifiers renamed: `Config.delivery()` → `Config.environment()`, `sandbox.DELIVERY_KINDS` → `sandbox.ENVIRONMENT_KINDS`, `StoryState.delivery` → `StoryState.environment`, etc. (see E10 table in design).
+- New environment kind `document` (for documentation-only ACs): tools are Read, Grep, Glob, Write; no Bash. The proxy gets these tools over its copy of the presentation, and judges each AC against the changed files (no service runs, no question posted).
+- Dashboard, docs, role files, and all user-facing text now say "acceptance environment". `OLD_ENVIRONMENT_NAME` constant and its test are the only places the old word appears in the runner.
+- Backward compatibility: State saved with old keys loads fine, next save writes new keys. DevOps config migration in `WriteMode.RECONFIGURE` merges old sections into new.
+
+See design `agile-team/docs/design/s93.md` (rules E1–E13, E10 rename table, new row in sandbox.ENVIRONMENT_KINDS and presentation.PRESENTATIONS).
 
 ## s110 complete: Role file states CI rule (no new ADR, extends s81/s106)
 

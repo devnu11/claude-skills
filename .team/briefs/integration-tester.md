@@ -1,6 +1,18 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s93 complete: A14a—"delivery" renamed to "acceptance environment" (AC1–AC5 all pass; no new ADR)
+
+**Verdict: All ACs verified.** Old word confined to one constant and its test. **What you did:**
+- Fixed the grep pin (D3 from review): `tests/e2e/test_s93_old_name_e2e.py` now walks the entire `agile-team/` directory (minus `docs/design/`) with correct skip filters (`.venv`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `node_modules`). Reports failures as `relative/path:line_no` list, so stray mentions are visible.
+- Verified AC3 (docs)—docs now say "acceptance environment"; `grep -ri config.OLD_ENVIRONMENT_NAME` over design-excluded scope finds only the config constant and its test.
+- Renamed unit tests: `test_s64_delivery.py` → `test_s64_environment.py`; `test_delivery_name_e2e.py` → `test_environment_name_e2e.py`. All identifiers and asserted texts updated per E10 table.
+- New test file `test_s93_environment_alias.py` pins backward compatibility: old-name files load as environments, with warnings; both sections error; state migration works; config check prints warnings and exits 0.
+- Dashboard e2e verified: snapshot has `environment` key, fixture matches, Backlog detail shows `acceptance environment: <name>`.
+- New `document` environment kind tested: sandbox has the right tools (Read, Grep, Glob, Write), guidance text correct, no question posted for `document` steps, `config check` accepts it.
+
+See design `agile-team/docs/design/s93.md` (E13 grep pin, test checklist).
 
 ## s109 complete: Dashboard model family grouping—AC1–AC3 acceptance tests pass (all pass)
 

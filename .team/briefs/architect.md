@@ -1,6 +1,18 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s93 docs done; s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s93 complete: Rename "delivery" to "acceptance environment" (docs done in round 1, no new ADR)
+
+**Deliverable:** Customer docs, role files, SKILL.md, reference/protocol.md, architecture.md. **What was written (AC3 scope):**
+- **SKILL.md:** Onboarding `--environment` flag, `[[environment]]` section, acceptance environment wording, rule E9 (repo's environments vs skill's kinds), `document` kind, old-name warning in a callout.
+- **reference/protocol.md:** Command table (`init --environment`, `--reconfigure` rename, `config check` warnings), `[[environment]]` config block with kind list, "Acceptance environments" section (E9 rule, E2–E5 backward compatibility), "Acceptance environment kinds" table (manual, web, document rows), Proxy sandbox wording, run-file paths.
+- **customer/acceptance-presentations.md:** "Acceptance environments" intro (E9), kind table with `document` row, "Document environments: nothing to run" section, web environment wording, init command.
+- **customer/dashboard.md, review-stack.md, runner-stages.md, routing.md:** Wording updated to "acceptance environment".
+- **architecture.md:** Story index (s26, s58, s64, s105, s93), module rows, StoryState, open_story schema, snapshot `environment` key, U4/U7 wording.
+- **README row:** Presentation sentence reworded.
+
+Rule E9: "Environments are the repo's data (names, prepare, url, commands); kinds are the skill's (sandbox.ENVIRONMENT_KINDS). Each kind decides the proxy's tools and sandbox; the set is fixed and is the security boundary." See design E10 (rename table), E11 (document kind), E13 (grep scope, design excludes docs/design/).
 
 ## s110 complete: CI rule documented in role file and docs (no new ADR, extends s81/s106 patterns)
 

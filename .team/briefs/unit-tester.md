@@ -1,6 +1,17 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s93 complete: "delivery" renamed to "environment" (test renames only, coverage ≥95%, ruff clean)
+
+**File:** Two e2e test files renamed; one unit test file added. **Changes (all pass):**
+- `test_s64_delivery.py` → `test_s64_environment.py` (all identifiers and asserted texts per E10 rename table).
+- `test_delivery_name_e2e.py` → `test_environment_name_e2e.py` (same refusal texts, e.g., `"acceptance environment … is not configured"`).
+- **New:** `test_s93_environment_alias.py` (pin backward compatibility): old-name files load as environments with warnings, both sections error, state migration works, `config check` warns and exits 0.
+
+No assertions changed (only renamed). Coverage ≥95%, ruff clean. Design E10 table lists every text.
+
+See design `agile-team/docs/design/s93.md` (E10, test checklist).
 
 ## s110 complete: CI rule text tests (all pass, coverage ≥95%, ruff clean)
 

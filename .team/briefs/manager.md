@@ -1,6 +1,12 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-13 (s110 done; s103 done; s78 done)
+**Last updated:** 2026-10-13 (s93 done; s110 done; s103 done; s78 done)
+
+## s93 complete: Config section renamed; no change to Manager role
+
+The config section `[[delivery]]` is now `[[environment]]`. Old sections load as environments with a warning; both sections error. This is a backward-compatible rename. No change to escalation, ruling, or hold logic. The new `document` environment kind is for documentation-only ACs; when the proxy's story has kind `document`, the proxy reads docs and judged ACs (no service runs, no question to you).
+
+See design `agile-team/docs/design/s93.md`.
 
 ## s110 complete: CI rule for sprint readiness (no change to Manager context)
 

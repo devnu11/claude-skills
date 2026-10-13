@@ -1,6 +1,18 @@
 # DevOps: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s103 done; s75 done)
+**Last updated:** 2026-10-13 (s93 done; s99 done; s103 done; s75 done)
+
+## s93 complete: Config section [[delivery]] renamed to [[environment]] (no new runtime work)
+
+**What changed:** The config section `[[delivery]]` is now `[[environment]]`. Old sections load as environments with a warning, and `config check` says `warning: [[delivery]] is the old name of [[environment]]; rename the section`. Both sections in one file error.
+
+**Your work:** If you have `.agile-team.toml` with `[[delivery]]`, rename those sections to `[[environment]]`. `agile-team config check` will guide you. When you run `config edit` (WriteMode.RECONFIGURE), the old section is automatically migrated to the new one, so a full reconfig cleans it up.
+
+**Rule E6:** `DEVOPS_SECTIONS` includes both "delivery" and "environment" so your edits that rename the section are not quarantined (a section rename is allowed by the dispatcher).
+
+**New environment kind:** `document` (for documentation-only ACs). You cannot configure it in `.agile-team.toml`; it is defined by the runner. The proxy uses it for stories with no service to run.
+
+No code changes to DevOps work. See design `agile-team/docs/design/s93.md` (E6 dispatch rule, E7 reconfigure migration).
 
 ## s99 complete: Repo tools are now data in config (no new runtime work)
 
