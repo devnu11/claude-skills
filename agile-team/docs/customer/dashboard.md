@@ -97,8 +97,12 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   If your system asks for reduced motion, the role glows steadily and the
   arrow lights up briefly instead.
   Above the chart, **Story / Sprint / Run** picks what each role's box
-  totals: its tokens and dollars on one story, one sprint or the whole run,
-  straight from the ledger. The page remembers your choice. Story starts on
+  totals: its tokens, dollars and time on one story, one sprint or the
+  whole run. Tokens and dollars come from the ledger. Time is the wall time
+  of the role's finished steps, shown in h and min. The Product Owner's box
+  shows no time, because its queries are not steps. A role that is working
+  now also shows `⏱ running 12 min`, which moves on each minute. The page
+  remembers your choice. Story starts on
   the story being worked on now. Pick another in the box beside the toggle.
   Roles that have not worked on that story are dimmed. The working role's
   box also shows its tokens per minute, a sparkline, its turn number, the
@@ -114,7 +118,12 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 - **Tokens:** a bar chart by role, story or model, and cumulative spend
   over time. Above the bars, the first buttons pick the grouping (Role,
   Story, Model). The second pick the unit: **Tokens** (bars split by token
-  kind) or **Dollars** (one bar of cost per row). The unit changes only that
+  kind), **Dollars** (one bar of cost per row) or **Time** (one bar of step
+  time per row, titled "Time by"). A Time bar's tooltip gives the number of
+  steps and the row's share of all step time. Time counts agent steps only.
+  The runner's own work between steps, such as gate runs, syncs and
+  presentation builds, is not in it. A step cut off by a killed runner
+  counts as a step but adds no time. The unit changes only that
   bar chart, and it stays as you set it while the page updates. The role and story tables also
   show **Turns/step** (average turns per step), **Last turns** (the most
   recent step's turns) and **Context/turn** (how much context each turn
