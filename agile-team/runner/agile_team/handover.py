@@ -5,7 +5,7 @@ The ``HANDOVERS`` table over step reports, and the hand-over prompt.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -174,9 +174,12 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.SYNC_CONFLICT,
         _held("sync_conflict"),
-        "{story}: sprint {sprint} start: merging {target} into {team_branch} conflicts in "
-        "{files}; the merge was aborted and the team branch is unchanged. Ask the human to "
-        "merge {target} into {team_branch} by hand and commit it, then continue_boundary",
+        "{story}: sprint {sprint} start: rebasing {team_branch} onto {target} stopped at "
+        '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. The rebase '
+        "was aborted and the team branch is unchanged. Ask the human to rebase {team_branch} "
+        "onto {target} by hand (git rebase {target}, resolve, git rebase --continue), then "
+        "continue_boundary; the runner rewrites the recorded hashes. If the run halts on the "
+        "moved checkout, they run agile-team accept-checkout first",
     ),
     Rule(
         Trigger.PUSH_PERMISSION,
@@ -267,7 +270,27 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
 
 
-BOUNDARY_TEXT = ("sprint", "edge", "stage", "target", "team_branch", "branch", "prs", "checks")
+BOUNDARY_TEXT = (
+    "sprint",
+    "edge",
+    "stage",
+    "target",
+    "team_branch",
+    "branch",
+    "prs",
+    "checks",
+    "commit",
+    "subject",
+)
+
+
+def group_files(files: Sequence[str]) -> str:
+    """Paths grouped by parent directory: ``dir (n): a, b; dir2 (m): c``."""
+    groups: dict[str, list[str]] = {}
+    for path in files:
+        parent, _, name = path.rpartition("/")
+        groups.setdefault(parent or ".", []).append(name)
+    return "; ".join(f"{d} ({len(n)}): {', '.join(sorted(n))}" for d, n in sorted(groups.items()))
 
 
 def _boundary_fields(report: dict) -> dict[str, str]:
@@ -277,7 +300,10 @@ def _boundary_fields(report: dict) -> dict[str, str]:
         return {}
     fields = {name: str(boundary.get(name) or "") for name in BOUNDARY_TEXT}
     fields["boundary_reason"] = str(boundary.get("reason") or "")
-    fields["files"] = ", ".join(boundary.get("files") or [])
+    files = boundary.get("files") or []
+    fields["files"] = ", ".join(files)
+    fields["file_count"] = str(len(files))
+    fields["file_groups"] = group_files(files)
     fields["branches"] = ", ".join(boundary.get("branches") or [])
     return fields
 

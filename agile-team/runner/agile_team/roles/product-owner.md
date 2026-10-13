@@ -74,8 +74,8 @@ another role's work.
    - **fault ruling not applied** (the reason says why): run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
-   - **sync conflict** (sprint start): ask the human to merge upstream into
-     the team branch by hand and commit; once they say it is done,
+   - **sync conflict** (sprint start): ask the human to rebase the team
+     branch onto upstream by hand; once they say it is done,
      `continue_boundary`.
    - **push permission**: ask the human exactly once whether the team may
      push review branches and open or update pull requests, then

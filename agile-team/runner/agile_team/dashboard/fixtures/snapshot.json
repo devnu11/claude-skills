@@ -1780,7 +1780,8 @@
     "edge": "end",
     "sprint": 10,
     "stage": "sync",
-    "outcome": "merged",
+    "outcome": "rebased",
+    "rewritten": 4,
     "sha": "3f9c2ab41d7e",
     "target": "origin/main",
     "team_branch": "agile-team"

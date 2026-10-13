@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 BOUNDARY_ROLE = "runner"
 FIX_ROLE = "devops"
-MERGE_MESSAGE = "chore(team): merge {target} at sprint {sprint} start"
 SPRINT_TITLE = "Sprint {sprint}: {goal}"
 SYNC_OFF = "[upstream] remote is empty"
 NO_REMOTE = "no remote {remote!r}"
@@ -106,6 +105,7 @@ class BoundaryOutcome(StrEnum):
     SKIPPED = "skipped"
     CURRENT = "current"
     MERGED = "merged"
+    REBASED = "rebased"
     CONFLICT = "conflict"
     PASS = "pass"
     FAIL = "fail"
@@ -224,6 +224,7 @@ class Boundary:
     escalated: str | None = None
     restack: bool = False
     note: str = ""
+    sync_from: str = ""
 
     def __post_init__(self) -> None:
         self.edge, self.stage = Edge(self.edge), Stage(self.stage)

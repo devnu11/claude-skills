@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops
+from . import halt, handover, loops, rewrite
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -20,7 +20,6 @@ from .boundary import (
     FIX_KINDS,
     FIX_ROLE,
     LOCAL_REPORT,
-    MERGE_MESSAGE,
     MERGED_NOTE,
     NOT_PERMITTED,
     NOTHING_REPORT,
@@ -67,7 +66,7 @@ from .fullcheck import CheckReport, Judging, full_checks, run_checks
 from .gates import StoryStatus
 from .relay import Note
 from .stack import REVIEW_DIR, Build, Conflict, Rebuilder
-from .upstream import Lease, MergeOutcome, Pr, PrSpec, PrState, Upstream
+from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
 
 if TYPE_CHECKING:
     from .dispatch import Runtime
@@ -248,15 +247,25 @@ class BoundaryRunner:
         self._emit(b, Out.SKIPPED, note=why)
         self._close(b, SKIPPED_REPORT.format(why=why))
 
-    def _merge_in(self, b: Boundary) -> None:
-        message = MERGE_MESSAGE.format(target=self.target, sprint=b.sprint)
-        merge = self.remote.merge_in(message)
-        if merge.outcome is MergeOutcome.CONFLICT:
-            files = list(merge.files)
-            return self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, files=files)
-        if merge.outcome is MergeOutcome.MERGED:
-            self.runtime.record_checkout()
-        self._emit(b, Out(merge.outcome), **({"sha": merge.sha} if merge.sha else {}))
+    def _rebase(self, b: Boundary) -> None:
+        b.sync_from = b.sync_from or self.runtime.git.head()
+        result = self.remote.rebase_onto(b.sync_from)
+        AFTER_REBASE[result.outcome](self, b, result)
+
+    def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
+        data = {"files": list(result.files), "commit": result.commit[:12]}
+        self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, subject=result.subject, **data)
+
+    def _rebase_current(self, b: Boundary, result: Rebase) -> None:
+        self._emit(b, Out.CURRENT)
+        self._advance(b)
+
+    def _settle_rebase(self, b: Boundary, result: Rebase) -> None:
+        count = rewrite.remap_state(self.runtime.state, result.moved)
+        self.runtime.record_checkout()
+        self.runtime.save()
+        self._drop_merged(b)
+        self._emit(b, Out.REBASED, sha=result.sha, rewritten=count)
         self._advance(b)
 
     def _end_sync(self, b: Boundary) -> None:
@@ -538,4 +547,9 @@ STAGE_RUNNERS = {
     Stage.PUSH: BoundaryRunner._push,
     Stage.CI: BoundaryRunner._ci,
 }
-SYNCS = {Edge.START: BoundaryRunner._merge_in, Edge.END: BoundaryRunner._end_sync}
+AFTER_REBASE = {
+    SyncOutcome.CONFLICT: BoundaryRunner._rebase_conflict,
+    SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
+    SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
+}
+SYNCS = {Edge.START: BoundaryRunner._rebase, Edge.END: BoundaryRunner._end_sync}

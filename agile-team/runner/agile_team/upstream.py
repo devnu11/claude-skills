@@ -1,14 +1,15 @@
 """The one narrow interface to the remote (git) and the pull request service (gh).
 
 Everything the runner does beyond the local repo goes through ``Upstream`` (git
-fetch, merge, push) and ``Prs`` (look up, open and update pull requests). Tests
+fetch, rebase, push) and ``Prs`` (look up, open and update pull requests). Tests
 use bare repos for the first and a fake for the second; they never run ``gh``.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -18,12 +19,29 @@ from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, Pr
 from .ci import Check, UpstreamError, checks_of, job_of
 from .commands import TIMED_OUT
 from .config import UpstreamSettings
-from .git_ops import Git, GitError, with_trailer
+from .git_ops import Git, GitError
+from .rewrite import Listing, Stamped, pair, parse_listing
 
 NO_GH = "gh is not installed"
 GH_LOGGED_OUT = "gh is not logged in"
 NO_PR_SERVICE = "no pull request service is configured"
 REFUSED_PUSH = "refusing to push {branch}: only review branches ({prefix}*) are pushed"
+REBASE_ARGV = (
+    "-c",
+    "rebase.updateRefs=false",
+    "-c",
+    "rebase.rebaseMerges=false",
+    "rebase",
+    "--no-verify",
+    "--no-autostash",
+    "--no-autosquash",
+    "--empty=drop",
+)
+STAMP_FORMAT = "%H%x1f%an%x1f%ae%x1f%ad%x1f%B%x1e"
+SYNC_LOST = (
+    "rebasing {team} onto {target} changed paths only one side touched: {paths}; "
+    "the team branch is back where it was"
+)
 GH_TIMEOUT = 120
 GH_TIMED_OUT = "gh timed out after {limit:.0f}s"
 CHECK_FIELDS = "name,state,bucket,link,workflow"
@@ -31,22 +49,34 @@ CHECK_FIELDS = "name,state,bucket,link,workflow"
 __all__ = ["UpstreamError"]
 
 
-class MergeOutcome(StrEnum):
-    """What merging the target into the team branch did."""
+class SyncOutcome(StrEnum):
+    """What rebasing the team branch onto the target did."""
 
     CURRENT = "current"
-    MERGED = "merged"
+    REBASED = "rebased"
     CONFLICT = "conflict"
 
 
 @dataclass(frozen=True)
-class Merge:
-    """The result of ``Upstream.merge_in``."""
+class Rebase:
+    """The result of ``Upstream.rebase_onto``."""
 
-    outcome: MergeOutcome
+    outcome: SyncOutcome
     sha: str = ""
     files: tuple[str, ...] = ()
+    commit: str = ""
+    subject: str = ""
+    moved: Mapping[str, str] = field(default_factory=dict)
     output: str = ""
+
+
+@dataclass(frozen=True)
+class Spans:
+    """The commits one rebase is judged by: HEAD before it, the old tip, the target."""
+
+    start: str
+    old: str
+    target_sha: str
 
 
 @dataclass(frozen=True)
@@ -236,7 +266,7 @@ def _pr_of(raw: dict[str, object]) -> Pr:
 
 @dataclass
 class Upstream:
-    """Git access to the remote: fetch, merge the target in, push review branches."""
+    """Git access to the remote: fetch, rebase onto the target, push review branches."""
 
     git: Git
     settings: UpstreamSettings
@@ -273,24 +303,55 @@ class Upstream:
         """The commit the team branch shares with the target."""
         return self.git.run("merge-base", "HEAD", self.target).strip()
 
-    def merge_in(self, message: str) -> Merge:
-        """Merge the target into the team branch; abort and report files on a conflict."""
-        before = self.git.head()
-        code, out = self.git.attempt(
-            "merge", "--no-edit", "--no-verify", "-m", with_trailer(message), self.target
-        )
+    def rebase_onto(self, old: str) -> Rebase:
+        """Rebase HEAD onto the target; abort and report on a conflict, check the result."""
+        start, target_sha = self.git.head(), self.git.run("rev-parse", self.target).strip()
+        code, out = self.git.attempt(*REBASE_ARGV, self.target)
         if code != 0:
-            return self._failed_merge(out)
+            return self._failed_rebase(out)
         after = self.git.head()
-        return Merge(MergeOutcome.CURRENT) if after == before else Merge(MergeOutcome.MERGED, after)
+        if after == old:
+            return Rebase(SyncOutcome.CURRENT)
+        self._check_kept(Spans(start, old, target_sha))
+        moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
+        return Rebase(SyncOutcome.REBASED, after, moved=moved)
 
-    def _failed_merge(self, output: str) -> Merge:
+    def listing(self, span: str) -> tuple[Stamped, ...]:
+        """The commits of ``span`` (``a..b``), oldest first, with their stamps."""
+        argv = ("log", "--reverse", "--topo-order", "--date=raw", f"--format={STAMP_FORMAT}")
+        return parse_listing(self.git.run(*argv, span))
+
+    def _new_listing(self, target_sha: str) -> Listing:
+        return Listing(target_sha, self.listing(f"{self.target}..HEAD"))
+
+    def _failed_rebase(self, output: str) -> Rebase:
         names = self.git.attempt("diff", "--name-only", "--diff-filter=U")[1]
-        self.git.attempt("merge", "--abort")
         files = tuple(n for n in names.splitlines() if n)
         if not files:
             raise GitError(output.strip())
-        return Merge(MergeOutcome.CONFLICT, files=files, output=output)
+        commit = self.git.attempt("rev-parse", "REBASE_HEAD")[1].strip()
+        subject = self.git.attempt("log", "-1", "--format=%s", commit)[1].strip()
+        self.git.attempt("rebase", "--abort")
+        return Rebase(SyncOutcome.CONFLICT, "", files, commit, subject, output=output)
+
+    def _check_kept(self, spans: Spans) -> None:
+        lost = self._lost(spans)
+        if not lost:
+            return
+        self.git.run("reset", "--hard", spans.start)
+        text = SYNC_LOST.format(team=self.git.branch(), target=self.target, paths=", ".join(lost))
+        raise UpstreamError(text)
+
+    def _lost(self, spans: Spans) -> list[str]:
+        base = self.git.run("merge-base", spans.old, self.target).strip()
+        upstream, team = self._names(base, self.target), self._names(base, spans.old)
+        mine = self._names(spans.old, "HEAD") - upstream
+        theirs = self._names(self.target, "HEAD") - team
+        return sorted(mine | theirs)
+
+    def _names(self, a: str, b: str) -> set[str]:
+        out = self.git.run("diff", "--name-only", "--no-renames", a, b)
+        return {n for n in out.splitlines() if n}
 
     def push(self, lease: Lease) -> str | None:
         """Push a review branch with its lease; ``None`` when pushed, else git's output."""
