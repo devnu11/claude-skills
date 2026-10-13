@@ -187,20 +187,29 @@ command fails.
    300 s) is killed along with everything it started, and the story
    bounces. The reason names the hung test, so a hanging test costs
    minutes and never stalls the run.
-   **Sprint boundaries.** At each sprint start the runner rebases the
-   team branch onto `origin/main` (never a merge), rewrites the commit
-   hashes it recorded in `state.json`, and runs the full checks. At each
-   sprint end it builds a review branch per unmerged sprint
-   (`team/sprint-<N>`, rebased onto the latest main in
-   `.team/run/review/`), checks it, and pushes it as a stacked PR: the
-   bottom one is open for review and the rest are drafts. The dashboard's Board tab
+   **Sprint boundaries.** The team rebases onto main **at sprint end
+   only** (s108). At each sprint start the runner fetches, reports how
+   far `origin/main` moved since the last sprint-end rebase, and runs the
+   full checks. It changes nothing: no rebase, no push, no PR edit. A
+   merge made mid-sprint waits for the next sprint end. At each sprint
+   end, in order, it builds and checks the sprint's review branch
+   (`team/sprint-<N>`, in `.team/run/review/`) and pushes it. Then it
+   rebases the team branch onto `origin/main` (never a merge) and
+   rewrites the commit hashes recorded in `state.json`. Then, bottom up,
+   it drops the PRs found merged and brings every other review branch up
+   to date: rebase, check the tree is unchanged, push with a lease,
+   retarget. Every PR in the stack is **ready** (none is a draft): the
+   bottom one is based on main, each other one on the PR below, so the
+   bases give the merge order. The dashboard's Board tab
    shows the **Review stack**. The PO asks the human **once** whether the
    team may push and open PRs; relay it like any question. After the push
-   the runner waits for the bottom PR's CI checks (`gh pr checks --watch`,
+   the runner waits for CI on every PR in the stack (`gh pr checks --watch`,
    up to `[gates] ci_timeout_s`, 30 min by default). The boundary is done
    only when CI is green or the PO has opened a bug story for the failure.
    Only a green result says **ready to merge**; tell the human to merge
-   that PR with **Rebase and merge**. Red CI comes with the failing jobs
+   the bottom PR with **Rebase and merge**. A PR with more than 100
+   commits is too big for that button; the report gives the fast-forward
+   command to merge it instead. Red CI comes with the failing jobs
    and test lines. The PO opens a bug story, records it with
    `record_ci_bug`, and puts it first in the next sprint. Both red and
    still-running CI mean the PR is **NOT** ready: never relay those as
@@ -268,7 +277,7 @@ command fails.
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit
-  `state.json` to move a story. The one exception is a **sync conflict** at sprint start:
+  `state.json` to move a story. The one exception is a **sync conflict** at sprint end (the `rebase` stage):
   the PO asks the human to rebase the team branch onto `origin/main` by hand.
   The runner waits and runs nothing meanwhile. The human, or you if they
   ask, rebases and resolves (`git rebase origin/main`, `git rebase
