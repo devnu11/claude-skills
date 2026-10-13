@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from tests.e2e.test_suite_denial_e2e import ask, reason
 
 ROLES = Path(__file__).resolve().parents[2] / "agile_team"
