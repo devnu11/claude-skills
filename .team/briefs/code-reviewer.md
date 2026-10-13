@@ -1,6 +1,28 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s86 done; s85 done; s84 done; s83 done)
+
+## s86: Story dependencies as data (1 round, all ACs pass) — verdict ship (P1 pending)
+
+**Scope:** `dependencies.py` (new, ~350 LOC), `gates.py` (one field), `dispatch.py` (load_dependencies, reorder warnings), `cli.py` (START_REFUSED text), `router.py` (_movable guard, _why signature), `po_tools.py` (_depends_refusal, open_story, start_sprint), `dashboard/snapshot.py` (three keys), `dashboard/index.html` (helpers, backlogRow, timeline), `roles/product-owner.md`, docs, tests. **Verdict: ship (P1 DP16 e2e pin and page harness pending).**
+
+**Design rules enforced (DP1–DP15, design spec):**
+- **DP1–DP2:** `depends_on` list in frontmatter, loaded from open story files, file wins. `StoryState` field, dataclass, default `[]`. Dedup by `dict.fromkeys`. Known: done stories are valid targets.
+- **DP3:** Load at `cmd_start` (via `_load_dependencies`), `start_sprint`, `open_story`. No other reads.
+- **DP4:** Validation order: shape (NOT_A_LIST), self (SELF), unknown (UNKNOWN), cycle (CYCLE). First refusal wins.
+- **DP7:** `find_cycle` DFS depth-first from each id in `priority.natural` order. Path from cycle point to itself joined by `" -> "`.
+- **DP5:** `load_refusal` returns text; refusal changes nothing, saves nothing. `cmd_start` raises `CliError(START_REFUSED…)`. `start_sprint` returns `refused()`.
+- **DP6:** `open_story` checks argument/file/graph; MISMATCH order-sensitive, dedup'd; self/unknown on new graph incl. new story.
+- **DP8–DP10:** `waiting_on` lists undone/missing ids in list order. `_movable` checks waiting_on is empty. `_why` order: hold > WAITING > status; text exact.
+- **DP11–DP13:** `above` finds inversions in queue. `warnings` calcs new inversions. Snapshot keys: depends_on (list), waiting_on (undone, [] if done), dependency_warnings (texts, [] if done).
+- **DP12, DP14:** `reorder` adds `warnings` key ([] if none, else `WARNING` per new inversion). `priority` event tone `warning` when warnings non-empty. Backlog tab shows depends, waiting, ⚠ pills.
+- **DP15:** Migration complete; prose "Depends on sN" removed, table-M stories have frontmatter lists, done deps dropped (s39 s29 done, no entry).
+
+**Module structure:** `dependencies.py` pure functions + file I/O, no dependencies added (PyYAML already present). `Declared` class with lists and bad ids. DRY: `graph_refusal` uses `first_refusal`. Helpers under 8 lines (DP12 `warnings` via list comp, DP13 `warning_texts` via map).
+
+**Coverage 99.46%, ruff clean. No tests deleted. Fixture adds s2 above s5 (waiting, with warning), s6 on done s1 (waiting_on: []).**
+
+See design `agile-team/docs/design/s86.md` (DP1–DP15, D1–D3, m1–m4), ADR-0046.
 
 ## s85: Liaison opinions (1 round, all ACs pass) — verdict ship (P1 pending)
 

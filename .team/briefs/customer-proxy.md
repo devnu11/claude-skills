@@ -1,8 +1,29 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done; s83 done)
+**Last updated:** 2026-10-13 (s86 done; s85 done; s84 done; s83 done)
 
-## s84: Story threads—discuss directly on the dashboard (all ACs verified; docs pending)
+## s86: Story dependencies shown on the Backlog tab (all ACs verified; P1 tests pending)
+
+**Verdict: All ACs pass.** Story ships in code (unit/code review done). Integration-tester carries P1 work (migration pin test and page harness tests) to next step. Architect's docs complete.
+
+**What you see on the Backlog tab:**
+- **Dependencies shown:** Each story's row shows which stories must be done first (e.g., `depends on s1, s2 (done)`, where (done) marks the done ones). Stories with no dependencies show no line.
+- **Waiting indicator:** If a story is waiting on a dependency that isn't done yet (e.g., s5 waiting on s2), the row shows that (inline or as a banner, design implementation detail).
+- **Warning on misordered reorder:** If you drag a story above one it depends on, a warning pill (⚠) shows on the story's row: "s5 is above s2, which it depends on" (exact text). The warning is also shown in the timeline as a note on the move event.
+- **Current sprint:** Sprint stories' dependencies are shown but reordering isn't affected by them (sprint is read-only). Warning pills still appear to show conflicts.
+
+**Acceptance notes (all pass in the e2e run):**
+1. **AC1 (depends_on data):** Each story file has `depends_on: [s1, s2]` in YAML frontmatter. Unknown ids, self-references, and cycles are refused at start with clear error messages (naming the stories). Done dependencies are valid and satisfied.
+2. **AC2 (routing):** Stories waiting on undone dependencies are skipped. The stalled line reads "s5 at design: waiting on s2" (exact format, list order). Dependencies added mid-sprint stop a started story.
+3. **AC3 (Backlog display and warnings):** Non-empty `depends_on` shown as `depends on s1, s2 (done)`. If a story is ranked above one it depends on, a warning pill shows with exact text. Warnings appear in the timeline on reorder events with tone `warning` and meta ` · ⚠ <text>`.
+4. **AC4 (migration from prose):** All prose "Depends on sN" sentences have been moved to frontmatter `depends_on` fields. Done dependencies (e.g., s29 → s39) were dropped as specified, so s39 has no entry. No prose remains in open stories.
+5. **AC5 (tests):** Unit tests cover validation, routing, warnings, migration. P1: e2e migration pin and node-harness page checks pending (integration-tester).
+
+**Your sandbox changes:** No change to startup, service, or test procedure. Dependencies are data, validated and enforced by the runner. The Backlog tab now shows them with warnings.
+
+See design `agile-team/docs/design/s86.md` (DP1–DP15), ADR-0046, review round 2.
+
+## s84: Story threads—discuss directly on the dashboard (all ACs verified; docs done)
 
 **Verdict: All ACs pass in the browser.** Story ships in code. Integration-tester carries P1 work (node-harness and e2e tests) to next step. Architect carries docs (SKILL.md, protocol.md, customer dashboard section, README).
 

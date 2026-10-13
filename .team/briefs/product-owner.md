@@ -1,6 +1,20 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done)
+**Last updated:** 2026-10-13 (s86 done)
+
+## s86 complete: Story dependencies as data (ADR-0046)
+
+Stories now have `depends_on: [s1, s2]` lists in frontmatter. The runner loads them at start and `start_sprint`, validates as a graph (no cycles, unknown, self), and won't start a story until its dependencies are done (skip reason: `waiting on sN`). The Backlog tab shows dependencies and warns when the human reorders a story above one it depends on; the warning is in the timeline.
+
+**What's new for you:**
+- **New `open_story` parameter:** `depends_on` is a list of story ids that must match the story file's frontmatter. Pass the same list to both. Unknown ids, self-references, and cycles are refused (exact error messages naming stories). Done dependencies are valid (story is satisfied).
+- **New `start_sprint` check:** The runner reloads `depends_on` from every open story's file before the sprint begins. A bad list (shape, self, unknown, cycle) refuses the sprint.
+- **Skip reason on stall:** When the pipeline stalls because a story is waiting on dependencies, the hand-over reads `s5 at design: waiting on s1, s2` (in list order, not natural order).
+- **No new tool.** Your `open_story` and `start_sprint` tools work as before; the new `depends_on` parameter is optional and must match the file.
+
+**Migration complete (AC4):** Table M stories (s2, s6, s16, s32, s33, s35, s36, s94, s95, s102) now have `depends_on` in frontmatter, prose removed. Done-dependent stories (s10, s34, s39, s54, s55) have no `depends_on` entry (dropped by AC4's rule). No prose "Depends on sN" remains in open stories. A test (P1, integration-tester) will pin this.
+
+See ADR-0046, design `agile-team/docs/design/s86.md` (DP1–DP15, known limits).
 
 ## s85 complete: The liaison's opinions on backlog stories (ADR-0045)
 

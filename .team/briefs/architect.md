@@ -1,8 +1,20 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done; s84 docs pending)
+**Last updated:** 2026-10-13 (s86 done; s85 done; s84 docs done)
 
-## s85 complete: Liaison opinions on backlog stories (design rules O1–O20, ADR-0045, docs to follow)
+## s86 complete: Story dependencies as data (design rules DP1–DP15, ADR-0046, docs complete)
+
+Dependencies recorded as `depends_on: [s1, s2]` lists in story file frontmatter. Loaded and validated at three points (cmd_start, start_sprint, open_story) as a graph (no cycles, self-references, unknown ids). Router skips stories waiting on undone dependencies (skip reason: `waiting on sN`). Backlog tab shows dependencies with ` (done)` markers and warns when human reorders a story above one it depends on (⚠ pill, timeline warning with tone). Migration complete: all prose "Depends on sN" → frontmatter, drop-done rule applied, no prose remains outside HISTORY.
+
+**Architectural pattern:** Pure module `dependencies.py` (~350 LOC), file I/O for reads, no writes from runner. Graph validation (DP4, DP7) is deterministic (DFS from natural order). Snapshot adds three keys per story (`depends_on`, `waiting_on`, `dependency_warnings`). No new dependency (PyYAML already present). Data-driven: validation text is exact for each refusal, cycle walk is deterministic.
+
+**Data contract:** Snapshot each story gains `depends_on: [...]` (state list), `waiting_on: [...]` (list order, undone or missing), `dependency_warnings: ["msg1", "msg2"]` ([] if done). Event `priority` gains `warnings` field (new inversions only, or [] if none). Stalled reason is `waiting on {ids}` (list order).
+
+**Docs written:** `agile-team/reference/protocol.md` (Story dependencies section, load points, checks a–d, open_story arg, routing, warnings, snapshot keys, Backlog row), `agile-team/docs/customer/dashboard.md` (Backlog row: depends/waiting with (done) marker, ⚠ pills), `agile-team/docs/customer/backlog-and-sprints.md` (updated), `agile-team/SKILL.md` step 6 (open_story and start_sprint descriptions), README row (updated). Code review done (D1 fixed). P1 work (DP16 migration pin, page harness node-harness tests) for integration-tester.
+
+See ADR-0046, design `agile-team/docs/design/s86.md` (DP1–DP16, known limits).
+
+## s85 complete: Liaison opinions on backlog stories (design rules O1–O20, ADR-0045, docs done)
 
 Opinions are a view over three append-only JSONL files: `opinions.jsonl` (CLI writes), `reviews.jsonl` (liaision summary), `opinion-acts.jsonl` (server writes). Latest opinion per story wins (line order). Acts route via two paths: moves to reorder queue (s83), others to PO as thread posts (s84). Dashboard shows badges, filters suggestions, renders details, review bar with ask button (fires `liaison_message` watch trigger), dismiss/apply buttons with token gate. Snapshot carries items with route/act, asked_at, review; events merge opinions/acts with thread and reorder events.
 

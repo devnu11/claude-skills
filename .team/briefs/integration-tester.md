@@ -1,6 +1,36 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s86: E2E and node-harness tests for story dependencies (AC1–AC5 unit/code-review done, P1: migration pin and page harness)
+
+Code shipped. Unit tests pass (coverage 99.46%, ruff clean). Code review done (all ACs pass except P1). **Your work (P1):** DP16 migration pin (AC4) and page harness tests (AC5).
+
+### E2E: DP16 migration pin (AC4)
+
+File: `tests/e2e/test_s86_dependencies_e2e.py` (new).
+
+Read the real `.team/stories/*.md` bodies. Verify:
+1. **Prose check:** Every file whose body matches `(?i)\bdepends\s+on\s+s\d+` must have id in `HISTORY` (done stories: s4, s5, s9, s29, s70, s76, s77, s79, s83, s84, s85 only). Assert matching ⊆ HISTORY.
+2. **Migration table (DP15):** Each story in table M (s2, s6, s10, s16, s32, s33, s34, s35, s36, s39, s54, s55, s94, s95, s102) has `story_files[id].frontmatter['depends_on']` equal to table M's list (drop-done rule applied, so s39→[], s10→[], etc.). Assert exact match per story.
+
+See design DP15–DP16 and table M for expected lists.
+
+### Node harness: Dependencies on Backlog tab (AC3)
+
+File: `tests/dashboard_node.py` (add to existing file, four test functions).
+
+**Setup:** Load fixture with dependencies. Fixture story s2 depends on s1 (done), s5 depends on s2 (undone), s6 depends on s1 (done).
+
+1. **Dependencies shown (DP14):** Backlog row for s2 shows `depends on s1 (done)`. Row for s5 shows `depends on s2`. Row for s6 shows `depends on s1 (done)`. Story with no depends_on shows no line.
+
+2. **Waiting and done markers (DP14):** s2 and s6 (wait on nothing) have no `waiting_on` banner. s5 (waiting on s2) shows inline with depends line or as banner; no (done) marker on s2.
+
+3. **Warning pills (DP14):** Fixture has s2 above s5 (inversion). Row for s2 shows pill `⚠ s2 is above s5, which it depends on` (exact text). s5 has no warning (depends on s2 which is below it).
+
+4. **Timeline warnings (DP12, DP14):** `TIMELINE.priority` event where s2 moved above s5 has meta ` · ⚠ s2 is above s5, which it depends on` and tone `warning`. Event with no inversions has `warnings: []` and tone `default` (not `warning`).
+
+See design DP11–DP14 for exact texts and warning logic.
 
 ## s85: E2E tests for liaison opinions (AC1–AC5 unit/code-review done, P1: node-harness and e2e tests pending)
 

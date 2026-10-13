@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done)
+**Last updated:** 2026-10-13 (s86 done)
 
 See `developer.md` for the base conventions.
+
+## s86 complete: Story dependencies as data (ADR-0046)
+
+New module `dependencies.py` (pure + file I/O, ~350 LOC). Story files gain `depends_on: [s1, s2]` list in frontmatter (DP1). Loaded at three points: `cmd_start` (DP3, via `_load_dependencies`), `start_sprint`, and `open_story`. Validated as a graph: shape, self-reference, unknown ids, cycles (DP4, DP7, texts exact). Router skips stories waiting on undone dependencies (DP9, `_movable`). Backlog tab shows depends/waiting and warns on misordered stories (DP13, DP14); `priority` events get `warnings` on reorder (DP12). Migration complete: prose "Depends on sN" → frontmatter list, drop-done rule applied, table-M stories done (DP15). Tests pass; design rules DP1–DP15 enforced. ADR-0046. See design `agile-team/docs/design/s86.md`.
 
 ## s85 complete: The liaison's opinion recording commands (two new, no ADR)
 

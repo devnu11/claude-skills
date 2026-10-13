@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done)
+**Last updated:** 2026-10-13 (s86 done)
+
+## s86 complete: Story dependencies as data—validation, routing, warnings, snapshot (coverage 99.46%, ruff clean, all pass)
+
+New module `dependencies.py` (~350 LOC, pure + file I/O). Tests cover: `listed` (dedupe, None cases), `declared` (file reads, missing/bad/no-key), `load_refusal` (shape/self/unknown/cycle order), `find_cycle` (DFS, DP7), `graph_refusal` (DP4 b–d), `apply`, `waiting_on` (list order), `above`/`inversions`/`warnings` (DP11–DP13). Routing: skip non-picked story waiting on undone deps, stall line exact. `StoryState.depends_on`, `Runtime.load_dependencies`, `_load_dependencies` CLI. Snapshot: three keys per story. `open_story` accepts `depends_on`, `start_sprint` loads from files. Refusal texts and MISMATCH exact. All texts match design word for word. No tests deleted; coverage 99.46%, ruff clean. See ADR-0046, design `agile-team/docs/design/s86.md` (DP1–DP15, test checklist).
 
 ## s85 complete: Liaison opinions—recording, validation, acts, routing, snapshot (coverage 99.46%, ruff clean, all pass)
 
