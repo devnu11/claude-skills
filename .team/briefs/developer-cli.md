@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
 
@@ -39,6 +39,10 @@ Replaced s40 rule P2 with tier-based ranking: started (in progress) > held > not
 **Key rules:** Unconfined steps get read-only git (status/diff/log, no commit). Confined steps (presentation/acceptance) can use git freely inside their workspace (`git init`, `git -C demo …`, `git clone`). Any git targeting the team repo is denied with `GIT_OUTSIDE`, naming the repo. Git can't find the repo from the workspace (G2 ceiling). AC1–AC10 pass: environment stops discovery, guard stops explicit access, prefixes are seen, workspace survives bounce.
 
 See design `agile-team/docs/design/s65.md` (G1–G10, test checklist).
+
+## s98 complete: Every agent's tool calls are recorded, the PO's included (no new ADR, extends s44/s96/s97)
+
+Tool calls (spans) are now recorded to `.team/run/tools.jsonl` for every agent and the PO. **What changes:** Each span records who (role, story, step), what (tool name, label, detail), when (start wall/monotonic time and awake seconds), how it ended (ok/error/timeout/unfinished). Labels are named (`po.run_role`, `runner-tool.run_tests`) or `Dev: <reason>`. Detail (first 80 chars) masks secrets (`*TOKEN*`, `*KEY*`, `*SECRET*`). Step-end events gain `tool_s`, `model_s`, `waiting_s`, `opened_at` fields; new `po-turn` events record the PO's split with `waiting_s` (time inside po.run_role). Snapshot gains a `tools` section: spans grouped by step, shortest calls gathered under `collapse_under_s` (default 0.1s). New module `tool_calls.py` (pure), changes to `live.py` (Reading gains calls, platform, start, end fields), `dispatch.py` (step-end gains time split), `po_tools.py` (emits po-turn), `config.py` (collapse_under_s setting), `dashboard/tool_groups.py` (gathering logic), `dashboard/snapshot.py` (tools section). No new dependency, no ADR. See design `agile-team/docs/design/s98.md`.
 
 ## s89: Unit suite passes on 3.13 (OS guard refined, test infrastructure only)
 

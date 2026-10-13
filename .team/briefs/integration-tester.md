@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s98 complete: Snapshot tools section, served correctly (all ACs verified; P1 e2e pending)
+
+**Verdict:** Unit/code-review done (all pass). Customer proxy reported AC1–AC3 done (sample tools.jsonl matches spans, labels, masked token). AC4–AC6 verified by team test results. **Your P1 work:** Write `tests/e2e/test_s98_tools_e2e.py` to verify: (1) tools.jsonl written during a step; (2) tools section present in served snapshot; (3) gathering works (short calls grouped under collapse_under_s threshold); (4) role/story/step/opened_at grouping; (5) misc entry with count/seconds/tools dict. Check that snapshot `tools` array matches tools.jsonl data (contracts match). Fixture schema available. No new AD or sandbox changes.
 
 ## s105 complete: E2E tests for presentation seeding (file `tests/e2e/test_presentation_seed.py`, AC1–AC3 pass)
 

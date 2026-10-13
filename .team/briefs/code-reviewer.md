@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s98 complete: Tool-call recording (TC1–TC18, all pass) — verdict ship (P1 e2e pending)
+
+**Scope:** `tool_calls.py` (new pure module, ~280 LOC), additions to `live.py`, `dispatch.py`, `po_tools.py`, `config.py`, new `dashboard/tool_groups.py`, `dashboard/snapshot.py` changes, tests. **Verdict: ship (P1 e2e pending).**
+
+**Design rules (TC1–TC18):** One span per call (TC1), opened on ToolUseBlock id, closed on matching ToolResultBlock. Status ok/error/timeout/unfinished (TC2). Unfinished spans closed at meter's end (TC3). Awake axis via platform-specific formula (TC4): POSIX mono delta, Windows wall minus sleep delta. Who from meter's Who plus STEP_OF_ROLE fallback (TC5). Named label for mcp__team__*/mcp__runner__* tools (TC6); Dev: for others (TC7). Detail: first 80 chars from DETAIL_KEYS with shown() applied (TC8–TC9). Masking replaces SECRET_ASSIGNMENT env vars with *** (TC10). Span line: JSON with keys in order (TC11). Time split: awake/busy/waiting via interval union (TC12). Split on step-end and po-turn events (TC13–TC14). Snapshot tools section: rows grouped by (role, story, step, opened_at) (TC15), valid rows only (TC16), shortest calls gathered under collapse_under_s (TC17–TC18).
+
+**Module structure:** `tool_calls.py` pure + frozen dataclasses (Status, Where, Call, ToolSpan, Split, Calls). Functions under 8 LOC. POSITIONS/NAMED_SERVERS/WAITING/SECRET_ASSIGNMENT tables data-driven. `Calls` class tracks open calls by id, emits fresh spans. `Live.Reading` gains calls ledger, platform, start/end marks. `Pulse.take` writes spans on ToolResultBlock; `Pulse.close` closes unfinished. `dashboard/tool_groups.py` gathers via running sum.
+
+**Coverage ≥95%, ruff clean. No tests deleted. All TC1–TC18 rules enforced; AC5–AC6 checklist items pass.**
+
+See design `agile-team/docs/design/s98.md` (TC1–TC18, per-module changes, AC5–AC6).
 
 ## s103 complete: Guard refusals standardized via new `refusal.py` module (1 round, all ACs pass, ship)
 

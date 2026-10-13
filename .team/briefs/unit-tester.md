@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
 
 ## s105 complete: Seed tests—delivery config, planting, checks, problem reporting (coverage ≥95%, ruff clean, all pass)
 
@@ -45,6 +45,10 @@ When the implement gate fails with a lint finding (ruff, flake8, mypy, etc.) in 
 **Coverage 99.47%, ruff clean. No test deleted. S96 exact-dict test gains two keys (clock/slept). S44/S78 heartbeat tests gain slept key.**
 
 See design `agile-team/docs/design/s97.md` (AW1–AW13, test checklist, known limits).
+
+## s98 complete: Tool call recording—spans, labels, detail, masking, time splits (all pass, no new ADR)
+
+New `tests/test_tool_calls.py` + additions to `test_live.py`, `test_dispatch.py`, `test_po_tools.py`, `test_tool_groups.py`, `test_config.py`, `test_snapshot.py`. **Test areas:** (1) **tool_calls.py** (pure): call to result → one span (TC11 keys in order, status ok/error/timeout/unfinished); repeated use id ignored; timeout on "timed out" text; parallel calls → separate spans with union for tool_s; `abandon` closes unfinished; labels (po.run_role, runner-tool.run_tests, Dev: <reason>); detail (first 80 chars, masked secrets); masking (GH_TOKEN, api_key, MY_SECRET, AWS_SECRET_ACCESS_KEY, not PATH); PO waiting_s split; union of intervals. (2) **live.py, dispatch.py, po_tools.py** additions: Pulse.take writes spans on result, not use; Pulse.close closes unfinished; step-end has opened_at, tool_s, model_s, waiting_s; po-turn event emitted per PO query. (3) **tool_groups.py** (new): gathering by limit, valid rows, group split. (4) **config.py**: collapse_under_s validation (number, ≥0). (5) **snapshot.py**: tools section present, uses collapse_under_s. All 24+ checklist items pass. No test deleted. See design `agile-team/docs/design/s98.md` (TC1–TC18, AC5–AC6).
 
 ## s96 complete: Step time pairing and dashboard display (23 tests pass, P1 pending)
 

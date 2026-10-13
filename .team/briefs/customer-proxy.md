@@ -1,6 +1,16 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s98 complete: Every agent's tool calls recorded with time split (all ACs pass)
+
+**Verdict: All ACs verified.** Tools now recorded to `.team/run/tools.jsonl` with spans (who, what, when, how). **What you see:**
+- **AC1 (Spans):** Each tool call opens on ToolUseBlock, closes on ToolResultBlock as one span with role, story, step, tool, label, detail, wall time, monotonic time, sleep counter, awake seconds, status.
+- **AC2–AC3 (Labels, Detail):** Named tools labeled `po.run_role` etc.; others as `Dev: <reason>`. Detail is first 80 chars of command/path with environment variables containing TOKEN/KEY/SECRET masked (***).
+- **AC4 (Time split):** Step-end and po-turn events record `tool_s` (tool time, excluding po.run_role), `model_s` (awake minus tool), `waiting_s` (po.run_role time in PO turns only). All in seconds.
+- **AC5–AC6 (Tests pin scenarios):** Parallel calls, unfinished, masking, PO waiting, gathering below collapse_under_s threshold all work.
+
+No new sandbox rules or service startup changes. Same acceptance workflow. See design `agile-team/docs/design/s98.md`.
 
 ## s103 complete: Acceptance can save test output; guard refusals clearer (no new ADR)
 

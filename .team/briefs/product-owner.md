@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s98 complete: Your tool calls are now recorded with time accounting (no new tool, no new ADR)
+
+Every time you call a tool (run_role, open_story, etc.), the runner records a span to tools.jsonl with: who, what tool, when (wall and monotonic start, awake seconds), how it ended. New events carry time accounting: **po-turn** (one per PO query) records your work breakdown: `tool_s` (time spent in tools), `model_s` (your thinking time, excluding tool waits), `waiting_s` (time inside po.run_role waiting for a role step to finish). Your split appears in snapshots and events. No new tools, no new hand-overs. You'll see `po-turn` events in timeline and snapshot; they break down where your time goes. **No changes to your workflow.** See design `agile-team/docs/design/s98.md` (TC1–TC18).
 
 ## s103 complete: Guard refusal messages now clear and rule-named (no new ADR)
 

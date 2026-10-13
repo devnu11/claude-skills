@@ -1,6 +1,12 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s98 done; s105 docs due; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s98 complete: Tool-call recording—spans, labels, detail, time split (no new ADR, extends s44/s96/s97)
+
+Pure module `tool_calls.py` (~280 LOC) records each tool call as a span: start (wall, monotonic, sleep counter), duration (awake seconds), label (named or Dev: reason), detail (first 80 chars, masked secrets). Changes: `live.py` Reading gains `calls` ledger, `platform`, `start`/`end` marks; `dispatch.py` passes pulse.clocks to step events; `po_tools.py` emits new `po-turn` event; `config.py` adds `collapse_under_s` (default 0.1); new `dashboard/tool_groups.py` gathers short calls. Snapshot gains `tools` section: spans grouped by (role, story, step, opened_at), shortest calls unified as `misc` under limit. Time split (tool_s, model_s, waiting_s, opened_at) on step-end and po-turn events (TC12, TC14). All data-driven, no branching; WAITING set contains po.run_role, NAMED_SERVERS table maps mcp__team__X to po.X, SECRET_ASSIGNMENT regex masks environment vars.
+
+**Your docs work (ship step):** Update `reference/protocol.md` (tools.jsonl format TC11, collapse_under_s setting TC18, step-end/po-turn event data, snapshot tools section TC15–TC17), `docs/customer/dashboard.md` (snapshot tools viewing, gathering), `docs/architecture.md` (two rows: tool_calls.py module, dashboard/tool_groups.py gathering). No ADR (extends s44 meter and s96/s97 snapshot patterns).
 
 ## s105 complete: Seeded config for dashboard presentations (no new ADR, extends s26 pattern)
 
