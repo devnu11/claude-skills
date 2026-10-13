@@ -223,7 +223,15 @@ def test_heartbeat_shape_and_atomic_write(scratch: Path, fake: FakeSystem) -> No
     beat = beat_file(scratch)
     pulse2.end()
     assert list(beat) == [
-        "version", "pid", "beat", "at", "mono", "started_at", "slept", "chore", "step",
+        "version",
+        "pid",
+        "beat",
+        "at",
+        "mono",
+        "started_at",
+        "slept",
+        "chore",
+        "step",
     ]  # fmt: skip (s97 AW2 adds "slept")
     assert beat["version"] == 2 and beat["pid"] == FAKE_IDS[0] and beat["beat"] == "beating"
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
