@@ -998,7 +998,7 @@ const STAGE_NODES = [
   { id: "st_env", label: "Prepare env", group: "Customer", anchor: "customer-proxy", side: "before",
     stages: ["env.prepare"] },
   { id: "st_gate", label: "Implement gate", group: "Build", anchor: "developer", side: "after",
-    stages: ["gate.tests+coverage", "gate.route-lint", "gate.dispute-output"] },
+    stages: ["gate.tests+coverage", "gate.route-lint", "gate.dispute-output", "gate.suite-runs"] },
   { id: "st_e2e", label: "E2E gate", group: "Verify", anchor: "integration-tester", side: "after",
     stages: ["presentation.trial"] },
   { id: "st_boundary", label: "Boundary", group: "Steering", anchor: PO, side: "after",
