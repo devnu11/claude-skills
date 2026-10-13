@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s110 complete: Role file states CI rule (no new ADR, extends s81/s106)
+
+Product-owner.md now carries the standing CI rule as a bullet after "Never call a PR ready..." and before `**refused**`. The rule: a sprint is done only when a green CI run is actually present on GitHub; a re-run counts only when it is green and the failed job never ran our code (cancelled with no steps, or no runner); if a failure could be flakiness in our code, it is a bug story and the sprint is not done; never tell the human done with no CI result or ci_pending. The ci_failed bullet now reads: read failing lines first; only ask for re-run if job never ran our code; otherwise, open bug story and record_ci_bug at once; never continue_boundary hoping a re-run turns green. Rule text is exact word-for-word in product-owner.md, SKILL.md step 8, and protocol.md sprint-boundary section. All ACs pass: rule in three docs, order verified, ci_failed phrases present, CR5 sentence in role file, protocol rows point to it. No code changes, no new tool. See ADR-0049, design `agile-team/docs/design/s110.md`.
 
 ## s109 complete: Dashboard groups models by family (AC1–AC3 pass, no new ADR)
 

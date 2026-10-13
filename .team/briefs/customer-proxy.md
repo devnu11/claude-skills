@@ -1,6 +1,14 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s110 complete: CI rule documented in role file, SKILL.md, protocol.md (AC1–AC2 pass, no new ADR)
+
+**Verdict: AC1–AC2 accepted.** The PO role file, SKILL.md, and protocol.md now state the standing CI rule. **What you verify:** The rule text (word-for-word, same in three places) reads: a sprint is done only when a green CI run is actually present on GitHub; a re-run counts only when it is green and the failed job never ran our code (cancelled with no steps, or no runner); if a failure could be flakiness in our code, it is a bug story and the sprint is not done. No new sandbox rules or acceptance changes. Same service startup, same Presentation.md contract. The rule is prompt-only (runner does not enforce it in code; a future story may add enforcement).
+
+**Your scope unchanged:** No new delivery, no new sandbox, no new acceptance procedure. The CI rule guides the PO's boundary decisions; it does not change the boundary outcome logic or the hand-overs you see.
+
+See design `agile-team/docs/design/s110.md`, ADR-0049.
 
 ## s109 complete: Dashboard model family grouping (AC1–AC3 pass, no new ADR)
 

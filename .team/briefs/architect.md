@@ -1,6 +1,12 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s110 complete: CI rule documented in role file and docs (no new ADR, extends s81/s106 patterns)
+
+**Decision:** The standing CI rule for sprint readiness is stated word-for-word in three places: product-owner.md, SKILL.md step 8, and protocol.md sprint-boundary section. Rule: a sprint is done only when a green CI run is actually present on GitHub; a re-run counts only when green and the job never ran our code; if a failure could be flakiness, it is a bug story and the sprint is not done; never mark done with no CI result or ci_pending. The role file gains a new bullet after "Never call a PR ready..." with the rule and a CR5 sentence (rule-file only). The ci_failed bullet is updated with guidance: read lines first; only ask for re-run if job never ran code; otherwise open bug story and record_ci_bug at once. No new ADR (prompt-only, extends s81 CI boundary). **Your docs (done in this step):** SKILL.md step 8 (rule exact text), protocol.md sprint-boundary (rule + CR5, three hand-over rows point to it), reference/protocol.md (ci_green/ci_failed/ci_pending rows mention rule).
+
+See design `agile-team/docs/design/s110.md` (CR1–CR5), ADR-0049.
 
 ## s109 complete: Dashboard model family grouping (no new ADR, view rule over s96 snapshot)
 

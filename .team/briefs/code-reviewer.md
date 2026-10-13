@@ -1,6 +1,23 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s110 complete: CI rule documented in three places (1 round, all ACs pass) — verdict ship
+
+**Scope:** `roles/product-owner.md` (two bullets), `SKILL.md` (one paragraph), `reference/protocol.md` (one paragraph + three row updates), `tests/test_s110_ci_rule.py` (new test file), `docs/architecture.md` (one row). **Verdict: ship.** Coverage 99.48%, ruff clean. No test deleted.
+
+**Design rules enforced (CR1–CR5):**
+- **CR1 (AC1):** One rule text, word-for-word in three places (whitespace-collapsed comparison). Label `**CI rule.**` part of text.
+- **CR2 (AC1):** Role file bullets after "Never call a PR ready..." and before `**refused**`, indent exact (5 spaces).
+- **CR4 (AC1):** `ci_failed` bullet updated with "read the failing lines first", "no runner was assigned", "Never `continue_boundary` hoping a re-run turns green" (exact phrases).
+- **CR5 (AC1):** Role file holds "never tell the human the sprint is done" (CR5 sentence, rule-file only).
+- **CR3 (AC2):** SKILL.md step 8 and protocol.md sprint-boundary section carry exact CR1 text. Three hand-over rows point to it ("see the CI rule under **Ready.**").
+
+**Module structure:** No Python changes. Text appears in role file, SKILL.md, protocol.md word-for-word. Tests read via `system.read_text` (design pattern from s51). Rule is prompt-only (runner does not enforce; future story possible per known limits).
+
+**Test file:** Five tests (CR1–CR5 items, all pass). `flat()` helper collapses whitespace. Parametrised test checks all three doc locations. Index-order test on role file. Phrase substring tests on ci_failed bullet. Protocol row pointer test on three rows. Coverage 99.48%, ruff clean.
+
+See design `agile-team/docs/design/s110.md` (CR1–CR5, test checklist), ADR-0049.
 
 ## s109 complete: Dashboard model family grouping (1 round, AC3 test added, all pass) — verdict ship
 

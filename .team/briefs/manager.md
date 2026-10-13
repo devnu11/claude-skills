@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s78 done)
+**Last updated:** 2026-10-13 (s110 done; s103 done; s78 done)
+
+## s110 complete: CI rule for sprint readiness (no change to Manager context)
+
+The PO now has standing guidance on CI readiness: a sprint is done only when a green CI run is actually present on GitHub; a re-run counts only when green and the job never ran our code; if a failure could be flakiness, it is a bug story and the sprint is not done; never mark done with no CI result or ci_pending. This rule is documented in product-owner.md, SKILL.md, and protocol.md. No change to escalation logic, ruling, or your decisions. This is prompt guidance for the PO's boundary hand-overs. See ADR-0049, design `agile-team/docs/design/s110.md`.
 
 ## s103 complete: Guard refusal messages clearer (no change to Manager escalation logic)
 

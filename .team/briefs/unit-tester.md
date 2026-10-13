@@ -1,6 +1,17 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s110 complete: CI rule text tests (all pass, coverage ≥95%, ruff clean)
+
+**File:** `tests/test_s110_ci_rule.py` (new, ~200 LOC). **Test coverage (five tests, five checklist items, all pass):**
+1. **Rule text presence (three cases):** The CI rule text (exact, whitespace-collapsed including `**CI rule.**` label) is in product-owner.md, SKILL.md, and protocol.md. Verify by reading through `system.read_text`, collapse whitespace, compare to canonical rule.
+2. **Role file order:** Rule comes after "Never call a PR ready ..." (before first `**refused**` marker). Index-order test pins position.
+3. **ci_failed bullet phrases:** The role file's `ci_failed` bullet holds "read the failing lines first", "no runner was assigned", and "Never `continue_boundary` hoping a re-run turns green". Sliced from role file starting at `**ci_failed**`.
+4. **CR5 sentence:** Role file holds "never tell the human the sprint is done" (CR5 rule-file-only phrase). Text test on role file slice.
+5. **Protocol row pointers:** `protocol.md` rows for `ci_green`, `ci_failed`, `ci_pending` each contain "see the CI rule under **Ready.**" (exact).
+
+All checklist items pass (design CR1–CR5). Whitespace-collapse approach handles line wrapping and bullet indentation correctly. No test deleted. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s110.md` (test checklist).
 
 ## s109 complete: Snapshot recorded_model and fixture shape tests (all pass, coverage ≥95%, ruff clean)
 
