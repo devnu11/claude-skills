@@ -184,6 +184,14 @@ def test_the_default_dashboard_reads_no_files() -> None:
 # ----- B18: the write gate -----
 
 
+class _Headers(list):
+    """The response-header list of Wire that also answers request-header lookups."""
+
+    def __init__(self, lookup: Any) -> None:
+        super().__init__()
+        self.get = lookup
+
+
 class PostWire(Wire):
     """A POST without a socket: peer address, headers and a recording body reader."""
 
@@ -198,8 +206,10 @@ class PostWire(Wire):
     ) -> None:
         super().__init__(path, app)
         self.client_address = (host, 5555)
-        self.headers = SimpleNamespace(get=self._header)  # type: ignore[assignment]
-        self.sent = {server.TOKEN_HEADER: token, "Content-Length": length or str(len(body))}
+        # Request headers are read with .get; response headers are appended to the same list.
+        self.headers = _Headers(self._header)
+        size = str(len(body)) if length is None else length
+        self.sent = {server.TOKEN_HEADER: token, "Content-Length": size}
         self.reads: list[int] = []
         self.rfile = SimpleNamespace(read=lambda n: self._read(body, n))
 

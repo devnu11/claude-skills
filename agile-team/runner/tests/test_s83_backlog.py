@@ -610,7 +610,7 @@ def test_start_sprint_is_never_refused_by_the_humans_order(make_runtime) -> None
 
 def test_the_schemas_mention_the_dashboard_order() -> None:
     for name in ("prioritise", "move_story"):
-        text = json.dumps(po_tools.SCHEMAS[name])
+        text = po_tools.SCHEMAS[name][0]
         assert "dashboard" in text
 
 

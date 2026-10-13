@@ -11,6 +11,7 @@ import tomli_w
 from agile_team import config as cfg
 from agile_team import state as state_mod
 from agile_team import system
+from agile_team.backlog import order_version
 from agile_team.dashboard import snapshot
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.roles import RoleBook
@@ -140,6 +141,23 @@ def commit_for(story: dict[str, Any], pulled: list[str]) -> str | None:
     return "abc" if started else None
 
 
+def reorder_outcome(row: dict[str, Any]) -> str:
+    """The settled text the run state keeps for a fixture reorder row (s83)."""
+    return "applied" if row["status"] == "applied" else row["reason"]
+
+
+def write_reorder_requests(config: cfg.Config, rows: list[dict[str, Any]]) -> None:
+    """Publish one request file per fixture reorder row (s83)."""
+    from agile_team.backlog import Ask
+    from agile_team.reorders import Request, Requests
+
+    folder = Requests(config.run_dir).folder
+    system.make_dirs(folder)
+    for row in rows:
+        request = Request(row["id"], Ask(row["story"], row["position"], "v"), row["at"])
+        system.write_text(folder / f"{row['id']}.json", request.to_json())
+
+
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
     config = make_config(root, steps=fixture["pipeline"])
@@ -158,6 +176,8 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             hold=s.get("hold"),
             previous=previous_from(s.get("wait")),
             commit=commit_for(s, pulled),
+            disputes=s["disputes"],
+            developer=s["developer"],
         )
         for s in fixture["stories"]
     }
@@ -170,7 +190,11 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
         pulled=pulled,
         manager_due=run["manager_due"],
         task=run["task"],
+        reorders={
+            r["id"]: reorder_outcome(r) for r in fixture["reorders"] if r["status"] != "pending"
+        },
     )
+    write_reorder_requests(config, fixture["reorders"])
     restore_upstream(state, fixture.get("upstream"))
     state_mod.save(config.run_dir, state)
     plain = [e for e in fixture["events"] if e["kind"] not in ("message", "answer")]
@@ -201,7 +225,9 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     config = write_run(scratch / "repo", fixture)
     snap = build(config, scratch)
     assert sorted(snap) == sorted(KEYS)
-    assert shape(snap) == shape(fixture)
+    # A started story must have a commit for its tier (commit_for), the fixture lists none.
+    got = {**snap, "stories": [{**s, "commits": []} for s in snap["stories"]]}
+    assert shape(got) == shape(fixture)
 
 
 def test_build_matches_fixture_values(scratch: Path) -> None:
@@ -254,6 +280,8 @@ def test_run_section_reads_config(config: cfg.Config, scratch: Path) -> None:
         "round_cap": 3,
         "manager_due": [],
         "order": [],
+        "order_version": order_version([], []),
+        "backlog": [],
     }
 
 
@@ -324,6 +352,11 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "tier": "in progress",
         "hold": None,
         "wait": None,
+        "disputes": 0,
+        "developer": None,
+        "commits": ["abc"],
+        "files": [],
+        "label": "",
     }
     assert "commit" not in story
 
