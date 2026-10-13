@@ -10,14 +10,11 @@ Two mechanisms, both driven by tables:
 Both raise ``RealOsCall``. It is a ``BaseException`` so ``except Exception`` in
 the code under test cannot swallow it; a violation is also recorded, so one
 swallowed anyway still fails the test when the phase ends.
-
-An audited call made while ``traceback``/``linecache`` read source is the stdlib's (s89).
 """
 
 from __future__ import annotations
 
 import importlib
-import itertools
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
@@ -127,9 +124,7 @@ PASS_THROUGH: frozenset[str] = frozenset(
     ]
 )
 
-CALLER_NOTE = " (caller: {caller})"
-
-# Callers whose audited events are allowed (imports, source lines, tracebacks, coverage, xdist).
+# Callers whose audited events are allowed (imports, source lines, coverage, xdist).
 EXEMPT_CALLERS: tuple[str, ...] = (
     "importlib._bootstrap",
     "importlib._bootstrap_external",
@@ -137,16 +132,12 @@ EXEMPT_CALLERS: tuple[str, ...] = (
     "zipimport",
     "linecache",
     "tokenize",
-    "traceback",
     "coverage",
     "execnet",
     "xdist",
     "_pytest.capture",
     "_pytest.logging",
 )
-
-# Stdlib modules that read source for a traceback; an audited call beneath them is theirs (s89).
-SOURCE_READERS: tuple[str, ...] = ("traceback", "linecache")
 
 # Callers whose patched calls are refused; every other caller gets the real function.
 GUARDED_CALLERS: tuple[str, ...] = ("agile_team", "tests")
@@ -163,44 +154,29 @@ class _Guard:
 _guard = _Guard()
 
 
-def _modules() -> Iterator[str]:
-    """Module names on the stack, innermost first, skipping this file's frames."""
-    frame = sys._getframe()
-    while frame is not None:
-        name = frame.f_globals.get("__name__", "")
-        if name != __name__:
-            yield name
-        frame = frame.f_back
-
-
 def _caller() -> str:
     """The module of the first frame outside the stdlib wrappers and this file."""
-    return next((n for n in _modules() if n.split(".")[0] not in PASS_THROUGH), "")
-
-
-def _reading_source() -> bool:
-    """Whether a source reader is on the stack inside the nearest guarded frame (T1)."""
-    inside = itertools.takewhile(lambda n: not n.startswith(GUARDED_CALLERS), _modules())
-    return any(n.startswith(SOURCE_READERS) for n in inside)
-
-
-def _allowed() -> bool:
-    """Allowed from an exempt caller (T2) or while the stdlib reads source (T1)."""
-    return _caller().startswith(EXEMPT_CALLERS) or _reading_source()
+    frame = sys._getframe(1)
+    while frame is not None:
+        name = frame.f_globals.get("__name__", "")
+        if name.split(".")[0] not in PASS_THROUGH and name != __name__:
+            return name
+        frame = frame.f_back
+    return ""
 
 
 def _violation(call: str, category: str) -> RealOsCall:
-    message = MESSAGE.format(call=call, category=category) + CALLER_NOTE.format(
-        caller=_caller() or "no python frame"
-    )
+    message = MESSAGE.format(call=call, category=category)
     _guard.violations.append(message)
     return RealOsCall(message)
 
 
 def hook(event: str, args: tuple[Any, ...]) -> None:
-    """The audit hook: refuse an audited event unless it is allowed (T1, T2)."""
+    """The audit hook: refuse an audited event unless an exempt module made it."""
     category = AUDITED.get(event)
-    if category is None or not _guard.on or _allowed():
+    if category is None or not _guard.on:
+        return
+    if _caller().startswith(EXEMPT_CALLERS):
         return
     raise _violation(event, category)
 
