@@ -38,7 +38,8 @@ def test_enum_values() -> None:
     assert [e.value for e in b.CheckState] == ["unchecked", "pass", "fail"]
     assert {e.value for e in b.BoundaryOutcome} == {
         "skipped", "current", "merged", "rebased", "conflict", "pass", "fail", "escalate", "built",
-        "held", "pushed", "local", "error", "done", "continued", "permission", "restacked", "rebuild",
+        "held", "pushed", "local", "error", "done", "continued", "permission", "restacked",
+        "rebuild",
     }  # fmt: skip
 
 
