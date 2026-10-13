@@ -3001,7 +3001,7 @@
    "sprint": 1,
    "ended_at": 1791458874.4,
    "status": "done",
-   "model": "haiku",
+   "model": "unknown",
    "seconds": 159.9,
    "clock": "awake",
    "slept": 0.0,
