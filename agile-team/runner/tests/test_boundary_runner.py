@@ -326,15 +326,15 @@ def test_no_pr_service_is_local_with_that_reason(env: Env, fake: FakeSystem) -> 
     assert pushes(fake) == []
 
 
-def test_second_sprint_stacks_drafts_on_the_first(env: Env, fake: FakeSystem) -> None:
+def test_second_sprint_stacks_a_ready_pr_on_the_first(env: Env, fake: FakeSystem) -> None:
     env.rt.state.upstream.push = bd.Permission.YES
     at_push(env, entry(1), entry(2))
     env.drive()
     e1, e2 = env.rt.state.upstream.stack
-    assert e2.base == "team/sprint-1" and e2.mode is PrMode.DRAFT
+    assert e2.base == "team/sprint-1" and e2.mode is PrMode.READY
     assert e1.mode is PrMode.READY and e1.base == "main"
     creates = [spec for verb, spec in env.prs.calls if verb == "create"]
-    assert creates[-1].mode is PrMode.DRAFT and "Stacked on team/sprint-1 (#1)" in creates[-1].body
+    assert creates[-1].mode is PrMode.READY and "Stacked on team/sprint-1 (#1)" in creates[-1].body
     assert len(pushes(fake)) == 2 and env.rt.state.boundary is None
 
 
