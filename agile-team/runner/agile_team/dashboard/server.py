@@ -1,5 +1,6 @@
 """Dashboard server: the page, the snapshot, the SSE stream, story files by id, and
-token-gated reorder requests and thread posts from localhost; stdlib only.
+token-gated reorder requests, thread posts, review requests and opinion acts from
+localhost; stdlib only.
 
 Never serves a directory.
 """
@@ -18,9 +19,10 @@ from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
 from urllib.parse import parse_qs, urlsplit
 
-from .. import reorders, system, threads
+from .. import opinions, reorders, system, threads
 from ..backlog import Ask
 from ..config import Config
+from ..opinions import Opinions
 from ..roles import RoleBook
 from ..threads import Entry, Post
 from . import snapshot, story_files
@@ -36,7 +38,12 @@ WRITE_HOSTS = {"127.0.0.1", "::1"}
 TOKEN_HEADER = "X-Agile-Team-Token"
 MAX_BODY = 4096
 MAX_POST_BODY = 32768
-BODY_LIMITS: dict[str, int] = {"/api/reorder": MAX_BODY, "/api/thread": MAX_POST_BODY}
+BODY_LIMITS: dict[str, int] = {
+    "/api/reorder": MAX_BODY,
+    "/api/thread": MAX_POST_BODY,
+    "/api/review": MAX_BODY,
+    "/api/opinion": MAX_BODY,
+}
 WHOLE_NUMBER = re.compile(r"[0-9]+")
 INDEX = Path(__file__).parent / "index.html"
 
@@ -53,6 +60,7 @@ class Dashboard:
     queue: Callable[[Ask], reorders.Request] | None = None
     post: Callable[[Post], Entry | None] | None = None
     token: str = ""
+    opinions: Opinions | None = None
 
     @classmethod
     def for_run(cls, config: Config, book: RoleBook) -> Dashboard:
@@ -64,6 +72,7 @@ class Dashboard:
             read_file=partial(story_files.read, config),
             queue=reorders.Requests(config.run_dir).queue,
             post=partial(threads.post_known, config.run_dir),
+            opinions=Opinions(config.run_dir),
         )
 
 
@@ -183,6 +192,35 @@ def _thread(handler: Handler) -> None:
     _send(handler, Body("application/json", data, 202))
 
 
+def _review(handler: Handler) -> None:
+    if not may_write(handler):
+        return handler.send_error(403)
+    box = handler.server.app.opinions  # type: ignore[attr-defined]
+    if box is None or not opinions.is_object(_body(handler) or b""):
+        return handler.send_error(400)
+    data = json.dumps({"id": box.ask_review().id, "status": "asked"}).encode()
+    _send(handler, Body("application/json", data, 202))
+
+
+def _opinion(handler: Handler) -> None:
+    if not may_write(handler):
+        return handler.send_error(403)
+    ask = opinions.parse_act(_body(handler) or b"")
+    box = handler.server.app.opinions  # type: ignore[attr-defined]
+    if ask is None or box is None:
+        return handler.send_error(400)
+    reason = box.refusal(ask)
+    if reason:
+        data = json.dumps({"status": "refused", "reason": reason}).encode()
+        return _send(handler, Body("application/json", data, 409))
+    done = box.act(ask)
+    status = opinions.ACT_STATUS[done.act]
+    data = json.dumps(
+        {"id": done.id, "status": status, "route": str(done.route), "ref": done.ref}
+    ).encode()
+    _send(handler, Body("application/json", data, 202))
+
+
 def _not_found(handler: Handler) -> None:
     handler.send_error(404)
 
@@ -219,7 +257,12 @@ ROUTES: dict[str, Callable[[Handler], None]] = {
     "/api/stream": _stream,
     "/api/file": _file,
 }
-POSTS: dict[str, Callable[[Handler], None]] = {"/api/reorder": _reorder, "/api/thread": _thread}
+POSTS: dict[str, Callable[[Handler], None]] = {
+    "/api/reorder": _reorder,
+    "/api/thread": _thread,
+    "/api/review": _review,
+    "/api/opinion": _opinion,
+}
 
 
 def with_token(url: str, token: str) -> str:

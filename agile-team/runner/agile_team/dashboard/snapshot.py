@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .. import backlog, health, live, system, threads, waits
+from .. import backlog, health, live, opinions, system, threads, waits
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
@@ -101,6 +101,7 @@ def watched_files(config: Config) -> list[Path]:
         *reqs,
         *asks,
         *threads.watched(config.run_dir),
+        *opinions.watched(config.run_dir),
     ]
 
 
@@ -285,9 +286,22 @@ def _answer_event(answer: dict) -> dict:
 
 def _thread_event(entry: threads.Entry) -> dict:
     return {"id": f"thread-{entry.id}", "at": entry.at, "kind": "thread",
-            "role": threads.EVENT_ROLES.get(entry.author), "story": entry.story,
+            "role": threads.EVENT_ROLES.get(entry.author), "story": entry.story or None,
             "data": {"entry": entry.id, "author": str(entry.author),
                      "to": str(entry.to)}}  # fmt: skip
+
+
+def _opinion_event(opinion: opinions.Opinion) -> dict:
+    return {"id": f"opinion-{opinion.id}", "at": opinion.at, "kind": "opinion",
+            "role": None, "story": opinion.story,
+            "data": {"opinion": opinion.id, "kind": str(opinion.kind)}}  # fmt: skip
+
+
+def _act_event(act: opinions.Settled) -> dict:
+    return {"id": f"opinion-act-{act.id}", "at": act.at, "kind": "opinion-act",
+            "role": None, "story": act.story,
+            "data": {"opinion": act.opinion, "act": str(act.act), "route": str(act.route),
+                     "ref": act.ref}}  # fmt: skip
 
 
 def _events(files: RunFiles) -> list[dict]:
@@ -295,7 +309,10 @@ def _events(files: RunFiles) -> list[dict]:
     sent = map(_message_event, outbox)
     received = map(_answer_event, files.lines(INBOX))
     posts = map(_thread_event, threads.Threads(files.config.run_dir).all())
-    merged = [*files.events, *sent, *received, *posts]
+    box = opinions.Opinions(files.config.run_dir)
+    marks = map(_opinion_event, box.all())
+    acts = map(_act_event, box.acts())
+    merged = [*files.events, *sent, *received, *posts, *marks, *acts]
     return sorted(merged, key=lambda e: e.get("at", 0.0))
 
 
@@ -313,6 +330,25 @@ def _answers(files: RunFiles) -> list[dict]:
 
 def _thread(files: RunFiles) -> list[dict]:
     return [entry.as_dict() for entry in threads.Threads(files.config.run_dir).all()]
+
+
+def _opinion_item(opinion: opinions.Opinion, board: opinions.Board, view: backlog.View) -> dict:
+    latest = board.latest()[opinion.story] == opinion
+    act = board.act_of(opinion.id)
+    route = opinions.route_of(opinion, view) if latest and act is None else opinions.Route.NONE
+    return {**opinion.as_dict(), "latest": latest, "route": str(route),
+            "act": act.as_dict() if act else None}  # fmt: skip
+
+
+def _opinions(files: RunFiles) -> dict:
+    box = opinions.Opinions(files.config.run_dir)
+    board, view = box.board(), backlog.View.of(files.state)
+    reviews = box.reviews()
+    return {
+        "items": [_opinion_item(o, board, view) for o in board.opinions],
+        "asked_at": box.asked_at(),
+        "review": reviews[-1].as_dict() if reviews else None,
+    }
 
 
 def _stack_entry(entry: Any) -> dict[str, Any]:
@@ -383,6 +419,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "messages": _messages,
     "answers": _answers,
     "thread": _thread,
+    "opinions": _opinions,
     "upstream": _upstream,
     "turns": _turns,
     "heartbeat": _heartbeat,

@@ -112,6 +112,8 @@ section[hidden] { display: none; }
 .thread { margin-top: 8px; }
 .tmsg { padding: 4px 0; border-top: 1px solid var(--border); }
 .tmeta { color: var(--muted, inherit); font-size: 11.5px; }
+.review-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; padding: 8px; background: var(--surface-2); border-radius: 6px; }
+.opinion { margin-top: 8px; padding: 6px 8px; background: var(--surface-2); border-radius: 6px; }
 .tform { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .tform textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .bdetail { padding: 6px 12px 10px; border-left: 2px solid var(--border); font-size: 12.5px; }
@@ -443,6 +445,8 @@ function normalize(snap) {
   out.run = { ...RUN_DEFAULTS, ...(out.run && typeof out.run === "object" ? out.run : {}) };
   out.generated_at ??= Date.now() / 1000;
   out.heartbeat ??= null;
+  out.opinions = { items: [], asked_at: null, review: null, ...(out.opinions && typeof out.opinions === "object" ? out.opinions : {}) };
+  out.opinions.items = list(out.opinions.items);
   out.health = { ...HEALTH_DEFAULT, ...(out.health && typeof out.health === "object" ? out.health : {}) };
   out.stories = out.stories.map((s) => ({ ...s, acceptance: list(s.acceptance), files: list(s.files), commits: list(s.commits) }));
   out.requirements = out.requirements.map((r) => ({ ...r, covers: list(r.covers), history: list(r.history) }));
@@ -1117,6 +1121,16 @@ const TIMELINE = {
   }),
 };
 
+const ACT_TO = { "": "liaison", reorder: "runner", "product-owner": "PO" };
+
+TIMELINE.opinion = (e, ctx) => ({
+  from: "liaison", to: "you", what: "opinion " + e.data.kind, body: ctx.opinions[e.data.opinion]?.text ?? "",
+});
+TIMELINE["opinion-act"] = (e) => ({
+  from: "you", to: ACT_TO[e.data.route], what: "opinion " + e.data.act,
+  body: e.data.opinion + (e.data.ref ? " → " + e.data.ref : ""),
+});
+
 TIMELINE.thread = (e, ctx) => ({
   from: WHO[e.data.author], to: WHO[e.data.to], what: "thread", body: ctx.thread[e.data.entry]?.text ?? "",
 });
@@ -1128,6 +1142,7 @@ function renderTimeline(view) {
     messages: Object.fromEntries(view.messages.map((m) => [m.id, m])),
     answers: Object.fromEntries(view.answers.map((a) => [a.id, a])),
     thread: Object.fromEntries(view.thread.map((t) => [t.id, t])),
+    opinions: Object.fromEntries(view.opinions.items.map((o) => [o.id, o])),
   };
   renderTimelineFilter(view);
   const rows = view.events.filter((e) => !ui.story || e.story === ui.story).slice(-120).reverse();
@@ -1139,7 +1154,7 @@ function timelineRow(e, ctx, isNew) {
   try { return timelineRowHtml(e, ctx, isNew); } catch (err) { console.error(err); return ""; }
 }
 
-const MARKDOWN_KINDS = new Set(["step-end", "message", "answer", "thread"]);
+const MARKDOWN_KINDS = new Set(["step-end", "message", "answer", "thread", "opinion"]);
 const bodyHtml = (kind, text) => (MARKDOWN_KINDS.has(kind) ? md(text) : esc(text));
 
 function timelineRowHtml(e, ctx, isNew) {
@@ -1208,7 +1223,7 @@ function backlogRow(story, place, count, view) {
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
     <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.delivery ? " · " + esc(story.delivery) : ""}</span>
-    ${storyLabel(story)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}
+    ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}
     ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
 }
 
@@ -1227,7 +1242,7 @@ function spendLine(view, id) {
   return `spend ${fmt.usd(cost)} · ${turns} turns`;
 }
 
-const eventLine = (e) => `<li>${fmt.time(e.at)} ${esc(e.kind)} ${esc(e.data?.source ?? e.data?.author ?? e.role ?? "")}</li>`;
+const eventLine = (e) => `<li>${fmt.time(e.at)} ${esc(e.kind)} ${esc(e.data?.source ?? e.data?.author ?? e.data?.act ?? e.data?.kind ?? e.role ?? "")}</li>`;
 
 const WHO = { human: "you", "product-owner": "PO", liaison: "liaison" };
 const SEND_EMPTY = "write a message first";
@@ -1256,6 +1271,79 @@ function threadHtml(story, view) {
   return `<div class="thread">${entries}${TOKEN === "" ? "" : threadFormHtml(story.id)}</div>`;
 }
 
+const NO_REVIEW = "The liaison has not reviewed the backlog yet.";
+const APPLY_LABEL = {
+  "move-up": "apply: move to the top of the backlog",
+  "move-down": "apply: move to the bottom of the backlog",
+};
+const APPLY_PO = "apply: send to the PO";
+
+/** The latest opinion on a story, or undefined (O15). */
+function storyOpinion(view, id) {
+  return view.opinions.items.find((o) => o.story === id && o.latest);
+}
+
+/** Is this opinion still open to a dismiss or apply? */
+function isSuggestion(item) {
+  return !!item && item.kind !== "keep" && item.act === null;
+}
+
+/** Has the human asked for a review the liaison has not closed yet? */
+function reviewWaiting(view) {
+  const { asked_at: asked, review } = view.opinions;
+  return asked !== null && (!review || asked > review.at);
+}
+
+function opinionBadge(story, view) {
+  const item = storyOpinion(view, story.id);
+  return isSuggestion(item) ? pill("liaison: " + item.kind, "") : "";
+}
+
+function refStatus(act, view) {
+  const found = view.reorders.find((r) => r.id === act.ref);
+  if (!found) return "";
+  return " · " + (found.status === "refused" ? "refused: " + found.reason : found.status);
+}
+
+function actStateHtml(item, view) {
+  const { act } = item;
+  if (act.act === "dismiss") return `dismissed ${fmt.time(act.at)}`;
+  const ref = act.ref ? ` → ${esc(act.ref)}${act.route === "reorder" ? esc(refStatus(act, view)) : ""}` : "";
+  return `applied ${fmt.time(act.at)}${ref}`;
+}
+
+function actButtonsHtml(item, view) {
+  const busy = ui.acting.has(item.id), reorder = item.route === "reorder";
+  const label = reorder ? APPLY_LABEL[item.kind] : APPLY_PO;
+  const applyOff = busy || (reorder && reorderPending(view));
+  return `<button class="ctl" data-opinion-act="dismiss" data-opinion="${esc(item.id)}" ${busy ? "disabled" : ""}>dismiss</button>
+    <button class="ctl" data-opinion-act="apply" data-opinion="${esc(item.id)}" ${applyOff ? "disabled" : ""}>${esc(label)}</button>
+    <span class="tnote">${esc(ui.actNote[item.id] ?? "")}</span>`;
+}
+
+/** The liaison's opinion on a story, with dismiss and apply (O16). */
+function opinionHtml(story, view) {
+  const item = storyOpinion(view, story.id);
+  if (!item) return "";
+  const settled = item.act ? `<div>${actStateHtml(item, view)}</div>` : "";
+  const buttons = isSuggestion(item) && TOKEN !== "" ? `<div>${actButtonsHtml(item, view)}</div>` : "";
+  return `<div class="opinion"><div class="tmeta">Liaison's opinion: <b>${esc(item.kind)}</b> · ${fmt.time(item.at)}</div>
+    <div class="md">${md(item.text)}</div>${settled}${buttons}</div>`;
+}
+
+/** The review bar: last review, what is waiting, the ask button and the filter (O18). */
+function reviewBarHtml(view) {
+  const { review, asked_at: asked } = view.opinions;
+  const last = review ? `Last review: ${fmt.time(review.at)}<div class="md">${md(review.text)}</div>` : esc(NO_REVIEW);
+  const waiting = reviewWaiting(view);
+  const wait = waiting ? ` Asked ${fmt.time(asked)}; waiting for the liaison.` : "";
+  const ask = TOKEN === "" ? "" : `<button class="ctl" data-ask-review ${waiting || ui.asking ? "disabled" : ""}>Ask the liaison to review the backlog</button>
+    <span class="tnote">${esc(ui.reviewNote)}</span>`;
+  const open = view.stories.filter((s) => s.status !== "done" && isSuggestion(storyOpinion(view, s.id))).length;
+  return `<div class="review-bar"><div>${last}${wait}</div><div>${ask}</div>
+    <label><input type="checkbox" data-suggested ${ui.suggested ? "checked" : ""}> only suggestions (${open})</label></div>`;
+}
+
 /** What an expanded row shows (B5). */
 function storyDetails(story, view) {
   const fields = DETAIL_FIELDS.map((k) => `<span>${k}: <b>${esc(story[k] ?? "—")}</b></span>`).join(" ");
@@ -1268,19 +1356,21 @@ function storyDetails(story, view) {
     <div class="bfields">${spendLine(view, story.id)}${links ? " · " + links : ""}</div>
     <ul class="bevents">${events.map(eventLine).join("")}</ul>
     ${asks.map((q) => `<div class="q"><div class="q-head">${pill(q.id, "warning")}</div><div class="q-text">${md(q.text)}</div></div>`).join("")}
-    ${threadHtml(story, view)}</div>`;
+    ${opinionHtml(story, view)}${threadHtml(story, view)}</div>`;
 }
 
 function groupHtml(title, rows, view, base) {
   const count = rows.length;
-  const html = rows.map((s, n) => backlogRow(s, base === null ? null : n + 1, count, view)
+  const places = rows.map((s, n) => [s, base === null ? null : n + 1]);
+  const shown = ui.suggested ? places.filter(([s]) => isSuggestion(storyOpinion(view, s.id))) : places;
+  const html = shown.map(([s, place]) => backlogRow(s, place, count, view)
     + (ui.expanded.has(s.id) ? storyDetails(s, view) : "")).join("");
   return `<h3>${esc(title)}<span>${count}</span></h3>${html || `<p class="empty">Nothing here.</p>`}`;
 }
 
 function backlogHtml(view) {
   const { current, backlog } = backlogGroups(view);
-  return groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0);
+  return reviewBarHtml(view) + groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0);
 }
 
 /** Run `fn`, then give a focused thread textarea its focus and selection back (H18). */
@@ -1367,6 +1457,51 @@ async function postThread(id) {
   render();
 }
 
+/** Ask the liaison to review the backlog (O19). */
+async function postReview() {
+  ui.asking = true;
+  ui.reviewNote = "";
+  try {
+    const res = await fetch("api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Agile-Team-Token": TOKEN },
+      body: "{}",
+    });
+    if (res.status === 403) ui.reviewNote = READ_ONLY;
+    else if (!res.ok) ui.reviewNote = "request failed: HTTP " + res.status;
+  } catch (err) { ui.reviewNote = "request failed: " + err.message; }
+  ui.asking = false;
+  render();
+}
+
+async function actAnswer(res, id) {
+  if (res.status === 403) return READ_ONLY;
+  if (res.status === 409) return (await res.json()).reason;
+  if (!res.ok) return "request failed: HTTP " + res.status;
+  const answer = await res.json();
+  if (answer.route === "reorder") {
+    const story = data.view.opinions.items.find((o) => o.id === id)?.story;
+    ui.reorder = { id: answer.ref, story };
+  }
+  return "";
+}
+
+/** Dismiss or apply opinion `id` (O19). */
+async function postOpinionAct(id, act) {
+  ui.acting.add(id);
+  ui.actNote[id] = "";
+  try {
+    const res = await fetch("api/opinion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Agile-Team-Token": TOKEN },
+      body: JSON.stringify({ opinion: id, act, version: data.view.run.order_version }),
+    });
+    ui.actNote[id] = await actAnswer(res, id);
+  } catch (err) { ui.actNote[id] = "request failed: " + err.message; }
+  ui.acting.delete(id);
+  render();
+}
+
 function moveFromHandle(btn) {
   const { backlog } = backlogGroups(data.view);
   const place = backlog.findIndex((s) => s.id === btn.dataset.story) + 1;
@@ -1377,6 +1512,10 @@ function moveFromHandle(btn) {
 document.addEventListener("click", (ev) => {
   const send = ev.target.closest("[data-thread-send]");
   if (send) return postThread(send.dataset.threadSend);
+  const act = ev.target.closest("[data-opinion-act]");
+  if (act) return act.disabled || postOpinionAct(act.dataset.opinion, act.dataset.opinionAct);
+  const ask = ev.target.closest("[data-ask-review]");
+  if (ask) return ask.disabled || postReview();
   const move = ev.target.closest("[data-move]");
   if (move) return moveFromHandle(move);
   if (ev.target.closest("[data-reload]")) return location.reload();
@@ -1388,6 +1527,8 @@ document.addEventListener("input", (ev) => {
   if (box) ui.drafts[box.dataset.threadText] = box.value;
 });
 document.addEventListener("change", (ev) => {
+  const only = ev.target.closest?.("[data-suggested]");
+  if (only) { ui.suggested = only.checked; render(); }
   const pick = ev.target.closest?.("[data-thread-to]");
   if (pick) ui.to[pick.dataset.threadTo] = pick.value;
 });
@@ -1754,6 +1895,7 @@ const ui = {
   scope: "story", focus: "", details: false,
   expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
   drafts: {}, to: {}, sending: new Set(), threadNote: {},
+  suggested: false, acting: new Set(), actNote: {}, asking: false, reviewNote: "",
 };
 const RENDER = { flow: renderFlowTab, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 

@@ -2021,6 +2021,52 @@
    }
   },
   {
+   "id": "opinion-o1",
+   "at": 1791472300.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o1",
+    "kind": "move-up"
+   }
+  },
+  {
+   "id": "opinion-o2",
+   "at": 1791472350.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o2",
+    "kind": "move-down"
+   }
+  },
+  {
+   "id": "opinion-o3",
+   "at": 1791472360.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "kind": "scope"
+   }
+  },
+  {
+   "id": "opinion-act-a1",
+   "at": 1791472420.0,
+   "kind": "opinion-act",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "act": "apply",
+    "route": "product-owner",
+    "ref": "t2"
+   }
+  },
+  {
    "id": "e99",
    "at": 1791472640.0,
    "kind": "step-start",
@@ -2565,8 +2611,62 @@
    "to": "human",
    "text": "Asked; the PO says CSV only.",
    "at": 1791472100.0
+  },
+  {
+   "id": "t2",
+   "story": "s5",
+   "author": "human",
+   "to": "product-owner",
+   "text": "The human applied the liaison's opinion o3 on s5 from the dashboard: scope.\n\nCover CSV only.",
+   "at": 1791472420.0
   }
  ],
+ "opinions": {
+  "items": [
+   {
+    "id": "o1",
+    "story": "s6",
+    "kind": "move-up",
+    "text": "s6 unblocks s7; do it first.",
+    "at": 1791472300.0,
+    "latest": false,
+    "route": "",
+    "act": null
+   },
+   {
+    "id": "o2",
+    "story": "s6",
+    "kind": "move-down",
+    "text": "s6 can wait for s5.",
+    "at": 1791472350.0,
+    "latest": true,
+    "route": "reorder",
+    "act": null
+   },
+   {
+    "id": "o3",
+    "story": "s5",
+    "kind": "scope",
+    "text": "Cover CSV only.",
+    "at": 1791472360.0,
+    "latest": true,
+    "route": "",
+    "act": {
+     "id": "a1",
+     "act": "apply",
+     "route": "product-owner",
+     "ref": "t2",
+     "at": 1791472420.0
+    }
+   }
+  ],
+  "asked_at": 1791472280.0,
+  "review": {
+   "id": "v1",
+   "text": "Two stories to change: s6 moves down, s5 narrows to CSV.",
+   "at": 1791472370.0
+  }
+ },
  "upstream": {
   "remote": "origin",
   "branch": "main",

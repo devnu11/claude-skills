@@ -25,6 +25,7 @@ from . import (
     halt,
     keys,
     onboard,
+    opinions,
     presentation,
     recovery,
     sandbox,
@@ -506,6 +507,35 @@ def cmd_reply(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_opinion(args: argparse.Namespace) -> int:
+    """Record the liaison's opinion on a story; the text comes from a file or stdin."""
+    config = _load_config(repo_of(args))
+    text = _message_text(args.source)
+    stories = state_mod.load(config.run_dir).stories
+    reason = (
+        threads.story_refusal(args.story, stories)
+        or opinions.kind_refusal(args.kind)
+        or threads.text_refusal(text)
+    )
+    if reason:
+        raise CliError(reason)
+    kind = opinions.Kind(args.kind)
+    made = opinions.Opinions(config.run_dir).record(args.story, kind, text)
+    print(opinions.RECORDED.format(id=made.id, kind=made.kind, story=made.story))
+    return 0
+
+
+def cmd_reviewed(args: argparse.Namespace) -> int:
+    """Record that the liaison reviewed the backlog, with a summary from a file or stdin."""
+    config = _load_config(repo_of(args))
+    text = _message_text(args.source)
+    reason = threads.text_refusal(text)
+    if reason:
+        raise CliError(reason)
+    print(opinions.REVIEWED.format(id=opinions.Opinions(config.run_dir).review(text).id))
+    return 0
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     """Block until the liaison is needed; print one JSON line."""
     config = _load_config(repo_of(args))
@@ -624,6 +654,14 @@ COMMANDS = (
     Command("reply", "reply on a story's dashboard thread (a file, or - for stdin)", cmd_reply,
             ((("story",), {}),
              (("source",), {"help": "file holding the reply, or - to read stdin"}))),
+    Command("opinion", "record the liaison's opinion on a story (a file, or - for stdin)",
+            cmd_opinion,
+            ((("story",), {}),
+             (("kind",), {"help": ", ".join(opinions.Kind)}),
+             (("source",), {"help": "file holding the opinion, or - to read stdin"}))),
+    Command("reviewed", "record a backlog review's summary (a file, or - for stdin)",
+            cmd_reviewed,
+            ((("source",), {"help": "file holding the summary, or - to read stdin"}),)),
     Command("watch", "wait until the liaison is needed; print one JSON line", cmd_watch,
             WATCH_ARGS),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),

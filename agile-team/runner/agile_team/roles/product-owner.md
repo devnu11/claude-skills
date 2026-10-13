@@ -188,3 +188,7 @@ then says "The human wrote to you on sN's thread (tK)". Read the file, and
 answer with `reply_story(story, text)`. The answer shows under the story. Don't
 use `notify_user` for it. The thread is a conversation, not a change order: act
 on it as you would on a `tell`.
+
+A thread post that starts "The human applied the liaison's opinion" is the human
+agreeing with the liaison's suggestion. Treat it as the human's request, and
+answer with `reply_story`. For a `close`, the human still decides the cancel.

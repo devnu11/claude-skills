@@ -1,5 +1,6 @@
 """Story threads (s84): the human's posts to the PO or the liaison and their replies,
-read from the files each path writes."""
+read from the files each path writes. A post with story ``BACKLOG`` is about the whole
+backlog (s85's review request)."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from .backlog import STORY_ID
 from .relay import LIAISON_DIR, MESSAGES_DIR, OUTBOX, REPLY, TOLD_LINE, Relay, Told
 
 MAX_TEXT = 4000
+BACKLOG = ""
 LIAISON_INBOX = "inbox.jsonl"
 LIAISON_REPLIES = "replies.jsonl"
 HEAD = "<!-- thread story={story} at={at} -->"
@@ -159,7 +161,7 @@ def post_known(run_dir: Path, post: Post) -> Entry | None:
     return Threads(run_dir).post(post)
 
 
-def _lines(path: Path) -> list[dict]:
+def read_lines(path: Path) -> list[dict]:
     """The JSON objects of a JSONL file; blank, torn and non-object lines are skipped."""
     if not system.is_file(path):
         return []
@@ -181,7 +183,7 @@ def _well_formed(record: dict) -> bool:
 
 
 def _entries(path: Path, prefix: str, authors: tuple[Party, Party]) -> list[Entry]:
-    records = [r for r in _lines(path) if _well_formed(r)]
+    records = [r for r in read_lines(path) if _well_formed(r)]
     return [
         Entry(f"{prefix}{n}", r["story"], authors[0], authors[1], r["text"], r["at"])
         for n, r in enumerate(records, 1)
@@ -215,7 +217,7 @@ class Threads:
 
     def _to_liaison(self, post: Post) -> Entry:
         text, at = post.text.strip(), system.now()
-        _append(self.inbox, {"story": post.story, "text": text, "at": at})
+        append_line(self.inbox, {"story": post.story, "text": text, "at": at})
         return Entry(
             f"lp{len(self.liaison_posts())}", post.story, Party.HUMAN, Party.LIAISON, text, at
         )
@@ -223,7 +225,7 @@ class Threads:
     def reply(self, story: str, text: str) -> Entry:
         """Record the liaison's reply."""
         text, at = text.strip(), system.now()
-        _append(self.replies, {"story": story, "text": text, "at": at})
+        append_line(self.replies, {"story": story, "text": text, "at": at})
         return Entry(
             f"lr{len(self.liaison_replies())}", story, Party.LIAISON, Party.HUMAN, text, at
         )
@@ -237,7 +239,7 @@ class Threads:
         """The outbox ``reply`` messages."""
         return [
             Entry(f"m{n}", r["stories"][0], Party.PO, Party.HUMAN, r["text"], r["at"])
-            for n, r in enumerate(_lines(self.run_dir / OUTBOX), 1)
+            for n, r in enumerate(read_lines(self.run_dir / OUTBOX), 1)
             if _is_reply(r)
         ]
 
@@ -267,7 +269,8 @@ def _is_reply(record: dict) -> bool:
     )
 
 
-def _append(path: Path, data: dict) -> None:
+def append_line(path: Path, data: dict) -> None:
+    """Append one JSON object as a line, creating the directory."""
     system.make_dirs(path.parent)
     system.append_text(path, json.dumps(data) + "\n")
 
