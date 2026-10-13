@@ -139,12 +139,13 @@ def test_each_story_has_its_own_presentation(config: cfg.Config) -> None:
 # ----- E2 -------------------------------------------------------------------
 
 
-def test_lay_out_wipes_the_old_presentation(config: cfg.Config) -> None:
+def test_lay_out_keeps_the_old_presentation(config: cfg.Config) -> None:
     source = present(config, "s4")
     system.write_text(source / "stale.txt", "old")
     assert presentation.lay_out(config, story_of()) == source
-    assert [p.name for p in system.list_dir(source)] == ["workspace"]
-    assert not system.exists(source / "workspace" / "todo.txt")
+    assert system.exists(source / "stale.txt")
+    assert system.exists(source / "workspace" / "todo.txt")
+    assert system.exists(source / "PRESENTATION.md")
 
 
 def test_lay_out_gives_a_package_its_own_git_workspace(
