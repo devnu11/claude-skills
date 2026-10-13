@@ -88,6 +88,11 @@ class StageLog:
 
     def _emit(self, run: stages.Run, start: Mark) -> None:
         seconds = awake_gap(self.clock.platform, (start, self.clock.mark()))
-        event = Event(EventKind.RUNNER_STAGE, stages.RUNNER_ROLE, run.place.story, Timed(run, start, seconds).data())
+        event = Event(
+            EventKind.RUNNER_STAGE,
+            stages.RUNNER_ROLE,
+            run.place.story,
+            Timed(run, start, seconds).data(),
+        )
         with suppress(OSError):
             self.log.emit(event)

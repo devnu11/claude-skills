@@ -239,7 +239,9 @@ class Calls:
             self._close(call, mark, Status.UNFINISHED)
 
     def _close(self, call: Call, mark: Mark, status: Status) -> None:
-        span = ToolSpan(self.where, call, mark, awake_gap(self.platform, (call.start, mark)), status)
+        span = ToolSpan(
+            self.where, call, mark, awake_gap(self.platform, (call.start, mark)), status
+        )
         self.spans.append(span)
         self.fresh.append(span)
 

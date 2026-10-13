@@ -113,7 +113,9 @@ class RunnerTools:
 
     async def run_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Run the named tests."""
-        return text_result(await self._reply(list(args.get("tests") or []), stages.RUNNER_TOOL["run_tests"]))
+        return text_result(
+            await self._reply(list(args.get("tests") or []), stages.RUNNER_TOOL["run_tests"])
+        )
 
     async def run_new_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Run the story's new test files."""

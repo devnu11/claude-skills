@@ -1,4 +1,4 @@
-"""The runner's own stages: a table of names, and the open-stage record choke points note into (s99).
+"""The runner's own stages: a table of names, and the open-stage record (s99).
 
 The caller of a stage names it; commands run inside only note themselves.
 Pure: no import from other ``agile_team`` modules.
@@ -86,7 +86,8 @@ STEP, STORY, BOUND = Attach.STEP, Attach.STORY, Attach.BOUNDARY
 _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
     (
         Name.ENV_PREPARE, B, STEP,
-        "Prepare the acceptance environment for the Customer Proxy: sandbox, prepare command or service start",
+        "Prepare the acceptance environment for the Customer Proxy: "
+        "sandbox, prepare command or service start",
     ),
     (
         Name.PRESENTATION_LAYOUT, B, STEP,
@@ -137,7 +138,9 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
     (Name.RUN_NEW_TESTS, D, STEP, "Run the story's new test files for a developer"),
 )  # fmt: skip
 
-STAGES: dict[Name, Stage] = {name: Stage(name, text, when, attach) for name, when, attach, text in _ROWS}
+STAGES: dict[Name, Stage] = {
+    name: Stage(name, text, when, attach) for name, when, attach, text in _ROWS
+}
 NAMESPACES: frozenset[str] = frozenset(n.split(".")[0] for n in Name) | {PO_NAMESPACE}
 QUALITY: dict[str, Name] = {
     "lint": Name.QUALITY_LINT,
