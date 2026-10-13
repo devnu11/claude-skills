@@ -13,7 +13,8 @@ from . import system
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .ci import CiResult
 from .config import PIPELINE_STEPS
-from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
+from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, load_dispute
+from .holds import PoHold
 from .ledger import SessionCost
 from .loops import Rule, Setback
 from .owners import FixRecord, load_fix
@@ -125,7 +126,7 @@ class RunState:
         """Open the next sprint holding exactly ``ids``; other unfinished stories go back."""
         self.sprint += 1
         for sid, story in self.stories.items():
-            if story.status != StoryStatus.DONE:
+            if story.status not in FINISHED:
                 story.sprint = self.sprint if sid in ids else None
 
     def interrupt(self, found: Interruption) -> None:
@@ -156,7 +157,12 @@ class RunState:
         return cls(**data)
 
 
-NESTED = {"previous": PreviousStep, "dispute": load_dispute, "interrupted": Interruption}
+NESTED = {
+    "previous": PreviousStep,
+    "dispute": load_dispute,
+    "interrupted": Interruption,
+    "po_hold": PoHold,
+}
 
 
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])

@@ -7,11 +7,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from . import priority
-from .gates import StoryState
+from .gates import StoryState, StoryStatus
+from .holds import HoldKind
 from .priority import Placement, Priority
 from .state import RunState
 
@@ -25,6 +27,7 @@ HUMAN_ORDER = (
 )
 CANCELLED = "cancelled"
 HELD = "held"
+CANCEL_REQUESTED = "cancel requested"
 
 
 @dataclass(frozen=True)
@@ -63,11 +66,25 @@ class View:
         return Placement(ask.story, self.queue.index(self.backlog[ask.position - 1]) + 1)
 
 
+def _cancelled(story: StoryState) -> bool:
+    legacy = (story.hold or "").strip().lower().startswith(CANCELLED)
+    return story.status is StoryStatus.CANCELLED or legacy
+
+
+def _cancel_requested(story: StoryState) -> bool:
+    return bool(story.po_hold) and story.po_hold.kind is HoldKind.CANCEL
+
+
+LABELS: tuple[tuple[str, Callable[[StoryState], bool]], ...] = (
+    (CANCELLED, _cancelled),
+    (CANCEL_REQUESTED, _cancel_requested),
+    (HELD, lambda s: priority.held(s) or bool(s.po_hold)),
+)
+
+
 def label(story: StoryState) -> str:
-    """``cancelled``, ``held`` or empty (B3)."""
-    if (story.hold or "").strip().lower().startswith(CANCELLED):
-        return CANCELLED
-    return HELD if priority.held(story) else ""
+    """``cancelled``, ``cancel requested``, ``held`` or empty (B3, H13)."""
+    return next((text for text, applies in LABELS if applies(story)), "")
 
 
 def stale_refusal(ask: Ask, view: View) -> str | None:

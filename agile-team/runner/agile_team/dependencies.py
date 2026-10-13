@@ -13,7 +13,7 @@ import yaml
 
 from . import system
 from .config import Config
-from .gates import StoryState, StoryStatus
+from .gates import FINISHED, StoryState, StoryStatus
 from .priority import first_refusal, natural
 from .roles import RoleError, split_frontmatter
 
@@ -63,7 +63,7 @@ def listed(value: Any) -> list[str] | None:
 
 def open_ids(stories: dict[str, StoryState]) -> list[str]:
     """The ids of stories that are not done."""
-    return [i for i, s in stories.items() if s.status is not StoryStatus.DONE]
+    return [i for i, s in stories.items() if s.status not in FINISHED]
 
 
 def _file_list(config: Config, sid: str) -> list[str] | None:

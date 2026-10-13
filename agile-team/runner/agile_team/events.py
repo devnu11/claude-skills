@@ -22,6 +22,7 @@ INTERRUPTED = "interrupted"  # step-end status of a step cut short (s44)
 class EventKind(StrEnum):
     """What happened."""
 
+    STORY_ADMIN = "story-admin"
     STEP_START = "step-start"
     CHECKOUT = "checkout"
     STEP_END = "step-end"

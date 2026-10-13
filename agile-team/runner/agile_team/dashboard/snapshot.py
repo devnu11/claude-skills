@@ -19,7 +19,7 @@ from .. import roles as roles_mod
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
-from ..gates import STEP_ROLES, StoryStatus
+from ..gates import FINISHED, STEP_ROLES
 from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
 from ..relay import INBOX, OUTBOX, REPLY
@@ -255,7 +255,7 @@ def _position(files: RunFiles, story: Any) -> int | None:
 
 
 def _tier(files: RunFiles, story: Any) -> str | None:
-    if story.status is StoryStatus.DONE:
+    if story.status in FINISHED:
         return None
     return str(_priority(files).tier(story))
 
@@ -269,7 +269,9 @@ def _asking(files: RunFiles, story_id: str) -> list[str]:
 
 def _wait(files: RunFiles, story: Any) -> dict[str, Any] | None:
     found = waits.wait(story, _asking(files, story.id))
-    return None if found is None else {"reason": str(found.reason), "on": found.on}
+    if found is None:
+        return None
+    return {"reason": str(found.reason), "on": found.on, "title": found.title}
 
 
 def _story(files: RunFiles, story: Any) -> dict:
@@ -285,6 +287,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "position": _position(files, story),
         "tier": _tier(files, story),
         "hold": story.hold,
+        "po_hold": asdict(story.po_hold) if story.po_hold else None,
         "wait": _wait(files, story),
         "opened_at": _opened_at(files.events, story.id),
         "acceptance": _acceptance(files.config, story.id),
@@ -300,7 +303,7 @@ def _story(files: RunFiles, story: Any) -> dict:
 def _dependency_keys(files: RunFiles, story: Any) -> dict[str, list[str]]:
     stories = files.state.stories
     queue = _priority(files).queue(stories.values())
-    done = story.status is StoryStatus.DONE
+    done = story.status in FINISHED
     return {
         "depends_on": list(story.depends_on),
         "waiting_on": [] if done else dependencies.waiting_on(story, stories),

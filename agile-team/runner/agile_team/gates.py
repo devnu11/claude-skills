@@ -20,6 +20,7 @@ from typing import Any
 from . import fingerprint, loops, stages, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
+from .holds import PoHold
 from .loops import Author, Fault, Rule, Setback
 from .owners import Fix, FixRecord, Item, Owners, Source, Split
 from .results import Ran, result_tail
@@ -86,6 +87,10 @@ class StoryStatus(StrEnum):
     NEEDS_MANAGER = "needs_manager"
     BLOCKED = "blocked"
     DONE = "done"
+    CANCELLED = "cancelled"
+
+
+FINISHED = frozenset({StoryStatus.DONE, StoryStatus.CANCELLED})
 
 
 class Verdict(StrEnum):
@@ -197,6 +202,7 @@ class StoryState:
     developer: str | None = None
     po_developer: str | None = None
     hold: str | None = None
+    po_hold: PoHold | None = None
     note: str = ""
     previous: PreviousStep | None = None
     dispute: OpenDispute | None = None
@@ -240,8 +246,8 @@ def ruling_refusal(story: StoryState | None, what: str = "a ruling") -> str | No
     """Why a Manager ruling (or fault, ``what``) cannot apply to ``story``, or ``None``."""
     if story is None:
         return f"{what} needs a story; run the manager on that story"
-    if story.status is StoryStatus.DONE:
-        return f"story {story.id} is done; {what} cannot move it"
+    if story.status in FINISHED:
+        return f"story {story.id} is {story.status}; {what} cannot move it"
     return None
 
 
@@ -302,6 +308,7 @@ def _repeat_refusal(story: StoryState) -> str | None:
 def _status_refusal(story: StoryState) -> str | None:
     reasons = {
         StoryStatus.DONE: "is done",
+        StoryStatus.CANCELLED: "was cancelled by the human",
         StoryStatus.BLOCKED: "is blocked waiting on an escalation",
         StoryStatus.NEEDS_MANAGER: "hit the round cap; run the manager for a ruling first",
     }

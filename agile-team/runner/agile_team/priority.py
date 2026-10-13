@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from .gates import StoryState, StoryStatus
+from .gates import FINISHED, StoryState, StoryStatus
 
 NO_STORIES = "no stories listed; pass the story ids in the order to work on them"
 UNKNOWN = "unknown stories: {ids}; open them with open_story first"
+CANCELLED_IDS = "cancelled stories can't be ordered: {ids}"
 DONE = "done stories have no place in the order: {ids}"
 BAD_POSITION = "position must be a whole number from 1 to {count}"
 PULL_NEEDS_REASON = (
@@ -163,7 +164,10 @@ def order_refusal(ids: list[str], stories: dict[str, StoryState]) -> str | None:
     if unknown:
         return UNKNOWN.format(ids=", ".join(unknown))
     done = [i for i in ids if stories[i].status is StoryStatus.DONE]
-    return DONE.format(ids=", ".join(done)) if done else None
+    if done:
+        return DONE.format(ids=", ".join(done))
+    gone = [i for i in ids if stories[i].status is StoryStatus.CANCELLED]
+    return CANCELLED_IDS.format(ids=", ".join(gone)) if gone else None
 
 
 def moves(before: list[str], after: list[str]) -> list[dict[str, Any]]:
@@ -191,7 +195,7 @@ class Priority:
 
     def key(self, story: StoryState) -> tuple[Any, ...]:
         """The one ranking rule (G3)."""
-        done = story.status is StoryStatus.DONE
+        done = story.status in FINISHED
         return (done, RANK[self.tier(story)], *self._listed(story))
 
     def ranked(self, stories: Iterable[StoryState]) -> list[StoryState]:
@@ -200,7 +204,7 @@ class Priority:
 
     def queue(self, stories: Iterable[StoryState]) -> list[str]:
         """Ids of the unfinished stories in ranking order."""
-        return [s.id for s in self.ranked(stories) if s.status is not StoryStatus.DONE]
+        return [s.id for s in self.ranked(stories) if s.status not in FINISHED]
 
     def _listed(self, story: StoryState) -> tuple[int, tuple[Any, ...]]:
         """The plan key: the listed place, then the natural id."""
@@ -209,7 +213,7 @@ class Priority:
 
     def plan(self, stories: Iterable[StoryState]) -> list[str]:
         """Ids of the unfinished stories by listed place alone, with no groups (G15)."""
-        open_ = [s for s in stories if s.status is not StoryStatus.DONE]
+        open_ = [s for s in stories if s.status not in FINISHED]
         return [s.id for s in sorted(open_, key=self._listed)]
 
     def with_first(self, ids: list[str], stories: Iterable[StoryState]) -> list[str]:
@@ -257,4 +261,4 @@ class Priority:
 
     @staticmethod
     def _pullable(story: StoryState) -> bool:
-        return story.status is not StoryStatus.DONE and not started(story)
+        return story.status not in FINISHED and not started(story)

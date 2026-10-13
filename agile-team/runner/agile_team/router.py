@@ -15,11 +15,12 @@ from .boundary_runner import BoundaryRunner
 from .config import Config
 from .dispatch import FIX_KINDS_SET as FIX_STEPS
 from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
-from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
+from .gates import FINISHED, STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
 from .relay import WAITING_HEAD, Answer, Told
 from .reorders import Desk
+from .story_admin import Clerk
 
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
@@ -86,7 +87,7 @@ def _bounced(story: StoryState) -> bool:
 
 def _scribable(story: StoryState) -> bool:
     """A story the Scribe may run on: unheld, or done (its hold is the final step's)."""
-    return not story.hold or story.status is StoryStatus.DONE
+    return story.po_hold is None and (not story.hold or story.status is StoryStatus.DONE)
 
 
 def _po_pick(story: StoryState) -> str | None:
@@ -204,10 +205,12 @@ class Router:
     steps: int = field(default=0, init=False)
     boundaries: BoundaryRunner = field(init=False)
     desk: Desk = field(init=False)
+    clerk: Clerk = field(init=False)
 
     def __post_init__(self) -> None:
         self.boundaries = BoundaryRunner(self.runtime)
         self.desk = Desk(self.runtime)
+        self.clerk = Clerk(self.runtime)
 
     async def advance(self) -> Pass:
         """Run steps until a hand-over trigger, the end of the sprint or the end of the run."""
@@ -222,6 +225,7 @@ class Router:
         if self.runtime.checkout_moved():
             return None
         self.desk.apply()
+        self.clerk.settle()
         answers, told = self._news(), self._unread()
         if answers or told:
             return self._deliver(answers, told)
@@ -270,7 +274,8 @@ class Router:
         rt = self.runtime
         in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.NEEDS_MANAGER
         waiting = story.repeated is not None and story.hold is None
-        return in_sprint and waiting and story.id not in rt.relay.blocked_stories()
+        free = story.po_hold is None and story.id not in rt.relay.blocked_stories()
+        return in_sprint and waiting and free
 
     def _story_work(self) -> Work | None:
         story = self._first_ranked(self._movable)
@@ -285,7 +290,7 @@ class Router:
     def _movable(self, story: StoryState) -> bool:
         rt = self.runtime
         in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.ACTIVE
-        free = story.hold is None and rt.state.boundary is None
+        free = story.hold is None and story.po_hold is None and rt.state.boundary is None
         ready = not dependencies.waiting_on(story, rt.state.stories)
         return in_sprint and free and ready and story.id not in rt.relay.blocked_stories()
 
@@ -448,6 +453,8 @@ def _boundary_stall(b: Boundary) -> str:
 
 
 def _why(story: StoryState, stories: dict[str, StoryState]) -> str:
+    if story.po_hold:
+        return story.po_hold.shown
     if story.hold:
         return STALL_REASONS["hold"].format(hold=story.hold)
     if waiting := dependencies.waiting_on(story, stories):
@@ -456,4 +463,4 @@ def _why(story: StoryState, stories: dict[str, StoryState]) -> str:
 
 
 def _in_backlog(story: StoryState) -> bool:
-    return story.sprint is None and story.status is not StoryStatus.DONE
+    return story.sprint is None and story.status not in FINISHED

@@ -60,6 +60,7 @@ from .router import Router
 from .runner_tools import text_result
 from .stage_log import place_of
 from .state import ModelOverride, RunStatus
+from .story_admin import Act, Clerk
 
 SERVER = "team"
 POLL_S = 5.0
@@ -354,6 +355,7 @@ class Tools:
         ids, limit = list(args.get("ids", [])), float(args.get("timeout_s", DEFAULT_WAIT_S))
         with self.runtime.pulse.doing(WAIT_CHORE.format(ids=", ".join(ids) or "—")):
             await self._poll(ids, limit)
+        Clerk(self.runtime).settle()
         answers = self.runtime.relay.answers()
         given = {i: answers[i].text for i in ids if i in answers}
         self._mark_delivered(list(given))
@@ -382,6 +384,18 @@ class Tools:
         story.hold, story.note = None, args.get("note", "")
         self.runtime.save()
         return text_result({"status": "continued", "story": story.id, "step": story.step})
+
+    async def hold_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Hold a story with a reason (s53)."""
+        return text_result(Clerk(self.runtime).run(Act.HOLD, args))
+
+    async def release_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Release the PO's hold, or a blocked story with no open question (s53)."""
+        return text_result(Clerk(self.runtime).run(Act.RELEASE, args))
+
+    async def request_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Ask the human to cancel a story (s53)."""
+        return text_result(Clerk(self.runtime).run(Act.REQUEST_CANCEL, args))
 
     async def pass_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Move a story stuck at tests on to the next step when the suite is green."""
@@ -545,6 +559,23 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Release a story the runner handed to you (a done story too, to clear its hold); "
         "your note is added to its next step's standard brief.",
         {"story": str, "note": str},
+    ),
+    "hold_story": (
+        "Hold a story that isn't done or cancelled, with a reason: the router skips it and it "
+        "keeps its place. No question is asked; holding again replaces the reason. Use this "
+        "instead of a parked ask_user.",
+        {"story": str, "reason": str},
+    ),
+    "release_story": (
+        "Release your hold, or a blocked story with no open question, to the step it stopped "
+        "at (status active); the reason goes to its next step's brief.",
+        {"story": str, "reason": str},
+    ),
+    "request_cancel": (
+        "Ask the human to cancel a story: it is held as cancel requested and the human gets one "
+        'question (cancel / keep). Only their "cancel" answer cancels it; "keep" releases it. '
+        "For a story with commits, say what happens to its code.",
+        {"story": str, "reason": str},
     ),
     "pass_tests": (
         "Move a story stuck at tests (open dispute, round cap, block or repeated setback) to "
