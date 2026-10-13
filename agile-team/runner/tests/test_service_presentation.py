@@ -683,14 +683,16 @@ def test_e2e_done_with_a_live_service_goes_to_acceptance() -> None:
     assert out.verdict is Verdict.PASS and s.step == "acceptance" and calls == ["s4"]
 
 
-def test_liveness_is_not_consulted_without_an_acceptance_step() -> None:
+def test_liveness_is_not_consulted_without_an_acceptance_step(config: cfg.Config) -> None:
     steps = [x for x in STEPS if x != "acceptance"]
     p, calls = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, "x"), steps=steps)
     assert p.evaluate(story_of("e2e"), Handoff("done")).verdict is Verdict.PASS
     assert calls == []
 
 
-def test_liveness_is_not_consulted_at_other_steps_or_for_changes_requested() -> None:
+def test_liveness_is_not_consulted_at_other_steps_or_for_changes_requested(
+    config: cfg.Config,
+) -> None:
     p, calls = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, "x"))
     assert p.evaluate(story_of("review"), Handoff("done")).verdict is Verdict.PASS
     p.evaluate(story_of("e2e"), Handoff("changes_requested", next_role="developer-cli"))
@@ -706,7 +708,7 @@ def test_return_to_e2e_builds_the_return_outcome() -> None:
     assert gate_pipeline(steps=steps)[0].return_to_e2e("it is down") is None
 
 
-def test_unpresented_never_runs_the_trial() -> None:
+def test_unpresented_never_runs_the_trial(config: cfg.Config) -> None:
     p, calls = gate_pipeline(files=lambda _s: MISSING)
     out = p.unpresented(story_of("acceptance"))
     assert (
