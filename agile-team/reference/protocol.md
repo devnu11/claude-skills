@@ -494,7 +494,14 @@ every opinion in line order, each `{"id", "story", "kind", "text", "at",
 "latest", "route", "act"}`, where `route` is the route an apply would take
 for a latest opinion with no act, else `""`, and `act` is `{"id", "act",
 "route", "ref", "at"}` or null; `asked_at`, the last review request's time
-or null; `review`, the last review `{"id", "text", "at"}` or null), `ledger`, `messages`,
+or null; `review`, the last review `{"id", "text", "at"}` or null), `ledger`,
+`steps` (s96: every agent step in start order, paired from `step-start` and
+`step-end` by role and story, each `{"role", "story", "model", "sprint",
+"at", "ended_at", "seconds", "status"}`; `at` is the start, `seconds` the
+wall time; a running step has `ended_at`, `seconds` and `status` null; a
+step closed after a kill has `seconds` null; `model` falls back to the
+role's configured model, then `"unknown"`; `sprint` is the sprint running
+when it started), `messages`,
 `answers`, `thread` (every thread entry in time order, each `{"id",
 "story", "author", "to", "text", "at"}` with `author`/`to` one of
 `human`, `product-owner`, `liaison`; the timeline shows it, filtered by
@@ -639,9 +646,18 @@ shows `↻ restarted`.
 The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
 It defaults to Story: the active step's story, or another story picked in
 the box beside it. Each role box shows that role's ledger tokens and dollars
-for the scope. A role that has not touched the story in focus is dimmed.
-The active box adds its live rate, sparkline, turn, tool and the step's
-estimate, outlined in the health colour.
+for the scope, and its step time: the summed wall time of its finished
+steps in the scope (snapshot `steps`). A role that has not touched the story
+in focus is dimmed. A role with an open step adds `⏱ running N min`,
+updated each minute. The active box adds its live rate, sparkline, turn,
+tool and the step's estimate, outlined in the health colour. The Product
+Owner's queries are not steps, so its box shows no time.
+
+The Tokens tab's measure toggle is **Tokens / Dollars / Time** (one row
+each in the page's `UNITS` table). Time draws "Time by" bars of summed step
+time per role, story or model, in h and min; each tooltip gives the step
+count and the share of the total time. Only agent steps count: the runner's
+own stages (gates, syncs, presentation builds) are left to A6.
 
 On red, the tab title gets a `⚠` prefix. On `localhost` (a secure context)
 the page also shows a desktop notification. It asks permission once, at your
