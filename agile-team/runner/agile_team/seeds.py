@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 from . import config, system
@@ -18,6 +19,8 @@ BROKEN = (
     "workspace/, or delete it so the runner seeds a working one"
 )
 Check = Callable[[Path], str | None]
+PACKAGED_SEED: Path = Path(str(resources.files("agile_team") / "dashboard" / "seed"))
+DEFAULT_SEEDS: dict[str, Path] = {"web": PACKAGED_SEED}
 
 
 def config_problem(path: Path) -> str | None:
@@ -33,10 +36,13 @@ CHECKS: dict[str, Check] = {config.CONFIG_NAME: config_problem}
 
 
 def seed_dir(repo: Path, delivery: Delivery | None) -> Path | None:
-    """``repo / delivery.seed``, or ``None`` when there is no delivery or it names no seed."""
-    if delivery is None or not delivery.seed:
+    """The delivery's seed directory per S1: its override, its kind's default, or ``None``."""
+    if delivery is None:
         return None
-    return repo / delivery.seed
+    if delivery.seed is None:
+        return DEFAULT_SEEDS.get(delivery.kind)
+    # repo / "" is the repo itself, so "" must return before the join.
+    return repo / delivery.seed if delivery.seed else None
 
 
 @dataclass(frozen=True)

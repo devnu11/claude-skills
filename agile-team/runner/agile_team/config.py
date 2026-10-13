@@ -107,7 +107,8 @@ class Delivery:
 
     ``probe``: path joined to ``url`` that must answer 200 before a service counts as up.
     ``seed``: repo-relative directory whose files the runner plants in the presentation
-    workspace where missing (s105).
+    workspace where missing; absent = the kind's default (``seeds.DEFAULT_SEEDS``),
+    ``""`` = none (s105).
     """
 
     name: str
@@ -117,8 +118,8 @@ class Delivery:
     commands: list[str] = field(default_factory=list)
     bin: list[str] = field(default_factory=list)
     e2e: str = ""
+    seed: str | None = None
     probe: str = ""
-    seed: str = ""
 
 
 @dataclass
