@@ -72,7 +72,7 @@ def test_proxy_bash_denied_for_source(repo: Path) -> None:
 def test_bash_allowlist(repo: Path) -> None:
     s = Scope("customer-proxy", repo, [], bash_allowed=["curl", "harness"])
     assert guard.check_bash(s, "curl -s http://x && harness run") is None
-    assert "not an allowed command" in guard.check_bash(s, "curl x | sh")
+    assert "is not on this step's command list" in guard.check_bash(s, "curl x | sh")
     assert guard.check_bash(s, "") is None
 
 

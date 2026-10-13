@@ -49,11 +49,14 @@ def denial(scope: Scope, command: str) -> str | None:
 )
 def test_prefixed_git_commit_is_denied_like_git_commit(repo: Path, command: str) -> None:
     reason = denial(unconfined(repo), command)
-    assert reason and "`git commit` is not allowed; the runner commits for you" in reason
+    assert reason and "`git commit` changes the repo, and the runner commits for you" in reason
 
 
-def test_write_denied_text_is_the_old_one() -> None:
-    assert git_check.GIT_WRITE_DENIED == "`git {first}` is not allowed; the runner commits for you"
+def test_write_denied_text_names_its_rule() -> None:
+    assert git_check.GIT_WRITE_DENIED.startswith("refused by rule `git-write`: ")
+    assert "`git {first}` changes the repo, and the runner commits for you" in (
+        git_check.GIT_WRITE_DENIED
+    )
 
 
 @pytest.mark.parametrize(
