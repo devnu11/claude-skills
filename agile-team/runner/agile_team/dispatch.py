@@ -625,7 +625,7 @@ class Runtime:
 
     def _take_off(self, plan: Plan, brief: str) -> None:
         """Announce the step and record it as in flight."""
-        self.emit(EventKind.STEP_START, plan, brief=brief)
+        self.emit(EventKind.STEP_START, plan, brief=brief, **self.pulse.clocks())
         story = plan.story.id if plan.story else None
         self.state.in_flight = salvage.InFlight(plan.role.name, story, brief)
         plan.meter = self.step_meter = self.pulse.open(self.who(plan))
@@ -652,7 +652,7 @@ class Runtime:
         meter = self._end_meter()
         if meter is not None:
             reason = self.halted_by.reason if self.halted_by else None
-            self.events.emit(meter.reading.interrupted(live.Stop(cause, reason)))
+            self.events.emit(meter.interrupted(live.Stop(cause, reason)))
 
     def _land(self, plan: Plan) -> None:
         """The step settled: nothing is in flight and its offered work is spent."""
@@ -839,6 +839,7 @@ class Runtime:
             commit=commit,
             turns=result.turns,
             model=meter.reading.model if meter else None,
+            **self.pulse.clocks(),
         )
 
     def _parse(self, plan: Plan) -> Handoff | HandoffError:

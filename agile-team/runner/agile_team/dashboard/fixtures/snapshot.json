@@ -651,7 +651,9 @@
    "role": "architect",
    "story": "s1",
    "data": {
-    "brief": "Design CSV output for `report run --format csv`."
+    "brief": "Design CSV output for `report run --format csv`.",
+    "mono": 452316.6,
+    "slept": 0.0
    }
   },
   {
@@ -677,7 +679,9 @@
     "requirements_added": [
      "REQ-001",
      "REQ-002"
-    ]
+    ],
+    "mono": 452500.3,
+    "slept": 120.0
    }
   },
   {
@@ -726,7 +730,9 @@
    "role": "unit-tester",
    "story": "s1",
    "data": {
-    "brief": "Red tests for CSV writer per REQ-001/002."
+    "brief": "Red tests for CSV writer per REQ-001/002.",
+    "mono": 453256.4,
+    "slept": 120.0
    }
   },
   {
@@ -748,7 +754,9 @@
     },
     "cost_usd": 0.2068,
     "turns": 33,
-    "commit": "95e761d"
+    "commit": "95e761d",
+    "mono": 453634.2,
+    "slept": 120.0
    }
   },
   {
@@ -773,7 +781,9 @@
    "role": "developer-cli",
    "story": "s1",
    "data": {
-    "brief": "Implement CSV writer."
+    "brief": "Implement CSV writer.",
+    "mono": 454202.5,
+    "slept": 120.0
    }
   },
   {
@@ -795,7 +805,9 @@
     },
     "cost_usd": 0.3327,
     "turns": 35,
-    "commit": "e00902c"
+    "commit": "e00902c",
+    "mono": 454419.2,
+    "slept": 120.0
    }
   },
   {
@@ -820,7 +832,9 @@
    "role": "quality-czar",
    "story": "s1",
    "data": {
-    "brief": "Lint and static checks."
+    "brief": "Lint and static checks.",
+    "mono": 454800.3,
+    "slept": 120.0
    }
   },
   {
@@ -842,7 +856,9 @@
     },
     "cost_usd": 0.0,
     "turns": 35,
-    "commit": "6bf46c6"
+    "commit": "6bf46c6",
+    "mono": 455200.9,
+    "slept": 120.0
    }
   },
   {
@@ -867,7 +883,9 @@
    "role": "code-reviewer",
    "story": "s1",
    "data": {
-    "brief": "Review against REQ-001/002."
+    "brief": "Review against REQ-001/002.",
+    "mono": 455549.7,
+    "slept": 120.0
    }
   },
   {
@@ -889,7 +907,9 @@
     },
     "cost_usd": 0.7405,
     "turns": 35,
-    "commit": "9474031"
+    "commit": "9474031",
+    "mono": 456029.6,
+    "slept": 120.0
    }
   },
   {
@@ -914,7 +934,9 @@
    "role": "architect",
    "story": "s1",
    "data": {
-    "brief": "Design review."
+    "brief": "Design review.",
+    "mono": 456438.6,
+    "slept": 120.0
    }
   },
   {
@@ -936,7 +958,9 @@
     },
     "cost_usd": 0.6308,
     "turns": 23,
-    "commit": "a5aa3c8"
+    "commit": "a5aa3c8",
+    "mono": 456576.3,
+    "slept": 120.0
    }
   },
   {
@@ -961,7 +985,9 @@
    "role": "integration-tester",
    "story": "s1",
    "data": {
-    "brief": "E2E on a 1k-row report."
+    "brief": "E2E on a 1k-row report.",
+    "mono": 457134.8,
+    "slept": 120.0
    }
   },
   {
@@ -983,7 +1009,9 @@
     },
     "cost_usd": 0.2449,
     "turns": 26,
-    "commit": "2b0537e"
+    "commit": "2b0537e",
+    "mono": 457452.1,
+    "slept": 120.0
    }
   },
   {
@@ -1008,7 +1036,9 @@
    "role": "customer-proxy",
    "story": "s1",
    "data": {
-    "brief": "Accept s1 as a finance user."
+    "brief": "Accept s1 as a finance user.",
+    "mono": 457951.8,
+    "slept": 120.0
    }
   },
   {
@@ -1030,7 +1060,9 @@
     },
     "cost_usd": 0.219,
     "turns": 35,
-    "commit": "14a0f9e"
+    "commit": "14a0f9e",
+    "mono": 458153.1,
+    "slept": 120.0
    }
   },
   {
@@ -1069,7 +1101,9 @@
    "role": "scribe",
    "story": null,
    "data": {
-    "brief": "Record s1 decisions."
+    "brief": "Record s1 decisions.",
+    "mono": 458594.5,
+    "slept": 120.0
    }
   },
   {
@@ -1091,7 +1125,9 @@
     },
     "cost_usd": 0.0,
     "turns": 28,
-    "commit": "f52ddf5"
+    "commit": "f52ddf5",
+    "mono": 458754.4,
+    "slept": 120.0
    }
   },
   {
@@ -1101,7 +1137,9 @@
    "role": "architect",
    "story": "s3",
    "data": {
-    "brief": "Design streaming export."
+    "brief": "Design streaming export.",
+    "mono": 458905.0,
+    "slept": 120.0
    }
   },
   {
@@ -1127,7 +1165,9 @@
     "requirements_added": [
      "REQ-003",
      "REQ-004"
-    ]
+    ],
+    "mono": 458997.1,
+    "slept": 120.0
    }
   },
   {
@@ -1176,7 +1216,9 @@
    "role": "unit-tester",
    "story": "s3",
    "data": {
-    "brief": "Red tests for streaming."
+    "brief": "Red tests for streaming.",
+    "mono": 460011.0,
+    "slept": 120.0
    }
   },
   {
@@ -1198,7 +1240,9 @@
     },
     "cost_usd": 0.2101,
     "turns": 10,
-    "commit": "7b45145"
+    "commit": "7b45145",
+    "mono": 460498.8,
+    "slept": 120.0
    }
   },
   {
@@ -1223,7 +1267,9 @@
    "role": "architect",
    "story": "s2",
    "data": {
-    "brief": "Design --columns."
+    "brief": "Design --columns.",
+    "mono": 460843.5,
+    "slept": 120.0
    }
   },
   {
@@ -1248,7 +1294,9 @@
     "commit": "9118bb1",
     "requirement_changes": {
      "REQ-002": "Order must follow --columns, not schema order; finance relies on a fixed layout."
-    }
+    },
+    "mono": 460967.9,
+    "slept": 120.0
    }
   },
   {
@@ -1288,7 +1336,9 @@
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Implement streaming writer."
+    "brief": "Implement streaming writer.",
+    "mono": 461561.1,
+    "slept": 120.0
    }
   },
   {
@@ -1310,7 +1360,9 @@
     },
     "cost_usd": 0.363,
     "turns": 34,
-    "commit": "7bdc968"
+    "commit": "7bdc968",
+    "mono": 461958.2,
+    "slept": 120.0
    }
   },
   {
@@ -1335,7 +1387,9 @@
    "role": "unit-tester",
    "story": "s2",
    "data": {
-    "brief": "Red tests for --columns."
+    "brief": "Red tests for --columns.",
+    "mono": 462211.5,
+    "slept": 120.0
    }
   },
   {
@@ -1357,7 +1411,9 @@
     },
     "cost_usd": 0.1994,
     "turns": 17,
-    "commit": "f373ca5"
+    "commit": "f373ca5",
+    "mono": 462683.8,
+    "slept": 120.0
    }
   },
   {
@@ -1382,7 +1438,9 @@
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Coverage below 95%: cover the progress path."
+    "brief": "Coverage below 95%: cover the progress path.",
+    "mono": 463263.1,
+    "slept": 120.0
    }
   },
   {
@@ -1406,7 +1464,9 @@
     },
     "cost_usd": 0.4394,
     "turns": 9,
-    "commit": "b239f3c"
+    "commit": "b239f3c",
+    "mono": 463705.0,
+    "slept": 120.0
    }
   },
   {
@@ -1431,7 +1491,9 @@
    "role": "developer-cli",
    "story": "s2",
    "data": {
-    "brief": "Implement --columns."
+    "brief": "Implement --columns.",
+    "mono": 464303.3,
+    "slept": 120.0
    }
   },
   {
@@ -1453,7 +1515,9 @@
     },
     "cost_usd": 0.3168,
     "turns": 18,
-    "commit": "9cfc865"
+    "commit": "9cfc865",
+    "mono": 464856.5,
+    "slept": 120.0
    }
   },
   {
@@ -1478,7 +1542,9 @@
    "role": "quality-czar",
    "story": "s2",
    "data": {
-    "brief": "Lint."
+    "brief": "Lint.",
+    "mono": 465619.1,
+    "slept": 120.0
    }
   },
   {
@@ -1500,7 +1566,9 @@
     },
     "cost_usd": 0.0,
     "turns": 37,
-    "commit": "7e26f36"
+    "commit": "7e26f36",
+    "mono": 466144.0,
+    "slept": 120.0
    }
   },
   {
@@ -1525,7 +1593,9 @@
    "role": "code-reviewer",
    "story": "s2",
    "data": {
-    "brief": "Review --columns."
+    "brief": "Review --columns.",
+    "mono": 466370.1,
+    "slept": 120.0
    }
   },
   {
@@ -1547,7 +1617,9 @@
     },
     "cost_usd": 0.6472,
     "turns": 32,
-    "commit": "cefe2a1"
+    "commit": "cefe2a1",
+    "mono": 466474.3,
+    "slept": 120.0
    }
   },
   {
@@ -1572,7 +1644,9 @@
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB."
+    "brief": "Memory test fails at 412MB.",
+    "mono": 467285.9,
+    "slept": 120.0
    }
   },
   {
@@ -1594,7 +1668,9 @@
     },
     "cost_usd": 0.2516,
     "turns": 17,
-    "commit": "7b8f2ab"
+    "commit": "7b8f2ab",
+    "mono": 467862.9,
+    "slept": 120.0
    }
   },
   {
@@ -1629,7 +1705,9 @@
    "role": "architect",
    "story": "s4",
    "data": {
-    "brief": "Design Excel-friendly encoding."
+    "brief": "Design Excel-friendly encoding.",
+    "mono": 468554.4,
+    "slept": 120.0
    }
   },
   {
@@ -1656,7 +1734,9 @@
     "commit": "c845007",
     "requirements_added": [
      "REQ-005"
-    ]
+    ],
+    "mono": 468889.0,
+    "slept": 120.0
    }
   },
   {
@@ -1703,7 +1783,9 @@
    "role": "developer-cli",
    "story": "s2",
    "data": {
-    "brief": "Error on unknown columns per REQ-002."
+    "brief": "Error on unknown columns per REQ-002.",
+    "mono": 469577.9,
+    "slept": 120.0
    }
   },
   {
@@ -1725,7 +1807,9 @@
     },
     "cost_usd": 0.2528,
     "turns": 33,
-    "commit": "ce76e9f"
+    "commit": "ce76e9f",
+    "mono": 470150.8,
+    "slept": 120.0
    }
   },
   {
@@ -1750,7 +1834,9 @@
    "role": "quality-czar",
    "story": "s2",
    "data": {
-    "brief": "Lint."
+    "brief": "Lint.",
+    "mono": 470712.4,
+    "slept": 120.0
    }
   },
   {
@@ -1784,7 +1870,9 @@
     },
     "cost_usd": 0.0,
     "turns": 5,
-    "commit": "03a56cc"
+    "commit": "03a56cc",
+    "mono": 471106.3,
+    "slept": 120.0
    }
   },
   {
@@ -1833,7 +1921,9 @@
    "role": "code-reviewer",
    "story": "s2",
    "data": {
-    "brief": "Re-review --columns after the fix."
+    "brief": "Re-review --columns after the fix.",
+    "mono": 471766.1,
+    "slept": 120.0
    }
   },
   {
@@ -1847,7 +1937,9 @@
     "summary": "Re-review clean.",
     "turns": 3,
     "next_role": null,
-    "open_questions": []
+    "open_questions": [],
+    "mono": 472180.0,
+    "slept": 120.0
    }
   },
   {
@@ -2135,7 +2227,9 @@
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB."
+    "brief": "Memory test fails at 412MB.",
+    "mono": 472520.0,
+    "slept": 120.0
    }
   },
   {
@@ -2596,7 +2690,9 @@
    "ended_at": 1791452188.1,
    "status": "done",
    "model": "sonnet",
-   "seconds": 411.6
+   "seconds": 411.6,
+   "clock": "wall",
+   "slept": 0.0
   },
   {
    "role": "architect",
@@ -2606,7 +2702,9 @@
    "ended_at": 1791452620.3,
    "status": "done",
    "model": "opus",
-   "seconds": 303.7
+   "seconds": 183.7,
+   "clock": "awake",
+   "slept": 120.0
   },
   {
    "role": "unit-tester",
@@ -2616,7 +2714,9 @@
    "ended_at": 1791453754.2,
    "status": "done",
    "model": "sonnet",
-   "seconds": 377.8
+   "seconds": 377.8,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "developer-cli",
@@ -2626,7 +2726,9 @@
    "ended_at": 1791454539.2,
    "status": "done",
    "model": "sonnet",
-   "seconds": 216.7
+   "seconds": 216.7,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "quality-czar",
@@ -2636,7 +2738,9 @@
    "ended_at": 1791455320.9,
    "status": "done",
    "model": "haiku",
-   "seconds": 400.6
+   "seconds": 400.6,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "code-reviewer",
@@ -2646,7 +2750,9 @@
    "ended_at": 1791456149.6,
    "status": "done",
    "model": "opus",
-   "seconds": 479.9
+   "seconds": 479.9,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "architect",
@@ -2656,7 +2762,9 @@
    "ended_at": 1791456696.3,
    "status": "done",
    "model": "opus",
-   "seconds": 137.7
+   "seconds": 137.7,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "integration-tester",
@@ -2666,7 +2774,9 @@
    "ended_at": 1791457572.1,
    "status": "done",
    "model": "sonnet",
-   "seconds": 317.3
+   "seconds": 317.3,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "customer-proxy",
@@ -2676,7 +2786,9 @@
    "ended_at": 1791458273.1,
    "status": "done",
    "model": "sonnet",
-   "seconds": 201.3
+   "seconds": 201.3,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "scribe",
@@ -2686,7 +2798,9 @@
    "ended_at": 1791458874.4,
    "status": "done",
    "model": "haiku",
-   "seconds": 159.9
+   "seconds": 159.9,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "architect",
@@ -2696,7 +2810,9 @@
    "ended_at": 1791459117.1,
    "status": "done",
    "model": "opus",
-   "seconds": 92.1
+   "seconds": 92.1,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "unit-tester",
@@ -2706,7 +2822,9 @@
    "ended_at": 1791460618.8,
    "status": "done",
    "model": "sonnet",
-   "seconds": 487.8
+   "seconds": 487.8,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "architect",
@@ -2716,7 +2834,9 @@
    "ended_at": 1791461087.9,
    "status": "done",
    "model": "opus",
-   "seconds": 124.4
+   "seconds": 124.4,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "developer-cli",
@@ -2726,7 +2846,9 @@
    "ended_at": 1791462078.2,
    "status": "done",
    "model": "sonnet",
-   "seconds": 397.1
+   "seconds": 397.1,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "unit-tester",
@@ -2736,7 +2858,9 @@
    "ended_at": 1791462803.8,
    "status": "done",
    "model": "sonnet",
-   "seconds": 472.3
+   "seconds": 472.3,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "developer-cli",
@@ -2746,7 +2870,9 @@
    "ended_at": 1791463825.0,
    "status": "done",
    "model": "sonnet",
-   "seconds": 441.9
+   "seconds": 441.9,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "developer-cli",
@@ -2756,7 +2882,9 @@
    "ended_at": 1791464976.5,
    "status": "done",
    "model": "sonnet",
-   "seconds": 553.2
+   "seconds": 553.2,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "quality-czar",
@@ -2766,7 +2894,9 @@
    "ended_at": 1791466264.0,
    "status": "done",
    "model": "haiku",
-   "seconds": 524.9
+   "seconds": 524.9,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "code-reviewer",
@@ -2776,7 +2906,9 @@
    "ended_at": 1791466594.3,
    "status": "changes_requested",
    "model": "opus",
-   "seconds": 104.2
+   "seconds": 104.2,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "developer-cli",
@@ -2786,7 +2918,9 @@
    "ended_at": 1791467982.9,
    "status": "done",
    "model": "sonnet",
-   "seconds": 577.0
+   "seconds": 577.0,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "architect",
@@ -2796,7 +2930,9 @@
    "ended_at": 1791469009.0,
    "status": "blocked",
    "model": "opus",
-   "seconds": 334.6
+   "seconds": 334.6,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "developer-cli",
@@ -2806,7 +2942,9 @@
    "ended_at": 1791470270.8,
    "status": "done",
    "model": "sonnet",
-   "seconds": 572.9
+   "seconds": 572.9,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "quality-czar",
@@ -2816,7 +2954,9 @@
    "ended_at": 1791471226.3,
    "status": "done",
    "model": "haiku",
-   "seconds": 393.9
+   "seconds": 393.9,
+   "clock": "awake",
+   "slept": 0
   },
   {
    "role": "code-reviewer",
@@ -2826,7 +2966,9 @@
    "ended_at": 1791472300.0,
    "status": "done",
    "model": "opus",
-   "seconds": 413.9
+   "seconds": 413.9,
+   "clock": "awake",
+   "slept": 0.0
   },
   {
    "role": "developer-cli",
@@ -2836,7 +2978,9 @@
    "ended_at": 1791472830.0,
    "status": "interrupted",
    "model": "claude-sonnet-4-5-20250929",
-   "seconds": 190.0
+   "seconds": 190.0,
+   "clock": "wall",
+   "slept": 0.0
   },
   {
    "role": "developer-cli",
@@ -2846,7 +2990,9 @@
    "ended_at": null,
    "status": null,
    "model": "sonnet",
-   "seconds": null
+   "seconds": null,
+   "clock": "wall",
+   "slept": 0.0
   }
  ],
  "messages": [
@@ -3767,7 +3913,8 @@
     "cache_creation": 43906
    },
    "cost_usd": 1.0767
-  }
+  },
+  "slept": 0.0
  },
  "health": {
   "level": "green",

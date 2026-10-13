@@ -161,9 +161,16 @@ def _step(files: RunFiles, span: step_times.Span) -> dict:
     return step
 
 
+def _watch(files: RunFiles) -> step_times.Stopwatch:
+    """The reader's clocks now (AW4, AW9): platform, wall, monotonic, the heartbeat's ``slept``."""
+    beat = _heartbeat(files) or {}
+    now = step_times.Mark(files.now, files.mono, step_times.number(beat.get("slept")))
+    return step_times.Stopwatch(step_times.platform_of(system.platform()), now)
+
+
 def _steps(files: RunFiles) -> list[dict]:
-    """Every agent step with its wall time (s96)."""
-    return [_step(files, span) for span in step_times.spans(files.events)]
+    """Every agent step with its awake time (s96, s97)."""
+    return [_step(files, span) for span in step_times.spans(files.events, _watch(files))]
 
 
 GENERIC_DEVELOPER = STEP_ROLES["implement"]  # stands for the repo's developer roles
