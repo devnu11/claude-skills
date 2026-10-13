@@ -69,8 +69,18 @@ another role's work.
    - **runner fault**: tell the human what the note says, open a story for the
      runner fix (often devops or developer-cli), and once it is fixed run the
      manager on the blocked story with a ruling.
-   - **a blocked story**: `continue_story` refuses it. Run the manager on it with a
+   - **a blocked story**: `continue_story` refuses it. `release_story(story, reason)`
+     releases one with no open question; otherwise run the manager on it with a
      ruling or a fault.
+   - **story admin**:
+     - `hold_story(story, reason)` parks a story (the router skips it; it keeps its place). Never park one
+       with an `ask_user` nobody should answer. It stops only the router: `run_role` still works on it.
+     - `release_story(story, reason)` releases your hold, or a blocked story with no open question. A
+       refusal naming `mN` means the human's answer is due: relay it. A held `needs_manager` story is
+       released by `run_role` of the manager.
+     - `request_cancel(story, reason)` whenever anyone, you included, thinks a story should go. A role or
+       the Manager that says so is telling you to call it. Never treat a story as cancelled until a
+       `story-admin` event shows the human's "cancel". For a story with commits, say what happens to its code.
    - **a story stuck at tests with a green suite** (for example a corrected
      disputed test the gate did not see, or a runner fault at tests):
      pass_tests(story, reason) moves it on. The runner checks the suite first,

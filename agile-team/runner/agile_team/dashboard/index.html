@@ -351,7 +351,7 @@ const RING_ORDER = [
   "architect", "unit-tester", "developer", "quality-czar", "code-reviewer",
   "integration-tester", "customer-proxy", "devops", "scribe", "manager",
 ];
-const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager: "serious", "round cap": "serious", held: "warning" };
+const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager: "serious", "round cap": "serious", held: "warning", "PO hold": "warning", "cancel requested": "serious" };
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
   pass: "good", bounce: "serious", hold: "warning", return: "warning", route: "warning",
@@ -1275,6 +1275,11 @@ function priorityLabel(e) {
 }
 
 const TIMELINE = {
+  "story-admin": (e) => ({
+    from: e.role ?? "human", to: e.story,
+    what: e.data.tool + ": " + (e.data.after.po_hold ? e.data.after.po_hold.kind : e.data.after.status),
+    body: e.data.reason, meta: e.data.question ?? "",
+  }),
   "step-start": (e, ctx) => ({
     from: PO, to: e.role, what: restarted(ctx.events, e) ? "brief (restarted)" : "brief", body: e.data.brief,
   }),
@@ -1409,13 +1414,16 @@ const READ_ONLY = "read-only: open the link the dashboard printed (it carries th
 const WAITING = "waiting for the runner: moves apply between steps";
 const STALE_TEXT = "the order changed since the dashboard showed it; reload";
 const DETAIL_FIELDS = ["sprint", "step", "status", "rounds", "disputes", "hold", "developer", "delivery"];
-const LABEL_TONE = { cancelled: "critical", held: "warning" };
+const LABEL_TONE = { cancelled: "critical", "cancel requested": "serious", held: "warning" };
 
 /** The stories that aren't done, split by the snapshot's backlog list (B1). */
 function backlogGroups(view) {
-  const open = view.stories.filter((s) => s.status !== "done");
+  const open = view.stories.filter((s) => s.status !== "done" && s.status !== "cancelled");
   const inBacklog = new Set(view.run.backlog);
-  return { current: open.filter((s) => !inBacklog.has(s.id)), backlog: open.filter((s) => inBacklog.has(s.id)) };
+  return {
+    current: open.filter((s) => !inBacklog.has(s.id)), backlog: open.filter((s) => inBacklog.has(s.id)),
+    cancelled: view.stories.filter((s) => s.status === "cancelled"),
+  };
 }
 
 function storyLabel(story) {
@@ -1612,8 +1620,9 @@ function groupHtml(title, rows, view, base) {
 }
 
 function backlogHtml(view) {
-  const { current, backlog } = backlogGroups(view);
-  return reviewBarHtml(view) + groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0) + doneHtml(view);
+  const { current, backlog, cancelled } = backlogGroups(view);
+  return reviewBarHtml(view) + groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0)
+    + (cancelled.length ? groupHtml("Cancelled", cancelled, view, null) : "") + doneHtml(view);
 }
 
 /** Run `fn`, then give a focused thread textarea its focus and selection back (H18). */
@@ -1853,7 +1862,7 @@ function storyCard(view, s, act) {
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
     working ? pill(`▶ ${act.role}`, "accent") : "",
-    s.wait ? pill(`⏸ ${s.wait.reason}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
+    s.wait ? pill(`⏸ ${s.wait.title}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
     <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}
