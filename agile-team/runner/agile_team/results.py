@@ -30,7 +30,9 @@ class Ran:
 
 
 BRIEF_RESULTS: dict[str, tuple[str, ...]] = {
-    "implement": ("test", "coverage"),
+    "implement": ("test", "coverage", "suite-runs"),
+    "e2e": ("suite-runs",),
+    "acceptance": ("suite-runs",),
     "quality": ("coverage", "lint", "static"),
     "review": ("coverage",),
 }

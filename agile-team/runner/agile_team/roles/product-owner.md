@@ -47,6 +47,10 @@ another role's work.
    `depends_on` at start and at `start_sprint`, and won't start a story until
    its dependencies are done; the stall line says `waiting on sN`. Put the
    dependency in the sprint, or change the file.
+   For a story that must prove a fix holds (a flaky test, a race), add
+   `suite_runs: N` (1–10) to its frontmatter; the runner then runs the test
+   command N times in a row after the story's e2e gate (or implement, with no
+   e2e step) and keeps the runs for the acceptance brief.
 3. `start_sprint(goal, stories=[...])`, then end your turn. The runner runs
    the manager, then the stories.
 4. The runner hands control back to you only for judgement. Your prompt

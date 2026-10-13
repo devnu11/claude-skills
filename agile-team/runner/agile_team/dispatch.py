@@ -1035,12 +1035,17 @@ class Runtime:
         if story.status is StoryStatus.DONE and reason not in self.state.po_renew_due:
             self.state.po_renew_due.append(reason)
 
+    def _keep_runs(self, story: StoryState, outcome: Outcome) -> None:
+        """Keep the gate's run and any extra runs under the step's gate."""
+        for ran in (outcome.ran, *outcome.extra_ran):
+            if ran:
+                self._keep(story, ran, f"{story.step} gate")
+
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
         outcome = self.pipeline.route(outcome, self.owners(story))
-        if outcome.ran:
-            self._keep(story, outcome.ran, f"{step} gate")
+        self._keep_runs(story, outcome)
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self.pipeline.advance(story, outcome)

@@ -48,6 +48,7 @@ class Name(StrEnum):
     GATE_TESTS_RED = "gate.tests-red"
     GATE_TESTS_REWORK = "gate.tests-rework"
     GATE_TESTS_COVERAGE = "gate.tests+coverage"
+    GATE_SUITE_RUNS = "gate.suite-runs"
     GATE_DISPUTE = "gate.dispute-output"
     GATE_ROUTE_LINT = "gate.route-lint"
     PRESENTATION_TRIAL = "presentation.trial"
@@ -106,6 +107,10 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
     (
         Name.GATE_TESTS_COVERAGE, A, STEP,
         "The implement gate: one coverage run proves green and the total",
+    ),
+    (
+        Name.GATE_SUITE_RUNS, A, STEP,
+        "Run the test command a story's suite_runs times in a row after its suite step's gate",
     ),
     (Name.GATE_DISPUTE, A, STEP, "Run the test command to show a disputed test's output"),
     (

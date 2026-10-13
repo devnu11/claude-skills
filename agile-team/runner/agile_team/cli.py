@@ -30,6 +30,7 @@ from . import (
     recovery,
     sandbox,
     stages,
+    suite_runs,
     system,
     threads,
     watch,
@@ -312,7 +313,10 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     live = presentation.Trial(config).liveness
     read = functools.partial(gates.read_repo_file, config.repo)
     runner = shell_runner(config.repo, config.gates.command_timeout_s)
-    checks = gates.Checks(commands, threshold, runner, baseline, missing, live, read=read)
+    suite = functools.partial(suite_runs.declared, config.stories_dir)
+    checks = gates.Checks(
+        commands, threshold, runner, baseline, missing, live, read=read, suite_runs=suite
+    )
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
 

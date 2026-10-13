@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import fingerprint, loops, stages, system
+from . import fingerprint, loops, stages, suite_runs, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .holds import PoHold
@@ -232,6 +232,7 @@ class Outcome:
     author: Author = Author.RUNNER
     rule: Rule = Rule.REPEAT
     ran: Ran | None = None
+    extra_ran: tuple[Ran, ...] = ()
     fixes: list[Fix] = field(default_factory=list)
     output: str = field(default="", repr=False)
 
@@ -366,6 +367,14 @@ def _always_live(_story: StoryState) -> Outcome:
     return Outcome(Verdict.PASS, READY)
 
 
+def _no_suite_runs(_story: str) -> suite_runs.Wanted:
+    return suite_runs.Wanted()
+
+
+def _passed() -> Outcome:
+    return Outcome(Verdict.PASS)
+
+
 @dataclass
 class Checks:
     """Command-backed gates for one repo."""
@@ -378,6 +387,7 @@ class Checks:
     liveness: Callable[[StoryState], Outcome] = _always_live
     read: Callable[[str], str | None] = _unread
     stages: stages.Opener = stages.unlogged
+    suite_runs: Callable[[str], suite_runs.Wanted] = _no_suite_runs
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -520,6 +530,46 @@ class Checks:
             return Outcome(Verdict.BOUNCE, f"coverage {pct}% is below {self.required_coverage()}%")
         return Outcome(Verdict.PASS, f"coverage {pct}%")
 
+    def after_suite_runs(self, story: str, first: Outcome) -> Outcome:
+        """Run the test command the story's ``suite_runs`` times after a passing gate."""
+        if first.verdict is not Verdict.PASS:
+            return first
+        wanted = self.suite_runs(story)
+        if wanted.refusal:
+            return Outcome(Verdict.HOLD, wanted.refusal, ran=first.ran)
+        if not wanted.count:
+            return first
+        with self.stages(stages.Name.GATE_SUITE_RUNS):
+            return _suite_outcome(first, self._run_suite(wanted.count))
+
+    def _run_suite(self, total: int) -> list[suite_runs.SuiteRun]:
+        """Run the test command up to ``total`` times, stopping after a failure."""
+        runs: list[suite_runs.SuiteRun] = []
+        for n in range(1, total + 1):
+            start = system.monotonic()
+            code, out = self.run(self.commands["test"])
+            runs.append(suite_runs.SuiteRun(n, total, code, system.monotonic() - start, out))
+            if code != 0:
+                break
+        return runs
+
+
+def _suite_outcome(first: Outcome, runs: list[suite_runs.SuiteRun]) -> Outcome:
+    """The gate's outcome after the suite runs (SR3, SR4)."""
+    last = runs[-1]
+    ran = Ran(suite_runs.SUITE_RUNS, last.code, suite_runs.report(runs))
+    extra = (*first.extra_ran, ran)
+    if last.code == 0:
+        text = suite_runs.passed_text(runs)
+        reason = f"{first.reason}; {text}" if first.reason else text
+        return replace(first, reason=reason, extra_ran=extra)
+    bounce = timed_out(last.code, last.out) or Outcome(
+        Verdict.BOUNCE,
+        suite_runs.SUITE_FAILED.format(n=last.n, total=last.total, tail=tail(last.out)),
+        output=last.out,
+    )
+    return replace(bounce, ran=first.ran, extra_ran=extra)
+
 
 def _ran(name: str, code: int, out: str) -> Ran:
     return Ran(name, code, result_tail(out))
@@ -558,6 +608,18 @@ class Pipeline:
         return _retry_here(gate(), story.step) if gate else self._handoff_outcome(handoff)
 
     def _gate_for(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+        gate = self._step_gate(story, handoff)
+        return self._suite_gate(story, gate) if self._suite_due(story, handoff) else gate
+
+    def _suite_due(self, story: StoryState, handoff: Handoff) -> bool:
+        return handoff.status == "done" and story.step == suite_runs.suite_step(self.steps)
+
+    def _suite_gate(
+        self, story: StoryState, gate: Callable[[], Outcome] | None
+    ) -> Callable[[], Outcome]:
+        return lambda: self.checks.after_suite_runs(story.id, (gate or _passed)())
+
+    def _step_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         if story.step == "tests" and story.dispute:
             return self._dispute_gate(story, handoff)
         if self.reworked(story):
