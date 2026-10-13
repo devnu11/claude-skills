@@ -219,7 +219,8 @@ def test_state_drops_environment_and_old_name_keys(scratch: Path) -> None:
 
 def test_state_dropped_keys_are_the_two_names() -> None:
     assert frozenset({"environment", cfg.OLD_ENVIRONMENT_NAME}) == state.STORY_DROPPED
-    assert state._kept({"id": "s1", "environment": "x", cfg.OLD_ENVIRONMENT_NAME: "y"}) == {"id": "s1"}
+    raw = {"id": "s1", "environment": "x", cfg.OLD_ENVIRONMENT_NAME: "y"}
+    assert state._kept(raw) == {"id": "s1"}
 
 
 # ----- SF8: the view -------------------------------------------------------------
