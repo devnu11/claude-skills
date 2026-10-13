@@ -321,7 +321,9 @@ def test_nothing_merged_and_main_unmoved_moves_no_head_but_still_runs_the_prs(
     env.br.step()
     assert len(pushes(fake)) == 1  # the already-pushed parent is not pushed again
     assert len(pr_calls(env, "create")) == 2 and b.stage is Stage.CI
-    assert not [c for c in fake.commands if c.argv[1:2] == ["branch"] and "--force" in c.argv]
+    assert [e.head for e in env.rt.state.upstream.stack] == [NEW, NEW]
+    forced = [c.argv[-2:] for c in fake.commands if "--force" in c.argv and "branch" in c.argv]
+    assert all(sha == NEW for _branch, sha in forced)  # re-pointed at the same head: a no-op
 
 
 def test_an_emptied_entry_is_dropped(env: Env, fake: FakeSystem) -> None:
@@ -353,7 +355,7 @@ def test_a_changed_tree_rebuilds_the_stack_and_moves_nothing(env: Env, fake: Fak
     assert note == "team/sprint-10 rebased onto origin/main has a different tree"
     assert pushes(fake) == [] and not pr_calls(env, "edit")
     assert (e10.head, e11.head) == (H2, H3)
-    assert not [c for c in fake.commands if c.argv[1:2] == ["branch"]]
+    assert not [c for c in fake.commands if "branch" in c.argv]
 
 
 def test_a_stopped_rebase_rebuilds_too(env: Env, fake: FakeSystem) -> None:

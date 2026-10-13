@@ -15,7 +15,7 @@ from .fake_system import FAKE_REPO, Done, FakeSystem
 from .test_boundary_runner import Env, entry, pushes
 from .test_s108_restack import H1, H2
 
-MUTATING = {"rebase", "reset", "merge", "checkout", "cherry-pick", "branch", "push"}
+MUTATING = {"rebase", "reset", "merge", "checkout", "cherry-pick", "branch", "push", "worktree"}
 
 
 @pytest.fixture
@@ -98,7 +98,7 @@ def test_a_start_sync_with_main_ahead_reports_and_changes_nothing(
     assert first["behind"] == 2
     assert env.rt.state.boundary is None
     assert finds == [] and env.prs.calls == [] and pushes(fake) == []
-    assert not [c for c in fake.commands if c.argv[1:2] and c.argv[1] in MUTATING]
+    assert not [c for c in fake.commands if MUTATING & set(c.argv)]
 
 
 def test_a_start_sync_leaves_sync_from_alone(env: Env, fake: FakeSystem) -> None:
