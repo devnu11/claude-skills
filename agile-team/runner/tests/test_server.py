@@ -104,7 +104,7 @@ def test_snapshot_route(app: Dashboard, box: dict[str, Any]) -> None:
         "/api",
         "/api/snapshot/",
         "/api/stream/x",
-        "/fixtures/snapshot.json",
+        "/fixtures/other.json",
         "/dashboard/",
         "/.team/run/state.json",
         "/../.team/run/keyfile",
@@ -117,8 +117,26 @@ def test_other_paths_are_404(path: str) -> None:
     assert wire.body == b""
 
 
-def test_routes_are_exactly_four() -> None:
-    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file", "/api/misc"}
+def test_routes_are_exactly_these() -> None:
+    assert set(server.ROUTES) == {
+        "/",
+        "/api/snapshot",
+        "/api/stream",
+        "/api/file",
+        "/api/misc",
+        "/fixtures/snapshot.json",
+    }
+
+
+def test_the_fixture_is_served_as_json_without_a_token() -> None:
+    wire = get("/fixtures/snapshot.json")
+    assert wire.status == 200
+    assert wire.header("Content-Type") == "application/json"
+    assert wire.body == system.read_bytes(server.FIXTURE)
+
+
+def test_the_fixture_comes_from_the_package_directory() -> None:
+    assert Path(server.__file__).parent / "fixtures" / "snapshot.json" == server.FIXTURE
 
 
 @pytest.mark.parametrize("method", ["PUT", "DELETE"])
