@@ -33,6 +33,7 @@ KEYS = [
     "turns",
     "heartbeat",
     "health",
+    "reorders",  # s83: its place in the document is free
 ]
 
 
@@ -199,7 +200,7 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     fixture = json.loads(FIXTURE_TEXT)
     config = write_run(scratch / "repo", fixture)
     snap = build(config, scratch)
-    assert list(snap) == KEYS
+    assert sorted(snap) == sorted(KEYS)
     assert shape(snap) == shape(fixture)
 
 
@@ -229,7 +230,7 @@ def test_build_matches_fixture_values(scratch: Path) -> None:
 
 def test_empty_run_files(config: cfg.Config, scratch: Path) -> None:
     snap = build(config, scratch)
-    assert list(snap) == KEYS
+    assert sorted(snap) == sorted(KEYS)
     for key in ("stories", "requirements", "events", "ledger", "messages", "answers"):
         assert snap[key] == []
     assert snap["run"]["status"] == "idle"

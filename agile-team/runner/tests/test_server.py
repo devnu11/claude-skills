@@ -117,11 +117,11 @@ def test_other_paths_are_404(path: str) -> None:
     assert wire.body == b""
 
 
-def test_routes_are_exactly_three() -> None:
-    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream"}
+def test_routes_are_exactly_four() -> None:
+    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file"}
 
 
-@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
 def test_other_methods_are_not_handled(method: str) -> None:
     assert not hasattr(server.Handler, f"do_{method}")  # http.server answers 501
 

@@ -174,6 +174,7 @@ class FakeSystem:
         self.slept: list[float] = []
         self.signals: list[tuple[str, int, int]] = []
         self.groups: dict[int, int] = {FAKE_IDS[0]: FAKE_IDS[1]}
+        self.tokens = 0
         self.survivors: set[int] = set()
         self.commands: list[Any] = []
         self.rules: list[_Rule] = []
@@ -484,6 +485,11 @@ class FakeSystem:
     def pid(self) -> int:
         """The runner's pid in the fake."""
         return FAKE_IDS[0]
+
+    def token(self) -> str:
+        """A predictable token: ``tok1``, ``tok2``, ... (s83)."""
+        self.tokens += 1
+        return f"tok{self.tokens}"
 
     def pgrp(self) -> int:
         """The runner's process group in the fake."""
