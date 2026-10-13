@@ -1135,9 +1135,35 @@ The Integration Tester presents each story to the Customer Proxy; the Proxy
 never builds or repairs an environment (a broken one is `changes_requested`
 to `integration-tester`).
 
-- Before each integration-tester step the runner wipes
-  `.team/run/presentation/<story>/` and, for every delivery kind but
-  `manual`, creates `workspace/` in it as an empty git repo (`git init`).
+- Before each integration-tester step the runner creates
+  `.team/run/presentation/<story>/` if it is missing and, for every delivery
+  kind but `manual`, `workspace/` in it as a git repo (`git init`, only when
+  `workspace/.git` is missing). It never wipes them (s65): the presentation
+  survives a bounce from acceptance back to e2e, and only the tester
+  replaces what is in it.
+- **Git stays in the workspace** (s65). The integration-tester (step `e2e`)
+  and the Customer Proxy (step `acceptance`) are *confined*, per the
+  `dispatch.GIT_CONFINED` table. Their workspace is the story's
+  `workspace/` for the tester, and the Proxy's copy
+  `<sandbox>/presentation/workspace` for the Proxy. Their Bash runs with
+  `GIT_CEILING_DIRECTORIES=<.team/run, resolved>`, so git in a directory
+  with no `.git` below the run dir says "not a git repository" instead of
+  finding the team repo, even from a script. It also runs with
+  `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`. The guard then allows any
+  git command whose directory and paths all lie inside the workspace. The
+  directory is the step's cwd, moved by a `cd DIR &&` before the command,
+  then by `-C`. The paths are `--git-dir`, `--work-tree`, `-c` values, and
+  the path arguments of `init`, `clone`, `remote`, `config`, `submodule`,
+  `worktree`, plus the repository of `push`/`fetch`/`pull`. That lets
+  `git init demo`, `git -C demo rebase main` and `git clone demo copy` run.
+  In the step's own cwd only the read-only list below is allowed. Anything
+  else is denied:
+  `<role> may not run `git <sub>` on <target>: in this step git works only inside <workspace>, and the team repo <repo> is the runner's. …`.
+  A `cd` followed by anything but `&&` makes the directory unknown, and
+  later git is denied unless it has an absolute `-C` inside the workspace.
+  A confined step's Bash may not mention `GIT_CEILING_DIRECTORIES`,
+  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_DISCOVERY_ACROSS_FILESYSTEM` or
+  `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`.
 - The tester builds the workspace the way a customer would have it (for this
   runner: `agile-team init` already run, plus the run files the ACs need),
   writes `PRESENTATION.md` (what to try for each AC), and adds real
@@ -1685,7 +1711,11 @@ Once `ci_green` says it is ready, merge it with **Rebase and merge**.
   `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`,
   `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
   push. Only the runner pushes, and only review branches (see "Sprint
-  boundaries").
+  boundaries"). The check sees through prefixes (s65): `X=1 git commit`,
+  `env git commit`, `command git commit`, `timeout 5 git commit` and
+  `/usr/bin/git commit` count as `git commit`. A confined step
+  (integration-tester, Customer Proxy) may also run any git inside its
+  workspace, and nothing outside it (see "Presentation").
 - Every role: Bash may not hold an open wait loop. A segment that starts
   with `until` or `while` is denied unless some segment starts with
   `timeout` or `gtimeout`. `while read …` and `while IFS= read …` (a loop

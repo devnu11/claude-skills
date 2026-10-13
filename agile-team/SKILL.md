@@ -118,7 +118,11 @@ command fails.
    after a story is done; it is expected. Acceptance is
    judged on what the Integration Tester presented to the Customer Proxy:
    `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
-   Show these when the human asks how a story was accepted. For a `web`
+   Show these when the human asks how a story was accepted. The workspace
+   is kept across rounds. Git in it can't reach the team repo: the runner
+   sets `GIT_CEILING_DIRECTORIES` for the tester's and the Proxy's steps,
+   and the guard denies their git outside the workspace (s65). Git demos
+   live in their own repos inside `workspace/`. For a `web`
    delivery the runner started the service and checked that it answers
    before the Proxy ran. The Proxy's OS sandbox may reach it on 127.0.0.1
    (macOS verified). The service's output is in
