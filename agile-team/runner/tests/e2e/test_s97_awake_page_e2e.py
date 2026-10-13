@@ -54,8 +54,10 @@ def test_time_by_counts_wall_and_tooltip_marks_it() -> None:
 
 
 def test_legend_says_awake_time() -> None:
-    """AC4 (AW12)."""
-    assert "Awake time:" in _run("out.l = timeLegend();")["l"]
+    """AC4 (AW12), superseded by TM8: the legend says Awake time and no longer says agent steps only."""
+    legend = _run("out.l = timeLegend();")["l"]
+    assert "Awake time:" in legend
+    assert "agent steps only" not in legend
 
 
 def test_replay_nulls_clock_and_slept_on_reopened_step() -> None:
