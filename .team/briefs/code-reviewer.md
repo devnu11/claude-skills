@@ -1,6 +1,27 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-12 (s15 done)
+
+## s15: Markdown rendering safe and pinned (1 round, all ACs pass) — verdict ship
+
+**Scope:** `agile-team/runner/agile_team/dashboard/index.html` (new markdown section), `tests/e2e/test_dashboard_markdown_e2e.py` (new file), `tests/e2e/test_dashboard_e2e.py` (one test renamed), docs. **Verdict: ship.** HTML matches design rules M1–M12 line for line. No Python code changed. E2E tests pass (payload inertness, link safety, plain fallback, load failure graceful, QA rendering, timeline kinds pick correctly, one function rule). Coverage unchanged. No new dependency (markdown-it is CDN-pinned, not imported). Ruff clean.
+
+**Design rules enforced in HTML:**
+- **M1:** `md(text)` sole renderer, `markdownit(` once in `safeMarkdown`, `.render()` on `markdown` once only.
+- **M2:** Loaded shape `<div class="md">` + HTML + `</div>`; unloaded `<div class="md plain">` + escaped + `</div>`; null/undefined empty.
+- **M3–M7:** Config `{ html: false, linkify: false, typographer: false, breaks: true }`, `disable("image")`, `validateLink = /^https?:\/\//i`, `link_open` rule adds `target="_blank" rel="noopener noreferrer"`.
+- **M8:** Boot calls `loadMarkdown()` not awaited; promise resolves (never rejects) on success or error; uses `globalThis.markdownit` from UMD wrapper.
+- **M9–M10:** Questions tab: open/raised/answered use `md()`; timeline: step-end/message/answer use `md()`, others use `esc()`; `MARKDOWN_KINDS` set and `bodyHtml()` helper data-driven.
+- **M11:** Pinned URL in `MARKDOWN_URL` constant, `SAFE_LINK` with escaped slashes.
+- **M12:** CSS `.md` (normal, overflow-wrap), `.md.plain` (pre-line), margins reset, block elements 6px, headings bold, lists indented, code/pre on surface-2, links on accent, blockquote on grid+ink-2.
+
+**Module structure:** No new JS files; all code in `index.html` after helpers section. Helpers: `safeMarkdown(markdownit)`, `useMarkdown(markdownit)`, `loadMarkdown()`, `md(text)`. Changes to `boot()`, `renderQuestions`, `renderAnswered`, timeline row builder.
+
+**Tests:** E2E only (real library needed). 10 cases: pin/copy version, syntax, links, 14 payloads inert, plain fallback, load failure graceful, questions render, timeline picks, one-function rule, two URLs exact.
+
+**Old rule updated (new ADR-0042):** "Only outside URL is Mermaid" → "Exactly two: Mermaid and markdown-it". E2E URL scan verifies both pinned, no others (SVG namespace excluded).
+
+No Python code, no new dependency, no test deleted or weakened. Snapshot and server unchanged. See design `agile-team/docs/design/s15.md`, ADR-0042.
 
 ## s51: Priority ranking, tier groups, pull logic (2 rounds, all defects fixed) — verdict ship
 

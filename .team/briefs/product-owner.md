@@ -1,6 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-12 (s15 done)
+
+## s15: Dashboard renders Markdown safely (ADR-0042)
+
+Questions tab and timeline handoff summaries now display formatted text (headings, lists, emphasis, code blocks, tables, links). Safe: raw HTML escapes, links limited to http(s), images disabled. Falls back to plain text if markdown-it library doesn't load. One renderer function, pinned URL like Mermaid, no build step.
+
+**What's changed:** Human-facing—Questions are now readable with formatting. No new hand-overs or tools for you. Integration-tester writes e2e tests for 10 cases (syntax, link safety, payload inertness, plain fallback). Code-reviewer checks rules M1–M12. Rule change: "exactly two pinned URLs" (Mermaid + markdown-it).
+
+See ADR-0042, design `agile-team/docs/design/s15.md` (rules M1–M12).
 
 ## s51: Started stories rank first; pulls need reasons (ADR-0016 amended)
 

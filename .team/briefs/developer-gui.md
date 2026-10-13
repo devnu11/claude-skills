@@ -1,18 +1,24 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-11 (s21 done)
+**Last updated:** 2026-10-12 (s15 done)
 
 See `developer.md` for base conventions.
 
-## s21 complete: Dashboard fixes
+## s15 complete: Dashboard renders Markdown safely
 
-Three features completed: $/tokens toggle on the "Tokens by" chart (persists across live updates), live budget updates from `.agile-team.toml`, and Done column visible at 1280px. All ACs pass.
+Questions tab and timeline now display Markdown with formatting (headings, lists, emphasis, code, tables) and fall back to plain text if the library doesn't load. All four ACs pass.
 
-- **AC1 toggle:** `ui.unit` defaults to `"tokens"`, click sets it, only `renderBars` reads it
-- **AC2 live config:** Each `snapshot.build()` calls `fresh_config()` to re-read config; falls back to startup on error
-- **AC3 board layout:** Flexbox with `flex: 1 1 0; min-width: 0` per column; empty columns 44px strips with vertical headings
-- **AC4 tests & docs:** All tests pass, coverage ≥95%, ruff clean
+- **AC1 syntax:** `md()` renders headings, paragraphs, lists, emphasis, inline/fenced code, tables, links via markdown-it default preset.
+- **AC2 safe:** Raw HTML escapes (`html: false`), links http(s) only (`validateLink`), images disabled, script/onerror payloads inert (confirmed in tests).
+- **AC3 one function:** `md(text)` is the only renderer; questions, raised questions, answered questions, and timeline bodies (step-end, message, answer) use it. Plain text stays escaped.
+- **AC4 pinned URL:** markdown-it@14.1.0 loaded from CDN like Mermaid, graceful plain-text fallback, testable offline with vendored copy.
 
-Minor findings: `costRow` and `mixRow` repeat role label (nit D-a, deferred); docs note N1 on fallback behavior (minor, no change needed).
+**Implementation notes:**
+- New markdown section in `index.html` (MARKDOWN_URL, SAFE_LINK, markdown state, functions: safeMarkdown, useMarkdown, loadMarkdown, md).
+- `boot()` calls `loadMarkdown()` (not awaited); on success, useMarkdown then re-render; on failure, warn and stay plain.
+- `renderQuestions` and `renderAnswered` call `md()` for question/answer text; `.q-answer` div styled smaller.
+- Timeline: data-driven `MARKDOWN_KINDS` set and `bodyHtml()` helper pick renderer by kind.
+- CSS: `.md` normal wrap, `.md.plain` pre-line; block elements 6px margin, headings bold, lists indented, code/pre on surface-2.
+- Vendored copy in tests/vendor/markdown-it-14.1.0.min.js for offline e2e (integration-tester's job).
 
-Known gap: board tested only with empty columns; integration test to cover full board at 1280px is pending.
+**Rule change (ADR-0042):** "Only outside URL is Mermaid" becomes "exactly two outside URLs: Mermaid and markdown-it" (both pinned).

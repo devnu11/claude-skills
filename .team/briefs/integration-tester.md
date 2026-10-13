@@ -1,6 +1,26 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-12 (s15 done)
+
+## s15: E2E tests for Markdown rendering (10 cases, all pass)
+
+Story complete. Dashboard Markdown rendering via markdown-it now tested offline with vendored library copy. File: `tests/e2e/test_dashboard_markdown_e2e.py`.
+
+**What to verify:**
+- **Pin and copy agree (AC4):** Parse `MARKDOWN_URL` from page script, version matches `markdown-it-<v>.min.js` file.
+- **Syntax (AC1):** All elements render (headings, paragraphs, lists, emphasis, code, tables, links) and output starts with `<div class="md">`.
+- **Links (AC2):** https/http links get `target="_blank"` and `rel` with `noopener`, autolinks work.
+- **Payloads inert (AC2):** 14 inputs (script, onerror, javascript:, data:, vbscript:, mailto:, relative, image, iframe, escaped quote) render with no `on*` attrs, no unsafe schemes in href, all tags in safe set, script input shows `&lt;script&gt;`.
+- **Plain fallback (AC4):** Unloaded `md()` returns `<div class="md plain">` + escaped text; null/undefined give empty div.
+- **Load failure (AC4, M8):** Node import fails (offline), promise resolves, markdown stays null, `md()` stays plain.
+- **Questions use md (AC3):** Open/raised/answered questions render with Markdown (bold, code, lists in q-answer).
+- **Timeline picks by kind (AC3, M10):** step-end/message/answer use md; gate/hold use esc.
+- **One function, no copies (AC1, M1):** `markdownit(` once, `function md(` once, `.render(` on markdown once (regex `\bmarkdown\.render\(`).
+- **Old rule updated:** E2E URL scan verifies exactly two pinned URLs (Mermaid + markdown-it).
+
+Use `dashboard_node.run_page()`, vendor copy in tests/ with `useMarkdown(require(...))` (CommonJS under node). Parse HTML output with `html.parser`. No node? Hand off blocked; ask for file.
+
+See design `agile-team/docs/design/s15.md` (rules M1–M12, test checklist), ADR-0042.
 
 ## s51: E2E test for router priority ranking (AC7 pending, unit and review complete)
 
