@@ -14,6 +14,7 @@ import shutil
 import socket
 import stat as stat_bits
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -53,6 +54,7 @@ __all__ = [
     "pgid",
     "pgrp",
     "pid",
+    "platform",
     "read_bytes",
     "read_end",
     "read_text",
@@ -243,6 +245,11 @@ def local_time(fmt: str) -> str:
 def sleep(seconds: float) -> None:
     """Block for ``seconds``."""
     time.sleep(seconds)
+
+
+def platform() -> str:
+    """The OS name as ``sys.platform`` gives it (``darwin``, ``linux``, ``win32``)."""
+    return sys.platform
 
 
 def pid() -> int:

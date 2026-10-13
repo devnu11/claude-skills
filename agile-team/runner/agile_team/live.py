@@ -246,6 +246,15 @@ class Meter:
         """Feed one SDK message."""
         self.pulse.take(self, message)
 
+    def interrupted(self, stop: Stop) -> Event:
+        """The reading's ``interrupted`` step-end with this pulse's ``clocks()`` added (AW1)."""
+        event = self.reading.interrupted(stop)
+        event.data.update(self.pulse.clocks())
+        return event
+
+
+SLEEP_GAP_BEATS = 2  # a beat gap over this many beats is sleep (AW2)
+
 
 @dataclass(eq=False)
 class Pulse:
@@ -254,6 +263,8 @@ class Pulse:
     run_dir: Path
     beat_s: float = 20.0
     started_at: float = field(init=False)
+    slept_s: float = field(init=False, default=0.0)
+    _last_beat: float = field(init=False)
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
     _open: list[Meter] = field(init=False, default_factory=list)
     _chore: dict[str, Any] | None = field(init=False, default=None)
@@ -263,7 +274,7 @@ class Pulse:
     _thread: threading.Thread | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
-        self.started_at = system.now()
+        self.started_at = self._last_beat = system.now()
 
     def open(self, who: Who) -> Meter:
         """Start measuring a query; the newest open meter is the one shown."""
@@ -336,9 +347,22 @@ class Pulse:
 
     def _beat(self) -> None:
         try:
+            self._count_sleep(system.now())
             self.write()
         except Exception as exc:
             self._report(exc)
+
+    def _count_sleep(self, now: float) -> None:
+        """Add a beat gap over ``SLEEP_GAP_BEATS`` beats, less one beat, to ``slept_s`` (AW2)."""
+        with self._lock:
+            gap = now - self._last_beat
+            self._last_beat = now
+            if gap > SLEEP_GAP_BEATS * self.beat_s:
+                self.slept_s += gap - self.beat_s
+
+    def clocks(self) -> dict[str, float]:
+        """``{"mono": …, "slept": …}`` for a step event (AW1)."""
+        return {"mono": system.monotonic(), "slept": round(self.slept_s, 1)}
 
     def _report(self, exc: Exception) -> None:
         """Leave one traceback in crash.log for the first failed beat."""
@@ -370,6 +394,7 @@ class Pulse:
             "at": system.now(),
             "mono": system.monotonic(),
             "started_at": self.started_at,
+            "slept": round(self.slept_s, 1),
             "chore": self._chore if live else None,
             "step": step,
         }
