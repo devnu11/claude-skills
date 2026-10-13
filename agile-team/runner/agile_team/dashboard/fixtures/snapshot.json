@@ -1201,42 +1201,6 @@
    }
   },
   {
-   "id": "e40",
-   "at": 1791458714.5,
-   "kind": "step-start",
-   "role": "scribe",
-   "story": null,
-   "data": {
-    "brief": "Record s1 decisions.",
-    "mono": 458594.5,
-    "slept": 120.0
-   }
-  },
-  {
-   "id": "e41",
-   "at": 1791458874.4,
-   "kind": "step-end",
-   "role": "scribe",
-   "story": null,
-   "data": {
-    "status": "done",
-    "summary": "ADR 0003: csv module over pandas.",
-    "next_role": null,
-    "open_questions": [],
-    "tokens": {
-     "input": 7735,
-     "output": 4526,
-     "cache_read": 138895,
-     "cache_creation": 24769
-    },
-    "cost_usd": 0.0,
-    "turns": 28,
-    "commit": "f52ddf5",
-    "mono": 458754.4,
-    "slept": 120.0
-   }
-  },
-  {
    "id": "e42",
    "at": 1791459025.0,
    "kind": "step-start",
@@ -2638,20 +2602,6 @@
    "turns": 35
   },
   {
-   "at": 1791458874.4,
-   "role": "scribe",
-   "model": "qwen3-coder",
-   "story": null,
-   "cost_usd": 0.0,
-   "tokens": {
-    "input": 7735,
-    "output": 4526,
-    "cache_read": 138895,
-    "cache_creation": 24769
-   },
-   "turns": 28
-  },
-  {
    "at": 1791458885.1,
    "role": "product-owner",
    "model": "opus",
@@ -2992,19 +2942,6 @@
    "seconds": 201.3,
    "clock": "awake",
    "slept": 0,
-   "recorded_model": null
-  },
-  {
-   "role": "scribe",
-   "story": null,
-   "at": 1791458714.5,
-   "sprint": 1,
-   "ended_at": 1791458874.4,
-   "status": "done",
-   "model": "unknown",
-   "seconds": 159.9,
-   "clock": "awake",
-   "slept": 0.0,
    "recorded_model": null
   },
   {
