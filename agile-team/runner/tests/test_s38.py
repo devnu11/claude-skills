@@ -130,7 +130,7 @@ def test_budget_status_uses_corrected_figures(scratch: Path) -> None:
 
 
 def test_budget_status_overcount_is_zero_without_legacy_lines(scratch: Path) -> None:
-    ledger = write_ledger(scratch / "l.jsonl", [entry(PO, 1.0, LATER), entry("scribe", 0.5)])
+    ledger = write_ledger(scratch / "l.jsonl", [entry(PO, 1.0, LATER), entry("devops", 0.5)])
     assert budget_status(ledger, 10.0)["po_overcount_usd"] == 0.0
 
 
@@ -192,7 +192,7 @@ def test_the_budget_halt_rule() -> None:
 def test_enforce_ceiling_below_does_nothing(make_runtime) -> None:
     rt = make_runtime()
     rt.config.team.budget_usd = 4.0
-    rt.ledger.record(entry("scribe", 1.0))
+    rt.ledger.record(entry("devops", 1.0))
     assert rt.enforce_ceiling() is None
     assert rt.state.status is not RunStatus.BLOCKED
     assert Relay(rt.config.run_dir).messages() == []
@@ -201,7 +201,7 @@ def test_enforce_ceiling_below_does_nothing(make_runtime) -> None:
 def test_enforce_ceiling_at_the_ceiling_blocks_once(make_runtime) -> None:
     rt = make_runtime()
     rt.config.team.budget_usd = 4.0
-    rt.ledger.record(entry("scribe", 4.0))
+    rt.ledger.record(entry("devops", 4.0))
     found = rt.enforce_ceiling()
     assert found.kind is halt.HaltKind.BUDGET
     assert (rt.state.status, rt.state.status_reason) == (RunStatus.BLOCKED, REASON)
@@ -219,7 +219,7 @@ def test_a_role_step_lands_then_the_run_blocks(make_runtime, configured) -> None
 
     rt = make_runtime(FakeQuery(cost=1.2, action=write))
     rt.config.team.budget_usd = 1.0
-    report = asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
+    report = asyncio.run(rt.run_role(StepRequest("devops", "go", None)))
     assert report["status"] != "halted"
     assert rt.state.interrupted == []
     assert rt.state.in_flight is None
@@ -227,7 +227,7 @@ def test_a_role_step_lands_then_the_run_blocks(make_runtime, configured) -> None
         RunStatus.BLOCKED,
         "budget reached: spent $1.20 of $1.00",
     )
-    again = asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
+    again = asyncio.run(rt.run_role(StepRequest("devops", "go", None)))
     assert again == {
         "status": "refused",
         "reason": "the run is blocked (budget reached: spent $1.20 of $1.00); end your turn",
@@ -237,7 +237,7 @@ def test_a_role_step_lands_then_the_run_blocks(make_runtime, configured) -> None
 def test_a_role_step_below_the_ceiling_does_not_block(make_runtime) -> None:
     rt = make_runtime(FakeQuery(cost=0.5))
     rt.config.team.budget_usd = 1.0
-    asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
+    asyncio.run(rt.run_role(StepRequest("devops", "go", None)))
     assert rt.state.status is not RunStatus.BLOCKED
 
 
@@ -285,7 +285,7 @@ def over_at_start(make_runtime, budget: float = 4.0):
     q = Totals([0.1, 0.1])
     rt = make_runtime(q)
     rt.config.team.budget_usd = budget
-    rt.ledger.record(entry("scribe", 5.0, LATER))
+    rt.ledger.record(entry("devops", 5.0, LATER))
     return rt, q
 
 

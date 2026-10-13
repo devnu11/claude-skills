@@ -221,7 +221,7 @@ def local_runtime(make_runtime, q, role):
 
 def test_local_provider_role_uses_endpoint_and_costs_nothing(make_runtime) -> None:
     q = FakeQuery(cost=0.7)
-    report = run(local_runtime(make_runtime, q, "scribe"), "scribe")
+    report = run(local_runtime(make_runtime, q, "devops"), "devops")
     env = q.calls[0]["options"].env
     assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
     assert env["ANTHROPIC_API_KEY"] == ""
@@ -419,10 +419,10 @@ def test_backlog_story_is_refused_for_story_bound_roles(make_runtime) -> None:
     assert out["reason"] == "story s1 is in the backlog; add it to a sprint"
 
 
-def test_backlog_story_still_allows_manager_and_scribe(make_runtime) -> None:
+def test_backlog_story_still_allows_manager(make_runtime) -> None:
     rt = make_runtime()
     open_story(rt, sprint=None)
-    for role in ("manager", "scribe"):
+    for role in ("manager",):
         out = run(rt, role, story="s1")
         assert "backlog" not in out.get("reason", "")
 
@@ -640,7 +640,7 @@ def test_web_proxy_keeps_read_to_rewrite_its_report(make_runtime) -> None:
     assert "Read" in q.calls[0]["options"].tools
 
 
-# ----- s19: holds, previous step, scribe queue, developer pick -------------------
+# ----- s19: holds, previous step, developer pick -------------------
 
 
 class Raising:
@@ -751,7 +751,7 @@ def test_ungated_roles_leave_previous_alone(make_runtime) -> None:
     rt = make_runtime(FakeQuery("no block"))
     keep = gates.PreviousStep("architect", "done")
     s = open_story(rt, "review", status=StoryStatus.DONE, previous=keep)
-    run(rt, "scribe", story="s1")
+    run(rt, "manager", story="s1")
     assert s.previous is keep
 
 
@@ -772,40 +772,13 @@ def test_note_step_sets_and_clears_the_hold(make_runtime) -> None:
     assert s.hold is None
 
 
-def test_note_step_removes_the_story_from_the_scribe_queue(make_runtime) -> None:
-    rt = make_runtime()
-    s = open_story(rt, "review", status=StoryStatus.DONE)
-    rt.state.scribe_due = ["s1", "s2"]
-    rt.note_step(s, {"role": "architect", "status": "done"})
-    assert rt.state.scribe_due == ["s1", "s2"]
-    rt.note_step(s, {"role": "scribe", "status": "bad_handoff", "reason": "r"})
-    assert rt.state.scribe_due == ["s2"]
-    rt.note_step(s, {"role": "scribe", "status": "done"})
-    assert rt.state.scribe_due == ["s2"]
-
-
-def test_a_story_reaching_done_queues_the_scribe(make_runtime) -> None:
+def test_a_story_reaching_done_queues_nothing(make_runtime) -> None:
     rt = make_runtime()
     open_story(rt, "review")
     rt.pipeline.steps = ["review"]
     run(rt, "code-reviewer", story="s1")
     assert rt.state.stories["s1"].status is StoryStatus.DONE
-    assert rt.state.scribe_due == ["s1"]
-
-
-def test_a_story_that_is_not_done_is_not_queued(make_runtime) -> None:
-    rt = make_runtime()
-    open_story(rt, "design")
-    run(rt, "architect", story="s1")
-    assert rt.state.scribe_due == []
-
-
-def test_running_the_scribe_dequeues_it(make_runtime) -> None:
-    rt = make_runtime()
-    open_story(rt, "review", status=StoryStatus.DONE)
-    rt.state.scribe_due = ["s1"]
-    run(rt, "scribe", story="s1")
-    assert rt.state.scribe_due == []
+    assert not hasattr(rt.state, "scribe_due")
 
 
 def test_the_architect_names_the_developer(make_runtime) -> None:

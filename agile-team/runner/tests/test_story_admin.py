@@ -328,13 +328,13 @@ def test_cancel_answer_cancels_and_cleans_up(make_runtime) -> None:
     story = requested(rt)
     story.commit, story.code_commits, story.sprint = "abc", ["abc"], 1
     rt.state.order, rt.state.pulled = ["s1", "s2"], ["s1"]
-    rt.state.human_order, rt.state.scribe_due = ["s1"], ["s1"]
+    rt.state.human_order = ["s1"]
     rt.relay.answer("m1", " Cancel. ")
     assert clerk(rt).settle() == ["s1"]
     assert story.status is StoryStatus.CANCELLED
     assert story.po_hold is None and story.hold is None and story.sprint is None
     assert (rt.state.order, rt.state.pulled) == (["s2"], [])
-    assert (rt.state.human_order, rt.state.scribe_due) == ([], [])
+    assert rt.state.human_order == []
     assert story.commit == "abc" and story.code_commits == ["abc"]
     event = admin_events(rt)[-1]
     assert event.role is None and event.data["tool"] == "answer"

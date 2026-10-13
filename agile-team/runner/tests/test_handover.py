@@ -98,9 +98,9 @@ ROWS = [
         "s1: developer reported failed: dead",
     ),
     (
-        {"status": "bad_handoff", "role": "scribe", "reason": "no block"},
+        {"status": "bad_handoff", "role": "manager", "reason": "no block"},
         T.BAD_HANDOFF,
-        "s1: scribe gave no valid handoff: no block",
+        "s1: manager gave no valid handoff: no block",
     ),
     (
         {"status": "done", "role": "architect", "open_questions": ["a?", "b?"]},
@@ -284,7 +284,7 @@ def test_previous_step_from_a_bad_handoff() -> None:
     [
         {"role": "architect", "status": "refused", "reason": "x"},
         {"role": "architect", "status": "error", "reason": "x"},
-        {"role": "scribe", "status": "done", "summary": "s"},
+        {"role": "manager", "status": "done", "summary": "s"},
         {"role": "architect", "status": "halted"},
     ],
 )

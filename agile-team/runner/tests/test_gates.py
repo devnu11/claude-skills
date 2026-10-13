@@ -174,7 +174,6 @@ def test_backlog_refusal_for_story_bound_roles() -> None:
 
 def test_backlog_refusal_ignored_for_ungated_and_storyless_roles() -> None:
     assert gates.dispatch_refusal("manager", story(sprint=None)) is None
-    assert gates.dispatch_refusal("scribe", story(sprint=None)) is None
     assert gates.dispatch_refusal("architect", None) is None
 
 

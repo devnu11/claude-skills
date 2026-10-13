@@ -84,7 +84,7 @@ def with_providers(repo: Path, home: Path, roles: dict) -> preflight.Preflight:
 
 
 def test_providers_checked_only_when_a_role_uses_them(configured: Path, key_home: Path) -> None:
-    roles = {"scribe": {"provider": "local"}, "devops": {"provider": "proxy"}}
+    roles = {"quality-czar": {"provider": "local"}, "devops": {"provider": "proxy"}}
     assert with_providers(configured, key_home, roles).providers() == [
         "providers.local: nothing answers at http://localhost:11434",
         "providers.proxy: $PROXY_TOKEN is not set",

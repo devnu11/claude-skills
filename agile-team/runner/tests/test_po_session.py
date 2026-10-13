@@ -159,7 +159,6 @@ def test_done_story_queues_one_boundary_even_if_logged_twice(make_runtime) -> No
     rt = build(make_runtime, script, steps=["design"])
     story = add_story(rt)
     drive(rt)
-    assert story.id not in rt.state.scribe_due
     reasons = [r for e in events(rt) for r in e.data["reasons"]] + rt.state.po_renew_due
     assert reasons.count("s1 done") == 1
 

@@ -176,8 +176,8 @@ def test_check_config_flags_bad_glob(configured: Path) -> None:
 
 def test_check_config_flags_unknown_provider(configured: Path) -> None:
     c = cfg.load(configured)
-    c.roles["scribe"] = {"provider": "local"}
-    assert "role scribe: unknown provider 'local'; add [providers.local]" in cli.check_config(
+    c.roles["quality-czar"] = {"provider": "local"}
+    assert "role quality-czar: unknown provider 'local'; add [providers.local]" in cli.check_config(
         c, configured
     )
     c.providers["local"] = Provider("local", "http://localhost:11434")
@@ -199,15 +199,15 @@ def test_make_runtime_lists_secrets(configured: Path, key_home: Path) -> None:
 
 def test_roles_list_shows_layers(configured: Path, isolated_global_roles: Path, capsys) -> None:
     system.make_dirs(isolated_global_roles)
-    system.write_text(isolated_global_roles / "scribe.md", "Keep ADRs short.")
+    system.write_text(isolated_global_roles / "quality-czar.md", "Keep ADRs short.")
     system.make_dirs(configured / ".team/roles")
-    system.write_text(configured / ".team/roles/scribe.md", "---\nextends: nope\n---\nbroken")
+    system.write_text(configured / ".team/roles/quality-czar.md", "---\nextends: nope\n---\nbroken")
     assert run("--repo", str(configured), "roles", "list") == 0
     out = json.loads(capsys.readouterr().out)
     assert out["_shared"] == {"layers": {"builtin": "base", "global": None, "repo": None}}
     assert out["architect"]["model"] == "opus" and out["architect"]["enabled"]
-    assert out["scribe"]["layers"] == {"builtin": "base", "global": "addendum", "repo": "replace"}
-    assert "unknown role" in out["scribe"]["error"]
+    assert out["quality-czar"]["layers"] == {"builtin": "base", "global": "addendum", "repo": "replace"}
+    assert "unknown role" in out["quality-czar"]["error"]
 
 
 def test_roles_scaffold_repo_and_global(

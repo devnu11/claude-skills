@@ -100,7 +100,7 @@ def test_new_fields_default_for_old_state_files() -> None:
         "",
         None,
     )
-    assert back.scribe_due == [] and back.delivered is None
+    assert back.delivered is None
 
 
 def test_story_defaults_come_after_sprint() -> None:
@@ -121,7 +121,7 @@ def test_story_defaults_come_after_sprint() -> None:
 def test_previous_step_round_trips_as_a_dataclass() -> None:
     from agile_team.gates import PreviousStep
 
-    st = state.RunState(sprint=1, scribe_due=["s1"], delivered=["m1"])
+    st = state.RunState(sprint=1, delivered=["m1"])
     prev = PreviousStep("code-reviewer", "changes_requested", "s", "bounce", "r", "developer-gui")
     st.stories["s1"] = StoryState("s1", "t", "implement", sprint=1, previous=prev, hold="stopped")
     st.stories["s2"] = StoryState("s2", "t", "design")
@@ -129,7 +129,7 @@ def test_previous_step_round_trips_as_a_dataclass() -> None:
     assert back.stories["s1"].previous == prev
     assert isinstance(back.stories["s1"].previous, PreviousStep)
     assert back.stories["s2"].previous is None and back.stories["s1"].hold == "stopped"
-    assert back.scribe_due == ["s1"] and back.delivered == ["m1"]
+    assert back.delivered == ["m1"]
 
 
 def test_previous_step_defaults() -> None:

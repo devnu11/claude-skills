@@ -200,62 +200,28 @@ def test_brief_carries_the_po_note(make_runtime) -> None:
     assert brief(rt, story).splitlines()[-1] == "- From the PO: use sqlite"
 
 
-def test_scribe_heading(make_runtime) -> None:
+def test_every_role_gets_the_step_heading(make_runtime) -> None:
     rt = make_runtime()
-    story = add_story(rt, "s7", status=StoryStatus.DONE)
-    text = brief(rt, story, "scribe")
-    assert text.splitlines()[0] == (
-        "Story s7 is done. Record its decisions as ADRs and refresh the role briefs. "
-        "Read the files below."
-    )
+    story = add_story(rt, "s7")
+    for role in ("architect", "developer", "code-reviewer", "quality-czar"):
+        assert brief(rt, story, role).startswith(router.STEP_HEADING)
 
 
 # ----- picking work (R2, R13) ------------------------------------------------------
 
 
-def test_pickers_is_boundary_manager_repeat_scribe_story() -> None:
+def test_pickers_is_boundary_manager_repeat_story() -> None:
     names = [p.__name__ for p in Router.PICKERS]
-    assert names == [
-        "_boundary_work",
-        "_manager_work",
-        "_repeat_work",
-        "_scribe_work",
-        "_story_work",
-    ]
+    assert names == ["_boundary_work", "_manager_work", "_repeat_work", "_story_work"]
 
 
 def test_manager_comes_first_and_runs_story_less(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt, "s1", status=StoryStatus.DONE)
     add_story(rt, "s2")
-    rt.state.scribe_due = ["s1"]
     rt.state.manager_due = ["sprint 1 start: G (s1)", "review model override for developer"]
     work = Router(rt).next_work()
     assert (work.role, work.story) == ("manager", None)
-
-
-def test_scribe_comes_before_stories(make_runtime) -> None:
-    rt = make_runtime()
-    add_story(rt, "s1", status=StoryStatus.DONE)
-    add_story(rt, "s2")
-    rt.state.scribe_due = ["s1"]
-    work = Router(rt).next_work()
-    assert (work.role, work.story.id) == ("scribe", "s1")
-
-
-def test_scribe_skips_held_and_question_blocked_done_stories(make_runtime) -> None:
-    rt = make_runtime()
-    add_story(rt, "s1", status=StoryStatus.DONE, hold="stopped")
-    add_story(rt, "s2", status=StoryStatus.DONE)
-    add_story(rt, "s3", hold="stopped")
-    rt.state.scribe_due = ["s3", "s2", "s1"]
-    rt.relay.post(Note("question", "Accept?", ["s2"]))
-    # R12: a hold on a done story is ignored; s3 (held, not done) and s2 (question) are skipped.
-    assert Router(rt).next_work().story.id == "s1"
-    rt.state.scribe_due.remove("s1")
-    assert Router(rt).next_work() is None
-    rt.relay.answer("m1", "yes")
-    assert Router(rt).next_work().story.id == "s2"
 
 
 def test_story_picker_takes_the_first_movable_story(make_runtime) -> None:
@@ -287,12 +253,10 @@ def test_a_po_held_story_is_skipped_and_the_next_one_runs(make_runtime) -> None:
     assert rt.state.stories["s1"].status is StoryStatus.ACTIVE
 
 
-def test_a_po_held_scribe_story_and_escalation_are_skipped(make_runtime) -> None:
+def test_a_po_held_escalation_is_skipped(make_runtime) -> None:
     rt = make_runtime()
     hold = PoHold(HoldKind.HOLD, "r")
-    add_story(rt, "s1", status=StoryStatus.DONE, po_hold=hold)
     add_story(rt, "s2", status=StoryStatus.NEEDS_MANAGER, repeated="same", po_hold=hold)
-    rt.state.scribe_due = ["s1"]
     assert Router(rt).next_work() is None
 
 
@@ -477,9 +441,9 @@ def test_one_run_drives_a_story_to_done_and_ends_at_sprint_end(make_runtime) -> 
     rt = build(make_runtime, script)
     add_story(rt)
     drive(rt)
-    assert step_roles(rt) == ["architect", "unit-tester", "developer", "code-reviewer", "scribe"]
+    assert step_roles(rt) == ["architect", "unit-tester", "developer", "code-reviewer"]
     story = rt.state.stories["s1"]
-    assert story.status is StoryStatus.DONE and rt.state.scribe_due == []
+    assert story.status is StoryStatus.DONE
     assert [r for r, _ in script.calls].count(PO_ROLE) == 2
     assert "Sprint 1 is complete: every story in it is done." in script.po_prompts[1]
     assert rt.state.status is RunStatus.IDLE
@@ -489,18 +453,18 @@ def test_one_run_drives_a_story_to_done_and_ends_at_sprint_end(make_runtime) -> 
     assert events[0].data == {
         "triggers": ["sprint_end"],
         "stories": [],
-        "steps": 6,
-    }  # five role steps + the end boundary
+        "steps": 5,
+    }  # four role steps + the end boundary
 
 
-def test_the_scribe_step_is_story_bound_and_the_manager_is_not(make_runtime) -> None:
+def test_the_architect_step_is_story_bound_and_the_manager_is_not(make_runtime) -> None:
     script = Script()
     rt = build(make_runtime, script, steps=["design"])
     add_story(rt)
     rt.state.manager_due = ["sprint 1 start: G (s1)"]
     drive(rt)
     starts = [(e.role, e.story) for e in rt.events.events() if e.kind == "step-start"]
-    assert starts == [("manager", None), ("architect", "s1"), ("scribe", "s1")]
+    assert starts == [("manager", None), ("architect", "s1")]
     assert rt.state.manager_due == []
     manager_prompt = script.prompts["manager"][0]
     assert manager_prompt.startswith("Manager review due: sprint 1 start: G (s1)")
@@ -517,7 +481,6 @@ def test_each_step_gets_a_standard_brief(make_runtime) -> None:
     assert first.startswith(HEADING) and "- Story: .team/stories/s1.md" in first
     assert "Story s1: Title s1 (step design, round 0)" in first
     assert "- Previous step: architect reported done" in script.prompts["code-reviewer"][0]
-    assert script.prompts["scribe"][0].startswith("Story s1 is done. Record its decisions")
 
 
 def test_the_architects_developer_pick_reaches_the_implement_step(make_runtime) -> None:
@@ -612,7 +575,7 @@ def test_a_blocked_step_holds_the_story_until_continue_story(make_runtime) -> No
     rt = build(make_runtime, script, steps=["design", "review"])
     add_story(rt)
     drive(rt)
-    assert step_roles(rt) == ["architect", "architect", "code-reviewer", "scribe"]
+    assert step_roles(rt) == ["architect", "architect", "code-reviewer"]
     assert "s1: architect reported blocked: need a database" in script.po_prompts[1]
     assert "- From the PO: use sqlite" in script.prompts["architect"][1]
     story = rt.state.stories["s1"]
@@ -627,7 +590,7 @@ def test_the_router_skips_a_held_story_and_runs_the_others(make_runtime) -> None
     add_story(rt, "s1", hold="stopped")
     add_story(rt, "s2")
     p = advance(rt)
-    assert step_roles(rt) == ["architect", "scribe"]
+    assert step_roles(rt) == ["architect"]
     assert p.kinds == [T.STALLED]
     assert p.lines[-1] == "s1 at design: held (stopped)"
     assert p.steps == 2
@@ -684,18 +647,7 @@ def test_a_quarantine_hands_over(make_runtime) -> None:
     assert "out-of-scope changes are quarantined in" in p.lines[0]
 
 
-# ----- scribe and manager (AC5) ----------------------------------------------------------
-
-
-def test_a_bad_scribe_handoff_still_clears_scribe_due(make_runtime) -> None:
-    script = Script({"scribe": ["no handoff block at all"]})
-    rt = build(make_runtime, script, steps=["design"])
-    add_story(rt)
-    drive(rt)
-    assert rt.state.scribe_due == []
-    assert handover_events(rt)[0].data["triggers"] == ["bad_handoff"]
-    assert "s1: scribe gave no valid handoff:" in script.po_prompts[1]
-    assert len(script.po_prompts) == 3  # bad handoff, then sprint end after the boundary
+# ----- manager (AC5) ----------------------------------------------------------
 
 
 def test_a_budget_checkpoint_runs_the_manager_before_the_next_step(make_runtime) -> None:
@@ -730,9 +682,9 @@ def test_a_bare_resume_runs_the_router_first(make_runtime) -> None:
     rt.state.po_session = "old"
     add_story(rt)
     asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
-    assert step_roles(rt) == ["architect", "scribe"]
+    assert step_roles(rt) == ["architect"]
     prompt = script.po_prompts[0]
-    assert prompt.startswith(RESUME_NOTE + "\n\nThe runner needs you (sprint 1; 3 steps")
+    assert prompt.startswith(RESUME_NOTE + "\n\nThe runner needs you (sprint 1; 2 steps")
     assert "Sprint 1 is complete" in prompt
     assert len(script.po_prompts) == 1
 
@@ -744,7 +696,7 @@ def test_a_resume_with_a_message_starts_with_the_po(make_runtime) -> None:
     add_story(rt)
     asyncio.run(po_tools.run_po(rt, Start("Also X", StartMode.RESUME)))
     assert script.calls[0] == (PO_ROLE, f"{RESUME_NOTE}\n\nNew from the human:\nAlso X")
-    assert step_roles(rt) == ["architect", "scribe"]
+    assert step_roles(rt) == ["architect"]
 
 
 def test_a_resume_without_a_session_gets_the_kickoff(make_runtime) -> None:
@@ -781,7 +733,7 @@ def test_a_human_message_hands_over_and_is_marked_delivered(make_runtime) -> Non
         "stories": ["s1"],
         "steps": 0,
     }
-    assert step_roles(rt) == ["architect", "scribe"]
+    assert step_roles(rt) == ["architect"]
 
 
 def test_a_stop_during_the_po_turn_ends_the_run(make_runtime) -> None:

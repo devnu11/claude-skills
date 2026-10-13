@@ -207,7 +207,6 @@ def test_done_story_hold_clearing_note_and_no_movement(make_runtime) -> None:
 
     rt = make_runtime(FakeQuery(), runner=FakeRunner())
     st = rt.state.stories["s1"] = story("review", status=StoryStatus.DONE, hold="x")
-    rt.state.scribe_due = ["s1"]
     t = Tools(rt)
     out = json.loads(
         asyncio.run(t.continue_story({"story": "s1", "note": "n"}))["content"][0]["text"]

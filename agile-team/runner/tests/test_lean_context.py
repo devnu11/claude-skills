@@ -269,7 +269,7 @@ def prompt_of(name: str) -> str:
 
 @pytest.mark.parametrize(
     "name",
-    ["architect", "unit-tester", "developer", "code-reviewer", "scribe", "manager"],
+    ["architect", "unit-tester", "developer", "code-reviewer", "quality-czar", "manager"],
 )
 def test_every_role_gets_the_read_little_rules(name: str) -> None:
     """The shared section (roles/_shared.md) reaches every role via system_prompt (L2)."""

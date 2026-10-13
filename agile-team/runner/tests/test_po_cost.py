@@ -98,7 +98,7 @@ def test_last_cost_is_the_last_entry_of_that_role(scratch: Path) -> None:
         led.record(Entry(role, "m", cost))
     assert led.last_cost("product-owner") == 7.0
     assert led.last_cost("architect") == 1.0
-    assert led.last_cost("scribe") == 0.0
+    assert led.last_cost("devops") == 0.0
 
 
 # ----- RunState -----------------------------------------------------------------------
@@ -231,7 +231,7 @@ def test_checkpoint_reflects_real_spend(make_runtime) -> None:
     turn(run, None)
     turn(run)
     assert rt.ledger.total() == pytest.approx(1.5)
-    asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
+    asyncio.run(rt.run_role(StepRequest("devops", "go", None)))
     assert rt.state.manager_due == ["budget checkpoint at $2.10"]
 
 
@@ -239,7 +239,7 @@ def test_role_steps_run_fresh_and_ledger_their_reported_cost(make_runtime) -> No
     q = Totals([], role_cost=0.4)
     rt = make_runtime(q)
     for _ in range(2):
-        asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
+        asyncio.run(rt.run_role(StepRequest("devops", "go", None)))
     assert [o.resume for o in q.calls] == [None, None]
     assert [e.cost_usd for e in rt.ledger.entries()] == pytest.approx([0.4, 0.4])
     assert rt.state.po_cost is None

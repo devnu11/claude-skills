@@ -104,14 +104,11 @@ def test_expand_globs() -> None:
 
 
 def test_system_prompt_order(repo: Path) -> None:
-    system.make_dirs(repo / ".team/briefs")
     system.write_text(repo / ".team/CLAUDE.md", "CHARTER")
-    system.write_text(repo / ".team/briefs/child.md", "BRIEF")
     b = book({"child": "ADDENDUM"}, repo)
     prompt = b.system_prompt(b.resolve("child"), "SCOPE")
     order = [
-        prompt.index(s)
-        for s in ("SHARED", "BASE", "CHILD", "ADDENDUM", "CHARTER", "BRIEF", "SCOPE")
+        prompt.index(s) for s in ("SHARED", "BASE", "CHILD", "ADDENDUM", "CHARTER", "SCOPE")
     ]
     assert order == sorted(order)
 

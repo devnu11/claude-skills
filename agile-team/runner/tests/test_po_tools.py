@@ -249,14 +249,14 @@ def test_run_po_resume_and_onboard(make_runtime) -> None:
 
 def test_set_role_model_moves_a_role_between_providers(make_runtime) -> None:
     rt = make_runtime(providers=Providers({"local": Provider("local", "http://localhost:11434")}))
-    rt.book.config_roles["scribe"] = {"provider": "local", "model": "qwen3-coder"}
-    assert "scribe (local: qwen3-coder)" in po_tools.first_prompt(rt, Start("t"))
+    rt.book.config_roles["quality-czar"] = {"provider": "local", "model": "qwen3-coder"}
+    assert "quality-czar (local: qwen3-coder)" in po_tools.first_prompt(rt, Start("t"))
     t = Tools(rt)
-    ghost = call(t.set_role_model({**OVERRIDE, "role": "scribe", "provider": "ghost"}))
+    ghost = call(t.set_role_model({**OVERRIDE, "role": "quality-czar", "provider": "ghost"}))
     assert ghost["reason"] == "unknown provider 'ghost'"
-    call(t.set_role_model({**OVERRIDE, "role": "scribe", "model": "sonnet"}))
-    assert rt.resolve("scribe").provider == "anthropic"
-    assert rt.resolve("scribe").model == "sonnet"
+    call(t.set_role_model({**OVERRIDE, "role": "quality-czar", "model": "sonnet"}))
+    assert rt.resolve("quality-czar").provider == "anthropic"
+    assert rt.resolve("quality-czar").model == "sonnet"
 
 
 # ----- s19: continue_story, set_developer, delivered ids, schemas ---------------
