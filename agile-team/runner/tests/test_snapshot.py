@@ -26,6 +26,7 @@ KEYS = [
     "roles",
     "stories",
     "requirements",
+    "reorders",
     "events",
     "ledger",
     "messages",
@@ -34,7 +35,6 @@ KEYS = [
     "turns",
     "heartbeat",
     "health",
-    "reorders",  # s83: its place in the document is free
 ]
 
 
@@ -224,10 +224,14 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     fixture = json.loads(FIXTURE_TEXT)
     config = write_run(scratch / "repo", fixture)
     snap = build(config, scratch)
-    assert sorted(snap) == sorted(KEYS)
-    # A started story must have a commit for its tier (commit_for), the fixture lists none.
-    got = {**snap, "stories": [{**s, "commits": []} for s in snap["stories"]]}
-    assert shape(got) == shape(fixture)
+    assert list(snap) == KEYS
+    # The fixture lists no commits; a started story gets one (commit_for), so expect it.
+    pulled = pulled_in(fixture["events"])
+    want = [
+        {**s, "commits": [c] if (c := commit_for(s, pulled)) else []} for s in fixture["stories"]
+    ]
+    assert shape(snap) == shape({**fixture, "stories": want})
+    assert [s["commits"] for s in snap["stories"]] == [s["commits"] for s in want]
 
 
 def test_build_matches_fixture_values(scratch: Path) -> None:
@@ -256,7 +260,7 @@ def test_build_matches_fixture_values(scratch: Path) -> None:
 
 def test_empty_run_files(config: cfg.Config, scratch: Path) -> None:
     snap = build(config, scratch)
-    assert sorted(snap) == sorted(KEYS)
+    assert list(snap) == KEYS
     for key in ("stories", "requirements", "events", "ledger", "messages", "answers"):
         assert snap[key] == []
     assert snap["run"]["status"] == "idle"

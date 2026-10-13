@@ -151,7 +151,7 @@ def test_a_started_story_with_no_hold_has_no_label() -> None:
 
 def test_story_id_shape() -> None:
     assert STORY_ID.match("s83") and STORY_ID.match("A_b-1")
-    for bad in ("", "1a", "../x", "s1/..", "/etc", "a" * 65, "s 1"):
+    for bad in ("", "1a", "../x", "s1/..", "/etc", "a" * 65, "s 1", "s1\n"):
         assert not STORY_ID.match(bad)
 
 
@@ -355,6 +355,14 @@ def test_all_skips_other_names_and_unreadable_files(make_runtime) -> None:
     system.write_text(folder / "notes.txt", "x")
     system.write_text(folder / "r10.json", Request("r10", Ask("s6", 1, "v")).to_json())
     assert [r.id for r in reqs.all()] == ["r1", "r10"]
+
+
+def test_all_skips_a_request_path_that_cannot_be_read(make_runtime) -> None:
+    rt = make_runtime()
+    reqs = Requests(rt.config.run_dir)
+    reqs.queue(Ask("s5", 1, "v"))
+    system.make_dirs(rt.config.run_dir / "reorders" / "r3.json")
+    assert [r.id for r in reqs.all()] == ["r1"]
 
 
 def test_all_with_no_folder_is_empty(make_runtime) -> None:
