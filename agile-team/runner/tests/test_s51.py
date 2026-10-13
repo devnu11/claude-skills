@@ -478,7 +478,7 @@ def test_first_refusal_returns_the_first_refusal_and_stops() -> None:
 def test_prioritise_while_a_started_story_is_held_keeps_its_place(make_runtime) -> None:
     t = origin_tools(make_runtime)
     t.runtime.state.stories["s38"].hold = "quarantine"
-    out = call(t.prioritise({"ids": ["s50"], "reason": ""}))
+    out = call(t.prioritise({"stories": ["s50"], "reason": ""}))
     assert out["status"] == "ordered"
     assert t.runtime.state.order == ["s50", "s45", "s38", "s21"]
     t.runtime.state.stories["s38"].hold = None
@@ -497,6 +497,6 @@ def test_move_story_while_a_started_story_is_held_keeps_its_place(make_runtime) 
 
 def test_a_refused_pull_is_returned_once_and_unknown_ids_are_not_pulled_on(make_runtime) -> None:
     t = origin_tools(make_runtime)
-    out = call(t.prioritise({"ids": ["s45", "s38"], "reason": ""}))
+    out = call(t.prioritise({"stories": ["s45", "s38"], "reason": ""}))
     assert out["status"] == "refused"
     assert out["reason"] == PULL_NEEDS_REASON.format(ids="s45")
