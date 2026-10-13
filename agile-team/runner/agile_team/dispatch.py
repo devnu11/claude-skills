@@ -995,8 +995,7 @@ class Runtime:
     def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
         chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
         with self.pulse.doing(chore):
-            outcome = self.pipeline.evaluate(plan.story, handoff)
-            return self.pipeline.route(outcome, self.owners(plan.story))
+            return self.pipeline.evaluate(plan.story, handoff)
 
     def owners(self, story: StoryState) -> Owners:
         """Who may write what, in pipeline order, for this story (R2)."""
@@ -1020,6 +1019,7 @@ class Runtime:
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
+        outcome = self.pipeline.route(outcome, self.owners(story))
         if outcome.ran:
             self._keep(story, outcome.ran, f"{step} gate")
         setback = _setback(plan, outcome)
