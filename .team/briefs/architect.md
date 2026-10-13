@@ -1,6 +1,6 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s53 shipped; s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
 
 ## s102 complete: Runner stages on Flow chart and Time chart (no new ADR, extends s96/s101 patterns)
 
@@ -12,6 +12,12 @@
 3. **`docs/architecture.md`:** `stage_log.py` (StageBoard protocol, open_row function); `live.py` (heartbeat.stages key); snapshot stage node display data-driven.
 
 See design `agile-team/docs/design/s102.md` (all rules, no new dependency).
+
+## s53 shipped: Story admin tools—PO holds, releases, request cancel (no new ADR, extends s83 desk pattern)
+
+**Decision:** PO has three new tools to manage story state without editing json: `hold_story` (parks story with reason, skips routing), `release_story` (releases hold or blocked story to prior step), `request_cancel` (asks human to cancel with yes/no question—only their "cancel" answer removes it). **No new ADR:** follows s83's desk pattern (pure rules module + I/O class) and s51's refusal helper (shared checks, `first_refusal` short-circuit). **Modules:** New `holds.py` (HoldKind enum, PoHold dataclass). New `story_admin.py` (pure + Clerk class, ~500 LOC). Changes: gates.py (po_hold field, CANCELLED status, FINISHED set), waits.py (two TITLED rows: cancel requested, PO hold), backlog.py (label logic), router.py (Clerk instance, settle in _tick, skip held/cancelled), po_tools.py (three tool methods via Clerk), snapshot.py (po_hold field, wait.title key). **Your docs work (none required at ship; architect does docs moves):** This shift to data-driven tools (no branching) is consistent with ADR-0043/s83 desk pattern; no new architectural decision. Docs sync with code: `reference/protocol.md` (po_hold state field, wait.title key, CANCELLED status, cancel question, story-admin event), `SKILL.md` step 5–6 (three tools, human cancel via question answer), `docs/customer/` backlog section (hold reason pill, cancel request flow), README row (if updated). No new dependency.
+
+See design `agile-team/docs/design/s53.md` (H1–H13).
 
 ## s101 complete: Nested tool-call rows on timeline expansion (no new ADR, extends s96/s98/s100 patterns)
 

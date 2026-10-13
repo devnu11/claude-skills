@@ -1,6 +1,15 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s53 complete: Three new story-admin tools on dashboard (all ACs verified on 46-test run)
+
+**Verdict: All ACs pass.** Tools tested via `agile-team status` in sandbox. **What you see:**
+- **`hold_story(story, reason)`:** Story row shows pill `⏸ PO hold: <reason>`, skipped from routing, position kept.
+- **`release_story(story, reason)`:** Story returns to its prior step with status ACTIVE. Reason goes to next step's brief.
+- **`request_cancel(story, reason)`:** Story shows `⏸ cancel requested: <reason>`, router posts one question to human. If human answers "cancel", story is removed from order (status CANCELLED, removed from Backlog). If "keep", hold released and story carries on. Only the human's answer cancels—never a tool.
+
+No new sandbox changes. Same service startup, same Presentation.md contract. Story state now carries `po_hold` field (kind/reason/question-id). Dashboard snapshot gains `po_hold` and `wait.title` for display. See design `agile-team/docs/design/s53.md`.
 
 ## s100 complete: Story timeline—every step, bounce, runner stage, wait on one time axis (all ACs verified)
 

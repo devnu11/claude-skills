@@ -1,6 +1,6 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
 
 ## s102 complete: Runner stages on Flow and Time charts (1 round, all ACs pass) — verdict ship
 
@@ -9,6 +9,28 @@
 **Design rules enforced:** Stage nodes (hexagons, STAGE_NODES table, SN1–SN8) drawn from events/open rows, edges to anchors, stats per scope, running line with awake time, active node picks first running stage or PO. Heartbeat stages key (HB1–HB4). Time pieces from three sources (TM1–TM4), runner row, PO split (model/tools/waiting), share bars on nodes (SB1–SB3). Flow and bars at natural size with scroll (RD1–RD4).
 
 See design `agile-team/docs/design/s102.md` (all rules SN1–RD4, test checklist).
+
+## s53 complete: Story admin tools—pure rules + Clerk I/O (1 round, all ACs pass) — verdict ship
+
+**Scope:** `holds.py` (new, HoldKind enum, PoHold dataclass), `story_admin.py` (new pure module, ~500 LOC, + Clerk class for I/O), changes to `gates.py`, `state.py`, `priority.py`, `dependencies.py`, `waits.py`, `backlog.py`, `router.py`, `po_tools.py`, `dashboard/snapshot.py`, `roles/product-owner.md`, tests. **Verdict: ship.** Coverage 99.54%, ruff clean. No new ADR (follows s83 desk pattern and s51 refusal helper).
+
+**Design rules enforced (H1–H13, no branching):**
+- **H1–H2:** `po_hold` is separate field from hand-over `hold`. Hold posts nothing, replaces reason if held. One event per success.
+- **H3:** Holds don't move stories (priority.held unchanged). Router skips held stories in _movable/_escalated/_scribable.
+- **H4–H5:** Board pill reads `⏸ PO hold: <reason>`. Release clears both holds, sets ACTIVE, saves reason in note for next step's brief.
+- **H6–H7:** Cancel request posts one question, waits for answer. Only human's "cancel" answer calls `cancel(state, story)` (sole place status becomes CANCELLED).
+- **H8:** Refusals data-driven (unknown, blank reason, finished, cancel pending, open question, manager wait, nothing to release, code unsaid). First match wins via `priority.first_refusal`.
+- **H9:** Settle before acting (story_admin.Clerk.settle in router._tick after desk.apply).
+- **H10:** One event per success (story-admin kind, role product-owner, data has tool/reason/before/after/question).
+- **H11:** CANCELLED is finished (FINISHED = {DONE, CANCELLED}). Removed from order/pulled/human_order/scribe_due. Keeps file/commits/events.
+- **H12:** Router never routes cancelled. _movable needs ACTIVE, _escalated needs NEEDS_MANAGER, _scribable checks po_hold and cancel clears scribe_due.
+- **H13:** Labels: cancelled status, cancel-requested hold, PO hold—all via `backlog.label()` table.
+
+**Module structure:** `story_admin.py` pure (Act/Decision enums, TOOLS table, refusal/effect/settle functions). `Clerk` does I/O: settle first, check refusal, apply tool, post question, save, emit event. `po_tools.py` routes hold_story, release_story, request_cancel through Clerk. No branching per tool (all via TOOLS dict). All texts exact per design.
+
+**Test areas:** Hold/release/cancel/settle actions, refusals (15 cases), no question on hold, s4 case (blocked, no hold, no question → released), continue_story leaves po_hold, settle answers, only answer cancels, router skip, waits.wait title, backlog labels, snapshot po_hold, state loaders. All 15 checklist items pass.
+
+See design `agile-team/docs/design/s53.md` (H1–H13, test checklist).
 
 ## s101 complete: Nested tool-call expansion (1 round, all ACs pass) — verdict ship (P1 tests pending)
 

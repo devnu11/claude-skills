@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
 
@@ -86,6 +86,10 @@ See ADR-0036 (s71 architecture).
 **Changes:** `snapshot.py` adds four functions (_assigned_developers, _routed_roles, _stepped_roles, _used_roles) and `used` field to roles; `index.html` fixes CSS, adds idleClassDef(), statsText(), natural-size Mermaid options. Fixture adds developer-db with used: false.
 
 No new CLI, no new hand-over. All tests pass (unit/code-review done; e2e P1 pending for integration-tester). See ADR-0047, design `agile-team/docs/design/s104.md` (FL1–FL9).
+
+## s53 complete: PO story admin tools—hold, release, request_cancel (no new ADR, follows s83/s51 patterns)
+
+New module `story_admin.py` (pure rules + `Clerk` I/O class) and `holds.py` (dataclass). Three MCP tools: `hold_story(story, reason)`, `release_story(story, reason)`, `request_cancel(story, reason)`. **Implementation:** PO holds are their own field (`StoryState.po_hold: PoHold | None`, not the hand-over hold). Hold posts nothing to outbox; holds and release use data-driven `TOOLS` table with shared refusal helper (`priority.first_refusal`). Cancel request posts one question and waits for human's answer. Rules H1–H13 in `story_admin.py` design spec. `po_tools.py` routes all three through `Clerk(runtime).run(act, args)` and `wait_for_answers` settles answered cancels. New `StoryStatus.CANCELLED = "cancelled"` (finished). Dashboard snapshot adds `po_hold` field and `wait.title`. No new dependency, follows s83 desk pattern (pure module + I/O class) and s51 refusal helper pattern. See design `agile-team/docs/design/s53.md` (H1–H13, test checklist).
 
 ## Context reduction (s23, s71)
 

@@ -1,6 +1,6 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
 
 ## s102 complete: Runner stages on Flow and Time charts (A6e: no new tool, no new hand-over)
 
@@ -9,6 +9,19 @@
 **How it works:** Runner-stage events record timing for the four internal checkpoints (env prep, implement gate, e2e trial, boundary sync). Heartbeat lists open stages so you see live progress. Page builds everything from raw data: no new Python calls, no new hand-overs. **No new tools, no new ADR** (extends snapshot and heartbeat patterns).
 
 See design `agile-team/docs/design/s102.md`.
+
+## s53 complete: Three new tools—hold, release, request_cancel (story admin)
+
+**Three new MCP tools for you:**
+1. **`hold_story(story, reason)`** – Hold a story (router skips it, keeps position). Use instead of parked `ask_user` to keep the board clean. Replaces reason if already held. No question posted.
+2. **`release_story(story, reason)`** – Release your hold or a `BLOCKED` story with no open question. Refusal if story has an open question naming a message id ("answer mN instead"). The reason goes to the next step's brief.
+3. **`request_cancel(story, reason)` – Ask the human to cancel a story.** Posts one question (cancel/keep options); human's "cancel" answer removes it from order and state; "keep" releases the hold. Story carries on until you release it manually. For stories with commits, say what happens to the code in the reason. No tool argument can cancel a story—only the human's answer to the question.
+
+**New hand-over section:** When a cancel request is answered, the story-admin event shows in your next hand-over. Release holds have no new output.
+
+**Data:** `StoryStatus.CANCELLED = "cancelled"` (new finished status). `state.json` gains `po_hold` field per story (kind: "PO hold"/"cancel requested", reason, question id if cancel). Dashboard snapshot includes `po_hold` and wait title on pill.
+
+**Rules (design H1–H13):** Hold ≠ hand-over hold. Release checks: open questions refuse, manager waits refuse, already-held+blocked+no-question always succeeds (s4 case pins it). Cancel pending refuses hold and request_cancel. Holds keep position (priority.held unchanged). Only human's answer cancels—never a tool. No new ADR (follows s83 desk and s51 refusal patterns). See design `agile-team/docs/design/s53.md`.
 
 ## s101 complete: Step rows expand to show nested tool calls (no new tool, no new hand-over)
 

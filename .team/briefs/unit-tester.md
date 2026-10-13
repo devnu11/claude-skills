@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
 
 ## s102 complete: Stage board and heartbeat stages tests (coverage ≥95%, ruff clean, all pass)
 
@@ -237,6 +237,10 @@ New modules for dashboard backlog tab and reorder requests. Test all refusals, a
 **No tests deleted. Coverage ≥95%, ruff clean.** Design rules B1–B20 enforced (see design `agile-team/docs/design/s83.md`).
 
 See ADR-0043.
+
+## s53 complete: Story admin tools tests—hold, release, cancel (coverage ≥95%, ruff clean, all pass)
+
+File: `tests/test_story_admin.py` (new, ~400 LOC). Test all 15 checklist items: hold/release/cancel/settle actions; refusals (unknown story, blank reason, finished story, cancel pending, open question, manager wait, no po_hold); no-question on hold; s4 case (blocked, no hold, no question—released); continue_story leaves po_hold set; settle with answers ("cancel", "keep", "unclear"); only answer cancels; router skip held/cancelled; waits.wait title text; backlog labels; priority tier/queue; state loaders; gates on finished; snapshot po_hold/wait/cancelled status. Design rules H1–H13 all enforced. No test deleted. See design `agile-team/docs/design/s53.md` (test checklist items 1–15).
 
 ## s51: Priority ranking tests (2 rounds, 99.41% coverage, ruff clean, all pass)
 
