@@ -1,6 +1,40 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s101 complete: Nested tool-call expansion (1 round, all ACs pass) — verdict ship (P1 tests pending)
+
+**Scope:** `tool_calls.py` (start_row, open_row functions; ToolSpan.as_dict refactor), `live.py` (Pulse._open_calls, heartbeat adds calls), `tool_groups.py` (new, MiscAsk, ask_key, gathered_calls), `snapshot.py` (misc_calls), `server.py` (_misc route), `dashboard/index.html` (nested-row functions N1–N15, ~1000 LOC), fixture. **Verdict: ship (P1 node-harness tests pending).**
+
+**Design rules enforced (N1–N15, AC1–AC5, AC-R):**
+- **N1–N2:** Every step/PO bar has a key; opened keys in shared `ui.tlOpen` Set. Bars matched by role/story/time window; PO matched by event.data.opened_at.
+- **N3:** Nested lines: model, lanes (one per stacking level), optional misc, or single "no tool calls" line if no group.
+- **N4:** Stacking by first-fit: sort by (from, id), put each call in first lane whose last `to` ≤ call.from, or new lane.
+- **N5:** Call bar state: ok/error/timeout (TOOL_LOOKS table), unfinished (hatched), open (grows to now), waiting (po.run_role with ok/open status).
+- **N6:** Model row pieces: bar span minus call union (tlComplement), drawn as bars, total label from step-end event's `model_s` or measured.
+- **N7:** Label: strip at y=top+4, h=8; lines below (name at +26, detail at +40, both x=x1+3). Drawn only if fit; narrow bars hide both in tooltip.
+- **N8:** secondsText: <60s → "N.NN s"; ≥60s → fmt.span.
+- **N9:** Misc box: text, rect (dashed), title with tool counts. Not on time axis (`x=LABEL_W+4`, no `data-from`/`data-to`).
+- **N10:** Misc on demand: click toggles ui.miscOpen key, fetches /api/misc once, caches result, renders list.
+- **N11:** Heartbeat gains `calls` after `step`: every open meter's calls, outer (PO) first.
+- **N12:** GET /api/misc: query (role, story, step, opened_at), returns 200 JSON array or 404.
+- **N13:** Keyed bars have `data-tl-keys`, `cursor:pointer`, `data-open="true"` when open. Row labels with keyed bars get `data-tl-keys`. Click toggles.
+- **N14:** Replay: `toolsAsOf` keeps groups with opened_at ≤ cursor, calls with at ≤ cursor, reopens unfinished calls.
+- **N15:** SVG ids prefixed by story id (tl-<story>-<group>-clip, etc.) so two timelines don't repeat ids.
+
+**Module structure:**
+- `tool_calls.py` pure + frozen dataclasses: `start_row(where, call)` returns TC11 keys up to `slept`; `open_row(where, call)` adds `status: "open"`; Calls.opened() lists open calls.
+- `live.py` Pulse: `_open_calls()` returns [row for m in open for row in m.reading.calls.opened()]; `heartbeat` adds `"calls": self._open_calls() if live else []`.
+- `tool_groups.py` pure (new): MiscAsk namedtuple (role, story, step, opened_at); ask_key() parses strings, validates finite float, returns Key|None; gathered_calls() finds group's misc rows, returns sorted by at.
+- `snapshot.py`: `misc_calls(config, ask)` reads tail, gathers via tool_groups, returns list|None.
+- `server.py`: Dashboard.misc_calls callable (default None). _misc handler parses query, calls app.misc_calls, returns 200 JSON or 404.
+- `index.html`: 40+ functions ≤8 LOC each, data tables exact (NEST.LANE_H/STRIP_H/INDENT/MIN_DETAIL_CHARS/MISC_PAD, TOOL_WAITING, TOOL_LOOKS, MODEL_LOOK, MISC_TITLE, NO_CALLS, MISC_LOADING/FAILED), SVG contract (data- attributes exact), UI state (tlOpen, miscOpen, miscCalls).
+
+**Tests:** No new test file (node harness tests pending as P1). Gate fixes: TL_TEXT count 9→12, heartbeat key lists. Fixture adds tools groups and heartbeat calls. Coverage 99.53%, ruff clean. All AC1–AC5 pass (customer-proxy verified on dashboard).
+
+**Minor findings (don't block):** m2, m7 helper opportunities (keyedBars, span). m3, m4 transient/live-refresh limits. m5 unfinished/waiting swatch collision. m6 CSS rule for pointer (equivalent). Docs not in diff (architect ship step).
+
+See design `agile-team/docs/design/s101.md` (N1–N15, test checklist, known limits), review round 1, acceptance (all six ACs pass on dashboard).
 
 ## s100 complete: Story timeline SVG (2 rounds, all defects fixed) — verdict ship (P1 pending)
 
@@ -66,6 +100,8 @@ See design `agile-team/docs/design/s98.md` (TC1–TC18, per-module changes, AC5�
 See design `agile-team/docs/design/s103.md` (R1–R8, rule table, per-module changes, test checklist AC1–AC3).
 
 ## s92 complete: Gate fixes with assertion changes require a named rule (no new ADR)
+
+Your brief on gate fixes: "Gate fix by `<role>` (commit `<sha>`) on `<files>`: `<note>`." When a fix changed what a test asserts without naming an AC or design rule, the note flags it: "assertion lines changed, but no rule was named; check them." Request changes if the rule doesn't support the change or is missing. All gate fix records show in exact order (R18). See `agile-team/docs/design/s92.md` (R19, test items 25, AC5).
 
 Your brief now lists gate fixes: "Gate fix by `<role>` (commit `<sha>`) on `<files>`: `<note>`." When a fix changed what a test asserts without naming an AC or design rule, the note flags it: "assertion lines changed, but no rule was named; check them." Request changes if the rule doesn't support the change or is missing. All gate fix records show in exact order (R18). See `agile-team/docs/design/s92.md` (R19, test items 25, AC5).
 

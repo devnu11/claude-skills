@@ -1,6 +1,16 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s101 complete: Step rows expand to show nested tool calls (no new tool, no new hand-over)
+
+**What you see on the dashboard:** Click a step bar or PO-turn bar on the timeline, or click its row label, and nested rows open underneath: one for model time (time not covered by tool calls), one or more lanes for tool calls (parallel calls stack), and a misc box at the end (small gathered calls, on demand). Each call bar shows its name and detail on two lines; narrow bars hide the text in the tooltip. Tool bars are teal (ok), red (error/timeout), hatched (unfinished), or neutral (waiting). An open call in the heartbeat grows live to "now". The PO's `po.run_role` wait is a neutral bar; its model time excludes the wait.
+
+**How it works:** Runner records each tool call in `tools.jsonl` with label, detail, start, end, status. Heartbeat lists open calls. Snapshot gathers short calls under `collapse_under_s` as misc. Dashboard derives nesting from raw data: one bar per call, stacked by overlap (N4), model computed as bar span minus calls (N6), misc on demand from `/api/misc` (N10). All text ≥12px with 4.5:1 contrast. **No new tools, no new hand-overs, no new ADR** (extends s100 timeline and s98 tool-call patterns).
+
+**P1 work:** Integration-tester writes node-harness tests (AC4/AC5/AC-R behaviour and readability cases, 14 items). When done, story ships.
+
+See design `agile-team/docs/design/s101.md` (N1–N15 rules, AC1–AC5, AC-R, test checklist), review round 1 (ship with P1 pending).
 
 ## s100 complete: Story timeline—every step, bounce, runner stage, PO turn, wait on one time axis (no new tool, no new hand-over)
 

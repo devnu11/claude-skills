@@ -1,6 +1,6 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done, P1 pending; s96 done, P1 pending)
+**Last updated:** 2026-10-13 (s101 done, P1 pending; s97 done, P1 pending; s96 done, P1 pending)
 
 See `developer.md` for base conventions.
 
@@ -14,6 +14,16 @@ Extended s96 with platform-aware awake-time logic. **Implementation (design AW1�
 **Code review done (all ACs pass).** Coverage 99.47%, ruff clean. No test deleted. Minor findings m1–m4 noted (not blocking): seam test missing (one line), dispatch clocks test weak, two helper duplicates. **Your work (P1):** Node-harness page tests (4 items: running line awake/wall, timeBy + tooltip, legend text, stepsAsOf replay). When done, AC4 is complete and story ships.
 
 See design `agile-team/docs/design/s97.md` (AW1–AW13, test checklist, known limits).
+
+## s101 complete: A step row expands into nested tool calls (all ACs pass, P1 pending)
+
+**Feature:** Dashboard timeline now shows step expansion: click a step bar or row label to reveal nested rows with model time, stacked tool-call lanes, and a misc box. Tool bars show name and detail on two lines (or tooltip if narrow); colours show state (ok/error/timeout/unfinished/open/waiting). Misc box loads calls on demand from `/api/misc`. Dashboard shows open calls in heartbeat. **Implementation (design N1–N15, AC1–AC5, AC-R):**
+- **Python:** `tool_calls.py` gains `start_row()` (TC11 keys up to `slept`) and `open_row()` (adds `status: "open"`). `Calls.opened()` returns open calls in order. `Pulse.heartbeat()` adds `"calls"` right after `"step"`. `tool_groups.py` (MiscAsk, ask_key, gathered_calls) and `snapshot.py` (misc_calls) gather calls from tail. `server.py` gains `GET /api/misc` route.
+- **Dashboard:** `index.html` gains nested-row functions (N1–N15, ~1000 LOC): barKey, barMatch, toolGroupOf, openCallsOf, toolState, secondsText, callTitle, callBar, callLanes, modelPieces, splitOf, nestOf, groupNests, groupLines, withNests, toggledKeys, miscText, miscAsk, toolsAsOf, and SVG builders (callSvg, miscSvg, miscListHtml, loadMisc, onTlClick). New state: ui.tlOpen, ui.miscOpen, ui.miscCalls. Fixture updated with tools groups and heartbeat calls.
+
+**Code review done (all ACs pass).** Coverage 99.53%, ruff clean. No test deleted. Gate fixes: TL_TEXT count 9→12 (call, detail, misc kinds), heartbeat key lists gain `calls` (both supported by design). **Your work (P1):** Node-harness page tests for AC4/AC5/AC-R (nesting, stacking, two-line labels, red/hatched/open states, PO wait, misc label/off-axis/on-demand, readability measured ≥12px/4.5:1). When done, story ships.
+
+See design `agile-team/docs/design/s101.md` (N1–N15, AC1–AC5, AC-R, test checklist lines 267–308), review round 1 (ship with P1 pending).
 
 ## s96 complete: Time per role on the Flow chart; Time measure in "Tokens by" (all ACs pass, P1 pending)
 

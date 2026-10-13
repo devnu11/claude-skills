@@ -1,6 +1,38 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s101: Node-harness tests for nested step expansion (P1, your work)
+
+**File:** `tests/test_s101_nested_page.py` (new, under `tests/dashboard_node.run_page` setup).
+
+**Design checklist (all via node harness, behaviour + readability):**
+
+**Behaviour (N1–N6, AC1–AC5):**
+1. **N1/N2 bar keys:** `barKey` of s3's live implement bar is `step:developer-cli:s3:<at>`, and the `e103` PO bar's is `po:e103`. `toolGroupOf` finds the live group for the live step, the interrupted group for the interrupted step, and the PO group for `e103`. A step with no group gives `null`.
+2. **AC1 nesting:** With nothing open, s3's `data-row-label`s and every bar's `y` equal the s100 output. Opening the live step adds `<key>/model`, the lanes and misc right after the `developer-cli` row and before `PO`, and moves the `PO` row down by the nest's height. Opening two bars on one row orders their nests by `from`.
+3. **AC1/AC4 stacking:** The parallel `Dev: Read` / `Dev: Grep` pair have different `data-lane`s. `slow` and `timed_out`, which don't overlap, share lane 0. Unit table for `callLanes`: touching calls share a lane, three mutually overlapping calls take three lanes.
+4. **AC2/AC4 two-line label:** With a window wide enough, `slow`'s `<g data-call>` holds `tlText("call", "Dev: run the unit tests")` and `tlText("detail", …)`. With a narrow window it holds neither, and its `<title>` has the name, the detail, `started` and the duration. Calllines table: name fits but detail too short (<MIN_DETAIL_CHARS); detail cut with `…`; empty detail.
+5. **AC3/AC4 states:** `timed_out` and the `Dev: Grep` error have `data-outcome` `timeout`/`error` and `--critical` fill. The interrupted step's call is `unfinished` with `fill="url(#tl-…-unfinished)"`. The heartbeat's open call is `open`, and its `data-to` equals `now`. At `now + 60` its `data-to` grows by 60.
+6. **AC4 PO wait:** Opening `e103` shows a `po.run_role` call with `data-outcome="waiting"` and detail `developer`. The PO's model row label reads `model · 9.5 s`, taken from `data.model_s`. The model pieces don't cover the call's `[from, to]`.
+
+**AC5 and state:**
+7. **N6 model pieces:** The live step's model pieces are the bar's span minus the union of its calls, including the open one. With no `step-end`, the label is the pieces' measure.
+8. **N3 none:** Opening an s1 step (no tools data) draws one `no tool calls` line and no call or model bars.
+9. **AC5 misc:** The live step's nest has one `data-misc` box, whose text is `misc · 3 calls · 0.04 s`. Its `<title>` starts with `MISC_TITLE` and lists `Read 2 · Grep 1`. It has no `data-from`/`data-to`. Its rect `x` is the same in two different windows (zoomed and panned). The interrupted step has no misc box.
+10. **AC5 on demand:** Stub `globalThis.fetch` to return `ok` with a two-row array. A click on `[data-tl-misc]` fetches `api/misc?role=developer-cli&story=s3&step=implement&opened_at=<…>` once, and `miscListHtml` then has two `li[data-misc-call]`. A second open uses the cache and fetches nothing. A rejecting fetch shows `could not load the calls`, and `[]` shows the "moved on" note. Nothing is fetched before the click.
+
+**Replay and controls (N14, N13):**
+11. **N14 replay:** `toolsAsOf` at a cursor inside `slow` turns it `open` with `ended_at: null`, and drops calls and groups after the cursor.
+12. **N13 toggle:** `toggledKeys` table (add all, remove all when all are open, mixed → add). A click on the `developer-cli` row label opens every developer-cli bar of s3.
+13. **N15 SVG ids:** Two timelines open (s2 and s3, Sprint scope) have no repeated `id` attribute (prefixed by story).
+
+**Readability (AC-R, measured):**
+14. **AC-R:** Extend the s100 TR helper. Parse `timelineHtml` for s3 with the live step and `e103` open, a wide window and an open misc list (stubbed loaded). Every text node outside `<title>` has ancestor `data-text` in `TL_TEXT`, rendered size ≥12 CSS px, contrast ≥4.5:1 against `--surface` in both themes. `call`, `detail`, `misc` are in `TL_TEXT`.
+
+**Coverage:** All 14 checklist items (design lines 267–308) verified via node harness. No process/e2e tests written (behavioural tests spawn node). Ship story when these land.
+
+See design `agile-team/docs/design/s101.md` (N1–N15, test checklist), review round 1 (ship with P1 pending).
 
 ## s100: Node-harness and measured tests for timeline behaviour and readability (P1, your work)
 

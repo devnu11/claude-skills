@@ -1,6 +1,21 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s101 complete: Nested tool-call rows on timeline expansion (no new ADR, extends s96/s98/s100 patterns)
+
+**Decision:** Tool calls are displayed as nested bars under expanded steps and PO turns. Model time (bar span minus calls), stacked lanes (overlapping calls), two-line labels (name, detail), colours (state: ok/error/timeout/unfinished/open/waiting), and misc box (gathered short calls, on demand) are browser-computed from raw snapshot `tools` section and `heartbeat.calls`. Rules N1–N15: bar keys and open tracking (N1–N2), nested line nesting (N3), call stacking (N4), call bar states (N5), model row (N6), label text and tooltips (N7–N9), misc box off-axis and on-demand (N9–N10), open calls in heartbeat (N11), `/api/misc` route (N12), clicking and keyboard (N13), replay (N14), SVG ids unique per story (N15). All text ≥12px with 4.5:1 contrast (AC-R).
+
+**Architecture:** Pure modules: no new one (follows s100/s98 patterns). Python: `tool_calls.py` gains `start_row()` and `open_row()` (refactoring ToolSpan.as_dict); `live.py` Pulse gains `_open_calls()` method; `tool_groups.py` (new, MiscAsk, ask_key, gathered_calls); `snapshot.py` gains `misc_calls()` function; `server.py` gains `_misc` handler. Browser: `index.html` gains nested-row functions (N1–N15, ~1000 LOC) and SVG builders.
+
+**Data contract:** `heartbeat.calls` (new, after `step`) lists open calls as `open_row()` rows. `tools` section unchanged. `GET /api/misc` returns JSON array of misc calls re-gathered from tail. No new event kinds or state fields.
+
+**Your docs work (due with ship, design section "Docs at ship"):**
+1. **`reference/protocol.md`:** Heartbeat `calls` key (N11 row), `GET /api/misc` route (N12 route), timeline's expandable rows (N1–N10 summary).
+2. **`docs/customer/dashboard.md`:** In "Story timeline" section, paragraph on expanding a step or PO turn: model row, lanes, labels, colours, misc, tooltip on narrow bars.
+3. **`docs/architecture.md`:** Four new rows (tool_calls, live, tool_groups, server modules). `tool_calls.start_row`/`open_row` keying; `live.py` heartbeat `calls`; `tool_groups.py` MiscAsk/gathered_calls; `server.py` /api/misc route.
+
+No new ADR (extends s96 snapshot pattern and s98 append-only tools pattern). No new dependency. See design `agile-team/docs/design/s101.md` (N1–N15, data contract, per-module changes, test checklist, known limits), review round 1 (ship with P1 tests pending).
 
 ## s100 complete: Story timeline—raw data in snapshot, views in browser (no new ADR, extends s96/s98 patterns)
 
