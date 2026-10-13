@@ -194,7 +194,8 @@ def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSy
         "started_at",
         "chore",
         "step",
-    ]  # fmt: skip (s97 adds "slept", checked in test_s97_clocks)
+        "calls",
+    ]  # fmt: skip (s101 N11 adds "calls"; s97 adds "slept", checked in test_s97_clocks)
 
 
 def test_tool_calls_and_results_write_the_heartbeat(fake: FakeSystem) -> None:
