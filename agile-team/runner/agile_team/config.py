@@ -17,8 +17,8 @@ from typing import Any
 from . import stages, system
 from .commands import DEFAULT_TIMEOUT_S
 from .providers import DEFAULT as DEFAULT_PROVIDER
-from .roles import retired_sections
 from .providers import Billing, Provider, ProviderKind
+from .roles import retired_sections
 
 CONFIG_NAME = ".agile-team.toml"
 TEAM_DIR = ".team"
