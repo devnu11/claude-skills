@@ -488,7 +488,7 @@ function asOf(snap, cursor) {
 
 /** Steps as they stood at `cursor`: later starts dropped, later ends reopened (ST15). */
 function stepsAsOf(steps, cursor) {
-  const reopen = { ended_at: null, seconds: null, status: null };
+  const reopen = { ended_at: null, seconds: null, status: null, clock: null, slept: null };
   return steps.filter((s) => s.at <= cursor).map((s) => (s.ended_at > cursor ? { ...s, ...reopen } : s));
 }
 
@@ -828,10 +828,16 @@ function liveLines(view, ctx, name) {
 /** The newest open step of role `name`, or undefined. */
 const openStep = (view, name) => view.steps.findLast((s) => s.role === name && !finished(s));
 
+/** Awake seconds of an open step so far: the clock since its start less the sleep the snapshot saw (AW10). */
+const awakeSoFar = (view, step) => clockNow(view) - step.at - (step.slept ?? 0);
+
+/** " (may include sleep)" for a step timed by wall clock, else "" (AW10, AW11). */
+const sleepNote = (step) => (step.clock === "wall" ? " (may include sleep)" : "");
+
 /** `<br/>⏱ running 12 min` for a role whose step is open, else "" (AC2, ST11). */
 function runningLine(view, name) {
   const step = openStep(view, name);
-  return step ? "<br/>" + mmdText("⏱ running " + fmt.span(clockNow(view) - step.at)) : "";
+  return step ? "<br/>" + mmdText("⏱ running " + fmt.span(awakeSoFar(view, step)) + sleepNote(step)) : "";
 }
 
 /** A role's stats for the scope, or "idle" when it has none (FL4). */
@@ -1716,12 +1722,13 @@ function ledgerTotals(view, key) { return totalsBy(view.ledger, key); }
 /** Step-time totals per group over finished steps, for the Time unit. */
 function stepTotals(view, key) { return timeBy(view.steps.filter(finished), key); }
 
-/** `{group: {steps, seconds}}` over `steps` (killed steps count, adding 0 s). */
+/** `{group: {steps, seconds, wall}}` over `steps` (killed steps count, adding 0 s; `wall` counts wall-clock steps). */
 function timeBy(steps, key) {
   const out = {};
   for (const s of steps) {
-    const t = (out[s[key] ?? "(no story)"] ??= { steps: 0, seconds: 0 });
+    const t = (out[s[key] ?? "(no story)"] ??= { steps: 0, seconds: 0, wall: 0 });
     t.steps++; t.seconds += s.seconds ?? 0;
+    if (s.clock === "wall") t.wall++;
   }
   return out;
 }
@@ -1837,7 +1844,7 @@ function costLegend() {
 
 /** Legend of the Time unit (ST14). */
 function timeLegend() {
-  return `<span><i class="sw" style="background:var(--s2)"></i>Step time (agent steps only; runner stages: see A6)</span>`;
+  return `<span><i class="sw" style="background:var(--s2)"></i>Awake time (agent steps only; runner stages: see A6)</span>`;
 }
 
 const UNITS = {
@@ -1860,7 +1867,7 @@ function costRow({ role, t, whole, total }, i, scale) {
 
 function timeRow({ role, t, whole, total }, i, scale) {
   const w = Math.max(0, t.seconds * scale), share = whole ? (100 * t.seconds) / whole : 0;
-  const tip = `<b>${esc(role)}</b><br>${fmt.span(t.seconds)} <span class="k">(${fmt.pct(share)} of time)</span> · ${t.steps} steps`;
+  const tip = `<b>${esc(role)}</b><br>${fmt.span(t.seconds)} <span class="k">(${fmt.pct(share)} of time)</span> · ${t.steps} steps${t.wall ? ` · ${t.wall} may include sleep` : ""}`;
   return oneBar(i, { role, w, fill: "var(--s2)", tip, value: fmt.span(total) });
 }
 
