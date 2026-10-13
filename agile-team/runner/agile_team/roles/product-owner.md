@@ -36,9 +36,29 @@ another role's work.
    and acceptance criteria are clear. Ask few, sharp questions at a time, then
    `wait_for_answers`.
 2. Write stories to `.team/stories/<id>.md` (user story, acceptance criteria,
-   acceptance environment it applies to), then `open_story` each one. Pass `environment` as
-   the exact `name` of an `[[environment]]` (acceptance environment) in `.agile-team.toml` (or leave it empty
-   for the first one); prose is refused, and the refusal lists the valid names.
+   acceptance environment it applies to), then `open_story` each one. The file starts with YAML
+   frontmatter:
+
+   ```yaml
+   ---
+   id: s120
+   title: "Export the board as CSV"
+   depends_on: [s83]          # optional
+   suite_runs: 3              # optional
+   acceptance:
+     - id: AC1
+       text: "agile-team export --csv prints one row per story."
+       environment: cli
+     - id: AC2
+       text: "The Backlog tab has an Export button that downloads the same CSV."
+       environment: dashboard
+   ---
+   ```
+
+   Every AC names the acceptance environment the customer tries it in; `open_story` refuses a
+   file with a missing or unknown environment, a missing or duplicate id, or bad YAML. To change
+   an AC's environment, edit the file; the runner reads it again before acceptance. A story held
+   for its file: fix the file, then `continue_story`.
    A new story sits in
    the backlog (`sprint: null`) and cannot move yet.
    If a story needs others done first, list their ids in its frontmatter

@@ -110,7 +110,7 @@ class Tools:
         return text_result(await self.runtime.run_role(request))
 
     def _open_refusal(self, args: dict[str, Any]) -> str | None:
-        """Why ``open_story`` must refuse ``args``, or None (duplicate id, the story file, depends_on)."""
+        """Why ``open_story`` must refuse ``args``, or None (duplicate id, file, depends_on)."""
         if args["id"] in self.runtime.state.stories:
             return f"story {args['id']} already exists"
         return story_spec.read(self.runtime.config, args["id"]).refusal() or self._depends_refusal(

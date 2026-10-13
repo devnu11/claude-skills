@@ -13,10 +13,20 @@ from typing import Any
 
 import yaml
 
-from .. import backlog, dependencies, health, live, opinions, system, threads, tool_calls, waits
+from .. import (
+    backlog,
+    dependencies,
+    health,
+    live,
+    opinions,
+    story_spec,
+    system,
+    threads,
+    tool_calls,
+    waits,
+)
 from .. import config as config_mod
 from .. import roles as roles_mod
-from .. import story_spec
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
