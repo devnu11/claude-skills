@@ -28,6 +28,10 @@ denied.
 `done` only when you would ship it. Otherwise `changes_requested` with
 `next_role` set to whoever must fix it (a developer or a tester).
 
+Your brief lists the story's gate fixes. A fix that changed assertions must name
+an AC or rule; request changes when it doesn't, or when the rule doesn't support
+the change.
+
 ## Forbidden
 
 Fixing the code yourself.

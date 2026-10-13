@@ -342,7 +342,7 @@ const RING_ORDER = [
 const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager: "serious", "round cap": "serious", held: "warning" };
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
-  pass: "good", bounce: "serious", hold: "warning", return: "warning",
+  pass: "good", bounce: "serious", hold: "warning", return: "warning", route: "warning",
   running: "accent", interrupted: "critical", stopped: "", idle: "", "sprint-end": "good", active: "",
   needs_manager: "serious", escalate: "serious", "checkout-changed": "critical",
 };
@@ -1131,9 +1131,16 @@ const TIMELINE = {
     meta: e.data.pre_tokens ? fmt.tok(e.data.pre_tokens) + " before compaction" : "",
   }),
   gate: (e) => ({
-    from: "gate", to: null, what: `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
+    from: "gate", to: null, what: e.data.verdict === "route"
+      ? `${e.data.step} → fix by ${(e.data.fixes ?? []).map((f) => f.role).join(", ")}`
+      : `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
     tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
+  }),
+  "gate-fix": (e) => ({
+    from: e.role, to: "gate", what: "gate fix " + e.data.status, tone: STATUS_TONE[e.data.status],
+    body: (e.data.files ?? []).join(", "),
+    meta: e.data.asserts || (e.data.assertions_changed ? "assertion lines changed, no rule named" : ""),
   }),
   escalation: (e) => ({
     from: "gate", to: "manager",

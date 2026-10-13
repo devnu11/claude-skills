@@ -54,3 +54,8 @@ A dispute the unit-tester upholds costs no round. One it confirms costs a
 round, and only the first round_cap disputes on a story are free. Use it
 only when the test and the design disagree, not when your code fails a
 correct test.
+
+If the gate fails only in files you can't edit, don't block: hand off `done`.
+The runner sends those items to the role that owns the file and brings the story
+back without a round. If a test another role owns contradicts the design, raise
+a dispute naming the rule; it goes to that test's owner.

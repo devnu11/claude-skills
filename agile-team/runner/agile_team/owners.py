@@ -194,7 +194,7 @@ def split(items: list[Item], owners: Owners) -> Split:
     own: list[Item] = []
     for item in kept:
         writer = owners.fixer(item)
-        if writer:
+        if writer is not None:
             by_writer.setdefault(writer, []).append(item)
         elif item.source == Source.TEST:
             own.append(item)

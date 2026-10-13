@@ -68,6 +68,7 @@ JSON. The runner parses it; a missing or malformed block fails your step.
   "summary": "one or two sentences on what you did or found",
   "changed_files": ["path", "..."],
   "open_questions": ["anything only the human can answer"],
+  "asserts": "only on a gate fix that changes what a test asserts: the AC or design rule that makes the old assertion wrong",
   "next_role": "the role you recommend runs next, or null",
   "friction": "what slowed you down or would have made this step cheaper; empty if nothing"
 }
@@ -83,3 +84,12 @@ JSON. The runner parses it; a missing or malformed block fails your step.
   `--last-failed` command would help" or "the brief restated the review, I
   only needed its path". Leave it empty when the step went smoothly. If your
   brief has "Questions from the Manager", answer them here.
+
+## Gate fix steps
+
+A gate fix step means the implement gate failed on files you own. Fix only the
+items in your brief, then hand off `done`; the story goes back to its step with
+no round counted. If a fix changes what a test asserts, put the AC or design
+rule that makes the old assertion wrong in your handoff's `asserts` field. If
+the failure is not yours to fix, hand off `changes_requested` and say why; the
+story goes back to its step as a round.
