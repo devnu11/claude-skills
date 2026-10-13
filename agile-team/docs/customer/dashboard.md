@@ -104,7 +104,14 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   now also shows `⏱ running 12 min`, which moves on each minute. The page
   remembers your choice. Story starts on
   the story being worked on now. Pick another in the box beside the toggle.
-  Roles that have not worked on that story are dimmed. The working role's
+  Roles that have not worked on that story are dimmed: their box turns
+  grey, and its text stays in place. In Sprint and Run, roles with nothing
+  to show are dimmed. A box with no tokens, dollars or time in the scope
+  reads `idle` instead of zeros. The chart shows only the roles your
+  pipeline uses or that have worked in this run; a role's box appears when
+  it starts its first step. The chart keeps its full size, with text as
+  large as the rest of the page; if it is wider than the window, scroll it
+  sideways. The working role's
   box also shows its tokens per minute, a sparkline, its turn number, the
   tool it is running and the step's estimated cost so far, outlined in the
   health colour.
