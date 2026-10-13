@@ -306,7 +306,7 @@ It never writes, and it never serves files by path.
 
 | Route | Returns |
 |---|---|
-| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resource is `mermaid@11.4.1` from `cdn.jsdelivr.net`, for the Flow chart. |
+| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for the question, answer and handoff text (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead. |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes or the health verdict (level and reason) changes (both checked once a second). Otherwise it sends a `: keepalive` comment every second. |
 | anything else | 404 (other methods: 501) |

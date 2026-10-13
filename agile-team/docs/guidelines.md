@@ -94,7 +94,10 @@ rule, update in the same story:
   path from a request. A new route is a new row there, documented in the
   protocol.
 - `index.html` is one vanilla-JS file with no build step. Its only outside
-  URL is the pinned `mermaid@11.4.1` (tested). Colours come from the CSS
+  URLs are the pinned `mermaid@11.4.1` and `markdown-it@14.1.0` (tested;
+  ADR-0042). Markdown becomes HTML only through `md(text)`, never through
+  another call to the library. Everything else goes through `esc()`.
+  Colours come from the CSS
   tokens in `:root`. Every panel survives a missing or empty snapshot
   section (it shows an `.empty` line).
 

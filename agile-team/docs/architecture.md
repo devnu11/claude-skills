@@ -19,6 +19,7 @@ one line here. Older designs are the sections at the end of this file.
 | s4 Dashboard backend | [below](#s4-dashboard-backend-snapshot-read-only-sse-server-cli) |
 | s5 Dashboard live UI | [below](#s5-dashboard-live-ui-tabs-over-the-s4-snapshot) |
 | s13 The team presents the product to the Customer Proxy | [design/s13.md](design/s13.md) |
+| s15 The dashboard renders Markdown safely. One `md(text)` in `index.html` uses the pinned `markdown-it@14.1.0` (UMD, dynamic `import()`, ADR-0042) with no raw HTML, http(s) links only (`rel="noopener noreferrer"`) and no images. Text is escaped plain until the library loads, and stays plain if it can't. Used by the Questions tab and the timeline's `step-end`/`message`/`answer` bodies. Tested against a vendored copy under `tests/vendor/` | [design/s15.md](design/s15.md) |
 | s19 Routing in code: the runner drives, the PO judges | [design/s19.md](design/s19.md) |
 | s11 Test disputes from implement back to tests; rulings at any step | [design/s11.md](design/s11.md) |
 | s23 Keep context small: PO session renewal, turns per step, leaner role sessions | [design/s23.md](design/s23.md) |

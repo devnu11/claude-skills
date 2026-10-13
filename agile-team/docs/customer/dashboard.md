@@ -79,6 +79,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   The flowchart is drawn by Mermaid, which the page loads from
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
+  Handoff summaries, questions and answers in the timeline are shown with
+  their Markdown formatting: headings, lists, code, tables and links. Links
+  open in a new tab. Raw HTML is shown as text and never runs, and only
+  `http(s)` links become links.
 - **Tokens:** a bar chart by role, story or model, and cumulative spend
   over time. Above the bars, the first buttons pick the grouping (Role,
   Story, Model). The second pick the unit: **Tokens** (bars split by token
@@ -95,7 +99,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   explains how to work out the correction to subtract.
 - **Questions:** questions waiting for your answer (with the
   `agile-team answer` command to copy), and questions a role raised in its
-  handoff.
+  handoff. Questions and answers are shown with their Markdown formatting.
+  The formatter is `markdown-it`, which the page also loads from
+  `cdn.jsdelivr.net`. Without internet access the text is shown plain, line
+  breaks kept.
 - **Requirements:** each requirement with its status, which acceptance
   criteria it covers, and its change history with the reasons.
 
