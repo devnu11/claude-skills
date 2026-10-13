@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import io
 import json
 from functools import partial
@@ -47,7 +48,7 @@ def lines_of(path: Path) -> list[dict]:
 
 def test_parties_and_recipients() -> None:
     assert [p.value for p in Party] == ["human", "product-owner", "liaison"]
-    assert threads.RECIPIENTS == {Party.PO, Party.LIAISON}
+    assert {Party.PO, Party.LIAISON} == threads.RECIPIENTS
     assert threads.MAX_TEXT == 4000
 
 
@@ -238,15 +239,15 @@ def test_a_post_to_the_liaison_is_an_inbox_line(fake: FakeSystem) -> None:
 
 
 @pytest.fixture
-def repo(make_runtime) -> Path:
+def story_repo(make_runtime) -> Path:
     rt = make_runtime()
     add_story(rt, "s5")
     rt.save()
     return rt.config.repo
 
 
-def reply(repo: Path, source: str) -> int:
-    return cli.main(["--repo", str(repo), "reply", "s5", source])
+def reply(story_repo: Path, source: str) -> int:
+    return cli.main(["--repo", str(story_repo), "reply", "s5", source])
 
 
 def test_reply_is_a_registered_command_after_tell() -> None:
@@ -254,24 +255,24 @@ def test_reply_is_a_registered_command_after_tell() -> None:
     assert names.index("reply") == names.index("tell") + 1
 
 
-def test_reply_from_a_file(repo: Path, scratch: Path, capsys, fake: FakeSystem) -> None:
+def test_reply_from_a_file(story_repo: Path, scratch: Path, capsys, fake: FakeSystem) -> None:
     src = scratch / "r.md"
     system.write_text(src, " the answer \n")
-    assert reply(repo, str(src)) == 0
+    assert reply(story_repo, str(src)) == 0
     assert capsys.readouterr().out.strip() == "replied lr1 on s5"
-    path = repo / ".team" / "run" / "liaison" / "replies.jsonl"
+    path = story_repo / ".team" / "run" / "liaison" / "replies.jsonl"
     assert lines_of(path) == [{"story": "s5", "text": "the answer", "at": fake.clock}]
 
 
-def test_reply_from_stdin(repo: Path, monkeypatch, capsys) -> None:
+def test_reply_from_stdin(story_repo: Path, monkeypatch, capsys) -> None:
     monkeypatch.setattr("sys.stdin", io.StringIO("from stdin"))
-    assert reply(repo, "-") == 0
+    assert reply(story_repo, "-") == 0
     assert "replied lr1 on s5" in capsys.readouterr().out
-    assert reply_file_lines(repo)[0]["text"] == "from stdin"
+    assert reply_file_lines(story_repo)[0]["text"] == "from stdin"
 
 
-def reply_file_lines(repo: Path) -> list[dict]:
-    return lines_of(repo / ".team" / "run" / "liaison" / "replies.jsonl")
+def reply_file_lines(story_repo: Path) -> list[dict]:
+    return lines_of(story_repo / ".team" / "run" / "liaison" / "replies.jsonl")
 
 
 @pytest.mark.parametrize(
@@ -282,24 +283,26 @@ def reply_file_lines(repo: Path) -> list[dict]:
         ("s5", "x" * 4001, "the message is longer than 4000 characters"),
     ],
 )
-def test_reply_refusals_write_nothing(repo: Path, scratch, capsys, story, text, reason) -> None:
+def test_reply_refusals_write_nothing(
+    story_repo: Path, scratch, capsys, story, text, reason
+) -> None:
     src = scratch / "r.md"
     system.write_text(src, text)
-    assert cli.main(["--repo", str(repo), "reply", story, str(src)]) == 1
+    assert cli.main(["--repo", str(story_repo), "reply", story, str(src)]) == 1
     assert capsys.readouterr().err.strip() == f"agile-team reply: {reason}"
-    assert not system.exists(repo / ".team" / "run" / "liaison" / "replies.jsonl")
+    assert not system.exists(story_repo / ".team" / "run" / "liaison" / "replies.jsonl")
 
 
-def test_reply_refuses_an_unreadable_file(repo: Path, scratch: Path, capsys) -> None:
+def test_reply_refuses_an_unreadable_file(story_repo: Path, scratch: Path, capsys) -> None:
     missing = scratch / "nope.md"
-    assert reply(repo, str(missing)) == 1
+    assert reply(story_repo, str(missing)) == 1
     assert capsys.readouterr().err.startswith(f"agile-team reply: cannot read {missing}")
 
 
-def test_replies_number_on_and_need_no_running_run(repo: Path, monkeypatch, capsys) -> None:
+def test_replies_number_on_and_need_no_running_run(story_repo: Path, monkeypatch, capsys) -> None:
     for text in ("one", "two"):
         monkeypatch.setattr("sys.stdin", io.StringIO(text))
-        reply(repo, "-")
+        reply(story_repo, "-")
     assert capsys.readouterr().out.splitlines() == ["replied lr1 on s5", "replied lr2 on s5"]
 
 
@@ -399,7 +402,7 @@ def test_a_post_to_the_liaison_fires_once(scratch: Path) -> None:
     [one] = out["posts"]
     assert (one["id"], one["story"], one["text"]) == ("lp1", "s5", "hello")
     again = until(run_dir, FakePace(), timeout=0)
-    assert again["triggers"] == [] and again["posts"] == []
+    assert again["triggers"] == ["heartbeat"] and again["posts"] == []
 
 
 def test_a_second_post_reports_only_the_new_one(scratch: Path) -> None:
@@ -436,7 +439,7 @@ def test_a_first_watch_takes_existing_posts_as_seen(scratch: Path) -> None:
     put(run_dir, RunStatus.RUNNING)
     Threads(run_dir).post(Post("s5", Party.LIAISON, "old"))
     out = until(run_dir, FakePace(), timeout=0)
-    assert out["triggers"] == [] and out["posts"] == []
+    assert out["triggers"] == ["heartbeat"] and out["posts"] == []
     assert json.loads(system.read_text(run_dir / "liaison" / "watch.json"))["posts"] == 1
 
 
@@ -582,8 +585,8 @@ def test_refused_writers_get_403_and_no_read(gate, kw) -> None:
 
 
 def test_an_empty_app_token_never_matches(gate) -> None:
-    app, rt = gate
-    app.token = ""
+    app, _ = gate
+    app = dataclasses.replace(app, token="")
     wire = thread_post(PostWire(app, body(), token="", path="/api/thread"))
     assert wire.status == 403 and wire.reads == []
 
@@ -621,7 +624,7 @@ def test_a_big_post_under_the_limit_is_read(gate) -> None:
 
 def test_no_post_callable_is_400(gate) -> None:
     app, _ = gate
-    app.post = None
+    app = dataclasses.replace(app, post=None)
     assert thread_post(PostWire(app, body(), path="/api/thread")).status == 400
 
 
