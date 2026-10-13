@@ -1,6 +1,41 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done)
+**Last updated:** 2026-10-13 (s96 done, P1 pending; s86 done)
+
+## s96 complete: Step time pairing and dashboard display (23 tests pass, P1 pending)
+
+**File:** `tests/test_s96_step_times.py` (pure, no files) + `tests/test_s96_snapshot.py` + `tests/test_s96_time_page.py` (node harness on dashboard_node.py).
+
+**Unit tests (step_times.py):**
+- Pairing: start/end pairs give seconds rounded to 0.1 with status/model from end, at from start.
+- Matching by (role, story): two roles stepping same story don't cross.
+- Running step: open start at log end has null ended_at/seconds/status.
+- Killed step: cause="killed" gives null seconds, ended_at set, status="interrupted". Halt preserved time.
+- Duplicate key (ST2): second start drops first, ignored end. End with no open start ignored.
+- Sprint (ST6): last sprint-start before step gives sprint; null before any.
+- Clock rewind (ST3): end before start gives 0, not negative.
+- Non-step kinds skipped; result in start order.
+
+**Snapshot tests (snapshot.py):**
+- `build` has `steps` after `ledger`.
+- Model fallback: end model wins; else configured role model; else "unknown" for unknown role.
+- Fixture contract: steps equal `_steps` over fixture events/roles; last step running.
+
+**Dashboard tests (dashboard_node.py, st9–st15 checks):**
+- `fmt.span`: 0→0 min, 30→<1 min, 125→2 min, 3725→1 h 2 min.
+- `stepTotals(view, k)` sums finished steps grouped by role/story/model; killed steps count, add 0.
+- Scope toggle (story/sprint/run): `scopeTotals()[role].seconds` hand-computed sums match.
+- `nodeLabel` contains role's fmt.span total.
+- Running line: open step 600s before clockNow gives "⏱ running 10 min"; no open step gives "".
+- UNITS.time.label="Time", title="Time by", three buttons, title renders.
+- `barRows` with time: largest first, tooltip has step count and % of time, value is fmt.span.
+- `timeLegend()` exact text "agent steps only; runner stages: see A6".
+- `costRow` (Dollars) unchanged by whole rename.
+- `stepsAsOf`: start after cursor dropped, end after cursor running.
+
+**Coverage ≥95%, ruff clean. 23 tests pass. P1: node-harness (scope/running/chart tests) and e2e (animation) pending.**
+
+See design `agile-team/docs/design/s96.md` (ST1–ST15, test checklist).
 
 ## s86 complete: Story dependencies as data—validation, routing, warnings, snapshot (coverage 99.46%, ruff clean, all pass)
 

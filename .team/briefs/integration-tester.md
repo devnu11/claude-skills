@@ -1,6 +1,27 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s96: Node harness and e2e for Flow time display (unit/code-review done, P1: your work)
+
+Code shipped. Unit tests pass (23 tests, coverage ≥95%, ruff clean). Code review done (all ACs pass). **Your work (P1): node-harness tests and e2e for active running line.**
+
+### Node harness tests (`tests/dashboard_node.py`, four test functions from design checklist items 7–9, 14–15)
+
+**Setup:** Load fixture with time steps (agent steps with different durations).
+
+1. **Scope toggle (ST10):** With `ui.scope` set to `story`, `sprint`, `run`, `scopeTotals(view)[role].seconds` matches hand-computed sums for the fixture (AC5, ST10).
+2. **Box time (ST10, ST11):** `nodeLabel` for a role contains `fmt.span` total. Running role with open step started 600s before `clockNow` gives `runningLine` with `"⏱ running 10 min"`.
+3. **Time chart (ST12–ST14):** `Object.keys(UNITS)` is `["tokens", "usd", "time"]`; `UNITS.time.label="Time"`, `title="Time by"`. With `ui.unit="time"`, `renderUnit` writes three buttons and title. `barRows` largest first; `timeRow` tooltip has step count and `% of time`; value is `fmt.span`. `timeLegend()` text exact `"agent steps only; runner stages: see A6"`.
+4. **costRow unchanged:** Dollars display unaffected by the `whole` parameter rename.
+
+### E2E test for active running line (real dashboard, 60s timeout)
+
+**File:** `tests/e2e/test_s96_running_time_e2e.py` (new).
+
+**Test:** Open dashboard on Flow tab. Let a step run (or mock one open in snapshot). Verify: active box shows `⏱ running 5 min` (or similar) **without a new snapshot arrival**, and the time increments roughly once per minute. Stop the runner or set a long clock offset to lock the display, verify time stops changing.
+
+See design `agile-team/docs/design/s96.md` (test checklist items 7–9, 14–15).
 
 ## s86: E2E and node-harness tests for story dependencies (AC1–AC5 unit/code-review done, P1: migration pin and page harness)
 
