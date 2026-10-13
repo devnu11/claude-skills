@@ -1,6 +1,64 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done)
+**Last updated:** 2026-10-13 (s84 code done, docs pending; s83 done)
+
+## s84: Story threads—human discusses with PO and liaison (design rules H1–H21, ADR-0044) [DOCS PENDING]
+
+Story shipped in code. Unit tests pass (coverage ≥99.44%, ruff clean). Code review done (all ACs pass). P1 work: node-harness and e2e tests (integration-tester). **Your pending work:** Write the docs listed below.
+
+**Architectural decisions (ADR-0044 D1–D30):**
+
+**D1–D2: Thread as a view, not a store.** Four append-only files, each with one writer: relay.tell (posts to PO), outbox/reply (PO replies), liaison/inbox.jsonl (posts to liaison), liaison/replies.jsonl (liaison replies). `Threads.all()` reads and merges by time at view-time, no aggregation. Entry structure: (id, story, author, to, text, at).
+
+**D3–D5: Validation.** Party enum (HUMAN, PO, LIAISON). Text: non-empty after strip, ≤4000 chars. Story: in state.stories (done allowed). Refusal functions called by all writers (server, PO tool, CLI).
+
+**D6–D7: POST shape.** Dashboard form: JSON with story (regex), to ("product-owner"|"liaison"), text. Dashboard checks: localhost + token (403), Content-Length 1–32768 (400), parse (400), post (400), reply 202.
+
+**D8–D10: To PO.** Posts via `Relay.tell(tagged(story, text))` with head `<!-- thread story={story} at={at} -->`. Router's `_told_lines` dispatches to `threads.told_line` (thread head → THREAD_TOLD_LINE, else TOLD_LINE). Stories in _deliver = answers + tagged stories.
+
+**D11–D12: PO replies.** New tool `reply_story(story, text)`. Refusals H3 (story), H4 (text), posts Note(REPLY, text, [story]). `notify_user(kind==REPLY)` refused with USE_REPLY before posting.
+
+**D13–D14: To liaison.** Posts append to `liaison/inbox.jsonl`. Watch gains `liaison_message` trigger: `Seen.posts`, `Look.posts`, `new_posts(seen)` method, posts in `line()`, `_next` keeps seen.posts. Old memory loads with posts=0. First watch records current posts as seen.
+
+**D15: Liaison replies.** CLI `reply <story> <source>` (file or -). Text/story checks via functions. Appends to `liaison/replies.jsonl`. Works while run stopped.
+
+**D16: All entries merged by time.** `to_po() + po_replies() + liaison_posts() + liaison_replies()` sorted by (at, id). JSONL read leniently (blank/torn/non-object lines skipped).
+
+**D17–D21: Dashboard (H14–H21).** Events: `thread-<id>` kind, role from EVENT_ROLES (PO only). Snapshot: new `thread` array (5 dicts per story), watched_files adds inbox/replies/told files. Page: `threadHtml(story, view)` on expanded row, form with textarea/select/button (TOKEN gated). `postThread` posts with header and token. `keepFocus` saves/restores focus. Timeline: `TIMELINE.thread` with author/to/body.
+
+**D22–D30: Implementation modules.**
+- New `threads.py` pure module: Party enum, Entry/Post/Tag dataclass, validation/tagging/reading functions, Threads class.
+- `relay.py`: REPLY added to KINDS, tell draft `.draft-{token()}`.
+- `router.py`: _told_lines uses threads.told_line, _deliver deduplicates stories.
+- `po_tools.py`: reply_story tool, notify_user refuses REPLY.
+- `watch.py`: Seen/Look.posts, liaison_message trigger.
+- `cli.py`: cmd_reply command.
+- `server.py`: BODY_LIMITS table (per-route), _thread handler (H4 order).
+- `snapshot.py`: _thread section, _thread_event, _events excludes reply from message.
+- `index.html`: thread state (drafts, to, sending, note), functions, listeners, timeline.
+
+**Data contract extends:** Snapshot adds `thread` array, `thread` events (no `message` for reply lines), watched_files. Relay adds REPLY kind. Watch adds `liaison_message` trigger with `posts`. Outbox reply messages no longer dual-logged.
+
+**File formats:** Relay head `<!-- thread story=<id> at=<time> -->\n\n`. Inbox/replies JSONL: `{story, text, at}` per line, append-only, torn reads OK.
+
+**Boundaries:** Server ↔ Files (POST → relay/inbox), Router ↔ Files (told files, inbox for trigger), PO Tool ↔ Outbox (reply messages), CLI ↔ Files (append replies). No dependencies added; watch and relay already exist.
+
+**Data-driven:** Party enum, RECIPIENTS frozenset, EVENT_ROLES dict. Refusals are functions (not branching). SENDERS dict dispatches post routes. `_lines` helper reads both JSONLs leniently.
+
+**Consequences:**
+- Human can discuss stories directly on dashboard without explicit request cycle.
+- Threads are auditable (all files append-only, time-stamped, tagged with story).
+- View-based (no new store) keeps writers independent.
+- Liaison wakes fast (2s via new trigger, not heartbeat wait).
+- PO and liaison flows differ by design (async vs interactive).
+
+**Docs (your work, due with this story to ship to customer):**
+1. **`agile-team/SKILL.md` step 5–6:** Dashboard writes now include thread posts (/api/thread). Watch triggers gain `liaison_message` with `posts` array. Liaison answers with `reply <story> -`.
+2. **`agile-team/reference/protocol.md`:** Watch trigger table (liaison_message), `reply` CLI command, `reply_story` PO tool, `reply` outbox kind, thread files (relay head, inbox/replies JSONL), POST /api/thread, snapshot thread and thread events.
+3. **`agile-team/docs/customer/dashboard.md`:** New section "Discuss a story" (form, posting, thread view, recipient choice, read-only without token).
+4. **README row (if dashboard writes are listed):** Add `/api/thread` to dashboard's POST routes.
+
+No ADR needed (docs move with behaviour as per charter). See ADR-0044, design `agile-team/docs/design/s84.md` (H1–H21).
 
 ## s83: Backlog reorder on dashboard; human order binding (design rules B1–B20, ADR-0043)
 

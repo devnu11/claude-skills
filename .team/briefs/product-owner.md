@@ -1,6 +1,27 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done)
+**Last updated:** 2026-10-13 (s84 done)
+
+## s84: Story threads—human discusses directly on the dashboard (ADR-0044)
+
+The human can now post questions to you on a story's thread on the Backlog tab. You reply with a new tool, `reply_story`, and the answer shows under the story. All ACs pass (code review done; node harness and e2e tests pending for integration-tester).
+
+**What's new for you:**
+- **Thread discussion:** When the human writes to you on a story's thread, the hand-over says "The human wrote to you on sN's thread (tK): read the file." Open the file (or find it in `liaison/messages/tK.md`) and read the question. Respond with `reply_story(story, text)`.
+- **New tool:** `reply_story(story: str, text: str)` - "Answer the human on a story's thread (shown under the story on the dashboard)." Unknown story, empty or over-long text (>4000 chars) refused with exact error. On success, the reply appears under the story within seconds (via SSE). Posts a `reply` message to the outbox, tagged with the story.
+- **Distinction from `notify_user`:** If the hand-over names a thread post, use `reply_story` (not `notify_user`). The thread is a conversation, not a change order; respond as you would to a `tell`. `notify_user` refuses `kind="reply"` automatically, so the tool won't let you post replies outside the thread.
+- **Thread as a view:** The thread shows all human posts (to you or to the liaison), your replies, liaison replies, and the liaison's posts. It's read-only on the dashboard without the token; write access is localhost-only, guarded like the Backlog reorder form.
+
+**Hand-over integration:**
+- No new hand-over section. Thread posts arrive as `human_message` passes (existing). The line names the story and tells you to read the file. `told` stories in _deliver include tagged relay files.
+
+**Snapshot:** New top-level `thread` array with entries (id, story, author, to, text, at). Events gain `thread` kind entries (no longer as `message`). Outbox `reply` messages no longer dual-logged as message events.
+
+**Implementation:** New `threads.py` module (reads four file sources and merges by time). Relay adds REPLY kind. Router uses `threads.told_line`. CLI adds `reply` command. Watch adds `liaison_message` trigger. Dashboard adds `/api/thread` endpoint and thread form on expanded Backlog rows.
+
+**Shipped:** Code review done (minor findings: m1 nested div in page, m2 bool check in snapshot). All 19 design rules (H1–H19) enforced in code. No changes to your existing tools or workflow beyond `reply_story` as a new option for hand-over questions.
+
+See ADR-0044, design `agile-team/docs/design/s84.md`.
 
 ## s83: Backlog tab with human reorder requests (ADR-0043)
 

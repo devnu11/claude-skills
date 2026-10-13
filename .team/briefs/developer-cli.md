@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-13 (s84 done)
 
 See `developer.md` for the base conventions.
+
+## s84: Story threads—liaison replies via CLI command (ADR-0044)
+
+Liaison now has `agile-team reply <story> <source>` command to answer a human's question on a story's thread on the dashboard. The text comes from a file or stdin (the same `-` pattern as `tell`). Unknown story, empty, or over-long text (>4000 chars) raises `CliError` with exact error text. On success, appends to `liaison/replies.jsonl` and prints `replied <id> on <story>`. Works while run is stopped. See ADR-0044, design `agile-team/docs/design/s84.md`.
 
 ## s51: Story priority with tiers and pulls (AC1–AC6 pass, design rules G1–G17)
 

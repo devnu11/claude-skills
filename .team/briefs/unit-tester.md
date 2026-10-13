@@ -1,6 +1,36 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done)
+**Last updated:** 2026-10-13 (s84 done)
+
+## s84: Story threads—parsing, validation, file I/O, read merging, dashboard/router/watch/PO integration (coverage ≥99.44%, ruff clean, all pass)
+
+New `threads.py` module for story discussion via dashboard and CLI. Tests cover all 19 design rules (H1–H19) and checklist items 1–13.
+
+**Module tests:**
+
+**`threads.py` (new, pure + file I/O):**
+- **Text and story checks:** `text_refusal` refuses blank/whitespace and >4000 chars exactly; `story_refusal` refuses unknown (exact text) and allows done.
+- **Parse post:** Valid body (text unstripped OK) → Post; non-object, missing key, bad `to`, bad id, non-str text, blank, over-long → None.
+- **To PO (H6–H8):** `Threads.post(Post("s5", PO, text))` writes `liaison/messages/t1.md` with exact head, returns `Entry("t1", "s5", HUMAN, PO, text.strip(), at)`. Two posts → t1, t2. Relay.told() lists them. Router's next `_tick` delivers `human_message` with `THREAD_TOLD_LINE` and stories=[s5]. Plain tell still gives `TOLD_LINE`, no story.
+- **`reply_story` (H9):** Unknown story → `UNKNOWN_STORY`, empty → `EMPTY`; neither writes. Good call appends outbox `{kind: "reply", stories: ["s5"], text}`, returns `{"status": "posted", "id": "m<N>"}`. `notify_user(kind="reply")` refused with `USE_REPLY`, posts nothing.
+- **To liaison (H10–H11):** `Threads.post(Post("s5", LIAISON, text))` appends one line to `liaison/inbox.jsonl`, returns `lp1`. Second post → lp2. Watch with saved memory fires `liaison_message` trigger, `posts` holds one entry, next watch doesn't repeat. Shorter inbox reports all. Old memory loads with posts=0. First watch takes existing posts as seen. Heartbeat has `posts: []`. Outbox reply still fires `message` trigger.
+- **Liaison reply (H12):** `cmd_reply` with file appends to `liaison/replies.jsonl`, prints `replied lr1 on s5`, returns 0. `-` reads stdin. Unknown story, empty file, over-long text raise `CliError` (exact texts), write nothing. Works without running runner.
+- **Thread view and order (H13):** One entry of each kind, out-of-file order. `Threads.all()` gives sorted by (at, id) with right authors/to. Torn last line in JSONL skipped, earlier ids unchanged. Outbox reply without stories not an entry. t*.md without head not an entry.
+- **Snapshot (H14–H15):** `build` has `thread` (4 dicts), 4 `thread` events (role `"product-owner"` only for PO's reply), no `message` event for reply line, sorted by time. Fixture keys match build (contract test). `watched_files` includes inbox, replies, told files.
+- **Write gate (H4):** POST from 127.0.0.1 with token and good body → 202 with id/status. From 10.0.0.5 with token, localhost with bad/missing/empty token, no token in app → 403, body unread. Bad body, unknown story, bad `to`, Content-Length 0/32769, or app.post=None → 400. `/api/reorder` still refuses 4097 bytes.
+- **Token never leaks:** Snapshot, told file, inbox line have no token.
+
+**Watch, router, PO tools, relay, CLI integration:**
+- Watch: `Seen.posts`, `Look.posts`, `new_posts` logic, `liaison_message` trigger, `posts` in line, `_next` keeping posts. Old memory loads with posts=0.
+- Router: `threads.told_line` used; stories = answer stories + tagged stories, deduplicated.
+- PO: `reply_story` tool with schema; `notify_user` refuses REPLY kind.
+- Relay: REPLY added last in KINDS; `tell` draft named `.draft-{token()}` (collision test).
+- CLI: `cmd_reply` and COMMANDS row; refusal texts exact.
+- Snapshot: `_thread` section, `_thread_event`, `_events` drops reply from message, `watched_files` includes thread files.
+
+**Checklist items (design) all covered, no tests deleted, coverage ≥99.44%, ruff clean.**
+
+See ADR-0044, design `agile-team/docs/design/s84.md`.
 
 ## s83: Backlog, reorders, request parsing, file serving, PO rules tests (coverage ≥95%, ruff clean, all pass)
 

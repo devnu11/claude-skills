@@ -1,6 +1,48 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done, P1 work pending)
+**Last updated:** 2026-10-13 (s84 done, P1 work pending; s83 P1 work pending)
+
+## s84: E2E tests for story threads (AC1–AC5 unit/code-review done, P1: node-harness and e2e tests pending)
+
+Story shipped. Unit tests pass (coverage ≥99.44%, ruff clean). Code review done (all ACs pass except P1). Design rules H1–H19 all enforced.
+
+**Your work (P1): node-harness tests and e2e for thread posting and liaison reply.**
+
+### Node harness tests (`tests/dashboard_node.py`, three test functions)
+
+**Setup:** Load fixture as `data.snap` with thread entries on story s5 from all four sources (human→PO, PO→human, human→liaison, liaison→human).
+
+1. **Thread render (AC1, AC4):** `storyDetails("s5")` shows 4 entries in order (by time). Each has labels `"you → PO"` style and Markdown text (no nested `.md` div—fix m1). `NO_THREAD` text on story with no entries. With `TOKEN`, textarea/select/button present; without, read-only note. Select defaults to `"product-owner"`.
+
+2. **`postThread` (AC1):** Blank draft sets `SEND_EMPTY` note, doesn't call fetch. Valid draft POSTs `api/thread` with `{story, to, text}` and `X-Agile-Team-Token` header. 403 response sets `READ_ONLY` note. 500 sets error text. OK clears draft and note. (Stubbed fetch, no real POST.)
+
+3. **Timeline (AC4):** Timeline event for a thread entry shows `from: "you"`, `to: "PO"`, `what: "thread"`, body is Markdown text. Story filter in timeline includes thread entries for that story.
+
+### E2E test for thread posting and liaison reply (REAL world, 30s timeout)
+
+**File:** `tests/e2e/test_s84_threads_e2e.py` (new).
+
+**Setup:**
+- Real runner in a scratch team repo.
+- State with at least one story (s5).
+- Start dashboard with `--port 0 --token test_token`.
+
+**Test:**
+1. **POST to PO (AC1, AC2):** Make a real POST to `/api/thread` from `127.0.0.1` with:
+   - Headers: `X-Agile-Team-Token: test_token`, `Content-Type: application/json`.
+   - Body: `{"story": "s5", "to": "product-owner", "text": "Can you review this?"}`.
+   - Expect 202 with `{"id": "t1", "status": "posted"}`.
+   - Verify: `liaison/messages/t1.md` exists, begins with head `<!-- thread story=s5 at=<time> -->`, contains "Can you review this?".
+
+2. **Watch wakes on liaison post (AC3):** POST to liaison: body `{"story": "s5", "to": "liaison", "text": "Any questions?"}`. Expect 202 with `{"id": "lp1", "status": "posted"}`. Call `agile-team watch --timeout 30` in another process/thread. Expect within 5s: `{"triggers": ["liaison_message"], "posts": [{"story": "s5", "text": "Any questions?", "at": <time>, "id": "lp1"}]}`.
+
+3. **Liaison replies (AC3):** Call `agile-team reply s5 -` with text "Sure, all good." on stdin. Expect stdout `"replied lr1 on s5"`, exit 0. Verify: `liaison/replies.jsonl` has one line `{"story": "s5", "text": "Sure, all good.", "at": <time>}`.
+
+4. **Thread in snapshot (AC4):** Call `GET /api/snapshot`. Expect `"thread"` array with 3 entries: t1, lp1, lr1, in time order. Expect `"events"` includes 3 `thread` events (ids `thread-t1`, `thread-lp1`, `thread-lr1`), no `message` event for the `reply` outbox line (if any).
+
+**Coverage:** Verifies localhost + token gate (202), file writing, watch trigger, CLI reply, and snapshot merge.
+
+See design `agile-team/docs/design/s84.md` (test checklist items 14–16, e2e), review round 2, ADR-0044.
 
 ## s83: E2E tests for Backlog tab (AC8, P1: node-harness and e2e tests pending)
 

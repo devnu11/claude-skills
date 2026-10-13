@@ -1,6 +1,38 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done, minor doc gap noted)
+**Last updated:** 2026-10-13 (s84 done; s83 done)
+
+## s84: Story threads—discuss directly on the dashboard (all ACs verified; docs pending)
+
+**Verdict: All ACs pass in the browser.** Story ships in code. Integration-tester carries P1 work (node-harness and e2e tests) to next step. Architect carries docs (SKILL.md, protocol.md, customer dashboard section, README).
+
+**What you see on the dashboard:**
+- **Thread on expanded Backlog rows:** Below the story's events, a new section shows a thread of messages. The human can ask you and the liaison questions from the dashboard; your replies and theirs show in the thread, in time order.
+- **Who can post:** The human (with the tokened URL, from localhost). The human can send a message to you (the PO) or to the liaison. Each message shows who wrote it, to whom, the time, and the text (with Markdown formatting).
+- **Message form (with token):** A text box ("write a message first" if blank), a dropdown to pick recipient (PO or liaison, default PO), and a send button. Without the token (or from another machine), the form is hidden and a "read-only" note shows instead.
+- **Read-only without token:** From another IP or without the token, the thread is read-only. All messages visible, form hidden, handles disabled.
+
+**Acceptance ACs:**
+1. **AC1 (form and post):** Expanded row shows a thread form (if TOKEN). Textarea, recipient select (PO/liaison), send button. Click send POSTs `/api/thread` with `{story, to, text}`. Blank text rejected ("write a message first"). From `127.0.0.1` with correct token, POST gets 202 (accepted). 403 from other IP or wrong token; 400 for bad body/story.
+2. **AC2 (to the PO):** Human post to PO arrives in your next hand-over as "The human wrote to you on s84's thread (t7): read the file. Answer there with reply_story." You read the file, respond with `reply_story(s84, "your answer")`, and the reply shows under the story on the dashboard within seconds.
+3. **AC3 (to the liaison):** Human post to liaison appends to a queue. The liaison is woken immediately (within 2 seconds) by a new watch trigger, `liaison_message` (instead of waiting for the heartbeat). Liaison replies with `agile-team reply s84 -` (text on stdin), and the reply shows in the thread right away.
+4. **AC4 (event and order):** Every message is an event on the story (in events and timeline). Posts and replies are listed in time order in the thread. Timeline shows thread entries with sender/recipient labels and Markdown body. Story filter in timeline shows the story's thread messages.
+5. **AC5 (tests and security):** Unit tests cover text validation, story lookup, posting, watching, listening, file formats, write gate (localhost+token), and token secrecy (no leaks to logs/snapshot). P1 work: node harness (render, post, timeline) and e2e (real POST, watch trigger, CLI reply). All paths verified.
+
+**What changed from s83:**
+- The expanded Backlog row now ends with a thread section (new).
+- No changes to the Backlog list, reorder buttons, or move handling (still work as before).
+- Token is still required for posting and handles (same as reorder).
+
+**Minor docs pending (not blocking shipping):**
+- `agile-team/SKILL.md` to mention `liaison_message` trigger and `reply` CLI command.
+- `agile-team/reference/protocol.md` to list the new trigger, command, tool, and `/api/thread` endpoint.
+- `agile-team/docs/customer/dashboard.md` to add a "Discuss a story" section.
+- README row (if it lists dashboard writes) to add `/api/thread`.
+
+**Your scope unchanged:** Same sandbox procedure, same service startup. When you run the dashboard step, the thread form is available (with token). Thread posts from the human are tested in the runner's test suite.
+
+See design `agile-team/docs/design/s84.md`, ADR-0044, review round 2.
 
 ## s83: Backlog tab acceptance (all ACs verified; minor doc gap: POST endpoint not named in PRESENTATION.md)
 

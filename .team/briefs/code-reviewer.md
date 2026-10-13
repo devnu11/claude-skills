@@ -1,6 +1,54 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done)
+**Last updated:** 2026-10-13 (s84 done; s83 done)
+
+## s84: Story threads—human discusses with PO and liaison (1 round, all ACs pass) — verdict ship (P1 pending)
+
+**Scope:** `threads.py` (new pure module, ~250 LOC), `relay.py`, `router.py`, `po_tools.py`, `watch.py`, `cli.py`, `dashboard/server.py`, `dashboard/snapshot.py`, `dashboard/index.html`, `roles/product-owner.md`, tests, design fixture. **Verdict: ship (P1 node-harness/e2e pending).**
+
+**Design rules enforced (H1–H21, design spec):**
+- **H1–H5:** Party enum (HUMAN, PO, LIAISON), RECIPIENTS frozenset. Text refusal: blank/whitespace, >4000 chars exactly. Story refusal: unknown (exact text), done allowed. Post shape: JSON {story (regex), to (string), text (string)}, extra keys OK.
+- **H6–H8:** To PO via `Relay.tell(tagged(story, text))`. Head format `<!-- thread story={story} at={at} -->\n\n`. `tag_of` reads file, matches head, returns Tag or None. `told_line` gives thread-tagged line format.
+- **H9–H10:** `reply_story` tool with story/text checks (H3, H2 in order), posts Note(REPLY, text, [story]), returns {status, id}. `notify_user(kind=="reply")` refused with exact USE_REPLY text before posting.
+- **H11:** Inbox line `{story, text, at}` appended to `liaison/inbox.jsonl`. Lenient read (blank/torn/non-object lines skipped).
+- **H12:** Watch `Seen.posts`, `Look.posts`, `new_posts(seen)` method. Trigger `liaison_message` fires on new_posts. `posts` in line(). `_next` keeps seen.posts. Old memory loads posts=0. First watch records current as seen.
+- **H13:** Liaison CLI `reply <story> <source>` (file or -). Text/story checks (H2, H3). Appends to `liaison/replies.jsonl`. Works stopped.
+- **H14–H15:** `Threads.all()` = four sources merged by (at, id). Entry fields: id, story, author, to, text, at. JSONL lenient (blank/non-object/torn skipped). Tag on relay files, reply in outbox, inbox/replies JSONL, no other markers.
+- **H16–H17:** Events: `thread-<id>`, kind="thread", role from EVENT_ROLES (PO only), data has entry/author/to. No message event for reply outbox lines.
+- **H18:** Snapshot: `thread` array, watched_files includes inbox/replies/told files.
+- **H19–H21:** Page: `threadHtml(story, view)` on expanded row. Form with textarea (maxlength 4000), select (PO/liaison), button (with TOKEN). `postThread` POSTs with token header. `keepFocus` saves/restores selection. Timeline: `TIMELINE.thread`, `ctx.thread` map, "thread" in MARKDOWN_KINDS.
+
+**Module structure:**
+- `threads.py` pure: Party enum, Entry/Post/Tag dataclass, text/story validation, parse_post, tagging/reading, Threads class with post/reply/all readers, SENDERS dispatch table, RECIPIENTS/EVENT_ROLES dicts, watched function.
+- `relay.py`: REPLY added to KINDS (last). Draft renamed `.draft-{token()}`.
+- `router.py`: _told_lines uses threads.told_line, _deliver = answers + tagged stories (deduplicated).
+- `po_tools.py`: reply_story tool (H9), notify_user refuses REPLY kind.
+- `watch.py`: Seen.posts, Look.posts, new_posts, liaison_message trigger.
+- `cli.py`: cmd_reply command (H12).
+- `server.py`: BODY_LIMITS table per-route. _thread handler (H4 order: may_write→403, length→400, parse→400, post→400, 202).
+- `snapshot.py`: _thread section, _thread_event, _events merges thread + drops reply from message.
+- `index.html`: `ui.drafts`, `ui.to`, `ui.sending`, `ui.threadNote` state. Functions: `threadHtml`, `postThread`, `keepFocus`. Input/change/click listeners.
+- `product-owner.md`: Section explaining thread posts and reply_story tool.
+
+**Test coverage (all items from design checklist pass):**
+- Text/story checks (blank, 4000/4001, unknown story).
+- Parse post (valid, non-object, missing key, bad to, bad id, non-str, blank, over-long).
+- To PO: file written with head, Entry returned, Relay.told lists it, no draft left, two posts → t1/t2.
+- Router: THREAD_TOLD_LINE delivered, stories included, plain tell still gives TOLD_LINE no story.
+- `reply_story`: unknown/empty refused (exact texts), good posts to outbox, `notify_user(reply)` refused.
+- To liaison: line appended, id=lp1/lp2.
+- Watch: fires on new post, next watch skips, shorter inbox reports all, old memory loads posts=0, first watch takes existing, heartbeat posts=[], reply still fires message.
+- Liaison reply: file appends, prints replied<id>, returns 0. Unknown/empty/over-long refused (exact), works stopped.
+- All merges: four sources by (at, id), torn line skipped (ids unchanged), reply without stories not an entry, head-less told not an entry.
+- Snapshot: thread dict array, four thread events (role PO only for reply), no message event for reply.
+- Write gate: 202 from 127.0.0.1+token; 403 from other host/bad token (body unread); 400 for bad body/story/length/app.post=None.
+- Token: absent from snapshot/told/inbox/replies.
+- Watch memory: posts field loads and keeps correctly.
+- Relay draft: `.draft-{token()}`, two tells get distinct numbers.
+
+**No test deleted or weakened. Coverage ≥99.44%, ruff clean.** All 13 design checklist items pass (14–16 e2e pending for integration-tester).
+
+See design `agile-team/docs/design/s84.md` (H1–H21), ADR-0044, review round 2 (m1/m2 minor, don't block).
 
 ## s83: Backlog reorder with human-order rule (1 round, all ACs pass) — verdict ship (P1 pending)
 

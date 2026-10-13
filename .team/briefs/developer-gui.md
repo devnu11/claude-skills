@@ -1,8 +1,31 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s83 done)
+**Last updated:** 2026-10-13 (s84 done)
 
 See `developer.md` for base conventions.
+
+## s84 complete: Story threads with the PO and the liaison (on Backlog tab)
+
+An expanded Backlog row now shows a thread of discussion with the PO or the liaison. The human can post questions from a form on the dashboard; the PO replies with `reply_story` tool (next hand-over); the liaison replies via CLI `agile-team reply` command (within 2 seconds via new `liaison_message` watch trigger). All ACs pass (code review done, node harness and e2e pending for integration-tester).
+
+**Features implemented (design H1–H21):**
+- **Thread view:** Below the expanded row's event list, `threadHtml(story, view)` lists entries in time order: `you → PO`-style labels, time, Markdown text. Shows "No messages yet." if none. With TOKEN, adds a form; without, shows read-only note.
+- **Form:** Textarea (maxlength 4000 chars, in `ui.drafts[id]`), select for recipient (PO/liaison, `ui.to[id]` defaults PO), send button (disabled in `ui.sending` while posting).
+- **Posting:** `postThread(id)` POSTs `/api/thread` with `{story, to, text}` + token header. Blank text rejected (`SEND_EMPTY`). Response 403 → read-only note; other non-OK → error; OK → draft cleared, entry appears next snapshot.
+- **Focus preservation:** `keepFocus(fn)` saves textarea focus and selection, runs render, restores both. Typing survives re-renders.
+- **Timeline:** Thread events appear in timeline with author→recipient labels and Markdown body. Story filter in timeline shows thread entries for that story.
+- **Snapshot fields:** `run` unchanged; `story` unchanged; new top-level `thread` array with 5 entries per story.
+
+**Implementation notes (index.html):**
+- New state: `ui.drafts = {}`, `ui.to = {}`, `ui.sending = new Set()`, `ui.threadNote = {}`.
+- Constants: `WHO = {human: "you", "product-owner": "PO", liaison: "liaison"}`, `SEND_EMPTY`, `NO_THREAD`.
+- Functions: `threadEntries(view, id)` (filter `view.thread` by story), `threadHtml(story, view)`, `postThread(id)`, `keepFocus(fn)`.
+- Event handlers: `[data-thread-text]` and `[data-thread-to]` update drafts/recipients; `[data-thread-send]` posts (checked before expand toggle).
+- CSS: `.thread` (entry block), `.tmsg` (sender labels), `.tform` (form layout).
+
+**Shipped:** Code review done (two minor findings left for later: m1 nested div, m2 bool check). Node harness tests (items 14–16) and e2e test (real POST → file, watch trigger, reply in snapshot) owned by integration-tester.
+
+See ADR-0044.
 
 ## s83 complete: Backlog tab with reorder handles and file reading
 
