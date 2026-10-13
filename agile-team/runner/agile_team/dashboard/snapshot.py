@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .. import backlog, dependencies, health, live, opinions, system, threads, waits
+from .. import backlog, dependencies, health, live, opinions, system, threads, tool_calls, waits
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
@@ -26,10 +26,20 @@ from ..relay import INBOX, OUTBOX, REPLY
 from ..reorders import APPLIED, REORDERS_DIR, Request, Requests
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
-from . import step_times, story_files
+from . import step_times, story_files, tool_groups
 
-RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX, live.HEARTBEAT, live.TURNS)
+RUN_FILES = (
+    STATE_FILE,
+    EVENTS,
+    LEDGER,
+    OUTBOX,
+    INBOX,
+    live.HEARTBEAT,
+    live.TURNS,
+    tool_calls.TOOLS,
+)
 TURN_TAIL_BYTES = 262_144
+TOOLS_TAIL_BYTES = 4_194_304
 TURN_WINDOW_S = 600
 TURNS_SHOWN = 500
 REORDERS_SHOWN = 20
@@ -477,6 +487,11 @@ def _turns(files: RunFiles) -> list[dict]:
     return recent[-TURNS_SHOWN:]
 
 
+def _tools(files: RunFiles) -> list[dict]:
+    rows = read_tail(files.config.run_dir / tool_calls.TOOLS, TOOLS_TAIL_BYTES)
+    return tool_groups.groups(rows, files.config.dashboard.collapse_under_s)
+
+
 def _heartbeat(files: RunFiles) -> dict[str, Any] | None:
     return live.read_heartbeat(files.config.run_dir)
 
@@ -497,6 +512,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "events": _events,
     "ledger": _ledger,
     "steps": _steps,
+    "tools": _tools,
     "messages": _messages,
     "answers": _answers,
     "thread": _thread,

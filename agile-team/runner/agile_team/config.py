@@ -41,6 +41,7 @@ PIPELINE_STEPS = (
 )
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 DASHBOARD_TOKEN = "[dashboard] token must be a string"
+DASHBOARD_COLLAPSE = "[dashboard] collapse_under_s must be a number of seconds, 0 or more"
 GLOB_KEYS = ("source", "tests", "e2e", "ci")
 UNKNOWN_DELIVERY = "delivery {name!r} is not a configured [[delivery]]; use one of: {names}"
 NO_DELIVERY = (
@@ -160,6 +161,7 @@ class DashboardSettings:
     """``[dashboard]``: a fixed write token for presentations (s83 B19); empty means random."""
 
     token: str = ""
+    collapse_under_s: float = 0.1
 
 
 @dataclass
@@ -278,7 +280,13 @@ def _dashboard(raw: dict[str, Any]) -> DashboardSettings:
     settings = _section(DashboardSettings, raw)
     if not isinstance(settings.token, str):
         raise ConfigError(DASHBOARD_TOKEN)
+    if not _seconds_ok(settings.collapse_under_s):
+        raise ConfigError(DASHBOARD_COLLAPSE)
     return settings
+
+
+def _seconds_ok(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int | float) and value >= 0
 
 
 def _upstream(raw: dict[str, Any]) -> UpstreamSettings:

@@ -36,6 +36,7 @@ class EventKind(StrEnum):
     HANDOVER = "handover"
     TEST_DISPUTE = "test-dispute"
     PO_SESSION = "po-session"
+    PO_TURN = "po-turn"
     ESCALATION = "escalation"
     FAULT = "fault"
     BOUNDARY = "boundary"

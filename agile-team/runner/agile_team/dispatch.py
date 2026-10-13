@@ -852,6 +852,7 @@ class Runtime:
             commit=commit,
             turns=result.turns,
             model=meter.reading.model if meter else None,
+            **live.time_split(meter),
             **self.pulse.clocks(),
         )
 

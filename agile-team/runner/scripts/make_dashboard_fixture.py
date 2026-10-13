@@ -583,6 +583,10 @@ def live_events(base, now):
         "tokens": {"input": 18, "output": 4210, "cache_read": 402_000, "cache_creation": 9_100},
         "estimate_usd": 0.0812,
         "model": MODEL_ID["sonnet"],
+        "opened_at": round(now - 520, 1),
+        "tool_s": 161.2,
+        "model_s": 28.8,
+        "waiting_s": 0.0,
     }
     rows = [
         ("step-start", now - 520, {"brief": "Memory test fails at 412MB."}),
@@ -590,10 +594,20 @@ def live_events(base, now):
         ("step-start", now - 200, {"brief": "Memory test fails at 412MB."}),
     ]
     n = len(base)
-    return [
+    events = [
         {"id": f"e{n + i + 1}", "at": round(at, 1), "kind": kind, **first, "data": d}
         for i, (kind, at, d) in enumerate(rows)
     ]
+    turn = {"opened_at": round(now - 400, 1), "tool_s": 312.5, "model_s": 9.5, "waiting_s": 312.5}
+    po_turn = {
+        "id": f"e{n + len(rows) + 1}",
+        "at": round(now - 60, 1),
+        "kind": "po-turn",
+        "role": "product-owner",
+        "story": None,
+        "data": {**turn, "mono": 5400.0, "slept": 0.0},
+    }
+    return [*events, po_turn]
 
 
 def live_heartbeat(now, turns):
@@ -623,6 +637,52 @@ def live_heartbeat(now, turns):
     }
 
 
+def tool_row(step, label, seconds, offset):
+    """One span row of the live step, in the tools.jsonl shape (s98 TC11)."""
+    at = step["opened_at"] + offset
+    tool = label.split(": ")[-1] if label.startswith("Dev: ") else label
+    return {
+        **step,
+        "tool": "Bash" if label.startswith("Dev: run") else tool,
+        "tool_use_id": f"toolu_{offset}",
+        "label": label,
+        "detail": "uv run pytest -q tests/test_x.py" if "Dev" in label else "developer",
+        "at": at,
+        "mono": 5000.0 + offset,
+        "slept": 0.0,
+        "seconds": seconds,
+        "ended_at": at + seconds,
+        "status": "ok",
+    }
+
+
+def tools_section(snap):
+    """The snapshot's ``tools`` groups: the live developer step and a PO turn (s98 TC15)."""
+    beat = snap["heartbeat"]["step"]
+    key = ("role", "story", "step")
+    live_step = {**{k: beat[k] for k in key}, "opened_at": beat["started_at"]}
+    po_step = {"role": "product-owner", "story": None, "step": "po-session", "opened_at": 0.0}
+    slow = tool_row(live_step, "Dev: run the unit tests", 41.2, 30.0)
+    timed_out = {**tool_row(live_step, "Dev: run the e2e tests", 120.0, 90.0), "status": "timeout"}
+    misc = {"count": 3, "seconds": 0.042, "tools": {"Read": 2, "Grep": 1}}
+    po_call = tool_row(po_step, "po.run_role", 312.5, 10.0)
+    return [
+        {**live_step, "calls": [slow, timed_out], "misc": misc},
+        {**po_step, "calls": [po_call], "misc": {"count": 0, "seconds": 0.0, "tools": {}}},
+    ]
+
+
+def with_tools_after_steps(snap, tools):
+    """``snap`` with ``tools`` placed right after ``steps`` (the section order)."""
+    out = {}
+    for key, value in snap.items():
+        if key != "tools":
+            out[key] = value
+        if key == "steps":
+            out["tools"] = tools
+    return out
+
+
 def add_live(snap):
     """Add turns, a heartbeat, health and the interrupted step to a snapshot."""
     now = CURATED_END + 900  # all live events fall after CURATED_END
@@ -633,7 +693,7 @@ def add_live(snap):
     snap["turns"] = turns
     snap["heartbeat"] = live_heartbeat(now, turns)
     snap["health"] = {"level": "green", "reason": "turns arriving", "model_note": None}
-    return snap
+    return with_tools_after_steps(snap, tools_section(snap))
 
 
 def starting_point(path):

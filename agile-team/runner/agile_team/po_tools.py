@@ -19,6 +19,7 @@ from . import (
     backlog,
     dependencies,
     handover,
+    live,
     po_session,
     priority,
     reorders,
@@ -815,6 +816,12 @@ class PoRun:
             raise
         finally:
             pulse.close(plan.meter)
+            self._turn_event(plan.meter)
+
+    def _turn_event(self, meter: live.Meter) -> None:
+        """One ``po-turn`` event per PO query, with its time split (TC14)."""
+        data = {**meter.time_split(), **self.runtime.pulse.clocks()}
+        self.runtime.events.emit(Event(EventKind.PO_TURN, PO, None, data))
 
     def _set_status(self, status: RunStatus) -> None:
         self.runtime.state.mark(status)

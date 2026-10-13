@@ -13,7 +13,8 @@ from typing import Any
 
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
-from . import halt, system
+from . import halt, system, tool_calls
+from .dashboard.step_times import Mark, Platform, platform_of
 from .events import INTERRUPTED, Event, EventKind
 from .ledger import Tokens
 from .providers import Billing
@@ -113,6 +114,10 @@ class Turn:
         return json.dumps(asdict(self))
 
 
+def _blocks(content: Any, kind: type) -> list[Any]:
+    return [b for b in content if isinstance(b, kind)] if isinstance(content, list) else []
+
+
 def _excess(now: Tokens, counted: Tokens) -> Tokens:
     return Tokens(*(max(0, a - b) for a, b in zip(_counts(now), _counts(counted), strict=True)))
 
@@ -143,10 +148,32 @@ class Reading:
     last_turn_at: float | None = None
     tools: dict[str, tuple[str, float]] = field(default_factory=dict)
     counted: dict[str, Tokens] = field(default_factory=dict)
+    platform: Platform = Platform.POSIX
+    start: Mark | None = None
+    end: Mark | None = None
     quiet_since: float = field(init=False)
+    calls: tool_calls.Calls = field(init=False)
 
     def __post_init__(self) -> None:
         self.quiet_since = self.started_at
+        self.start = self.start or Mark(self.started_at)
+        self.calls = tool_calls.Calls(self.where(), self.platform)
+
+    def where(self) -> tool_calls.Where:
+        """Which step or PO turn this reading's spans belong to (TC5)."""
+        who = self.who
+        step = who.step or tool_calls.STEP_OF_ROLE.get(who.role)
+        return tool_calls.Where(who.role, who.story, step, self.started_at)
+
+    def close(self, mark: Mark) -> None:
+        """End the reading at ``mark``; open calls end unfinished (TC3)."""
+        self.end = mark
+        self.calls.abandon(mark)
+
+    def time_split(self) -> dict[str, float]:
+        """``opened_at`` and the time split (TC12)."""
+        split = self.calls.split(self.start or Mark(self.started_at), self.end or self.start)  # type: ignore[arg-type]
+        return {"opened_at": self.started_at, **split.as_dict()}
 
     def wake(self, now: float) -> None:
         """Control is back with the model: the quiet clock restarts (H7)."""
@@ -154,10 +181,16 @@ class Reading:
 
     def take(self, message: Any, now: float) -> Turn | None:
         """Fold in one message (T1-T6); a turn line when it started a turn or added news."""
+        return self.take_at(message, Mark(now))
+
+    def take_at(self, message: Any, mark: Mark) -> Turn | None:
+        """``take`` with the full clock reading, which times the tool calls."""
         if isinstance(message, UserMessage):
-            self._close_tools(message, now)
+            self._close_tools(message, mark.at)
+            self.calls.finish(_blocks(message.content, ToolResultBlock), mark)
         elif isinstance(message, AssistantMessage):
-            return self._answer(message, now)
+            self.calls.start(_blocks(message.content, ToolUseBlock), mark)
+            return self._answer(message, mark.at)
         return None
 
     def _close_tools(self, message: UserMessage, now: float) -> None:
@@ -249,8 +282,17 @@ class Meter:
     def interrupted(self, stop: Stop) -> Event:
         """The reading's ``interrupted`` step-end with this pulse's ``clocks()`` added (AW1)."""
         event = self.reading.interrupted(stop)
-        event.data.update(self.pulse.clocks())
+        event.data.update(self.time_split(), **self.pulse.clocks())
         return event
+
+    def time_split(self) -> dict[str, float]:
+        """The reading's ``opened_at`` and time split."""
+        return self.reading.time_split()
+
+
+def time_split(meter: Meter | None) -> dict[str, float]:
+    """``meter``'s split for a step event; ``{}`` without a meter."""
+    return {} if meter is None else meter.time_split()
 
 
 SLEEP_GAP_BEATS = 2  # a beat gap over this many beats is sleep (AW2)
@@ -263,6 +305,7 @@ class Pulse:
     run_dir: Path
     beat_s: float = 20.0
     started_at: float = field(init=False)
+    platform: Platform = field(init=False)
     slept_s: float = field(init=False, default=0.0)
     _last_beat: float = field(init=False)
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
@@ -275,10 +318,16 @@ class Pulse:
 
     def __post_init__(self) -> None:
         self.started_at = self._last_beat = system.now()
+        self.platform = platform_of(system.platform())
+
+    def mark(self) -> Mark:
+        """The clocks now, as a ``Mark``."""
+        return Mark(system.now(), system.monotonic(), round(self.slept_s, 1))
 
     def open(self, who: Who) -> Meter:
         """Start measuring a query; the newest open meter is the one shown."""
-        meter = Meter(self, Reading(who, system.now()))
+        mark = self.mark()
+        meter = Meter(self, Reading(who, mark.at, platform=self.platform, start=mark))
         with self._lock:
             self._open.append(meter)
         self.write()
@@ -286,7 +335,10 @@ class Pulse:
 
     def close(self, meter: Meter) -> None:
         """Stop measuring ``meter``, wherever it is in the stack."""
+        mark = self.mark()
         with self._lock:
+            meter.reading.close(mark)
+            self._log_spans(meter.reading.calls.take_fresh())
             self._open = [m for m in self._open if m is not meter]
             self._wake_innermost()
         self.write()
@@ -299,8 +351,9 @@ class Pulse:
         """Feed ``message`` to ``meter``; log a turn line and beat when there is news."""
         with self._lock:
             before = len(meter.reading.tools)
-            turn = meter.reading.take(message, system.now())
+            turn = meter.reading.take_at(message, self.mark())
             self._log(turn)
+            self._log_spans(meter.reading.calls.take_fresh())
             news = turn is not None or len(meter.reading.tools) < before
         if news:
             self.write()
@@ -310,6 +363,14 @@ class Pulse:
             return
         with suppress(OSError):  # a lost turn line must never stop the run
             system.append_text(self.run_dir / TURNS, turn.line() + "\n")
+
+    def _log_spans(self, spans: list[tool_calls.ToolSpan]) -> None:
+        if not spans:
+            return
+        with suppress(OSError):  # a lost span line must never stop the run
+            system.append_text(
+                self.run_dir / tool_calls.TOOLS, "".join(s.line() + "\n" for s in spans)
+            )
 
     @contextmanager
     def doing(self, what: str) -> Iterator[None]:

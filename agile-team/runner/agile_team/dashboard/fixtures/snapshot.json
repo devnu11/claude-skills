@@ -1927,22 +1927,6 @@
    }
   },
   {
-   "id": "e87b",
-   "at": 1791472300.0,
-   "kind": "step-end",
-   "role": "code-reviewer",
-   "story": "s2",
-   "data": {
-    "status": "done",
-    "summary": "Re-review clean.",
-    "turns": 3,
-    "next_role": null,
-    "open_questions": [],
-    "mono": 472180.0,
-    "slept": 120.0
-   }
-  },
-  {
    "id": "e88",
    "at": 1791471900.0,
    "kind": "story-opened",
@@ -2175,65 +2159,17 @@
    }
   },
   {
-   "id": "opinion-o1",
-   "at": 1791472300.0,
-   "kind": "opinion",
-   "role": null,
-   "story": "s6",
-   "data": {
-    "opinion": "o1",
-    "kind": "move-up"
-   }
-  },
-  {
-   "id": "opinion-o2",
-   "at": 1791472350.0,
-   "kind": "opinion",
-   "role": null,
-   "story": "s6",
-   "data": {
-    "opinion": "o2",
-    "kind": "move-down"
-   }
-  },
-  {
-   "id": "opinion-o3",
-   "at": 1791472360.0,
-   "kind": "opinion",
-   "role": null,
-   "story": "s5",
-   "data": {
-    "opinion": "o3",
-    "kind": "scope"
-   }
-  },
-  {
-   "id": "opinion-act-a1",
-   "at": 1791472420.0,
-   "kind": "opinion-act",
-   "role": null,
-   "story": "s5",
-   "data": {
-    "opinion": "o3",
-    "act": "apply",
-    "route": "product-owner",
-    "ref": "t2"
-   }
-  },
-  {
-   "id": "e99",
+   "id": "e103",
    "at": 1791472640.0,
    "kind": "step-start",
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB.",
-    "mono": 472520.0,
-    "slept": 120.0
+    "brief": "Memory test fails at 412MB."
    }
   },
   {
-   "id": "e100",
+   "id": "e104",
    "at": 1791472830.0,
    "kind": "step-end",
    "role": "developer-cli",
@@ -2251,11 +2187,15 @@
      "cache_creation": 9100
     },
     "estimate_usd": 0.0812,
-    "model": "claude-sonnet-4-5-20250929"
+    "model": "claude-sonnet-4-5-20250929",
+    "opened_at": 1791472640.0,
+    "tool_s": 161.2,
+    "model_s": 28.8,
+    "waiting_s": 0.0
    }
   },
   {
-   "id": "e101",
+   "id": "e105",
    "at": 1791472960.0,
    "kind": "step-start",
    "role": "developer-cli",
@@ -2265,39 +2205,18 @@
    }
   },
   {
-   "id": "e102",
-   "at": 1791472965.0,
-   "kind": "priority",
-   "role": null,
-   "story": "s6",
+   "id": "e106",
+   "at": 1791473100.0,
+   "kind": "po-turn",
+   "role": "product-owner",
+   "story": null,
    "data": {
-    "change": "move",
-    "order": [
-     "s3",
-     "s2",
-     "s4",
-     "s7",
-     "s5",
-     "s6"
-    ],
-    "moves": [
-     {
-      "story": "s6",
-      "from": 6,
-      "to": 5
-     },
-     {
-      "story": "s5",
-      "from": 5,
-      "to": 6
-     }
-    ],
-    "reason": "moved on the dashboard (r1)",
-    "pulled": [
-     "s5"
-    ],
-    "source": "human (dashboard)",
-    "warnings": []
+    "opened_at": 1791472760.0,
+    "tool_s": 312.5,
+    "model_s": 9.5,
+    "waiting_s": 312.5,
+    "mono": 5400.0,
+    "slept": 0.0
    }
   }
  ],
@@ -2993,6 +2912,85 @@
    "seconds": null,
    "clock": "wall",
    "slept": 0.0
+  }
+ ],
+ "tools": [
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "step": "implement",
+   "opened_at": 1791472960.0,
+   "calls": [
+    {
+     "role": "developer-cli",
+     "story": "s3",
+     "step": "implement",
+     "opened_at": 1791472960.0,
+     "tool": "Bash",
+     "tool_use_id": "toolu_30.0",
+     "label": "Dev: run the unit tests",
+     "detail": "uv run pytest -q tests/test_x.py",
+     "at": 1791472990.0,
+     "mono": 5030.0,
+     "slept": 0.0,
+     "seconds": 41.2,
+     "ended_at": 1791473031.2,
+     "status": "ok"
+    },
+    {
+     "role": "developer-cli",
+     "story": "s3",
+     "step": "implement",
+     "opened_at": 1791472960.0,
+     "tool": "Bash",
+     "tool_use_id": "toolu_90.0",
+     "label": "Dev: run the e2e tests",
+     "detail": "uv run pytest -q tests/test_x.py",
+     "at": 1791473050.0,
+     "mono": 5090.0,
+     "slept": 0.0,
+     "seconds": 120.0,
+     "ended_at": 1791473170.0,
+     "status": "timeout"
+    }
+   ],
+   "misc": {
+    "count": 3,
+    "seconds": 0.042,
+    "tools": {
+     "Read": 2,
+     "Grep": 1
+    }
+   }
+  },
+  {
+   "role": "product-owner",
+   "story": null,
+   "step": "po-session",
+   "opened_at": 0.0,
+   "calls": [
+    {
+     "role": "product-owner",
+     "story": null,
+     "step": "po-session",
+     "opened_at": 0.0,
+     "tool": "po.run_role",
+     "tool_use_id": "toolu_10.0",
+     "label": "po.run_role",
+     "detail": "developer",
+     "at": 10.0,
+     "mono": 5010.0,
+     "slept": 0.0,
+     "seconds": 312.5,
+     "ended_at": 322.5,
+     "status": "ok"
+    }
+   ],
+   "misc": {
+    "count": 0,
+    "seconds": 0.0,
+    "tools": {}
+   }
   }
  ],
  "messages": [
@@ -3886,11 +3884,10 @@
   }
  ],
  "heartbeat": {
-  "version": 2,
+  "version": 1,
   "pid": 4242,
   "beat": "beating",
   "at": 1791473157.0,
-  "mono": 523000.0,
   "started_at": 1791469560.0,
   "chore": null,
   "step": {
@@ -3913,8 +3910,7 @@
     "cache_creation": 43906
    },
    "cost_usd": 1.0767
-  },
-  "slept": 0.0
+  }
  },
  "health": {
   "level": "green",
