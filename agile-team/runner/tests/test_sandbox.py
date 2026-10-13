@@ -355,6 +355,12 @@ def test_read_joins_the_restricted_kinds(kind: str, tools: tuple[str, ...]) -> N
 SEED_TOML = '[dashboard]\ntoken = "presentation"\n'
 
 
+PACKAGED_SEED_TEXT = (
+    "# Seeded by the runner into a dashboard presentation's workspace (s105).\n"
+    "# The fixed token lets the Customer Proxy use the dashboard's writes (t31).\n" + SEED_TOML
+)
+
+
 def seeded(configured: Path) -> Delivery:
     system.make_dirs(configured / "seedsrc")
     system.write_text(configured / "seedsrc" / ".agile-team.toml", SEED_TOML)
@@ -417,7 +423,7 @@ def test_prepare_seeds_a_web_delivery_without_a_seed_key_with_the_packaged_seed(
 ) -> None:
     p = prepared_web(configured, fake)
     target = p.root / "presentation" / "workspace" / ".agile-team.toml"
-    assert system.read_text(target) == SEED_TOML
+    assert system.read_text(target) == PACKAGED_SEED_TEXT
     assert p.seed_problems() == []
 
 
