@@ -46,6 +46,8 @@ EXPECTED = [
     "boundary.check",
     "boundary.review",
     "boundary.push",
+    "boundary.rebase",
+    "boundary.restack",
     "boundary.ci-wait",
     "runner-tool.run_tests",
     "runner-tool.run_new_tests",

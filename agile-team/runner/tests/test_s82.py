@@ -13,6 +13,7 @@ from agile_team.config import Environment
 from agile_team.gates import READY, StoryState, Verdict
 from agile_team.presentation import Trial
 
+from .conftest import write_story
 from .fake_system import FAKE_REPO, Done, FakeSystem, Hang
 
 PORT = 8799
@@ -124,6 +125,7 @@ def story() -> StoryState:
 
 
 def test_trial_holds_when_the_stop_reports_a_held_port(config: cfg.Config) -> None:
+    write_story(config, "s7", "ui")
     out = trial_with(config, "port 1 held").liveness(story())
     assert out.verdict is Verdict.HOLD
     assert out.reason == presentation.STOP_HELD.format(story="s7", held="port 1 held")
@@ -131,6 +133,7 @@ def test_trial_holds_when_the_stop_reports_a_held_port(config: cfg.Config) -> No
 
 
 def test_trial_passes_when_the_stop_is_clean(config: cfg.Config) -> None:
+    write_story(config, "s7", "ui")
     out = trial_with(config, None).liveness(story())
     assert out.verdict is Verdict.PASS
     assert out.reason == f"{READY}; {URL}api/snapshot answered"

@@ -21,6 +21,7 @@ from agile_team.upstream import PrMode, UpstreamError
 
 from .fake_system import FakeSystem
 from .test_boundary_runner import Env, at_push, entry
+from .test_s108_follow import script_noop
 
 LINK = "https://github.com/o/r/actions/runs/1/job/77"
 RED = [Check("unit", Bucket.FAIL, "ci", LINK)]
@@ -134,8 +135,9 @@ def test_no_non_draft_pr_finishes_as_none(env: Env) -> None:
 
 
 @pytest.mark.parametrize("why", ["no", "gh"])
-def test_no_permission_or_no_gh_is_local_with_ci_none(env: Env, why: str) -> None:
+def test_no_permission_or_no_gh_is_local_with_ci_none(env: Env, fake: FakeSystem, why: str) -> None:
     at_push(env, entry(1))
+    script_noop(fake, 2)  # M15: a local boundary still pins and restacks
     if why == "no":
         env.rt.state.upstream.push = bd.Permission.NO
     else:
@@ -151,13 +153,13 @@ def test_no_permission_or_no_gh_is_local_with_ci_none(env: Env, why: str) -> Non
     assert env.rt.state.boundary is None and ci.READY_PHRASE not in env.rt.state.upstream.report
 
 
-def test_a_plain_start_skips_ci_and_a_restacking_start_runs_it() -> None:
+def test_start_never_reaches_ci_and_push_is_followed_by_rebase_then_restack() -> None:
+    """M2/M3: START ends after CHECK, restack or not; END runs PUSH, REBASE, RESTACK, CI."""
     plain = bd.Boundary(Edge.START, 1, stage=Stage.CHECK)
     assert bd.next_stage(plain) is None
-    assert (
-        bd.next_stage(bd.Boundary(Edge.START, 1, stage=Stage.CHECK, restack=True)) is Stage.REVIEW
-    )
-    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.PUSH)) is Stage.CI
+    assert bd.next_stage(bd.Boundary(Edge.START, 1, stage=Stage.CHECK, restack=True)) is None
+    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.PUSH)) is Stage.REBASE
+    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.RESTACK)) is Stage.CI
 
 
 def test_a_pr_service_error_holds_as_error(env: Env) -> None:
@@ -174,6 +176,7 @@ def test_a_pr_service_error_holds_as_error(env: Env) -> None:
 def test_a_full_push_run_records_ci_on_the_entry(env: Env, fake: FakeSystem) -> None:
     at_push(env, entry(1))
     env.rt.state.upstream.push = bd.Permission.YES
+    script_noop(fake, 2)  # M8's pin (rebase) and the one entry's fast rebase (restack)
     env.drive()
     [e] = env.rt.state.upstream.stack
     assert isinstance(e.ci, CiResult) and e.ci.verdict is CiVerdict.GREEN

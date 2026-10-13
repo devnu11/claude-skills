@@ -378,7 +378,7 @@ def test_a_rejected_push_at_restack_holds_and_stays(env: Env, fake: FakeSystem) 
     assert len(pushes(fake)) == 1  # nothing after the refused push
 
 
-# ----- M15: local delivery and guards --------------------------------------------
+# ----- M15: local environment and guards --------------------------------------------
 
 
 @pytest.mark.parametrize("why", ["permission", "no gh"])

@@ -15,7 +15,15 @@ def failure(**kw) -> b.Failure:
 
 def test_enum_values() -> None:
     assert [e.value for e in b.Edge] == ["start", "end"]
-    assert [e.value for e in b.Stage] == ["sync", "check", "review", "push", "ci"]
+    assert [e.value for e in b.Stage] == [
+        "sync",
+        "check",
+        "review",
+        "push",
+        "rebase",
+        "restack",
+        "ci",
+    ]
     assert [e.value for e in b.StepKind] == [
         "role",
         "boundary",
@@ -71,24 +79,26 @@ def test_next_stage_end_goes_through_every_stage() -> None:
     while (nxt := b.next_stage(bd)) is not None:
         seen.append(nxt)
         bd.stage = nxt
-    assert seen == [b.Stage.CHECK, b.Stage.REVIEW, b.Stage.PUSH, b.Stage.CI]
+    assert seen == [
+        b.Stage.CHECK,
+        b.Stage.REVIEW,
+        b.Stage.PUSH,
+        b.Stage.REBASE,
+        b.Stage.RESTACK,
+        b.Stage.CI,
+    ]
 
 
-def test_next_stage_start_skips_review_and_push_without_restack() -> None:
+def test_next_stage_start_skips_every_end_only_stage() -> None:
     bd = b.Boundary(b.Edge.START, 1, stage=b.Stage.CHECK)
     assert b.next_stage(bd) is None
     bd.stage = b.Stage.SYNC
     assert b.next_stage(bd) is b.Stage.CHECK
 
 
-def test_next_stage_start_with_restack_goes_on() -> None:
+def test_next_stage_start_ignores_restack_and_stops_after_check() -> None:
+    """M3: the START edge runs SYNC and CHECK only, whatever ``restack`` says."""
     bd = b.Boundary(b.Edge.START, 1, stage=b.Stage.CHECK, restack=True)
-    assert b.next_stage(bd) is b.Stage.REVIEW
-    bd.stage = b.Stage.REVIEW
-    assert b.next_stage(bd) is b.Stage.PUSH
-    bd.stage = b.Stage.PUSH
-    assert b.next_stage(bd) is b.Stage.CI
-    bd.stage = b.Stage.CI
     assert b.next_stage(bd) is None
 
 
@@ -98,7 +108,10 @@ def test_fix_kinds_table() -> None:
         b.FixCase.REVIEW_CHECK: b.StepKind.TEAM_FIX,
         b.FixCase.REVIEW_CONFLICT: b.StepKind.REVIEW_FIX,
     }
-    assert frozenset({b.Stage.REVIEW, b.Stage.PUSH, b.Stage.CI}) == b.RESTACK_ONLY
+    assert (
+        frozenset({b.Stage.REVIEW, b.Stage.PUSH, b.Stage.REBASE, b.Stage.RESTACK, b.Stage.CI})
+        == b.END_ONLY
+    )
 
 
 def test_setback_key_uses_edge_stage_and_normalised_reason() -> None:

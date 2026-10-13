@@ -64,7 +64,8 @@ def stories_of(**deps: list[str]) -> dict[str, StoryState]:
 def put_file(config, sid: str, meta: str) -> None:
     path = config.stories_dir / f"{sid}.md"
     system.make_dirs(path.parent)
-    system.write_text(path, f"---\n{meta}---\nbody\n")
+    ac = '  - id: AC1\n    text: "c"\n    environment: cli\n'
+    system.write_text(path, f'---\nid: {sid}\ntitle: "A story"\n{meta}acceptance:\n{ac}---\nbody\n')
 
 
 # ----- DP1: listed, state field ---------------------------------------------------
@@ -371,6 +372,7 @@ def test_start_refused_text() -> None:
 
 def open_two(t: Tools) -> None:
     for sid in ("s1", "s2"):
+        put_file(t.runtime.config, sid, "")
         call(t.open_story({"id": sid, "title": sid}))
 
 
@@ -412,7 +414,9 @@ def test_start_sprint_existing_refusals_come_first(make_runtime) -> None:
 def test_open_story_with_depends_on_records_it_and_the_event(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s1", "")
     call(t.open_story({"id": "s1", "title": "A"}))
+    put_file(rt.config, "s2", "depends_on: [s1]\n")
     out = call(t.open_story({"id": "s2", "title": "B", "depends_on": ["s1", "s1"]}))
     assert out["step"] == "design"
     assert rt.state.stories["s2"].depends_on == ["s1"]
@@ -423,6 +427,7 @@ def test_open_story_with_depends_on_records_it_and_the_event(make_runtime) -> No
 def test_open_story_without_depends_on_means_empty(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s1", "")
     call(t.open_story({"id": "s1", "title": "A"}))
     assert rt.state.stories["s1"].depends_on == []
     opened = [e for e in rt.events.events() if e.kind == "story-opened"][-1]
@@ -432,6 +437,7 @@ def test_open_story_without_depends_on_means_empty(make_runtime) -> None:
 @pytest.mark.parametrize("bad", ["s1", [1], {"a": 1}])
 def test_open_story_refuses_depends_on_that_is_not_a_list_of_ids(make_runtime, bad) -> None:
     rt = make_runtime()
+    put_file(rt.config, "s2", "")
     out = call(Tools(rt).open_story({"id": "s2", "title": "B", "depends_on": bad}))
     assert out["status"] == "refused"
     assert out["reason"] == NOT_A_LIST.format(ids="s2")
@@ -441,6 +447,7 @@ def test_open_story_refuses_depends_on_that_is_not_a_list_of_ids(make_runtime, b
 def test_open_story_refuses_a_file_list_that_differs(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s1", "")
     call(t.open_story({"id": "s1", "title": "A"}))
     put_file(rt.config, "s2", "depends_on: [s1]\n")
     out = call(t.open_story({"id": "s2", "title": "B"}))
@@ -451,6 +458,7 @@ def test_open_story_refuses_a_file_list_that_differs(make_runtime) -> None:
 def test_open_story_accepts_the_same_list_as_the_file(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s1", "")
     call(t.open_story({"id": "s1", "title": "A"}))
     put_file(rt.config, "s2", "depends_on: [s1]\n")
     call(t.open_story({"id": "s2", "title": "B", "depends_on": ["s1"]}))
@@ -467,8 +475,10 @@ def test_open_story_refuses_a_bad_file(make_runtime) -> None:
 def test_open_story_refuses_self_and_unknown(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s2", "depends_on: [s2]\n")
     out = call(t.open_story({"id": "s2", "title": "B", "depends_on": ["s2"]}))
     assert out["reason"] == SELF.format(ids="s2")
+    put_file(rt.config, "s2", "depends_on: [s7]\n")
     out = call(t.open_story({"id": "s2", "title": "B", "depends_on": ["s7"]}))
     assert out["reason"] == UNKNOWN.format(pairs="s2 on s7")
     assert rt.state.stories == {}
@@ -477,6 +487,7 @@ def test_open_story_refuses_self_and_unknown(make_runtime) -> None:
 def test_open_story_duplicate_id_is_still_refused_first(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
+    put_file(rt.config, "s1", "")
     call(t.open_story({"id": "s1", "title": "A"}))
     out = call(t.open_story({"id": "s1", "title": "A", "depends_on": "bad"}))
     assert out["status"] == "refused" and out["reason"] != NOT_A_LIST.format(ids="s1")
