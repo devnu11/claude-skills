@@ -47,7 +47,8 @@ def test_load_failure_is_a_warning_not_an_error(page: str) -> None:
 def test_questions_and_handoffs_use_md(page: str) -> None:
     assert page.count("${md(q.text)}") >= 3
     assert "${md(answers[q.id].text)}" in page
-    assert 'MARKDOWN_KINDS = new Set(["step-end", "message", "answer", "thread", "opinion"])' in page
+    kinds = '["step-end", "message", "answer", "thread", "opinion"]'
+    assert f"MARKDOWN_KINDS = new Set({kinds})" in page
     assert "bodyHtml(e.kind, t.body)" in page
 
 
