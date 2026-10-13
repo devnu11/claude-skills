@@ -93,7 +93,9 @@ rule, update in the same story:
   `events.jsonl` or anything else. A new kind of write is the same pattern:
   queue a request file, and let the runner decide.
 - The write token is printed once, in the local URL. It never goes into the
-  snapshot, an event, a request file or a log.
+  snapshot, an event, a request file or a log. It is random unless
+  `--token` or the served repo's `[dashboard] token` fixes it; only
+  presentation workspaces set the latter.
 - Read JSONL that another process is appending to through
   `snapshot.read_jsonl`, which skips torn and blank lines. `Ledger.entries`,
   `Relay` and `EventLog` raise on a torn line, so they suit the runner,

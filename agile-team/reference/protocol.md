@@ -306,7 +306,9 @@ auth. It never serves files by path. Its one write queues a backlog reorder
 request (s83). The request is accepted only from `127.0.0.1` or `::1` and
 only with the token printed in the local URL
 (`dashboard: http://localhost:<port>/?token=<t>`). The token is random at
-each start unless `--token T` is given, and it never appears in the
+each start unless `--token T` is given or the served repo's
+`.agile-team.toml` sets `[dashboard] token` (presentation workspaces only;
+the flag wins). It never appears in the
 snapshot, the events or any log. The dashboard never writes `state.json`:
 the runner applies the request between steps.
 
@@ -560,6 +562,9 @@ stale_s = 90                   # heartbeat older than this: red (amber while a t
 amber_tool_s = 180             # no turn this long while a tool runs: amber
 amber_quiet_s = 300            # no turn this long, no tool: amber
 red_quiet_s = 600              # no turn this long: red
+
+[dashboard]                    # optional; presentation workspaces only, never a real team repo
+token = "presentation"         # fixed write token when `dashboard` has no --token; unset: random each start
 
 [upstream]                     # optional; these are the defaults (see Sprint boundaries)
 remote = "origin"              # "" turns sync and pull requests off

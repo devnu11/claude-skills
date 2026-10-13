@@ -33,7 +33,7 @@ reorder the backlog. The token is new each time the dashboard starts.
 | `--port 8765` | The port (default 8765). `--port 0` picks a free one and prints it. |
 | `--host H` | The address to listen on. By default it is every interface, so other machines on the network can open the second link. On Windows the default is `127.0.0.1`, and only the first line is printed. |
 | `--no-open` | Don't open a browser (for example over SSH). |
-| `--token T` | Use `T` as the write token instead of a random one (for scripts and presentations). |
+| `--token T` | Use `T` as the write token instead of a random one (for scripts and presentations). Without it, `[dashboard] token = "T"` in the repo's `.agile-team.toml` does the same; leave that unset in a real repo so the token stays random. |
 
 Stop it with Ctrl-C, or by stopping the background process.
 
