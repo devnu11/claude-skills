@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s103 complete: E2E test output redirection allowed; refusals name rules (no new ADR)
+
+Your e2e test runs can now save output with redirects: `pytest tests/e2e/test_x.py > out.txt`, `| tee out.txt`, and similar forms. Full-suite runs are still refused. When the guard denies a command, it now names the rule violated (e.g., `"refused by rule 'full-suite': the full suite is the runner's to run: it runs it at the gates and puts the output in your brief (## Runner results). Allowed: named tests, e.g. 'pytest -q tests/e2e/test_x.py::test_y'; to keep the output, add '> out.txt' or '| tee out.txt'"`). This clarity helps you avoid retries on guesswork. Role files no longer mention `timeout` command (macOS has none); they use the Bash tool's `timeout` parameter. No new guard rules or dependencies.
 
 ## s92 P1: Node-harness tests for gate routing to e2e test owner (your work)
 

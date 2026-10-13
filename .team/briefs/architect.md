@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s103 complete: Refusal format standardized, guard clarity improved (no new ADR, extends s69/s43/s41)
+
+**New `refusal.py` module (pure, stdlib only):** Standardizes all Bash refusal messages. `Rule` enum (14 members for each guard rule), `Refusal` dataclass (rule, why, allowed fields), `FORMAT` string: `"refused by rule `{rule}`: {why}. Allowed: {allowed}"`. All guard modules (`suite_check`, `kill_check`, `git_check`, `guard`) now build and format refusals via this module. **Key changes:** (1) `suite_check._is_positional()` skips words after bare redirect operators (`>`, `>>`, `<`, etc.), allowing `pytest tests/test_x.py > out.txt` form for named runs; (2) `WAIT_DENIED` and role `_shared.md` no longer say "run under `timeout` command"; they say "use the Bash tool's `timeout` parameter" (R4–R5); (3) every refusal reason now names its rule and allowed form (R7–R8), eliminating guesswork. **Data tables:** `Rule` enum matches existing constant names (API_KEY, GIT_WRITE, ALLOWLIST, etc.); `refusal` texts in new module match design table exactly. **Docs work (architect ship step):** Update `reference/protocol.md` (guard section: wait-loop bullet names Bash tool's `timeout` parameter; suite bullet drops glued-only limit and shows `> out`, `>> out`, `2> err` forms; new bullet on Bash refusal shape with rule names and exact text). See design `agile-team/docs/design/s103.md` (R1–R8, rule table).
 
 ## s92 complete: Gate routing to file owners—new verdict (ROUTE) and step kind (GATE_FIX) (no new ADR)
 

@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s103 complete: Guard refusals standardized via new `refusal.py` module (1 round, all ACs pass, ship)
+
+**Scope:** New `agile_team/refusal.py` (pure, ~50 LOC), changes to `suite_check.py`, `kill_check.py`, `git_check.py`, `guard.py`, `roles/_shared.md`, design spec. **Verdict: ship.** Diff matches design R1–R8 line for line.
+
+**Design rules enforced (R1–R8):** (R1) Bare redirect operator (whole word `>`, `>>`, `<`, `1>`, `2>`, `2>>`) followed by target word; target is not a positional. (R2) Run kind decided on test paths after R1 applied. (R3) Redirect target not path-checked by guard (audit is backstop). (R4) No built-in role file contains `"timeout "` (with space); backtick-quoted `timeout` keyword and `timeout` ini allowed. (R5) No Bash refusal reason contains `"timeout "`. (R6) Wait check unchanged (loop with timeout/gtimeout prefix still passes). (R7) Every Bash refusal: `"refused by rule `{rule}`: {why}. Allowed: {allowed}"` (rule = Rule enum member, allowed non-empty). (R8) One rule name per refusal row (two GIT_OUTSIDE rows share one rule). **Rule table:** 14 Rule members with exact `why` and `allowed` texts matching design table. **Module structure:** `refusal.py` pure (no imports from agile_team), exports FORMAT string, Rule enum, Refusal dataclass with `text()` method. Guard modules import and build Refusals at runtime; `text()` preserves `{placeholder}` for later `.format()` calls. **Coverage ≥95%, ruff clean. No test deleted.**
+
+See design `agile-team/docs/design/s103.md` (R1–R8, rule table, per-module changes, test checklist AC1–AC3).
 
 ## s92 complete: Gate fixes with assertion changes require a named rule (no new ADR)
 

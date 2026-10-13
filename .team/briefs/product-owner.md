@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s103 complete: Guard refusal messages now clear and rule-named (no new ADR)
+
+When a role's test command is refused (e.g., full-suite run), the guard now gives a clear message: `"refused by rule '{rule}': {why}. Allowed: {allowed}"`. This means no guesswork on what's allowed—the refusal names the rule and shows the exact permitted form. Roles can now save test output to a file: `pytest > out.txt`, `| tee out.txt` forms are allowed for named runs (full-suite still refused). Role files no longer say "run under `timeout` command" (macOS has none); they say "use the Bash tool's `timeout` parameter". No new hand-overs or tools; this is a clarity improvement to error messages. No new ADR (extends guard pattern from s69/s43/s41). See design `agile-team/docs/design/s103.md`.
 
 ## s92 complete: Gate failures route to file owners; no disputes, no rounds (no new ADR)
 

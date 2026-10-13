@@ -1,6 +1,10 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-12 (s78 done)
+**Last updated:** 2026-10-13 (s103 done; s78 done)
+
+## s103 complete: Guard refusal messages clearer (no change to Manager escalation logic)
+
+Bash refusal reasons now follow a consistent format: `"refused by rule '{rule}': {why}. Allowed: {allowed}"`. This means error messages in role briefs and hand-overs will be more explicit about what rule was violated and what the allowed form is. No change to escalation logic, hold clearing, or your decision-making. This is a clarity improvement to help roles understand what commands are allowed and why.
 
 ## s78: Health accuracy improves—red now means truly stuck, not just busy (no new Manager context)
 

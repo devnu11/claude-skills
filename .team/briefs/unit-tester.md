@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s103 complete: Keep unit test output with redirects; refusals name rules (no new ADR)
+
+You can now save a unit test run's output: `pytest tests/test_x.py > out.txt`, `>> out.txt`, `2> err.txt`, `| tee out.txt`. Full-suite runs are still refused. When the guard refuses your command, the reason now names the rule violated and the allowed form, so you know what to try next (no guesswork). Role files no longer say "use `timeout` command"; they say "use the Bash tool's `timeout` parameter". This is for macOS (which has no `timeout` command). See design `agile-team/docs/design/s103.md` (rules R1–R8).
 
 ## s92 complete: Gate fix steps for lint findings in test files (no new ADR)
 

@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s103 complete: Acceptance can save test output; guard refusals clearer (no new ADR)
+
+Your acceptance step can now capture test output with redirects: `pytest -q tests/ > out.txt`, `| tee out.txt`. Full-suite runs are still refused. When the guard refuses a command, the reason now explicitly names the rule and shows the allowed form, so you know the exact permitted command (no guesswork). Role files no longer say "use `timeout`"; they say "use the Bash tool's `timeout` parameter". These are clarity improvements; no new restrictions. See design `agile-team/docs/design/s103.md` (rules R1–R8).
 
 ## s92 complete: Gate failures in foreign files route silently; no disputes for e2e (all ACs pass)
 

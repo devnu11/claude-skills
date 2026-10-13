@@ -1,6 +1,10 @@
 # DevOps: Current context and conventions
 
-**Last updated:** 2026-10-12 (s75 done)
+**Last updated:** 2026-10-13 (s103 done; s75 done)
+
+## s103 complete: Guard refusal messages standardized (no change to DevOps work)
+
+Bash refusal messages now follow a consistent format with rule names and allowed forms (e.g., `"refused by rule 'full-suite': … Allowed: named tests, e.g. 'pytest …'"`). No change to your test scoping rule (s75), delivery configuration, or boundary fix steps. This is a clarity improvement for roles reading error messages.
 
 ## s75: Test scoping rule documented; your exemption boundary established (ADR-0039)
 

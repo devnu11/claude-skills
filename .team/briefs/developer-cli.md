@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s86 done)
+**Last updated:** 2026-10-13 (s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s103 complete: Guard accepts named test output redirection, refusals name rules (no new ADR)
+
+Guard now allows redirected test output: `pytest -q tests/test_x.py > out.txt`, `>> out.txt`, `2> err.txt`, `| tee out.txt`, and `< /dev/null` forms keep a test run's output. Full-suite runs (`pytest > out.txt` with no test name) are still refused. When the guard refuses a command, the reason names the rule violated and the allowed form (e.g., `"refused by rule 'full-suite': … Allowed: named tests, e.g. 'pytest -q tests/test_x.py::test_y'; to keep output, add '> out.txt' or '| tee out.txt'"`). This makes refusal messages clear and actionable—no guesswork on which command is allowed. Role files no longer say "use `timeout` command" (macOS lacks it); they say "use the Bash tool's `timeout` parameter" instead. No new guard rules, no new dependencies.
 
 ## s86 complete: Story dependencies as data (ADR-0046)
 
