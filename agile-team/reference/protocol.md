@@ -301,23 +301,54 @@ on the story (`interrupted`) and logged as a `step-interrupted` event
 
 ## Dashboard
 
-`agile-team dashboard` is a read-only HTTP server (Python stdlib, no auth).
-It never writes, and it never serves files by path.
+`agile-team dashboard` is an HTTP server (Python stdlib). Reads need no
+auth. It never serves files by path. Its one write queues a backlog reorder
+request (s83). The request is accepted only from `127.0.0.1` or `::1` and
+only with the token printed in the local URL
+(`dashboard: http://localhost:<port>/?token=<t>`). The token is random at
+each start unless `--token T` is given, and it never appears in the
+snapshot, the events or any log. The dashboard never writes `state.json`:
+the runner applies the request between steps.
 
 | Route | Returns |
 |---|---|
 | `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for the question, answer and handoff text (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead. |
 | `GET /api/snapshot` | the snapshot as JSON |
+| `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
+| `POST /api/reorder` | body `{"story", "position", "version"}`: `position` is the place in the Backlog group, and `version` is the snapshot's `run.order_version`. It needs the `X-Agile-Team-Token` header and a localhost peer, else 403. A bad body gets 400. Otherwise it writes `.team/run/reorders/r<N>.json` and answers 202 `{"id": "r<N>", "status": "queued"}`. |
 | `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes or the health verdict (level and reason) changes (both checked once a second). Otherwise it sends a `: keepalive` comment every second. |
-| anything else | 404 (other methods: 501) |
+| anything else | 404 (methods other than GET and POST: 501) |
+
+**Reorder requests (s83).** Each time the router ticks (before news and
+work), it applies pending requests in number order. A request is pending
+until its id is in `state.reorders`. The checks, first refusal wins: the
+order changed since the page saw it (`version` differs: "…; reload"), an
+unknown or done story, a current-sprint story, a place outside the
+Backlog, then `move_refusal`. A request that passes is applied with
+`Priority.with_move`. It may pull, since the human's request is its own
+reason. It is logged as a `priority` event with `role` `null` and
+`source` `human (dashboard)`. Every PO `priority` event carries `source`
+`product-owner`. The new Backlog order is saved as `state.human_order`.
+The PO's next hand-over prompt starts with a `From the dashboard:` section.
+After that, a PO `prioritise` or `move_story` that changes the relative
+order of `human_order`'s stories still in the Backlog is refused without a
+reason. `start_sprint` is exempt.
 
 The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
 task, budget, Manager checkpoint percentage, round cap, `manager_due`,
-`order`: the priority queue), `pipeline` (enabled steps), `roles` (name,
+`order`: the priority queue, `backlog`: the queued stories outside the
+current sprint, `order_version`: a 12-hex digest of both), `pipeline`
+(enabled steps), `roles` (name,
 model, provider, with PO overrides applied), `stories` (in priority order;
 state plus `opened_at`, `repeated`, the story file's `acceptance`,
-`position`, `in_progress`, `hold` and `wait`: `{"reason", "on"}` or
-`null`). The board keeps that order in every column and shows each
+`position`, `tier`, `hold`, `wait`: `{"reason", "on"}` or
+`null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
+`/api/file` kinds that exist) and `label`: `cancelled`, `held` or `""`).
+`reorders` lists the last 20 reorder requests with `status`
+`pending`/`applied`/`refused` and `reason`. The **Backlog** tab lists
+`run.order` in two groups, Current sprint (no handles) and Backlog (up,
+down, top, drag). A click expands a row to show the story file, state,
+file links, spend, recent events and open questions. The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
 `⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
 `needs the human` (blocked, or an open question names it) or `held` (any

@@ -62,6 +62,7 @@ one line here. Older designs are the sections at the end of this file.
 | s51 Finish started stories first: the ranking groups stories (in progress, held, not started; started = a recorded commit) before the PO's order (replaces s40 P2); a not-started story goes ahead only by a pull with a reason (`state.pulled`, `pulled` in the `priority` event); `start_sprint` never pulls except the s81 CI bug story; snapshot `tier` replaces `in_progress` | [design/s51.md](design/s51.md) |
 | s65 A role's git never reaches the team repo: `dispatch.GIT_CONFINED` (`e2e` → presentation workspace, `acceptance` → the Proxy's copy) sets `GIT_CEILING_DIRECTORIES` (run dir) and pins Bash's cwd; `git_check` sees through `X=1`/`env`/`command`, tracks `cd … &&`, and one `GIT_RULES` table by `Where` (unconfined, step dir, workspace, elsewhere, unknown) allows any git inside the workspace, read-only in the step's cwd, nothing elsewhere; `lay_out` keeps the workspace across rounds | [design/s65.md](design/s65.md) |
 | s59 The sprint-start sync rebases the team branch onto the target (no merge, no `-X ours`); old commits pair with their copies by author, date and message (`rewrite.pair`); `rewrite.remap_state` rewrites the recorded team hashes (`REMAPPED`), but not `upstream.checked`; a no-lost-content check resets and holds `error`; a conflict aborts, holds `sync_conflict` with the files grouped by directory; `Boundary.sync_from` lets a hand rebase be remapped too (ADR-012) | [design/s59.md](design/s59.md) |
+| s83 Backlog tab: every outstanding story in the queue's order, grouped Current sprint / Backlog (`backlog.View`), rows that expand to the story file (`md()`), state, file links, spend, events and questions; files served by id from four fixed folders (`GET /api/file`, `story_files`); Backlog moves POSTed from localhost with the start-up token (`/api/reorder`, 403 otherwise) as `.team/run/reorders/r<N>.json`, applied by the router between steps through `with_move`/`move_refusal` (stale version refused), logged as `priority` with `source` `human (dashboard)`, told to the PO at its next hand-over; the human's backlog order (`state.human_order`) binds the PO's `prioritise`/`move_story` unless it gives a reason | [design/s83.md](design/s83.md) |
 
 ## Components
 
@@ -87,6 +88,8 @@ one line here. Older designs are the sections at the end of this file.
 | `fingerprint.py` | content fingerprints that ignore whitespace and comments (s30): `of`, `normalise`, `LINE_COMMENTS`; no I/O | none |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
 | `priority.py` | story priority (s40, s51): `Priority` (the one ranking rule `key`: groups `Tier` in progress / held / not started, then the PO's order; `ranked`, `queue`, `plan` (the order with no groups), `with_first` and `with_move` (build the new order on the plan, never the queue), `board_move`, `move_pull`, `repulled`), `started`, `pulls`, refusals (incl. a pull without a reason, `first_refusal`), `moves`; no I/O | gates (`StoryState`) |
+| `backlog.py` | the dashboard's Backlog (s83): `View` (queue, backlog, order version), `label`, the apply refusals, the human's-order rule (`HumanCheck`, `human_refusal`), `STORY_ID`; no I/O | priority, state |
+| `reorders.py` | reorder requests (s83): `Requests` (`.team/run/reorders/r<N>.json`, published like `tell`), `parse_ask`, `Desk` (applies pending requests between steps through `Runtime.reorder`), `told_section` | backlog, priority, dispatch (`Runtime`) |
 | `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |
 | `state.py` | `RunState` (with the PO's story `order`, s40, and the `pulled` stories, s51) and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
@@ -104,7 +107,8 @@ one line here. Older designs are the sections at the end of this file.
 | `presentation.py` | the story's presentation for the Proxy (`PRESENTATIONS` table of `Recipe(need, check)`): lay-out before e2e, completeness check, the e2e liveness `Trial` (s26), copy into the sandbox | sandbox, gates, git |
 | `roles.py`, `config.py` | role layering, handoff parsing, `.agile-team.toml` | none |
 | `dashboard/snapshot.py` | `build(config, book)`: run files → one snapshot dict (read-only) | state, ledger, relay files, events file, story and requirement files, roles |
-| `dashboard/server.py` | read-only HTTP + SSE server (`open_server` → `system.listen_http`, s76), `default_host`, `display_url` | snapshot (through `Dashboard`) |
+| `dashboard/story_files.py` | the story files the dashboard may serve (s83): `FOLDERS` table, `path_of`, `read`, `existing`; by story id only | config, state |
+| `dashboard/server.py` | HTTP + SSE server (`open_server` → `system.listen_http`, s76), `default_host`, `dashboard_urls`; GET routes read only; one write, `POST /api/reorder`, from localhost with the start-up token, which only queues a request file (s83) | snapshot, story_files, reorders (through `Dashboard`) |
 
 ```mermaid
 flowchart LR
@@ -129,6 +133,9 @@ flowchart LR
   st -. read only .-> dash
   relay -. read only .-> dash
   dash -- SSE snapshot --> browser[[human's browser]]
+  browser -- POST reorder, localhost + token --> dash
+  dash -- rN.json --> rq[(reorders/)]
+  rq -. between steps .-> router
 ```
 
 ### One role step

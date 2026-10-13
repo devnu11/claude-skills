@@ -60,7 +60,15 @@ each card shows its position (`#1` is next). A waiting story shows
 `⏸ questions`, `⏸ manager`, `⏸ round cap`, `⏸ needs the human` or `⏸ held`,
 with a `waits on:` line naming the question (for example `m38: …`) or the
 reason. Each change to the order appears in the timeline as a **priority**
-row: who moved what, from which position to which, and why.
+row: who moved what (the Product Owner, or `human (dashboard)`), from which
+position to which, and why.
+
+You can also reorder the backlog yourself on the dashboard's **Backlog**
+tab: move a story up, down or to the top, or drag it. Only stories outside
+the current sprint move. The runner applies your move between steps and
+tells the Product Owner at its next turn. From then on your backlog order
+binds the PO: a change to it without a reason is refused, and the reason
+appears in the timeline.
 
 `agile-team status` shows the stories in the order they were created. The
 Product Owner's `story_status` and the dashboard show the priority order.

@@ -82,17 +82,26 @@ rule, update in the same story:
   renders. Event `data` shapes must match it.
 - New event kinds go in `events.EventKind`; never reuse a kind for a
   different shape.
-- The dashboard is read-only. `dashboard/snapshot.py` reads only the files
-  `watched_files` lists (plus the role book). It never writes, never runs git
-  and never reads key files. A new data source is a new entry there and in
-  the "Dashboard" section of `reference/protocol.md`.
+- The dashboard never changes the run itself. `dashboard/snapshot.py` reads
+  only the files `watched_files` lists (plus the role book). It never
+  writes, never runs git and never reads key files. A new data source is a
+  new entry there and in the "Dashboard" section of `reference/protocol.md`.
+- The dashboard's one write (s83) is a request file in
+  `.team/run/reorders/`, accepted only from localhost with the start-up
+  token. The runner applies it between steps, through the same code as the
+  PO's tools (`Runtime.reorder`). The dashboard never writes `state.json`,
+  `events.jsonl` or anything else. A new kind of write is the same pattern:
+  queue a request file, and let the runner decide.
+- The write token is printed once, in the local URL. It never goes into the
+  snapshot, an event, a request file or a log.
 - Read JSONL that another process is appending to through
   `snapshot.read_jsonl`, which skips torn and blank lines. `Ledger.entries`,
   `Relay` and `EventLog` raise on a torn line, so they suit the runner,
   which writes those files, but not readers running alongside it.
-- The server serves fixed routes (`server.ROUTES`) and never builds a file
-  path from a request. A new route is a new row there, documented in the
-  protocol.
+- The server serves fixed routes (`server.ROUTES`, `server.POSTS`) and never
+  builds a file path from raw request text. Story files are looked up by a
+  checked story id in the `story_files.FOLDERS` table (s83). A new route is
+  a new row there, documented in the protocol.
 - `index.html` is one vanilla-JS file with no build step. Its only outside
   URLs are the pinned `mermaid@11.4.1` and `markdown-it@14.1.0` (tested;
   ADR-0042). Markdown becomes HTML only through `md(text)`, never through

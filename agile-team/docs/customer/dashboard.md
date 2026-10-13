@@ -3,8 +3,9 @@
 `agile-team dashboard` serves a web page that shows the team at work: the
 board, who is briefing and handing off to whom, token spend, questions
 waiting for you and requirement changes. It updates by itself as the run
-moves. It only reads the run's files, so it never changes anything, and you
-can start and stop it at any time.
+moves. It reads the run's files and changes only one thing: on the
+**Backlog** tab you can reorder the stories outside the current sprint.
+You can start and stop it at any time.
 
 ## Start it
 
@@ -18,19 +19,21 @@ It prints the local link, then the link for other machines, and opens the
 local one in your browser:
 
 ```text
-dashboard: http://localhost:8765/
+dashboard: http://localhost:8765/?token=Xq3vB9kTf0aLm2Rw8sYc1g
 from other machines: http://labbox.local:8765/
 ```
 
 Use the `localhost` link on the machine running the team. Only there can
 the page show a desktop notification when something goes wrong (see
-"Is the team working?").
+"Is the team working?"). Only there, with the token in the link, can you
+reorder the backlog. The token is new each time the dashboard starts.
 
 | Option | Effect |
 |---|---|
 | `--port 8765` | The port (default 8765). `--port 0` picks a free one and prints it. |
 | `--host H` | The address to listen on. By default it is every interface, so other machines on the network can open the second link. On Windows the default is `127.0.0.1`, and only the first line is printed. |
 | `--no-open` | Don't open a browser (for example over SSH). |
+| `--token T` | Use `T` as the write token instead of a random one (for scripts and presentations). |
 
 Stop it with Ctrl-C, or by stopping the background process.
 
@@ -40,6 +43,8 @@ Use the second printed link, for example `http://labbox.local:8765/`. If
 the name doesn't resolve on the other machine, use the server's IP address with the
 same port. There is no login, so anyone who can reach that port sees the run:
 the task, the stories, the questions and the spend. It never shows API keys.
+From another machine the page is read-only: reordering works only on the
+machine running the team.
 To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 ## What you see
@@ -58,6 +63,22 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   position (`#1` runs next) and its rounds. A story that cannot move shows
   `⏸ <reason>` (`questions`, `manager`, `round cap`, `needs the human` or
   `held`) and a `waits on:` line. See
+  [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
+- **Backlog:** every story that isn't done, in the order the team will take
+  them, in two groups: **Current sprint** and **Backlog**. Each row shows
+  its position, id, title, step, status, delivery, and why it is held.
+  Cancelled and held stories are labelled. Click a row to open it: the
+  story file, its state (sprint, step, status, rounds, disputes, hold,
+  developer, delivery, commits), links to its design, review and
+  acceptance files when they exist, its spend and turns, its last 10
+  events, and the open questions about it. Click again to close it.
+  Backlog rows have `↑`, `↓` and `⤒` buttons, and you can drag them onto
+  another Backlog row. Current-sprint rows can't be moved. A move is
+  applied by the runner between steps, so the tab says
+  `waiting for the runner` until then. If the order changed in the
+  meantime, your move is refused and the tab asks you to reload. Once you
+  have set the backlog's order, the Product Owner keeps it. It can change
+  it only with a stated reason, and the reason shows in the timeline. See
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
   status, and questions and answers between the PO and you, next to a

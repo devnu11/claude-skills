@@ -54,16 +54,18 @@ command fails.
 5. **Start in the background:**
    `$AT start --cadence <c> --task "<the human's task, verbatim>"`
    (add `--onboard` for the onboarding sprint, `--resume` to continue).
-   Next to it, also in the background, start the read-only dashboard:
+   Next to it, also in the background, start the dashboard:
    `$AT dashboard` (add `--no-open` over SSH or when the human is on another
-   machine). It prints `dashboard: http://localhost:<port>/`, then
+   machine). It prints `dashboard: http://localhost:<port>/?token=<t>`, then
    `from other machines: http://<host>.local:<port>/`. Give the human the
-   localhost link when they are on this machine: only there can it raise a
-   desktop notification when the run turns red. Give the second link to
+   localhost link, token included, when they are on this machine. Only
+   there can it raise a desktop notification when the run turns red, and
+   only there, with the token, can the human reorder the Backlog tab. Give the second link to
    someone on another machine (on Windows there is none; it is local only). If the
    port is taken, a dashboard is probably already running, so reuse its URL
-   or pass `--port 0`. Leave it running across resumes. It never changes
-   anything.
+   or pass `--port 0`. Leave it running across resumes. Its only write is
+   a Backlog reorder request, which the runner applies between steps and
+   tells the PO about.
    **Long runs** survive usage limits under the `unattended` skill. Make the
    job's command the `start` above, and make its resume command plain
    `<AT> start --resume`, where `<AT>` is the full command in `$AT`. Never
