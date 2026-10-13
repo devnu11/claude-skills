@@ -1,5 +1,5 @@
 """Dashboard server: the page, the snapshot, the SSE stream, story files by id, and
-token-gated reorder requests from localhost; stdlib only.
+token-gated reorder requests and thread posts from localhost; stdlib only.
 
 Never serves a directory.
 """
@@ -18,10 +18,11 @@ from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
 from urllib.parse import parse_qs, urlsplit
 
-from .. import reorders, system
+from .. import reorders, system, threads
 from ..backlog import Ask
 from ..config import Config
 from ..roles import RoleBook
+from ..threads import Entry, Post
 from . import snapshot, story_files
 from .story_files import FileAsk
 
@@ -34,6 +35,8 @@ LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 WRITE_HOSTS = {"127.0.0.1", "::1"}
 TOKEN_HEADER = "X-Agile-Team-Token"
 MAX_BODY = 4096
+MAX_POST_BODY = 32768
+BODY_LIMITS: dict[str, int] = {"/api/reorder": MAX_BODY, "/api/thread": MAX_POST_BODY}
 WHOLE_NUMBER = re.compile(r"[0-9]+")
 INDEX = Path(__file__).parent / "index.html"
 
@@ -48,6 +51,7 @@ class Dashboard:
     vital_sign: Callable[[], str] = lambda: ""
     read_file: Callable[[FileAsk], str | None] = lambda _ask: None
     queue: Callable[[Ask], reorders.Request] | None = None
+    post: Callable[[Post], Entry | None] | None = None
     token: str = ""
 
     @classmethod
@@ -59,6 +63,7 @@ class Dashboard:
             vital_sign=partial(snapshot.vital_sign, config),
             read_file=partial(story_files.read, config),
             queue=reorders.Requests(config.run_dir).queue,
+            post=partial(threads.post_known, config.run_dir),
         )
 
 
@@ -147,9 +152,10 @@ def may_write(handler: Handler) -> bool:
 
 
 def _body(handler: Handler) -> bytes | None:
-    """The request body when its Content-Length is 1 to MAX_BODY, else None."""
+    """The request body when its Content-Length is 1 to the route's limit, else None."""
     raw = handler.headers.get("Content-Length", "")
-    if not WHOLE_NUMBER.fullmatch(raw) or not 1 <= int(raw) <= MAX_BODY:
+    limit = BODY_LIMITS[urlsplit(handler.path).path]
+    if not WHOLE_NUMBER.fullmatch(raw) or not 1 <= int(raw) <= limit:
         return None
     return handler.rfile.read(int(raw))
 
@@ -162,6 +168,18 @@ def _reorder(handler: Handler) -> None:
     if ask is None or queue is None:
         return handler.send_error(400)
     data = json.dumps({"id": queue(ask).id, "status": "queued"}).encode()
+    _send(handler, Body("application/json", data, 202))
+
+
+def _thread(handler: Handler) -> None:
+    if not may_write(handler):
+        return handler.send_error(403)
+    post = threads.parse_post(_body(handler) or b"")
+    send = handler.server.app.post  # type: ignore[attr-defined]
+    entry = send(post) if post and send else None
+    if entry is None:
+        return handler.send_error(400)
+    data = json.dumps({"id": entry.id, "status": "posted"}).encode()
     _send(handler, Body("application/json", data, 202))
 
 
@@ -201,7 +219,7 @@ ROUTES: dict[str, Callable[[Handler], None]] = {
     "/api/stream": _stream,
     "/api/file": _file,
 }
-POSTS: dict[str, Callable[[Handler], None]] = {"/api/reorder": _reorder}
+POSTS: dict[str, Callable[[Handler], None]] = {"/api/reorder": _reorder, "/api/thread": _thread}
 
 
 def with_token(url: str, token: str) -> str:

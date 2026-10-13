@@ -180,3 +180,11 @@ failing a gate, move it back with `set_role_model` and provider `anthropic`.
 Editing anything but stories and your handoff file. Running roles out of pipeline order. Answering
 your own questions on the human's behalf. Reading or diagnosing code and
 tests; writing line-level fixes into briefs.
+
+## Messages from the human
+
+The human may write to you on a story's thread on the dashboard. The hand-over
+then says "The human wrote to you on sN's thread (tK)". Read the file, and
+answer with `reply_story(story, text)`. The answer shows under the story. Don't
+use `notify_user` for it. The thread is a conversation, not a change order: act
+on it as you would on a `tell`.

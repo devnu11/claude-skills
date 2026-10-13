@@ -1709,6 +1709,18 @@
    }
   },
   {
+   "id": "thread-t1",
+   "at": 1791471000.0,
+   "kind": "thread",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "entry": "t1",
+    "author": "human",
+    "to": "product-owner"
+   }
+  },
+  {
    "id": "e85",
    "at": 1791471226.3,
    "kind": "step-end",
@@ -1731,6 +1743,18 @@
    }
   },
   {
+   "id": "thread-m5",
+   "at": 1791471500.0,
+   "kind": "thread",
+   "role": "product-owner",
+   "story": "s5",
+   "data": {
+    "entry": "m5",
+    "author": "product-owner",
+    "to": "human"
+   }
+  },
+  {
    "id": "e86",
    "at": 1791471570.0,
    "kind": "gate",
@@ -1743,6 +1767,18 @@
     "rounds": 1,
     "story_status": "active",
     "reason": ""
+   }
+  },
+  {
+   "id": "thread-lp1",
+   "at": 1791471800.0,
+   "kind": "thread",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "entry": "lp1",
+    "author": "human",
+    "to": "liaison"
    }
   },
   {
@@ -1797,6 +1833,18 @@
     "kind": "runner",
     "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
     "now_at": "acceptance"
+   }
+  },
+  {
+   "id": "thread-lr1",
+   "at": 1791472100.0,
+   "kind": "thread",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "entry": "lr1",
+    "author": "liaison",
+    "to": "human"
    }
   },
   {
@@ -2467,6 +2515,15 @@
     "s4"
    ],
    "at": 1791469489.5
+  },
+  {
+   "id": "m5",
+   "kind": "reply",
+   "text": "Yes: CSV only for now.",
+   "stories": [
+    "s5"
+   ],
+   "at": 1791471500.0
   }
  ],
  "answers": [
@@ -2474,6 +2531,40 @@
    "id": "m1",
    "text": "Only `report run` for now. Yes, Excel on Windows matters: finance opens these.",
    "at": 1791450263.9
+  }
+ ],
+ "thread": [
+  {
+   "id": "t1",
+   "story": "s5",
+   "author": "human",
+   "to": "product-owner",
+   "text": "Should s5 cover Excel quoting?",
+   "at": 1791471000.0
+  },
+  {
+   "id": "m5",
+   "story": "s5",
+   "author": "product-owner",
+   "to": "human",
+   "text": "Yes: CSV only for now.",
+   "at": 1791471500.0
+  },
+  {
+   "id": "lp1",
+   "story": "s5",
+   "author": "human",
+   "to": "liaison",
+   "text": "Can you ask the PO about s5's scope?",
+   "at": 1791471800.0
+  },
+  {
+   "id": "lr1",
+   "story": "s5",
+   "author": "liaison",
+   "to": "human",
+   "text": "Asked; the PO says CSV only.",
+   "at": 1791472100.0
   }
  ],
  "upstream": {

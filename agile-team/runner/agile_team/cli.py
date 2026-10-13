@@ -29,6 +29,7 @@ from . import (
     recovery,
     sandbox,
     system,
+    threads,
     watch,
 )
 from . import config as config_mod
@@ -492,6 +493,19 @@ def cmd_tell(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reply(args: argparse.Namespace) -> int:
+    """Reply on a story's thread as the liaison; the text comes from a file or stdin."""
+    config = _load_config(repo_of(args))
+    text = _message_text(args.source)
+    stories = state_mod.load(config.run_dir).stories
+    reason = threads.text_refusal(text) or threads.story_refusal(args.story, stories)
+    if reason:
+        raise CliError(reason)
+    entry = threads.Threads(config.run_dir).reply(args.story, text)
+    print(threads.REPLIED.format(id=entry.id, story=entry.story))
+    return 0
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     """Block until the liaison is needed; print one JSON line."""
     config = _load_config(repo_of(args))
@@ -607,6 +621,9 @@ COMMANDS = (
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
     Command("tell", "queue a message for the PO (a file, or - for stdin)", cmd_tell,
             ((("source",), {"help": "file holding the message, or - to read stdin"}),)),
+    Command("reply", "reply on a story's dashboard thread (a file, or - for stdin)", cmd_reply,
+            ((("story",), {}),
+             (("source",), {"help": "file holding the reply, or - to read stdin"}))),
     Command("watch", "wait until the liaison is needed; print one JSON line", cmd_watch,
             WATCH_ARGS),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),

@@ -109,6 +109,11 @@ section[hidden] { display: none; }
 .btitle { flex: 1 1 18ch; }
 .bmeta, .bhold { color: var(--muted); font-size: 12px; }
 .bhandles { margin-left: auto; display: flex; gap: 4px; }
+.thread { margin-top: 8px; }
+.tmsg { padding: 4px 0; border-top: 1px solid var(--border); }
+.tmeta { color: var(--muted, inherit); font-size: 11.5px; }
+.tform { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tform textarea { width: 100%; box-sizing: border-box; font: inherit; }
 .bdetail { padding: 6px 12px 10px; border-left: 2px solid var(--border); font-size: 12.5px; }
 .bfields { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--ink-2); margin: 4px 0; }
 .bevents { margin: 4px 0; padding-left: 18px; color: var(--muted); }
@@ -423,7 +428,7 @@ function md(text) {
 
 // ----- empty states -----------------------------------------------------------
 
-const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns", "reorders"];
+const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns", "reorders", "thread"];
 const HEALTH_DEFAULT = { level: "idle", reason: "", model_note: null };
 const RUN_DEFAULTS = {
   status: "idle", sprint: 0, task: "", budget_usd: 0, manager_every_pct: 25, round_cap: 3, manager_due: [],
@@ -1112,12 +1117,17 @@ const TIMELINE = {
   }),
 };
 
+TIMELINE.thread = (e, ctx) => ({
+  from: WHO[e.data.author], to: WHO[e.data.to], what: "thread", body: ctx.thread[e.data.entry]?.text ?? "",
+});
+
 function renderTimeline(view) {
   const fresh = data.fresh;
   const ctx = {
     events: view.events,
     messages: Object.fromEntries(view.messages.map((m) => [m.id, m])),
     answers: Object.fromEntries(view.answers.map((a) => [a.id, a])),
+    thread: Object.fromEntries(view.thread.map((t) => [t.id, t])),
   };
   renderTimelineFilter(view);
   const rows = view.events.filter((e) => !ui.story || e.story === ui.story).slice(-120).reverse();
@@ -1129,7 +1139,7 @@ function timelineRow(e, ctx, isNew) {
   try { return timelineRowHtml(e, ctx, isNew); } catch (err) { console.error(err); return ""; }
 }
 
-const MARKDOWN_KINDS = new Set(["step-end", "message", "answer"]);
+const MARKDOWN_KINDS = new Set(["step-end", "message", "answer", "thread"]);
 const bodyHtml = (kind, text) => (MARKDOWN_KINDS.has(kind) ? md(text) : esc(text));
 
 function timelineRowHtml(e, ctx, isNew) {
@@ -1217,7 +1227,34 @@ function spendLine(view, id) {
   return `spend ${fmt.usd(cost)} · ${turns} turns`;
 }
 
-const eventLine = (e) => `<li>${fmt.time(e.at)} ${esc(e.kind)} ${esc(e.data?.source ?? e.role ?? "")}</li>`;
+const eventLine = (e) => `<li>${fmt.time(e.at)} ${esc(e.kind)} ${esc(e.data?.source ?? e.data?.author ?? e.role ?? "")}</li>`;
+
+const WHO = { human: "you", "product-owner": "PO", liaison: "liaison" };
+const SEND_EMPTY = "write a message first";
+const NO_THREAD = "No messages yet.";
+
+function threadEntries(view, id) {
+  return view.thread.filter((t) => t.story === id);
+}
+
+function threadEntryHtml(t) {
+  return `<div class="tmsg"><div class="tmeta">${esc(WHO[t.author])} → ${esc(WHO[t.to])} · ${fmt.time(t.at)}</div><div class="md">${md(t.text)}</div></div>`;
+}
+
+function threadFormHtml(id) {
+  const to = ui.to[id] ?? "product-owner", sending = ui.sending.has(id);
+  const option = (value, label) => `<option value="${value}" ${to === value ? "selected" : ""}>${label}</option>`;
+  return `<div class="tform"><textarea data-thread-text="${esc(id)}" maxlength="4000" rows="3">${esc(ui.drafts[id] ?? "")}</textarea>
+    <select data-thread-to="${esc(id)}">${option("product-owner", "PO")}${option("liaison", "liaison")}</select>
+    <button class="ctl" data-thread-send="${esc(id)}" ${sending ? "disabled" : ""}>send</button>
+    <span class="tnote">${esc(ui.threadNote[id] ?? "")}</span></div>`;
+}
+
+/** A story's thread: its entries, and a form when the page holds the token (H16). */
+function threadHtml(story, view) {
+  const entries = threadEntries(view, story.id).map(threadEntryHtml).join("") || `<p class="empty">${NO_THREAD}</p>`;
+  return `<div class="thread">${entries}${TOKEN === "" ? "" : threadFormHtml(story.id)}</div>`;
+}
 
 /** What an expanded row shows (B5). */
 function storyDetails(story, view) {
@@ -1230,7 +1267,8 @@ function storyDetails(story, view) {
     <div class="bfields">${fields} <span>commits: ${commits}</span></div>
     <div class="bfields">${spendLine(view, story.id)}${links ? " · " + links : ""}</div>
     <ul class="bevents">${events.map(eventLine).join("")}</ul>
-    ${asks.map((q) => `<div class="q"><div class="q-head">${pill(q.id, "warning")}</div><div class="q-text">${md(q.text)}</div></div>`).join("")}</div>`;
+    ${asks.map((q) => `<div class="q"><div class="q-head">${pill(q.id, "warning")}</div><div class="q-text">${md(q.text)}</div></div>`).join("")}
+    ${threadHtml(story, view)}</div>`;
 }
 
 function groupHtml(title, rows, view, base) {
@@ -1245,9 +1283,23 @@ function backlogHtml(view) {
   return groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0);
 }
 
+/** Run `fn`, then give a focused thread textarea its focus and selection back (H18). */
+function keepFocus(fn) {
+  const box = document.activeElement?.closest?.("[data-thread-text]");
+  const id = box?.dataset.threadText, start = box?.selectionStart, end = box?.selectionEnd;
+  fn();
+  if (id === undefined) return;
+  const next = document.querySelector(`[data-thread-text="${CSS.escape(id)}"]`);
+  if (!next) return;
+  next.focus();
+  next.setSelectionRange(start, end);
+}
+
 function renderBacklog(view) {
-  $("#backlog").innerHTML = backlogHtml(view);
-  $("#backlog-note").innerHTML = reorderNote(view);
+  keepFocus(() => {
+    $("#backlog").innerHTML = backlogHtml(view);
+    $("#backlog-note").innerHTML = reorderNote(view);
+  });
 }
 
 /** What the tab says about its last request (B16, B20). */
@@ -1294,6 +1346,27 @@ async function postReorder(story, position) {
   render();
 }
 
+/** Post the draft on story `id`'s thread (H17). */
+async function postThread(id) {
+  const text = (ui.drafts[id] ?? "").trim();
+  if (text === "") { ui.threadNote[id] = SEND_EMPTY; return render(); }
+  ui.sending.add(id);
+  ui.threadNote[id] = "";
+  render();
+  try {
+    const res = await fetch("api/thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Agile-Team-Token": TOKEN },
+      body: JSON.stringify({ story: id, to: ui.to[id] ?? "product-owner", text }),
+    });
+    if (res.status === 403) ui.threadNote[id] = READ_ONLY;
+    else if (!res.ok) ui.threadNote[id] = "post failed: HTTP " + res.status;
+    else { ui.drafts[id] = ""; ui.threadNote[id] = ""; }
+  } catch (err) { ui.threadNote[id] = "post failed: " + err.message; }
+  ui.sending.delete(id);
+  render();
+}
+
 function moveFromHandle(btn) {
   const { backlog } = backlogGroups(data.view);
   const place = backlog.findIndex((s) => s.id === btn.dataset.story) + 1;
@@ -1302,11 +1375,21 @@ function moveFromHandle(btn) {
 }
 
 document.addEventListener("click", (ev) => {
+  const send = ev.target.closest("[data-thread-send]");
+  if (send) return postThread(send.dataset.threadSend);
   const move = ev.target.closest("[data-move]");
   if (move) return moveFromHandle(move);
   if (ev.target.closest("[data-reload]")) return location.reload();
   const row = ev.target.closest("[data-expand]");
   if (row) toggleRow(row.dataset.expand);
+});
+document.addEventListener("input", (ev) => {
+  const box = ev.target.closest?.("[data-thread-text]");
+  if (box) ui.drafts[box.dataset.threadText] = box.value;
+});
+document.addEventListener("change", (ev) => {
+  const pick = ev.target.closest?.("[data-thread-to]");
+  if (pick) ui.to[pick.dataset.threadTo] = pick.value;
 });
 document.addEventListener("dragstart", (ev) => {
   const row = ev.target.closest?.("[data-place]");
@@ -1670,6 +1753,7 @@ const ui = {
   tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens",
   scope: "story", focus: "", details: false,
   expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
+  drafts: {}, to: {}, sending: new Set(), threadNote: {},
 };
 const RENDER = { flow: renderFlowTab, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 

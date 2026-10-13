@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .. import backlog, health, live, system, waits
+from .. import backlog, health, live, system, threads, waits
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
@@ -22,7 +22,7 @@ from ..events import EVENTS
 from ..gates import StoryStatus
 from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
-from ..relay import INBOX, OUTBOX
+from ..relay import INBOX, OUTBOX, REPLY
 from ..reorders import APPLIED, REORDERS_DIR, Request, Requests
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
@@ -94,7 +94,14 @@ def watched_files(config: Config) -> list[Path]:
     stories = system.glob(config.stories_dir, "*.md")
     reqs = system.glob(config.requirements_dir, "REQ-*.md")
     asks = system.glob(config.run_dir / REORDERS_DIR, "r*.json")
-    return [*run, config_path(config.repo), *stories, *reqs, *asks]
+    return [
+        *run,
+        config_path(config.repo),
+        *stories,
+        *reqs,
+        *asks,
+        *threads.watched(config.run_dir),
+    ]
 
 
 def _generated_at(files: RunFiles) -> float:
@@ -276,10 +283,20 @@ def _answer_event(answer: dict) -> dict:
             "role": None, "story": None, "data": {"message": mid}}  # fmt: skip
 
 
+def _thread_event(entry: threads.Entry) -> dict:
+    return {"id": f"thread-{entry.id}", "at": entry.at, "kind": "thread",
+            "role": threads.EVENT_ROLES.get(entry.author), "story": entry.story,
+            "data": {"entry": entry.id, "author": str(entry.author),
+                     "to": str(entry.to)}}  # fmt: skip
+
+
 def _events(files: RunFiles) -> list[dict]:
-    sent = map(_message_event, files.lines(OUTBOX))
+    outbox = [m for m in files.lines(OUTBOX) if m.get("kind") != REPLY]
+    sent = map(_message_event, outbox)
     received = map(_answer_event, files.lines(INBOX))
-    return sorted([*files.events, *sent, *received], key=lambda e: e.get("at", 0.0))
+    posts = map(_thread_event, threads.Threads(files.config.run_dir).all())
+    merged = [*files.events, *sent, *received, *posts]
+    return sorted(merged, key=lambda e: e.get("at", 0.0))
 
 
 def _ledger(files: RunFiles) -> list[dict]:
@@ -292,6 +309,10 @@ def _messages(files: RunFiles) -> list[dict]:
 
 def _answers(files: RunFiles) -> list[dict]:
     return files.lines(INBOX)
+
+
+def _thread(files: RunFiles) -> list[dict]:
+    return [entry.as_dict() for entry in threads.Threads(files.config.run_dir).all()]
 
 
 def _stack_entry(entry: Any) -> dict[str, Any]:
@@ -361,6 +382,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "ledger": _ledger,
     "messages": _messages,
     "answers": _answers,
+    "thread": _thread,
     "upstream": _upstream,
     "turns": _turns,
     "heartbeat": _heartbeat,

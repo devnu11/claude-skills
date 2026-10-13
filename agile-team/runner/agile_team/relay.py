@@ -4,7 +4,8 @@ The PO's ``ask_user`` / ``notify_user`` append to ``outbox.jsonl``; the liaison
 watches it and relays to the human. Answers come back through
 ``agile-team answer`` into ``inbox.jsonl``. ``agile-team tell`` queues the
 human's own messages for the PO as ``liaison/messages/t<N>.md`` files. Only the
-stories a question names are blocked while it is open.
+stories a question names are blocked while it is open. Story-thread posts to the
+PO are ``tell`` files with a thread head (s84, ``threads.py``).
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ from . import system
 WAIT_LINE = "{story} waits on {ids}"
 RUN_WAIT_LINE = "the run waits on {ids}"
 WAITING_HEAD = "waiting on answers: "
-KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped")
+KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped", "reply")
+REPLY = "reply"
 OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"
 LIAISON_DIR = "liaison"
@@ -90,7 +92,7 @@ class Relay:
     def tell(self, text: str) -> Told:
         """Queue ``text`` as the next ``t<N>.md``: written whole, never overwriting (T2)."""
         system.make_dirs(self.messages_dir)
-        draft = self.messages_dir / f".draft-{system.pid()}"
+        draft = self.messages_dir / f".draft-{system.token()}"
         try:
             system.write_text(draft, text)
             return self._publish(draft)

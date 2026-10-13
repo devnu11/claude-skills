@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import halt, handover, loops, system
+from . import halt, handover, loops, system, threads
 from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
@@ -18,7 +18,7 @@ from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
 from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
-from .relay import TOLD_LINE, WAITING_HEAD, Answer, Told
+from .relay import WAITING_HEAD, Answer, Told
 from .reorders import Desk
 
 POLL_S = 5.0
@@ -323,7 +323,8 @@ class Router:
         state.told = [*state.told, *(t.id for t in told)]
         self.runtime.save()
         lines = self._answer_lines(answers) + self._told_lines(told)
-        return Pass([Trigger.HUMAN_MESSAGE], lines, self._answer_stories(answers))
+        stories = [*self._answer_stories(answers), *threads.told_stories(told)]
+        return Pass([Trigger.HUMAN_MESSAGE], lines, list(dict.fromkeys(stories)))
 
     def _answer_lines(self, answers: list[Answer]) -> list[str]:
         asked = {m.id: m for m in self.runtime.relay.messages()}
@@ -335,7 +336,7 @@ class Router:
 
     def _told_lines(self, told: list[Told]) -> list[str]:
         repo = self.runtime.config.repo
-        return [TOLD_LINE.format(id=t.id, path=t.path.relative_to(repo)) for t in told]
+        return [threads.told_line(t, repo) for t in told]
 
     def _sprint_stories(self) -> list[StoryState]:
         state = self.runtime.state

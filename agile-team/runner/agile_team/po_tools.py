@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import backlog, handover, po_session, priority, reorders, salvage, system
+from . import backlog, handover, po_session, priority, reorders, salvage, system, threads
 from .boundary import (
     CI_BUG_FIRST,
     Boundary,
@@ -44,7 +44,7 @@ from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
 from .priority import Change, Placement, Priority, Pull, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
-from .relay import Note
+from .relay import REPLY, Note
 from .router import Router
 from .runner_tools import text_result
 from .state import ModelOverride, RunStatus
@@ -54,6 +54,7 @@ POLL_S = 5.0
 WAIT_CHORE = "waiting for answers to {ids}"
 DEFAULT_WAIT_S = 1800
 RESUME_NOTE = "Resume the run from state."
+USE_REPLY = "use reply_story to answer on a story's thread"
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
 SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
@@ -296,11 +297,25 @@ class Tools:
 
     async def notify_user(self, args: dict[str, Any]) -> dict[str, Any]:
         kind = args.get("kind", "update")
+        if kind == REPLY:
+            return text_result(refused(USE_REPLY))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
         if kind in STATUS_KINDS:
             self.runtime.state.status = RunStatus(kind)
             self.runtime.save()
         return text_result({"id": msg.id})
+
+    async def reply_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Answer the human on a story's thread (s84)."""
+        story, text = args.get("story", ""), args.get("text", "")
+        stories = self.runtime.state.stories
+        reason = priority.first_refusal(
+            [lambda: threads.story_refusal(story, stories), lambda: threads.text_refusal(text)]
+        )
+        if reason:
+            return text_result(refused(reason))
+        msg = self.runtime.relay.post(Note(REPLY, text.strip(), [story]))
+        return text_result({"status": "posted", "id": msg.id})
 
     async def wait_for_answers(self, args: dict[str, Any]) -> dict[str, Any]:
         """Poll the inbox until the given questions are answered or time runs out."""
@@ -481,6 +496,12 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "notify_user": (
         "Send an update (kind: update, sprint-end, blocked, done).",
         {"text": str, "kind": str, "stories": list},
+    ),
+    "reply_story": (
+        "Answer the human on a story's thread (shown under the story on the dashboard). "
+        "Use it when a hand-over says the human wrote to you on a story's thread. Unknown "
+        "stories and empty or over-long texts are refused.",
+        {"story": str, "text": str},
     ),
     "continue_story": (
         "Release a story the runner handed to you (a done story too, to clear its hold); "

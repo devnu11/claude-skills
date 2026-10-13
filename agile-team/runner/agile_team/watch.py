@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +12,7 @@ from . import config as config_mod
 from . import health, relay, system
 from . import state as state_mod
 from .relay import Message, Relay
+from .threads import Entry, Threads
 
 WATCH_FILE = "watch.json"
 POLL_S = 2.0
@@ -26,6 +27,7 @@ class Seen:
     status: str | None = None
     status_reason: str | None = None
     health: str = ""
+    posts: int = 0
 
     @classmethod
     def load(cls, path: Path) -> Seen | None:
@@ -57,6 +59,7 @@ class Look:
     status_reason: str | None
     health: str = ""
     health_reason: str = ""
+    posts: list[Entry] = field(default_factory=list)
 
     def quiet(self) -> bool:
         """Running with no reason."""
@@ -67,9 +70,16 @@ class Look:
         start = seen.messages if seen.messages <= len(self.messages) else 0
         return self.messages[start:]
 
+    def new_posts(self, seen: Seen) -> list[Entry]:
+        """Liaison-inbox entries not yet reported; a shorter inbox reports all."""
+        start = seen.posts if seen.posts <= len(self.posts) else 0
+        return self.posts[start:]
+
     def seen(self) -> Seen:
         """This look as watch memory."""
-        return Seen(len(self.messages), self.status, self.status_reason, self.health)
+        return Seen(
+            len(self.messages), self.status, self.status_reason, self.health, len(self.posts)
+        )
 
 
 def look(run_dir: Path) -> Look | None:
@@ -81,7 +91,8 @@ def look(run_dir: Path) -> Look | None:
     state = state_mod.load(run_dir)
     status = str(state_mod.shown_status(run_dir, state))
     verdict = health.current(_config_of(run_dir))
-    return Look(messages, status, state.status_reason, str(verdict.level), verdict.reason)
+    posts = Threads(run_dir).liaison_posts()
+    return Look(messages, status, state.status_reason, str(verdict.level), verdict.reason, posts)
 
 
 def _config_of(run_dir: Path) -> config_mod.Config:
@@ -99,6 +110,7 @@ def _status_changed(seen: Seen, now: Look) -> bool:
 
 TRIGGERS: tuple[tuple[str, Callable[[Seen, Look], bool]], ...] = (
     ("message", lambda seen, now: bool(now.new_since(seen))),
+    ("liaison_message", lambda seen, now: bool(now.new_posts(seen))),
     ("status", _status_changed),
     ("health", lambda seen, now: now.health == "red" and seen.health != "red"),
 )
@@ -123,6 +135,7 @@ def line(triggers: list[str], basis: Basis) -> dict[str, Any]:
     return {
         "triggers": triggers,
         "messages": [asdict(m) for m in now.new_since(seen)] if triggers != [HEARTBEAT] else [],
+        "posts": [e.as_dict() for e in now.new_posts(seen)] if triggers != [HEARTBEAT] else [],
         "status": now.status,
         "status_reason": now.status_reason,
         "was": {"status": seen.status, "status_reason": seen.status_reason},
@@ -190,4 +203,4 @@ class Watcher:
         """After a quiet look the status baseline moves to it; the message count stays (V5)."""
         if now is None:
             return seen
-        return Seen(seen.messages, now.status, now.status_reason, now.health)
+        return Seen(seen.messages, now.status, now.status_reason, now.health, seen.posts)
