@@ -1,6 +1,18 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s94 complete: A14b—story file parsing and story state changes (coverage ≥95%, ruff clean, all pass)
+
+**New module `story_spec.py`:** Pure parsing and validation of story file frontmatter. `parse()` reads YAML, checks format (id, title, acceptance list with id/text/environment), and returns `Spec` or `Read` with problems. `read()` wraps parse with file I/O. `environment_names()` and `first_environment()` extract environments in config order. **Test file: `tests/test_s94_story_spec.py`** (unit tests on pure functions with literal YAML sources).
+
+**Changes to tests that build `StoryState`:** New helper `write_story(config, story, environments)` in `conftest.py` writes a story file with one AC per environment, then removes the story from code that builds state with `environment=...`. Affected files: `test_s64_environment.py`, `test_s93_environment_alias.py`, `test_presentation.py`, `test_service_presentation.py`, `test_seeds.py`, `test_dispatch.py`, `test_po_tools.py`, `test_snapshot.py`, `conftest.py` (add helper), `tests/e2e/test_environment_name_e2e.py` (refactored), `tests/e2e/test_service_presentation_e2e.py` (refactored).
+
+**State changes (rule SF6):** `StoryState.environment` field is removed. Loading old state.json drops both `environment` and the s93 alias `delivery`. Test: load then save drops both. **Test file: `test_s93_environment_alias.py`** adds a test for dropping on save.
+
+**No SF11 migration test in unit scope:** The test `tests/e2e/test_s94_story_files_e2e.py` (integration-tester's responsibility) pins every real story file (43 open + s108, copied to scratch) against the scratch config (cli, dashboard, review environments). Unit tests use fake frontmatter only. **Your note in handoff:** "moves to e2e: tests/e2e/test_s94_story_files_e2e.py:: (every open story reads clean against scratch config)".
+
+See design `agile-team/docs/design/s94.md` (SF1–SF10, test checklist).
 
 ## s108 complete: Sprint-end rebase and stack restack—unit tests for M1–M18 (coverage 99.52%, ruff clean, all pass)
 

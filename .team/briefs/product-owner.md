@@ -1,6 +1,36 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s94 complete: A14b—every AC names its acceptance environment (no new ADR, extends s86/s107 frontmatter pattern)
+
+**What changed for your work:** Story files are now the **only record** of AC environments. Each AC in the frontmatter names its environment (not the story itself). Fix a wrong environment by editing the file; no state edit is needed.
+
+**New story file format:** YAML frontmatter with `acceptance: [{id, text, environment}]` list. Example:
+```yaml
+---
+id: s120
+title: "Export the board as CSV"
+depends_on: [s83]
+acceptance:
+  - id: AC1
+    text: "agile-team export --csv prints one row per story."
+    environment: cli
+  - id: AC2
+    text: "The Backlog tab has an Export button that downloads the same CSV."
+    environment: dashboard
+---
+```
+
+**Writing story files:** Every AC must have an `id`, non-empty `text`, and an `environment` that names a configured `[[environment]]`. Bad files (missing id, duplicate id, unknown environment, bad YAML) are refused with a clear message naming the file and the AC. Call `open_story` with the story id and `depends_on` list (both matching the file). No `environment` argument to `open_story` anymore.
+
+**If held for a bad file:** The story is held before acceptance with reason "the story file must be fixed before acceptance:" followed by every problem (file path, AC id, and the exact error). Edit the file to fix it (environment name, missing id, bad YAML, etc.), then call `continue_story`. The file is read again; if fixed, acceptance runs.
+
+**Migration done (AC4):** All 43 open stories have frontmatter with an `environment` on every AC. A test pins that every open story file has the right format; the runner rejects any file with missing or unknown environment names.
+
+**No new hand-overs or tools.** Same acceptance procedure; same `open_story` tool (minus the environment argument).
+
+See design `agile-team/docs/design/s94.md` (rules SF1–SF10, AC1–AC5).
 
 ## s108 complete: Review stack ready at sprint end (no new tools, amends ADR-0041)
 

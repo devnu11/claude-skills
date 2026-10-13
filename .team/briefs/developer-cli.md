@@ -1,8 +1,38 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s94 complete: A14b—every AC names its acceptance environment (no new ADR, extends s86/s107 pattern)
+
+**What changed for you:** Story files are now the only record of AC environments. Each AC in the YAML frontmatter names its `environment` (one of the configured `[[environment]]` sections). The story itself has no environment in state—it's all in the file.
+
+**Reading a story's environments:** The runner reads the story file once when the story starts (during `open_story`) and once before acceptance runs. If you edited the file's `environment` values between e2e and acceptance, the new values are used. No state field tracks environment; the file is the truth.
+
+**File format (example):** Story file `.team/stories/s120.md` with YAML frontmatter:
+```yaml
+---
+id: s120
+title: "Export the board as CSV"
+depends_on: [s83]
+acceptance:
+  - id: AC1
+    text: "agile-team export --csv prints one row per story."
+    environment: cli
+  - id: AC2
+    text: "The Backlog tab has an Export button that downloads the same CSV."
+    environment: dashboard
+---
+```
+
+**When the file is missing or bad:** The story is held before acceptance (after settle_po, before the proxy runs). The hold reason names the file and the AC. No new state edit is needed. The PO fixes the file and calls `continue_story`. The runner reads it again.
+
+**If a story has no file:** The story is also held. The PO writes the file first, then calls `continue_story` (or the next step on the same story).
+
+**Your scope unchanged:** Your implementation is unchanged. You run the e2e gate on the first environment in config order (until A14c when each AC gets its own proxy step). Environments are already in the config and in the file; the runner wires them up.
+
+See design `agile-team/docs/design/s94.md` (SF1–SF10, AC1–AC5, test checklist).
 
 ## s108 complete: Review stack after a merge—rebase moved to sprint end (no new ADR, amends ADR-0041)
 

@@ -1,6 +1,22 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s94 complete: A14b—every AC names its acceptance environment (AC1–AC5 all pass, no new ADR)
+
+**Verdict: All ACs pass.** The runner reads story files to get AC environments. If a file is missing or bad, your step is held before running (no service starts, no step runs). **What you see on acceptance:**
+- **AC1–AC2 (file format, reading):** Story files have YAML frontmatter with `acceptance: [{id, text, environment}]`. Every AC's environment names a configured `[[environment]]` (cli, dashboard, review, web, manual, document, unattended). Missing, duplicate, or unknown environment is refused with file path and AC id. The runner reads the file when the story starts and again before your acceptance step.
+- **AC3 (fixing a bad file):** If your step is held for a bad file, the hold reason names the file and the problem. The PO edits the file and calls `continue_story` (no state changes needed). You see no hold-release hand-over; the story just retries at the next step.
+- **AC4 (migration):** All 43 open stories have frontmatter with an environment on every AC. The runner validates them all when starting.
+- **AC5 (documentation):** Docs updated; customer dashboard and role files show the YAML format.
+
+**Your sandbox unchanged:** Same service startup per delivery, same acceptance procedure. You get the story's **first environment in config order** until A14c (when each AC can get its own proxy step). The story file holds the environments; no state field tracks them.
+
+**If the story file is missing:** The story is held with reason "no story file; write it before open_story". The PO writes the file with correct frontmatter and calls `continue_story`.
+
+**Order of operations:** If a story has a bad file, the hold happens after `settle_po` and before you run, so you never start a service for a story with an unreadable file.
+
+See design `agile-team/docs/design/s94.md` (SF1–SF10, AC1–AC5).
 
 ## s108 complete: Review stack rebase at sprint end—all ACs verified (all pass)
 

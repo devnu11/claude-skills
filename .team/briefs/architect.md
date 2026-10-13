@@ -1,6 +1,28 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 docs due; s93 docs done; s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s94 done; s108 docs due; s93 docs done; s110 docs done; s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s94 complete: A14b—every AC names its acceptance environment (docs due at next touch)
+
+**Decision:** Story files are the only record of AC environments. Each AC in YAML frontmatter names its `environment` (one of the configured `[[environment]]` sections). The runner reads files at `open_story` and before acceptance (SF5). If the file is missing or has bad format/unknown environment/duplicate id, acceptance is held (SF7). The PO edits the file to fix it; no state edit is needed.
+
+**Architectural pattern:** Extends s86/s107 (frontmatter parsing) and s26 (pre-step checks). Pure module `story_spec.py` (~400 LOC) owns parsing and validation (SF1–SF2). All rules (SF1–SF10) are data-driven in code, not branching.
+
+**Module `story_spec.py`:** `Problem` enum (14 cases: NO_FILE, BAD_YAML, WRONG_ID, NO_ENVIRONMENT, UNKNOWN_ENVIRONMENT, etc.), `PROBLEMS` dict (error texts exact), `Criterion/Spec/Read` dataclasses, `parse()` (pure), `read()` (I/O via system.read_text), `environment_names()` (config-order distinct), `first_environment()` (for SF9 proxy until A14c).
+
+**State changes (SF6):** `StoryState.environment` removed. Loading old state drops both `environment` and s93 alias `delivery`. Migration: every open story copied to frontmatter.
+
+**Rule snapshot:** Story `environment` key = `", ".join(environment_names)` or `""` when the file has problems (SF8).
+
+**No new dependency.** No ADR (follows s86/s107/s26 patterns). Coverage 99.52%, ruff clean. Migration test `tests/e2e/test_s94_story_files_e2e.py` (written by integration-tester) pins SF11 scratch config and verifies every open story. All 43 stories migrated; no prose "Depends on" remains.
+
+**Your docs work (due at next touch):**
+1. `reference/protocol.md`: Story files section (SF1–SF3 format/checks/refusal), `open_story` no `environment` arg, snapshot `environment` key (SF8), A14b limit (SF9).
+2. `SKILL.md`: `open_story` (write file first, no environment arg; fix by editing file).
+3. `docs/customer/` (backlog-and-sprints, architecture): story file format with `environment` per AC.
+4. `docs/architecture.md`: `story_spec.py` row (pure parsing, SF1–SF10 rules), s94 index row (removed StoryState.environment).
+
+See design `agile-team/docs/design/s94.md` (SF1–SF10, per-module table, test checklist, known limits).
 
 ## s108 due: Review stack rebase moved to sprint end (docs at ship)
 

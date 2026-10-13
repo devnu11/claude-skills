@@ -1,6 +1,38 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s94 complete: A14b—story file parsing (1 round, all ACs pass) — verdict ship
+
+**Scope:** `story_spec.py` (new pure module, ~400 LOC), changes to `gates.py`, `cli.py`, `dispatch.py`, `presentation.py`, `po_tools.py`, `config.py`, `state.py`, `snapshot.py`, role files, tests, state migration. **Verdict: ship.** Coverage 99.52%, ruff clean. All ACs pass.
+
+**Design rules enforced (SF1–SF10):**
+- **SF1:** YAML frontmatter with `id`, `title`, `acceptance: [{id, text, environment}]`. Other keys ignored.
+- **SF2:** Checks in order: file exists, frontmatter present, valid YAML, id matches, title non-empty, acceptance non-empty, then per-item checks (mapping, id, duplicate, text, environment, configured).
+- **SF3:** Refusal is one line per problem, in SF2 order, with file path, AC id or item number, and exact problem text.
+- **SF4:** `open_story` reads file, refuses with SF3 text, order: duplicate id, then file, then `depends_on`.
+- **SF5:** Read before acceptance (after settle_po, before proxy). File with problems holds the story (SF7).
+- **SF6:** `StoryState.environment` removed. Loading state drops both `environment` and s93 alias `delivery`.
+- **SF7:** Bad file at acceptance holds (not a fault), no new tool—PO edits file and calls `continue_story`.
+- **SF8:** Snapshot `environment` = environments joined by `", "`, or `""` when file has problems.
+- **SF9:** Until A14c, one environment per story: first in config order (or None when file has problems).
+- **SF10:** Migration complete; all 43 open stories have frontmatter with `environment` on every AC.
+
+**Key changes per module:**
+- `story_spec.py` new: Problem enum, PROBLEMS dict, Criterion/Spec/Read classes, parse/read/environment_names/first_environment functions.
+- `gates.py`: `StoryState.environment` removed. `Checks.story_spec` callable. `Pipeline.unready()` returns hold Outcome.
+- `cli.py`: `story_spec=functools.partial(story_spec.read, config)` passed to Checks.
+- `dispatch.py`: `_unready()` check runs before `_unpresented()`. `_environment_for()` uses `story_spec.first_environment()`.
+- `presentation.py`, `po_tools.py`: Use `story_spec.first_environment()` (SF9).
+- `config.py`: `environment_refusal` and its texts removed (story_spec owns now).
+- `state.py`: `STORY_DROPPED = {"environment", OLD_ENVIRONMENT_NAME}`. Load drops both; save never writes them.
+- `snapshot.py`: `environment` = `", ".join(story_spec.environment_names(...))` or `""`.
+
+**Test changes:** `write_story()` helper in conftest for stories with multiple environments. Affected tests updated (s64, s93, dispatch, po_tools, snapshot, presentation, seeds, service_presentation, e2e files).
+
+**Migration test (integration-tester scope):** `tests/e2e/test_s94_story_files_e2e.py` pins SF11 scratch config and checks every open story. Unit-tester owns the rule; integration-tester writes the file.
+
+No tests deleted or weakened. No new dependency. See design `agile-team/docs/design/s94.md` (SF1–SF10, module table, test checklist).
 
 ## s108 complete: Review stack rebase at sprint end (4 rounds, all defects fixed, ship) — verdict ship
 

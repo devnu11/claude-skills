@@ -1,6 +1,16 @@
 # Manager: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s103 done; s78 done)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s103 done; s78 done)
+
+## s94 complete: Story file hold before unpresented (no change to Manager escalation logic)
+
+**What you need to know:** Before the proxy runs acceptance, the runner checks the story file (`.team/stories/<id>.md`). If the file is missing, has bad YAML, or has a missing/unknown/duplicate AC id or environment, the story is held **before** the unpresented check (SF5, SF7). The hold reason names the file and the exact problem (e.g., "AC2: environment is not a configured [[environment]]; use one of: cli, dashboard, review").
+
+This is a data validation hold, not a runner fault. The PO edits the file to fix it, then calls `continue_story`. The file is read again; if fixed, the next proxy step runs normally.
+
+**Impact on you:** The hold comes before unpresented, so you won't see stories with bad story files as unpresented bounces. They're held explicitly, with clear reasons for the PO to fix. The repeat logic (s27) may apply if the same hold repeats (PO forgot to fix the file).
+
+No change to escalation rules, rulings, or your decision-making. This is a clarity improvement: bad story files are explicitly held, not bounced as unpresented. See design `agile-team/docs/design/s94.md` (SF7, SF5 order).
 
 ## s108 complete: Review stack rebase moved to sprint end (no change to Manager context)
 

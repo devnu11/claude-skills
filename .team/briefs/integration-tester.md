@@ -1,6 +1,23 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s94 done; s108 done; s93 done; s110 done; s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s94 complete: A14b—SF11 migration test (every open story reads clean against scratch config)
+
+**Your work (AC4 acceptance test):** Write `tests/e2e/test_s94_story_files_e2e.py`. This test is owned by the unit-tester (rule SF11 in design), and the file is written by you (write scope is `{e2e}`).
+
+**SF11 test (two checks):**
+1. **Scratch config has three ruled environments:** Load a tmp_path config with the `SCRATCH_CONFIG` constant (cli, dashboard, review environments, exact text). `config.load(tmp_path)` names (cli, dashboard, review) in that order with kinds (package, web, document).
+2. **Every open story reads clean:** Copy all real `.team/stories/s*.md` files into `tmp_path / ".team" / "stories"` (preserving names). Load the config. For each story not in `DONE_AT_MIGRATION` (done stories: pinned frozenset), call `story_spec.read(config, story_id)`. Each read must have no problems. On failure, `Read.refusal()` lists every problem per story, so one run names all files to fix.
+
+**Constants to pin in the test file:**
+- `SCRATCH_CONFIG`: the 3-env TOML from design (literal string)
+- `SCRATCH_NAMES = ("cli", "dashboard", "review")`
+- `DONE_AT_MIGRATION`: frozenset of done story ids when the migration lands (written as literals, e.g., `{"s10", "s34", ...}`)
+
+**Never read the live `.agile-team.toml`.** The test reads only the scratch config and real story files. The live config may be updated (PR #17) after the migration; this test must stay green and never depend on the live config.
+
+**Test scope:** `tests/e2e/` (reads real files, which the OS guard refuses in unit tests per s71). Both checks in one test file. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s94.md` (SF11, test checklist lines 298–305).
 
 ## s108 complete: Sprint-end rebase and restack—e2e and presentation done (all ACs pass, coverage 99.52%, ruff clean)
 
