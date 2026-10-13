@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -18,9 +16,9 @@ from agile_team import state as state_mod
 
 from .. import dashboard_node
 from ..pipeline_helpers import Script, add_story, build
-from .test_dashboard_e2e import BOOT, RUNNER
+from .readiness import LOCAL, STARTUP_S, Launch, dashboard
 from .test_liaison_e2e import ENTRY, run_cli
-from .test_s83_backlog_e2e import TOKEN, _call, _snapshot, _url
+from .test_s83_backlog_e2e import TOKEN, _call, _snapshot
 
 
 @pytest.fixture
@@ -29,17 +27,9 @@ def served(make_runtime, configured: Path, tmp_path: Path) -> Iterator[tuple]:
     rt = build(make_runtime, Script(), steps=["design", "review"])
     add_story(rt, "s5")
     state_mod.save(rt.config.run_dir, rt.state)
-    env = {**os.environ, "AGILE_TEAM_HOME": str(tmp_path / "home")}
-    cmd = [sys.executable, "-c", BOOT, "--repo", str(configured), "dashboard"]
-    cmd += ["--host", "127.0.0.1", "--port", "0", "--no-open", "--token", TOKEN]
-    proc = subprocess.Popen(
-        cmd, cwd=RUNNER, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-    try:
-        yield configured, _url(proc), rt
-    finally:
-        proc.kill()
-        proc.wait(timeout=10)
+    launch = Launch(configured, tmp_path / "home", (*LOCAL, "--token", TOKEN))
+    with dashboard(launch) as live_dash:
+        yield configured, live_dash.url, rt
 
 
 def _post(url: str, story: str, to: str, text: str, token: str | None = TOKEN) -> tuple:
@@ -78,13 +68,12 @@ def test_post_to_the_liaison_wakes_watch_and_the_reply_shows(served) -> None:
     repo, url, _ = served
     run_cli(repo, "watch", "--timeout", "1")  # saves the memory: existing posts count as seen
     watch = subprocess.Popen(
-        [sys.executable, "-c", ENTRY, "--repo", str(repo), "watch", "--timeout", "30"],
+        [sys.executable, "-c", ENTRY, "--repo", str(repo), "watch", "--timeout", "120"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )  # fmt: skip
     try:
-        time.sleep(1)
         assert _post(url, "s5", "liaison", "Ask the PO about scope")[0] == 202
-        out, _ = watch.communicate(timeout=15)
+        out, _ = watch.communicate(timeout=2 * STARTUP_S)
     finally:
         if watch.poll() is None:
             watch.kill()

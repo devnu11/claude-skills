@@ -13,6 +13,8 @@ from agile_team import gates
 from agile_team.commands import NO_HUNG_LINE, TIMED_OUT, CommandShell
 from agile_team.guard import WAIT_DENIED, Scope, check_bash
 
+from .readiness import wait_until
+
 
 def hanging_suite(tmp_path: Path) -> str:
     """A tiny pytest-timeout suite whose one test hangs; returns the command."""
@@ -34,7 +36,7 @@ def test_real_pytest_hang_is_killed_named_and_bounces_tests_gate(tmp_path: Path)
     started = time.monotonic()
     code, out = run(hanging_suite(tmp_path))
     assert code == TIMED_OUT
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 25  # the hang sleeps 30 s; only a kill ends it sooner
     assert "test_hang.py::test_hangs" in out
     outcome = gates.Checks({"test": hanging_suite(tmp_path)}, 95.0, run).tests_red()
     assert outcome.verdict == gates.Verdict.BOUNCE
@@ -61,10 +63,7 @@ def test_the_whole_group_dies_but_a_foreign_group_survives(tmp_path: Path) -> No
         code, _ = CommandShell(tmp_path, 0.3).run("sleep 30 & echo $! > pid; wait")
         assert code == TIMED_OUT
         child = int((tmp_path / "pid").read_text())
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline and alive(child):
-            time.sleep(0.05)
-        assert not alive(child)
+        wait_until(lambda: not alive(child), "the timed-out child to die")
         assert other.poll() is None
     finally:
         other.kill()

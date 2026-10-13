@@ -6,11 +6,11 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from agile_team import reorders
 
+from .readiness import STARTUP_S
 from .test_liaison_e2e import ENTRY, run_cli
 from .test_s83_backlog_e2e import TOKEN, _call, _snapshot, served
 
@@ -22,13 +22,12 @@ def _post(url: str, path: str, payload: dict, token: str | None = TOKEN) -> tupl
 def _watch_after_review(url: str, repo: Path) -> dict:
     run_cli(repo, "watch", "--timeout", "1")  # saves the memory
     watch = subprocess.Popen(
-        [sys.executable, "-c", ENTRY, "--repo", str(repo), "watch", "--timeout", "30"],
+        [sys.executable, "-c", ENTRY, "--repo", str(repo), "watch", "--timeout", "120"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )  # fmt: skip
     try:
-        time.sleep(1)
         assert _post(url, "/api/review", {})[0] == 202
-        out, _ = watch.communicate(timeout=15)
+        out, _ = watch.communicate(timeout=2 * STARTUP_S)
     finally:
         if watch.poll() is None:
             watch.kill()

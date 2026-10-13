@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -13,6 +14,7 @@ import pytest
 from agile_team import events as events_mod
 from agile_team import state as state_mod
 
+from .readiness import Output, wait_until
 from .test_dashboard_e2e import _get, dash  # noqa: F401
 from .test_liaison_e2e import run_cli
 
@@ -92,16 +94,25 @@ def test_late_beat_during_a_gate_is_amber_naming_the_gate(configured, run_dir, a
     assert "while runner: gate: implement on s71" in health["reason"]
 
 
+def _chore_beat(run_dir: Path) -> bool:
+    """Whether heartbeat.json names the gate chore (False when missing or torn)."""
+    try:
+        beat = json.loads((run_dir / "heartbeat.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return (beat.get("chore") or {}).get("what") == "gate: implement on s71"
+
+
 def test_real_pulse_in_a_gate_reads_green(configured: Path, run_dir: Path):
     """AC2: a real process beating inside a gate chore reads green, runner: gate."""
     proc = subprocess.Popen(
         [sys.executable, "-c", PULSE_SCRIPT, str(run_dir)],
-        cwd=RUNNER, stdout=subprocess.PIPE, text=True,
+        cwd=RUNNER, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )  # fmt: skip
     try:
-        assert proc.stdout.readline().strip() == "ready"
+        Output(proc).wait_for(re.compile(r"^ready$"))
         (run_dir / "runner.pid").write_text(str(proc.pid))
-        time.sleep(0.6)
+        wait_until(lambda: _chore_beat(run_dir), "the gate chore in heartbeat.json")
         health = _health(configured)
     finally:
         proc.kill()

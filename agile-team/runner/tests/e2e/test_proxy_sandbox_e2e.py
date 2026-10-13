@@ -6,8 +6,7 @@ import copy
 import json
 import subprocess
 import sys
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,11 @@ import pytest
 from agile_team import config as cfg
 from agile_team import sandbox
 from agile_team.config import Environment
+
+from .readiness import serving
+
+CURL_MAX_S = 60
+CLI_S = 600
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin",
@@ -138,18 +142,17 @@ def make_model(curl: str, recorded: list[str]) -> type[BaseHTTPRequestHandler]:
     return Model
 
 
-def serve(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
-
-
 @pytest.fixture
 def service():
-    server = serve(Service)
+    server = serving(Service)
     yield server.server_address[1]
     server.shutdown()
     server.server_close()
+
+
+def _tail(data: bytes | None) -> str:
+    """The last 60 lines of a child's captured output."""
+    return "\n".join((data or b"").decode(errors="replace").splitlines()[-60:])
 
 
 def run_cli(
@@ -157,9 +160,11 @@ def run_cli(
 ) -> tuple[int, list[str]]:
     """Run the bundled CLI against a scripted model; return its exit code and the tool results."""
     url = f"http://127.0.0.1:{port}/"
-    curl = f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 {url}; echo \" exit=$?\""
+    curl = (
+        f"curl -s -o /dev/null -w '%{{http_code}}' --max-time {CURL_MAX_S} {url}; echo \" exit=$?\""
+    )
     recorded: list[str] = []
-    model = serve(make_model(curl, recorded))
+    model = serving(make_model(curl, recorded))
     home = tmp / "home"
     home.mkdir(exist_ok=True)
     path = tmp / "settings.json"
@@ -176,7 +181,14 @@ def run_cli(
     cmd += ["--permission-mode", "dontAsk"]
     cmd += ["--output-format", "json", "--max-turns", "3"]
     try:
-        done = subprocess.run(cmd, cwd=prepared.workdir, env=env, timeout=120, capture_output=True)
+        done = subprocess.run(
+            cmd, cwd=prepared.workdir, env=env, timeout=CLI_S, capture_output=True
+        )
+    except subprocess.TimeoutExpired as err:
+        pytest.fail(
+            f"the CLI ran past {CLI_S} s; stdout:\n{_tail(err.stdout)}"
+            f"\nstderr:\n{_tail(err.stderr)}"
+        )
     finally:
         model.shutdown()
         model.server_close()
@@ -197,9 +209,9 @@ def test_sandboxed_curl_reaches_service_with_local_binding(
 ) -> None:
     settings, prepared = proxy
     code, results = run_cli(settings, prepared, service, tmp_path)
-    assert code == 0
-    assert len(results) == 1
-    assert "200 exit=0" in results[0]
+    assert code == 0, results
+    assert len(results) == 1, results
+    assert "200 exit=0" in results[0], results
 
 
 def test_sandboxed_curl_fails_without_local_binding(proxy, service: int, tmp_path: Path) -> None:
@@ -207,5 +219,5 @@ def test_sandboxed_curl_fails_without_local_binding(proxy, service: int, tmp_pat
     bare = copy.deepcopy(settings)
     del bare["sandbox"]["network"]
     _, results = run_cli(bare, prepared, service, tmp_path)
-    assert len(results) == 1
-    assert "exit=7" in results[0]
+    assert len(results) == 1, results
+    assert "exit=7" in results[0], results

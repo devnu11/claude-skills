@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import subprocess
-import time
 from datetime import datetime
 from datetime import time as clock
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+
+from .readiness import wait_until
 
 RESET_ZONE = ZoneInfo("America/Chicago")  # the zone the halt line names
 RESET_AT = clock(21, 3)  # 9pm plus unattended's margin, in RESET_ZONE
@@ -31,13 +32,15 @@ def unattended(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def status_when_waiting(home: Path) -> dict:
-    """Poll `status` until the job leaves `running` (or time out)."""
-    for _ in range(40):
-        state = json.loads(unattended(home, "status", "live").stdout)
-        if state["status"] != "running":
-            return state
-        time.sleep(0.5)
-    return state
+    """Poll `status` until the job leaves `running`; keep the last status JSON."""
+    seen: dict = {}
+
+    def left_running() -> bool:
+        seen.update(json.loads(unattended(home, "status", "live").stdout))
+        return seen["status"] != "running"
+
+    wait_until(left_running, "the job to leave running")
+    return seen
 
 
 @pytest.mark.skipif(not RUNNER.is_dir(), reason="unattended runner not in this checkout")

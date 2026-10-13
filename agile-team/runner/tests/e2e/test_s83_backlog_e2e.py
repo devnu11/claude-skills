@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
-import os
 import re
-import select
-import subprocess
-import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -18,20 +13,9 @@ from agile_team import reorders
 from agile_team import state as state_mod
 
 from ..pipeline_helpers import Script, add_story, build
-from .test_dashboard_e2e import BOOT, RUNNER
+from .readiness import LOCAL, STARTUP_S, Launch, dashboard
 
 TOKEN = "e2e-token"
-
-
-def _url(proc: subprocess.Popen) -> str:
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        if select.select([proc.stdout], [], [], 0.5)[0]:
-            match = re.search(r"dashboard: (http://\S+)", proc.stdout.readline())
-            if match:
-                return match.group(1)
-        assert proc.poll() is None, "dashboard exited early"
-    raise AssertionError("no dashboard URL printed")
 
 
 @pytest.fixture
@@ -47,21 +31,13 @@ def served(make_runtime, configured: Path, tmp_path: Path) -> Iterator[tuple]:
     stories.mkdir(parents=True, exist_ok=True)
     (stories / "b1.md").write_text("# b1 story\n")
     (configured / "secret.md").write_text("do not serve\n")
-    env = {**os.environ, "AGILE_TEAM_HOME": str(tmp_path / "home")}
-    cmd = [sys.executable, "-c", BOOT, "--repo", str(configured), "dashboard"]
-    cmd += ["--host", "127.0.0.1", "--port", "0", "--no-open", "--token", TOKEN]
-    proc = subprocess.Popen(
-        cmd, cwd=RUNNER, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-    try:
-        yield rt, _url(proc), proc
-    finally:
-        proc.kill()
-        proc.wait(timeout=10)
+    launch = Launch(configured, tmp_path / "home", (*LOCAL, "--token", TOKEN))
+    with dashboard(launch) as live_dash:
+        yield rt, live_dash.url, live_dash.proc
 
 
 def _call(url: str, method: str, path: str, body: bytes = b"", token: str | None = None) -> tuple:
-    conn = http.client.HTTPConnection(re.match(r"http://([^/]+)", url).group(1), timeout=10)
+    conn = http.client.HTTPConnection(re.match(r"http://([^/]+)", url).group(1), timeout=STARTUP_S)
     headers = {"X-Agile-Team-Token": token} if token is not None else {}
     conn.request(method, path, body=body or None, headers=headers)
     resp = conn.getresponse()

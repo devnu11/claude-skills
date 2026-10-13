@@ -4,10 +4,7 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import subprocess
-import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -17,8 +14,8 @@ from agile_team import state as state_mod
 
 from .. import dashboard_node
 from ..pipeline_helpers import Script, add_story, build
-from .test_dashboard_e2e import BOOT, RUNNER
-from .test_s83_backlog_e2e import _snapshot, _url
+from .readiness import LOCAL, Launch, dashboard
+from .test_s83_backlog_e2e import _snapshot
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
@@ -138,17 +135,8 @@ def served(make_runtime, configured: Path, tmp_path: Path) -> Iterator[tuple]:
     rt = build(make_runtime, Script(), steps=["design", "review"])
     add_story(rt, "s1")
     state_mod.save(rt.config.run_dir, rt.state)
-    env = {**os.environ, "AGILE_TEAM_HOME": str(tmp_path / "home")}
-    cmd = [sys.executable, "-c", BOOT, "--repo", str(configured), "dashboard"]
-    cmd += ["--host", "127.0.0.1", "--port", "0", "--no-open"]
-    proc = subprocess.Popen(
-        cmd, cwd=RUNNER, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-    )
-    try:
-        yield rt, _url(proc)
-    finally:
-        proc.kill()
-        proc.wait(timeout=10)
+    with dashboard(Launch(configured, tmp_path / "home", LOCAL)) as live_dash:
+        yield rt, live_dash.url
 
 
 def _drawn(snap: dict, role: str) -> bool:
