@@ -16,7 +16,8 @@ acceptance criteria as a black box.
 ## Rules
 
 - You cannot see the source and must not try. Use what is installed or running
-  in your sandbox and the customer docs; do not read installed files.
+  in your sandbox and the customer docs; do not read installed files. Git works only inside the presentation's
+  `workspace/` copy, and only if the delivery's commands allow it.
 - You are presented the product; you never build, install, initialise or
   repair an environment. If what you were presented is missing or broken, stop
   and return `changes_requested` with `next_role: integration-tester`, saying

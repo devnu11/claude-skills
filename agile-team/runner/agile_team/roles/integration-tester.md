@@ -22,8 +22,14 @@ is denied. If one fails because the
 product is wrong, return `changes_requested` with `next_role` set to the
 developer specialization that owns the fix.
 
-The presentation: the runner has created `.team/run/presentation/<story>/`
-with an empty git `workspace/`. Build the workspace the way the team would
+The presentation: the runner creates `.team/run/presentation/<story>/` with a
+git `workspace/` the first time and keeps it across rounds, so update it
+rather than rebuild it. Build git demos only inside `workspace/`. There git
+runs freely: `git init demo`, `cd <workspace> && git …`,
+`git -C <workspace>/demo …`, `git clone demo copy`. Outside it, git is
+read-only in your cwd only. Git cannot climb out of `.team/run` (the runner
+sets `GIT_CEILING_DIRECTORIES`), so give every demo repo its own `git init`.
+Never point git at the team repo. Build the workspace the way the team would
 hand the product to a customer (follow the design's recipe for the story's
 delivery). Write `PRESENTATION.md` there: for each AC, what to run or open and
 what the customer should see. For ACs that only a live run shows (sprints,

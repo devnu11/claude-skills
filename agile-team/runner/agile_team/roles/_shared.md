@@ -52,6 +52,7 @@ the most.
 
 - The runner commits for you after your step. Do not run `git commit`,
   `git reset`, `git checkout`, `git stash`, `git rebase` or `git push`.
+  `X=1 git …`, `env git …` and `command git …` count as `git …`.
 - Write only inside your file scope (listed at the end). Writes outside it are
   denied, and anything changed outside it through Bash is quarantined and
   reverted.
