@@ -415,7 +415,38 @@ def test_no_tool_effect_cancels(make_runtime) -> None:
 def test_schemas_rows() -> None:
     for name in ("hold_story", "release_story", "request_cancel"):
         assert name in SCHEMAS
-        assert set(SCHEMAS[name][1]) == {"story", "reason"} if len(SCHEMAS[name]) > 1 else True
+        assert len(SCHEMAS[name]) > 1
+        assert set(SCHEMAS[name][1]) == {"story", "reason"}
+
+
+def tool(rt, name: str, reason: str) -> dict:
+    result = call(getattr(Tools(rt), name)({"story": "s1", "reason": reason}))
+    return json.loads(result["content"][0]["text"])
+
+
+def test_hold_story_wrapper_holds(make_runtime) -> None:
+    rt = make_runtime()
+    story = open_story(rt)
+    out = tool(rt, "hold_story", "waits")
+    assert out["status"] == "held"
+    assert story.po_hold == PoHold(HoldKind.HOLD, "waits")
+
+
+def test_release_story_wrapper_releases(make_runtime) -> None:
+    rt = make_runtime()
+    story = open_story(rt)
+    tool(rt, "hold_story", "waits")
+    out = tool(rt, "release_story", "go")
+    assert out["status"] == "released"
+    assert story.po_hold is None
+
+
+def test_request_cancel_wrapper_asks(make_runtime) -> None:
+    rt = make_runtime()
+    story = open_story(rt)
+    out = tool(rt, "request_cancel", "gone")
+    assert out["status"] == "cancel requested" and out["question"] == "m1"
+    assert story.po_hold.kind is HoldKind.CANCEL
 
 
 def test_wait_titles(make_runtime) -> None:
