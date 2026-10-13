@@ -127,7 +127,7 @@ section[hidden] { display: none; }
 
 /* flow */
 #flow { overflow-x: auto; }
-.flow svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.flow svg { max-width: none; display: block; margin: 0 auto; }
 .flow pre { overflow-x: auto; font-size: 12px; }
 .seg { display: inline-flex; gap: 0; margin-bottom: 8px; }
 .seg button { border: 1px solid var(--border); background: var(--surface); padding: 2px 10px; cursor: pointer; font-size: 12px; }
@@ -791,12 +791,20 @@ function renderTabs(view) {
 
 const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
 
+const FLOW_FONT_PX = 16;
+const MERMAID_OPTIONS = { startOnLoad: false, securityLevel: "strict", theme: "base", flowchart: { useMaxWidth: false } };
+
+/** Mermaid's initialise options for the theme colours `vars` (FL5). */
+function mermaidConfig(vars) {
+  return { ...MERMAID_OPTIONS, themeVariables: vars };
+}
+
 function ringRoles(view) {
   const rank = (n) => {
     const i = RING_ORDER.findIndex((p) => n === p || n.startsWith(p + "-"));
     return i < 0 ? RING_ORDER.length : i;
   };
-  return view.roles.map((r) => r.name).filter((n) => n !== PO).sort((a, b) => rank(a) - rank(b));
+  return view.roles.filter((r) => r.used !== false).map((r) => r.name).filter((n) => n !== PO).sort((a, b) => rank(a) - rank(b));
 }
 
 const weight = (n, max) => n ? 1.2 + 4 * Math.sqrt(n / Math.max(1, max)) : 1;
@@ -826,12 +834,18 @@ function runningLine(view, name) {
   return step ? "<br/>" + mmdText("⏱ running " + fmt.span(clockNow(view) - step.at)) : "";
 }
 
+/** A role's stats for the scope, or "idle" when it has none (FL4). */
+function statsText(view, ctx, name) {
+  const t = ctx.totals[name];
+  if (!t && !openStep(view, name)) return "idle";
+  return `${fmt.tok(t?.tokens ?? 0)} · ${fmt.usd(t?.cost ?? 0)} · ${fmt.span(t?.seconds ?? 0)}`;
+}
+
 function nodeLabel(view, name, ctx) {
   const info = roleInfo(view, name), s = ctx.stats[name], t = ctx.totals[name];
   const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
   const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
-  const total = `${fmt.tok(t?.tokens ?? 0)} · ${fmt.usd(t?.cost ?? 0)} · ${fmt.span(t?.seconds ?? 0)}`;
-  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${total}${bounced}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
+  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${statsText(view, ctx, name)}${bounced}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
 }
 
 const STEER = "grpSteering";
@@ -909,6 +923,11 @@ function activeNodeId(view) {
 }
 
 /** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
+/** The dimmed class: colour only, never opacity (FL1, FL2). */
+function idleClassDef() {
+  return `classDef idle fill:${cssVar("--surface-2")},stroke:${cssVar("--grid")},color:${cssVar("--muted")}`;
+}
+
 function flowSource(view) {
   const ctx = flowContext(view), stats = ctx.stats, names = ringRoles(view);
   const ids = names.map((n, i) => [n, "r" + i]);
@@ -916,7 +935,7 @@ function flowSource(view) {
   const edges = flowEdgeList(view, stats, ids), max = Math.max(1, ...edges.map((e) => e.n));
   for (const e of edges) lines.push(`${e.from} ${e.arrow}|"${e.label}"| ${e.to}`);
   edges.forEach((e, k) => lines.push(`linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`));
-  lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, "classDef idle opacity:0.55");
+  lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, idleClassDef());
   lines.push(...liveClassLines(ctx), ...flowClassLines(view, ctx, ids));
   return lines.join("\n");
 }
@@ -949,7 +968,7 @@ const flowMemo = { key: "", seq: 0, drawn: 0 };
 const themeVars = () => ({
   background: cssVar("--surface"), primaryColor: cssVar("--surface"), primaryTextColor: cssVar("--ink"),
   textColor: cssVar("--ink"), lineColor: cssVar("--axis"), primaryBorderColor: cssVar("--axis"),
-  edgeLabelBackground: cssVar("--surface"),
+  edgeLabelBackground: cssVar("--surface"), fontSize: `${FLOW_FONT_PX}px`,
 });
 
 function flowUnavailable(source) {
@@ -959,7 +978,7 @@ function flowUnavailable(source) {
 async function drawFlow(source, vars, seq) {
   try {
     const mermaid = await loadMermaid();
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: vars });
+    mermaid.initialize(mermaidConfig(vars));
     const { svg } = await mermaid.render("flow-svg-" + seq, source);
     if (seq === flowMemo.seq) { $("#flow").innerHTML = svg; flowMemo.drawn = seq; flushLive(); }
   } catch {
