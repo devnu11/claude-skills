@@ -36,7 +36,7 @@ def test_named_tests_are_allowed(tmp_path: Path) -> None:
 
 def test_code_reviewer_may_not_run_tests_at_all(tmp_path: Path) -> None:
     out = ask("code-reviewer", "pytest -q tests/test_x.py", tmp_path)
-    assert reason(out).startswith("code-reviewer reads tests")
+    assert "code-reviewer reads tests and does not run them" in reason(out)
 
 
 def test_brief_section_carries_kept_runner_results(tmp_path: Path) -> None:
