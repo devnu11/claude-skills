@@ -26,7 +26,7 @@ def ev(kind: str, at: float, **data: Any) -> dict:
 def pair(start_data: dict, end_data: dict, at: tuple[float, float] = (100.0, 400.0)) -> list[dict]:
     return [
         ev("step-start", at[0], **start_data),
-        ev("step-end", at[1], status="done", **end_data),
+        ev("step-end", at[1], **{"status": "done", **end_data}),
     ]
 
 
