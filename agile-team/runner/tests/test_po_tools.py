@@ -25,7 +25,8 @@ def test_open_story_and_status(make_runtime) -> None:
     status = call(t.story_status({}))
     assert status["stories"]["s1"]["delivery"] == "cli"
     opened = t.runtime.events.events()
-    assert len(opened) == 1 and opened[0].data == {"title": "Add", "step": "design"}
+    want = {"title": "Add", "step": "design", "depends_on": []}
+    assert len(opened) == 1 and opened[0].data == want
     assert "developer" in status["roles"]
 
 
