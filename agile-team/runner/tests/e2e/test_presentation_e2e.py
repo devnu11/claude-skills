@@ -13,7 +13,7 @@ from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from ..conftest import GUIDE_TEXT, FakeQuery, handoff, present, result_message
+from ..conftest import GUIDE_TEXT, FakeQuery, handoff, present, result_message, write_story
 
 
 def run(rt, role: str, story: str = "s1") -> dict[str, Any]:
@@ -21,6 +21,7 @@ def run(rt, role: str, story: str = "s1") -> dict[str, Any]:
 
 
 def open_story(rt, step: str) -> None:
+    write_story(rt.config, "s1", "cli")
     rt.state.sprint = 1
     rt.state.stories["s1"] = gates.StoryState("s1", "Add todo", step, sprint=1)
 

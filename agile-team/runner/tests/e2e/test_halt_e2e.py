@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from agile_team import cli, halt, preflight
+from agile_team import config as config_mod
 from agile_team import state as state_mod
 from agile_team.dispatch import Runtime, StepRequest
 from agile_team.events import EventKind
@@ -20,7 +21,7 @@ from agile_team.po_tools import Tools
 from agile_team.relay import Relay
 from claude_agent_sdk import AssistantMessage, ResultError, TextBlock
 
-from ..conftest import FakeQuery, git, result_message
+from ..conftest import FakeQuery, git, result_message, write_story
 
 LIMIT_TEXT = "You\u2019ve hit your session limit \u00b7 resets 2:20pm (America/Edmonton)"
 REASON = "session limit, resets 2:20pm (America/Edmonton)"
@@ -173,6 +174,9 @@ def test_real_sdk_error_str_ends_with_exit_code_but_reason_does_not() -> None:
 def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> None:
     start, holder = harness
     po = PoRunsRole(holder)
+    write_story(config_mod.load(configured), "s1", "cli")  # open_story needs the file (s94)
+    git(configured, "add", ".team/stories")
+    git(configured, "commit", "-qm", "story file")
     head = git(configured, "rev-parse", "HEAD")
     assert start(Router(po, RoleWritesThenLimit(configured)), "--task", "t") == 75
     assert po.reports[0]["status"] == "halted"

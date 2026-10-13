@@ -16,7 +16,7 @@ from agile_team import gates, presentation
 from agile_team.gates import Verdict
 from agile_team.sandbox import port_in_use
 
-from ..conftest import PY_CONFIG, git
+from ..conftest import PY_CONFIG, git, write_story
 
 RUNNER = Path(__file__).resolve().parents[2]
 
@@ -45,14 +45,13 @@ def web(configured: Path):
     (configured / config_mod.CONFIG_NAME).write_text(tomli_w.dumps(cfg))
     git(configured, "commit", "-qam", "web acceptance environment")
     config = config_mod.load(configured)
-    story = gates.StoryState("s1", "Dash", "e2e", sprint=1, environment="dashboard")
+    write_story(config, "s1", "dashboard")
+    story = gates.StoryState("s1", "Dash", "e2e", sprint=1)
     return config, story, port
 
 
 def present_workspace(config, init: bool) -> Path:
-    source = presentation.lay_out(
-        config, gates.StoryState("s1", "Dash", "e2e", environment="dashboard")
-    )
+    source = presentation.lay_out(config, gates.StoryState("s1", "Dash", "e2e"))
     (source / "PRESENTATION.md").write_text("Open the dashboard.\n")
     if not init:  # seeds opted out (seed = ""), so nothing plants a config
         (source / "workspace" / "note.txt").write_text("no config here\n")
