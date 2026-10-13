@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import system
+from . import stages, system
 from .process_groups import signal_child_group
 
 CommandRunner = Callable[[str], tuple[int, str]]
@@ -81,6 +81,11 @@ class CommandShell:
 
     def run(self, command: str) -> tuple[int, str]:
         """Run ``command``; on timeout kill its group and return ``TIMED_OUT``."""
+        code, out = self._run(command)
+        stages.note(command, code)
+        return code, out
+
+    def _run(self, command: str) -> tuple[int, str]:
         with system.spawn_piped(system.ShellCommand(command, self.repo)) as proc:
             try:
                 out, _ = proc.communicate(timeout=self.limit_s)

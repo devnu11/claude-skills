@@ -10,7 +10,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import system
+from . import stages, system
 
 CO_AUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
 RENAME_CODES = frozenset("RC")
@@ -45,7 +45,9 @@ class Git:
         return out.strip() if code == 0 else None
 
     def _exec(self, *args: str) -> system.Completed:
-        return system.run(system.Command(("git", *self.options, *args), self.repo))
+        proc = system.run(system.Command(("git", *self.options, *args), self.repo))
+        stages.note(f"git {' '.join(args)}", proc.code)
+        return proc
 
     def is_repo(self) -> bool:
         """True when ``repo`` is a directory inside a git work tree."""

@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from . import system
+from . import stages, system
 from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, PrMode
 from .ci import Check, UpstreamError, checks_of, job_of
 from .commands import TIMED_OUT
@@ -148,10 +148,18 @@ class Exec(Protocol):
     def __call__(self, argv: list[str], limit_s: float = GH_TIMEOUT) -> tuple[int, str]: ...
 
 
+def _noted(argv: list[str], result: tuple[int, str]) -> tuple[int, str]:
+    stages.note(" ".join(argv), result[0])
+    return result
+
+
 def command_runner(repo: Path) -> Exec:
     """An ``Exec`` that runs argv in ``repo``; a missing binary gives exit 127."""
 
     def run(argv: list[str], limit_s: float = GH_TIMEOUT) -> tuple[int, str]:
+        return _noted(argv, attempt(argv, limit_s))
+
+    def attempt(argv: list[str], limit_s: float) -> tuple[int, str]:
         try:
             done = system.run(system.Command(tuple(argv), repo, limit_s))
         except FileNotFoundError as exc:

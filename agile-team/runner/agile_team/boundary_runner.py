@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops, rewrite
+from . import halt, handover, loops, rewrite, stages
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -160,7 +160,8 @@ class BoundaryRunner:
     def step(self) -> dict[str, Any]:
         """Run the current stage once, as a chore on the heartbeat."""
         stage = self.runtime.state.boundary.stage  # type: ignore[union-attr]
-        with self.runtime.pulse.doing(f"sprint boundary: {stage}"):
+        chore = self.runtime.pulse.doing(f"sprint boundary: {stage}")
+        with chore, self.runtime.stage_log.open(stages.BOUNDARY[stage]):
             return self._step()
 
     def _step(self) -> dict[str, Any]:

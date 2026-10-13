@@ -68,6 +68,12 @@ def masked(text: str) -> str:
     return SECRET_ASSIGNMENT.sub(r"\1=***", text)
 
 
+def awake_gap(platform: Platform, marks: tuple[Mark, Mark]) -> float:
+    """Awake seconds between two marks on ``platform``, never negative."""
+    position = POSITIONS[platform]
+    return round(max(0, position(marks[1]) - position(marks[0])), ROUND)
+
+
 def shown(text: str) -> str:
     """Masked, whitespace collapsed, cut to ``LIMIT`` characters (TC9)."""
     return " ".join(masked(text).split())[:LIMIT]
@@ -233,8 +239,7 @@ class Calls:
             self._close(call, mark, Status.UNFINISHED)
 
     def _close(self, call: Call, mark: Mark, status: Status) -> None:
-        gap = self._position(mark) - self._position(call.start)
-        span = ToolSpan(self.where, call, mark, round(max(0, gap), ROUND), status)
+        span = ToolSpan(self.where, call, mark, awake_gap(self.platform, (call.start, mark)), status)
         self.spans.append(span)
         self.fresh.append(span)
 

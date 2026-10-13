@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import system
+from . import stages, system
 from .commands import DEFAULT_TIMEOUT_S
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .providers import Billing, Provider, ProviderKind
@@ -164,6 +164,15 @@ class DashboardSettings:
     collapse_under_s: float = 0.1
 
 
+@dataclass(frozen=True)
+class Tool:
+    """``[[tool]]``: a repo's own named tool, owned by DevOps (s99 RS11)."""
+
+    name: str
+    description: str = ""
+    command: str = ""
+
+
 @dataclass
 class Config:
     """Parsed ``.agile-team.toml`` for one repo."""
@@ -176,6 +185,7 @@ class Config:
     health: HealthLimits = field(default_factory=HealthLimits)
     dashboard: DashboardSettings = field(default_factory=DashboardSettings)
     deliveries: list[Delivery] = field(default_factory=list)
+    tools: list[Tool] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
 
@@ -242,6 +252,7 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         health=_section(HealthLimits, raw.get("health", {})),
         dashboard=_dashboard(raw.get("dashboard", {})),
         deliveries=[_delivery(d) for d in raw.get("delivery", [])],
+        tools=_tools(raw.get("tool", [])),
         roles=dict(raw.get("roles", {})),
         providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
     )
@@ -383,6 +394,38 @@ DANGLING_ROLE = "roles.{name} extends unknown role {base!r}"
 def broken(rules: tuple[Rule, ...], subject: Any) -> list[str]:
     """Messages of the rules ``subject`` breaks."""
     return [message for ok, message in rules if not ok(subject)]
+
+
+TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9_+-]*(\.[a-z0-9][a-z0-9_+-]*)*")
+TOOL_RULES: tuple[Rule, ...] = (
+    (
+        lambda t: bool(TOOL_NAME.fullmatch(t.name)),
+        "name must be lowercase letters, digits, -, _, + and dots",
+    ),
+    (lambda t: not stages.reserved(t.name), "clashes with a built-in name; pick another"),
+    (lambda t: bool(t.description.strip()), "needs a description"),
+    (lambda t: bool(t.command.strip()), "needs a command"),
+)
+REPEATED_TOOL = "[[tool]] name {name!r} is repeated"
+
+
+def _tool(raw: dict[str, Any]) -> Tool:
+    return Tool(*(str(raw.get(key, "")) for key in ("name", "description", "command")))
+
+
+def tool_problems(tools: list[Tool]) -> list[str]:
+    """Every way the ``[[tool]]`` rows break the rules, in message order."""
+    names = [t.name for t in tools]
+    repeated = sorted({n for n in names if names.count(n) > 1})
+    problems = [f"[[tool]] {t.name!r} {m}" for t in tools for m in broken(TOOL_RULES, t)]
+    return problems + [REPEATED_TOOL.format(name=n) for n in repeated]
+
+
+def _tools(raw: list[dict[str, Any]]) -> list[Tool]:
+    tools = [_tool(row) for row in raw]
+    if problems := tool_problems(tools):
+        raise ConfigError("; ".join(problems))
+    return tools
 
 
 def validate(config: Config, known: Known) -> list[str]:

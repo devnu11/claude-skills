@@ -58,6 +58,7 @@ from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import REPLY, Note
 from .router import Router
 from .runner_tools import text_result
+from .stage_log import place_of
 from .state import ModelOverride, RunStatus
 
 SERVER = "team"
@@ -396,7 +397,8 @@ class Tools:
     def _pass_refusal(self, story: StoryState | None, args: dict[str, Any]) -> str | None:
         if not args.get("reason"):
             return "a reason is required"
-        return self.runtime.pipeline.pass_tests_refusal(story)  # type: ignore[arg-type]
+        with self.runtime.stage_log.within(place_of(story)):
+            return self.runtime.pipeline.pass_tests_refusal(story)  # type: ignore[arg-type]
 
     def _pass_tests(self, story: StoryState, reason: str) -> dict[str, Any]:
         rt = self.runtime

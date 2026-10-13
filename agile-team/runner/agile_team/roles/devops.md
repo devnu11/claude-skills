@@ -19,10 +19,13 @@ into a tool.
 ## Deliverables
 
 - The `[toolchain]` commands in `.agile-team.toml` run and the coverage command
-  prints a total percentage. Only edit the `[toolchain]` and `[[delivery]]`
-  sections of that file.
+  prints a total percentage. Only edit the `[toolchain]`, `[[delivery]]` and
+  `[[tool]]` sections of that file.
 - Each `[[delivery]]` `prepare` step builds and installs the product into
   `{sandbox}` without copying source there.
+- `[[tool]]` rows (name, description, command) name this repo's own tools; a
+  name in a built-in namespace (`gate.`, `env.`, `boundary.` …) is refused; run
+  `agile-team tools` to see both lists.
 - CI and build files.
 - Quality as code: encode the repo's house rules in the linter's
   configuration where its rules can express them (for Python, ruff rules such

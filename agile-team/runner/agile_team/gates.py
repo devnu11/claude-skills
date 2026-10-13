@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import fingerprint, loops, system
+from . import fingerprint, loops, stages, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .loops import Author, Fault, Rule, Setback
@@ -370,13 +370,15 @@ class Checks:
     presentation: Callable[[StoryState], str | None] = _always_presented
     liveness: Callable[[StoryState], Outcome] = _always_live
     read: Callable[[str], str | None] = _unread
+    stages: stages.Opener = stages.unlogged
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
-        reason = self.presentation(story)
-        if reason is None:
-            return self.liveness(story)
-        return Outcome(Verdict.BOUNCE, reason)
+        with self.stages(stages.Name.PRESENTATION_TRIAL):
+            reason = self.presentation(story)
+            if reason is None:
+                return self.liveness(story)
+            return Outcome(Verdict.BOUNCE, reason)
 
     def tracked(self, file: str) -> str | None:
         """The one tracked repo-relative path for a test file id, if any."""
@@ -400,7 +402,8 @@ class Checks:
 
     def test_output(self, test: str) -> str:
         """The test command's output as shown to the dispute's readers."""
-        code, out = self.run(self.commands["test"])
+        with self.stages(stages.Name.GATE_DISPUTE):
+            code, out = self.run(self.commands["test"])
         if code == 0:
             return TEST_GREEN.format(test=test)
         name = test_name(test)
@@ -430,7 +433,8 @@ class Checks:
 
     def ran(self, name: str) -> Ran:
         """Run toolchain command ``name``; keep its exit code and output tail (Q1, Q2)."""
-        return _ran(name, *self.run(self.commands[name]))
+        with self.stages(stages.QUALITY[name]):
+            return _ran(name, *self.run(self.commands[name]))
 
     def listing(self) -> str:
         """Every tracked path, or ``""`` when git fails."""
@@ -440,10 +444,16 @@ class Checks:
     def lint_outputs(self) -> list[str]:
         """Output of each configured lint/static command that failed (not timed out)."""
         configured = [self.commands[n] for n in ROUTED_COMMANDS if n in self.commands]
-        ran = [self.run(command) for command in configured]
+        with self.stages(stages.Name.GATE_ROUTE_LINT):
+            ran = [self.run(command) for command in configured]
         return [out for code, out in ran if code not in (0, TIMED_OUT)]
 
     def tests_red(self) -> Outcome:
+        """The tests gate: the new tests must fail."""
+        with self.stages(stages.Name.GATE_TESTS_RED):
+            return self._red()
+
+    def _red(self) -> Outcome:
         code, out = self.run(self.commands["test"])
         return _with_ran(self._red_outcome(code, out), _ran("test", code, out))
 
@@ -456,7 +466,8 @@ class Checks:
 
     def tests_reworked(self, claim: TestClaim | None) -> Outcome:
         """Red passes; green passes only with a tests claim (code from an earlier pass)."""
-        red = self.tests_red()
+        with self.stages(stages.Name.GATE_TESTS_REWORK):
+            red = self._red()
         if red.reason != GREEN_TOO_EARLY:
             return red
         if claim is None:
@@ -465,7 +476,8 @@ class Checks:
 
     def green(self) -> Outcome:
         """Pass when the test command exits 0, else bounce with its output tail."""
-        code, out = self.run(self.commands["test"])
+        with self.stages(stages.Name.GATE_GREEN):
+            code, out = self.run(self.commands["test"])
         if timeout := timed_out(code, out):
             return timeout
         if code != 0:
@@ -474,7 +486,8 @@ class Checks:
 
     def tests_green_and_covered(self) -> Outcome:
         """One coverage run proves green and gives the total (s68 C1-C5)."""
-        code, out = self.run(self.commands["coverage"])
+        with self.stages(stages.Name.GATE_TESTS_COVERAGE):
+            code, out = self.run(self.commands["coverage"])
         covered = _with_ran(self._covered_outcome(code, out), _ran("coverage", code, out))
         return covered if code == TIMED_OUT else replace(covered, output=out)
 

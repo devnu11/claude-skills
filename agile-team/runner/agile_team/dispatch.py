@@ -42,6 +42,7 @@ from . import (
     runner_tools,
     salvage,
     sandbox,
+    stages,
     system,
 )
 from . import owners as owners_mod
@@ -95,6 +96,7 @@ from .roles import (
 )
 from .salvage import Cause, Interruption
 from .stack import REVIEW_DIR
+from .stage_log import StageLog, place_of
 from .state import RunState
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
 
@@ -123,7 +125,7 @@ RUNNER_FAULT_NOTE = (
 )
 RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
-DEVOPS_SECTIONS = ("toolchain", "delivery")
+DEVOPS_SECTIONS = ("toolchain", "delivery", "tool")
 BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
 BARE_KINDS = frozenset({StepKind.GATE_FIX})
@@ -276,7 +278,7 @@ def with_secret_denials(settings: dict[str, Any] | None, secrets: list[Path]) ->
 
 
 def restrict_config(audit: guard.Audit, git: Git) -> guard.Audit:
-    """A config edit may only touch ``[toolchain]`` and ``[[delivery]]``.
+    """A config edit may only touch ``[toolchain]``, ``[[delivery]]`` and ``[[tool]]``.
 
     Anything else (roles, gates, team) would let a role widen its own scope on
     the next run, so such an edit is moved to the quarantine list.
@@ -348,12 +350,15 @@ class Runtime:
     events: EventLog = field(init=False)
     halted_by: Halt | None = field(default=None, init=False)
     pulse: live.Pulse = field(init=False)
+    stage_log: StageLog = field(init=False)
     results: results_mod.Results = field(init=False)
     step_meter: live.Meter | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
         self.pulse = live.Pulse(self.config.run_dir, self.config.health.beat_s)
+        self.stage_log = StageLog(self.events, self.pulse)
+        self.pipeline.checks.stages = self.stage_log.open
         self.results = results_mod.Results(self.config.run_dir)
         if self.upstream is None:
             self.upstream = Upstream(self.git, self.config.upstream)
@@ -503,13 +508,15 @@ class Runtime:
         plan.scope = guard.Scope(plan.role.name, worktree, files, read, secrets=self.secrets)
 
     def _lay_out_presentation(self, plan: Plan) -> None:
-        presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
+        with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
+            presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
 
     def _attach_delivery(self, plan: Plan) -> None:
         delivery = self.config.delivery(plan.story.delivery if plan.story else None)
         if delivery is None:
             raise sandbox.SandboxError("no [[delivery]] is configured for the customer proxy")
-        plan.prepared = self.prepare_fn(self.config, self._order(delivery, plan.story))
+        with self.stage_log.open(stages.Name.ENV_PREPARE):
+            plan.prepared = self.prepare_fn(self.config, self._order(delivery, plan.story))
         role_writes, plan.scope = plan.scope.write, sandbox.proxy_scope(self.config, plan.prepared)
         plan.scope.write += role_writes
         self._fit_role_to_delivery(plan)
@@ -605,7 +612,7 @@ class Runtime:
         if reason:
             return refused(reason)
         try:
-            report = await self._run_step(request)
+            report = await self._placed_step(request)
         except CheckoutChanged as moved:
             return halted_report(request.role, moved.halt)
         except Exception as exc:
@@ -613,6 +620,12 @@ class Runtime:
             raise
         self.enforce_ceiling()
         return report
+
+    async def _placed_step(self, request: StepRequest) -> dict[str, Any]:
+        """Run the step with its stages attached to the requested story and step."""
+        story = self.state.stories.get(request.story_id or "")
+        with self.stage_log.within(place_of(story)):
+            return await self._run_step(request)
 
     async def _run_step(self, request: StepRequest) -> dict[str, Any]:
         """Settle the PO, return an unpresented request or run the planned step, then note it."""
@@ -785,6 +798,10 @@ class Runtime:
 
     def checkout_moved(self) -> Halt | None:
         """K3/K4: halt the run when the checkout drifted; record it when unrecorded and matching."""
+        with self.stage_log.open(stages.Name.CHECKOUT_GUARD):
+            return self._drift_halt()
+
+    def _drift_halt(self) -> Halt | None:
         drift = checkout.check(self.git, self.state.checkout)
         if drift is not None:
             return self.halt_run(drift.halt())
@@ -794,7 +811,8 @@ class Runtime:
 
     def verify_checkout(self) -> None:
         """``checkout_moved``, raising ``CheckoutChanged`` with the halt when it halted."""
-        moved = self.checkout_moved()
+        with self.stage_log.open(stages.Name.CHECKOUT_VERIFY):
+            moved = self._drift_halt()
         if moved is not None:
             raise CheckoutChanged(moved)
 

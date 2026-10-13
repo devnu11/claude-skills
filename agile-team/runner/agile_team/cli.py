@@ -29,6 +29,7 @@ from . import (
     presentation,
     recovery,
     sandbox,
+    stages,
     system,
     threads,
     watch,
@@ -448,6 +449,19 @@ def pid_file(run_dir: Path) -> Iterator[None]:
 # ----- status / answer / stop ----------------------------------------------
 
 
+def tools_report(config: config_mod.Config) -> dict[str, list[dict[str, str]]]:
+    """The built-in stages and the repo's ``[[tool]]`` rows."""
+    return {
+        "built_in": [stage.as_dict() for stage in stages.STAGES.values()],
+        "repo": [asdict(tool) for tool in config.tools],
+    }
+
+
+def cmd_tools(args: argparse.Namespace) -> int:
+    print_json(tools_report(_load_config(repo_of(args))))
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     print_json(status_report(_load_config(repo_of(args))))
     return 0
@@ -658,6 +672,11 @@ COMMANDS = (
     Command("roles", "list role layers or scaffold instruction stubs", cmd_roles, ROLES_ARGS),
     Command("start", "run the team (blocks; run in the background)", cmd_start, START_ARGS),
     Command("status", "print run state as JSON", cmd_status),
+    Command(
+        "tools",
+        "list the built-in runner stages and the repo's [[tool]] entries as JSON",
+        cmd_tools,
+    ),
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
     Command("tell", "queue a message for the PO (a file, or - for stdin)", cmd_tell,
             ((("source",), {"help": "file holding the message, or - to read stdin"}),)),

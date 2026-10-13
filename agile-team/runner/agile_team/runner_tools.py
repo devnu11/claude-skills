@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import system
+from . import stages, system
 from .config import Targeted, Toolchain
 from .events import EventKind
 from .gates import StoryState, test_file
@@ -113,11 +113,11 @@ class RunnerTools:
 
     async def run_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Run the named tests."""
-        return text_result(await self._reply(list(args.get("tests") or [])))
+        return text_result(await self._reply(list(args.get("tests") or []), stages.RUNNER_TOOL["run_tests"]))
 
     async def run_new_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Run the story's new test files."""
-        return text_result(await self._reply(self._new_tests))
+        return text_result(await self._reply(self._new_tests, stages.RUNNER_TOOL["run_new_tests"]))
 
     @property
     def _new_tests(self) -> list[str] | Refused:
@@ -127,10 +127,12 @@ class RunnerTools:
         found = new_tests(story, self.runtime.config.repo)
         return found or Refused(NO_NEW_TESTS.format(story=story.id))
 
-    async def _reply(self, tests: list[str] | Refused) -> dict[str, Any]:
+    async def _reply(self, tests: list[str] | Refused, stage: stages.Name) -> dict[str, Any]:
         try:
             ids = self._locate(self._named(tests))
-            return await self._run(ids, batches(ids, self.runtime.config.toolchain))
+            plan = batches(ids, self.runtime.config.toolchain)
+            with self.runtime.stage_log.open(stage):
+                return await self._run(ids, plan)
         except Refused as refusal:
             return {"status": "refused", "reason": str(refusal)}
 

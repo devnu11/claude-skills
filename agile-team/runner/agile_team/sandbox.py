@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
-from . import system
+from . import stages, system
 from .config import Config, Delivery
 from .guard import Scope
 from .paths import literal_root, under_root
@@ -334,7 +334,9 @@ Runner = Callable[[str, Prepared], int]
 
 def run_shell(command: str, prepared: Prepared) -> int:
     """Default prepare runner: a blocking shell command in the repo."""
-    return system.run_shell(system.ShellCommand(command, prepared.repo, prepared.env))
+    code = system.run_shell(system.ShellCommand(command, prepared.repo, prepared.env))
+    stages.note(command, code)
+    return code
 
 
 def kind_of(delivery: Delivery) -> DeliveryKind:
@@ -405,7 +407,19 @@ class Preparer:
     def _serve(self, prepared: Prepared, prepare: str) -> None:
         if prepare:
             self._start(prepared, prepare)
-        self._await_answer(prepared)
+        self._answered(prepared, prepare)
+
+    def _answered(self, prepared: Prepared, prepare: str) -> None:
+        try:
+            self._await_answer(prepared)
+        except NotUp:
+            self._note_start(prepare, stages.NOT_UP)
+            raise
+        self._note_start(prepare, 0)
+
+    def _note_start(self, prepare: str, code: int) -> None:
+        if prepare:
+            stages.note(prepare, code)
 
     def _start(self, prepared: Prepared, command: str) -> None:
         self._refuse_busy(prepared)
