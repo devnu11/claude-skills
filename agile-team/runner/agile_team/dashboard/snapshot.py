@@ -167,7 +167,10 @@ def _configured_model(files: RunFiles, role: str) -> str:
 
 
 def _step(files: RunFiles, span: step_times.Span) -> dict:
-    """One ``steps`` object; ``model`` falls back to the configured one (ST7); ``recorded_model`` is the end's own (MF6)."""
+    """One ``steps`` object; ``model`` falls back to the configured one (ST7).
+
+    ``recorded_model`` is the end's own (MF6).
+    """
     step = span.as_dict()
     step["model"] = span.model or _configured_model(files, span.role)
     step["recorded_model"] = span.model
