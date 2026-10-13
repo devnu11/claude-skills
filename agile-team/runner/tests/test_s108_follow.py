@@ -415,11 +415,11 @@ def test_a_merge_made_mid_sprint_changes_nothing_until_the_sprint_ends(
     ]
 
 
-def test_the_end_sync_follows_the_merge_before_adding_the_entry(env: Env, fake: FakeSystem) -> None:
+def test_the_end_sync_only_adds_the_entry_and_follows_nothing(env: Env, fake: FakeSystem) -> None:
+    """M2: the merge is followed at RESTACK, not at SYNC."""
     sync_with_merged_bottom(env, fake, Edge.END)
     env.br.step()
-    outcomes = env.outcomes()
-    assert outcomes.index("merged") < outcomes.index("pass")
+    assert env.outcomes() == ["pass"] and pushes(fake) == []
 
 
 def test_a_rejected_push_at_sync_stops_the_stage(env: Env, fake: FakeSystem) -> None:
