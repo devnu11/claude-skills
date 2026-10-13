@@ -245,9 +245,6 @@ class BoundaryRunner:
         if why:
             return self._skip(b, why)
         self.mine.team_branch = self.remote.team_branch()
-        if self._follow(b) in SYNC_STOPS:
-            return
-        self._drop_merged(b)
         SYNCS[b.edge](self, b)
 
     def _skip(self, b: Boundary, why: str) -> None:
@@ -656,5 +653,5 @@ CI_AFTER_FOLLOW = {
     FollowOutcome.REBUILD: BoundaryRunner._to_review,
     FollowOutcome.REJECTED: BoundaryRunner._to_push,
 }
-SYNC_STOPS = frozenset({FollowOutcome.REJECTED})
 SYNCS = {Edge.START: BoundaryRunner._rebase, Edge.END: BoundaryRunner._end_sync}
+SYNC_STOPS = frozenset({FollowOutcome.REJECTED})
