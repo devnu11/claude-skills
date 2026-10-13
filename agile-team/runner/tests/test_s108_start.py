@@ -147,7 +147,7 @@ def test_the_stage_order_has_rebase_and_restack_between_push_and_ci() -> None:
 
 
 def test_the_end_only_stages_are_skipped_at_start_even_with_restack() -> None:
-    assert bd.END_ONLY == {Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI}
+    assert {Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI} == bd.END_ONLY
     for restack in (False, True):
         b = bd.Boundary(Edge.START, 1, stage=Stage.CHECK, restack=restack)
         assert bd.next_stage(b) is None

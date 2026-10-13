@@ -31,6 +31,9 @@ def open_pr(env: Env, e: bd.StackEntry, base: str, state: PrState = PrState.OPEN
     env.prs.prs[e.branch] = Pr(e.sprint, e.url, state, False, base)
 
 
+PIN = "c" * 40  # the REBASE stage pins sync_from with the first rev-parse HEAD (M8, s59 R2)
+
+
 def at_stage(
     env: Env, stage: Stage, *heads: str, merged: int = 1, push: bd.Permission = bd.Permission.YES
 ):
@@ -229,7 +232,7 @@ def test_the_end_boundary_pushes_then_rebases_then_restacks(
     b, (_e9, e10, e11) = at_stage(env, Stage.PUSH, H1, H2, H3)
     e11.pushed = ""
     monkeypatch.setattr(env.rt.upstream, "rebase_onto", lambda old: Rebase(SyncOutcome.CURRENT))
-    script_fast_path(fake, N1, N2)
+    script_fast_path(fake, PIN, N1, N2)
     env.br.step()
     assert env.prs.calls == [] and b.stage is Stage.REBASE
     env.br.step()
