@@ -1,6 +1,12 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s109 complete: Dashboard model family grouping (1 round, AC3 test added, all pass) — verdict ship
+
+**Scope:** `dashboard/index.html` (eight functions: familyOf, versionOf, GROUP_KEYS, groupKeyOf, versionsLine, stepPieces, turnPieces, timeBy enhancements), snapshot.py (_step adds recorded_model), fixture.json. **Verdict: ship.** Coverage 99.48%, ruff clean. Gate fix round 1: D1 missing tests addressed (familyOf/versionOf unit tests added via node harness; AC3 Time-by-Model test now present pinning alias+exact→one row). All MF1–MF8 rules matched in code; no logic defects. No test deleted or weakened. Minor: docstrings on barRows, GROUP_KEYS, NOT_RECORDED, newLineTotal, newTimeTotal (present now). No new ADR (extends s96 snapshot view pattern).
+
+See design `agile-team/docs/design/s109.md` (MF1–MF8, all rules).
 
 ## s107 complete: Suite runs feature—runner part (2 rounds, all ACs pass) — verdict ship
 

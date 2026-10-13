@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s109 complete: Dashboard groups models by family (AC1–AC3 pass, no new ADR)
+
+"Time by Model", "Tokens by Model", "Spend by Model" charts now show one row per model family (opus, sonnet, haiku) instead of splitting alias and exact version into separate rows. Aliases and exact ids of the same family sum into one row. Tooltips list exact versions with their shares; steps with no recorded model show "version not recorded". Implementation is view-time only: snapshot records `recorded_model` on each step (what was logged), dashboard applies `familyOf()` and `versionOf()` functions at build time. History is untouched. No new CLI or config. See design `agile-team/docs/design/s109.md` (MF1–MF8).
 
 ## s107 complete: Suite runs feature—story frontmatter declares repeated test runs (no new ADR, extends s69/s99 patterns)
 

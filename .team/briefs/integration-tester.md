@@ -1,6 +1,12 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s109 complete: Dashboard model family grouping—AC1–AC3 acceptance tests pass (all pass)
+
+**AC1–AC3 verified on real dashboard:** Every chart with Model grouping shows one row per family (opus, sonnet, haiku); aliases and exact versions are summed under the family name. Tooltips list exact versions with their shares, and steps with no recorded model show "version not recorded". Family mapping is in index.html as data tables, no history rewritten. Design rules MF1–MF8 enforced; AC3 test (alias + exact-id → one row) pinned. No new ADR (extends s96 snapshot patterns).
+
+See design `agile-team/docs/design/s109.md` (MF1–MF8).
 
 ## s107 complete: E2E test fixes—readiness waits replace fixed sleeps (AC1, AC2 pass; AC3 to runner gate)
 

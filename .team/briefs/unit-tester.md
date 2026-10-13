@@ -1,6 +1,17 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s109 complete: Snapshot recorded_model and fixture shape tests (all pass, coverage ≥95%, ruff clean)
+
+**File:** `tests/test_s109_snapshot.py` (new, ~150 LOC). **Test items (MF6, fixture contract):**
+- A step whose end has `data.model = "claude-opus-5-5"` → `recorded_model == "claude-opus-5-5"`, `model == "claude-opus-5-5"` (fallback applies).
+- A step whose end has no `model` → `recorded_model is None`, `model` is configured model (ST7 fallback).
+- A running step → `recorded_model is None`.
+- `recorded_model` is the last key of each step object.
+- Fixture steps still equal builder's (s96 exact-dict test, two new keys: recorded_model).
+
+Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s109.md` (test checklist, MF6).
 
 ## s107 complete: Suite runs tests—frontmatter parsing, gating, result keeping (all pass, coverage ≥95%, ruff clean)
 

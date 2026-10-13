@@ -1,6 +1,19 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s109 complete: Dashboard model family grouping (AC1–AC3 pass, no new ADR)
+
+**Verdict: All ACs verified on real dashboard.** Charts now group models by family (opus, sonnet, haiku). **What you see:**
+1. **AC1 (family grouping):** "Time by Model", "Tokens by Model", "Spend by Model" charts show one row per family, not alias + exact version separately. Example: both `sonnet` (alias, no recorded model) and `claude-sonnet-5-5` (exact) appear under one `sonnet` row with summed values.
+2. **AC2 (versions tooltip):** Hover over a model row to see tooltip: `"sonnet · 24h · claude-sonnet-5-5 75% · version not recorded 25%"` (exact versions with their share; "version not recorded" when model was not logged). Share percentages computed from the same unit (tokens/cost/time).
+3. **AC3 (history untouched):** The family mapping is purely view-time: no events rewritten, ledger unchanged, `events.jsonl` identical before/after. `recorded_model` on steps shows what was logged; `model` field (used in charts via familyOf) records the fallback or exact id.
+
+**Implementation:** Snapshot gains `recorded_model` field on each step (last key). Dashboard `index.html` gains `MODEL_FAMILIES` table, `familyOf()` (splits model string on non-letters, matches whole-word family), `versionOf()` (exact id or "version not recorded" for aliases/missing), and grouping logic in `totalsBy`/`timeBy` functions. Rules MF1–MF8 all data-driven in code tables.
+
+**Your scope unchanged:** Same sandbox, same service startup, same acceptance procedure. Dashboard is the only change (view rules, no data rewriting).
+
+See design `agile-team/docs/design/s109.md` (MF1–MF8).
 
 ## s107 complete: Flaky e2e tests fixed—readiness waits and suite runs (AC1–AC2 pass; AC3 to runner gate)
 

@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s109 done; s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s109 complete: Dashboard groups models by family, no new hand-overs or tools
+
+Charts now show one row per model family (opus, sonnet, haiku) instead of splitting alias and exact version. Snapshot records what was logged (`recorded_model` on each step); dashboard applies view-time mapping (familyOf splits on non-letters, matches family; versionOf records exact id or "version not recorded"). No event/state/ledger changes. History untouched. AC1–AC3 verified on real dashboard: families group correctly, tooltips list versions with shares, family mapping is in code tables. No new hand-overs, no new tools, no new ADR (extends s96 snapshot view pattern). See design `agile-team/docs/design/s109.md` (MF1–MF8).
 
 ## s107 complete: Suite runs—test stories N times after the gate (no new tool, no new hand-over)
 

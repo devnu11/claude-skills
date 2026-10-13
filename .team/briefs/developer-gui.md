@@ -1,8 +1,14 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s102 done; s101 done, P1 pending; s97 done, P1 pending; s96 done, P1 pending)
+**Last updated:** 2026-10-13 (s109 done; s102 done; s101 done, P1 pending; s97 done, P1 pending; s96 done, P1 pending)
 
 See `developer.md` for base conventions.
+
+## s109 complete: Dashboard model family grouping (AC1–AC3 pass, no new ADR)
+
+One row per model family in charts: `opus`, `sonnet`, `haiku` (or configured alias). **Implementation (MF1–MF8):** `index.html` gains `MODEL_FAMILIES` table, `familyOf(model)` function (splits on non-letters, matches whole-word families), `versionOf(model)` (records exact ids or "version not recorded" for aliases/missing), `GROUP_KEYS` maps "model" to family grouping, `totalsBy` and `timeBy` group by family, versions tooltip shows each exact id's share, "runner" row has no versions line. Snapshot adds `recorded_model` to each step (MF6, last key). History untouched (MF8). Design rules MF1–MF8 all enforced; AC3 test pins alias+exact-id→one row. Coverage 99.48%, ruff clean. No new ADR (extends s96 snapshot view pattern).
+
+See design `agile-team/docs/design/s109.md` (MF1–MF8, all rules).
 
 ## s102 complete: Runner stages on Flow and Time charts (all ACs pass, P1 complete)
 

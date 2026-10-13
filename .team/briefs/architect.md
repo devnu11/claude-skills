@@ -1,6 +1,13 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s107 docs done; s53 shipped; s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s109 docs due; s107 docs done; s53 shipped; s102 docs done; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s109 complete: Dashboard model family grouping (no new ADR, view rule over s96 snapshot)
+
+**Decision:** Charts group models by family (opus, sonnet, haiku) at view-time. Snapshot records exact id (`recorded_model` key on each step). familyOf strips non-letters, matches whole-word family. versionOf records exact id or "version not recorded" for aliases/missing. MF1–MF8 rules data-driven in index.html (table lookups, pure model functions). No event/state/ledger changes. **Your docs work (ship step):**
+- `reference/protocol.md`: `recorded_model` key on steps (MF6), Model grouping by family (MF1–MF2), versions tooltip (MF5), Flow model line shows family (MF7).
+- `docs/customer/dashboard.md`: "Tokens by / Spend by / Time by" Model rows group by family; hover lists exact versions and "version not recorded".
+- `docs/architecture.md`: index.html section (if changed).
 
 ## s107 complete: Suite runs—data-driven repeated test execution (no new ADR, extends s69/s99 patterns)
 
