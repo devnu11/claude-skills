@@ -52,10 +52,15 @@ PACKAGE_DATA = (
 )
 
 
+SKILL_DIR = PACKAGE_DIR.parents[1]
+SKILL_DOCS = ("SKILL.md", "reference/protocol.md")  # prose the doc tests read
+
+
 def _snapshot_package_data() -> dict[Path, bytes]:
     """Read the built-in roles, presets and UI once, at import (before any guard)."""
     found = (path for pattern in PACKAGE_DATA for path in sorted(PACKAGE_DIR.glob(pattern)))
-    return {path: path.read_bytes() for path in found}
+    docs = (SKILL_DIR / name for name in SKILL_DOCS)
+    return {path: path.read_bytes() for path in (*found, *docs)}
 
 
 PACKAGE_FILES = _snapshot_package_data()
