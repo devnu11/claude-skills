@@ -1,6 +1,25 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s107 complete: Suite runs feature—runner part (2 rounds, all ACs pass) — verdict ship
+
+**Scope:** `suite_runs.py` (new pure module), `gates.py` (Checks.after_suite_runs, _run_suite, _suite_outcome), `dispatch.py` (_keep_runs), `cli.py` (suite_runs wired), `stages.py` (gate.suite-runs row), `results.py` (BRIEF_RESULTS pins), `dashboard/index.html` (STAGE_NODES), `roles/product-owner.md` (one sentence), tests. **Verdict: ship (runner part).** E2e part (F1–F7) is integration-tester's work. Coverage 99.55%, ruff clean.
+
+**Design rules enforced (SR1–SR7, all pass):**
+- **SR1/SR6:** `wanted()` parses `suite_runs` key from frontmatter meta (none → 0, int 1–10 → count, else refusal). `declared()` reads story file, missing/YAML error → defaults. Bad value text exact: `BAD_SUITE_RUNS` with repr.
+- **SR2:** `suite_step()` returns first of `("e2e", "implement")` in pipeline, or None.
+- **SR3:** `_run_suite()` runs test command up to N times, timed, stops on non-zero exit. `_suite_outcome()` builds bounce on failure (run k of N, with tail), or `timed_out`, or pass with joined text.
+- **SR4:** Pass reason: `"{first.reason}; {SUITE_PASSED}"` (times via monotonic, exact format).
+- **SR5:** `Ran("suite-runs", code, report(runs))` kept in `extra_ran`. Report has N RUN_LINEs, blank line, failed tail on fail.
+- **SR7:** Stage `gate.suite-runs` opens, one event per gate run, stages list pin updated.
+- **SR2 gating:** `Pipeline._suite_due` checks status=="done" at suite step. `_suite_gate` wraps step's gate (or `_passed` base). No suite runs on changes_requested, on non-suite steps, or when step gate failed (0 test-command calls).
+
+**Round 1:** Changes requested—D1 missing: `STAGE_NODES` list gains `"gate.suite-runs"` after tests+coverage. Everything else matches design.
+
+**Round 2:** Fixed. Diff one line in `dashboard/index.html`. Coverage 99.55%, ruff clean. No test assertion changed or weakened. Gate fixes cited: `a75a79a` (s69 BRIEF_RESULTS result pin), `8881a8d` (s107 unit test covering real gate).
+
+See design `agile-team/docs/design/s107.md` (SR1–SR7, all rules).
 
 ## s102 complete: Runner stages on Flow and Time charts (1 round, all ACs pass) — verdict ship
 

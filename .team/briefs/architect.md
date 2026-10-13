@@ -1,6 +1,22 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 shipped; s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s107 docs done; s53 shipped; s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s107 complete: Suite runs—data-driven repeated test execution (no new ADR, extends s69/s99 patterns)
+
+**Decision:** Stories can declare `suite_runs: N` in YAML frontmatter (1–10). Runner loads at three points (cmd_start, open_story, start_sprint) and executes after the suite step's gate (e2e or implement, first in pipeline). Command runs up to N times in a row, timed with monotonic clock. All pass → PASS with extended reason + times. One fails → BOUNCE with failure details at that run. Timeout → TIMED_OUT. Results kept in extra_ran, shown in briefs. Stage `gate.suite-runs` logs the run inside dispatch stages.
+
+**Architecture:** Pure module `suite_runs.py` (Wanted, SuiteRun classes, wanted/declared/suite_step/summary/report/passed_text functions). No branching (data-driven frontmatter parsing, no dependency on delivery kind). Changes: gates.py (Checks.after_suite_runs, _run_suite, _suite_outcome), dispatch.py (_keep_runs keeps both ran + extra_ran), cli.py (suite_runs callable via functools.partial), stages.py (gate.suite-runs row, NoneType in place of stage for gate, not story/step specific), results.py (BRIEF_RESULTS adds suite-runs to implement/e2e/acceptance), dashboard/index.html (STAGE_NODES), roles/product-owner.md (one sentence).
+
+**Data contract:** Story frontmatter `suite_runs: N` (optional, 1–10). Snapshot: no change (not stored). Events: no change (stage event records it). Results file: suite-runs Ran with N RUN_LINEs and failed tail. Brief: "### suite-runs: exit 0" block with run summaries.
+
+**No new ADR** (extends s69 runner results pattern and s99 stages pattern). No new dependency. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s107.md` (SR1–SR7, all rules, test checklist, known limits).
+
+**Your docs work (due with ship):**
+1. **`reference/protocol.md`:** Story frontmatter `suite_runs` (SR1, SR6 bad value rules). Pipeline/gates section: suite step, N times, stop at first failure, pass text with times, suite-runs result in briefs (SR2–SR5). Stage table: `gate.suite-runs` row.
+2. **`docs/customer/backlog-and-sprints.md`:** `suite_runs` in story file YAML.
+3. **`docs/customer/runner-stages.md`:** New stage row for gate.suite-runs.
+4. **`docs/architecture.md`:** `suite_runs.py` row (frontmatter parsing, wanted/declared, gating rules).
 
 ## s102 complete: Runner stages on Flow chart and Time chart (no new ADR, extends s96/s101 patterns)
 

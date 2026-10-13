@@ -1,8 +1,14 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s99 done; s98 done; s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s107 complete: Suite runs feature—story frontmatter declares repeated test runs (no new ADR, extends s69/s99 patterns)
+
+New `suite_runs.py` module (pure + I/O) and gates integration (SR1–SR7). **What changes:** Story frontmatter gains optional `suite_runs: N` (1–10). Runner executes on `done` at the suite step (e2e, or implement if no e2e). Command runs N times in a row; stops on first non-zero exit; all N pass → reason extended with pass text + times; one fails → BOUNCE with failure details and tail. Runs inside `gate.suite-runs` stage. Dashboard's implement-gate node gains `"gate.suite-runs"` to its stages list. Results are kept in `Ran("suite-runs", ...)` and shown in briefs. **Modules:** New `suite_runs.py` (Wanted, SuiteRun classes, wanted/declared/suite_step/summary/report/passed_text functions). Changed: gates.py (Checks.after_suite_runs, _run_suite, _suite_outcome), dispatch.py (_keep_runs), cli.py (suite_runs wired), dashboard/index.html (node stages list), results.py (BRIEF_RESULTS pins). **No new ADR** (extends s69 runner results and s99 stages patterns). Coverage ≥95%, ruff clean.
+
+See design `agile-team/docs/design/s107.md` (SR1–SR7, F1–F7 e2e, test checklist).
 
 ## s99 complete: Runner stages named, timed, and data-driven (ADR-0048, no new ADR per design extends s44/s98)
 

@@ -1,6 +1,25 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s107 complete: Flaky e2e tests fixed—readiness waits and suite runs (AC1–AC2 pass; AC3 to runner gate)
+
+**Verdict: AC1–AC2 accepted on presented evidence** (readiness.py, green e2e run, clean ruff). **AC3 left to runner gate** (5 full suite runs, runner's own measurement).
+
+**What changed:**
+1. **No flaky tests under load.** Three tests that failed under `-n auto` now pass: `test_health_goes_green_amber_red_as_the_step_goes_quiet` (fake step advances its own quiet clock instead of waiting real time), `test_sandboxed_curl_fails_without_local_binding` (subprocess timeout 600s monotonic, not wall), `test_traversal_is_404` (dashboard startup waits for readiness, not hard 20s).
+2. **New readiness module.** `tests/e2e/readiness.py` provides `wait_until(check, what)` (poll with 120s monotonic deadline), `Output.wait_for(pattern)` (child output reader with timeout), `dashboard(Launch)` (start CLI, wait for URL match, yield proc/url), `serving(handler)` (in-thread HTTP server with TCP connect wait). Timeout failures include child output, so debugging is clear.
+3. **Test updates.** 11 test files refactored: replaced fixed sleeps before assertions with `wait_until`, relaxed socket/stream/subprocess timeouts to 120s (STARTUP_S), made health test levels driven by fake step meter, stream readers now condition-based. All changes follow design rules F1–F7 (readiness waits, no wall-clock bounds, health driven, conditions not clocks).
+4. **Suite runs feature.** Story frontmatter can declare `suite_runs: 5`. After the e2e gate passes, the runner runs the test command 5 times in a row, timed. All pass → PASS with "the test command passed 5 runs in a row (412 s, 398 s, …)"; failure/timeout at any run → bounce/hold with details. Acceptance brief shows the suite-runs block.
+
+**Acceptance notes:**
+- **AC1 (time-sensitive tests pass under load):** Three named tests and the rest of e2e pass under `pytest -n auto` from integration-tester's e2e gate. Green run confirmed.
+- **AC2 (readiness waits with timeout, child output on failure):** Every dashboard start goes through `readiness.dashboard`; every child waits via `Output.wait_for(pattern)`. Grep confirms no bare `Popen(` elsewhere. No `time.sleep` before assertions (except 7 minimum-duration/minimum-age checks listed in design). Output included on timeout failure.
+- **AC3 (5 full suite runs pass):** Story frontmatter has `suite_runs: 5`. Runner's gate runs test command after e2e passes, N times. Acceptance brief shows suite-runs block with run times. Runner quotes it in its own hand-over.
+
+**Sandbox unchanged.** Same Presentation.md contract. E2e tests now pass reliably; acceptance step's test run produces consistent results.
+
+See design `agile-team/docs/design/s107.md` (F1–F7 e2e, SR1–SR7 suite runs, all rules).
 
 ## s53 complete: Three new story-admin tools on dashboard (all ACs verified on 46-test run)
 

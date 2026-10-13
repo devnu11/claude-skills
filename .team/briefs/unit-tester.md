@@ -1,6 +1,26 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s107 complete: Suite runs tests—frontmatter parsing, gating, result keeping (all pass, coverage ≥95%, ruff clean)
+
+**File:** `tests/test_s107_suite_runs.py` (new, ~350 LOC, fake system). **Test checklist (SR1–SR7, all pass):**
+
+- **SR1/SR6 `wanted`:** none → `Wanted()`; `{"suite_runs": 5}` → `Wanted(5)`; bad values (0, 11, "5", True, 2.5) → `BAD_SUITE_RUNS` text (exact repr).
+- **`declared`:** missing file → `Wanted()`; frontmatter errors → `BAD_FRONTMATTER`; file with `suite_runs: 3` → `Wanted(3)`.
+- **SR2 `suite_step`:** `[…, "e2e", "acceptance"]` → `"e2e"`; no e2e → `"implement"`; neither → `None`.
+- **`summary`:** pytest lines joined with ` | `; no match → last non-blank; empty → `"no output"`.
+- **SR3 (failure):** scripted runner 0, 0, 1 for N=5 → 3 runs, BOUNCE, reason starts "the test command failed on run 3 of 5:", output is run 3's, extra_ran[0].name == "suite-runs", tail has 3 RUN_LINEs and failed tail.
+- **SR3 (timeout):** run 2 returns TIMED_OUT → timed_out outcome, extra_ran.
+- **SR4 (pass text):** all 5 pass after e2e PASS → reason "…; the test command passed 5 runs in a row (…)"; first.ran kept.
+- **SR2 (gating):** suite runs only on `done` at suite step. Not on changes_requested, not at implement when e2e is in steps, not when step's own gate failed (zero test-command calls).
+- **E2e with no acceptance + done → suite runs happen (`_passed` base).
+- **SR6 (bad value at gate):** bad value → HOLD, no test-command call.
+- **SR5 (dispatch):** `_advance_and_log` keeps coverage and suite-runs; briefs show `### suite-runs: exit 0` blocks.
+- **SR7 (stage):** one `runner-stage` event per gate; stages list pinned with `gate.suite-runs` after `gate.tests+coverage`.
+- **`make_pipeline`:** wires `suite_runs.declared` with `config.stories_dir`.
+
+Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s107.md` (test checklist).
 
 ## s102 complete: Stage board and heartbeat stages tests (coverage ≥95%, ruff clean, all pass)
 

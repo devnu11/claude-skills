@@ -1,6 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s107 complete: Suite runs—test stories N times after the gate (no new tool, no new hand-over)
+
+**For story files that must prove a fix holds** (flaky tests, race conditions), you can now add `suite_runs: N` (1–10) to the YAML frontmatter. After the story's suite step (e2e or implement) passes its gate, the runner runs the test command N times in a row. All N pass → outcome PASS with extended reason; one fails → bounce back with failure details; timeout → TIMED_OUT. Results are kept in the acceptance brief under `### suite-runs: exit 0` with all N run summaries. **No new tools, no new hand-overs.** Just add the frontmatter key and the runner handles the rest.
+
+**Example:** A story fixing a flaky test gets `suite_runs: 5`. On `done`, the e2e gate runs the test. If it passes, then the runner runs it 5 more times. All 6 total pass → PASS with "the test command passed 5 runs in a row (412 s, 398 s, …)"; on failure, bounce with run details.
+
+See design `agile-team/docs/design/s107.md` (SR1–SR7).
 
 ## s102 complete: Runner stages on Flow and Time charts (A6e: no new tool, no new hand-over)
 

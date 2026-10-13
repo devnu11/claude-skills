@@ -1,6 +1,26 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s107 done; s53 done; s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s107 complete: E2E test fixes—readiness waits replace fixed sleeps (AC1, AC2 pass; AC3 to runner gate)
+
+**File:** Tests refactored in `tests/e2e/` directory (readiness.py new, per-test-file updates). **Design checklist (F1–F7, all AC1–AC2 verified; AC3 is the runner's 5-run gate):**
+
+**Readiness module (F1, F5):** New `tests/e2e/readiness.py` with `STARTUP_S = 120.0` monotonic deadline, `POLL_S = 0.05` polling interval. `wait_until(check, what)` polls a condition; `Output` class reads child's merged stdout on daemon thread; `Output.wait_for(pattern)` waits for a regex match or fails at deadline with output and exit code; `dashboard(Launch)` context starts the CLI with local args, waits for DASHBOARD_URL pattern, yields proc/output/url, kills on exit; `serving(handler)` starts in-thread HTTP server, waits for TCP connect, returns server. All timeouts include child output on failure (F2–F5).
+
+**Test changes (F2–F4, F6):**
+- **F2 (no fixed sleeps before assertions):** `time.sleep` calls removed before assertions that load can break. Sleeps ≥0.05s that wait for something become `wait_until`. Minimum-duration sleeps kept (load only helps). Minimum-age checks in lists.
+- **F3 (no tight wall-clock bounds):** Socket/stream/subprocess timeouts in e2e tests set to `STARTUP_S` (120s). Short limits on purpose are listed (test asserts they fire).
+- **F4 (health driven, not waited for):** HEALTH_TOML gains large `amber_quiet_s = 300, red_quiet_s = 600`. Fake step meter advances its own quiet clock on command (`_go_quiet` writes and waits for ack). Green→amber→red test passes with slow host (stale 120s, test is unaffected by load).
+- **F6 (stream reads stop on condition):** `_stream_health` reads distinct (level, reason) pairs until `done(seen)` is true; fails after `STARTUP_S` with `seen` list, never a fixed window.
+
+**Test files updated:** `test_dashboard_e2e.py` (dash uses readiness.dashboard, _read_url deleted, _conn uses STARTUP_S, _read_until for stream, health tests use fake step), `test_s83_backlog_e2e.py` (served → readiness.dashboard), `test_s84_thread_e2e.py` / `test_s104_flow_e2e.py` (readiness.dashboard, --timeout 120, watch communicate timeout), `test_s85_opinions_e2e.py` (same as s84), `test_health_false_red_e2e.py` (Output.wait_for, wait_until for chore beat), `test_proxy_sandbox_e2e.py` (readiness.serving, CURL_MAX_S, CLI_S timeouts, TimeoutExpired handling), `test_command_timeout_e2e.py` (wait_until for child death), `test_unattended_wake_e2e.py` (wait_until for status JSON).
+
+**Reviewed, unchanged (F2/F3 minimums):** `test_signal_own_groups_e2e.py` sleeps (0.2 nothing-check, 1.1 minimum), `test_s98_tool_spans_e2e.py` sleep (0.05 minimum duration), `test_command_timeout_e2e.py`/`test_signal_own_groups_e2e.py` (timeouts firing as assertions), `test_unit_limit_e2e.py`/`test_service_stop_e2e.py` (sleeps in child), `test_service_stop_e2e.py`/`test_service_presentation_e2e.py` (production readiness), proc.wait(timeout=10) after kill.
+
+**AC3 (runner gate):** Story frontmatter has `suite_runs: 5`. E2e gate runs test command 5 times, all pass → "the test command passed 5 runs in a row (412 s, 398 s, …)"; acceptance brief shows suite-runs block.
+
+Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s107.md` (F1–F7, test checklist).
 
 ## s102 complete: Page tests for runner stages on Flow/Time charts (AC4, AC-R all pass)
 
