@@ -90,6 +90,7 @@ class RunState:
     upstream: UpstreamState = field(default_factory=UpstreamState)
     goal: str = ""
     order: list[str] = field(default_factory=list)
+    pulled: list[str] = field(default_factory=list)
     in_flight: InFlight | None = None
     interrupted: list[Interruption] = field(default_factory=list)
     checkout: CheckoutRecord | None = None

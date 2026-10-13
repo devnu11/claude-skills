@@ -19,6 +19,7 @@ from .. import roles as roles_mod
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
+from ..gates import StoryStatus
 from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
 from ..relay import INBOX, OUTBOX
@@ -101,7 +102,7 @@ def _pipeline(files: RunFiles) -> list[str]:
 
 
 def _priority(files: RunFiles) -> Priority:
-    return Priority(files.state.order, files.config.gates.steps[0])
+    return Priority(files.state.order, files.state.pulled)
 
 
 def _run(files: RunFiles) -> dict[str, Any]:
@@ -165,6 +166,12 @@ def _position(files: RunFiles, story: Any) -> int | None:
     return queue.index(story.id) + 1 if story.id in queue else None
 
 
+def _tier(files: RunFiles, story: Any) -> str | None:
+    if story.status is StoryStatus.DONE:
+        return None
+    return str(_priority(files).tier(story))
+
+
 def _asking(files: RunFiles, story_id: str) -> list[str]:
     answered = {a.get("id") for a in files.lines(INBOX)}
     asked = (m for m in files.lines(OUTBOX) if m.get("kind") == "question")
@@ -188,7 +195,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "rounds": story.rounds,
         "repeated": story.repeated,
         "position": _position(files, story),
-        "in_progress": _priority(files).in_progress(story),
+        "tier": _tier(files, story),
         "hold": story.hold,
         "wait": _wait(files, story),
         "opened_at": _opened_at(files.events, story.id),

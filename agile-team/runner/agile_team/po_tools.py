@@ -42,7 +42,7 @@ from .events import Event, EventKind
 from .gates import StoryState, StoryStatus, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
-from .priority import Change, Placement, Reorder
+from .priority import Change, Placement, Pull, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .router import Router
@@ -59,6 +59,7 @@ SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
 )
 NO_BOUNDARY = "no sprint boundary is pending"
+CI_BUG_PULL = "CI failed on the pushed code; {story} fixes it"
 NO_CI_HOLD = "no boundary is held on failed CI; record_ci_bug applies after a ci_failed hand-over"
 UNKNOWN_BUG = "unknown story {story!r}; open it with open_story first"
 DONE_BUG = "story {story} is done; open a new story for the failing CI"
@@ -149,8 +150,15 @@ class Tools:
             return CI_BUG_FIRST.format(story=bug)
         return None
 
+    def _sprint_pull(self, bug: str, goal: str) -> tuple[Pull, str]:
+        story = self.runtime.state.stories.get(bug)
+        if bug and story and story.status is not StoryStatus.DONE:
+            return Pull((bug,), (bug,)), f"{goal}; {CI_BUG_PULL.format(story=bug)}"
+        return Pull(), goal
+
     def _begin_sprint(self, goal: str, ids: list[str]) -> None:
         state = self.runtime.state
+        pull, why = self._sprint_pull(state.upstream.ci_bug, goal)
         state.begin_sprint(ids)
         state.upstream.ci_bug = ""
         state.goal, state.boundary = goal, Boundary(Edge.START, state.sprint)
@@ -161,7 +169,7 @@ class Tools:
         data = {"sprint": state.sprint, "goal": goal, "stories": ids}
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
         order = self.runtime.priority().with_first(ids, state.stories.values())
-        self._reorder(Reorder(Change.SPRINT, order, None, goal))
+        self._reorder(Reorder(Change.SPRINT, order, None, why, pull))
 
     async def prioritise(self, args: dict[str, Any]) -> dict[str, Any]:
         """Set the order the team works in."""
@@ -169,8 +177,12 @@ class Tools:
         reason = priority.order_refusal(ids, rt.state.stories)
         if reason:
             return text_result(refused(reason))
+        pull, why = priority.set_pull(ids, rt.state.stories), args.get("reason", "")
+        reason = priority.pull_refusal(pull, why)
+        if reason:
+            return text_result(refused(reason))
         order = rt.priority().with_first(ids, rt.state.stories.values())
-        return text_result(self._reorder(Reorder(Change.SET, order, None, args.get("reason", ""))))
+        return text_result(self._reorder(Reorder(Change.SET, order, None, why, pull)))
 
     async def move_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Move one story to a position in the order."""
@@ -179,23 +191,36 @@ class Tools:
         reason = rt.priority().move_refusal(placement, stories)
         if reason:
             return text_result(refused(reason))
+        pull, why = rt.priority().move_pull(placement, stories), args.get("reason", "")
+        reason = priority.pull_refusal(pull, why)
+        if reason:
+            return text_result(refused(reason))
         order = rt.priority().with_move(placement, stories.values())
-        change = Reorder(Change.MOVE, order, placement.story, args.get("reason", ""))
-        return text_result(self._reorder(change))
+        result = self._reorder(Reorder(Change.MOVE, order, placement.story, why, pull))
+        return text_result(self._with_note(result, placement))
+
+    @staticmethod
+    def _with_note(result: dict[str, Any], placement: Placement) -> dict[str, Any]:
+        landed = result["order"].index(placement.story) + 1
+        if landed != placement.position:
+            note = priority.RANKED_ELSEWHERE.format(
+                story=placement.story, landed=landed, position=placement.position
+            )
+            return {**result, "note": note}
+        return result
 
     def _reorder(self, change: Reorder) -> dict[str, Any]:
         rt = self.runtime
-        before = rt.priority().queue(rt.state.stories.values())
+        stories = rt.state.stories
+        before = rt.priority().queue(stories.values())
         rt.state.order = change.order
+        rt.state.pulled = rt.priority().repulled(change.pull, stories)
         rt.save()
-        data = {
-            "change": str(change.change),
-            "order": change.order,
-            "moves": priority.moves(before, change.order),
-            "reason": change.reason,
-        }
-        rt.events.emit(Event(EventKind.PRIORITY, PO, change.story, data))
-        return {"status": "ordered", "order": change.order}
+        after = rt.priority().queue(stories.values())
+        rt.events.emit(
+            Event(EventKind.PRIORITY, PO, change.story, _priority_data(change, before, after))
+        )
+        return {"status": "ordered", "order": after}
 
     async def continue_boundary(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release a held sprint boundary so the runner retries its stage."""
@@ -377,6 +402,17 @@ class Tools:
         return text_result(story_status_data(self.runtime))
 
 
+def _priority_data(change: Reorder, before: list[str], after: list[str]) -> dict[str, Any]:
+    """The data of a ``priority`` event (G11)."""
+    return {
+        "change": str(change.change),
+        "order": after,
+        "moves": priority.moves(before, after),
+        "reason": change.reason,
+        "pulled": list(change.pull.ahead),
+    }
+
+
 def story_status_data(runtime: Runtime) -> dict[str, Any]:
     """What ``story_status`` reports: sprint, stories, review reasons, enabled roles."""
     ranking = runtime.priority()
@@ -385,6 +421,7 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
         "sprint": runtime.state.sprint,
         "stories": {s.id: asdict(s) for s in ranked},
         "order": ranking.queue(ranked),
+        "pulled": runtime.state.pulled,
         "manager_due": runtime.state.manager_due,
         "roles": runtime.book.enabled_names(),
         "boundary": asdict(b) if (b := runtime.state.boundary) else None,
@@ -406,18 +443,24 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
         "not listed go back to the backlog. The manager must run next."
-        " The order you list them in is their priority.",
+        " The order you list them in is their priority within each group; "
+        "started stories still come first.",
         {"goal": str, "stories": list},
     ),
     "prioritise": (
         "Set the order the team works in: the listed story ids first, in that order; every "
-        "other unfinished story keeps its order after them. The router follows it; a held "
-        "story keeps its place. Unknown or done ids are refused.",
+        "other unfinished story keeps its order after them. Started stories (with commits) "
+        "always rank first, held ones after those in progress, then stories not started; "
+        "the order ranks stories within each group. To pull a not-started story ahead of "
+        "started ones, list it before a started one and give a reason; without a reason "
+        "that is refused. Unknown or done ids are refused.",
         {"stories": list, "reason": str},
     ),
     "move_story": (
         "Move one story to a position in the order (1 = next; the board shows each "
-        "story's #position).",
+        "story's #position). Moving a not-started story before a started one pulls it "
+        "ahead and needs a reason. If the groups place the story elsewhere for now, the "
+        "result says so and the order keeps its place.",
         {"story": str, "position": int, "reason": str},
     ),
     "ask_user": (

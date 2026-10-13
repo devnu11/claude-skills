@@ -135,8 +135,12 @@ line to your brief.
 - Priority: agree the order with the human, then set it with `prioritise`
   (listed ids first, in that order) or by the list order of `start_sprint`.
   Move one story with `move_story` (position 1 = next). Always give a reason.
-  The router follows the order, and a held story keeps its place, so its
-  position never changes while it waits.
+  Started stories (with commits) always go first, held ones after those in
+  progress, then stories not started. Your order ranks stories within each
+  group. To pull a not-started story ahead of started ones, list it before a
+  started story in `prioritise` or move it there with `move_story`, and give
+  the reason. The runner refuses a pull without one. `start_sprint`'s list
+  never pulls.
 - "The sprint's stories" means those whose `sprint` equals the current sprint.
 
 ## Returned stories

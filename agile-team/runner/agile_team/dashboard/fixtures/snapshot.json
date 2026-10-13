@@ -84,37 +84,6 @@
  ],
  "stories": [
   {
-   "id": "s3",
-   "title": "Stream large exports without loading them into memory",
-   "sprint": 1,
-   "delivery": "cli",
-   "step": "implement",
-   "status": "needs_manager",
-   "rounds": 3,
-   "opened_at": 1791450678.3,
-   "acceptance": [
-    {
-     "id": "AC1",
-     "text": "A 2M-row report exports with memory under 256 MB"
-    },
-    {
-     "id": "AC2",
-     "text": "--progress shows rows written so far"
-    }
-   ],
-   "repeated": null,
-   "position": 1,
-   "in_progress": true,
-   "hold": null,
-   "wait": {
-    "reason": "round cap",
-    "on": [
-     "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
-     "round 3: the manager must rule"
-    ]
-   }
-  },
-  {
    "id": "s2",
    "title": "Choose which columns to export",
    "sprint": 1,
@@ -138,10 +107,62 @@
     }
    ],
    "repeated": null,
-   "position": 2,
-   "in_progress": true,
+   "position": 1,
+   "tier": "in progress",
    "hold": null,
    "wait": null
+  },
+  {
+   "id": "s5",
+   "title": "Export through the HTTP API",
+   "sprint": null,
+   "delivery": "cli",
+   "step": "design",
+   "status": "active",
+   "rounds": 0,
+   "opened_at": 1791451059.1,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "GET /reports/{id}.csv returns the export"
+    }
+   ],
+   "repeated": null,
+   "position": 2,
+   "tier": "in progress",
+   "hold": null,
+   "wait": null
+  },
+  {
+   "id": "s3",
+   "title": "Stream large exports without loading them into memory",
+   "sprint": 1,
+   "delivery": "cli",
+   "step": "implement",
+   "status": "needs_manager",
+   "rounds": 3,
+   "opened_at": 1791450678.3,
+   "acceptance": [
+    {
+     "id": "AC1",
+     "text": "A 2M-row report exports with memory under 256 MB"
+    },
+    {
+     "id": "AC2",
+     "text": "--progress shows rows written so far"
+    }
+   ],
+   "repeated": null,
+   "position": 3,
+   "tier": "held",
+   "hold": null,
+   "wait": {
+    "reason": "round cap",
+    "on": [
+     "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
+     "round 3: the manager must rule"
+    ]
+   }
   },
   {
    "id": "s4",
@@ -163,8 +184,8 @@
     }
    ],
    "repeated": null,
-   "position": 3,
-   "in_progress": true,
+   "position": 4,
+   "tier": "held",
    "hold": "questions",
    "wait": {
     "reason": "questions",
@@ -190,8 +211,8 @@
      "text": "The dashboard answers on its port"
     }
    ],
-   "position": 4,
-   "in_progress": true,
+   "position": 5,
+   "tier": "held",
    "hold": null,
    "wait": {
     "reason": "manager",
@@ -199,27 +220,6 @@
      "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
     ]
    }
-  },
-  {
-   "id": "s5",
-   "title": "Export through the HTTP API",
-   "sprint": null,
-   "delivery": "cli",
-   "step": "design",
-   "status": "active",
-   "rounds": 0,
-   "opened_at": 1791451059.1,
-   "acceptance": [
-    {
-     "id": "AC1",
-     "text": "GET /reports/{id}.csv returns the export"
-    }
-   ],
-   "repeated": null,
-   "position": 5,
-   "in_progress": false,
-   "hold": null,
-   "wait": null
   },
   {
    "id": "s6",
@@ -238,7 +238,7 @@
    ],
    "repeated": null,
    "position": 6,
-   "in_progress": false,
+   "tier": "not started",
    "hold": null,
    "wait": null
   },
@@ -267,7 +267,7 @@
    ],
    "repeated": null,
    "position": null,
-   "in_progress": true,
+   "tier": null,
    "hold": null,
    "wait": null
   }
@@ -1893,7 +1893,10 @@
       "to": 2
      }
     ],
-    "reason": "s3 blocks the export; fix its memory bound first"
+    "reason": "s3 blocks the export; fix its memory bound first",
+    "pulled": [
+     "s5"
+    ]
    }
   },
   {

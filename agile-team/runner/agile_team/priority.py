@@ -1,4 +1,4 @@
-"""Story priority (s40): the PO's explicit order and the one rule that ranks stories."""
+"""Story priority (s40, s51): the PO's order within the groups started, held and not started."""
 
 from __future__ import annotations
 
@@ -14,6 +14,15 @@ NO_STORIES = "no stories listed; pass the story ids in the order to work on them
 UNKNOWN = "unknown stories: {ids}; open them with open_story first"
 DONE = "done stories have no place in the order: {ids}"
 BAD_POSITION = "position must be a whole number from 1 to {count}"
+PULL_NEEDS_REASON = (
+    "pulling {ids} ahead of started stories needs a reason; "
+    "give one, or place them after the started stories"
+)
+RANKED_ELSEWHERE = (
+    "{story} ranks #{landed}, not #{position}: stories in progress come first, "
+    "then held started ones, then the rest; its place in the order is kept"
+)
+HELD_STATUSES = frozenset({StoryStatus.BLOCKED, StoryStatus.NEEDS_MANAGER})
 
 
 class Change(StrEnum):
@@ -22,6 +31,25 @@ class Change(StrEnum):
     SET = "set"
     MOVE = "move"
     SPRINT = "sprint"
+
+
+class Tier(StrEnum):
+    """The group a story ranks in."""
+
+    IN_PROGRESS = "in progress"
+    HELD = "held"
+    NOT_STARTED = "not started"
+
+
+RANK = {tier: n for n, tier in enumerate(Tier)}
+
+
+@dataclass(frozen=True)
+class Pull:
+    """The stories a change judges, and those it pulls ahead of started ones."""
+
+    judged: tuple[str, ...] = ()
+    ahead: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -40,6 +68,37 @@ class Reorder:
     order: list[str]
     story: str | None = None
     reason: str = ""
+    pull: Pull = Pull()
+
+
+def started(story: StoryState) -> bool:
+    """Has commits in the tree: the runner recorded its first commit (G1)."""
+    return story.commit is not None
+
+
+def held(story: StoryState) -> bool:
+    """A hold, a block or a needs-manager status."""
+    return story.hold is not None or story.status in HELD_STATUSES
+
+
+def pulls(listed: list[str], stories: dict[str, StoryState]) -> list[str]:
+    """Not-started ids in ``listed`` that come before its last started id (G6)."""
+    last = max((n for n, i in enumerate(listed) if started(stories[i])), default=0)
+    return [i for i in listed[:last] if not started(stories[i])]
+
+
+def set_pull(ids: list[str], stories: dict[str, StoryState]) -> Pull:
+    """G7: judge ``ids`` only when they name a started story."""
+    if not any(started(stories[i]) for i in ids):
+        return Pull()
+    return Pull(tuple(ids), tuple(pulls(ids, stories)))
+
+
+def pull_refusal(pull: Pull, reason: str) -> str | None:
+    """G9: why a pull without a reason is refused, or None."""
+    if pull.ahead and not reason.strip():
+        return PULL_NEEDS_REASON.format(ids=", ".join(pull.ahead))
+    return None
 
 
 def natural(sid: str) -> tuple[Any, ...]:
@@ -70,20 +129,22 @@ def moves(before: list[str], after: list[str]) -> list[dict[str, Any]]:
 
 @dataclass(frozen=True)
 class Priority:
-    """The PO's order over a pipeline whose first step is ``first``."""
+    """The PO's order and pulls over the stories."""
 
     order: list[str]
-    first: str
+    pulled: list[str]
 
-    def in_progress(self, story: StoryState) -> bool:
-        """Past the first step, or a step has already run on it."""
-        return story.step != self.first or story.previous is not None
+    def tier(self, story: StoryState) -> Tier:
+        """The group the story ranks in (G2)."""
+        if not started(story) and story.id not in self.pulled:
+            return Tier.NOT_STARTED
+        return Tier.HELD if held(story) else Tier.IN_PROGRESS
 
     def key(self, story: StoryState) -> tuple[Any, ...]:
-        """The one ranking rule (P2)."""
+        """The one ranking rule (G3)."""
         done = story.status is StoryStatus.DONE
         listed = self.order.index(story.id) if story.id in self.order else len(self.order)
-        return (done, listed, not self.in_progress(story), natural(story.id))
+        return (done, RANK[self.tier(story)], listed, natural(story.id))
 
     def ranked(self, stories: Iterable[StoryState]) -> list[StoryState]:
         """Every story, best first."""
@@ -113,3 +174,19 @@ class Priority:
         p = placement.position
         ok = type(p) is int and 1 <= p <= count
         return None if ok else BAD_POSITION.format(count=count)
+
+    def move_pull(self, placement: Placement, stories: dict[str, StoryState]) -> Pull:
+        """G8: the moved story is pulled when it lands before a started one."""
+        moved = self.with_move(placement, stories.values())
+        ahead = (placement.story,) if placement.story in pulls(moved, stories) else ()
+        return Pull((placement.story,), ahead)
+
+    def repulled(self, pull: Pull, stories: dict[str, StoryState]) -> list[str]:
+        """G13: the pulled ids after a change."""
+        kept = [i for i in self.pulled if i not in pull.judged]
+        ids = dict.fromkeys(kept + list(pull.ahead))
+        return [i for i in ids if i in stories and self._pullable(stories[i])]
+
+    @staticmethod
+    def _pullable(story: StoryState) -> bool:
+        return story.status is not StoryStatus.DONE and not started(story)

@@ -689,8 +689,8 @@ class Runtime:
         return halted_report(plan.role.name, self.halt_run(found))
 
     def priority(self) -> Priority:
-        """The story ranking: the PO's order over this run's pipeline."""
-        return Priority(self.state.order, self.pipeline.first())
+        """The story ranking: the PO's order and pulls over this run's stories."""
+        return Priority(self.state.order, self.state.pulled)
 
     def enforce_ceiling(self) -> Halt | None:
         """Halt the run when corrected spend has reached ``team.budget_usd`` (B1, B3)."""

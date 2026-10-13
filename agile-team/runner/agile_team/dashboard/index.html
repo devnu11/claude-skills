@@ -1009,7 +1009,8 @@ const TIMELINE = {
   }),
   priority: (e) => ({
     from: PO, to: "order", what: priorityLabel(e), body: e.data.reason,
-    meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · "),
+    meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · ")
+      + (e.data.pulled?.length ? ` · pulled ahead: ${e.data.pulled.join(", ")}` : ""),
   }),
   fault: (e) => ({
     from: "manager", to: e.data.kind === "runner" ? "you" : e.data.fault,
