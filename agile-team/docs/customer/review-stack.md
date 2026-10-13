@@ -16,7 +16,7 @@ still works:
   copy, then pushes it and opens a pull request.
 
 The **full checks** are your `[toolchain]` `lint`, `static`, `test` and the
-coverage gate, then each delivery's `e2e` command.
+coverage gate, then each acceptance environment's `e2e` command.
 
 ## One pull request per sprint, stacked
 
@@ -82,10 +82,10 @@ prefix = "team/sprint-"  # review branch names: <prefix><sprint>
 [gates]
 ci_timeout_s = 1800      # how long a sprint end waits for the PR's CI checks
 
-[[delivery]]
+[[environment]]
 name = "cli"
 kind = "package"
-e2e = "uv run pytest -q tests/e2e"   # this delivery's e2e suite, run with the full checks
+e2e = "uv run pytest -q tests/e2e"   # this environment's e2e suite, run with the full checks
 ```
 
 ## Where to look

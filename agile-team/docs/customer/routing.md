@@ -117,7 +117,8 @@ decides whose fault the loop is:
 
 - **a role in the pipeline**: the story goes to that role's step;
 - **another role, such as DevOps**: the PO briefs that role;
-- **the runner itself**, for example a delivery's start command that
+- **the runner itself**, for example an acceptance environment's start
+  command that
   always fails: the story is blocked, and you get a note that starts
   `Runner fault on sN`. The PO plans the fix.
 

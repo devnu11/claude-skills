@@ -13,10 +13,10 @@ team works on this runner itself, it runs on a pinned copy instead (see
 
 | Command | What it does |
 |---|---|
-| `init --detect` | Print the detected stack preset, commands, globs and suggested delivery kind as JSON. No writes. |
-| `init --preset P --delivery K [--url U] [--docs-dir D] [--artifacts committed\|ignored] [--key-file F] [--budget USD] [--cadence sprint\|until-blocker]` | Phase A: write `.agile-team.toml`, `.gitignore` lines, `.team/CLAUDE.md`, a stub per role in `.team/roles/`; commit `chore(team): onboard agile team`. |
-| `init … --reconfigure` | Re-run phase A; keeps every value already in the config and never overwrites the charter. |
-| `config check` | Validate config, every role's resolution and glob placeholders. Exit 1 on problems. |
+| `init --detect` | Print the detected stack preset, commands, globs and suggested acceptance environment kind (`environment_kind`) as JSON. No writes. |
+| `init --preset P --environment K [--url U] [--docs-dir D] [--artifacts committed\|ignored] [--key-file F] [--budget USD] [--cadence sprint\|until-blocker]` | Phase A: write `.agile-team.toml`, `.gitignore` lines, `.team/CLAUDE.md`, a stub per role in `.team/roles/`; commit `chore(team): onboard agile team`. |
+| `init … --reconfigure` | Re-run phase A; keeps every value already in the config and never overwrites the charter. A section under its old name is rewritten as `[[environment]]` (see "Acceptance environments"). |
+| `config check` | Validate config, every role's resolution and glob placeholders. Prints each warning as `warning: <text>` first (warnings never change the exit code), then the problems. Exit 1 on problems, else 0. |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
@@ -58,8 +58,9 @@ question is open and nothing else can move, the runner keeps running and
 waits for the answer. The runner itself posts an `update` at each sprint
 end that pushed review branches (or built them without pushing; see
 "Sprint boundaries"). A
-`manual` delivery's acceptance script arrives as a `question`; the answer is
-the human's test result. The runner itself posts `blocked`, `failed` or
+`manual` acceptance environment's acceptance script arrives as a `question`;
+the answer is the human's test result. A `document` environment posts
+nothing. The runner itself posts `blocked`, `failed` or
 `stopped` when it halts (see "Run status and stops"), and a `question` when
 the checkout changed under it (see "Checkout guard").
 
@@ -78,7 +79,8 @@ checkout moved, else `null`, see "Interrupted steps"),
 live meter, see "Live meter and health"), `runner.pid` (the live runner's pid; a
 stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
-`customer/<delivery>/` (Customer Proxy sandboxes), `presentation/<story>/`
+`customer/<environment>/` (Customer Proxy sandboxes, one per acceptance
+environment), `presentation/<story>/`
 (what the Integration Tester presents to the Customer Proxy: see
 "Presentation"), `api-key` (default key location).
 
@@ -792,12 +794,12 @@ remote = "origin"              # "" turns sync and pull requests off
 branch = "main"                # merged in at sprint start; what the bottom PR targets
 prefix = "team/sprint-"        # review branch names: <prefix><sprint>
 
-[[delivery]]                   # one or more
+[[environment]]                # one or more acceptance environments
 name = "cli"
-kind = "package"               # package | script | web | library | harness | manual
+kind = "package"               # package | script | web | library | harness | manual | document
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
 bin = ["venv/bin"]             # prepended to the Proxy's PATH
-e2e = ""                       # this delivery's e2e suite, run with the full checks at sprint boundaries
+e2e = ""                       # this environment's e2e suite, run with the full checks at sprint boundaries
 url = ""                       # web only; its host and port fill {host} and {port}
 probe = ""                     # web only: path joined to url that must answer 200 (e.g. "api/snapshot")
 commands = []                  # harness only: the Proxy's Bash allowlist
@@ -825,13 +827,40 @@ token_env = ""                 # env var holding its token; empty sends a placeh
 billing = "free"               # free (ledgered as 0) | reported (Claude-priced)
 ```
 
-Stories pick a delivery with `open_story(…, delivery="cli")`; the default is
-the first one. The name must equal a configured `[[delivery]]` `name`
-exactly (no prose, no case folding). Any other name is refused before the
-story opens: `delivery 'x' is not a configured [[delivery]]; use one of: cli,
-web`. With no `[[delivery]]` configured, the refusal says so and lists no
-names. One check (`Config.delivery_refusal`) serves every path that sets a
-story's delivery.
+### Acceptance environments
+
+An acceptance environment is the setup the Customer Proxy uses to try a
+story: an `[[environment]]` row in `.agile-team.toml`.
+
+**Environments are the repo's; kinds are the skill's** (s93). A repo
+configures as many environments as it needs, each with its own `name`,
+`prepare`, `url`, `commands` and so on. Each environment names one `kind`
+from the skill's fixed set (`sandbox.ENVIRONMENT_KINDS`, see "Acceptance
+environment kinds"). The kind decides the Proxy's tools and sandbox, so a
+repo can't add one: the set is the security boundary.
+
+Stories pick an environment with `open_story(…, environment="cli")`; the
+default is the first one. The name must equal a configured `[[environment]]`
+`name` exactly (no prose, no case folding). Any other name is refused before
+the story opens: `acceptance environment 'x' is not a configured
+[[environment]]; use one of: cli, web`. With no `[[environment]]` configured,
+the refusal says so and lists no names. One check
+(`Config.environment_refusal`) serves every path that sets a story's
+environment.
+
+**The old section name** (s93). Before s93 the section had another name.
+A file that still uses it loads exactly as `[[environment]]`; `config check`
+prints `warning: [[<old>]] is the old name of [[environment]]; rename the
+section` and still exits 0 when nothing else is wrong. A file with both
+sections fails to load: `[[environment]] and [[<old>]] are both set; move
+every [[<old>]] into [[environment]]`. `init --reconfigure` rewrites an old
+file as `[[environment]]`, and a DevOps edit that only renames the section is
+kept. A story in an old `state.json` that carries the old key loads into
+`environment`, and the next save writes `environment` (if both keys are
+present, `environment` wins). A runner from before s93 can't read state
+saved after it.
+
+### Repo tools
 
 `[[tool]]` rows (s99) name a repo's own tools: `name`, `description` and
 `command`, each a non-empty string after strip. Loading refuses the whole
@@ -846,7 +875,7 @@ listing every problem `; `-joined, in rule order, then repeats:
 | command not blank | `[[tool]] 'x' needs a command` |
 | name not repeated | `[[tool]] name 'x' is repeated` |
 
-DevOps owns `[[tool]]` as it owns `[toolchain]` and `[[delivery]]`: a role's
+DevOps owns `[[tool]]` as it owns `[toolchain]` and `[[environment]]`: a role's
 config edit touching only those sections is kept, any other is quarantined.
 In s99 the rows are a format only: the runner runs no `[[tool]]` command, and
 an agent's Bash call is never matched to one by its text.
@@ -1112,7 +1141,7 @@ bounces as a coverage shortfall when the output shows a total below the
 requirement and no failing test, and as `tests fail` otherwise) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
 is enabled: a `done` handoff passes only with a complete presentation and,
-for a `web` delivery, a service that starts from it and answers its probe)
+for a `web` environment, a service that starts from it and answers its probe)
 → acceptance (customer-proxy).
 
 A failed gate or `changes_requested` moves the story back and adds a round
@@ -1125,7 +1154,7 @@ setbacks"). At
 `run_role(customer-proxy)` on a story with no complete presentation does not
 start the Proxy. The runner moves the story back to `e2e` **without** a round
 (gate event `verdict: "return"`) and reports `{"status": "returned", …}`. The
-same happens when a `web` delivery's service does not come up for the Proxy
+same happens when a `web` environment's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
 
@@ -1539,8 +1568,8 @@ never builds or repairs an environment (a broken one is `changes_requested`
 to `integration-tester`).
 
 - Before each integration-tester step the runner creates
-  `.team/run/presentation/<story>/` if it is missing and, for every delivery
-  kind but `manual`, `workspace/` in it as a git repo (`git init`, only when
+  `.team/run/presentation/<story>/` if it is missing and, for every
+  environment kind but `manual`, `workspace/` in it as a git repo (`git init`, only when
   `workspace/.git` is missing). It never wipes them (s65): the presentation
   survives a bounce from acceptance back to e2e, and only the tester
   replaces what is in it.
@@ -1578,6 +1607,10 @@ to `integration-tester`).
   files to try, test, coverage or ruff output) goes into the presentation
   as a verbatim copy or as captured output with its command and exit code
   (for example `docs/` and `evidence/`).
+- For a `document` environment (s93) nothing runs: the tester copies the
+  files the story changed (prompts, docs, designs) into `workspace/` under
+  their repo paths, and the guide says for each AC which file and section
+  shows it.
 - Complete = `PRESENTATION.md` is not blank and, except for `manual`,
   `workspace/` holds something besides `.git`. Otherwise the e2e gate
   bounces with `story sN has no presentation: <path> is missing or empty`.
@@ -1585,24 +1618,24 @@ to `integration-tester`).
   says whether its check is `files` or `service`; only `web` is `service`.
   For a service, once the files are complete, the e2e gate runs a trial: it
   prepares the sandbox exactly as for the Proxy (presentation copied in),
-  starts the delivery's `prepare` in the background, and probes
+  starts the environment's `prepare` in the background, and probes
   `url` + `probe` every 0.25 s for up to 30 s. It passes (`presentation
   ready; <url> answered`) only on HTTP 200 (and, for a JSON response, a
   body that parses), then stops the service. A start that exits or never
   answers bounces to `e2e` with a round:
-  `story sN presentation is not up: delivery '<name>' did not start: the start command exited with code <rc> before <url> answered. Last output: …`
+  `story sN presentation is not up: acceptance environment '<name>' did not start: the start command exited with code <rc> before <url> answered. Last output: …`
   (or `… did not answer <url> within 30s. …`), quoting the last 20 lines of
   its output. A port that another process holds puts the gate on **hold**
   (no round, the PO gets a `gate_hold` hand-over):
-  `delivery '<name>' cannot start: <host>:<port> is already in use by a process the runner did not start; stop it or change the delivery's url`.
+  `acceptance environment '<name>' cannot start: <host>:<port> is already in use by a process the runner did not start; stop it or change the environment's url`.
 - For the Proxy step the runner copies the dir to `<sandbox>/presentation/`
-  (symlinks kept as links) **before** the delivery's `prepare` runs, so a
+  (symlinks kept as links) **before** the environment's `prepare` runs, so a
   `web` prepare can serve `{sandbox}/presentation/workspace`. A `web`
   service is started and probed the same way before the Proxy starts. The
   Proxy's prompt quotes `PRESENTATION.md` and gives the copy's absolute
   path.
 - A service is never reused. Its process group id is in
-  `.team/run/customer/<delivery>.pid` and its output is in `<delivery>.log`
+  `.team/run/customer/<environment>.pid` and its output is in `<environment>.log`
   next to it. Before each start, the runner stops a group still named
   there (left by an earlier step or a killed runner). It stops the service
   when the Proxy's step ends (pass, fail, halt or crash) and deletes the pid
@@ -1617,11 +1650,11 @@ to `integration-tester`).
   the runner started. It sends SIGTERM to the group and returns only once the
   leader is reaped and no process is left in the group (the shell, `uv` and
   the server alike). A group still alive after 10 s gets SIGKILL and 5 s more.
-  Then the stop waits up to 5 s for the delivery's port to refuse
+  Then the stop waits up to 5 s for the environment's port to refuse
   connections. It never waits more than 20 s, and it never signals a leader
   that had already exited before the stop. If the port is still in use at the
   deadline, the trial puts the gate on **hold**:
-  `story sN presentation did not stop: delivery '<name>' did not let go of <host>:<port>: it was still in use 5s after the service was stopped; keep the service in its start command's process group`.
+  `story sN presentation did not stop: acceptance environment '<name>' did not let go of <host>:<port>: it was still in use 5s after the service was stopped; keep the service in its start command's process group`.
   A start that never came up adds that line to its bounce reason. After the
   Proxy's step, the next start holds on the busy port.
 - Service lifecycle (s58). The e2e gate's trial stops its service on purpose,
@@ -1681,7 +1714,7 @@ The pass ends at the first step whose report matches a row of the
 | `refused` | the step was refused |
 | `error` | the step raised an error other than a limit (traceback in `crash.log`) |
 | `stopped` | the handoff is `blocked` or `failed` |
-| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` delivery's port is in use by another process); `continue_story` once it is fixed |
+| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process); `continue_story` once it is fixed |
 | `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
@@ -1808,8 +1841,8 @@ Each story in `state.json` has `sprint`: the number of the sprint it is
 committed to, or `null` when it is in the backlog.
 
 - `open_story` puts a story in the backlog. It refuses an existing id and a
-  `delivery` that is not a configured `[[delivery]]` name (empty means the
-  first one), and changes nothing when it refuses. Its `depends_on`
+  `environment` that is not a configured `[[environment]]` name (empty means
+  the first one), and changes nothing when it refuses. Its `depends_on`
   argument (s86) is checked next; see "Story dependencies".
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
@@ -1945,8 +1978,8 @@ found by a depth-first walk from each id in natural order, following each
 list in its own order. A story file that is not valid UTF-8 is not refused:
 reading it raises an error.
 
-`open_story(…, depends_on=[…])` checks, after the duplicate-id and delivery
-checks: the argument is a list of strings (a missing or empty argument means
+`open_story(…, depends_on=[…])` checks, after the duplicate-id and acceptance
+environment checks: the argument is a list of strings (a missing or empty argument means
 `[]`); if the story's file already exists, its frontmatter is good and its
 list is the same, in the same order (`s7's file has depends_on [s1, s2], not
 [s2]; pass the same list, or fix the file`); then checks b–d, with the new id
@@ -2154,7 +2187,7 @@ hand-over):
 
 **Full checks**: the `[toolchain]` `lint`, `static`, `test` and `coverage`
 commands (coverage must reach the gate or the baseline), then each
-delivery's `e2e` command. Every configured check runs, and the failed ones
+acceptance environment's `e2e` command. Every configured check runs, and the failed ones
 are quoted (`<name> failed (<why>): <command>` plus the last 30 lines).
 
 **Failures.** A failed check or a rebuild conflict becomes a **DevOps fix
@@ -2322,8 +2355,8 @@ Once `ci_green` says it is ready, merge it with **Rebase and merge**.
   record its coverage baseline; its role file (s75) tells it to run only
   what proves its change, normally one named test, and to leave the full
   suite and coverage to the runner's gate.
-- A change to `.agile-team.toml` outside `[toolchain]` and `[[delivery]]` is
-  quarantined, so no role can widen its own scope for the next run.
+- A change to `.agile-team.toml` outside `[toolchain]`, `[[environment]]`
+  (or its old name) and `[[tool]]` is quarantined, so no role can widen its own scope for the next run.
 - Residual risk: the key is in the runner's environment, so a role's Bash could
   still read it through an interpreter (e.g. `python -c 'import os; …'`). Use
   a project-scoped key with a Console spend cap.
@@ -2340,7 +2373,7 @@ Once `ci_green` says it is ready, merge it with **Rebase and merge**.
   `allowRead` for the sandbox, stories, `.team/acceptance` and customer docs, plus
   `permissions.deny` rules `Read(/<repo>/<root>)` and `Read(/<repo>/<root>/**)`
   for each forbidden root, so the rules never cover `<docs>/customer/` unless a
-  source or test glob does. A delivery that serves locally (a kind whose start
+  source or test glob does. An acceptance environment that serves locally (a kind whose start
   is `background`, today `web`) also gets `sandbox.network.allowLocalBinding:
   true`, so the Proxy's sandboxed `curl` reaches the service on 127.0.0.1;
   other kinds get no `network` key (s58). Needs bubblewrap (Linux) or Seatbelt
@@ -2349,7 +2382,10 @@ Once `ci_green` says it is ready, merge it with **Rebase and merge**.
   exits 7 without the `network` key. Linux is not verified end to end; the
   test is skipped there.
 
-## Delivery kinds
+## Acceptance environment kinds
+
+The kinds are the skill's, fixed in `sandbox.ENVIRONMENT_KINDS`; a repo's
+`[[environment]]` rows pick one each (see "Acceptance environments").
 
 | kind | prepare | Proxy tools |
 |---|---|---|
@@ -2359,6 +2395,7 @@ Once `ci_green` says it is ready, merge it with **Rebase and merge**.
 | `library` | build the package; Proxy works in `{sandbox}/consumer` | Bash, Read/Grep/Glob, Write/Edit |
 | `harness` | anything DevOps defines | Bash limited to `commands`, Read, Write |
 | `manual` | nothing | Read, Write; its acceptance script goes to the human as a question |
+| `document` (s93) | nothing; for ACs with nothing to run (prompt, docs or design changes). Its presentation is a guide plus the changed files (`files` check, no service); no `url`, `commands` or seed | Read/Grep/Glob over its copy of the presentation, Write (the report only), no Bash; nothing is posted to the human |
 
 When the story has a presentation, every kind gets its copy in
 `{sandbox}/presentation/` before `prepare` runs. Every kind except `manual` has a `workspace/` in it.

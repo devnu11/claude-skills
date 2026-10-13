@@ -33,13 +33,21 @@ command fails.
    `init` stops with `not a git repository`; ask the human before you run
    `git init`.
 3. **Onboard if needed.** No `.agile-team.toml`? Run `$AT init --detect`, show
-   the detected preset, commands and delivery kind, and ask the human to
+   the detected preset, commands and acceptance environment kind, and ask the human to
    confirm or edit. Then ask: artifact policy (`.team/` and docs committed or
    ignored), docs dir, auth (`api-key` bills the repo's Console workspace;
    `login` uses the human's Claude Code subscription), key file location for
    `api-key` (or fall back to `~/secrets/anthropic-api-key`), budget ceiling
-   in USD (the run halts when spend reaches it), default cadence. Run `$AT init --preset … --delivery … [--url …]
-   --docs-dir … --artifacts … --auth … --key-file … --budget … --cadence …`. Then ask whether any roles should run
+   in USD (the run halts when spend reaches it), default cadence. Run `$AT init --preset … --environment … [--url …]
+   --docs-dir … --artifacts … --auth … --key-file … --budget … --cadence …`.
+   It writes the first `[[environment]]` (acceptance environment: the setup
+   the Customer Proxy uses to try a story). Environments are the repo's: as
+   many as it needs, each with its own name, prepare, url and commands. Kinds
+   (`package`, `script`, `web`, `library`, `harness`, `manual`, `document`)
+   are the skill's and fixed, because a kind decides the Proxy's tools and
+   sandbox. Use `document` for stories with nothing to run (prompt, docs or
+   design changes). A config with the section's old name still loads;
+   `config check` warns, and `init --reconfigure` renames it. Then ask whether any roles should run
    on a local or other Anthropic-compatible model. If so, add
    `[providers.<name>]` and `[roles.<role>]` `provider`/`model` to the config
    (see "Providers" in the protocol) and commit it as
@@ -153,14 +161,15 @@ command fails.
    sets `GIT_CEILING_DIRECTORIES` for the tester's and the Proxy's steps,
    and the guard denies their git outside the workspace (s65). Git demos
    live in their own repos inside `workspace/`. For a `web`
-   delivery the runner started the service and checked that it answers
-   before the Proxy ran. The Proxy's OS sandbox may reach it on 127.0.0.1
-   (macOS verified). The service's output is in
-   `.team/run/customer/<delivery>.log`. A `gate_hold` hand-over about a port
-   in use means another process holds the delivery's port. Tell the human.
-   A story's delivery must be the exact name of a `[[delivery]]` in
-   `.agile-team.toml`; `open_story` refuses any other name and lists the
-   valid ones.
+   acceptance environment the runner started the service and checked that
+   it answers before the Proxy ran. The Proxy's OS sandbox may reach it on
+   127.0.0.1 (macOS verified). The service's output is in
+   `.team/run/customer/<environment>.log`. A `gate_hold` hand-over about a
+   port in use means another process holds the environment's port. Tell the
+   human. A story's acceptance environment must be the exact name of an
+   `[[environment]]` in `.agile-team.toml`; `open_story` refuses any other
+   name and lists the valid ones. A `manual` environment's script reaches
+   you as a question for the human; a `document` environment asks nothing.
    When the same setback repeats on a story, the runner stops the loop and
    runs the Manager on it (`⏸ manager` on the dashboard board). It
    does the same when a story bounces between the same two steps
@@ -274,7 +283,7 @@ command fails.
   writes one `runner-stage` event (story, step, command, exit code, awake
   seconds). `agile-team tools` prints the built-in stages and the repo's
   `[[tool]]` rows as JSON. DevOps owns `[[tool]]` (name, description,
-  command) as it owns `[toolchain]` and `[[delivery]]`; a repeated name or
+  command) as it owns `[toolchain]` and `[[environment]]`; a repeated name or
   one in a built-in namespace (`gate.`, `env.`, `boundary.` …) is refused on
   load. Nothing runs a `[[tool]]` command yet.
 - In this repo the runner's suite runs in parallel with pytest-xdist (s70):

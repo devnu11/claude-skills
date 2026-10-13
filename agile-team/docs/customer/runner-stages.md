@@ -40,7 +40,7 @@ these lines yet.
 ## Name your repo's own tools
 
 Add `[[tool]]` rows to `.agile-team.toml`. DevOps owns them, as it owns
-`[toolchain]` and `[[delivery]]`:
+`[toolchain]` and the acceptance environments (`[[environment]]`):
 
 ```toml
 [[tool]]
