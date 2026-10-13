@@ -1,6 +1,18 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 code done, docs pending; s83 done)
+**Last updated:** 2026-10-13 (s85 done; s84 docs pending)
+
+## s85 complete: Liaison opinions on backlog stories (design rules O1–O20, ADR-0045, docs to follow)
+
+Opinions are a view over three append-only JSONL files: `opinions.jsonl` (CLI writes), `reviews.jsonl` (liaision summary), `opinion-acts.jsonl` (server writes). Latest opinion per story wins (line order). Acts route via two paths: moves to reorder queue (s83), others to PO as thread posts (s84). Dashboard shows badges, filters suggestions, renders details, review bar with ask button (fires `liaison_message` watch trigger), dismiss/apply buttons with token gate. Snapshot carries items with route/act, asked_at, review; events merge opinions/acts with thread and reorder events.
+
+**Architectural pattern:** Append-only JSONL files like s84 threads (one writer per file). Pure module `opinions.py`, view-time merging at snapshot build. No new dependency. Rules O1–O20 in code, no branching (Kind/Act/Route enums, Board/Opinions classes, table-driven dispatch).
+
+**Data contract:** Snapshot sections: opinions (items, asked_at, review); events gain opinion/opinion-act kinds; watched_files add three JSONL paths. CLI gains opinion/reviewed commands; server gains /api/review and /api/opinion POST routes; thread posts to PO tagged with opinion id.
+
+Code review done (m4 docstring minor, carries to next touch). P1 work (node-harness, e2e) for integration-tester.
+
+See ADR-0045, design `agile-team/docs/design/s85.md` (O1–O20).
 
 ## s84: Story threads—human discusses with PO and liaison (design rules H1–H21, ADR-0044) [DOCS PENDING]
 

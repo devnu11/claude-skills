@@ -1,6 +1,18 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done)
+**Last updated:** 2026-10-13 (s85 done)
+
+## s85 complete: The liaison's opinions on backlog stories (ADR-0045)
+
+The liaison can now suggest changes to any backlog story. Opinions are recorded as data (like s84 threads), shown on the dashboard with badges and a filter, and the human can act on them from there. Applied opinions (other than moves) arrive as thread posts to you, suggesting the human agrees with the liaison's recommendation.
+
+**What's new for you:** When a human applies a non-move opinion (fold, close, scope, ask, or move on a sprint story), the hand-over arrives as a thread post: "The human applied the liaison's opinion <oN> on <story>: <kind>. <opinion text>." Treat it as the human's decision/request, answering with `reply_story` as you would any thread post. (Move opinions go to the reorder queue; close goes to you, not yet a cancel.)
+
+**Snapshot:** New `opinions` section with items, review status, and last-asked time. Opinion and opinion-act events merged into timeline by date.
+
+No new tools; no change to your workflow beyond new thread post types. All ACs pass; P1 work (node-harness and e2e) for integration-tester.
+
+See ADR-0045, design `agile-team/docs/design/s85.md`.
 
 ## s84: Story threads—human discusses directly on the dashboard (ADR-0044)
 

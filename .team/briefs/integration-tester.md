@@ -1,6 +1,23 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done, P1 work pending; s83 P1 work pending)
+**Last updated:** 2026-10-13 (s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s85: E2E tests for liaison opinions (AC1–AC5 unit/code-review done, P1: node-harness and e2e tests pending)
+
+Story shipped in code. Unit tests pass (coverage 99.46%, ruff clean). Code review done (all ACs pass). **Your work (P1): node-harness and e2e tests.**
+
+### Node harness tests (dashboard_node.py, four test functions)
+
+1. **Badge and filter (AC2):** With fixture (s6 move-down opinion, s5 scope settled), Backlog shows badges `liaison: move-down`, `liaison: scope`. Expanding shows kind, date, text. Ticking "only suggestions (1)" filters to s6 only; unfiltered positions and handles unchanged.
+2. **Details (AC2, AC4):** s6 shows opinion details with kind, text, time; dismiss and apply buttons labeled "move to the bottom" (move-down) and "send to the PO"; buttons disabled without TOKEN.
+3. **Review bar (AC3):** Shows "Last review: <time>" and summary, or "The liaison has not reviewed yet". With `asked_at` later, adds "Asked <time>; waiting"; button absent without TOKEN.
+4. **Posting (AC3, AC4):** `postReview()` POSTs `/api/review` with `{}` and token header. `postOpinionAct(id, act)` POSTs `/api/opinion` with `{opinion, act, version}`. 409 response sets reason; OK clears note.
+
+### E2E test (30s timeout, real dashboard --port 0 --token t)
+
+POST `/api/opinion` with apply (dismiss similar). Expect 202 with id/status. For move-up on Backlog story, expect ref is a reorder id. For other kind, expect ref is a thread post id (route in answer).
+
+See design `agile-team/docs/design/s85.md` (test checklist items 13–17), ADR-0045.
 
 ## s84: E2E tests for story threads (AC1–AC5 unit/code-review done, P1: node-harness and e2e tests pending)
 

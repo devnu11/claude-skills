@@ -1,8 +1,26 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done)
+**Last updated:** 2026-10-13 (s85 done)
 
 See `developer.md` for base conventions.
+
+## s85 complete: The liaison's opinions on stories, highlighted in backlog (code done, P1 pending)
+
+New opinions feature on the Backlog tab. The liaison records opinions with `agile-team opinion` CLI command; the dashboard shows them as badges and allows the human to dismiss or apply them. Applied move-opinions queue reorders; other applied kinds post to the PO as thread posts.
+
+**Features implemented (design O1–O20, ~200 LOC index.html additions):**
+- **Opinion badges:** Backlog stories with non-`keep` opinions show `liaison: <kind>` badges. Expanded rows show the opinion's text, date, and route (reorder or PO).
+- **Filter:** Checkbox "only suggestions (N)" filters to stories with open opinions. Places and move handles computed from full group first, then filtered.
+- **Review bar:** "Last review: <time>" with summary (Markdown). Button "Ask the liaison to review the backlog" posts to inbox, fires `liaison_message` watch trigger. Shows "waiting" state.
+- **Dismiss and apply:** Two buttons on suggestions. Apply routes move-opinions to reorder queue (disabled while pending), others to PO via thread posts. Both buttons disabled without TOKEN; rendered Markdown text in opinion details.
+- **Events and timeline:** Opinions and acts merged into events (kind="opinion"/"opinion-act"); timeline shows them with source→target labels and Markdown body.
+- **Snapshot fields:** New `opinions` section with items (all, `latest` flag, route, act), `asked_at`, `review` (last); events gain opinion/opinion-act kinds.
+
+**Implementation notes (index.html):** New state: `ui.suggested`, `ui.acting` (Set), `ui.actNote`, `ui.asking`, `ui.reviewNote`. Functions: `storyOpinion()`, `isSuggestion()`, `opinionBadge()`, `opinionHtml()`, `reviewBarHtml()`, `postReview()`, `postOpinionAct()`. Button handlers `[data-opinion-act]` and `[data-ask-review]` checked before expand toggle.
+
+**Shipped:** Code review done (m4 docstring minor). Node harness and e2e tests pending (integration-tester P1).
+
+See ADR-0045.
 
 ## s84 complete: Story threads with the PO and the liaison (on Backlog tab)
 

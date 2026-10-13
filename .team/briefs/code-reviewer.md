@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done; s83 done)
+**Last updated:** 2026-10-13 (s85 done; s84 done; s83 done)
+
+## s85: Liaison opinions (1 round, all ACs pass) — verdict ship (P1 pending)
+
+**Scope:** `opinions.py` (new, ~250 LOC), `cli.py` (two new commands), `server.py` (two POST routes), `snapshot.py` (opinions section, events), `index.html` (~200 LOC, badges, filter, review bar, buttons), `threads.py` (public `read_lines`, `append_line`, `has_time`), tests, docs, fixture. **Verdict: ship (P1 node-harness/e2e pending).**
+
+**Design rules enforced (O1–O20):** Kind/Act/Route enums; Recording with refusals (story, kind, text); Latest-by-line wins; Review closure; Ask posts to inbox; Act parsing and refusals (unknown, superseded, keep, settled); Routes (NONE/REORDER/PO); Snapshot items, route, acts; Events merged; Write gate (403/400/409/202); Token never leaks.
+
+**Module structure:** `opinions.py` pure + file I/O; Board, Opinions classes; lenient readers; table-driven dispatch (DOERS, APPLIERS). `threads.py` gains three public functions (read_lines, append_line, has_time). CLI appends to JSONL files with validated input. Server routes via `Opinions` instance. Snapshot builds items list, merges acts, event-ifies opinions/acts. HTML: badges (O15), filter (O17), details (O16), review bar (O18), buttons (O16), posting (O19).
+
+**Coverage 99.46%, ruff clean. No tests deleted. Fixture adds s6 move-down (open), s5 scope (settled).**
+
+See design `agile-team/docs/design/s85.md` (O1–O20), ADR-0045.
 
 ## s84: Story threads—human discusses with PO and liaison (1 round, all ACs pass) — verdict ship (P1 pending)
 

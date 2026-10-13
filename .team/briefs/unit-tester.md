@@ -1,6 +1,12 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done)
+**Last updated:** 2026-10-13 (s85 done)
+
+## s85 complete: Liaison opinions—recording, validation, acts, routing, snapshot (coverage 99.46%, ruff clean, all pass)
+
+New `opinions.py` module (pure + file I/O, ~250 LOC) for opinion recording and act handling. Tests cover: recording opinions with refusals (unknown story/kind, empty text); latest-per-story rule; `reviewed` summary; ask_review posting to liaison inbox; act parsing and refusals (unknown, superseded, keep, settled); dismiss/apply routing (move to reorder, others to PO); snapshot building with items, route, acts, events; write gate (403/400/409/202). Design O1–O20, 12 checklist items, snapshot contract match. No tests deleted, coverage 99.46% (opinions.py 100%, threads.py 100%), ruff clean.
+
+See ADR-0045, design `agile-team/docs/design/s85.md` (O1–O20, test checklist).
 
 ## s84: Story threads—parsing, validation, file I/O, read merging, dashboard/router/watch/PO integration (coverage ≥99.44%, ruff clean, all pass)
 

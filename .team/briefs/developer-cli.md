@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s84 done)
+**Last updated:** 2026-10-13 (s85 done)
 
 See `developer.md` for the base conventions.
+
+## s85 complete: The liaison's opinion recording commands (two new, no ADR)
+
+Two new CLI commands for the liaison: `agile-team opinion <story> <kind> <source>` and `agile-team reviewed <source>`. Opinion text comes from a file or stdin (`-`); kind is one of keep, move-up, move-down, fold, close, scope, ask. On success, appends to `liaison/opinions.jsonl` and prints the opinion id. `reviewed` similarly appends to `liaison/reviews.jsonl` with a backlog review summary. Both refuse unknown story, unknown kind, or empty text with exact error messages. Works while run is stopped. Design O2–O4; ADR-0045.
 
 ## s84: Story threads—liaison replies via CLI command (ADR-0044)
 
