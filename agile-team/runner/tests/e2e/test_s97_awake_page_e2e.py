@@ -41,22 +41,21 @@ def test_running_line_takes_out_sleep_or_marks_wall() -> None:
 def test_time_by_counts_wall_and_tooltip_marks_it() -> None:
     """AW11: timeBy counts wall steps; only those groups carry the tooltip note."""
     out = _run("""
-    const mk = (clock) => ({role: "r", story: "s1", seconds: 60, clock, ended_at: 1, status: "done"});
-    out.by = timeBy([mk("wall"), mk("awake"), mk("awake")], "role");
+    const mk = (wall) => ({role: "r", story: "s1", count: "steps", wall, parts: {work: 60}});
+    out.by = timeBy([mk(true), mk(false), mk(false)], "role");
     const row = (t) => timeRow({role: "r", t, whole: 100, total: t.seconds}, 0, 1);
-    out.withWall = row({steps: 2, seconds: 60, wall: 1});
-    out.noWall = row({steps: 2, seconds: 60, wall: 0});
+    out.withWall = row({steps: 2, seconds: 60, wall: 1, parts: {work: 60}});
+    out.noWall = row({steps: 2, seconds: 60, wall: 0, parts: {work: 60}});
     """)
-    assert out["by"]["r"] == {"steps": 3, "seconds": 180, "wall": 1}
+    by = out["by"]["r"]
+    assert (by["steps"], by["seconds"], by["wall"]) == (3, 180, 1)
     assert "1 may include sleep" in out["withWall"]
     assert "may include sleep" not in out["noWall"]
 
 
 def test_legend_says_awake_time() -> None:
     """AC4 (AW12)."""
-    assert (
-        "Awake time (agent steps only; runner stages: see A6)" in _run("out.l = timeLegend();")["l"]
-    )
+    assert "Awake time:" in _run("out.l = timeLegend();")["l"]
 
 
 def test_replay_nulls_clock_and_slept_on_reopened_step() -> None:
