@@ -52,6 +52,7 @@ def test_the_sleep_line_has_three_keys_rounded_to_a_tenth() -> None:
 
 def test_a_sleeping_beat_appends_exactly_one_line(fake: FakeSystem) -> None:
     pulse, _ = make_pulse(fake)
+    fake.dirs.add(str(RUN_DIR))
     start = fake.clock
     fake.clock += 6 * BEAT
     pulse._beat()
@@ -60,6 +61,7 @@ def test_a_sleeping_beat_appends_exactly_one_line(fake: FakeSystem) -> None:
 
 def test_two_sleeps_append_two_lines_in_order(fake: FakeSystem) -> None:
     pulse, _ = make_pulse(fake)
+    fake.dirs.add(str(RUN_DIR))
     fake.clock += 6 * BEAT
     pulse._beat()
     fake.clock += 4 * BEAT
