@@ -551,7 +551,7 @@ def test_without_a_presentation_dir_the_order_carries_none(make_runtime) -> None
     assert not system.exists(rt.config.run_dir / "customer/cli/presentation")
 
 
-def test_integration_tester_gets_a_fresh_presentation_to_fill(
+def test_integration_tester_keeps_the_existing_presentation_files(
     make_runtime, fake: FakeSystem
 ) -> None:
     seen = {}
@@ -568,7 +568,7 @@ def test_integration_tester_gets_a_fresh_presentation_to_fill(
     rt.query_fn = FakeQuery(action=build)
     s = open_story(rt, "e2e")
     report = run(rt, "integration-tester", story="s1")
-    assert seen == {"stale": False, "git": True, "old": False}
+    assert seen == {"stale": True, "git": True, "old": True}
     assert report["gate"]["verdict"] == "pass" and s.step == "acceptance"
 
 
