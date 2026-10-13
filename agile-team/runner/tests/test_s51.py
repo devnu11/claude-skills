@@ -495,8 +495,75 @@ def test_move_story_while_a_started_story_is_held_keeps_its_place(make_runtime) 
     assert t.runtime.priority().queue(t.runtime.state.stories.values())[0] == "s38"
 
 
-def test_a_refused_pull_is_returned_once_and_unknown_ids_are_not_pulled_on(make_runtime) -> None:
+def test_a_refused_pull_returns_its_reason_and_changes_nothing(make_runtime) -> None:
     t = origin_tools(make_runtime)
     out = call(t.prioritise({"stories": ["s45", "s38"], "reason": ""}))
     assert out["status"] == "refused"
     assert out["reason"] == PULL_NEEDS_REASON.format(ids="s45")
+    assert t.runtime.state.pulled == []
+    assert t.runtime.state.order == ["s45", "s38", "s21", "s50"]
+
+
+def test_start_sprint_while_a_started_story_is_held_keeps_its_place(make_runtime) -> None:
+    t = origin_tools(make_runtime)
+    t.runtime.state.stories["s38"].hold = "quarantine"
+    call(t.start_sprint({"goal": "G", "stories": ["s50"]}))
+    order = t.runtime.state.order
+    assert order.index("s38") < order.index("s21")
+    t.runtime.state.stories["s38"].hold = None
+    assert t.runtime.priority().queue(t.runtime.state.stories.values())[0] == "s38"
+
+
+def queue_of(t: Tools) -> list[str]:
+    return t.runtime.priority().queue(t.runtime.state.stories.values())
+
+
+def test_the_worked_example_step_by_step(make_runtime) -> None:
+    t = origin_tools(make_runtime)
+    st = t.runtime.state
+    assert queue_of(t) == ["s38", "s21", "s45", "s50"]
+    st.stories["s38"].hold = "quarantine"
+    assert queue_of(t) == ["s21", "s38", "s45", "s50"]
+    call(t.prioritise({"stories": ["s50"], "reason": ""}))
+    assert st.order == ["s50", "s45", "s38", "s21"]
+    assert queue_of(t) == ["s21", "s38", "s50", "s45"]
+    st.stories["s38"].hold = None
+    assert queue_of(t) == ["s38", "s21", "s50", "s45"]
+    out = call(t.move_story({"story": "s45", "position": 1, "reason": ""}))
+    assert out["status"] == "refused" and out["reason"] == PULL_NEEDS_REASON.format(ids="s45")
+    call(
+        t.move_story({"story": "s45", "position": 1, "reason": "the human needs the hotfix today"})
+    )
+    assert st.pulled == ["s45"] and st.order == ["s50", "s45", "s38", "s21"]
+    assert queue_of(t) == ["s45", "s38", "s21", "s50"]
+    call(t.prioritise({"stories": ["s50", "s45"], "reason": ""}))
+    assert st.order == ["s50", "s45", "s38", "s21"] and queue_of(t) == ["s45", "s38", "s21", "s50"]
+    call(t.prioritise({"stories": ["s21", "s45"], "reason": ""}))
+    assert st.order == ["s21", "s45", "s50", "s38"] and st.pulled == []
+    assert queue_of(t) == ["s21", "s38", "s45", "s50"] or queue_of(t) == [
+        "s38",
+        "s21",
+        "s45",
+        "s50",
+    ]
+    out = call(t.move_story({"story": "s21", "position": 4, "reason": ""}))
+    assert st.order == ["s45", "s50", "s38", "s21"]
+    assert queue_of(t) == ["s38", "s21", "s45", "s50"]
+    assert out["note"].startswith("s21 ranks #2, not #4")
+    st.stories["s38"].hold = "quarantine"
+    assert queue_of(t) == ["s21", "s38", "s45", "s50"]
+    out = call(t.move_story({"story": "s38", "position": 1, "reason": ""}))
+    assert st.order == ["s45", "s50", "s38", "s21"]
+    assert out["note"].startswith("s38 ranks #2, not #1")
+    st.stories["s38"].hold = None
+    assert queue_of(t)[0] == "s38"
+
+
+@pytest.mark.parametrize(
+    ("sid", "position", "landing"),
+    [("s45", 4, 4), ("s50", 3, 3), ("s38", 1, 2), ("s38", 4, 2)],
+)
+def test_with_move_lands_the_story_where_its_group_allows(sid, position, landing) -> None:
+    p, items = held_board()
+    plan = p.with_move(Placement(sid, position), items)
+    assert Priority(plan, []).queue(items.values()).index(sid) + 1 == landing
