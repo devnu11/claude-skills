@@ -32,7 +32,7 @@ def web(configured: Path):
     """A repo with a real `dashboard` delivery on a free port, and the trial for it."""
     port = free_port()
     cfg = dict(PY_CONFIG)
-    cfg["delivery"] = [
+    cfg["environment"] = [
         {
             "name": "dashboard",
             "kind": "web",
@@ -45,13 +45,13 @@ def web(configured: Path):
     (configured / config_mod.CONFIG_NAME).write_text(tomli_w.dumps(cfg))
     git(configured, "commit", "-qam", "web delivery")
     config = config_mod.load(configured)
-    story = gates.StoryState("s1", "Dash", "e2e", sprint=1, delivery="dashboard")
+    story = gates.StoryState("s1", "Dash", "e2e", sprint=1, environment="dashboard")
     return config, story, port
 
 
 def present_workspace(config, init: bool) -> Path:
     source = presentation.lay_out(
-        config, gates.StoryState("s1", "Dash", "e2e", delivery="dashboard")
+        config, gates.StoryState("s1", "Dash", "e2e", environment="dashboard")
     )
     (source / "PRESENTATION.md").write_text("Open the dashboard.\n")
     if not init:  # seeds opted out (seed = ""), so nothing plants a config
@@ -73,13 +73,13 @@ def test_trial_starts_the_real_dashboard_probes_it_and_stops_it(web) -> None:
 def test_trial_bounces_a_broken_workspace_with_the_dashboards_own_error(web) -> None:
     """AC2: no .agile-team.toml in the workspace; the reason quotes the real output."""
     config, story, port = web
-    bare = replace(config.deliveries[0], seed="")
-    config = replace(config, deliveries=[bare])
+    bare = replace(config.environments[0], seed="")
+    config = replace(config, environments=[bare])
     present_workspace(config, init=False)
     outcome = presentation.Trial(config).liveness(story)
     assert outcome.verdict is Verdict.BOUNCE
     assert outcome.reason.startswith(
-        "story s1 presentation is not up: delivery 'dashboard' did not"
+        "story s1 presentation is not up: acceptance environment 'dashboard' did not"
     )
     assert ".agile-team.toml not found" in outcome.reason
     assert not port_in_use("127.0.0.1", port)

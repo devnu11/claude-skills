@@ -15,7 +15,7 @@ import claude_agent_sdk
 import pytest
 from agile_team import config as cfg
 from agile_team import sandbox
-from agile_team.config import Delivery
+from agile_team.config import Environment
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin",
@@ -185,9 +185,9 @@ def run_cli(
 
 @pytest.fixture
 def proxy(configured: Path, service: int):
-    d = Delivery("dash", "web", url=f"http://127.0.0.1:{service}/")
+    d = Environment("dash", "web", url=f"http://127.0.0.1:{service}/")
     c = cfg.load(configured)
-    c.deliveries = [d]
+    c.environments = [d]
     prepared = sandbox.layout(c, d)
     return sandbox.os_sandbox_settings(c, prepared), prepared
 

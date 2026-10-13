@@ -148,7 +148,7 @@ def test_init_outside_git_exits_1_with_a_message(tmp_path, monkeypatch, capsys) 
     plain.mkdir()
     for target in (plain, tmp_path / "missing"):
         code = cli.main(
-            ["--repo", str(target), "init", "--preset", "python", "--delivery", "package"]
+            ["--repo", str(target), "init", "--preset", "python", "--environment", "package"]
         )
         err = capsys.readouterr().err
         assert code == 1

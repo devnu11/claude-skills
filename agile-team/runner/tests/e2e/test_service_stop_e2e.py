@@ -47,7 +47,7 @@ def make_config(configured: Path, tmp_path: Path, mode: str) -> tuple[config_mod
     script.write_text(SERVER)
     port = free_port()
     cfg = dict(PY_CONFIG)
-    cfg["delivery"] = [
+    cfg["environment"] = [
         {
             "name": "slow",
             "kind": "web",
@@ -62,7 +62,7 @@ def make_config(configured: Path, tmp_path: Path, mode: str) -> tuple[config_mod
 
 
 def start(config: config_mod.Config) -> sandbox.Prepared:
-    return Preparer().prepare(config, Order(config.deliveries[0]))
+    return Preparer().prepare(config, Order(config.environments[0]))
 
 
 def test_stop_waits_until_the_slow_server_frees_its_port(configured: Path, tmp_path: Path) -> None:
