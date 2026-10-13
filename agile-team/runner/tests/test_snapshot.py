@@ -633,7 +633,7 @@ def test_fixture_upstream_section_has_a_two_entry_stack_and_boundary_events() ->
     assert section["stack"][1]["pr"] is None and section["boundary"]["hold"] == "push_permission"
     events = [e["data"] for e in fixture["events"] if e["kind"] == "boundary"]
     assert {(d["stage"], d["outcome"]) for d in events} >= {
-        ("sync", "merged"), ("check", "fail"), ("check", "pass"), ("review", "built"), ("push", "held"),  # noqa: E501
+        ("sync", "rebased"), ("check", "fail"), ("check", "pass"), ("review", "built"), ("push", "held"),  # noqa: E501
     }  # fmt: skip
 
 

@@ -31,7 +31,7 @@ def test_enum_values() -> None:
     assert [e.value for e in b.Permission] == ["unasked", "yes", "no"]
     assert [e.value for e in b.CheckState] == ["unchecked", "pass", "fail"]
     assert {e.value for e in b.BoundaryOutcome} == {
-        "skipped", "current", "merged", "conflict", "pass", "fail", "escalate", "built",
+        "skipped", "current", "merged", "rebased", "conflict", "pass", "fail", "escalate", "built",
         "held", "pushed", "local", "error", "done", "continued", "permission",
     }  # fmt: skip
 
@@ -169,7 +169,7 @@ def test_output_block_format() -> None:
 
 
 def test_exact_strings() -> None:
-    assert b.MERGE_MESSAGE == "chore(team): merge {target} at sprint {sprint} start"
+    assert not hasattr(b, "MERGE_MESSAGE")
     assert b.SYNC_OFF == "[upstream] remote is empty"
     assert b.NO_REMOTE.format(remote="origin") == "no remote 'origin'"
     assert b.NO_TARGET.format(target="origin/main") == "origin/main does not exist"
