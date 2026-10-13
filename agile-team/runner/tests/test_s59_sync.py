@@ -106,6 +106,36 @@ def test_sync_from_is_not_replaced_when_already_set(
     assert script.olds == ["1" * 40]
 
 
+def _trace_save_and_rebase(env: Env, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    order: list[str] = []
+    monkeypatch.setattr(env.rt, "save", lambda: order.append("save"))
+
+    def rebase(old: str) -> Rebase:
+        order.append("rebase")
+        return Rebase(SyncOutcome.CURRENT)
+
+    monkeypatch.setattr(env.rt.upstream, "rebase_onto", rebase)
+    return order
+
+
+def test_sync_from_is_saved_before_the_rebase_runs(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    order = _trace_save_and_rebase(env, monkeypatch)
+    env.open(Edge.START)
+    env.drive()
+    assert order[:2] == ["save", "rebase"]
+
+
+def test_nothing_is_saved_before_the_rebase_when_sync_from_is_already_set(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    order = _trace_save_and_rebase(env, monkeypatch)
+    env.open(Edge.START, sync_from="1" * 40)
+    env.drive()
+    assert order[0] == "rebase"
+
+
 def test_boundary_defaults_to_an_empty_sync_from() -> None:
     assert bd.Boundary(Edge.START, 1).sync_from == ""
     assert bd.BoundaryOutcome.REBASED == "rebased"

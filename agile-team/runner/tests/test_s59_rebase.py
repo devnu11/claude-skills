@@ -207,9 +207,12 @@ def test_the_check_does_not_run_when_nothing_changed(fake: FakeSystem) -> None:
     assert not seen(fake, *NO_RENAMES)
 
 
-def test_the_push_refuses_the_team_branch_and_leases_a_review_branch(fake: FakeSystem) -> None:
+def test_the_push_refuses_the_team_branch(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
     with pytest.raises(UpstreamError, match="refusing to push agile-team"):
         upstream_for().push(up.Lease("agile-team", OLD))
     assert not seen(fake, "git", "push")
+
+
+def test_a_rebase_result_moves_nothing_by_default() -> None:
     assert Rebase(SyncOutcome.CURRENT).moved == {}
