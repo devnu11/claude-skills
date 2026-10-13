@@ -15,7 +15,17 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import backlog, handover, po_session, priority, reorders, salvage, system, threads
+from . import (
+    backlog,
+    dependencies,
+    handover,
+    po_session,
+    priority,
+    reorders,
+    salvage,
+    system,
+    threads,
+)
 from .boundary import (
     CI_BUG_FIRST,
     Boundary,
@@ -99,23 +109,43 @@ class Tools:
         """Why ``open_story`` must refuse ``args``, or None (duplicate id, then s64 V1)."""
         if args["id"] in self.runtime.state.stories:
             return f"story {args['id']} already exists"
-        return self.runtime.config.delivery_refusal(args.get("delivery"))
+        return self.runtime.config.delivery_refusal(args.get("delivery")) or self._depends_refusal(
+            args
+        )
+
+    def _depends_refusal(self, args: dict[str, Any]) -> str | None:
+        """DP6: the checks on ``open_story``'s ``depends_on``."""
+        sid, stories = args["id"], self.runtime.state.stories
+        given = dependencies.listed(args.get("depends_on") or [])
+        if given is None:
+            return dependencies.NOT_A_LIST.format(ids=sid)
+        found = dependencies.declared(self.runtime.config, [sid])
+        graph = {**dependencies.graph_of(stories), sid: given}
+        return priority.first_refusal(
+            [
+                lambda: dependencies.shape_refusal(found.bad),
+                lambda: dependencies.mismatch_refusal(dependencies.Proposal(sid, given), found),
+                lambda: dependencies.graph_refusal(graph, {*stories, sid}),
+            ]
+        )
 
     async def open_story(self, args: dict[str, Any]) -> dict[str, Any]:
         rt, sid = self.runtime, args["id"]
         if reason := self._open_refusal(args):
             return text_result(refused(reason))
         first = rt.pipeline.first()
-        rt.state.stories[sid] = StoryState(sid, args["title"], first, delivery=args.get("delivery"))
-        rt.save()
-        rt.events.emit(
-            Event(EventKind.STORY_OPENED, PO, sid, {"title": args["title"], "step": first})
+        given = dependencies.listed(args.get("depends_on") or []) or []
+        rt.state.stories[sid] = StoryState(
+            sid, args["title"], first, delivery=args.get("delivery"), depends_on=given
         )
+        rt.save()
+        data = {"title": args["title"], "step": first, "depends_on": given}
+        rt.events.emit(Event(EventKind.STORY_OPENED, PO, sid, data))
         return text_result({"status": "opened", "step": first})
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
         ids = list(dict.fromkeys(args.get("stories") or []))
-        reason = self._sprint_refusal(ids)
+        reason = self._sprint_refusal(ids) or self.runtime.load_dependencies()
         if reason:
             return text_result(refused(reason))
         self._begin_sprint(args.get("goal", ""), ids)
@@ -463,14 +493,19 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "open_story": (
         "Register a story; it starts in the backlog until start_sprint lists it. "
         "delivery must be the name of a configured [[delivery]] (empty = the first one); "
-        "any other name is refused with the valid names.",
-        {"id": str, "title": str, "delivery": str},
+        "any other name is refused with the valid names. "
+        "depends_on: the ids of stories that must be done before this one starts. Write the "
+        "same list in the story file's frontmatter `depends_on`; a different list is refused. "
+        "Unknown ids, the story itself and cycles are refused.",
+        {"id": str, "title": str, "delivery": str, "depends_on": list},
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
         "not listed go back to the backlog. The manager must run next."
         " The order you list them in is their priority within each group; "
-        "started stories still come first.",
+        "started stories still come first. "
+        "It first reloads depends_on from every open story's file. A bad list (not ids, "
+        "self, unknown, cycle) refuses the sprint and names the stories.",
         {"goal": str, "stories": list},
     ),
     "prioritise": (

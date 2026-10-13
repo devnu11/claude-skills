@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import halt, handover, loops, system, threads
+from . import dependencies, halt, handover, loops, system, threads
 from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
@@ -248,7 +248,8 @@ class Router:
         rt = self.runtime
         in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.ACTIVE
         free = story.hold is None and rt.state.boundary is None
-        return in_sprint and free and story.id not in rt.relay.blocked_stories()
+        ready = not dependencies.waiting_on(story, rt.state.stories)
+        return in_sprint and free and ready and story.id not in rt.relay.blocked_stories()
 
     def _briefed(self, role: str, story: StoryState) -> Work:
         return Work(role, story, standard_brief(self.runtime.config, Work(role, story, "")))
@@ -367,8 +368,9 @@ class Router:
         pending = self.runtime.state.boundary
         if pending:
             return [_boundary_stall(pending)]
+        stories = self.runtime.state.stories
         if unfinished:
-            return [f"{s.id} at {s.step}: {_why(s)}" for s in unfinished]
+            return [f"{s.id} at {s.step}: {_why(s, stories)}" for s in unfinished]
         lines = [
             f"No story is in sprint {self.runtime.state.sprint}; "
             "start_sprint with the stories to work on."
@@ -407,9 +409,11 @@ def _boundary_stall(b: Boundary) -> str:
     )
 
 
-def _why(story: StoryState) -> str:
+def _why(story: StoryState, stories: dict[str, StoryState]) -> str:
     if story.hold:
         return STALL_REASONS["hold"].format(hold=story.hold)
+    if waiting := dependencies.waiting_on(story, stories):
+        return dependencies.WAITING.format(ids=", ".join(waiting))
     return STALL_REASONS.get(story.status, str(story.status))
 
 

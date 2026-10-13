@@ -122,7 +122,16 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [
+    "s5"
+   ],
+   "waiting_on": [
+    "s5"
+   ],
+   "dependency_warnings": [
+    "s2 is above s5, which it depends on"
+   ]
   },
   {
    "id": "s5",
@@ -150,7 +159,10 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
   },
   {
    "id": "s3",
@@ -188,7 +200,10 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
   },
   {
    "id": "s4",
@@ -226,7 +241,10 @@
    "files": [
     "story"
    ],
-   "label": "held"
+   "label": "held",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
   },
   {
    "id": "s7",
@@ -259,7 +277,10 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
   },
   {
    "id": "s6",
@@ -287,7 +308,12 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [
+    "s1"
+   ],
+   "waiting_on": [],
+   "dependency_warnings": []
   },
   {
    "id": "s1",
@@ -323,7 +349,10 @@
    "files": [
     "story"
    ],
-   "label": ""
+   "label": "",
+   "depends_on": [],
+   "waiting_on": [],
+   "dependency_warnings": []
   }
  ],
  "requirements": [
@@ -2017,7 +2046,10 @@
     "pulled": [
      "s5"
     ],
-    "source": "product-owner"
+    "source": "product-owner",
+    "warnings": [
+     "s2 is above s5, which it depends on"
+    ]
    }
   },
   {
@@ -2140,7 +2172,8 @@
     "pulled": [
      "s5"
     ],
-    "source": "human (dashboard)"
+    "source": "human (dashboard)",
+    "warnings": []
    }
   }
  ],

@@ -60,6 +60,9 @@ from .upstream import GhPrs, command_runner
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
 
 
+START_REFUSED = "story files: {refusal}; fix depends_on in {folder}"
+
+
 class CliError(Exception):
     """A user-facing failure; the message is printed as is."""
 
@@ -352,9 +355,16 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     _recover(config, start)
     _require_preflight(config, place.home)
     runtime = make_runtime(place, query_fn or default_query())
+    _load_dependencies(runtime)
     runtime.state.cadence = args.cadence or config.team.cadence
     _record_task(runtime.state, start)
     return _run(runtime, start)
+
+
+def _load_dependencies(runtime: Runtime) -> None:
+    """Load story dependencies from the files; a bad list stops the start (s86 DP3)."""
+    if refusal := runtime.load_dependencies():
+        raise CliError(START_REFUSED.format(refusal=refusal, folder=config_mod.STORIES_DIR))
 
 
 def _record_task(state: state_mod.RunState, start: Start) -> None:

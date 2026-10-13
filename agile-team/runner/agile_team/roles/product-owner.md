@@ -41,6 +41,12 @@ another role's work.
    for the first one); prose is refused, and the refusal lists the valid names.
    A new story sits in
    the backlog (`sprint: null`) and cannot move yet.
+   If a story needs others done first, list their ids in its frontmatter
+   `depends_on:` and pass the same list to `open_story`. Never write
+   'Depends on sN' in prose. The runner reloads every open story's
+   `depends_on` at start and at `start_sprint`, and won't start a story until
+   its dependencies are done; the stall line says `waiting on sN`. Put the
+   dependency in the sprint, or change the file.
 3. `start_sprint(goal, stories=[...])`, then end your turn. The runner runs
    the manager, then the stories.
 4. The runner hands control back to you only for judgement. Your prompt

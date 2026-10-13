@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 from . import (
     boundary,
     checkout,
+    dependencies,
     git_check,
     guard,
     halt,
@@ -709,6 +710,16 @@ class Runtime:
         """The story ranking: the PO's order and pulls over this run's stories."""
         return Priority(self.state.order, self.state.pulled)
 
+    def load_dependencies(self) -> str | None:
+        """Load `depends_on` from the open stories' files into state (s86); the refusal, or None."""
+        stories = self.state.stories
+        found = dependencies.declared(self.config, dependencies.open_ids(stories))
+        if refusal := dependencies.load_refusal(found, stories):
+            return refusal
+        dependencies.apply(found, stories)
+        self.save()
+        return None
+
     def reorder(self, change: Reorder) -> list[str]:
         """Apply a new order and log it (PO tools and dashboard requests alike)."""
         stories = self.state.stories
@@ -717,7 +728,9 @@ class Runtime:
         self.state.pulled = self.priority().repulled(change.pull, stories)
         self.save()
         after = self.priority().queue(stories.values())
-        data = change.event_data(before, after)
+        data = change.event_data(before, after) | {
+            "warnings": dependencies.warnings(dependencies.Moved(before, after), stories)
+        }
         self.events.emit(Event(EventKind.PRIORITY, SOURCE_ROLES[change.source], change.story, data))
         return after
 

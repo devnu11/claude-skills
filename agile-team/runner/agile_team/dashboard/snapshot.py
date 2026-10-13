@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .. import backlog, health, live, opinions, system, threads, waits
+from .. import backlog, dependencies, health, live, opinions, system, threads, waits
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
@@ -220,6 +220,18 @@ def _story(files: RunFiles, story: Any) -> dict:
         "commits": [c for c in dict.fromkeys([story.commit, *story.code_commits]) if c],
         "files": story_files.existing(files.config, story.id),
         "label": backlog.label(story),
+        **_dependency_keys(files, story),
+    }
+
+
+def _dependency_keys(files: RunFiles, story: Any) -> dict[str, list[str]]:
+    stories = files.state.stories
+    queue = _priority(files).queue(stories.values())
+    done = story.status is StoryStatus.DONE
+    return {
+        "depends_on": list(story.depends_on),
+        "waiting_on": [] if done else dependencies.waiting_on(story, stories),
+        "dependency_warnings": dependencies.warning_texts(story, queue),
     }
 
 

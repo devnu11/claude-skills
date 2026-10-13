@@ -107,7 +107,7 @@ section[hidden] { display: none; }
 .brow[draggable="true"] { cursor: grab; }
 .bpos { color: var(--muted); min-width: 3ch; }
 .btitle { flex: 1 1 18ch; }
-.bmeta, .bhold { color: var(--muted); font-size: 12px; }
+.bmeta, .bhold, .bdeps { color: var(--muted); font-size: 12px; }
 .bhandles { margin-left: auto; display: flex; gap: 4px; }
 .thread { margin-top: 8px; }
 .tmsg { padding: 4px 0; border-top: 1px solid var(--border); }
@@ -1087,7 +1087,9 @@ const TIMELINE = {
   priority: (e) => ({
     from: e.data.source ?? e.role ?? PO, to: "order", what: priorityLabel(e), body: e.data.reason,
     meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · ")
-      + (e.data.pulled?.length ? ` · pulled ahead: ${e.data.pulled.join(", ")}` : ""),
+      + (e.data.pulled?.length ? ` · pulled ahead: ${e.data.pulled.join(", ")}` : "")
+      + (e.data.warnings?.length ? ` · ⚠ ${e.data.warnings.join("; ")}` : ""),
+    tone: e.data.warnings?.length ? "warning" : undefined,
   }),
   fault: (e) => ({
     from: "manager", to: e.data.kind === "runner" ? "you" : e.data.fault,
@@ -1215,6 +1217,18 @@ function moveHandles(story, place, count, view) {
 }
 
 /** One row (B2, B8); `place` is the 1-based Backlog place, null for the current sprint. */
+function depsLine(story) {
+  const deps = story.depends_on ?? [];
+  if (!deps.length) return "";
+  const waiting = story.waiting_on ?? [];
+  const ids = deps.map((d) => esc(d) + (waiting.includes(d) ? "" : " (done)")).join(", ");
+  return `<span class="bdeps">depends on ${ids}</span>`;
+}
+
+function depWarnings(story) {
+  return (story.dependency_warnings ?? []).map((w) => pill("⚠ " + w, "warning")).join("");
+}
+
 function backlogRow(story, place, count, view) {
   const open = ui.expanded.has(story.id);
   const movable = place !== null && TOKEN !== "";
@@ -1223,7 +1237,7 @@ function backlogRow(story, place, count, view) {
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
     <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.delivery ? " · " + esc(story.delivery) : ""}</span>
-    ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}
+    ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}${depsLine(story)}${depWarnings(story)}
     ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
 }
 

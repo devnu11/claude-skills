@@ -200,6 +200,7 @@ class StoryState:
     run: list[Setback] = field(default_factory=list)
     escalated_by: Rule | None = None
     interrupted: Interruption | None = None
+    depends_on: list[str] = field(default_factory=list)
 
 
 @dataclass
