@@ -150,13 +150,17 @@ def test_api_urls_are_relative_and_resolve(dash) -> None:
     conn.close()
 
 
-def test_only_outside_url_is_pinned_mermaid(dash) -> None:
+def test_only_outside_urls_are_pinned_libraries(dash) -> None:
     _, url, _ = dash
     urls = set(re.findall(r"https?://[^\s\"'`)<>]+", _index(url)))
     urls -= {"http://www.w3.org/2000/svg"}
-    assert len(urls) == 1
-    (only,) = urls
-    assert re.fullmatch(r"https://cdn\.jsdelivr\.net/npm/mermaid@\d+\.\d+\.\d+/\S+", only)
+    patterns = [
+        r"https://cdn\.jsdelivr\.net/npm/mermaid@\d+\.\d+\.\d+/\S+",
+        r"https://cdn\.jsdelivr\.net/npm/markdown-it@\d+\.\d+\.\d+/\S+",
+    ]
+    assert len(urls) == len(patterns)
+    for pattern in patterns:
+        assert len([u for u in urls if re.fullmatch(pattern, u)]) == 1
 
 
 def test_event_edge_covers_flow_kinds(dash) -> None:
