@@ -100,6 +100,35 @@ Backlog. They have a `cancelled` pill and can't be moved. A story that
 depends on a cancelled one keeps waiting until the PO edits its
 dependencies.
 
+### What a story file holds
+
+Each story is a file, `.team/stories/<id>.md`. The Product Owner writes it
+before the story enters the backlog. Its frontmatter lists the acceptance
+criteria, and each one says where the customer tries it: the name of one of
+your `[[environment]]` rows in `.agile-team.toml`.
+
+```yaml
+---
+id: s120
+title: "Export the board as CSV"
+acceptance:
+  - id: AC1
+    text: "agile-team export --csv prints one row per story."
+    environment: cli
+  - id: AC2
+    text: "The Backlog tab has an Export button that downloads the same CSV."
+    environment: dashboard
+---
+```
+
+A story whose criteria name two environments touches both. (For now the
+Customer Proxy tries it in the first of them, in the order of your config.)
+The runner refuses to open a story whose file has a missing or unknown
+environment, a missing or repeated criterion id, or YAML it can't read; the
+refusal names the file, the criterion and the problem. To move a criterion
+to another environment, edit the file. The runner reads it again before the
+Customer Proxy's turn, and holds the story until a bad file is fixed.
+
 ### Stories that depend on others
 
 When a story needs other stories done first, the Product Owner lists them in

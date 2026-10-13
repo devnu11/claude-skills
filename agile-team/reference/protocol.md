@@ -839,14 +839,13 @@ from the skill's fixed set (`sandbox.ENVIRONMENT_KINDS`, see "Acceptance
 environment kinds"). The kind decides the Proxy's tools and sandbox, so a
 repo can't add one: the set is the security boundary.
 
-Stories pick an environment with `open_story(…, environment="cli")`; the
-default is the first one. The name must equal a configured `[[environment]]`
-`name` exactly (no prose, no case folding). Any other name is refused before
-the story opens: `acceptance environment 'x' is not a configured
-[[environment]]; use one of: cli, web`. With no `[[environment]]` configured,
-the refusal says so and lists no names. One check
-(`Config.environment_refusal`) serves every path that sets a story's
-environment.
+Each acceptance criterion names its environment in the story file (s94; see
+"Story files"). The name must equal a configured `[[environment]]` `name`
+exactly (no prose, no case folding); `open_story` refuses any other name and
+lists the valid ones. A story's environments are the distinct names of its
+ACs, in config order. Until one proxy step per environment ships (A14c), the
+e2e recipe, the liveness trial, the seeds and the Proxy's sandbox use the
+story's **first** environment in config order.
 
 **The old section name** (s93). Before s93 the section had another name.
 A file that still uses it loads exactly as `[[environment]]`; `config check`
@@ -855,10 +854,9 @@ section` and still exits 0 when nothing else is wrong. A file with both
 sections fails to load: `[[environment]] and [[<old>]] are both set; move
 every [[<old>]] into [[environment]]`. `init --reconfigure` rewrites an old
 file as `[[environment]]`, and a DevOps edit that only renames the section is
-kept. A story in an old `state.json` that carries the old key loads into
-`environment`, and the next save writes `environment` (if both keys are
-present, `environment` wins). A runner from before s93 can't read state
-saved after it.
+kept. Since s94, `state.json` keeps no environment for a story: a story's
+`environment` key, or its old-name key, is dropped on load, and the next save
+writes neither. A runner from before s93 can't read state saved after it.
 
 ### Repo tools
 
@@ -1714,7 +1712,7 @@ The pass ends at the first step whose report matches a row of the
 | `refused` | the step was refused |
 | `error` | the step raised an error other than a limit (traceback in `crash.log`) |
 | `stopped` | the handoff is `blocked` or `failed` |
-| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process); `continue_story` once it is fixed |
+| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process), or a story file that went bad before a Proxy step (s94, "Story files"); `continue_story` once it is fixed |
 | `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
@@ -1840,10 +1838,11 @@ with no reasons and the `compact` path.
 Each story in `state.json` has `sprint`: the number of the sprint it is
 committed to, or `null` when it is in the backlog.
 
-- `open_story` puts a story in the backlog. It refuses an existing id and a
-  `environment` that is not a configured `[[environment]]` name (empty means
-  the first one), and changes nothing when it refuses. Its `depends_on`
-  argument (s86) is checked next; see "Story dependencies".
+- `open_story` puts a story in the backlog. The PO writes the story file
+  first. `open_story` refuses an existing id, then a story file with problems
+  (see "Story files"), and changes nothing when it refuses. It has no
+  `environment` argument. Its `depends_on` argument (s86) is checked next; see
+  "Story dependencies".
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
   go back to the backlog. Done stories never move; they keep the sprint they
@@ -1933,6 +1932,77 @@ or `unclear`). `before` and `after` are `{"status", "step", "sprint",
 "hold", "po_hold"}`. The story's `label` is `cancelled`, then `cancel
 requested`, then `held` (any PO hold or held tier), else `""`.
 
+## Story files
+
+A story's file `.team/stories/<id>.md` is the only record of its acceptance
+criteria and their acceptance environments (s94). It starts with YAML
+frontmatter:
+
+```yaml
+---
+id: s120
+title: "Export the board as CSV"
+depends_on: [s83]          # optional (see "Story dependencies")
+acceptance:
+  - id: AC1
+    text: "agile-team export --csv prints one row per story."
+    environment: cli
+  - id: AC2
+    text: "The Backlog tab has an Export button that downloads the same CSV."
+    environment: dashboard
+---
+```
+
+Other top-level keys and other keys inside an AC are ignored. The body after
+the frontmatter is free text (user story, notes).
+
+**Checks, in order.** Checks 1–3 stop the read. Checks 4–6 are story-level and
+all are reported; a failed 6 stops before the items. Then every problem of
+every item is reported, in file order.
+
+| # | Check | Problem text |
+|---|---|---|
+| 1 | the file exists and is readable | `no story file; write it before open_story` |
+| 2 | it starts with frontmatter | `no YAML frontmatter; start the file with --- and the keys id, title and acceptance` |
+| 3 | the frontmatter parses and is a mapping | `frontmatter does not parse: <error>` |
+| 4 | `id` equals the file's story id | `id is 's12', not 's120'` |
+| 5 | `title` is a non-empty string | `title must be a non-empty string` |
+| 6 | `acceptance` is a non-empty list | `acceptance must be a non-empty list of {id, text, environment}` |
+| 7a | the item is a mapping | `must be a mapping with id, text and environment` |
+| 7b | its `id` is a non-empty string | `id is missing or empty` |
+| 7c | its `id` is not used by an earlier item | `id is used by an earlier AC` |
+| 7d | its `text` is non-empty | `text is missing or empty` |
+| 7e | its `environment` is a non-empty string | `environment is missing; use one of: cli, dashboard, review` |
+| 7f | it names a configured `[[environment]]` | `environment 'web' is not a configured [[environment]]; use one of: cli, dashboard, review` |
+| 7g | (no `[[environment]]` configured) | `environment 'cli' cannot be checked: .agile-team.toml configures no [[environment]]; ask the human to add one` |
+
+An item without a usable id reports only 7a or 7b. **The refusal** is one line
+per problem, joined by newlines: `{file}: {where}{problem}`, where `{file}` is
+repo-relative (`.team/stories/s120.md`) and `{where}` is `AC <id>: `, or
+`item <n>: ` (1-based) for an item with no usable id, or empty for a
+story-level problem. One read lists everything to fix.
+
+**When the runner reads it.**
+
+| When | On problems |
+|---|---|
+| `open_story`, after the duplicate-id check and before `depends_on` | the tool returns the refusal; the story is not opened |
+| before every Customer Proxy step on the story (after the PO's turn, before the unpresented check) | the step does not run and nothing is billed; the gate holds the story with `the story file must be fixed before acceptance:` + the refusal + `Edit the file; no state change is needed`, which the PO gets as a `gate_hold` hand-over |
+
+A clean file is used as it is, so an edit since `open_story` takes effect at
+the next Proxy step. **Fixing an environment is an edit to the file**: no tool
+and no state change. A held story goes on with `continue_story`, and the next
+Proxy request reads the file again. The hold counts as a setback like any gate
+hold, so the same unfixed hold repeated can escalate.
+
+**State and snapshot.** `state.json` keeps no environment for a story. The
+snapshot's story `environment` (a string) is the story's environments joined
+by `", "` in config order (`"cli, dashboard"`), or `""` when the file has
+problems.
+
+**Limit until A14c.** A story whose ACs name two environments is presented and
+tried in the first one, in config order, only.
+
 ## Story dependencies
 
 A story that needs others done first lists them (s86) in its file's YAML
@@ -1978,8 +2048,8 @@ found by a depth-first walk from each id in natural order, following each
 list in its own order. A story file that is not valid UTF-8 is not refused:
 reading it raises an error.
 
-`open_story(…, depends_on=[…])` checks, after the duplicate-id and acceptance
-environment checks: the argument is a list of strings (a missing or empty argument means
+`open_story(…, depends_on=[…])` checks, after the duplicate-id and story file
+checks: the argument is a list of strings (a missing or empty argument means
 `[]`); if the story's file already exists, its frontmatter is good and its
 list is the same, in the same order (`s7's file has depends_on [s1, s2], not
 [s2]; pass the same list, or fix the file`); then checks b–d, with the new id

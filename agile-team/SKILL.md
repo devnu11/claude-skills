@@ -166,9 +166,14 @@ command fails.
    127.0.0.1 (macOS verified). The service's output is in
    `.team/run/customer/<environment>.log`. A `gate_hold` hand-over about a
    port in use means another process holds the environment's port. Tell the
-   human. A story's acceptance environment must be the exact name of an
-   `[[environment]]` in `.agile-team.toml`; `open_story` refuses any other
-   name and lists the valid ones. A `manual` environment's script reaches
+   human. Write the story file before `open_story`: frontmatter `id`,
+   `title` and `acceptance: [{id, text, environment}]`, where each AC's
+   environment is the exact name of an `[[environment]]` in
+   `.agile-team.toml` (s94). `open_story` has no `environment` argument; it
+   refuses a bad file with every problem (file, AC, problem). To change an
+   AC's environment, edit the file; the runner reads it again before each
+   Proxy step and holds the story (`gate_hold`) if it went bad: fix it, then
+   `continue_story`. A `manual` environment's script reaches
    you as a question for the human; a `document` environment asks nothing.
    When the same setback repeats on a story, the runner stops the loop and
    runs the Manager on it (`⏸ manager` on the dashboard board). It
