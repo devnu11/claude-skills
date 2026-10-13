@@ -1459,13 +1459,19 @@ the next change once it has a commit or is done.
 PO tools:
 
 - `prioritise(stories, reason)` puts the listed ids first, in the order
-  given. Every other unfinished story keeps its order after them. When the
+  given. Every other unfinished story keeps its place in the PO's order
+  after them (its place in `order`, not in the queue, so the groups are
+  never written into `order`). When the
   list names a started story, a not-started id listed before it is pulled,
   and one listed after it is unpulled. A list that names no started story
   leaves the pulls as they are.
-- `move_story(story, position, reason)` moves one story to `position`.
-  Moved before a started story, a not-started story is pulled. Moved after
-  all of them, it is unpulled. When the groups place the story elsewhere for
+- `move_story(story, position, reason)` moves one story to `position` on
+  the board. Moved before a started story, a not-started story is pulled.
+  Moved after all of them, it is unpulled. In `order` the story goes next to
+  its nearest neighbour on the board in the group it ranks in (after the one
+  before it, else before the one after it), so it lands at `position`
+  whenever its group allows, and every other story keeps its place in
+  `order`. When the groups place the story elsewhere for
   now (a started story moved behind not-started ones, or a held one moved to
   1), the move is kept and the result adds a `note`: `s21 ranks #2, not #4:
   stories in progress come first, then held started ones, then the rest; its
@@ -1475,8 +1481,9 @@ PO tools:
   the s81 CI bug story, which is pulled. Its reason is the goal (plus `CI
   failed on the pushed code; sN fixes it` for that pull).
 
-Each change saves the requested queue as `order`, so a held story keeps the
-place the PO gave it. A story opened later has no explicit place until the
+Each change builds the new `order` from the old one, never from the queue,
+so a held story keeps the place the PO gave it, even when the PO reorders
+other stories while it is held. A story opened later has no explicit place until the
 PO gives it one. Refusals change nothing:
 `no stories listed; pass the story ids in the order to work on them`,
 `unknown stories: s7; open them with open_story first`, `done stories have

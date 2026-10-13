@@ -85,7 +85,7 @@ one line here. Older designs are the sections at the end of this file.
 | `commands.py` | shell commands the runner runs (s43): `CommandShell`/`shell_runner` (own process group, `[gates] command_timeout_s`, group kill, `TIMED_OUT`), `HUNG_PATTERNS` and `hung_test` | none (stdlib) |
 | `fingerprint.py` | content fingerprints that ignore whitespace and comments (s30): `of`, `normalise`, `LINE_COMMENTS`; no I/O | none |
 | `loops.py` | repeated-setback detection (s27): `NORMALISE` table, `Setback` and its key, the streak, `Author`, `Fault`, the Manager's `repeated_setback` view | events (types only) |
-| `priority.py` | story priority (s40, s51): `Priority` (the one ranking rule `key`: groups `Tier` in progress / held / not started, then the PO's order; `ranked`, `queue`, `with_first`, `with_move`, `move_pull`, `repulled`), `started`, `pulls`, refusals (incl. a pull without a reason), `moves`; no I/O | gates (`StoryState`) |
+| `priority.py` | story priority (s40, s51): `Priority` (the one ranking rule `key`: groups `Tier` in progress / held / not started, then the PO's order; `ranked`, `queue`, `plan` (the order with no groups), `with_first` and `with_move` (build the new order on the plan, never the queue), `board_move`, `move_pull`, `repulled`), `started`, `pulls`, refusals (incl. a pull without a reason, `first_refusal`), `moves`; no I/O | gates (`StoryState`) |
 | `waits.py` | why a story is not moving (s40): the `WAITS` table, `Wait`, `wait(story, asking)`; no I/O | gates (`StoryState`) |
 | `state.py` | `RunState` (with the PO's story `order`, s40, and the `pulled` stories, s51) and `state.json` load/save | gates (`StoryState`) |
 | `events.py` | `events.jsonl` append-only log (`EventKind`) | none |
