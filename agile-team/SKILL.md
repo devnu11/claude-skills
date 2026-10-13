@@ -60,12 +60,14 @@ command fails.
    `from other machines: http://<host>.local:<port>/`. Give the human the
    localhost link, token included, when they are on this machine. Only
    there can it raise a desktop notification when the run turns red, and
-   only there, with the token, can the human reorder the Backlog tab. Give the second link to
+   only there, with the token, can the human reorder the Backlog tab or
+   write on a story's thread. Give the second link to
    someone on another machine (on Windows there is none; it is local only). If the
    port is taken, a dashboard is probably already running, so reuse its URL
-   or pass `--port 0`. Leave it running across resumes. Its only write is
-   a Backlog reorder request, which the runner applies between steps and
-   tells the PO about.
+   or pass `--port 0`. Leave it running across resumes. It writes only two
+   things: a Backlog reorder request, which the runner applies between steps and
+   tells the PO about, and a post on a story's thread (an open Backlog row),
+   addressed to the PO or to you (step 6).
    **Long runs** survive usage limits under the `unattended` skill. Make the
    job's command the `start` above, and make its resume command plain
    `<AT> start --resume`, where `<AT>` is the full command in `$AT`. Never
@@ -74,7 +76,9 @@ command fails.
 6. **Watch:** run `$AT watch --timeout 7200` in the background. It spends
    no tokens and exits with one JSON line when something needs you:
    `triggers` lists `message` (new outbox entries, in full under
-   `messages`), `status` (the run's `status`/`status_reason` changed: halted,
+   `messages`), `liaison_message` (the human wrote to you on a story's
+   thread on the dashboard; the new posts are under `posts`, each with `id`,
+   `story`, `text` and `at`), `status` (the run's `status`/`status_reason` changed: halted,
    waiting, budget, limit, interrupted, done; `was` holds the old one),
    `health` (the live meter turned red: no turns for too long, a stale
    `heartbeat.json`, a dead runner, or a halt, but never a graceful
@@ -85,7 +89,13 @@ command fails.
    stand as already seen and waits for something new (use `$AT status` for
    where the run stands). Run one at a time. For each new message, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
-   entries, include the id. The PO speaks only when the runner needs its
+   entries, include the id. An outbox message of kind `reply` is the PO's
+   answer on a story's thread and is already on the dashboard, so relay it
+   only as a one-line summary. For each post under `posts`, answer it on the
+   thread: write the answer to a file with the Write tool and run
+   `$AT reply <story> <file>` (or `-` for stdin; never the text on a command
+   line), or relay it to the human. The reply shows under the story; it
+   works while the run is stopped. The PO speaks only when the runner needs its
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
    The dashboard shows step-by-step progress. When a question is open and
    nothing else can move, the runner waits for the answer rather than

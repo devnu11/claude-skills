@@ -23,6 +23,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
+| `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
 | `watch [--timeout S]` | Block, polling the run files every 2 s (no tokens), until something needs the liaison. Then print one JSON line and exit 0. See "Watch". |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `accept-checkout` | Keep the current branch and HEAD as the team's after a `checkout-changed` halt (see "Checkout guard"). Refused (exit 1) while a runner is alive, on a detached HEAD, or with a git operation in progress. |
@@ -47,7 +48,9 @@ command's executable is missing; `config check` fails.
 ```
 
 `kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`,
-`failed`, `stopped`. A `question` blocks only the stories it lists. While a
+`failed`, `stopped`, `reply`. A `reply` is the PO's answer on a story's
+thread (see "Story threads"); only the `reply_story` tool writes it, and its
+`stories` names that one story. A `question` blocks only the stories it lists. While a
 question is open and nothing else can move, the runner keeps running and
 waits for the answer. The runner itself posts an `update` at each sprint
 end that pushed review branches (or built them without pushing; see
@@ -101,15 +104,51 @@ keeps it, and `start --resume` hands it over at its first router pass. That
 pass is before the PO's first turn unless a `--task` or pending interrupted
 steps give the PO a turn first. `start --resume --task T` still works.
 
+`tell` names its draft `.draft-<random token>`, so two posts from the
+dashboard's threads at once never share a draft.
+
+### Story threads
+
+The human discusses a story with the PO or the liaison under its open
+Backlog row (s84). A thread is not a store of its own: it is read from four
+files, one per path. A text is stripped, must not be blank, and holds at
+most 4000 characters. The story must be in `state.json` `stories` (a done
+story is allowed). Every writer checks both.
+
+| Path | Written by | File | Entry id |
+|---|---|---|---|
+| human → PO | `POST /api/thread` with `to: "product-owner"` | a `tell` file `liaison/messages/t<N>.md` whose first line is `<!-- thread story=<id> at=<time> -->`, then a blank line, then the text | `t<N>` |
+| PO → human | the PO tool `reply_story(story, text)` | an `outbox.jsonl` message of kind `reply`, `stories: [<id>]` | `m<N>` |
+| human → liaison | `POST /api/thread` with `to: "liaison"` | a line `{"story", "text", "at"}` in `liaison/inbox.jsonl` | `lp<N>` (line order) |
+| liaison → human | `agile-team reply <story> <file\|->` | a line `{"story", "text", "at"}` in `liaison/replies.jsonl` | `lr<N>` (line order) |
+
+A post to the PO is handed over like any `tell`, at the next router pass,
+but its line names the story, and the pass's `stories` include it:
+
+```text
+The human wrote to you on s84's thread (t7): read .team/run/liaison/messages/t7.md. Answer there with reply_story; the reply shows under the story on the dashboard.
+```
+
+`reply_story` refuses an unknown story first, then an empty or over-long
+text, and posts nothing then. Otherwise it answers
+`{"status": "posted", "id": "m<N>"}`. `notify_user` with `kind: "reply"` is
+refused (`use reply_story to answer on a story's thread`), so every `reply`
+comes from `reply_story`. A `tell` file without the head belongs to no
+thread. JSONL lines that are blank, torn or lack a str `story`, a str `text`
+and a number `at` are skipped; only a last line can be torn, so earlier ids
+never shift. The PO sees only the new post, not the thread before it.
+
 ### Watch
 
-`watch` polls every 2 s. Each poll reads `outbox.jsonl` and the shown status
+`watch` polls every 2 s. Each poll reads `outbox.jsonl`,
+`liaison/inbox.jsonl` (leniently) and the shown status
 (`status` and `status_reason`, with `interrupted` for a dead runner). A torn
 outbox line counts as no poll. Triggers, in order:
 
 | Trigger | Fires when |
 |---|---|
-| `message` | the outbox has entries after the ones already reported (all of them when the outbox got shorter) |
+| `message` | the outbox has entries after the ones already reported (all of them when the outbox got shorter); a PO `reply` fires it too |
+| `liaison_message` | `liaison/inbox.jsonl` has thread posts to the liaison after the ones already reported (all of them when it got shorter) |
 | `status` | the status is not plain `running` (`running` with no reason) and `(status, status_reason)` differs from the last one seen: halted, waiting on answers, budget, limit, interrupted, done, sprint end, idle |
 | `health` | the live meter's health (see "Live meter and health") turned `red` since the last one seen |
 
@@ -120,14 +159,18 @@ it prints one line and exits 0:
 {"triggers": ["message", "status"], "messages": [{"id": "m7", "kind": "blocked", "text": "…", "stories": [], "at": 1791800000.0}], "status": "blocked", "status_reason": "session limit, resets 9pm (Europe/Berlin)", "was": {"status": "running", "status_reason": null}}
 ```
 
-The line also carries `"health": {"level", "reason"}`. A timeout line has
-`"triggers": ["heartbeat"]` and `"messages": []` (this watch heartbeat is
-not `heartbeat.json`). `was` is
+The line also carries `"health": {"level", "reason"}` and `"posts"`: the
+new thread posts to the liaison, each
+`{"id": "lp3", "story", "author": "human", "to": "liaison", "text", "at"}`.
+A timeout line has
+`"triggers": ["heartbeat"]`, `"messages": []` and `"posts": []` (this watch
+heartbeat is not `heartbeat.json`). `was` is
 the status seen before. What was
 reported is kept in `.team/run/liaison/watch.json`
-(`{messages, status, status_reason, health}`), so nothing is lost between two
+(`{messages, status, status_reason, health, posts}`; `posts` is a count, and
+a file from before s84 loads with 0), so nothing is lost between two
 watches. The first watch in a repo (no `watch.json` yet) does not report the
-history: it takes the outbox, status and health as they stand as already
+history: it takes the outbox, posts, status and health as they stand as already
 seen, writes `watch.json` at once, and then waits like any watch. Only what
 comes after fires. Its heartbeat line still shows the current `status` and
 `health`. An unreadable `watch.json` counts as empty memory: that watch
@@ -302,8 +345,9 @@ on the story (`interrupted`) and logged as a `step-interrupted` event
 ## Dashboard
 
 `agile-team dashboard` is an HTTP server (Python stdlib). Reads need no
-auth. It never serves files by path. Its one write queues a backlog reorder
-request (s83). The request is accepted only from `127.0.0.1` or `::1` and
+auth. It never serves files by path. It has two writes: it queues a backlog
+reorder request (s83), and it writes a post on a story's thread (s84). Each
+is accepted only from `127.0.0.1` or `::1` and
 only with the token printed in the local URL
 (`dashboard: http://localhost:<port>/?token=<t>`). The token is random at
 each start unless `--token T` is given or the served repo's
@@ -317,7 +361,8 @@ the runner applies the request between steps.
 | `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for the question, answer and handoff text (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead. |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
-| `POST /api/reorder` | body `{"story", "position", "version"}`: `position` is the place in the Backlog group, and `version` is the snapshot's `run.order_version`. It needs the `X-Agile-Team-Token` header and a localhost peer, else 403. A bad body gets 400. Otherwise it writes `.team/run/reorders/r<N>.json` and answers 202 `{"id": "r<N>", "status": "queued"}`. |
+| `POST /api/reorder` | body `{"story", "position", "version"}`: `position` is the place in the Backlog group, and `version` is the snapshot's `run.order_version`. It needs the `X-Agile-Team-Token` header and a localhost peer, else 403. A bad body gets 400. Otherwise it writes `.team/run/reorders/r<N>.json` and answers 202 `{"id": "r<N>", "status": "queued"}`. The body may hold at most 4096 bytes. |
+| `POST /api/thread` | body `{"story", "to", "text"}`: `to` is `product-owner` or `liaison`, `story` an opened story's id, and `text` 1 to 4000 characters once stripped. Checked in order: a localhost peer and the `X-Agile-Team-Token` header, else 403 (the body is not read); `Content-Length` from 1 to 32768, else 400; the body's shape, else 400; a known story, else 400. Otherwise it writes the post (see "Story threads") and answers 202 `{"id": "t<N>" or "lp<N>", "status": "posted"}`. |
 | `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes or the health verdict (level and reason) changes (both checked once a second). Otherwise it sends a `: keepalive` comment every second. |
 | anything else | 404 (methods other than GET and POST: 501) |
 
@@ -350,7 +395,12 @@ state plus `opened_at`, `repeated`, the story file's `acceptance`,
 `pending`/`applied`/`refused` and `reason`. The **Backlog** tab lists
 `run.order` in two groups, Current sprint (no handles) and Backlog (up,
 down, top, drag). A click expands a row to show the story file, state,
-file links, spend, recent events and open questions. The board keeps that order in every column and shows each
+file links, spend, recent events and open questions, then the story's
+thread: each entry as `you → PO`, `PO → you`, `you → liaison` or
+`liaison → you` with its time and Markdown text (`No messages yet.` when
+there is none). With the token, a text box, a PO/liaison picker (PO by
+default) and a send button follow; a draft and its cursor survive live
+updates, and the entry shows with the next snapshot. The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
 `⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
 `needs the human` (blocked, or an open question names it) or `held` (any
@@ -359,8 +409,15 @@ ids and texts, and the last step's summary or the repeated reason. The
 timeline shows `escalation`, `fault` and `priority` events. The remaining
 keys are `requirements` (from `<docs>/requirements/REQ-*.md`, with
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
-outbox and inbox entries as `message`/`answer` events), `ledger`, `messages`,
-`answers` and `upstream` (remote, branch, team branch, push permission, the
+outbox and inbox entries as `message`/`answer` events, and every thread
+entry as a `thread` event `{"id": "thread-<entry id>", "kind": "thread",
+"story", "role": "product-owner" for the PO's reply else null, "data":
+{"entry", "author", "to"}}`, all in time order; an outbox `reply` is a
+`thread` event only, never also a `message`), `ledger`, `messages`,
+`answers`, `thread` (every thread entry in time order, each `{"id",
+"story", "author", "to", "text", "at"}` with `author`/`to` one of
+`human`, `product-owner`, `liaison`; the timeline shows it, filtered by
+its story chip) and `upstream` (remote, branch, team branch, push permission, the
 last end report, the pending boundary and the review stack: each sprint's
 branch, base, PR number and URL, `mode` `none`/`draft`/`ready`/`closed`,
 `check` `unchecked`/`pass`/`fail`; the Board tab shows it as the **Review
@@ -375,7 +432,8 @@ shows each step-end's turns and each `po-session` renewal.
 
 Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
 outbox.jsonl, inbox.jsonl, heartbeat.json, turns.jsonl}` (only the last
-256 KiB of `turns.jsonl`), `.agile-team.toml`, `.team/stories/*.md` and
+256 KiB of `turns.jsonl`), `.team/run/liaison/{inbox.jsonl, replies.jsonl,
+messages/t*.md}` (the threads), `.agile-team.toml`, `.team/stories/*.md` and
 `<docs>/requirements/REQ-*.md`. A missing file gives an empty section. A
 torn last line, which can appear while the runner is appending, is skipped.
 Each snapshot re-reads `.agile-team.toml`, so a budget, round cap or
@@ -1354,6 +1412,8 @@ story.
   developer for that story; it refuses an unknown role or one that is not a
   developer. `pass_tests(story, reason)` (s30) moves a story stuck at
   `tests` on when the suite is green (see "Test disputes").
+  `reply_story(story, text)` (s84) answers the human on a story's thread
+  (see "Story threads").
 - When nothing can move but a question is open, the runner waits for an
   answer (polling every 5 s, no timeout). `stop` ends the wait. Each poll
   reads the inbox first, so an answer ends the wait within one poll, whether

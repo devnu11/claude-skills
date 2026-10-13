@@ -80,6 +80,7 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   have set the backlog's order, the Product Owner keeps it. It can change
   it only with a stated reason, and the reason shows in the timeline. See
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
+  An open row ends with the story's thread (see "Discuss a story").
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
   status, and questions and answers between the PO and you, next to a
   timeline of recent events. You and the customer proxy are in the top row.
@@ -129,6 +130,36 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 The page follows your system's light or dark setting. The ◐ button in the
 header switches between automatic, light and dark.
+
+## Discuss a story
+
+Open a story's row on the Backlog tab. Under its details is the story's
+thread: everything you wrote about it and every answer, oldest first, each
+marked `you → PO`, `PO → you`, `you → liaison` or `liaison → you`. A story
+with no messages shows `No messages yet.` Done stories have threads too.
+
+To write, use the localhost link with the token (the same one that lets you
+reorder). Type in the box (up to 4000 characters, Markdown welcome), pick
+**PO** or **liaison**, and press **send**. What you are typing survives the
+page's live updates. Your message shows in the thread with the next update,
+within about a second.
+
+- **To the PO:** the Product Owner reads it at its next turn, which is when
+  the current step ends. A stopped run delivers it at the next
+  `agile-team start --resume`. The PO answers on the thread. It treats your
+  message as a conversation, like a `tell`, not as an order to change the
+  plan. It sees only your new message, not the thread before it, so quote
+  what it needs.
+- **To the liaison:** the Claude session you started the team from is woken
+  within a few seconds while it watches the run. It answers on the thread
+  with `agile-team reply <story> <file>`, or it answers you in chat. This
+  works while the run is stopped.
+
+The thread's messages also appear in the Flow tab's timeline, under the
+story's chip. An empty message gets `write a message first`, and a link
+without the token shows the thread read-only. Example: on s12, ask the PO
+"Can the export also cover CSV?" and the answer appears under s12 once the
+PO's turn comes.
 
 ## Is the team working?
 
