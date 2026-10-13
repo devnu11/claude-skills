@@ -41,6 +41,20 @@ repo paths, so `PRESENTATION.md` names none and the presentation holds no
 links into the repo. Put in copies of what the customer needs (the ADR, the
 protocol section, files to try) and captured command output (test and ruff
 results, each with its command and exit code).
+A dashboard presentation (a `web` delivery whose start command runs
+`agile-team dashboard`) needs only the run data its story's ACs show.
+You need not write the config, because the runner seeds the config: `workspace/.agile-team.toml` with
+`[dashboard] token = "presentation"` appears when you start and again in the
+Proxy's copy, and a file you wrote yourself is kept. Example, for an AC "the
+Backlog tab lists story s3 as held":
+
+    workspace/.team/run/state.json      # stories: {"s3": {...held...}}, backlog: ["s3"]
+    workspace/.team/run/events.jsonl    # only if the AC shows events
+    workspace/.team/stories/s3.md       # only if the AC opens the story file
+
+and `PRESENTATION.md` says: open the dashboard, Backlog tab, row s3 reads
+"held". Copy real files from a live run where you can, and trim them to what
+the ACs need. A failed start names a broken seeded file and how to fix it.
 
 Check that it works before you hand off. The e2e gate refuses a missing
 presentation. For a delivery that runs as a service (`web`), the gate also

@@ -106,6 +106,8 @@ class Delivery:
     """One way a customer reaches the product (see ``sandbox.DELIVERY_KINDS``).
 
     ``probe``: path joined to ``url`` that must answer 200 before a service counts as up.
+    ``seed``: repo-relative directory whose files the runner plants in the presentation
+    workspace where missing (s105).
     """
 
     name: str
@@ -116,6 +118,7 @@ class Delivery:
     bin: list[str] = field(default_factory=list)
     e2e: str = ""
     probe: str = ""
+    seed: str = ""
 
 
 @dataclass

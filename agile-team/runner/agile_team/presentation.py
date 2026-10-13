@@ -13,6 +13,7 @@ from . import sandbox, system
 from .config import Config
 from .gates import READY, Outcome, StoryState, Verdict
 from .git_ops import Git
+from .seeds import Seeds, seed_dir
 
 PRESENTATION_DIR = "presentation"
 GUIDE = "PRESENTATION.md"
@@ -120,8 +121,19 @@ def lay_out(config: Config, story: StoryState) -> Path:
     source = source_dir(config, story.id)
     system.make_dirs(source)
     if recipe_of(config, story).need is Need.WORKSPACE:
-        _ensure_workspace(source / WORKSPACE)
+        _ready_workspace(config, story)
     return source
+
+
+def _ready_workspace(config: Config, story: StoryState) -> None:
+    _ensure_workspace(workspace_of(config, story.id))
+    story_seeds(config, story).plant()
+
+
+def story_seeds(config: Config, story: StoryState) -> Seeds:
+    """The story delivery's seeds for its source workspace (S3a)."""
+    delivery = config.delivery(story.delivery)
+    return Seeds(seed_dir(config.repo, delivery), workspace_of(config, story.id))
 
 
 def _ensure_workspace(workspace: Path) -> None:
@@ -136,7 +148,9 @@ def missing(config: Config, story: StoryState) -> str | None:
     source = source_dir(config, story.id)
     if not _guide_written(source):
         return _reason(config, source / GUIDE, story)
-    if recipe_of(config, story).need is Need.WORKSPACE and not _has_content(source / WORKSPACE):
+    if recipe_of(config, story).need is Need.WORKSPACE and not _has_content(
+        source / WORKSPACE, story_seeds(config, story)
+    ):
         return _reason(config, source / WORKSPACE, story)
     return None
 
@@ -151,8 +165,11 @@ def _guide_written(source: Path) -> bool:
     return system.is_file(guide) and bool(system.read_text(guide).strip())
 
 
-def _has_content(workspace: Path) -> bool:
-    return system.is_dir(workspace) and any(p.name != ".git" for p in system.list_dir(workspace))
+def _has_content(workspace: Path, seeds: Seeds) -> bool:
+    ignored = {".git", *seeds.names()}
+    return system.is_dir(workspace) and any(
+        p.name not in ignored for p in system.list_dir(workspace)
+    )
 
 
 def copy_into(source: Path, root: Path) -> Path:

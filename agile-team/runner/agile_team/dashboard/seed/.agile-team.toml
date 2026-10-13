@@ -1,0 +1,4 @@
+# Seeded by the runner into a dashboard presentation's workspace (s105).
+# The fixed token lets the Customer Proxy use the dashboard's writes (t31).
+[dashboard]
+token = "presentation"

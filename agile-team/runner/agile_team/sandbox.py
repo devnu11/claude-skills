@@ -24,6 +24,7 @@ from .config import Config, Delivery
 from .guard import Scope
 from .paths import literal_root, under_root
 from .process_groups import Recorded, RunnerIds, signal_child_group
+from .seeds import Seeds, seed_dir
 
 CUSTOMER_DIR = "customer"
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -148,6 +149,7 @@ class Prepared:
     env: dict[str, str] = field(default_factory=dict)
     process: system.Process | None = None
     presentation: Path | None = None
+    seeds: Seeds | None = None
 
     def stop(self) -> str | None:
         """End the service's whole process group, wait for its port and drop the pid file.
@@ -161,6 +163,10 @@ class Prepared:
     def _end(self) -> str | None:
         end_group(self.process)  # type: ignore[arg-type]
         return port_released(self)
+
+    def seed_problems(self) -> list[str]:
+        """The seeds' problems (S7); [] when nothing was seeded."""
+        return self.seeds.problems() if self.seeds else []
 
     def pid_file(self) -> Path:
         """Where the service's process group id is kept, beside the sandbox."""
@@ -386,7 +392,7 @@ class Preparer:
         """Replace any stale service, lay out the sandbox, copy the presentation, then start."""
         stop_stale(sandbox_root(config, order.delivery))
         prepared = layout(config, order.delivery)
-        _copy_presentation(prepared, order.presentation)
+        _present(prepared, order.presentation)
         launches = {Start.BACKGROUND: self._serve, Start.FOREGROUND: self._run_blocking}
         launches[prepared.kind.start](prepared, order.delivery.prepare)
         return prepared
@@ -427,6 +433,9 @@ class Preparer:
         raise NotUp(_joined(reason, prepared.stop()))
 
     def _not_up_reason(self, prepared: Prepared) -> str:
+        return "\n".join([*prepared.seed_problems(), self._start_failure(prepared)])
+
+    def _start_failure(self, prepared: Prepared) -> str:
         name, url = prepared.delivery.name, prepared.probe_url()
         tail = _log_tail(prepared.log_file())
         code = prepared.process.poll() if prepared.process else None
@@ -445,12 +454,14 @@ def _log_tail(path: Path) -> str:
     return "\n".join(lines) if lines else "(no output)"
 
 
-def _copy_presentation(prepared: Prepared, source: Path | None) -> None:
-    if source is None:
-        return
+def _present(prepared: Prepared, source: Path | None) -> None:
     from . import presentation  # deferred: presentation imports this module
 
-    prepared.presentation = presentation.copy_into(source, prepared.root)
+    if source is not None:
+        prepared.presentation = presentation.copy_into(source, prepared.root)
+    workspace = presentation.copied_workspace(prepared.root)
+    prepared.seeds = Seeds(seed_dir(prepared.repo, prepared.delivery), workspace)
+    prepared.seeds.plant()
 
 
 def layout(config: Config, delivery: Delivery) -> Prepared:
