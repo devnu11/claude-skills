@@ -30,6 +30,7 @@ SPLIT_KEYS = {"opened_at", "tool_s", "model_s", "waiting_s"}
 
 
 def pulse_of(fake: FakeSystem) -> live.Pulse:
+    fake.make_dirs(RUN_DIR)
     pulse = live.Pulse(RUN_DIR, 20.0)
     pulse.write = lambda: None  # type: ignore[method-assign]
     return pulse

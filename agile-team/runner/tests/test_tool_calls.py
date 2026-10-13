@@ -202,7 +202,7 @@ def test_masking_hides_the_value_of_secret_variables(text: str, expected: str) -
 
 
 def test_a_secret_straddling_character_80_never_shows_a_prefix() -> None:
-    text = "x" * 70 + " GH_TOKEN=abcdefghijklmnopqrstuvwxyz"
+    text = "x" * 60 + " GH_TOKEN=abcdefghijklmnopqrstuvwxyz"
     shown = tc.shown(text)
     assert "abc" not in shown and len(shown) <= tc.LIMIT
     assert shown.endswith("GH_TOKEN=***")
