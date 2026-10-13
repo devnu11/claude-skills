@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: Started stories rank first; pulls need reasons (ADR-0016 amended)
+
+Stories with commits always rank first, held started ones after in-progress, then stories not yet started. Your order ranks stories within each group. To pull a not-started story ahead of started ones, use `prioritise` or `move_story` with a reason; without one the tool is refused. `start_sprint` never pulls. **ADR-0016 amended:** ranking rule is `(done, RANK[tier], listed, natural(id))` where `RANK` = {in progress: 0, held: 1, not started: 2}. New `state.pulled` field holds pulled story ids. Priority events now include `"pulled"` in data for audit.
 
 ## s65: Git safety—presentations and acceptance run in isolated git (no new ADR)
 

@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: Priority ranking acceptance (AC1–AC6 verified on logged test runs, e2e pending)
+
+Story accepted on units, code review, and captured test runs. Customer docs updated: priority rules and snapshot `tier` field. Acceptance verifies dashboard shows correct `tier` (in progress/held/not started) and `position` per story, and snapshot `pulled` array. Workspace and service unchanged. Same sandbox procedure, same acceptance workflow.
 
 ## s65: Git confinement—acceptance runs safe from the team repo (AC2, AC7 all pass)
 

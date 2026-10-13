@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: Priority ranking tests (2 rounds, 99.41% coverage, ruff clean, all pass)
+
+Test `priority.py`: `started()` (commit=None false), `held()` (hold, BLOCKED, NEEDS_MANAGER true), `tier()` (three groups + pulled), `pulls()` (not-started before last started), `set_pull()` (Pull.judged and Pull.ahead), `pull_refusal()` (reason required text), `plan()` (listed by place, unlisted by natural), `with_first()` (builds on plan order), `with_move()` rules 1–3, `repulled()` (cleanup), `first_refusal()` (calls in turn, short-circuit). PO tools: move without reason refused, with reason pulls; prioritise lists before started, unpulls when listed after started; start_sprint with CI bug pulls it. Worked example end-to-end (s45/s38/s21 case). `state.json` loads without `pulled` (defaults []). Router tests: started story routes first. Coverage ≥95%, ruff clean. See design test checklist, all items done. ADR-0016 amended.
 
 ## s65: Git confinement (unit tests, coverage ≥95%, no new ADR)
 

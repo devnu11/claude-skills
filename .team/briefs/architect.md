@@ -1,6 +1,12 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: Tier-based priority ranking, pull semantics (design rules G1–G17, ADR-0016 amended)
+
+Refined s40's explicit order with **story tiers**: in-progress (started, not held) > held (started) > not-started. Ranking rule: `(done, RANK[tier], listed, natural(id))` replaces "explicit order beats in-progress". **Pull logic:** To move a not-started story ahead of started ones, the PO calls `prioritise` or `move_story` with a reason; without reason the tool is refused. `state.pulled` records pulled ids. **Plan vs queue distinction:** Changes build on plan (no groups) never queue (with groups), so reordering while a story is held does not move its held place in order.
+
+**Data-driven:** `Tier` enum, `RANK` dict. **Key functions:** `started()`, `held()`, `tier()`, `plan()`, `pulls()`, `set_pull()`, `pull_refusal()`, `with_first()`, `with_move()`, `repulled()`, `first_refusal()`. **Modules changed:** `priority.py` (new), `state.py` (+pulled field), `po_tools.py` (pull checks), `dispatch.py` (priority method), `dashboard/snapshot.py` (tier field). **Coverage 99.41%, ruff clean.** See design rules G1–G17, ADR-0016 amendment.
 
 ## s65: Git confinement—S61 incident solved, no ADR (extends s41/s43/s69 guard pattern)
 

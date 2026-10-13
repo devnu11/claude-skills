@@ -1,6 +1,22 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: Priority ranking, tier groups, pull logic (2 rounds, all defects fixed) — verdict ship
+
+**Scope:** `priority.py` (new rules G1–G17), `state.py`, `dispatch.py`, `po_tools.py`, `dashboard/snapshot.py`, `dashboard/index.html`, `roles/product-owner.md`, ADR-0016 amendment. **Verdict: ship.** Diff matches design G1–G17, D1'–D5' line for line. No test deleted or weakened. Coverage 99.41%, ruff clean.
+
+**Design rules enforced:**
+- G1–G2: `Tier` enum, `started()` checks commit, `held()` checks hold/status, `tier()` returns group.
+- G3: `key()` = `(done, RANK[tier], listed, natural(id))` replaces P2 (explicit order beats in-progress).
+- G6–G9: `pulls()` finds not-started before last started, `set_pull()` judges when at least one started listed, `pull_refusal()` requires reason, `first_refusal()` short-circuits.
+- G13–G16: `repulled()` maintains pulled list, `plan()` builds without groups, `with_first()` and `with_move()` build on plan (never queue), so held stories keep their place.
+- State: `RunState.pulled` field, loads without it (defaults []).
+- Snapshot: `tier` replaces `in_progress`. Dashboard shows `tier` per story.
+
+All 18 test items pass (worked example end-to-end, all refusals, group ranking, held hold-release cycle, reorder while held). ADR-0016 amended.
+
+See design `agile-team/docs/design/s51.md` (G1–G17, D1'–D5', test checklist).
 
 ## s65: Git confinement (one round, design matched, no new ADR) — verdict ship
 

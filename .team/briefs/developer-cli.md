@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
 
 See `developer.md` for the base conventions.
+
+## s51: Story priority with tiers and pulls (AC1–AC6 pass, design rules G1–G17)
+
+Replaced s40 rule P2 with tier-based ranking: started (in progress) > held > not started. PO's order ranks within groups. New rules: `Tier` enum, `Priority.tier()`, `plan()`, `with_move()`, `pull()` functions. Pulls need reasons (G9). Changes build on plan, never queue (G15, G16). `state.pulled` saves pulled ids. `RunState` gains `pulled` field. Dashboard snapshot replaces `in_progress` with `tier: "in progress"|"held"|"not started"|null`. `po_tools` (prioritise, move_story, start_sprint) check and record pulls. All tests pass (2 rounds, 99.41% coverage, ruff clean). See design `agile-team/docs/design/s51.md` (G1–G17, D1'–D5', test checklist). ADR-0016 amended.
 
 ## s65: Git confinement—roles can't reach team repo (AC1–AC10 all pass)
 

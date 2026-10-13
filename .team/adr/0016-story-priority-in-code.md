@@ -1,7 +1,7 @@
 # ADR-0016: Story priority lives in code
 
 **Date:** 2026-10-11 (s40 done)  
-**Status:** Accepted  
+**Status:** Accepted; amended by s51 (2026-10-12)  
 **Relates to:** ADR-0009 (routing in code), ADR-0014 (escalate repeated setbacks), s3 (sprints)
 
 ## Context
@@ -22,34 +22,43 @@ After any priority change (set, move, sprint), `state.order` holds the **full qu
 
 ### 2. The one ranking rule (P2, AC3, AC8)
 
-**The rule:** `Priority.key(story) = (done, listed, not in_progress, natural(id))`
+**The rule:** `Priority.key(story) = (done, RANK[tier], listed, natural(id))`
 
-- `done`: done stories sort last (0 if done, 1 if not)
+- `done`: done stories sort last (0 if not done, 1 if done)
+- `tier`: group the story is in (in progress, held, not started), ranked by `RANK`: in progress = 0, held = 1, not started = 2. Groups sort before listed order.
 - `listed`: index in `order`, or `len(order)` when unlisted (so unlisted sort after listed)
-- `in_progress`: 0 if past the first step or `previous` is set, else 1 (prefer in-flight stories when priority is equal)
 - `natural(id)`: digit runs compare as numbers (s9 < s10 < s100)
 
-An explicit position always beats in-progress. In-progress only breaks ties between unlisted stories.
+**Vocabulary:**
+- **started**: story has commits in the tree (`story.commit is not None`). The runner records its first commit, and every later commit is a fixup.
+- **held**: `story.hold is not None`, or status is `BLOCKED` or `NEEDS_MANAGER`.
+- **in progress**: started and not held. A step that ran but committed nothing is not started.
+- **not started**: no commits, and not pulled ahead with a reason.
+- **pulled**: the PO pulled a not-started story ahead of started ones. The ids are in `state.pulled`.
+
+Stories with commits always go first (in progress), held started ones after those in progress, then stories not started. Within each group, the PO's order (listed index) decides.
 
 The router picks the first story in `Priority.ranked(...)` that is `_movable`. Creation order plays no part.
 
-**Consequence:** Every role follows the same rule. The rule is one function with tests.
+**Consequence:** Every role follows the same rule. Commits in the tree beat explicit order, but the PO ranks within each group.
 
 ### 3. PO tools: prioritise and move_story (P5, P6, AC2)
 
-- **`prioritise(stories, reason)`:** Sets the queue to the listed ids in the order given, followed by every other unfinished story in its current queue order. Duplicates collapse (first wins). Refused (nothing changes) for empty list, unknown ids, or done ids.
-- **`move_story(story, position, reason)`:** Takes the story out of the queue and puts it back at `position` (1 = next). Refused for unknown or done story, or a position outside 1 to queue length.
-- **`start_sprint(goal, stories)`:** Treats its list as an order. After `begin_sprint`, applies prioritise with the sprint's ids (done ids skipped), so the sprint's stories come first in the order given.
+- **`prioritise(ids, reason)`:** Sets the order to the listed ids in the order given, followed by every other unfinished story in its current order (the plan, with no groups). Duplicates collapse (first wins). When the listed ids include a not-started story before a started one, that story is **pulled ahead** and the tool is refused unless `reason.strip()` is non-empty. Refused (nothing changes) for empty list, unknown ids, or done ids.
+- **`move_story(story, position, reason)`:** Takes the story out of the queue and puts it back at `position` (1 = next). When moving a not-started story before a started one, it is pulled ahead and the tool is refused unless `reason.strip()` is non-empty. Refused for unknown or done story, or a position outside 1 to queue length.
+- **`start_sprint(goal, stories)`:** Treats its list as an order. After `begin_sprint`, applies prioritise with the sprint's ids (done ids skipped), so the sprint's stories come first in the order given. `start_sprint` never pulls not-started stories ahead, except when the upstream has a pending CI bug story (which is pulled and prioritized as a fix).
 
-**Consequence:** The PO explicitly agrees on an order, then sets it with one tool. Refusals are clear.
+**Consequence:** The PO explicitly agrees on an order, then sets it with one tool. Pulls require a reason to prevent accidental disorder. Refusals are clear.
 
-### 4. Hold semantics: held stories keep their place (P4, AC6)
+### 4. Hold semantics: held stories keep their place in order (P4, AC6)
 
-Holds (hold, needs-manager, blocked, open questions) never change `order`. A held story keeps its position number and is skipped by the router until released. Once released via `continue_story`, it runs before later stories and its position never changes.
+Holds (hold, needs-manager, blocked, open questions) never change `order` (the plan of unfinished stories). A held story keeps its place in that list. While held, it ranks after all in-progress stories and before not-started ones, so its #position on the board changes. Once released via `continue_story`, it ranks back at its place among started stories.
+
+Every change (set, move, sprint) builds the new `order` from the old `order` (the plan, with no groups), never from the queue (with groups). So reordering other stories while a story is held does not move its place in `order`.
 
 `_movable` skips held stories; `_repeat_work` (for escalated stories) also respects holds.
 
-**Consequence:** The order shown makes sense. A held story's position tells you when it will run.
+**Consequence:** The order shown makes sense. A held story's place in the plan is remembered; its #position tells you when it will run once released.
 
 ### 5. Comprehensive wait system (W1, W2, AC6)
 
@@ -77,16 +86,17 @@ Every change in `prioritise`, `move_story`, and `start_sprint` emits one `priori
   "change": "set" | "move" | "sprint",
   "order": [...full queue after change...],
   "moves": [{"story", "from", "to"} for each story whose position changed (1-based)],
-  "reason": str
+  "reason": str,
+  "pulled": [list of not-started story ids pulled ahead of started ones, empty if none]
 }
 ```
 
 The timeline shows:
-- `set`: "order set" label, reason in body, moves in meta
-- `move`: "#<from> → #<to>" label (or "#<n> (unchanged)" when move changes nothing)
-- `sprint`: "sprint order" label
+- `set`: "order set" label, reason in body, moves in meta, pulled in meta when non-empty
+- `move`: "#<from> → #<to>" label (or "#<n> (unchanged)" when move changes nothing), pulled in meta when non-empty
+- `sprint`: "sprint order" label, pulled in meta when non-empty
 
-**Consequence:** Every decision is logged and visible on the timeline.
+**Consequence:** Every decision is logged and visible on the timeline. Pulls are recorded for audit.
 
 ### 7. Snapshot and board (D1–D5)
 
@@ -94,13 +104,13 @@ The timeline shows:
 - `stories` are listed in ranking order
 - Each story adds:
   - `position`: 1-based int in queue, or `null` when done
-  - `in_progress`: bool
+  - `tier`: the group the story is in (`"in progress"`, `"held"`, or `"not started"`), or `null` when done
   - `hold`: str or `null` (the reason, e.g., "questions, needs the human")
   - `wait`: `{"reason", "on"}` or `null` (why it's not moving)
 
 The board shows `#<position>` in the story id line and a wait pill `⏸ <reason>` when waiting.
 
-**Consequence:** The snapshot and board are the single source of truth. The order shown is what runs next.
+**Consequence:** The snapshot and board are the single source of truth. The order shown is what runs next, grouped by tier.
 
 ### 8. Documentation (X1, AC7)
 
@@ -118,9 +128,9 @@ The board shows `#<position>` in the story id line and a wait pill `⏸ <reason>
 ## Consistency rules
 
 - **No implicit order:** Creation order never affects ranking. Explicit `order` is the only priority source.
-- **Hold is a position, not a move:** Releasing a held story does not change its position.
-- **Tie-breaking:** In-progress only breaks ties between unlisted stories. Explicit priority always wins.
-- **Full queue on save:** After any change, `order` holds every unfinished story, in queue order.
+- **Hold is a position, not a move:** Releasing a held story does not change its position in the plan.
+- **Groups first:** Stories are ranked by tier (in progress, held, not started) before the PO's listed order applies within each group.
+- **Full queue on save:** After any change, `order` holds every unfinished story, in plan order (no groups).
 - **Wait is read-only:** The wait reason is computed from the story's state; no separate field stores it.
 
 ## Tradeoffs
@@ -128,7 +138,7 @@ The board shows `#<position>` in the story id line and a wait pill `⏸ <reason>
 - **Unlisted stories sort after listed:** Stories opened during a sprint are unlisted until the PO places them. They don't interrupt the plan, but the PO must place them intentionally.
 - **Position is 1-based on the board:** Matches user expectations; the rule computes 0-based (sorted list), then +1 for display.
 - **One wait reason per story:** The first matching `WAITS` row wins. If a story has both "questions" and "held", "questions" fires. This keeps the UI simple.
-- **No position groups:** Each listed story has its own position. In-progress only breaks ties among unlisted stories (future: group positions for equal-priority batches).
+- **Groups are fixed:** A not-started story always ranks after started ones unless the PO explicitly pulls it ahead with a reason. A pull does not change the ranking function; it marks the story as moved intentionally.
 
 ## References
 

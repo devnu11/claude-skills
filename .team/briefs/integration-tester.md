@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s65 done)
+**Last updated:** 2026-10-12 (s51 done)
+
+## s51: E2E test for router priority ranking (AC7 pending, unit and review complete)
+
+Story complete on units (coverage 99.41%, ruff clean) and code review. E2E tests belong here. Design calls for one case: with started and not-started stories, router picks the started one first. File: (tbd) router e2e test. **Setup:** state with 4 stories (order=["s45", "s38", "s21", "s50"], s45/s50 not started, s38/s21 started with commits). **Test:** Router calls `dispatch.router()`, first routable story is s38 (not s45). When s38 held, s21 is next. When s38 released, s38 is next again. Covers AC1 (in-progress first) and AC4 (held story skipped).
 
 ## s65: Git confinement—build demos in the presentation workspace (AC9 e2e test, all pass)
 
