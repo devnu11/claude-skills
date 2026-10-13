@@ -127,7 +127,7 @@ def test_developer_bash_write_to_tests_is_quarantined(
     assert log[2] == "chore(team): quarantine out-of-scope changes by developer-cli"
     assert rt.git.is_clean() and not system.exists(configured / "tests/x")
     assert report["gate"]["verdict"] is Verdict.PASS
-    events = rt.events.events()
+    events = [e for e in rt.events.events() if e.kind != "runner-stage"]
     assert [e.kind for e in events] == ["step-start", "quarantine", "step-end", "gate"]
     assert {e.role for e in events[:3]} == {"developer-cli"} and events[0].story == "s1"
     assert events[1].data["paths"] == ["tests/x"]

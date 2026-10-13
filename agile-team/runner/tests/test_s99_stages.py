@@ -365,10 +365,19 @@ def test_tool_is_a_devops_section() -> None:
 def test_tool_edit_kept_and_gates_edit_quarantined(configured: Path) -> None:
     path = configured / cfg.CONFIG_NAME
     text = system.read_text(path)
+
+    class Committed:
+        """A git whose HEAD holds the original config (the fake world has no commits)."""
+
+        repo = configured
+
+        def run(self, *args: str) -> str:
+            return text
+
     system.write_text(path, text + '\n[[tool]]\nname = "x.y"\ndescription = "d"\ncommand = "c"\n')
-    assert dispatch.config_edit_allowed(Git(configured))
+    assert dispatch.config_edit_allowed(Committed())
     system.write_text(path, text + "\n[extra]\nk = 1\n")
-    assert not dispatch.config_edit_allowed(Git(configured))
+    assert not dispatch.config_edit_allowed(Committed())
 
 
 # -- agile-team tools ------------------------------------------------------
