@@ -1386,49 +1386,83 @@ committed to, or `null` when it is in the backlog.
 - `start_sprint` opens the sprint's **start boundary**, and it is refused
   while a boundary is pending (`sprint N <edge> boundary is still pending
   (…); finish it first`). See "Sprint boundaries".
-- The order in which `start_sprint` lists its stories is their priority (see
-  "Story priority").
+- The order in which `start_sprint` lists its stories is their priority
+  within each group. Started stories still come first (see "Story
+  priority").
 
 ## Story priority
+
+Started stories are finished before new ones are started (s51). A story is
+**started** when it has commits in the tree: the runner recorded its first
+commit (`commit` in `state.json`). A step that committed nothing does not
+start a story. Every unfinished story is in one **group**:
+
+| Group (`tier`) | Stories |
+|---|---|
+| `in progress` | started (or pulled, below) and not held |
+| `held` | started (or pulled) and held: a `hold`, `blocked` or `needs_manager` |
+| `not started` | everything else |
 
 `state.json` `order` is the PO's explicit list of story ids. It covers
 sprint stories and the backlog. One rule ranks every story. These keys are
 compared in turn:
 
 1. done stories come last;
-2. the story's index in `order`; stories not in `order` come after those
+2. the group: `in progress`, then `held`, then `not started`;
+3. the story's index in `order`; stories not in `order` come after those
    that are;
-3. among stories with no explicit place, a story **in progress** (past the
-   first pipeline step, or a step already ran on it) comes before one not
-   started. This limits work in progress;
 4. the id, with numbers compared as numbers (`s9` before `s10`).
 
-So an explicit place always beats in-progress. The unfinished stories in
-this ranking are the **queue**. A story's **position** is its place in the
-queue (1 = next). The router follows the ranking (see "Routing"). Holds,
-open questions, the round cap and blocks never change the order. A held
-story keeps its position and is skipped until it is released. A file
-without `order` loads with an empty list, which ranks by rules 3 and 4.
+So the order ranks stories within each group, and a started story always
+runs before a story not started. The unfinished stories in this ranking are
+the **queue**. A story's **position** is its place in the queue (1 = next).
+The router follows the ranking (see "Routing"). Holds, open questions, the
+round cap and blocks never change `order`. While a started story is held it
+ranks after the stories in progress, and its position changes. Once it is
+released, it goes back to its place. The router skips a held story, so it
+never stops another story from routing. A file without `order` or `pulled`
+loads with empty lists.
+
+**Pulling ahead.** The PO can pull a not-started story ahead of the started
+ones on purpose, with a reason. Pulled ids are kept in `state.json`
+`pulled`, and a pulled story ranks as if started. A pull without a reason is
+refused: `pulling s45 ahead of started stories needs a reason; give one, or
+place them after the started stories`. A pulled story leaves `pulled` at
+the next change once it has a commit or is done.
 
 PO tools:
 
 - `prioritise(stories, reason)` puts the listed ids first, in the order
-  given. Every other unfinished story keeps its order after them.
+  given. Every other unfinished story keeps its order after them. When the
+  list names a started story, a not-started id listed before it is pulled,
+  and one listed after it is unpulled. A list that names no started story
+  leaves the pulls as they are.
 - `move_story(story, position, reason)` moves one story to `position`.
+  Moved before a started story, a not-started story is pulled. Moved after
+  all of them, it is unpulled. When the groups place the story elsewhere for
+  now (a started story moved behind not-started ones, or a held one moved to
+  1), the move is kept and the result adds a `note`: `s21 ranks #2, not #4:
+  stories in progress come first, then held started ones, then the rest; its
+  place in the order is kept`.
 - `start_sprint(goal, stories)` puts the sprint's stories first, in the
-  order listed. Its reason is the goal.
+  order listed, within each group. It never pulls from its list, except for
+  the s81 CI bug story, which is pulled. Its reason is the goal (plus `CI
+  failed on the pushed code; sN fixes it` for that pull).
 
-Each change saves the whole new queue as `order`. A story opened later has
-no explicit place until the PO gives it one. Refusals change nothing:
+Each change saves the requested queue as `order`, so a held story keeps the
+place the PO gave it. A story opened later has no explicit place until the
+PO gives it one. Refusals change nothing:
 `no stories listed; pass the story ids in the order to work on them`,
 `unknown stories: s7; open them with open_story first`, `done stories have
-no place in the order: s1`, and `position must be a whole number from 1 to
-N`. Each change is logged as a `priority` event (role `product-owner`;
-`story` is the moved story for a move):
+no place in the order: s1`, `position must be a whole number from 1 to N`,
+and the pull refusal above. Each change is logged as a `priority` event
+(role `product-owner`; `story` is the moved story for a move):
 `{"change": "set" | "move" | "sprint", "order": [...], "moves": [{"story",
-"from", "to"}], "reason": "..."}`. `moves` lists only the stories whose
-position changed. `story_status` returns the stories in ranking order, with
-`order` set to the queue.
+"from", "to"}], "reason": "...", "pulled": [...]}`. `order` is the queue
+after the change. `moves` lists only the stories whose position changed.
+`pulled` lists the stories this change pulled ahead. `story_status` returns
+the stories in ranking order, with `order` set to the queue and `pulled`.
+The snapshot gives each unfinished story its `tier`.
 
 ## Sprint boundaries: sync, full checks, review stack
 

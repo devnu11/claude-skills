@@ -43,11 +43,17 @@ The team works in an explicit order, not in the order stories were written.
 Tell the Product Owner the order you want ("gate fixes first: s24, s30, s26;
 then s37"). The PO records it, and the runner follows it:
 
-- The story highest in the order that can move goes next.
-- A story that is not in the order yet comes after the ones that are. Among
-  those, a story already under way goes before one not started.
-- A story waiting on something (your answer, the Manager, the round cap)
-  keeps its place and is skipped until it is released.
+- Work already committed is finished first. Stories with commits go before
+  stories not started, and your order ranks the stories within each group.
+- A started story that is waiting (on your answer, the Manager or the round
+  cap) moves behind the started stories that can run, but still before the
+  stories not started. It is skipped until it is released, then it goes
+  back to its place.
+- A story that is not in the order yet comes after the ones that are, in
+  its group.
+- To start a new story before the started ones finish, tell the Product
+  Owner why. The PO pulls it ahead with that reason, and the timeline shows
+  it. Without a reason the runner refuses.
 
 On the dashboard's **Board**, every column lists stories in that order, and
 each card shows its position (`#1` is next). A waiting story shows

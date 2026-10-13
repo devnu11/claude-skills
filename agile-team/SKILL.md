@@ -92,10 +92,14 @@ command fails.
    the run looks idle: an unanswered id there is a question you have not
    relayed yet. **Order of work** is data, not prose: the PO sets it with
    `prioritise`, `move_story` or the order of `start_sprint`'s list, and the
-   router follows it. When the human states an order ("s30 before s29"),
-   relay it to the PO. The board shows each story's `#position`. A story
-   that cannot move shows `⏸ <reason>` and what it waits on; it keeps its
-   place and runs once it is released.
+   router follows it. Started stories (with commits) always come first, then
+   held started ones, then stories not started. The order ranks stories
+   within each group. The PO can pull a not-started story ahead only with a
+   reason, and the pull shows in the timeline. When the human states an
+   order ("s30 before s29"), relay it to the PO. The board shows each
+   story's `#position`. A story that cannot move shows `⏸ <reason>` and what
+   it waits on; it keeps its place in the order and runs once it is
+   released.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
    something the PO did not ask for, write the human's words verbatim to a
    file with the Write tool (for example `.team/run/liaison/draft.md`), then
