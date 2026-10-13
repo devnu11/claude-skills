@@ -1,6 +1,25 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s59 done)
+
+## s59: Rebase at sprint start (ADR-0041, rule R1–R12, docs updated)
+
+Sprint-boundary sync rebases the team branch onto main instead of merging, dropping commits already upstream. False conflicts from sprint 18 (~100) are gone. The decision replaces ADR-005 decision 1 ("merge in, never rewrite").
+
+**Key rules (R1–R12):**
+- **R1:** `git rebase --empty=drop`, no merge, no `-s ours` or `-X ours`. Result is linear.
+- **R2:** Boundary.sync_from pinned before rebase; save before rebase on first run guards against crash losing old hash map.
+- **R5:** Commits paired by stamp (author, date, message); dropped commits map to last matched copy or rebase base.
+- **R6:** Hashes rewritten in `REMAPPED` fields only (story commits, code commits, interrupted shas, stack entries); `checked`, `head`, `pushed`, `base` left alone.
+- **R7:** Lost-content check validates no path changed without one side touching it; reset on violation.
+- **R9:** New outcome `REBASED` (sha, rewritten count); tone is `"good"`.
+- **R12:** Only START edge rebases; END edge unchanged.
+
+**Docs updated:** `agile-team/SKILL.md` (sprint boundaries section), `agile-team/reference/protocol.md` (hold table, start step), `agile-team/docs/customer/review-stack.md`, fixture e93 (end-edge sync: `outcome: pass`, not `rebased`).
+
+**Process in code:** `rewrite.py` pure, `Rebase` dataclass, `SyncOutcome` enum, dispatch via `AFTER_REBASE` dict (table-driven, no branching). E2E tests (5 cases) pending for integration-tester.
+
+See design `agile-team/docs/design/s59.md` (R1–R12, test checklist, known limits), review round 3, ADR-0041.
 
 ## s89: Guard refined to let stdlib read source on 3.13 (no new ADR, extends s71)
 

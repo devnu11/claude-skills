@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s59 done)
+
+## s59: Sprint-start sync rebases the team branch onto main (ADR-0041)
+
+Sync no longer merges; it rebases, dropping commits already upstream. False conflicts from sprint 18 (~100 on m54) are gone. Hashes pinned before rebase and rewritten after; nothing is lost. Real conflicts abort cleanly; human rebases by hand and continues. End-edge unchanged. One new boundary outcome: `rebased` (tree kept, hashes rewritten; tone: `good`).
+
+**What changed for you:**
+- `sync_conflict` hand-over now lists conflicting files grouped by directory with counts, e.g. ". (1): README.md; src (2): a.py, b.py".
+- No more `-s ours` or `-X ours` merges. The branch is always linear.
+- New tool: none (the old `merge_in` is gone; `rebase_onto` is internal).
+
+See ADR-0041, design `agile-team/docs/design/s59.md` (rules R1–R12), review round 3 (all defects fixed; e2e pending for integration-tester).
 
 ## s89: Unit suite passes on 3.13 (OS guard refined, test infrastructure, no new ADR)
 

@@ -1,8 +1,16 @@
 # Developer (API): Current context and conventions
 
-**Last updated:** 2026-10-12 (s74 done)
+**Last updated:** 2026-10-12 (s59 done)
 
 See `developer.md` for base conventions.
+
+## s59: Rebase at sprint start (ADR-0041, round 3 done)
+
+New module `agile_team/rewrite.py` (pure): pairs old-to-new commits by stamp (author, date, message) and rewrites hashes in `state.json`. Updated `upstream.py`: replaced `merge_in` with `rebase_onto` (uses `git rebase --empty=drop`, no `-s ours`). New `Rebase` class, `SyncOutcome` enum. `boundary_runner.py`: `_pin_sync_from` guard saves before rebase; `AFTER_REBASE` dispatch table handles outcomes. `handover.py`: conflict now groups files by directory. Dashboard tone: `rebased: "good"`. E2E tests (5 cases: all upstream, copies+new, real conflict, hash rewrite, hand rebase after conflict) pending for integration-tester.
+
+**Defects fixed in round 3:** R2 save ordering (D1, D2), type hints and `_swap` helper (D4), test rename (D3).
+
+See design `agile-team/docs/design/s59.md` (R1–R12, test checklist), review round 3.
 
 ## s74: Dashboard pill fixes — N1 text, resting stopped pill styling
 

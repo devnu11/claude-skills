@@ -1,6 +1,23 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s59 done)
+
+## s59: Rebase at sprint start (3 rounds, all defects fixed) — verdict ship (e2e pending)
+
+**Scope:** `rewrite.py` (new), `upstream.py`, `boundary.py`, `boundary_runner.py`, `handover.py`, dashboard, docs. **Verdict: ship (e2e pending).**
+
+**Round 1:** Design rules R1–R12 matched closely. No merge, no `-s ours`, linear result. Boundary gains `sync_from` field, outcome `REBASED`. `rebase_onto` reads start and target, runs exact argv, handles conflict by abort+read, checks for lost content. `rewrite.py` pure, pairing by stamp, remap by field table. Dispatch via `AFTER_REBASE` dict (R1–R12 data-driven). Fixture e93 (end-edge) becomes `pass` not `rebased` (R12: only START). No test deleted, no dependency added. **Changes requested:** R2 save before rebase (D1, D2), style (D3, D4).
+
+**Round 2 defects fixed in round 3:**
+- **D1, D2:** `_pin_sync_from` guard saves only when empty; two tests pin order (save before rebase on first run, rebase first on rerun).
+- **D3:** Push test renamed; moved moved-assertion to separate test.
+- **D4:** `_swap` helper reduces repeated swap-and-count; type hints on `_story`, `_interruptions`.
+
+**Checked:** No `merge`, `-s`, or `-X` in sync. Team-branch push refusal pins both target and team (R11). `REMAPPED` table exact; `checked` not rewritten. No repeated blocks new. Coverage 99.43%, ruff clean.
+
+**Pending:** AC6 e2e tests (5 cases: all upstream, copies+new, real conflict, hash rewrite, hand rebase after conflict). Integration-tester scope, design specifies all cases exactly.
+
+See design `agile-team/docs/design/s59.md` (R1–R12, test checklist), review round 3, ADR-0041.
 
 ## s89: OS guard refined for 3.13 (test infrastructure, no new ADR) — verdict ship
 

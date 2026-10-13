@@ -1,6 +1,14 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s59 done)
+
+## s59: Rebase at sprint start (unit tests, coverage 99.43%, no new ADR scope)
+
+Unit tests cover pairing (match, all dropped, middle dropped, first dropped, merge commit), remap (count, REMAPPED fields yes/no, staleness safe), rebase (argv exact, current, rebased with pairing, conflict with abort, lost-path reset), sync_from (set once, reused, save before rebase order), dispatch (conflict hold, rebased event, current emit), push guard (team branch refused), and group_files (directory grouping). Fixture e93 (end-edge) is now `outcome: pass`, not `rebased` (R12: only START edge rebases).
+
+**No tests deleted; removed `merge_in` tests replaced by rebase tests.** E2E tests (5 cases: all upstream, copies+new, real conflict, hash rewrite, hand rebase after conflict) belong to integration-tester's e2e step, not unit.
+
+See design `agile-team/docs/design/s59.md` (test checklist), review round 3 (all defects fixed).
 
 ## s89: OS guard refined to allow stdlib source reads on 3.13 (test infrastructure, no new ADR)
 

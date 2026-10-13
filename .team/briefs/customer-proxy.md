@@ -1,6 +1,21 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s59 done)
+
+## s59: Sprint-start sync rebases; no false conflicts from now on (AC1–AC7 all pass)
+
+Story accepted on all seven ACs. Evidence:
+1. **AC1 (rebase done):** Sync runs `git rebase --empty=drop`, not merge.
+2. **AC2 (hashes rewritten):** state.json story commits and stack entries map to new rebased shas.
+3. **AC3 (conflict safe):** Real conflict aborts, branch unchanged, sync_conflict hand-over lists files grouped by directory.
+4. **AC4 (--force-with-lease):** Push uses `--force-with-lease=<ref>:<expect>` for review branches only, not team branch.
+5. **AC5 (no merge strategies):** No `-s ours` or `-X ours` calls in codebase.
+6. **AC6 (tests on scratch repo):** Captured unit test outputs from 5 e2e test definitions (pending integration-tester implementation of actual tests).
+7. **AC7 (docs & coverage):** SKILL.md, protocol.md, review-stack.md updated. Fixture e93 (end-edge) is `pass` not `rebased`. Coverage 99.43%, ruff clean.
+
+No false conflicts like sprint 18. Boundary is faster and idempotent. Real conflicts are explicit and require hand rebase.
+
+See design `agile-team/docs/design/s59.md` (rules R1–R12), review round 3, ADR-0041. E2E tests (5 cases) will be implemented by integration-tester in the next step.
 
 ## s89: Unit suite green on 3.13 and 3.12 (bug fix, acceptance complete)
 
