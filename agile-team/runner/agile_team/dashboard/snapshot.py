@@ -37,8 +37,10 @@ RUN_FILES = (
     live.HEARTBEAT,
     live.TURNS,
     tool_calls.TOOLS,
+    live.SLEEPS,
 )
 TURN_TAIL_BYTES = 262_144
+SLEEPS_TAIL_BYTES = 262_144
 TOOLS_TAIL_BYTES = 4_194_304
 TURN_WINDOW_S = 600
 TURNS_SHOWN = 500
@@ -492,6 +494,21 @@ def _tools(files: RunFiles) -> list[dict]:
     return tool_groups.groups(rows, files.config.dashboard.collapse_under_s)
 
 
+def _sleep_row(row: dict) -> dict | None:
+    start, end, slept = (step_times.number(row.get(k)) for k in ("from", "to", "slept"))
+    if start is None or end is None or slept is None:
+        return None
+    if start > end or not 0 <= slept <= end - start:
+        return None
+    return {"from": start, "to": end, "slept": slept}
+
+
+def _sleeps(files: RunFiles) -> list[dict]:
+    rows = read_tail(files.config.run_dir / live.SLEEPS, SLEEPS_TAIL_BYTES)
+    valid = [r for r in map(_sleep_row, rows) if r is not None]
+    return sorted(valid, key=lambda r: r["from"])
+
+
 def _heartbeat(files: RunFiles) -> dict[str, Any] | None:
     return live.read_heartbeat(files.config.run_dir)
 
@@ -513,6 +530,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "ledger": _ledger,
     "steps": _steps,
     "tools": _tools,
+    "sleeps": _sleeps,
     "messages": _messages,
     "answers": _answers,
     "thread": _thread,

@@ -296,6 +296,21 @@ def time_split(meter: Meter | None) -> dict[str, float]:
 
 
 SLEEP_GAP_BEATS = 2  # a beat gap over this many beats is sleep (AW2)
+SLEEPS = "sleeps.jsonl"
+
+
+@dataclass(frozen=True)
+class Sleep:
+    """One sleep the heartbeat counted (TL19): the beat gap and the seconds left out."""
+
+    start: float
+    end: float
+    slept: float
+
+    def line(self) -> str:
+        """``{"from", "to", "slept"}`` as one JSON line, each rounded to 1 decimal."""
+        keys = {"from": self.start, "to": self.end, "slept": self.slept}
+        return json.dumps({k: round(v, 1) for k, v in keys.items()})
 
 
 @dataclass(eq=False)
@@ -408,18 +423,26 @@ class Pulse:
 
     def _beat(self) -> None:
         try:
-            self._count_sleep(system.now())
+            self._log_sleep(self._count_sleep(system.now()))
             self.write()
         except Exception as exc:
             self._report(exc)
 
-    def _count_sleep(self, now: float) -> None:
+    def _count_sleep(self, now: float) -> Sleep | None:
         """Add a beat gap over ``SLEEP_GAP_BEATS`` beats, less one beat, to ``slept_s`` (AW2)."""
         with self._lock:
-            gap = now - self._last_beat
+            before, gap = self._last_beat, now - self._last_beat
             self._last_beat = now
-            if gap > SLEEP_GAP_BEATS * self.beat_s:
-                self.slept_s += gap - self.beat_s
+            if gap <= SLEEP_GAP_BEATS * self.beat_s:
+                return None
+            self.slept_s += gap - self.beat_s
+            return Sleep(before, now, gap - self.beat_s)
+
+    def _log_sleep(self, sleep: Sleep | None) -> None:
+        if sleep is None:
+            return
+        with suppress(OSError):  # a lost sleep line must never stop the run
+            system.append_text(self.run_dir / SLEEPS, sleep.line() + "\n")
 
     def clocks(self) -> dict[str, float]:
         """``{"mono": …, "slept": …}`` for a step event (AW1)."""

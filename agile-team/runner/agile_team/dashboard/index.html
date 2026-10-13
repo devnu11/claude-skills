@@ -127,6 +127,13 @@ section[hidden] { display: none; }
 
 /* flow */
 #flow { overflow-x: auto; }
+.tl { background: var(--surface); }
+.tl [data-tl-plot] { overflow-x: auto; }
+.tl svg { display: block; max-width: none; }
+.tl-link { margin-left: 6px; }
+.tl-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+.tl-totals { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0; }
+.tl .seg button[aria-current="true"] { background: var(--surface-2); font-weight: 700; }
 .flow svg { max-width: none; display: block; margin: 0 auto; }
 .flow pre { overflow-x: auto; font-size: 12px; }
 .seg { display: inline-flex; gap: 0; margin-bottom: 8px; }
@@ -477,6 +484,7 @@ function asOf(snap, cursor) {
            manager_due: capped.map((s) => `story ${s.id} ${s.repeated ? "repeated a setback" : "hit the round cap"}`) },
     ledger: snap.ledger.filter(upto),
     steps: stepsAsOf(snap.steps, cursor),
+    sleeps: (snap.sleeps ?? []).filter((s) => s.to <= cursor),
     turns: snap.turns.filter(upto), heartbeat: null, health: HEALTH_DEFAULT,
     messages: snap.messages.filter(upto),
     answers: snap.answers.filter(upto),
@@ -800,11 +808,7 @@ function mermaidConfig(vars) {
 }
 
 function ringRoles(view) {
-  const rank = (n) => {
-    const i = RING_ORDER.findIndex((p) => n === p || n.startsWith(p + "-"));
-    return i < 0 ? RING_ORDER.length : i;
-  };
-  return view.roles.filter((r) => r.used !== false).map((r) => r.name).filter((n) => n !== PO).sort((a, b) => rank(a) - rank(b));
+  return view.roles.filter((r) => r.used !== false).map((r) => r.name).filter((n) => n !== PO).sort((a, b) => roleRank(a) - roleRank(b));
 }
 
 const weight = (n, max) => n ? 1.2 + 4 * Math.sqrt(n / Math.max(1, max)) : 1;
@@ -930,7 +934,7 @@ function activeNodeId(view) {
 
 /** The dimmed class: colour only, never opacity (FL1, FL2). */
 function idleClassDef() {
-  return `classDef idle fill:${cssVar("--surface-2")},stroke:${cssVar("--grid")},color:${cssVar("--muted")}`;
+  return `classDef idle fill:${cssVar("--surface-2")},stroke:${cssVar("--grid")},color:${cssVar("--ink-2")}`;
 }
 
 /** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
@@ -1440,6 +1444,7 @@ function storyDetails(story, view) {
   return `<div class="bdetail">${fileBody(story.id)}
     <div class="bfields">${fields} <span>commits: ${commits}</span></div>
     <div class="bfields">${spendLine(view, story.id)}${links ? " · " + links : ""}</div>
+    ${timelineHtml(view, story)}
     <ul class="bevents">${events.map(eventLine).join("")}</ul>
     ${asks.map((q) => `<div class="q"><div class="q-head">${pill(q.id, "warning")}</div><div class="q-text">${md(q.text)}</div></div>`).join("")}
     ${opinionHtml(story, view)}${threadHtml(story, view)}</div>`;
@@ -1456,7 +1461,7 @@ function groupHtml(title, rows, view, base) {
 
 function backlogHtml(view) {
   const { current, backlog } = backlogGroups(view);
-  return reviewBarHtml(view) + groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0);
+  return reviewBarHtml(view) + groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0) + doneHtml(view);
 }
 
 /** Run `fn`, then give a focused thread textarea its focus and selection back (H18). */
@@ -1472,10 +1477,10 @@ function keepFocus(fn) {
 }
 
 function renderBacklog(view) {
-  keepFocus(() => {
+  keepFocus(() => keepTimelineScroll(() => {
     $("#backlog").innerHTML = backlogHtml(view);
     $("#backlog-note").innerHTML = reorderNote(view);
-  });
+  }));
 }
 
 /** What the tab says about its last request (B16, B20). */
@@ -1491,7 +1496,7 @@ function reorderNote(view) {
 
 function toggleRow(id) {
   if (ui.expanded.has(id)) ui.expanded.delete(id);
-  else { ui.expanded.add(id); if (!("story:" + id in ui.files)) loadFile(id, "story"); }
+  else expandRow(id);
   render();
 }
 
@@ -1596,6 +1601,10 @@ function moveFromHandle(btn) {
 }
 
 document.addEventListener("click", (ev) => {
+  if (onTlClick(ev)) return;
+  const link = ev.target.closest("[data-timeline]");
+  if (link) { ev.preventDefault(); return openTimeline(link.dataset.timeline); }
+  if (ev.target.closest("[data-show-done]")) { ui.showDone = !ui.showDone; return render(); }
   const send = ev.target.closest("[data-thread-send]");
   if (send) return postThread(send.dataset.threadSend);
   const act = ev.target.closest("[data-opinion-act]");
@@ -1608,6 +1617,7 @@ document.addEventListener("click", (ev) => {
   const row = ev.target.closest("[data-expand]");
   if (row) toggleRow(row.dataset.expand);
 });
+document.addEventListener("wheel", onTlWheel, { passive: false });
 document.addEventListener("input", (ev) => {
   const box = ev.target.closest?.("[data-thread-text]");
   if (box) ui.drafts[box.dataset.threadText] = box.value;
@@ -1694,7 +1704,8 @@ function storyCard(view, s, act) {
     s.wait ? pill(`⏸ ${s.wait.reason}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
-    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}</div>
+    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}
+      <a class="tl-link" href="#backlog" data-timeline="${esc(s.id)}">${tlSpan("control", "timeline")}</a></div>
     <div class="title">${esc(s.title)}</div>
     ${s.wait ? waitLine(s.wait) : ""}
     ${flags ? `<div class="row" style="margin-bottom:6px">${flags}</div>` : ""}
@@ -2011,11 +2022,631 @@ function showTip(ev, html) {
 }
 const hideTip = () => { $("#tip").style.display = "none"; };
 
+// ----- story timeline (s100) -----------------------------------------------
+
+const TL = { LABEL_W: 150, PLOT_W: 810, AXIS_H: 24, GROUP_H: 22, WAITS_H: 22, ROW_H: 22, BAR_H: 12,
+             MIN_SPAN_S: 60, FOLLOW_PAD: 0.04, TICK_MIN_PX: 90, CHAR_EM: 0.6, MIN_BAR_PX: 2 };
+const TL_WIDTH = TL.LABEL_W + TL.PLOT_W;
+const TL_TEXT = {
+  label:   { px: 13, ink: "--ink" },   group:  { px: 13, ink: "--ink" },
+  total:   { px: 13, ink: "--ink" },   control: { px: 12, ink: "--ink" },
+  now:     { px: 12, ink: "--ink" },   axis:   { px: 12, ink: "--ink-2" },
+  wait:    { px: 12, ink: "--ink-2" }, legend: { px: 12, ink: "--ink-2" },
+  note:    { px: 13, ink: "--ink-2" },
+};
+const TL_SCOPES = [["story", "Story"], ["sprint", "Sprint"]];
+const TL_PO = "PO", TL_RUNNER = "runner";
+const TL_NOTE = "No recorded activity for this story yet.";
+const VERDICT_KINDS = new Set(["gate", "test-dispute", "escalation"]);
+const OUTCOMES = {
+  pass: { outcome: "passed", fill: "--good" },       bounce: { outcome: "bounced", fill: "--serious" },
+  return: { outcome: "bounced", fill: "--serious" }, dispute: { outcome: "disputed", fill: "--warning" },
+  hold: { outcome: "held", fill: "--axis" },         escalate: { outcome: "escalated", fill: "--critical" },
+  route: { outcome: "routed", fill: "--s1" },
+};
+const STEP_STATES = { running: { outcome: "running", fill: "--accent" },
+                      killed: { outcome: "killed", fill: "--grid" }, ended: { outcome: "ended", fill: "--axis" } };
+const STAGE_STATES = { ok: { outcome: "ok", fill: "--axis" }, failed: { outcome: "failed", fill: "--critical" } };
+const PO_TURN_LOOK = { outcome: "turn", fill: "--s4" };
+const ARROW_VERDICTS = new Set(["bounce", "return"]);
+const HOLD_LABELS = { hold: "held", escalate: "waiting on the Manager" };
+const RULING_KINDS = new Set(["ruling", "fault"]);
+const PO_TOUCH_KINDS = new Set(["story-opened", "step-start", "step-end", "gate", "gate-fix",
+  "test-dispute", "escalation", "ruling", "fault", "priority", "requirement-changed",
+  "tests-passed", "handover", "runner-stage"]);
+const WAIT_KINDS = [
+  ["asleep", "--ink-2", sleepWaits], ["question", "--s2", questionWaits],
+  ["hold", "--warning", holdWaits],   ["other", "--accent", otherWaits],
+];
+const IDLE = { kind: "idle", fill: "--grid", label: "nothing recorded" };
+const WAIT_FILLS = { ...Object.fromEntries(WAIT_KINDS.map(([kind, fill]) => [kind, fill])), idle: IDLE.fill };
+const TOTALS = [["work", "Work"], ["runner", "Runner"], ["po", "PO"], ["waiting", "Waiting"], ["asleep", "Asleep"]];
+const TICK_STEPS = [60, 300, 900, 1800, 3600, 7200, 21600, 43200, 86400, 172800, 604800];
+const WAIT_BREAKDOWN = ["question", "hold", "other", "idle"];
+
+const tlCut = (text, n) => (text.length > n ? text.slice(0, n - 1) + "…" : text);
+const tlFixed = (t) => t.toFixed(1);
+const firstLine = (text) => String(text ?? "").split("\n")[0];
+
+// -- model (pure: no DOM, no clock) --
+
+/** Rank of a role in the pipeline: its `RING_ORDER` prefix, unknown roles last. */
+function roleRank(name) {
+  const i = RING_ORDER.findIndex((p) => name === p || name.startsWith(p + "-"));
+  return i < 0 ? RING_ORDER.length : i;
+}
+
+/** The clock the timeline uses: the snapshot's time in a replay, else the live clock (TL3). */
+function tlNow(view) { return data.cursor !== Infinity ? view.generated_at : clockNow(view); }
+
+/** Intervals sorted and merged. */
+function tlUnion(intervals) {
+  const out = [];
+  for (const [a, b] of [...intervals].sort((x, y) => x[0] - y[0] || x[1] - y[1])) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/** Seconds covered by the intervals. */
+function tlMeasure(intervals) { return sum(tlUnion(intervals), ([a, b]) => b - a); }
+
+/** Each interval cut to `range`; empty ones dropped. */
+function tlClip(intervals, range) {
+  return intervals.map(([a, b]) => [Math.max(a, range.from), Math.min(b, range.to)]).filter(([a, b]) => b > a);
+}
+
+/** The parts of `range` the intervals leave uncovered (TL10). */
+function tlComplement(intervals, range) {
+  const gaps = [];
+  let at = range.from;
+  for (const [a, b] of tlUnion(tlClip(intervals, range))) {
+    if (a > at) gaps.push([at, a]);
+    at = b;
+  }
+  if (range.to > at) gaps.push([at, range.to]);
+  return gaps;
+}
+
+const storySteps = (ctx, id) => ctx.view.steps.filter((s) => s.story === id && s.role !== PO).sort((a, b) => a.at - b.at);
+const nextStepOf = (ctx, step) => storySteps(ctx, step.story).find((s) => s.at > step.at);
+const storyEvents = (ctx, id) => ctx.view.events.filter((e) => e.story === id);
+
+/** `{from, to, running}` for a story, or null with nothing recorded (TL2). */
+function storyRange(ctx, story) {
+  const mine = storyEvents(ctx, story.id), steps = storySteps(ctx, story.id);
+  const times = [...mine.map((e) => e.at), ...steps.map((s) => s.at)];
+  if (!times.length) return null;
+  const from = mine.find((e) => e.kind === "story-opened")?.at ?? Math.min(...times);
+  const running = story.status !== "done";
+  const done = mine.filter((e) => e.kind === "gate" && e.data.story_status === "done").pop();
+  const last = done?.at ?? mine[mine.length - 1]?.at ?? Math.max(...times);
+  return { from, to: Math.max(from, running ? ctx.now : last), running };
+}
+
+/** The first verdict event after a step ended and before the story's next step (TL5). */
+function verdictOf(ctx, step) {
+  if (step.story == null || step.ended_at == null) return undefined;
+  const next = nextStepOf(ctx, step);
+  return storyEvents(ctx, step.story).find((e) => VERDICT_KINDS.has(e.kind) && e.at >= step.ended_at && (!next || e.at < next.at));
+}
+
+function stepState(step) {
+  return STEP_STATES[step.ended_at == null ? "running" : step.seconds == null ? "killed" : "ended"];
+}
+
+function stepTitle(ctx, step, verdict, outcome) {
+  const reason = verdict?.data?.reason ? ` — ${firstLine(verdict.data.reason)}` : "";
+  const back = ARROW_VERDICTS.has(verdict?.data?.verdict) && !nextStepOf(ctx, step) ? ` · back to ${verdict.data.now_at}` : "";
+  const took = fmt.span((step.ended_at ?? ctx.now) - step.at);
+  return `${step.role}${step.story ? " · " + step.story : ""}: ${outcome} · ${took}${reason}${back}`;
+}
+
+/** One bar for a step, coloured by its outcome (TL5). */
+function stepBar(ctx, step) {
+  const verdict = verdictOf(ctx, step);
+  const look = OUTCOMES[verdict?.data?.verdict] ?? stepState(step);
+  return { kind: "step", row: step.role, from: step.at, to: step.ended_at ?? ctx.now, outcome: look.outcome,
+           fill: look.fill, step, verdict, title: stepTitle(ctx, step, verdict, look.outcome) };
+}
+
+/** Bars for a story's steps (TL5). */
+function stepBars(ctx, id) { return storySteps(ctx, id).map((s) => stepBar(ctx, s)); }
+
+function stageBar(e) {
+  const d = e.data, look = STAGE_STATES[(d.code ?? 0) === 0 && d.raised == null ? "ok" : "failed"];
+  const during = d.when === "during" ? " · during the step; counted in work" : "";
+  return { kind: "stage", row: TL_RUNNER, from: d.started_at, to: e.at, outcome: look.outcome, fill: look.fill, event: e,
+           title: `${d.stage}: ${look.outcome} · ${fmt.span(d.seconds ?? e.at - d.started_at)}${during}` };
+}
+
+/** Bars for a story's runner stages (TL6). */
+function stageBars(ctx, id) { return storyEvents(ctx, id).filter((e) => e.kind === "runner-stage").map(stageBar); }
+
+/** Every PO turn as `{from, to, event}` (TL7). */
+function poTurns(view) {
+  return view.events.filter((e) => e.kind === "po-turn").map((e) => ({ from: e.data.opened_at, to: e.at, event: e }));
+}
+
+/** Whether the PO turn touched story `id` (TL7). */
+function touches(ctx, turn, id) {
+  const messages = new Map(ctx.view.messages.map((m) => [m.id, m]));
+  const names = (e) => e.kind === "message" && list(messages.get(e.data?.message)?.stories).includes(id);
+  return ctx.view.events.some((e) => e.at >= turn.from && e.at <= turn.to
+    && ((e.story === id && PO_TOUCH_KINDS.has(e.kind)) || names(e)));
+}
+
+/** Bars for the PO turns that touched the story (TL7). */
+function poBars(ctx, id) {
+  return poTurns(ctx.view).filter((t) => touches(ctx, t, id)).map((t) => ({
+    kind: "po", row: TL_PO, from: t.from, to: t.to, ...PO_TURN_LOOK, event: t.event,
+    title: `PO turn · ${fmt.span(t.to - t.from)}`,
+  }));
+}
+
+/** Diamonds for the Manager's rulings and faults (TL9). */
+function rulingMarks(ctx, id) {
+  return storyEvents(ctx, id).filter((e) => RULING_KINDS.has(e.kind)).map((e) => ({
+    kind: e.kind, row: e.role ?? "manager", at: e.at,
+    title: `${e.kind}: ${e.data[e.kind]} — ${e.data.reason}`,
+  }));
+}
+
+/** Arrows from a bounced step's verdict to the story's next step (TL8). */
+function bounceArrows(ctx, id) {
+  return stepBars(ctx, id).filter((b) => ARROW_VERDICTS.has(b.verdict?.data?.verdict)).flatMap((b) => {
+    const next = nextStepOf(ctx, b.step);
+    return next ? [{ fromRow: b.row, toRow: next.role, from: b.verdict.at, to: next.at }] : [];
+  });
+}
+
+/** Row names: roles in pipeline order, then PO and runner (TL4). */
+function groupRows(bars, marks) {
+  const roles = new Set([...bars.filter((b) => b.kind === "step").map((b) => b.row), ...marks.map((m) => m.row)]);
+  const sorted = [...roles].sort((a, b) => roleRank(a) - roleRank(b) || a.localeCompare(b));
+  return [...sorted, TL_PO, TL_RUNNER];
+}
+
+/** Wait intervals for sleep (TL11). */
+function sleepWaits(ctx) {
+  return list(ctx.view.sleeps).map((s) => ({ from: s.to - s.slept, to: s.to, label: "asleep" }));
+}
+
+/** Wait intervals for questions put to the human (TL11). */
+function questionWaits(ctx, story) {
+  return ctx.view.messages.filter((m) => m.kind === "question" && list(m.stories).includes(story.id)).map((m) => ({
+    from: m.at, to: ctx.view.answers.find((a) => a.id === m.id)?.at ?? ctx.now, label: `question ${m.id} to you`,
+  }));
+}
+
+/** Wait intervals for holds and escalations (TL11). */
+function holdWaits(ctx, story) {
+  return storyEvents(ctx, story.id).filter((e) => VERDICT_KINDS.has(e.kind) && e.data.verdict in HOLD_LABELS).map((e) => ({
+    from: e.at, to: storySteps(ctx, story.id).find((s) => s.at > e.at)?.at ?? ctx.now,
+    label: `${HOLD_LABELS[e.data.verdict]}: ${tlCut(firstLine(e.data.reason), 60)}`,
+  }));
+}
+
+/** Wait intervals while other work ran, each with its `key` (TL11). */
+function otherWaits(ctx, story) {
+  const id = story.id, end = (s) => s.ended_at ?? ctx.now;
+  const steps = ctx.view.steps.filter((s) => s.story !== id).map((s) => ({ from: s.at, to: end(s), key: s.story ?? s.role }));
+  const stages = ctx.view.events.filter((e) => e.kind === "runner-stage" && e.story !== id)
+    .map((e) => ({ from: e.data.started_at, to: e.at, key: e.story ?? TL_RUNNER }));
+  const turns = poTurns(ctx.view).filter((t) => !touches(ctx, t, id)).map((t) => ({ from: t.from, to: t.to, key: TL_PO }));
+  return [...steps, ...stages, ...turns];
+}
+
+function otherLabel(story, keys) {
+  const name = (k) => (list(story.depends_on).includes(k) ? `${k} (dependency)` : k);
+  const extra = keys.length > 3 ? ` +${keys.length - 3}` : "";
+  return `other work: ${keys.slice(0, 3).map(name).join(", ")}${extra}`;
+}
+
+/** The sorted, distinct cut points inside a gap. */
+function cutPoints(gap, items) {
+  const inside = items.flatMap((i) => [i.from, i.to]).filter((t) => t > gap[0] && t < gap[1]);
+  return [...new Set([gap[0], ...inside, gap[1]])].sort((a, b) => a - b);
+}
+
+/** The first wait kind covering `[a, b]`'s midpoint, else idle (TL10). */
+function pieceOf([a, b], waits, story) {
+  const mid = (a + b) / 2;
+  for (const w of waits) {
+    const hits = w.items.filter((i) => i.from <= mid && mid < i.to);
+    if (!hits.length) continue;
+    const label = w.kind === "other" ? otherLabel(story, [...new Set(hits.map((h) => h.key))]) : hits[0].label;
+    return { from: a, to: b, kind: w.kind, label };
+  }
+  return { from: a, to: b, kind: IDLE.kind, label: IDLE.label };
+}
+
+function mergePieces(pieces) {
+  const out = [];
+  for (const p of pieces) {
+    const last = out[out.length - 1];
+    if (last && last.kind === p.kind && last.label === p.label && last.to === p.from) last.to = p.to;
+    else out.push({ ...p });
+  }
+  return out;
+}
+
+/** The explained gaps between a group's bars (TL10). */
+function gapSegments(ctx, story, group) {
+  const waits = WAIT_KINDS.map(([kind, , find]) => ({ kind, items: find(ctx, story) }));
+  const all = waits.flatMap((w) => w.items);
+  const gaps = tlComplement(group.bars.map((b) => [b.from, b.to]), group.range);
+  const pieces = gaps.flatMap((gap) => {
+    const cuts = cutPoints(gap, all);
+    return cuts.slice(1).map((t, i) => [cuts[i], t]);
+  });
+  return mergePieces(pieces.map((p) => pieceOf(p, waits, story)));
+}
+
+/** A story's group: rows, bars, marks, arrows, waits and sleeps; null with no activity (TL4-TL12). */
+function storyGroup(ctx, story) {
+  const range = storyRange(ctx, story);
+  if (!range) return null;
+  const bars = [...stepBars(ctx, story.id), ...stageBars(ctx, story.id), ...poBars(ctx, story.id)];
+  const marks = rulingMarks(ctx, story.id);
+  const group = { id: story.id, story, title: story.title, range, rows: groupRows(bars, marks), bars, marks,
+                  arrows: bounceArrows(ctx, story.id), segments: [], sleeps: tlClip(sleepWaits(ctx).map((w) => [w.from, w.to]), range) };
+  return { ...group, segments: gapSegments(ctx, story, group) };
+}
+
+/** The `Sprint N` group: runner stages and steps that belong to no story (TL14). */
+function sprintGroup(ctx, n) {
+  const start = ctx.view.events.find((e) => e.kind === "sprint-start" && e.data.sprint === n);
+  if (!start) return null;
+  const mine = inSprint(ctx.view, n);
+  const steps = ctx.view.steps.filter((s) => s.story == null && s.role !== PO && mine(s));
+  const stages = ctx.view.events.filter((e) => e.kind === "runner-stage" && e.story == null && mine(e));
+  const bars = [...steps.map((s) => stepBar(ctx, s)), ...stages.map(stageBar)];
+  const to = Math.max(start.at, ...bars.map((b) => b.to));
+  return { id: `sprint-${n}`, story: null, title: `Sprint ${n}`, range: { from: start.at, to, running: false },
+           rows: groupRows(bars, []).filter((r) => r !== TL_PO), bars, marks: [], arrows: [], segments: [], sleeps: [] };
+}
+
+const stepSeconds = (ctx, step) => (step.ended_at == null ? Math.max(0, ctx.now - step.at - (step.slept ?? 0)) : step.seconds ?? 0);
+const turnSeconds = (bar) => (bar.event.data.tool_s ?? 0) + (bar.event.data.model_s ?? 0);
+const spanOf = (pieces) => sum(pieces, (p) => p.to - p.from);
+
+/** Totals for one group (TL13). */
+function groupTotals(ctx, group) {
+  const bars = (kind) => group.bars.filter((b) => b.kind === kind);
+  const counted = bars("stage").filter((b) => b.event.data.when !== "during");
+  const waits = Object.fromEntries(WAIT_BREAKDOWN.map((k) => [k, spanOf(group.segments.filter((p) => p.kind === k))]));
+  return {
+    work: sum(bars("step"), (b) => stepSeconds(ctx, b.step)), runner: sum(counted, (b) => b.event.data.seconds ?? 0),
+    po: sum(bars("po"), turnSeconds), waiting: sum(Object.values(waits)), asleep: tlMeasure(group.sleeps), waits,
+  };
+}
+
+/** The earliest start to the latest end of the groups. */
+function modelRange(groups) {
+  if (!groups.length) return null;
+  return { from: Math.min(...groups.map((g) => g.range.from)), to: Math.max(...groups.map((g) => g.range.to)),
+           running: groups.some((g) => g.range.running) };
+}
+
+/** Totals over the groups: PO turns once each, sleep once over the whole range (TL13, TL14). */
+function modelTotals(ctx, groups) {
+  const parts = groups.map((g) => groupTotals(ctx, g));
+  const turns = new Map(groups.flatMap((g) => g.bars).filter((b) => b.kind === "po").map((b) => [b.event.id, b]));
+  const waits = Object.fromEntries(WAIT_BREAKDOWN.map((k) => [k, sum(parts, (p) => p.waits[k])]));
+  const sleeps = tlClip(sleepWaits(ctx).map((w) => [w.from, w.to]), modelRange(groups));
+  return { work: sum(parts, (p) => p.work), runner: sum(parts, (p) => p.runner), po: sum([...turns.values()], turnSeconds),
+           waiting: sum(Object.values(waits)), asleep: tlMeasure(sleeps), waits, stories: groups.filter((g) => g.story).length };
+}
+
+/** What the timeline draws for `story` in `scope` (TL14). */
+function timelineModel(ctx, story, scope) {
+  const n = scope === "sprint" ? story.sprint : null;
+  const members = n == null ? [story] : ctx.view.stories.filter((s) => s.sprint === n);
+  const groups = [...(n == null ? [] : [sprintGroup(ctx, n)]), ...members.map((s) => storyGroup(ctx, s))].filter(Boolean);
+  if (!groups.length) return { scope, range: null, groups, totals: null };
+  return { scope, range: modelRange(groups), groups, totals: modelTotals(ctx, groups) };
+}
+
+// -- view state (pure) --
+
+/** The story's timeline state, created on first use (TL15). */
+function tlState(id) { return (ui.tl[id] ??= { scope: "story", span: null, end: null }); }
+
+const fullSpan = (range) => Math.max(TL.MIN_SPAN_S, range.to - range.from);
+const spanOfState = (state, range) => Math.max(TL.MIN_SPAN_S, state.span ?? fullSpan(range));
+const rightEdge = (range, span) => (range.running ? range.to + span * TL.FOLLOW_PAD : range.to);
+
+/** The visible `{from, to}` (TL15). */
+function tlWindow(range, state) {
+  const span = spanOfState(state, range);
+  const end = state.end ?? rightEdge(range, span);
+  return { from: end - span, to: end };
+}
+
+/** The state after zooming `in`, `out` or `fit` (TL15). */
+function zoomed(state, range, dir) {
+  if (dir === "fit") return { ...state, span: null, end: null };
+  const span = spanOfState(state, range);
+  const next = dir === "in" ? Math.max(TL.MIN_SPAN_S, span / 2) : span * 2;
+  return { ...state, span: next >= fullSpan(range) ? null : next };
+}
+
+/** The state after moving the window by `seconds` (TL15). */
+function pannedBy(state, range, seconds) {
+  const span = spanOfState(state, range), right = rightEdge(range, span);
+  const end = Math.max((state.end ?? right) + seconds, range.from + span);
+  return { ...state, end: end >= right ? null : end };
+}
+
+/** Axis ticks `[{t, label}]`: the first step in `TICK_STEPS` that keeps them `TICK_MIN_PX` apart. */
+function tlTicks(win) {
+  const width = win.to - win.from;
+  const step = TICK_STEPS.find((s) => (s / width) * TL.PLOT_W >= TL.TICK_MIN_PX) ?? TICK_STEPS[TICK_STEPS.length - 1];
+  const ticks = [];
+  for (let t = Math.ceil(win.from / step) * step; t <= win.to; t += step) ticks.push(t);
+  return ticks.map((t, i) => ({ t, label: tickLabel(t, i ? ticks[i - 1] : t) }));
+}
+
+function tickLabel(t, before) {
+  const d = new Date(t * 1000), clock = fmt.time(t);
+  return d.toDateString() === new Date(before * 1000).toDateString() ? clock : `${d.toLocaleDateString([], { weekday: "short" })} ${clock}`;
+}
+
+// -- text (TR1) --
+
+const tlInk = (kind) => `font-size:${TL_TEXT[kind].px}px`;
+const tlSvgStyle = (kind) => `${tlInk(kind)};fill:var(${TL_TEXT[kind].ink})`;
+const tlHtmlStyle = (kind) => `${tlInk(kind)};color:var(${TL_TEXT[kind].ink})`;
+
+/** SVG text of `kind`; size and colour come from `TL_TEXT` (TR1). */
+function tlText(kind, body, attrs = "") {
+  return `<text data-text="${kind}" style="${tlSvgStyle(kind)}" ${attrs}>${esc(body)}</text>`;
+}
+
+/** HTML span of `kind` (TR1). */
+function tlSpan(kind, body, attrs = "") {
+  return `<span data-text="${kind}" style="${tlHtmlStyle(kind)}" ${attrs}>${esc(body)}</span>`;
+}
+
+/** HTML button of `kind` (TR1). */
+function tlButton(kind, attrs, body) {
+  return `<button data-text="${kind}" style="${tlHtmlStyle(kind)}" ${attrs}>${esc(body)}</button>`;
+}
+
+// -- drawing --
+
+const tlClamp = (x) => Math.min(TL_WIDTH, Math.max(TL.LABEL_W, x));
+const tlSeen = (win, from, to) => to > win.from && from < win.to;
+
+function groupLayout(group, top) {
+  const waitsTop = top + TL.GROUP_H, rowsTop = waitsTop + (group.story ? TL.WAITS_H : 0);
+  const rowY = (row) => rowsTop + group.rows.indexOf(row) * TL.ROW_H + TL.ROW_H / 2;
+  return { top, waitsTop, rowsTop, rowY, bottom: rowsTop + group.rows.length * TL.ROW_H };
+}
+
+function barSvg(bar, lay, plot) {
+  if (!tlSeen(plot.win, bar.from, bar.to)) return "";
+  const x1 = tlClamp(plot.x(bar.from)), x2 = tlClamp(plot.x(bar.to));
+  return `<rect data-bar="${bar.kind}" data-row="${esc(bar.row)}" data-outcome="${bar.outcome}" data-from="${tlFixed(bar.from)}" data-to="${tlFixed(bar.to)}"`
+    + ` x="${x1}" y="${lay.rowY(bar.row) - TL.BAR_H / 2}" width="${Math.max(TL.MIN_BAR_PX, x2 - x1)}" height="${TL.BAR_H}" rx="2" fill="var(${bar.fill})"><title>${esc(bar.title)}</title></rect>`;
+}
+
+function markSvg(mark, lay, plot) {
+  if (!tlSeen(plot.win, mark.at, mark.at)) return "";
+  const x = plot.x(mark.at), y = lay.rowY(mark.row), r = TL.BAR_H / 2 + 1;
+  const fill = mark.kind === "fault" ? "--critical" : "--accent";
+  return `<path data-mark="${mark.kind}" data-row="${esc(mark.row)}" d="M${x} ${y - r} L${x + r} ${y} L${x} ${y + r} L${x - r} ${y} Z" fill="var(${fill})"><title>${esc(mark.title)}</title></path>`;
+}
+
+function arrowSvg(arrow, lay, plot, group) {
+  const [x1, x2] = [plot.x(arrow.from), plot.x(arrow.to)];
+  const [y1, y2] = [lay.rowY(arrow.fromRow), lay.rowY(arrow.toRow)];
+  const lift = y1 === y2 ? 16 : 0;
+  const d = `M${x1} ${y1} C${x1} ${y1 - lift} ${x2} ${y2 - lift} ${x2} ${y2}`;
+  return `<path data-arrow="bounce" data-from-row="${esc(arrow.fromRow)}" data-to-row="${esc(arrow.toRow)}" d="${d}" fill="none" stroke="var(--serious)" stroke-width="1.25" marker-end="url(#tl-${esc(group.id)}-arrow)"/>`;
+}
+
+function segmentSvg(seg, lay, plot) {
+  if (!tlSeen(plot.win, seg.from, seg.to)) return "";
+  const x1 = tlClamp(plot.x(seg.from)), x2 = tlClamp(plot.x(seg.to)), fill = WAIT_FILLS[seg.kind];
+  const strip = lay.waitsTop + TL.WAITS_H - 4, px = TL_TEXT.wait.px;
+  const fits = x2 - x1 >= seg.label.length * TL.CHAR_EM * px + 6;
+  const shade = `<rect x="${x1}" y="${lay.rowsTop}" width="${x2 - x1}" height="${lay.bottom - lay.rowsTop}" fill="var(${fill})" fill-opacity=".10"/>`;
+  const title = `${seg.kind}: ${seg.label} · ${fmt.span(seg.to - seg.from)}`;
+  return shade + `<rect data-wait="${seg.kind}" data-from="${tlFixed(seg.from)}" data-to="${tlFixed(seg.to)}" x="${x1}" y="${strip}" width="${x2 - x1}" height="4" fill="var(${fill})"><title>${esc(title)}</title></rect>`
+    + (fits ? tlText("wait", seg.label, `x="${x1 + 3}" y="${strip - 4}"`) : "");
+}
+
+function sleepSvg([from, to], lay, plot, group) {
+  if (!tlSeen(plot.win, from, to)) return "";
+  const x1 = tlClamp(plot.x(from)), x2 = tlClamp(plot.x(to));
+  return `<rect data-sleep data-from="${tlFixed(from)}" data-to="${tlFixed(to)}" x="${x1}" y="${lay.rowsTop}" width="${x2 - x1}" height="${lay.bottom - lay.rowsTop}" fill="url(#tl-${esc(group.id)}-sleep)"/>`;
+}
+
+function groupDefs(group) {
+  const id = esc(group.id);
+  return `<pattern id="tl-${id}-sleep" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="var(--ink-2)" fill-opacity=".25"/></pattern>`
+    + `<marker id="tl-${id}-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--serious)"/></marker>`;
+}
+
+function rowLabelsSvg(group, lay) {
+  const labels = group.rows.map((row) => tlText("label", tlCut(row, 20), `x="4" y="${lay.rowY(row) + 4}" data-row-label="${esc(row)}"`));
+  const waits = group.story ? [tlText("label", "waits", `x="4" y="${lay.waitsTop + 15}" data-row-label="waits"`)] : [];
+  return [...waits, ...labels].join("");
+}
+
+function groupSvg(group, top, plot) {
+  const lay = groupLayout(group, top);
+  const head = tlText("group", tlCut(`${group.story ? group.id + " · " : ""}${group.title}`, 80), `x="4" y="${top + 15}"`);
+  const body = [
+    ...group.segments.map((s) => segmentSvg(s, lay, plot)), ...group.sleeps.map((s) => sleepSvg(s, lay, plot, group)),
+    ...group.bars.map((b) => barSvg(b, lay, plot)), ...group.marks.map((m) => markSvg(m, lay, plot)),
+    ...group.arrows.map((a) => arrowSvg(a, lay, plot, group)),
+  ];
+  return { svg: `<g data-group="${esc(group.id)}"><defs>${groupDefs(group)}</defs>${head}${rowLabelsSvg(group, lay)}${body.join("")}</g>`, bottom: lay.bottom };
+}
+
+function axisSvg(win, height) {
+  const x = (t) => TL.LABEL_W + ((t - win.from) / (win.to - win.from)) * TL.PLOT_W;
+  return tlTicks(win).map(({ t, label }) => `<line x1="${x(t)}" x2="${x(t)}" y1="${TL.AXIS_H}" y2="${height}" stroke="var(--grid)"/>`
+    + tlText("axis", label, `x="${x(t)}" y="16" text-anchor="middle"`)).join("");
+}
+
+function nowSvg(range, win, now) {
+  if (!range.running || now < win.from || now > win.to) return "";
+  const x = TL.LABEL_W + ((now - win.from) / (win.to - win.from)) * TL.PLOT_W;
+  return `<line data-now x1="${x}" x2="${x}" y1="${TL.AXIS_H - 4}" y2="__H__" stroke="var(--accent)" stroke-width="1.5"/>` + tlText("now", "now", `x="${x + 3}" y="${TL.AXIS_H - 8}"`);
+}
+
+/** The SVG for a model in a window, drawn at scale 1 (TR2). */
+function timelineSvg(model, win, now) {
+  const plot = { win, x: (t) => TL.LABEL_W + ((t - win.from) / (win.to - win.from)) * TL.PLOT_W };
+  let top = TL.AXIS_H;
+  const groups = model.groups.map((g) => {
+    const drawn = groupSvg(g, top, plot);
+    top = drawn.bottom + 6;
+    return drawn.svg;
+  });
+  const h = top;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${TL_WIDTH}" height="${h}" viewBox="0 0 ${TL_WIDTH} ${h}">`
+    + `<rect width="${TL_WIDTH}" height="${h}" fill="var(--surface)"/>${axisSvg(win, h)}${groups.join("")}${nowSvg(model.range, win, now).replace("__H__", h)}</svg>`;
+}
+
+/** The totals line (TL13). */
+function totalsHtml(totals) {
+  const detail = WAIT_BREAKDOWN.map((k) => `${k} ${fmt.span(totals.waits[k])}`).join(" · ");
+  const many = totals.stories > 1 ? " (story-time summed over the stories)" : "";
+  const title = (key) => (key === "waiting" ? ` title="${esc(detail + many)}"` : "");
+  return `<div class="tl-totals">${TOTALS.map(([key, label]) => tlSpan("total", `${label} ${fmt.span(totals[key])}`, `data-total="${key}"${title(key)}`)).join("")}</div>`;
+}
+
+/** The colour key: outcomes, then wait kinds. */
+function legendHtml() {
+  const looks = [...new Map([...Object.values(OUTCOMES), ...Object.values(STEP_STATES), ...Object.values(STAGE_STATES), PO_TURN_LOOK]
+    .map((l) => [l.outcome, l.fill])), ...Object.entries(WAIT_FILLS).map(([k, f]) => [`waiting: ${k}`, f])];
+  const swatch = ([name, fill]) => `<span><i style="display:inline-block;width:10px;height:10px;background:var(${fill})"></i>${tlSpan("legend", name)}</span>`;
+  return `<div class="legend">${looks.map(swatch).join("")}</div>`;
+}
+
+function toolbarHtml(story, state) {
+  const scopes = TL_SCOPES.map(([id, label]) => {
+    const off = id === "sprint" && story.sprint == null ? ` disabled title="not in a sprint"` : "";
+    return tlButton("control", `data-tl-scope="${id}" aria-current="${state.scope === id}"${off}`, label);
+  }).join("");
+  const zoom = [["out", "−"], ["in", "+"], ["fit", "fit"]].map(([d, label]) => tlButton("control", `data-tl-zoom="${d}"`, label)).join("");
+  const pan = tlButton("control", `data-tl-pan="-1"`, "◀") + tlButton("control", `data-tl-pan="1"`, "▶") + tlButton("control", `data-tl-follow`, "now");
+  return `<div class="tl-bar"><span class="seg">${scopes}</span><span class="seg">${zoom}</span><span class="seg">${pan}</span></div>`;
+}
+
+/** The Timeline section of an expanded Backlog row (TL1). */
+function timelineHtml(view, story) {
+  const ctx = { view, now: tlNow(view) }, state = tlState(story.id);
+  const model = timelineModel(ctx, story, state.scope);
+  const head = `<div>${tlSpan("group", "Timeline")}</div>`;
+  if (!model.range) return `<section class="tl" data-tl-story="${esc(story.id)}">${head}<div>${tlSpan("note", TL_NOTE)}</div></section>`;
+  const svg = timelineSvg(model, tlWindow(model.range, state), ctx.now);
+  return `<section class="tl" data-tl-story="${esc(story.id)}">${head}${toolbarHtml(story, state)}${totalsHtml(model.totals)}<div data-tl-plot>${svg}</div>${legendHtml()}</section>`;
+}
+
+// -- behaviour --
+
+/** Switch a story's timeline between Story and Sprint scope (TL14). */
+function setTlScope(id, scope) {
+  if (!TL_SCOPES.some(([s]) => s === scope)) return;
+  ui.tl[id] = { ...tlState(id), scope };
+  render();
+}
+
+/** The model range and state of story `id`'s open timeline, or null. */
+function tlTarget(id) {
+  const view = data.view, story = view?.stories.find((s) => s.id === id);
+  if (!story) return null;
+  const state = tlState(id), range = timelineModel({ view, now: tlNow(view) }, story, state.scope).range;
+  return range ? { state, range } : null;
+}
+
+function tlChange(id, change) {
+  const target = tlTarget(id);
+  if (!target) return;
+  ui.tl[id] = change(target.state, target.range);
+  render();
+}
+
+const TL_CLICKS = {
+  tlZoom: (value) => (state, range) => zoomed(state, range, value),
+  tlPan: (value) => (state, range) => pannedBy(state, range, (Number(value) * spanOfState(state, range)) / 2),
+  tlFollow: () => (state) => ({ ...state, end: null }),
+};
+
+/** Handle a click on a timeline control; true when it was one (TL14, TL15). */
+function onTlClick(ev) {
+  const btn = ev.target.closest("[data-tl-scope],[data-tl-zoom],[data-tl-pan],[data-tl-follow]");
+  if (!btn) return false;
+  if (btn.disabled) return true;
+  const id = btn.closest("[data-tl-story]").dataset.tlStory;
+  if (btn.dataset.tlScope) setTlScope(id, btn.dataset.tlScope);
+  else {
+    const key = Object.keys(TL_CLICKS).find((k) => k in btn.dataset);
+    tlChange(id, TL_CLICKS[key](btn.dataset[key]));
+  }
+  return true;
+}
+
+/** Wheel over a plot: ctrl or meta zooms, sideways or shift pans, plain vertical scrolls the page (TL15). */
+function onTlWheel(ev) {
+  const id = ev.target?.closest?.("[data-tl-plot]")?.closest("[data-tl-story]")?.dataset.tlStory;
+  const sideways = ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+  if (!id || !(ev.ctrlKey || ev.metaKey || sideways)) return;
+  ev.preventDefault();
+  if (ev.ctrlKey || ev.metaKey) return tlChange(id, (state, range) => zoomed(state, range, ev.deltaY < 0 ? "in" : "out"));
+  const delta = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+  tlChange(id, (state, range) => pannedBy(state, range, (delta / TL.PLOT_W) * spanOfState(state, range)));
+}
+
+/** Stories that are done, in snapshot order (TL17). */
+function doneStories(view) { return view.stories.filter((s) => s.status === "done"); }
+
+/** The folded Done group, or its rows when opened (TL17). */
+function doneHtml(view) {
+  const done = doneStories(view);
+  if (!done.length) return "";
+  const label = ui.showDone ? "hide done stories" : "show done stories";
+  const toggle = `<button class="ctl" data-show-done>${label}</button>`;
+  if (ui.showDone) return groupHtml("Done", done, view, null) + toggle;
+  return `<h3>Done<span>${done.length}</span></h3>${toggle}`;
+}
+
+/** Expand a story's row, loading its file as `toggleRow` does. */
+function expandRow(id) {
+  ui.expanded.add(id);
+  if (!("story:" + id in ui.files)) loadFile(id, "story");
+}
+
+/** Open a story's timeline from the Board (TL18). */
+function openTimeline(id) {
+  expandRow(id);
+  if (data.view?.stories.find((s) => s.id === id)?.status === "done") ui.showDone = true;
+  showTab("backlog");
+  document.querySelector(`[data-expand="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "start" });
+}
+
+/** Run `fn`, then put each plot's sideways scroll back (TL16). */
+function keepTimelineScroll(fn) {
+  const key = (plot) => plot.closest("[data-tl-story]").dataset.tlStory;
+  const kept = new Map([...document.querySelectorAll("[data-tl-plot]")].map((p) => [key(p), p.scrollLeft]));
+  fn();
+  for (const plot of document.querySelectorAll("[data-tl-plot]")) plot.scrollLeft = kept.get(key(plot)) ?? 0;
+}
+
 const ui = {
   tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens",
   scope: "story", focus: "", details: false,
   expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
   drafts: {}, to: {}, sending: new Set(), threadNote: {},
+  tl: {}, showDone: false,
   suggested: false, acting: new Set(), actNote: {}, asking: false, reviewNote: "",
 };
 const RENDER = { flow: renderFlowTab, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };

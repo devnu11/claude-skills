@@ -603,6 +603,26 @@
    }
   },
   {
+   "id": "rs3",
+   "at": 1791451460.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": null,
+   "data": {
+    "stage": "boundary.sync",
+    "when": "before",
+    "attach": "boundary",
+    "step": null,
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791451400.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 60.0
+   }
+  },
+  {
    "id": "e10",
    "at": 1791451776.5,
    "kind": "step-start",
@@ -1366,6 +1386,26 @@
    }
   },
   {
+   "id": "rs1",
+   "at": 1791462200.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s3",
+   "data": {
+    "stage": "gate.tests+coverage",
+    "when": "after",
+    "attach": "step",
+    "step": "implement",
+    "detail": null,
+    "code": 1,
+    "raised": null,
+    "started_at": 1791462100.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 100.0
+   }
+  },
+  {
    "id": "e56",
    "at": 1791462236.7,
    "kind": "gate",
@@ -1378,6 +1418,26 @@
     "rounds": 1,
     "story_status": "active",
     "reason": "coverage 88.1% is below 95%"
+   }
+  },
+  {
+   "id": "rs2",
+   "at": 1791462310.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s2",
+   "data": {
+    "stage": "checkout.guard",
+    "when": "before",
+    "attach": "step",
+    "step": "unit-tester",
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791462300.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 10.0
    }
   },
   {
@@ -1927,22 +1987,6 @@
    }
   },
   {
-   "id": "e87b",
-   "at": 1791472300.0,
-   "kind": "step-end",
-   "role": "code-reviewer",
-   "story": "s2",
-   "data": {
-    "status": "done",
-    "summary": "Re-review clean.",
-    "turns": 3,
-    "next_role": null,
-    "open_questions": [],
-    "mono": 472180.0,
-    "slept": 120.0
-   }
-  },
-  {
    "id": "e88",
    "at": 1791471900.0,
    "kind": "story-opened",
@@ -2172,6 +2216,22 @@
     "warnings": [
      "s2 is above s5, which it depends on"
     ]
+   }
+  },
+  {
+   "id": "e87b",
+   "at": 1791472300.0,
+   "kind": "step-end",
+   "role": "code-reviewer",
+   "story": "s2",
+   "data": {
+    "status": "done",
+    "summary": "Re-review clean.",
+    "turns": 3,
+    "next_role": null,
+    "open_questions": [],
+    "mono": 472180.0,
+    "slept": 120.0
    }
   },
   {
@@ -3091,6 +3151,18 @@
     "seconds": 0.0,
     "tools": {}
    }
+  }
+ ],
+ "sleeps": [
+  {
+   "from": 1791452400.0,
+   "to": 1791452540.0,
+   "slept": 120.0
+  },
+  {
+   "from": 1791460700.0,
+   "to": 1791461400.0,
+   "slept": 680.0
   }
  ],
  "messages": [
