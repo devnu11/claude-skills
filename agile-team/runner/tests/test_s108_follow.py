@@ -54,7 +54,7 @@ def at_ci(env: Env, *heads: str, merged: int = 1, push: bd.Permission = bd.Permi
 
 def script_fast_path(fake: FakeSystem, *new: str) -> None:
     """Rebase gives ``new`` heads in turn; each has the same tree as before."""
-    fake.reply(("git", "rev-parse", "HEAD"), lines(*new))
+    fake.reply(("git", "rev-parse", "HEAD"), *[lines(sha) for sha in new])
     for sha in new:
         same_tree(fake, sha, "")
     fake.reply(("rev-list", "--count"), Done(0, "2\n"))
@@ -391,13 +391,28 @@ def sync_with_merged_bottom(env: Env, fake: FakeSystem, edge: Edge) -> bd.Bounda
     return b
 
 
-def test_the_start_sync_follows_the_merge_and_asks_for_a_restack(
+def test_the_start_sync_rebases_retargets_and_pushes_nothing(env: Env, fake: FakeSystem) -> None:
+    """AC2: the stack is brought up to date at sprint end only, never at sprint start."""
+    sync_with_merged_bottom(env, fake, Edge.START)
+    kept = env.rt.state.upstream.stack[1]
+    env.br.step()
+    assert pushes(fake) == [] and pr_calls(env, "edit") == []
+    assert (kept.head, kept.pushed, kept.base) == (H2, H2, "team/sprint-9")
+
+
+def test_a_merge_made_mid_sprint_changes_nothing_until_the_sprint_ends(
     env: Env, fake: FakeSystem
 ) -> None:
-    b = sync_with_merged_bottom(env, fake, Edge.START)
-    env.br.step()
-    assert "merged" in env.outcomes() and b.restack is True
-    assert [e.branch for e in env.rt.state.upstream.stack] == ["team/sprint-10"]
+    """AC2: with no boundary open there is nothing due, so no rebase, push or retarget."""
+    _, stack = at_ci(env, H1, H2)
+    env.rt.state.boundary = None
+    script_fast_path(fake, N1)
+    assert env.br.due() is None
+    assert pushes(fake) == [] and pr_calls(env, "edit") == []
+    assert [(e.head, e.pushed, e.base) for e in stack] == [
+        (H1, H1, "main"),
+        (H2, H2, "team/sprint-9"),
+    ]
 
 
 def test_the_end_sync_follows_the_merge_before_adding_the_entry(env: Env, fake: FakeSystem) -> None:
