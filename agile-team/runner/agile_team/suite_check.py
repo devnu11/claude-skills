@@ -11,23 +11,30 @@ from enum import StrEnum
 from itertools import pairwise
 from pathlib import PurePosixPath
 
+from .refusal import Refusal, Rule
+
 ASK_RUNNER = (
-    "name the tests instead (`pytest -q tests/test_x.py::test_y`), or, as a developer, "
-    "ask the runner with its `run_tests` tool (test ids) or its `run_new_tests` tool "
-    "(the story's new tests)"
+    "named tests, e.g. `pytest -q tests/test_x.py::test_y`; to keep the output, add "
+    "`> out.txt` or `| tee out.txt`; or, as a developer, the runner's `run_tests` tool "
+    "(test ids) or `run_new_tests` tool (the story's new tests)"
 )
-FULL_DENIED = (
+FULL_DENIED = Refusal(
+    Rule.FULL_SUITE,
     "the full suite is the runner's to run: it runs it at the gates and puts the "
-    "output in your brief (## Runner results); " + ASK_RUNNER
-)
-COVERAGE_DENIED = (
+    "output in your brief (## Runner results)",
+    ASK_RUNNER,
+).text()
+COVERAGE_DENIED = Refusal(
+    Rule.COVERAGE,
     "coverage is the runner's to run: the implement gate runs it and your brief "
-    "shows the result (## Runner results); " + ASK_RUNNER
-)
-READ_ONLY_DENIED = (
-    "{role} reads tests and does not run them: the runner's results are in your "
-    "brief (## Runner results)"
-)
+    "shows the result (## Runner results)",
+    ASK_RUNNER,
+).text()
+READ_ONLY_DENIED = Refusal(
+    Rule.TESTS_READ_ONLY,
+    "{role} reads tests and does not run them",
+    "reading the runner's results in your brief (## Runner results)",
+).text()
 
 
 class Run(StrEnum):
@@ -86,6 +93,7 @@ VALUE_OPTIONS = frozenset(
     }
 )
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+REDIRECT_OPERATOR = re.compile(r"^\d*(>>?|<)$")  # a bare operator; the next word is its target (R1)
 REDIRECT = re.compile(r"^\d*[<>]")  # `2>` is what `2>&1` leaves after the guard splits on `&`
 NODE_MARK = "::"
 GLOB_CHARS = ("*", "?", "[")
@@ -166,7 +174,12 @@ def _positionals_after(words: list[str], index: int) -> list[str]:
 
 
 def _is_positional(previous: str, word: str) -> bool:
-    return not word.startswith("-") and not REDIRECT.match(word) and previous not in VALUE_OPTIONS
+    return (
+        not word.startswith("-")
+        and not REDIRECT.match(word)
+        and previous not in VALUE_OPTIONS
+        and not REDIRECT_OPERATOR.match(previous)
+    )
 
 
 def run_kind(words: list[str]) -> Run | None:

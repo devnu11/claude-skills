@@ -32,6 +32,7 @@ from . import git_check, system
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
+from .refusal import Refusal, Rule
 from .suite_check import suite_denial
 
 WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
@@ -48,10 +49,13 @@ UNQUOTE = str.maketrans("", "", "'\"\\")
 WAIT_LOOPS = frozenset({"until", "while"})
 DEADLINES = frozenset({"timeout", "gtimeout"})
 STREAM_WORD = "read"
-WAIT_DENIED = (
-    "a wait loop needs a deadline: run it under `timeout N`, or loop a bounded "
-    "number of times (`for i in $(seq 60)`); better, run the suite in the foreground"
-)
+WAIT_DENIED = Refusal(
+    Rule.WAIT,
+    "an open `until`/`while` loop has no deadline",
+    "a loop with a count (`for i in $(seq 60); do …; done`), or the command itself in "
+    "the foreground, capped by the Bash tool's `timeout` parameter",
+).text()
+SECRET_ALLOWED = "commands that do not name the key or its files; the runner authenticates for you"
 
 # The SDK fixes the hook signature at (input, tool_use_id, context).
 Hook = Callable[[dict[str, Any], str | None, Any], Awaitable[dict[str, Any]]]
@@ -241,7 +245,12 @@ def _reads_stream(words: list[str]) -> bool:
 def _check_secret_mention(scope: Scope, command: str) -> str | None:
     needles = [*SECRET_WORDS, *(str(s) for s in scope.secrets)]
     hit = next((n for n in needles if n in command), None)
-    return f"{scope.role} may not reference the API key ({hit})" if hit else None
+    return _secret_refusal(scope.role, hit) if hit else None
+
+
+def _secret_refusal(role: str, hit: str) -> str:
+    why = f"{role} may not name the API key ({hit})"
+    return Refusal(Rule.API_KEY, why, SECRET_ALLOWED).text()
 
 
 def _links(command: str) -> list[git_check.Link]:
@@ -265,12 +274,18 @@ def _check_allowlist(scope: Scope, segments: list[list[str]]) -> str | None:
         return None
     bad = next((w[0] for w in segments if w and w[0] not in scope.bash_allowed), None)
     allowed = ", ".join(scope.bash_allowed)
-    return f"`{bad}` is not an allowed command; allowed: {allowed}" if bad else None
+    why = f"`{bad}` is not on this step's command list"
+    return Refusal(Rule.ALLOWLIST, why, allowed).text() if bad else None
 
 
 def _check_tokens(scope: Scope, tokens: list[str]) -> str | None:
     bad = next((t for t in tokens if _token_forbidden(scope, t)), None)
-    return f"{scope.role} may not reference {bad!r} from Bash" if bad else None
+    return _path_refusal(scope, bad) if bad else None
+
+
+def _path_refusal(scope: Scope, bad: str) -> str:
+    why = f"{scope.role} may not name {bad!r} from Bash: this step works in its sandbox"
+    return Refusal(Rule.SANDBOX_PATH, why, f"paths inside {system.resolve(scope.base)}").text()
 
 
 def _tokens(command: str) -> list[str]:

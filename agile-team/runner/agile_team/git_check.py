@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 
 from . import system
 from .paths import resolve_in
+from .refusal import Refusal, Rule
 from .suite_check import ASSIGNMENT
 
 SAFE_GIT = frozenset(
@@ -46,17 +47,28 @@ GIT_VALUE_OPTIONS = (
     | frozenset({"--namespace", "--config-env", "--super-prefix", "--exec-path"})
 )
 
-GIT_WRITE_DENIED = "`git {first}` is not allowed; the runner commits for you"
-GIT_OUTSIDE = (
+GIT_WRITE_DENIED = Refusal(
+    Rule.GIT_WRITE,
+    "`git {first}` changes the repo, and the runner commits for you",
+    "read-only git: `git status`, `git diff`, `git log`, `git show` and the other "
+    "read-only subcommands",
+).text()
+GIT_OUTSIDE = Refusal(
+    Rule.GIT_OUTSIDE,
     "{role} may not run `git {sub}` on {target}: in this step git works only "
-    "inside {workspace}, and the team repo {repo} is the runner's. Work in the "
-    "workspace: `cd {workspace} && git …` or `git -C {workspace}/<dir> …`"
-)
-GIT_DIR_UNKNOWN = (
-    "{role} may not run `git {sub}` where an earlier `cd` may not have run; "
-    "chain the `cd` with `&&` or give git an absolute `-C` inside {workspace}"
-)
-GIT_ENV_DENIED = "{role} may not set {name}: the runner sets git's environment for this step"
+    "inside {workspace}, and the team repo {repo} is the runner's",
+    "`cd {workspace} && git …` or `git -C {workspace}/<dir> …`",
+).text()
+GIT_DIR_UNKNOWN = Refusal(
+    Rule.GIT_UNKNOWN_DIR,
+    "{role} may not run `git {sub}` where an earlier `cd` may not have run",
+    "chain the `cd` with `&&`, or give git an absolute `-C` inside {workspace}",
+).text()
+GIT_ENV_DENIED = Refusal(
+    Rule.GIT_ENV,
+    "{role} may not set {name}: the runner sets git's environment for this step",
+    "the same git command without setting {name}",
+).text()
 
 
 @dataclass(frozen=True)

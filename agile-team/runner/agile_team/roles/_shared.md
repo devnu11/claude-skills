@@ -31,6 +31,8 @@ the most.
   results in your brief (`## Runner results`), and a full `pytest` or a
   `--cov` run is denied. Run only named tests, quietly, and keep the tail,
   e.g. `pytest -q -x --no-header tests/test_x.py::test_y 2>&1 | tail -20`.
+  To keep a named run's output, redirect it inside your scope
+  or under `.team/run/`: `pytest -q tests/test_x.py > out.txt` or `… | tee out.txt`.
 - Your brief's design file is the contract. Read source only for what it
   leaves open.
 
@@ -38,9 +40,11 @@ the most.
 
 - Run every command in the foreground and let it finish. Don't start it in
   the background and then poll for its output.
-- Give every wait a deadline: run it under `timeout N`, or loop a bounded
-  number of times (`for i in $(seq 60); do …; done`). An open `until` or
-  `while` loop with no deadline is denied.
+- Give every wait a deadline: run the command in the foreground with the
+  Bash tool's `timeout` parameter (milliseconds, at most 600000), or loop a
+  bounded number of times (`for i in $(seq 60); do …; done`). An open
+  `until` or `while` loop with no deadline is denied. macOS has no
+  `timeout` command; don't reach for one.
 - Stop only what you started, by the pid you saved (`cmd & PID=$!` … `kill $PID`).
   `pkill`, `killall`, `kill $(…)`, `xargs kill` and a pid in the runner's process
   group are denied: the agent running you has your prompt on its command line, so

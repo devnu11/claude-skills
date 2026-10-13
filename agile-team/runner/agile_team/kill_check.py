@@ -10,6 +10,7 @@ import re
 
 from . import system
 from .process_groups import in_runner_group
+from .refusal import Refusal, Rule
 
 BY_NAME = frozenset({"pkill", "killall"})
 KILL = "kill"
@@ -20,18 +21,22 @@ END_OF_OPTIONS = "--"
 NUMBER = re.compile(r"-?\d+")
 ALWAYS_PROTECTED = frozenset({0, -1})
 KILL_FIX = "kill only a process you started, by the pid you saved: `cmd & PID=$!` … `kill $PID`"
-BY_NAME_DENIED = (
+BY_NAME_DENIED = Refusal(
+    Rule.KILL_BY_NAME,
     "`{word}` picks processes by name, and the agent running you has your whole prompt "
-    "on its command line, so it can match itself; " + KILL_FIX
-)
-RUNNER_DENIED = (
-    "`kill {target}` would signal the runner or the agent running you "
-    "(the runner's process group); " + KILL_FIX
-)
-AT_RUN_TIME_DENIED = (
-    "`kill` with targets chosen at run time (`$(…)`, backticks or `xargs`) "
-    "cannot be checked; " + KILL_FIX
-)
+    "on its command line, so it can match itself",
+    KILL_FIX,
+).text()
+RUNNER_DENIED = Refusal(
+    Rule.KILL_RUNNER,
+    "`kill {target}` would signal the runner or the agent running you (the runner's process group)",
+    KILL_FIX,
+).text()
+AT_RUN_TIME_DENIED = Refusal(
+    Rule.KILL_RUN_TIME,
+    "`kill` with targets chosen at run time (`$(…)`, backticks or `xargs`) cannot be checked",
+    KILL_FIX,
+).text()
 
 
 def _names(words: list[str]) -> list[str]:
