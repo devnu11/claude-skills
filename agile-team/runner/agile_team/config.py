@@ -41,7 +41,7 @@ PIPELINE_STEPS = (
 )
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 DASHBOARD_TOKEN = "[dashboard] token must be a string"
-GLOB_KEYS =("source", "tests", "e2e", "ci")
+GLOB_KEYS = ("source", "tests", "e2e", "ci")
 UNKNOWN_DELIVERY = "delivery {name!r} is not a configured [[delivery]]; use one of: {names}"
 NO_DELIVERY = (
     "delivery {name!r} is not a configured [[delivery]]; .agile-team.toml configures none, "
