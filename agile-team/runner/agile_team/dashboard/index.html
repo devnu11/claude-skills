@@ -103,6 +103,15 @@ section[hidden] { display: none; }
 /* cards & layout */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
 .card h2 { font-size: 13.5px; font-weight: 600; margin: 0 0 2px; }
+.brow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 4px; border-top: 1px solid var(--border); cursor: pointer; }
+.brow[draggable="true"] { cursor: grab; }
+.bpos { color: var(--muted); min-width: 3ch; }
+.btitle { flex: 1 1 18ch; }
+.bmeta, .bhold { color: var(--muted); font-size: 12px; }
+.bhandles { margin-left: auto; display: flex; gap: 4px; }
+.bdetail { padding: 6px 12px 10px; border-left: 2px solid var(--border); font-size: 12.5px; }
+.bfields { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--ink-2); margin: 4px 0; }
+.bevents { margin: 4px 0; padding-left: 18px; color: var(--muted); }
 .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
 .grid-flow { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -275,6 +284,9 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
     <div class="card" id="stack-card" hidden></div>
     <div class="board" id="board"></div>
   </section>
+  <section id="tab-backlog" hidden>
+    <div class="card"><p class="sub" id="backlog-note"></p><div id="backlog"></div></div>
+  </section>
   <section id="tab-tokens" hidden>
     <div class="stack">
       <div class="tiles" id="tiles"></div>
@@ -313,7 +325,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 
 const PO = "product-owner";
 const TABS = [
-  ["flow", "Flow"], ["board", "Board"], ["tokens", "Tokens"],
+  ["flow", "Flow"], ["board", "Board"], ["backlog", "Backlog"], ["tokens", "Tokens"],
   ["questions", "Questions"], ["requirements", "Requirements"],
 ];
 const RING_ORDER = [
@@ -338,6 +350,7 @@ const BASE_TITLE = "agile-team dashboard";
 const RATE_WINDOW_S = 300, SPARK_BUCKETS = 10, SPARK_BUCKET_S = 60;
 const SCOPE_KEY = "agile-team-flow-scope", NOTIFY_KEY = "agile-team-notify-asked";
 const PARAMS = new URLSearchParams(location.search);
+const TOKEN = PARAMS.get("token") ?? "";
 const MOCK = PARAMS.has("mock") || location.protocol === "file:";
 
 // ----- helpers --------------------------------------------------------------
@@ -410,10 +423,11 @@ function md(text) {
 
 // ----- empty states -----------------------------------------------------------
 
-const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns"];
+const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns", "reorders"];
 const HEALTH_DEFAULT = { level: "idle", reason: "", model_note: null };
 const RUN_DEFAULTS = {
   status: "idle", sprint: 0, task: "", budget_usd: 0, manager_every_pct: 25, round_cap: 3, manager_due: [],
+  order_version: "", backlog: [],
 };
 const list = (x) => (Array.isArray(x) ? x : []);
 
@@ -425,7 +439,7 @@ function normalize(snap) {
   out.generated_at ??= Date.now() / 1000;
   out.heartbeat ??= null;
   out.health = { ...HEALTH_DEFAULT, ...(out.health && typeof out.health === "object" ? out.health : {}) };
-  out.stories = out.stories.map((s) => ({ ...s, acceptance: list(s.acceptance) }));
+  out.stories = out.stories.map((s) => ({ ...s, acceptance: list(s.acceptance), files: list(s.files), commits: list(s.commits) }));
   out.requirements = out.requirements.map((r) => ({ ...r, covers: list(r.covers), history: list(r.history) }));
   return out;
 }
@@ -1062,7 +1076,7 @@ const TIMELINE = {
     meta: e.data.test ?? "",
   }),
   priority: (e) => ({
-    from: PO, to: "order", what: priorityLabel(e), body: e.data.reason,
+    from: e.data.source ?? e.role ?? PO, to: "order", what: priorityLabel(e), body: e.data.reason,
     meta: e.data.moves.map((m) => `${m.story} ${m.from}→${m.to}`).join(" · ")
       + (e.data.pulled?.length ? ` · pulled ahead: ${e.data.pulled.join(", ")}` : ""),
   }),
@@ -1133,6 +1147,181 @@ function renderTimelineFilter(view) {
     ...view.stories.map((s) => `<option value="${esc(s.id)}" ${ui.story === s.id ? "selected" : ""}>${esc(s.id)}: ${esc(s.title)}</option>`)];
   $("#tl-filter").innerHTML = opts.join("");
 }
+
+// ----- backlog ----------------------------------------------------------------
+
+const READ_ONLY = "read-only: open the link the dashboard printed (it carries the token), on this machine";
+const WAITING = "waiting for the runner: moves apply between steps";
+const STALE_TEXT = "the order changed since the dashboard showed it; reload";
+const DETAIL_FIELDS = ["sprint", "step", "status", "rounds", "disputes", "hold", "developer", "delivery"];
+const LABEL_TONE = { cancelled: "critical", held: "warning" };
+
+/** The stories that aren't done, split by the snapshot's backlog list (B1). */
+function backlogGroups(view) {
+  const open = view.stories.filter((s) => s.status !== "done");
+  const inBacklog = new Set(view.run.backlog);
+  return { current: open.filter((s) => !inBacklog.has(s.id)), backlog: open.filter((s) => inBacklog.has(s.id)) };
+}
+
+function storyLabel(story) {
+  return story.label ? pill(story.label, LABEL_TONE[story.label] ?? "") : "";
+}
+
+/** The place a move gives: up, down or top; null when it would not move or leave 1..count (B9). */
+function moveTarget(action, place, count) {
+  const to = { up: place - 1, down: place + 1, top: 1 }[action];
+  return to === undefined || to === place || to < 1 || to > count ? null : to;
+}
+
+const HANDLES = [["up", "↑", "Move up"], ["down", "↓", "Move down"], ["top", "⤒", "Move to top"]];
+
+/** Is this tab's last request still waiting for the runner? */
+function reorderPending(view) {
+  if (!ui.reorder) return false;
+  const found = view.reorders.find((r) => r.id === ui.reorder.id);
+  return !found || found.status === "pending";
+}
+
+function moveHandles(story, place, count, view) {
+  const busy = reorderPending(view);
+  const off = { up: place === 1, down: place === count, top: place === 1 };
+  return HANDLES.map(([action, glyph, name]) =>
+    `<button class="ctl" data-move="${action}" data-story="${esc(story.id)}" aria-label="${name}" ${busy || off[action] ? "disabled" : ""}>${glyph}</button>`).join("");
+}
+
+/** One row (B2, B8); `place` is the 1-based Backlog place, null for the current sprint. */
+function backlogRow(story, place, count, view) {
+  const open = ui.expanded.has(story.id);
+  const movable = place !== null && TOKEN !== "";
+  const drag = place !== null && TOKEN !== "" ? `draggable="true" data-place="${place}"` : "";
+  return `<div class="brow" data-expand="${esc(story.id)}" aria-expanded="${open}" ${drag}>
+    <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
+    <span class="btitle">${esc(story.title)}</span>
+    <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.delivery ? " · " + esc(story.delivery) : ""}</span>
+    ${storyLabel(story)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}
+    ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
+}
+
+function fileBody(id) {
+  const key = "story:" + id;
+  if (!(key in ui.files) || ui.files[key] === undefined) return `<p class="empty">loading…</p>`;
+  return ui.files[key] === null ? `<p class="empty">no story file</p>` : `<div class="md">${md(ui.files[key])}</div>`;
+}
+
+const fileLink = (story, kind) =>
+  `<a href="api/file?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(story.id)}" target="_blank" rel="noopener noreferrer">${esc(kind)}</a>`;
+
+function spendLine(view, id) {
+  const mine = view.ledger.filter((l) => l.story === id);
+  const cost = mine.reduce((sum, l) => sum + (l.cost_usd ?? 0), 0), turns = mine.reduce((sum, l) => sum + (l.turns ?? 0), 0);
+  return `spend ${fmt.usd(cost)} · ${turns} turns`;
+}
+
+const eventLine = (e) => `<li>${fmt.time(e.at)} ${esc(e.kind)} ${esc(e.data?.source ?? e.role ?? "")}</li>`;
+
+/** What an expanded row shows (B5). */
+function storyDetails(story, view) {
+  const fields = DETAIL_FIELDS.map((k) => `<span>${k}: <b>${esc(story[k] ?? "—")}</b></span>`).join(" ");
+  const commits = story.commits.length ? story.commits.map((c) => `<code>${esc(c.slice(0, 8))}</code>`).join(" ") : "none";
+  const links = story.files.filter((k) => k !== "story").map((k) => fileLink(story, k)).join(" · ");
+  const events = view.events.filter((e) => e.story === story.id).slice(-10).reverse();
+  const asks = openQuestions(view).filter((q) => list(q.stories).includes(story.id));
+  return `<div class="bdetail">${fileBody(story.id)}
+    <div class="bfields">${fields} <span>commits: ${commits}</span></div>
+    <div class="bfields">${spendLine(view, story.id)}${links ? " · " + links : ""}</div>
+    <ul class="bevents">${events.map(eventLine).join("")}</ul>
+    ${asks.map((q) => `<div class="q"><div class="q-head">${pill(q.id, "warning")}</div><div class="q-text">${md(q.text)}</div></div>`).join("")}</div>`;
+}
+
+function groupHtml(title, rows, view, base) {
+  const count = rows.length;
+  const html = rows.map((s, n) => backlogRow(s, base === null ? null : n + 1, count, view)
+    + (ui.expanded.has(s.id) ? storyDetails(s, view) : "")).join("");
+  return `<h3>${esc(title)}<span>${count}</span></h3>${html || `<p class="empty">Nothing here.</p>`}`;
+}
+
+function backlogHtml(view) {
+  const { current, backlog } = backlogGroups(view);
+  return groupHtml("Current sprint", current, view, null) + groupHtml("Backlog", backlog, view, 0);
+}
+
+function renderBacklog(view) {
+  $("#backlog").innerHTML = backlogHtml(view);
+  $("#backlog-note").innerHTML = reorderNote(view);
+}
+
+/** What the tab says about its last request (B16, B20). */
+function reorderNote(view) {
+  if (TOKEN === "") return esc(READ_ONLY);
+  if (ui.note) return esc(ui.note);
+  const found = ui.reorder ? view.reorders.find((r) => r.id === ui.reorder.id) : null;
+  if (ui.reorder && (!found || found.status === "pending")) return esc(WAITING);
+  if (found?.status !== "refused") return "";
+  const reload = found.reason === STALE_TEXT ? ` <button class="ctl" data-reload>reload</button>` : "";
+  return esc(found.reason) + reload;
+}
+
+function toggleRow(id) {
+  if (ui.expanded.has(id)) ui.expanded.delete(id);
+  else { ui.expanded.add(id); if (!("story:" + id in ui.files)) loadFile(id, "story"); }
+  render();
+}
+
+/** Fetch a story file once: text, or null when there is none. */
+async function loadFile(id, kind) {
+  const key = kind + ":" + id;
+  ui.files[key] = undefined;
+  try {
+    const res = await fetch(`api/file?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`);
+    ui.files[key] = res.ok ? await res.text() : null;
+  } catch { ui.files[key] = null; }
+  render();
+}
+
+/** Ask the runner to move `story` to Backlog place `position` (B9, B16, B20). */
+async function postReorder(story, position) {
+  ui.note = "";
+  try {
+    const res = await fetch("api/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Agile-Team-Token": TOKEN },
+      body: JSON.stringify({ story, position, version: data.view.run.order_version }),
+    });
+    if (res.status === 403) ui.note = READ_ONLY;
+    else if (!res.ok) ui.note = "request failed: HTTP " + res.status;
+    else ui.reorder = { id: (await res.json()).id, story };
+  } catch (err) { ui.note = "request failed: " + err.message; }
+  render();
+}
+
+function moveFromHandle(btn) {
+  const { backlog } = backlogGroups(data.view);
+  const place = backlog.findIndex((s) => s.id === btn.dataset.story) + 1;
+  const to = place ? moveTarget(btn.dataset.move, place, backlog.length) : null;
+  if (to !== null && !btn.disabled) postReorder(btn.dataset.story, to);
+}
+
+document.addEventListener("click", (ev) => {
+  const move = ev.target.closest("[data-move]");
+  if (move) return moveFromHandle(move);
+  if (ev.target.closest("[data-reload]")) return location.reload();
+  const row = ev.target.closest("[data-expand]");
+  if (row) toggleRow(row.dataset.expand);
+});
+document.addEventListener("dragstart", (ev) => {
+  const row = ev.target.closest?.("[data-place]");
+  if (row) ui.drag = row.dataset.expand;
+});
+document.addEventListener("dragover", (ev) => {
+  if (ev.target.closest?.("[data-place]")) ev.preventDefault();
+});
+document.addEventListener("drop", (ev) => {
+  const row = ev.target.closest?.("[data-place]");
+  if (!row || !ui.drag || ui.drag === row.dataset.expand) return;
+  ev.preventDefault();
+  postReorder(ui.drag, Number(row.dataset.place));
+  ui.drag = "";
+});
 
 // ----- board ------------------------------------------------------------------
 
@@ -1480,8 +1669,9 @@ const hideTip = () => { $("#tip").style.display = "none"; };
 const ui = {
   tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens",
   scope: "story", focus: "", details: false,
+  expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
 };
-const RENDER = { flow: renderFlowTab, board: renderBoard, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
+const RENDER = { flow: renderFlowTab, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 
 function showTab(id) {
   ui.tab = TABS.some(([t]) => t === id) ? id : "flow";

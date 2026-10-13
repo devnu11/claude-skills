@@ -60,6 +60,16 @@ class Placement:
     position: Any
 
 
+class Source(StrEnum):
+    """Who asked for a reorder."""
+
+    PO = "product-owner"
+    HUMAN = "human (dashboard)"
+
+
+SOURCE_ROLES: dict[Source, str | None] = {Source.PO: "product-owner", Source.HUMAN: None}
+
+
 @dataclass(frozen=True)
 class Reorder:
     """A change to the order: its kind, the new queue, the moved story and why."""
@@ -69,6 +79,18 @@ class Reorder:
     story: str | None = None
     reason: str = ""
     pull: Pull = Pull()
+    source: Source = Source.PO
+
+    def event_data(self, before: list[str], after: list[str]) -> dict[str, Any]:
+        """The data of a ``priority`` event (G11, B14)."""
+        return {
+            "change": str(self.change),
+            "order": after,
+            "moves": moves(before, after),
+            "reason": self.reason,
+            "pulled": list(self.pull.ahead),
+            "source": str(self.source),
+        }
 
 
 def started(story: StoryState) -> bool:

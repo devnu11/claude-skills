@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import shutil
 import socket
 import stat as stat_bits
@@ -65,6 +66,7 @@ __all__ = [
     "spawn_logged",
     "spawn_piped",
     "stat",
+    "token",
     "wait_event",
     "which",
     "write_text",
@@ -175,6 +177,11 @@ def remove_tree(path: Path) -> None:
 def copy_tree(source: Path, target: Path) -> None:
     """Copy a directory tree, keeping symlinks."""
     shutil.copytree(source, target, symlinks=True)
+
+
+def token() -> str:
+    """A random URL-safe token (``secrets.token_urlsafe(16)``)."""
+    return secrets.token_urlsafe(16)
 
 
 def is_file(path: Path) -> bool:

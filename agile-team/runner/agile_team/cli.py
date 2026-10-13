@@ -14,7 +14,7 @@ import signal
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -127,11 +127,12 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     """Serve the read-only dashboard until interrupted."""
     httpd = _dashboard_server(args)
     urls = server.dashboard_urls(*httpd.server_address[:2])
-    print(f"dashboard: {urls.local}", flush=True)
+    local = server.with_token(urls.local, httpd.app.token)  # type: ignore[attr-defined]
+    print(f"dashboard: {local}", flush=True)
     if urls.lan:
         print(f"from other machines: {urls.lan}", flush=True)
     if args.browser is Browser.OPEN:
-        system.open_browser(urls.local)
+        system.open_browser(local)
     server.serve(httpd)
     return 0
 
@@ -140,6 +141,7 @@ def _dashboard_server(args: argparse.Namespace) -> system.HttpServer:
     place = Place.of(args)
     config = _load_config(place.repo)
     app = server.Dashboard.for_run(config, role_book(config, place.home))
+    app = replace(app, token=args.token or system.token())
     address = (args.host or server.default_host(), args.port)
     try:
         return server.open_server(address, app)
@@ -587,6 +589,7 @@ DASHBOARD_ARGS: tuple[Arg, ...] = (
     (("--host",), {"default": None,
                    "help": "address to bind (default: all interfaces; 127.0.0.1 on Windows)"}),
     (("--port",), {"type": int, "default": server.DEFAULT_PORT}),
+    (("--token",), {"default": None, "help": "fix the write token (default: random each start)"}),
     (("--no-open",), {"action": "store_const", "dest": "browser", "const": Browser.SKIP,
                       "default": Browser.OPEN, "help": "do not open a browser"}),
 )  # fmt: skip

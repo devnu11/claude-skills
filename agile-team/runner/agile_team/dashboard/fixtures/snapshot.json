@@ -18,6 +18,11 @@
    "s7",
    "s5",
    "s6"
+  ],
+  "order_version": "3f9a1c07be52",
+  "backlog": [
+   "s5",
+   "s6"
   ]
  },
  "pipeline": [
@@ -110,7 +115,14 @@
    "position": 1,
    "tier": "in progress",
    "hold": null,
-   "wait": null
+   "wait": null,
+   "disputes": 0,
+   "developer": "developer",
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   },
   {
    "id": "s5",
@@ -131,7 +143,14 @@
    "position": 2,
    "tier": "in progress",
    "hold": null,
-   "wait": null
+   "wait": null,
+   "disputes": 0,
+   "developer": null,
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   },
   {
    "id": "s3",
@@ -162,7 +181,14 @@
      "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
      "round 3: the manager must rule"
     ]
-   }
+   },
+   "disputes": 0,
+   "developer": "developer",
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   },
   {
    "id": "s4",
@@ -193,7 +219,14 @@
      "m4: s4: should exports write a UTF-8 BOM by default (Excel opens them correctly) or only with a new --excel flag (cleaner for scripts)?",
      "architect: Asked which export encoding Excel on Windows expects"
     ]
-   }
+   },
+   "disputes": 0,
+   "developer": null,
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": "held"
   },
   {
    "id": "s7",
@@ -219,7 +252,14 @@
     "on": [
      "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
     ]
-   }
+   },
+   "disputes": 0,
+   "developer": "developer",
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   },
   {
    "id": "s6",
@@ -240,7 +280,14 @@
    "position": 6,
    "tier": "not started",
    "hold": null,
-   "wait": null
+   "wait": null,
+   "disputes": 0,
+   "developer": null,
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   },
   {
    "id": "s1",
@@ -269,7 +316,14 @@
    "position": null,
    "tier": null,
    "hold": null,
-   "wait": null
+   "wait": null,
+   "disputes": 0,
+   "developer": "developer",
+   "commits": [],
+   "files": [
+    "story"
+   ],
+   "label": ""
   }
  ],
  "requirements": [
@@ -379,6 +433,24 @@
      "sha": "6f0e228"
     }
    ]
+  }
+ ],
+ "reorders": [
+  {
+   "id": "r1",
+   "story": "s6",
+   "position": 1,
+   "at": 1791472960.0,
+   "status": "applied",
+   "reason": ""
+  },
+  {
+   "id": "r2",
+   "story": "s5",
+   "position": 2,
+   "at": 1791472961.0,
+   "status": "refused",
+   "reason": "the order changed since the dashboard showed it; reload"
   }
  ],
  "events": [
@@ -1896,7 +1968,8 @@
     "reason": "s3 blocks the export; fix its memory bound first",
     "pulled": [
      "s5"
-    ]
+    ],
+    "source": "product-owner"
    }
   },
   {
@@ -1939,6 +2012,39 @@
    "story": "s3",
    "data": {
     "brief": "Memory test fails at 412MB."
+   }
+  },
+  {
+   "id": "e102",
+   "at": 1791472965.0,
+   "kind": "priority",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "change": "move",
+    "order": [
+     "s3",
+     "s2",
+     "s4",
+     "s7",
+     "s5",
+     "s6"
+    ],
+    "moves": [
+     {
+      "story": "s6",
+      "from": 6,
+      "to": 5
+     },
+     {
+      "story": "s5",
+      "from": 5,
+      "to": 6
+     }
+    ],
+    "reason": "moved on the dashboard (r1)",
+    "pulled": [],
+    "source": "human (dashboard)"
    }
   }
  ],

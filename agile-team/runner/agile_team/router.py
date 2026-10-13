@@ -19,6 +19,7 @@ from .gates import STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
 from .relay import TOLD_LINE, WAITING_HEAD, Answer, Told
+from .reorders import Desk
 
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
@@ -170,9 +171,11 @@ class Router:
     runtime: Runtime
     steps: int = field(default=0, init=False)
     boundaries: BoundaryRunner = field(init=False)
+    desk: Desk = field(init=False)
 
     def __post_init__(self) -> None:
         self.boundaries = BoundaryRunner(self.runtime)
+        self.desk = Desk(self.runtime)
 
     async def advance(self) -> Pass:
         """Run steps until a hand-over trigger, the end of the sprint or the end of the run."""
@@ -186,6 +189,7 @@ class Router:
     async def _tick(self) -> Pass | None:
         if self.runtime.checkout_moved():
             return None
+        self.desk.apply()
         answers, told = self._news(), self._unread()
         if answers or told:
             return self._deliver(answers, told)

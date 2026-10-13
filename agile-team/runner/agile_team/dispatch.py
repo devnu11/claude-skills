@@ -73,7 +73,7 @@ from .insights import (
 )
 from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
-from .priority import Priority
+from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
 from .results import Ran
@@ -708,6 +708,18 @@ class Runtime:
     def priority(self) -> Priority:
         """The story ranking: the PO's order and pulls over this run's stories."""
         return Priority(self.state.order, self.state.pulled)
+
+    def reorder(self, change: Reorder) -> list[str]:
+        """Apply a new order and log it (PO tools and dashboard requests alike)."""
+        stories = self.state.stories
+        before = self.priority().queue(stories.values())
+        self.state.order = change.order
+        self.state.pulled = self.priority().repulled(change.pull, stories)
+        self.save()
+        after = self.priority().queue(stories.values())
+        data = change.event_data(before, after)
+        self.events.emit(Event(EventKind.PRIORITY, SOURCE_ROLES[change.source], change.story, data))
+        return after
 
     def enforce_ceiling(self) -> Halt | None:
         """Halt the run when corrected spend has reached ``team.budget_usd`` (B1, B3)."""

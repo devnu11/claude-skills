@@ -91,6 +91,9 @@ class RunState:
     goal: str = ""
     order: list[str] = field(default_factory=list)
     pulled: list[str] = field(default_factory=list)
+    human_order: list[str] = field(default_factory=list)
+    reorders: dict[str, str] = field(default_factory=dict)
+    reorders_told: list[str] = field(default_factory=list)
     in_flight: InFlight | None = None
     interrupted: list[Interruption] = field(default_factory=list)
     checkout: CheckoutRecord | None = None

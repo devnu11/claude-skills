@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 
 from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
-from . import handover, po_session, priority, salvage, system
+from . import backlog, handover, po_session, priority, reorders, salvage, system
 from .boundary import (
     CI_BUG_FIRST,
     Boundary,
@@ -42,7 +42,7 @@ from .events import Event, EventKind
 from .gates import StoryState, StoryStatus, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
 from .po_session import RenewPath
-from .priority import Change, Placement, Pull, Reorder
+from .priority import Change, Placement, Priority, Pull, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import Note
 from .router import Router
@@ -175,10 +175,18 @@ class Tools:
         """Set the order the team works in."""
         rt, ids = self.runtime, list(dict.fromkeys(args.get("stories") or []))
         why = args.get("reason", "")
+
+        def pull_of() -> Pull:
+            return priority.set_pull(ids, rt.state.stories)
+
+        def order_of() -> list[str]:
+            return rt.priority().with_first(ids, rt.state.stories.values())
+
         reason = priority.first_refusal(
             [
                 lambda: priority.order_refusal(ids, rt.state.stories),
                 lambda: priority.pull_refusal(priority.set_pull(ids, rt.state.stories), why),
+                lambda: backlog.human_refusal(self._human_check(order_of(), pull_of()), why),
             ]
         )
         if reason:
@@ -196,6 +204,12 @@ class Tools:
             [
                 lambda: prio.move_refusal(placement, stories),
                 lambda: priority.pull_refusal(prio.move_pull(placement, stories), why),
+                lambda: backlog.human_refusal(
+                    self._human_check(
+                        prio.with_move(placement, stories), prio.move_pull(placement, stories)
+                    ),
+                    why,
+                ),
             ]
         )
         if reason:
@@ -215,17 +229,18 @@ class Tools:
         return result
 
     def _reorder(self, change: Reorder) -> dict[str, Any]:
-        rt = self.runtime
-        stories = rt.state.stories
-        before = rt.priority().queue(stories.values())
-        rt.state.order = change.order
-        rt.state.pulled = rt.priority().repulled(change.pull, stories)
-        rt.save()
-        after = rt.priority().queue(stories.values())
-        rt.events.emit(
-            Event(EventKind.PRIORITY, PO, change.story, _priority_data(change, before, after))
+        return {"status": "ordered", "order": self.runtime.reorder(change)}
+
+    def _human_check(self, order: list[str], pull: Pull) -> backlog.HumanCheck:
+        """What a change would do to the order the human set (B17)."""
+        state = self.runtime.state
+        view = backlog.View.of(state)
+        after = Priority(order, self.runtime.priority().repulled(pull, state.stories))
+        return backlog.HumanCheck(
+            backlog.guarded(state.human_order, view),
+            view.queue,
+            after.queue(state.stories.values()),
         )
-        return {"status": "ordered", "order": after}
 
     async def continue_boundary(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release a held sprint boundary so the runner retries its stage."""
@@ -407,17 +422,6 @@ class Tools:
         return text_result(story_status_data(self.runtime))
 
 
-def _priority_data(change: Reorder, before: list[str], after: list[str]) -> dict[str, Any]:
-    """The data of a ``priority`` event (G11)."""
-    return {
-        "change": str(change.change),
-        "order": after,
-        "moves": priority.moves(before, after),
-        "reason": change.reason,
-        "pulled": list(change.pull.ahead),
-    }
-
-
 def story_status_data(runtime: Runtime) -> dict[str, Any]:
     """What ``story_status`` reports: sprint, stories, review reasons, enabled roles."""
     ranking = runtime.priority()
@@ -433,6 +437,9 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
     }
 
 
+DASHBOARD_REASON = (
+    "A reason is also required when the change reorders the backlog the human set on the dashboard."
+)
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "run_role": (
         "Run one role step yourself with your own brief; the runner runs standard steps on "
@@ -458,14 +465,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "always rank first, held ones after those in progress, then stories not started; "
         "the order ranks stories within each group. To pull a not-started story ahead of "
         "started ones, list it before a started one and give a reason; without a reason "
-        "that is refused. Unknown or done ids are refused.",
+        "that is refused. Unknown or done ids are refused. " + DASHBOARD_REASON,
         {"stories": list, "reason": str},
     ),
     "move_story": (
         "Move one story to a position in the order (1 = next; the board shows each "
         "story's #position). Moving a not-started story before a started one pulls it "
         "ahead and needs a reason. If the groups place the story elsewhere for now, the "
-        "result says so and the order keeps its place.",
+        "result says so and the order keeps its place. " + DASHBOARD_REASON,
         {"story": str, "position": int, "reason": str},
     ),
     "ask_user": (
@@ -686,6 +693,14 @@ class PoRun:
         self.runtime.save()
         return section
 
+    def _take_reorders(self) -> str:
+        """The dashboard reorders section; it is told once, then cleared (B15)."""
+        state = self.runtime.state
+        section = reorders.told_section(state.reorders_told)
+        state.reorders_told.clear()
+        self.runtime.save()
+        return section
+
     async def _after_po(self) -> PoTurn | None:
         found = await self.router.advance()
         return None if found.quiet() else self._hand_over(found, "")
@@ -698,7 +713,8 @@ class PoRun:
             Event(EventKind.HANDOVER, PO, None, {**data, "steps": found.steps})
         )
         state = self.runtime.state
-        return PoTurn(lead + handover.prompt(found, state), state.po_session)
+        told = self._take_reorders()
+        return PoTurn(lead + told + handover.prompt(found, state), state.po_session)
 
     async def _turn(self, turn: PoTurn) -> StepResult:
         if self.runtime.halted_by or self.runtime.checkout_moved():

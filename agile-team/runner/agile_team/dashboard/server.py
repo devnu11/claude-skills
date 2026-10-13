@@ -1,11 +1,14 @@
-"""Read-only dashboard server: ``/``, ``/api/snapshot`` and an SSE stream, stdlib only.
+"""Dashboard server: the page, the snapshot, the SSE stream, story files by id, and
+token-gated reorder requests from localhost; stdlib only.
 
 Never serves a directory.
 """
 
 from __future__ import annotations
 
+import hmac
 import json
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,12 +16,14 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
-from .. import system
+from .. import reorders, system
+from ..backlog import Ask
 from ..config import Config
 from ..roles import RoleBook
-from . import snapshot
+from . import snapshot, story_files
+from .story_files import FileAsk
 
 POLL_SECONDS = 1.0
 DEFAULT_PORT = 8765
@@ -26,6 +31,10 @@ KEEPALIVE = b": keepalive\n\n"
 HOSTS = {"win32": "127.0.0.1"}
 ALL_INTERFACES = {"0.0.0.0", ""}
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+WRITE_HOSTS = {"127.0.0.1", "::1"}
+TOKEN_HEADER = "X-Agile-Team-Token"
+MAX_BODY = 4096
+WHOLE_NUMBER = re.compile(r"[0-9]+")
 INDEX = Path(__file__).parent / "index.html"
 
 
@@ -37,6 +46,9 @@ class Dashboard:
     watched: Callable[[], list[Path]]
     poll_seconds: float = POLL_SECONDS
     vital_sign: Callable[[], str] = lambda: ""
+    read_file: Callable[[FileAsk], str | None] = lambda _ask: None
+    queue: Callable[[Ask], reorders.Request] | None = None
+    token: str = ""
 
     @classmethod
     def for_run(cls, config: Config, book: RoleBook) -> Dashboard:
@@ -45,6 +57,8 @@ class Dashboard:
             partial(snapshot.build, config, book),
             partial(snapshot.watched_files, config),
             vital_sign=partial(snapshot.vital_sign, config),
+            read_file=partial(story_files.read, config),
+            queue=reorders.Requests(config.run_dir).queue,
         )
 
 
@@ -71,13 +85,17 @@ class Body(NamedTuple):
 
     content_type: str
     data: bytes
+    status: int = 200
 
 
 class Handler(BaseHTTPRequestHandler):
-    """GET-only handler; every unknown path is a 404."""
+    """GET and token-gated POST handler; every unknown path is a 404."""
 
     def do_GET(self) -> None:
         ROUTES.get(urlsplit(self.path).path, _not_found)(self)
+
+    def do_POST(self) -> None:
+        POSTS.get(urlsplit(self.path).path, _not_found)(self)
 
     def log_message(self, format: str, *args: Any) -> None:
         """Quiet: the dashboard runs in the background."""
@@ -91,8 +109,9 @@ def open_server(address: tuple[str, int], app: Dashboard) -> system.HttpServer:
 
 
 def _send(handler: Handler, body: Body) -> None:
-    handler.send_response(200)
+    handler.send_response(body.status)
     handler.send_header("Content-Type", body.content_type)
+    handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("Content-Length", str(len(body.data)))
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
@@ -106,6 +125,44 @@ def _index(handler: Handler) -> None:
 def _snapshot(handler: Handler) -> None:
     data = json.dumps(handler.server.app.snapshot()).encode()  # type: ignore[attr-defined]
     _send(handler, Body("application/json", data))
+
+
+def _file(handler: Handler) -> None:
+    query = parse_qs(urlsplit(handler.path).query)
+    ask = FileAsk(*(query.get(key, [""])[0] for key in ("kind", "id")))
+    text = handler.server.app.read_file(ask)  # type: ignore[attr-defined]
+    if text is None:
+        _not_found(handler)
+    else:
+        _send(handler, Body("text/plain; charset=utf-8", text.encode()))
+
+
+def may_write(handler: Handler) -> bool:
+    """Is the peer on localhost and does it carry the token (B18 checks 1-2)?"""
+    if handler.client_address[0] not in WRITE_HOSTS:
+        return False
+    given = handler.headers.get(TOKEN_HEADER, "").encode()
+    want = handler.server.app.token.encode()  # type: ignore[attr-defined]
+    return bool(want) and hmac.compare_digest(given, want)
+
+
+def _body(handler: Handler) -> bytes | None:
+    """The request body when its Content-Length is 1 to MAX_BODY, else None."""
+    raw = handler.headers.get("Content-Length", "")
+    if not WHOLE_NUMBER.fullmatch(raw) or not 1 <= int(raw) <= MAX_BODY:
+        return None
+    return handler.rfile.read(int(raw))
+
+
+def _reorder(handler: Handler) -> None:
+    if not may_write(handler):
+        return handler.send_error(403)
+    ask = reorders.parse_ask(_body(handler) or b"")
+    queue = handler.server.app.queue  # type: ignore[attr-defined]
+    if ask is None or queue is None:
+        return handler.send_error(400)
+    data = json.dumps({"id": queue(ask).id, "status": "queued"}).encode()
+    _send(handler, Body("application/json", data, 202))
 
 
 def _not_found(handler: Handler) -> None:
@@ -142,7 +199,14 @@ ROUTES: dict[str, Callable[[Handler], None]] = {
     "/": _index,
     "/api/snapshot": _snapshot,
     "/api/stream": _stream,
+    "/api/file": _file,
 }
+POSTS: dict[str, Callable[[Handler], None]] = {"/api/reorder": _reorder}
+
+
+def with_token(url: str, token: str) -> str:
+    """``url`` with the write token in its query."""
+    return f"{url}?token={token}"
 
 
 def default_host() -> str:

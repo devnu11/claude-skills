@@ -13,8 +13,8 @@ from typing import Any
 
 import yaml
 
+from .. import backlog, health, live, system, waits
 from .. import config as config_mod
-from .. import health, live, system, waits
 from .. import roles as roles_mod
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
@@ -23,13 +23,16 @@ from ..gates import StoryStatus
 from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
 from ..relay import INBOX, OUTBOX
+from ..reorders import APPLIED, REORDERS_DIR, Request, Requests
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
+from . import story_files
 
 RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX, live.HEARTBEAT, live.TURNS)
 TURN_TAIL_BYTES = 262_144
 TURN_WINDOW_S = 600
 TURNS_SHOWN = 500
+REORDERS_SHOWN = 20
 HISTORY_KEYS = ("at", "change", "reason", "role", "story")
 
 
@@ -90,7 +93,8 @@ def watched_files(config: Config) -> list[Path]:
     run = [config.run_dir / name for name in RUN_FILES]
     stories = system.glob(config.stories_dir, "*.md")
     reqs = system.glob(config.requirements_dir, "REQ-*.md")
-    return [*run, config_path(config.repo), *stories, *reqs]
+    asks = system.glob(config.run_dir / REORDERS_DIR, "r*.json")
+    return [*run, config_path(config.repo), *stories, *reqs, *asks]
 
 
 def _generated_at(files: RunFiles) -> float:
@@ -107,6 +111,7 @@ def _priority(files: RunFiles) -> Priority:
 
 def _run(files: RunFiles) -> dict[str, Any]:
     state, config = files.state, files.config
+    view = backlog.View.of(state)
     return {
         "status": str(state_mod.shown_status(config.run_dir, state)),
         "sprint": state.sprint,
@@ -117,6 +122,8 @@ def _run(files: RunFiles) -> dict[str, Any]:
         "round_cap": config.gates.round_cap,
         "manager_due": list(state.manager_due),
         "order": _priority(files).queue(state.stories.values()),
+        "order_version": view.version,
+        "backlog": view.backlog,
     }
 
 
@@ -200,7 +207,26 @@ def _story(files: RunFiles, story: Any) -> dict:
         "wait": _wait(files, story),
         "opened_at": _opened_at(files.events, story.id),
         "acceptance": _acceptance(files.config, story.id),
+        "disputes": story.disputes,
+        "developer": story.developer,
+        "commits": [c for c in dict.fromkeys([story.commit, *story.code_commits]) if c],
+        "files": story_files.existing(files.config, story.id),
+        "label": backlog.label(story),
     }
+
+
+def _reorder(files: RunFiles, request: Request) -> dict[str, Any]:
+    done = files.state.reorders.get(request.id)
+    status = "pending" if done is None else "applied" if done == APPLIED else "refused"
+    reason = done if status == "refused" else ""
+    ask = request.ask
+    return {"id": request.id, "story": ask.story, "position": ask.position,
+            "at": request.at, "status": status, "reason": reason}  # fmt: skip
+
+
+def _reorders(files: RunFiles) -> list[dict]:
+    asked = Requests(files.config.run_dir).all()[-REORDERS_SHOWN:]
+    return [_reorder(files, request) for request in asked]
 
 
 def _stories(files: RunFiles) -> list[dict]:
@@ -330,6 +356,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "roles": _roles,
     "stories": _stories,
     "requirements": _requirements,
+    "reorders": _reorders,
     "events": _events,
     "ledger": _ledger,
     "messages": _messages,
