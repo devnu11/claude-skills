@@ -43,7 +43,7 @@ CI_NONE_REPORT = (
 )
 CI_TIMEOUT = "CI checks still running after {limit:.0f}s"
 NO_CHECKS_WHY = "no CI checks reported"
-NO_OPEN_PR_WHY = "no open, non-draft pull request to watch"
+NO_OPEN_PR_WHY = "no open pull request to watch"
 CHECK_LINE = "- {label}: {bucket} {link}"
 
 

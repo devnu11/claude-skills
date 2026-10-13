@@ -13,6 +13,7 @@ from pathlib import Path
 from . import system
 from .boundary import StackEntry
 from .git_ops import Git, GitError
+from .upstream import REBASE_ARGV
 
 REVIEW_DIR = "review"
 REVIEW_GIT = (
@@ -46,6 +47,14 @@ class Build:
 
     base: str
     picks: list[str]
+
+
+@dataclass(frozen=True)
+class Move:
+    """Replay ``upstream..head`` onto ``onto``."""
+
+    onto: str
+    upstream: str
 
 
 @dataclass
@@ -95,6 +104,29 @@ class Rebuilder:
             self.wt.run("branch", "--force", entry.branch, "HEAD")
             entry.head = self.wt.head()
         return conflict
+
+    def point(self, entry: StackEntry, sha: str) -> None:
+        """Set the entry's branch and head to ``sha``."""
+        self.wt.run("branch", "--force", entry.branch, sha)
+        entry.head = sha
+
+    def rebase(self, head: str, move: Move) -> str | None:
+        """Rebase ``head`` per ``move`` in the worktree; the new head, or ``None`` (aborted)."""
+        self.wt.run("checkout", "--detach", "--force", head)
+        code, _ = self.wt.attempt(*REBASE_ARGV, "--onto", move.onto, move.upstream)
+        if code != 0:
+            self.wt.attempt("rebase", "--abort")
+            return None
+        return self.wt.head()
+
+    def same_tree(self, a: str, b: str) -> bool:
+        """Whether commits ``a`` and ``b`` hold the same tree."""
+        first, second = self.git.run("rev-parse", f"{a}^{{tree}}", f"{b}^{{tree}}").split()
+        return first == second
+
+    def count(self, base: str, head: str) -> int:
+        """How many commits ``base..head`` holds."""
+        return int(self.git.run("rev-list", "--count", f"{base}..{head}").strip() or 0)
 
     def record(self, files: list[str]) -> None:
         """Stage the resolved files, let rerere learn them, and stop the pick."""

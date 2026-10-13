@@ -26,6 +26,7 @@ from .boundary import (
     PR_BODY,
     PR_KIND,
     PUSHED_REPORT,
+    RESTACKED_UPDATE,
     SKIPPED_REPORT,
     SPRINT_TITLE,
     STACKED_LINE,
@@ -43,6 +44,7 @@ from .boundary import (
     StackEntry,
     Stage,
     StepKind,
+    big_pr_notes,
     fix_brief,
     next_stage,
     setback,
@@ -56,6 +58,7 @@ from .ci import (
     CiResult,
     CiVerdict,
     CiWatch,
+    UpstreamError,
     check_lines,
     green_report,
     overall,
@@ -65,6 +68,7 @@ from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
 from .gates import StoryStatus
 from .relay import Note
+from .restack import FollowOutcome, Plan, Restacker
 from .stack import REVIEW_DIR, Build, Conflict, Rebuilder
 from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
 
@@ -108,6 +112,7 @@ class BoundaryRunner:
     runtime: Runtime
     last: Event | None = field(default=None, init=False)
     rebuilder: Rebuilder = field(init=False)
+    restacker: Restacker = field(init=False)
     watch: CiWatch = field(init=False)
 
     def __post_init__(self) -> None:
@@ -115,6 +120,7 @@ class BoundaryRunner:
         self.watch = CiWatch(rt.prs, rt.config.gates.ci_timeout_s)
         worktree = rt.config.run_dir / REVIEW_DIR
         self.rebuilder = Rebuilder(rt.git, worktree, self.remote.target)
+        self.restacker = Restacker(rt.prs, self.rebuilder)
 
     # ----- shortcuts
 
@@ -239,6 +245,8 @@ class BoundaryRunner:
         if why:
             return self._skip(b, why)
         self.mine.team_branch = self.remote.team_branch()
+        if self._follow(b) in SYNC_STOPS:
+            return
         self._drop_merged(b)
         SYNCS[b.edge](self, b)
 
@@ -428,17 +436,91 @@ class BoundaryRunner:
         self._finish(b, text)
 
     def _push_all(self, b: Boundary) -> None:
+        if self._push_stack(b):
+            self._pushed(b)
+
+    def _push_stack(self, b: Boundary) -> bool:
+        """Push and retarget every entry; hold ``push_rejected`` and return False on a refusal."""
         for entry, below in zip(self.stack, [None, *self.stack], strict=False):
             rejected = self._push_entry(entry, below)
             if rejected is not None:
                 fields = {"branch": entry.branch, "reason": rejected}
-                return self._hold(b, BoundaryHold.PUSH_REJECTED, Out.HELD, **fields)
-        self._pushed(b)
+                self._hold(b, BoundaryHold.PUSH_REJECTED, Out.HELD, **fields)
+                return False
+        return True
+
+    def _with_big(self, text: str) -> str:
+        """``text`` followed by one fast-forward note per PR too big for "Rebase and merge"."""
+        return "\n".join([text, *big_pr_notes(self.stack, self.runtime.config.upstream)])
+
+    # ----- following merges
+
+    def _follows(self) -> bool:
+        return self.mine.push is Permission.YES and self.runtime.prs.missing() is None
+
+    def _fetch(self) -> None:
+        why = self.remote.missing()
+        if why:
+            raise UpstreamError(why)
+
+    def _follow(self, b: Boundary) -> FollowOutcome:
+        """Drop merged entries, rebase the rest onto the target and push; see M2-M8."""
+        gone = self.restacker.merged(self.stack) if self._follows() else []
+        if not gone:
+            return FollowOutcome.NONE
+        self._fetch()
+        rest = self.stack[len(gone) :]
+        for entry in gone:
+            self._drop(b, entry)
+        b.restack = b.restack or b.edge is Edge.START
+        outcome = self._apply(b, self.restacker.plan(rest, gone[-1]))
+        if outcome is FollowOutcome.RESTACKED:
+            self._restacked(b, gone)
+        return outcome
+
+    def _apply(self, b: Boundary, plan: Plan) -> FollowOutcome:
+        if plan.refused:
+            self._emit(b, Out.REBUILD, note=plan.refused)
+            return FollowOutcome.REBUILD
+        for entry, head in zip(self.stack, plan.heads, strict=True):
+            self._move(entry, head)
+        return FollowOutcome.RESTACKED if self._push_stack(b) else FollowOutcome.REJECTED
+
+    def _move(self, entry: StackEntry, head: str) -> None:
+        if entry.checked == entry.head:
+            entry.checked = head
+        self.rebuilder.point(entry, head)
+
+    def _restacked(self, b: Boundary, gone: list[StackEntry]) -> None:
+        self._emit(b, Out.RESTACKED, branches=[e.branch for e in self.stack])
+        if not self.stack:
+            return
+        merged = ", ".join(f"#{e.pr} ({e.branch})" for e in gone)
+        prs = "; ".join(f"#{e.pr} ({e.branch}) {e.url}" for e in self.stack)
+        target = self.runtime.config.upstream.branch
+        self._post(self._with_big(RESTACKED_UPDATE.format(target=target, merged=merged, prs=prs)))
+
+    def _followed(self, b: Boundary) -> bool:
+        """Follow a merge at the ci stage; True when the stage must end here."""
+        if self._follows():
+            self._fetch()
+        outcome = self._follow(b)
+        CI_AFTER_FOLLOW[outcome](self, b)
+        return outcome is not FollowOutcome.NONE
+
+    def _stay(self, b: Boundary) -> None:
+        """Nothing changes the stage."""
+
+    def _to_review(self, b: Boundary) -> None:
+        b.stage = Stage.REVIEW
+
+    def _to_push(self, b: Boundary) -> None:
+        b.stage = Stage.PUSH
 
     def _pushed(self, b: Boundary) -> None:
         kinds = ((e, PR_KIND[e.mode]) for e in self.stack if e.pr)
         prs = "; ".join(f"#{e.pr} ({kind}, {e.branch}) {e.url}" for e, kind in kinds)
-        text = PUSHED_REPORT.format(sprint=b.sprint, prs=prs)
+        text = self._with_big(PUSHED_REPORT.format(sprint=b.sprint, prs=prs))
         self._emit(b, Out.PUSHED, branches=[e.branch for e in self.stack])
         self._post(text)
         self._advance(b)
@@ -449,14 +531,20 @@ class BoundaryRunner:
         return [e for e in self.stack if e.mode is PrMode.READY and e.pr]
 
     def _ci(self, b: Boundary) -> None:
+        if not self.stack:
+            return self._finish(b, NOTHING_REPORT.format(target=self.target))
+        if self._followed(b):
+            return
         watched = self._watched()
         results = self.watch.results(watched)
+        if self._followed(b):
+            return
         for entry, result in zip(watched, results, strict=True):
             entry.ci = result
         CI_OUTCOMES[overall(results)](self, b, results)
 
     def _ci_green(self, b: Boundary, results: list[CiResult]) -> None:
-        text = green_report(b.sprint, results)
+        text = self._with_big(green_report(b.sprint, results))
         self._finish(b, text, ci=CiVerdict.GREEN, **_ci_fields(results))
 
     def _ci_red(self, b: Boundary, results: list[CiResult]) -> None:
@@ -470,7 +558,7 @@ class BoundaryRunner:
     def _ci_none(self, b: Boundary, results: list[CiResult]) -> None:
         why = NO_CHECKS_WHY if results else NO_OPEN_PR_WHY
         prs = prs_text(results) or ", ".join(e.branch for e in self.stack)
-        text = CI_NONE_REPORT.format(sprint=b.sprint, prs=prs, why=why)
+        text = self._with_big(CI_NONE_REPORT.format(sprint=b.sprint, prs=prs, why=why))
         self._post(text)
         self._finish(b, text, ci=CiVerdict.NONE, note=why, **_ci_fields(results))
 
@@ -489,6 +577,8 @@ class BoundaryRunner:
             if out is not None:
                 return out
             entry.pushed = entry.head
+        base = below.head if below else self.target
+        entry.commits = self.rebuilder.count(base, entry.head)
         self._pr(entry, below)
         return None
 
@@ -518,7 +608,7 @@ class BoundaryRunner:
         if below is None:
             base, mode, stacked = self.runtime.config.upstream.branch, PrMode.READY, ""
         else:
-            base, mode = below.branch, PrMode.DRAFT
+            base, mode = below.branch, PrMode.READY
             stacked = STACKED_LINE.format(base=below.branch, base_pr=below.pr)
         return PrSpec(entry.branch, base, entry.title, self._body(entry, stacked), mode)
 
@@ -560,4 +650,11 @@ AFTER_REBASE = {
     SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
     SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
 }
+CI_AFTER_FOLLOW = {
+    FollowOutcome.NONE: BoundaryRunner._stay,
+    FollowOutcome.RESTACKED: BoundaryRunner._stay,
+    FollowOutcome.REBUILD: BoundaryRunner._to_review,
+    FollowOutcome.REJECTED: BoundaryRunner._to_push,
+}
+SYNC_STOPS = frozenset({FollowOutcome.REJECTED})
 SYNCS = {Edge.START: BoundaryRunner._rebase, Edge.END: BoundaryRunner._end_sync}

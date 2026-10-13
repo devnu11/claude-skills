@@ -15,6 +15,7 @@ from .ci import CiResult
 from .loops import Author, Setback
 
 if TYPE_CHECKING:
+    from .config import UpstreamSettings
     from .events import Event
 
 BOUNDARY_ROLE = "runner"
@@ -39,8 +40,19 @@ BOUNDARY_REFUSAL = (
 SKIPPED_REPORT = "sync and pull requests skipped: {why}"
 NOTHING_REPORT = "nothing to review: every sprint is in {target}"
 PUSHED_REPORT = (
-    "Sprint {sprint}'s review branches are pushed: {prs}. The runner now waits for CI on the "
-    "non-draft PR; nothing is called ready before CI passes."
+    "Sprint {sprint}'s review branches are pushed: {prs}. The runner now waits for CI on "
+    "every PR of the stack; nothing is called ready before CI passes on all of them."
+)
+REBASE_MERGE_LIMIT = 100
+BIG_PR_NOTE = (
+    "PR #{pr} ({branch}) has {commits} commits, more than the {limit} GitHub allows for "
+    '"Rebase and merge". When it is the bottom of the stack, merge it by fast-forward: '
+    "git fetch {remote} && git push {remote} {remote}/{branch}:{target}"
+)
+RESTACKED_UPDATE = (
+    "Merged into {target}: {merged}. The PRs above were rebased onto it with the same tree "
+    "and pushed: {prs}. The bottom one is now based on {target}; nothing is called ready "
+    "before CI passes."
 )
 LOCAL_REPORT = (
     "Sprint {sprint}'s review branches are built and checked but not pushed ({why}): {branches}."
@@ -58,6 +70,22 @@ PR_BODY = (
     'Rebuilt by agile-team from {team} onto {target}. Merge with "Rebase and merge".'
 )
 STACKED_LINE = "Stacked on {base} (#{base_pr}): review and merge that one first.\n\n"
+
+
+def big_pr_notes(stack: list[StackEntry], upstream: UpstreamSettings) -> list[str]:
+    """One fast-forward note per entry with more commits than "Rebase and merge" allows."""
+    return [
+        BIG_PR_NOTE.format(
+            pr=e.pr,
+            branch=e.branch,
+            commits=e.commits,
+            limit=REBASE_MERGE_LIMIT,
+            remote=upstream.remote,
+            target=upstream.branch,
+        )
+        for e in stack
+        if e.commits > REBASE_MERGE_LIMIT
+    ]
 
 
 class Edge(StrEnum):
@@ -119,6 +147,8 @@ class BoundaryOutcome(StrEnum):
     DONE = "done"
     CONTINUED = "continued"
     PERMISSION = "permission"
+    RESTACKED = "restacked"
+    REBUILD = "rebuild"
 
 
 class FixCase(StrEnum):
@@ -251,6 +281,7 @@ class StackEntry:
     base: str = ""
     mode: PrMode = PrMode.NONE
     ci: CiResult | None = None
+    commits: int = 0
 
     def __post_init__(self) -> None:
         self.check, self.mode = CheckState(self.check), PrMode(self.mode)
