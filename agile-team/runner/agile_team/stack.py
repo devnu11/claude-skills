@@ -119,6 +119,10 @@ class Rebuilder:
             return None
         return self.wt.head()
 
+    def merge_base(self, head: str) -> str:
+        """The commit ``head`` shares with the target."""
+        return self.git.run("merge-base", head, self.target).strip()
+
     def same_tree(self, a: str, b: str) -> bool:
         """Whether commits ``a`` and ``b`` hold the same tree."""
         first, second = self.git.run("rev-parse", f"{a}^{{tree}}", f"{b}^{{tree}}").split()

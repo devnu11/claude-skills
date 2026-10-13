@@ -174,7 +174,7 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.SYNC_CONFLICT,
         _held("sync_conflict"),
-        "{story}: sprint {sprint} start: rebasing {team_branch} onto {target} stopped at "
+        "{story}: sprint {sprint} end: rebasing {team_branch} onto {target} stopped at "
         '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. The rebase '
         "was aborted and the team branch is unchanged. Ask the human to rebase {team_branch} "
         "onto {target} by hand (git rebase {target}, resolve, git rebase --continue), then "

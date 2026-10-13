@@ -26,7 +26,6 @@ from .boundary import (
     PR_BODY,
     PR_KIND,
     PUSHED_REPORT,
-    RESTACKED_UPDATE,
     SKIPPED_REPORT,
     SPRINT_TITLE,
     STACKED_LINE,
@@ -68,7 +67,7 @@ from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
 from .gates import StoryStatus
 from .relay import Note
-from .restack import FollowOutcome, Plan, Restacker
+from .restack import Plan, Restacker
 from .stack import REVIEW_DIR, Build, Conflict, Rebuilder
 from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
 
@@ -77,6 +76,15 @@ if TYPE_CHECKING:
 
 Out = BoundaryOutcome
 FETCH_PREFIX = "git fetch "
+START_NOTES = {
+    False: "the team branch is current with {target}",
+    True: (
+        "{target} moved {count} commits since the last sprint-end rebase; "
+        "nothing changes until the next sprint end"
+    ),
+}
+NOTHING_TO_PUSH = "no review branch to push"
+NOTHING_TO_RESTACK = "no review branch to restack"
 
 
 def fetch_failed(why: str) -> bool:
@@ -253,7 +261,15 @@ class BoundaryRunner:
         self._emit(b, Out.SKIPPED, note=why)
         self._close(b, SKIPPED_REPORT.format(why=why))
 
+    def _start_sync(self, b: Boundary) -> None:
+        """Report how far the target moved; change nothing (the next sprint end rebases)."""
+        behind = self.remote.behind()
+        note = START_NOTES[behind > 0].format(target=self.remote.target, count=behind)
+        self._emit(b, Out.PASS, note=note, behind=behind)
+        self._advance(b)
+
     def _rebase(self, b: Boundary) -> None:
+        self._fetch()
         self._pin_sync_from(b)
         result = self.remote.rebase_onto(b.sync_from)
         AFTER_REBASE[result.outcome](self, b, result)
@@ -271,14 +287,19 @@ class BoundaryRunner:
 
     def _rebase_current(self, b: Boundary, result: Rebase) -> None:
         self._emit(b, Out.CURRENT)
+        self._unpin(b)
         self._advance(b)
+
+    def _unpin(self, b: Boundary) -> None:
+        b.sync_from = ""
+        self.runtime.save()
 
     def _settle_rebase(self, b: Boundary, result: Rebase) -> None:
         count = rewrite.remap_state(self.runtime.state, result.moved)
         self.runtime.record_checkout()
         self.runtime.save()
-        self._drop_merged(b)
         self._emit(b, Out.REBASED, sha=result.sha, rewritten=count)
+        self._unpin(b)
         self._advance(b)
 
     def _end_sync(self, b: Boundary) -> None:
@@ -300,16 +321,6 @@ class BoundaryRunner:
         done = [s.id for s in state.stories.values() if s.sprint == b.sprint]
         title = SPRINT_TITLE.format(sprint=b.sprint, goal=state.goal)
         return StackEntry(b.sprint, branch, start, self.runtime.git.head(), title, done)
-
-    def _drop_merged(self, b: Boundary) -> None:
-        if not self.stack:
-            return
-        unmerged = self.rebuilder.unmerged(self.stack[-1].end)
-        gone = [e for e in self.stack if not self.rebuilder.picks(e, unmerged)]
-        for entry in gone:
-            self._drop(b, entry)
-        if gone and self.stack and b.edge is Edge.START:
-            b.restack = True
 
     def _drop(self, b: Boundary, entry: StackEntry) -> None:
         self.stack.remove(entry)
@@ -362,7 +373,7 @@ class BoundaryRunner:
     def _review(self, b: Boundary) -> None:
         self._include_fixes(b)
         self.rebuilder.prepare()
-        conflict = self._build_all(b) if self.stack else None
+        conflict = self._build_from(b, self._first_build(b))
         failure = self._conflict_failure(conflict) if conflict else self._check_ends()
         if failure:
             return self._fail(b, failure)
@@ -374,10 +385,19 @@ class BoundaryRunner:
         if b.edge is Edge.END and top and top.sprint == b.sprint:
             top.end = self.mine.last_end = self.runtime.git.head()
 
-    def _build_all(self, b: Boundary) -> Conflict | None:
+    def _first_build(self, b: Boundary) -> int:
+        """Index of the first entry to build: all after a refused restack, else the sprint's own."""
+        top = self.stack[-1] if self.stack else None
+        if b.restack:
+            return 0
+        return len(self.stack) - 1 if top and top.sprint == b.sprint else len(self.stack)
+
+    def _build_from(self, b: Boundary, first: int) -> Conflict | None:
+        if first >= len(self.stack):
+            return None
         unmerged = self.rebuilder.unmerged(self.stack[-1].end)
-        base = self.target
-        for entry in list(self.stack):
+        base = self.stack[first - 1].head if first else self.target
+        for entry in list(self.stack[first:]):
             conflict = self._build_one(b, entry, Build(base, self.rebuilder.picks(entry, unmerged)))
             if conflict:
                 return conflict
@@ -414,35 +434,54 @@ class BoundaryRunner:
 
     def _push(self, b: Boundary) -> None:
         if not self.stack:
-            return self._finish(b, NOTHING_REPORT.format(target=self.target))
+            return self._pass(b, NOTHING_TO_PUSH)
         why = self.runtime.prs.missing()
         if why:
-            return self._local(b, why)
+            return self._local_event(b, why)
         if self.mine.push is Permission.UNASKED:
             branches = [e.branch for e in self.stack]
             return self._hold(b, BoundaryHold.PUSH_PERMISSION, Out.HELD, branches=branches)
         if self.mine.push is Permission.NO:
-            return self._local(b, NOT_PERMITTED)
-        self._push_all(b)
+            return self._local_event(b, NOT_PERMITTED)
+        self._push_own(b)
 
-    def _local(self, b: Boundary, why: str) -> None:
-        branches = ", ".join(e.branch for e in self.stack)
-        text = LOCAL_REPORT.format(sprint=b.sprint, why=why, branches=branches)
+    def _pass(self, b: Boundary, note: str) -> None:
+        self._emit(b, Out.PASS, note=note)
+        self._advance(b)
+
+    def _local_event(self, b: Boundary, why: str) -> None:
         self._emit(b, Out.LOCAL, note=why, ci=CiVerdict.NONE)
-        self._post(text)
-        self._finish(b, text)
+        self._advance(b)
 
-    def _push_all(self, b: Boundary) -> None:
-        if self._push_stack(b):
-            self._pushed(b)
+    def _push_own(self, b: Boundary) -> None:
+        """Push the sprint's own review branch (step 1 of the sprint end); no PR call."""
+        top = self.stack[-1]
+        if top.sprint != b.sprint:
+            return self._pass(b, NOTHING_TO_PUSH)
+        rejected = self._push_branch(top)
+        if rejected is not None:
+            return self._reject(b, top, rejected)
+        self._pass(b, f"pushed {top.branch}")
+
+    def _push_branch(self, entry: StackEntry) -> str | None:
+        """Push the entry's branch when it moved; the refusal text, or ``None``."""
+        if entry.pushed == entry.head:
+            return None
+        out = self.remote.push(Lease(entry.branch, entry.pushed))
+        if out is None:
+            entry.pushed = entry.head
+        return out
+
+    def _reject(self, b: Boundary, entry: StackEntry, reason: str) -> None:
+        fields = {"branch": entry.branch, "reason": reason}
+        self._hold(b, BoundaryHold.PUSH_REJECTED, Out.HELD, **fields)
 
     def _push_stack(self, b: Boundary) -> bool:
         """Push and retarget every entry; hold ``push_rejected`` and return False on a refusal."""
         for entry, below in zip(self.stack, [None, *self.stack], strict=False):
             rejected = self._push_entry(entry, below)
             if rejected is not None:
-                fields = {"branch": entry.branch, "reason": rejected}
-                self._hold(b, BoundaryHold.PUSH_REJECTED, Out.HELD, **fields)
+                self._reject(b, entry, rejected)
                 return False
         return True
 
@@ -450,76 +489,76 @@ class BoundaryRunner:
         """``text`` followed by one fast-forward note per PR too big for "Rebase and merge"."""
         return "\n".join([text, *big_pr_notes(self.stack, self.runtime.config.upstream)])
 
-    # ----- following merges
-
-    def _follows(self) -> bool:
-        return self.mine.push is Permission.YES and self.runtime.prs.missing() is None
+    # ----- restack
 
     def _fetch(self) -> None:
         why = self.remote.missing()
         if why:
             raise UpstreamError(why)
 
-    def _follow(self, b: Boundary) -> FollowOutcome:
-        """Drop merged entries, rebase the rest onto the target and push; see M2-M8."""
-        gone = self.restacker.merged(self.stack) if self._follows() else []
-        if not gone:
-            return FollowOutcome.NONE
-        self._fetch()
+    def _local_why(self) -> str:
+        """Why the boundary delivers nothing: no gh, or no permission; empty when it delivers."""
+        if why := self.runtime.prs.missing():
+            return why
+        return "" if self.mine.push is Permission.YES else NOT_PERMITTED
+
+    def _restack(self, b: Boundary) -> None:
+        """Steps 3-4: drop merged parents, rebase the rest onto the target, push, retarget."""
+        if not self.stack:
+            return self._pass(b, NOTHING_TO_RESTACK)
+        gone = [] if self._local_why() else self.restacker.merged(self.stack)
+        if gone:
+            self._fetch()
+        below = gone[-1].head if gone else self.rebuilder.merge_base(self.stack[0].head)
         rest = self.stack[len(gone) :]
         for entry in gone:
             self._drop(b, entry)
-        b.restack = b.restack or b.edge is Edge.START
-        outcome = self._apply(b, self.restacker.plan(rest, gone[-1]))
-        if outcome is FollowOutcome.RESTACKED:
-            self._restacked(b, gone)
-        return outcome
+        plan = self.restacker.plan(rest, below)
+        self._settle_plan(b, plan)
 
-    def _apply(self, b: Boundary, plan: Plan) -> FollowOutcome:
+    def _settle_plan(self, b: Boundary, plan: Plan) -> None:
         if plan.refused:
-            self._emit(b, Out.REBUILD, note=plan.refused)
-            return FollowOutcome.REBUILD
-        for entry, head in zip(self.stack, plan.heads, strict=True):
-            self._move(entry, head)
-        return FollowOutcome.RESTACKED if self._push_stack(b) else FollowOutcome.REJECTED
+            return self._rebuild(b, plan.refused)
+        self._apply(b, plan)
+        self._deliver(b)
+
+    def _rebuild(self, b: Boundary, why: str) -> None:
+        self._emit(b, Out.REBUILD, note=why)
+        b.restack, b.stage = True, Stage.REVIEW
+
+    def _apply(self, b: Boundary, plan: Plan) -> None:
+        moved = [e.branch for e, h in zip(self.stack, plan.heads, strict=True) if e.head != h]
+        for entry, head in zip(list(self.stack), plan.heads, strict=True):
+            if entry.branch in plan.emptied:
+                self._drop(b, entry)
+            else:
+                self._move(entry, head)
+        self._emit(b, Out.RESTACKED, branches=moved)
 
     def _move(self, entry: StackEntry, head: str) -> None:
         if entry.checked == entry.head:
             entry.checked = head
         self.rebuilder.point(entry, head)
 
-    def _restacked(self, b: Boundary, gone: list[StackEntry]) -> None:
-        self._emit(b, Out.RESTACKED, branches=[e.branch for e in self.stack])
+    def _deliver(self, b: Boundary) -> None:
         if not self.stack:
-            return
-        merged = ", ".join(f"#{e.pr} ({e.branch})" for e in gone)
-        prs = "; ".join(f"#{e.pr} ({e.branch}) {e.url}" for e in self.stack)
-        target = self.runtime.config.upstream.branch
-        self._post(self._with_big(RESTACKED_UPDATE.format(target=target, merged=merged, prs=prs)))
+            return self._advance(b)
+        why = self._local_why()
+        if why:
+            return self._finish_local(b, why)
+        if self._push_stack(b):
+            self._pushed(b)
 
-    def _followed(self, b: Boundary) -> bool:
-        """Follow a merge at the ci stage; True when the stage must end here."""
-        if self._follows():
-            self._fetch()
-        outcome = self._follow(b)
-        CI_AFTER_FOLLOW[outcome](self, b)
-        return outcome is not FollowOutcome.NONE
-
-    def _stay(self, b: Boundary) -> None:
-        """Nothing changes the stage."""
-
-    def _to_review(self, b: Boundary) -> None:
-        b.stage = Stage.REVIEW
-
-    def _to_push(self, b: Boundary) -> None:
-        b.stage = Stage.PUSH
+    def _finish_local(self, b: Boundary, why: str) -> None:
+        branches = ", ".join(e.branch for e in self.stack)
+        text = LOCAL_REPORT.format(sprint=b.sprint, why=why, branches=branches)
+        self._post(text)
+        self._finish(b, text)
 
     def _pushed(self, b: Boundary) -> None:
         kinds = ((e, PR_KIND[e.mode]) for e in self.stack if e.pr)
         prs = "; ".join(f"#{e.pr} ({kind}, {e.branch}) {e.url}" for e, kind in kinds)
-        text = self._with_big(PUSHED_REPORT.format(sprint=b.sprint, prs=prs))
-        self._emit(b, Out.PUSHED, branches=[e.branch for e in self.stack])
-        self._post(text)
+        self._post(self._with_big(PUSHED_REPORT.format(sprint=b.sprint, prs=prs)))
         self._advance(b)
 
     # ----- ci
@@ -530,12 +569,8 @@ class BoundaryRunner:
     def _ci(self, b: Boundary) -> None:
         if not self.stack:
             return self._finish(b, NOTHING_REPORT.format(target=self.target))
-        if self._followed(b):
-            return
         watched = self._watched()
         results = self.watch.results(watched)
-        if self._followed(b):
-            return
         for entry, result in zip(watched, results, strict=True):
             entry.ci = result
         CI_OUTCOMES[overall(results)](self, b, results)
@@ -569,11 +604,9 @@ class BoundaryRunner:
         self.runtime.save()
 
     def _push_entry(self, entry: StackEntry, below: StackEntry | None) -> str | None:
-        if entry.pushed != entry.head:
-            out = self.remote.push(Lease(entry.branch, entry.pushed))
-            if out is not None:
-                return out
-            entry.pushed = entry.head
+        out = self._push_branch(entry)
+        if out is not None:
+            return out
         base = below.head if below else self.target
         entry.commits = self.rebuilder.count(base, entry.head)
         self._pr(entry, below)
@@ -640,6 +673,8 @@ STAGE_RUNNERS = {
     Stage.CHECK: BoundaryRunner._check,
     Stage.REVIEW: BoundaryRunner._review,
     Stage.PUSH: BoundaryRunner._push,
+    Stage.REBASE: BoundaryRunner._rebase,
+    Stage.RESTACK: BoundaryRunner._restack,
     Stage.CI: BoundaryRunner._ci,
 }
 AFTER_REBASE = {
@@ -647,11 +682,4 @@ AFTER_REBASE = {
     SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
     SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
 }
-CI_AFTER_FOLLOW = {
-    FollowOutcome.NONE: BoundaryRunner._stay,
-    FollowOutcome.RESTACKED: BoundaryRunner._stay,
-    FollowOutcome.REBUILD: BoundaryRunner._to_review,
-    FollowOutcome.REJECTED: BoundaryRunner._to_push,
-}
-SYNCS = {Edge.START: BoundaryRunner._rebase, Edge.END: BoundaryRunner._end_sync}
-SYNC_STOPS = frozenset({FollowOutcome.REJECTED})
+SYNCS = {Edge.START: BoundaryRunner._start_sync, Edge.END: BoundaryRunner._end_sync}

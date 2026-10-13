@@ -57,6 +57,8 @@ class Name(StrEnum):
     BOUNDARY_CHECK = "boundary.check"
     BOUNDARY_REVIEW = "boundary.review"
     BOUNDARY_PUSH = "boundary.push"
+    BOUNDARY_REBASE = "boundary.rebase"
+    BOUNDARY_RESTACK = "boundary.restack"
     BOUNDARY_CI_WAIT = "boundary.ci-wait"
     RUN_TESTS = "runner-tool.run_tests"
     RUN_NEW_TESTS = "runner-tool.run_new_tests"
@@ -127,13 +129,21 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
     ),
     (
         Name.BOUNDARY_SYNC, B, BOUND,
-        "Bring the team branch up to date with the target (rebase at a sprint start)",
+        "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",  # noqa: E501
     ),
     (Name.BOUNDARY_CHECK, A, BOUND, "Run the full checks on the team branch"),
     (Name.BOUNDARY_REVIEW, A, BOUND, "Build and check the per-sprint review branches"),
     (
         Name.BOUNDARY_PUSH, A, BOUND,
         "Push the review branches and open or update their pull requests",
+    ),
+    (
+        Name.BOUNDARY_REBASE, A, BOUND,
+        "Rebase the team branch onto the target (sprint end only)",
+    ),
+    (
+        Name.BOUNDARY_RESTACK, A, BOUND,
+        "Bring every review PR up to date, bottom up: rebase, same tree, push, retarget",
     ),
     (
         Name.BOUNDARY_CI_WAIT, A, BOUND,
@@ -157,6 +167,8 @@ BOUNDARY: dict[str, Name] = {
     "check": Name.BOUNDARY_CHECK,
     "review": Name.BOUNDARY_REVIEW,
     "push": Name.BOUNDARY_PUSH,
+    "rebase": Name.BOUNDARY_REBASE,
+    "restack": Name.BOUNDARY_RESTACK,
     "ci": Name.BOUNDARY_CI_WAIT,
 }
 RUNNER_TOOL: dict[str, Name] = {

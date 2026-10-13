@@ -1,4 +1,4 @@
-"""Follows merged stack PRs: finds them and plans the fast rebase of the PRs above them.
+"""Finds merged stack PRs and plans the fast rebase of the stack.
 
 Nothing here pushes or moves a branch. ``Restacker.plan`` rebases in the review
 worktree and says whether every PR kept its tree; the boundary runner applies it.
@@ -7,7 +7,6 @@ worktree and says whether every PR kept its tree; the boundary runner applies it
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from itertools import takewhile
 
 from .boundary import StackEntry
@@ -19,21 +18,13 @@ TREE_CHANGED = "{branch} rebased onto {onto} has a different tree"
 SHORT = 12
 
 
-class FollowOutcome(StrEnum):
-    """What following a merge did."""
-
-    NONE = "none"
-    RESTACKED = "restacked"
-    REBUILD = "rebuild"
-    REJECTED = "rejected"
-
-
 @dataclass(frozen=True)
 class Plan:
-    """New heads for the entries above a merge, bottom first, or why the fast path was refused."""
+    """New heads for the remaining entries, bottom first, or why the fast path was refused."""
 
     heads: list[str] = field(default_factory=list)
     refused: str = ""
+    emptied: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -47,18 +38,23 @@ class Restacker:
         """The leading entries whose PR is merged; lookups stop at the first that is not."""
         return list(takewhile(self._is_merged, stack))
 
-    def plan(self, rest: list[StackEntry], top: StackEntry) -> Plan:
-        """Rebase ``rest`` bottom first above merged ``top``; refuse on a stop or a changed tree."""
+    def plan(self, rest: list[StackEntry], below: str) -> Plan:
+        """Rebase ``rest`` bottom first from ``below``; refuse on a stop or a changed tree."""
         self.rebuilder.prepare()
-        heads: list[str] = []
-        move = Move(self.rebuilder.target, top.head)
+        plan = Plan()
+        move = Move(self.rebuilder.target, below)
         for entry in rest:
             new, refused = self._next(entry, move)
             if refused:
                 return Plan(refused=refused)
-            heads.append(new)
+            self._note(plan, entry, move, new)
             move = Move(new, entry.head)
-        return Plan(heads=heads)
+        return plan
+
+    def _note(self, plan: Plan, entry: StackEntry, move: Move, new: str) -> None:
+        plan.heads.append(new)
+        if self.rebuilder.count(move.onto, new) == 0:
+            plan.emptied.append(entry.branch)
 
     def _is_merged(self, entry: StackEntry) -> bool:
         if not entry.pr:

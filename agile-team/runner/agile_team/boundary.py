@@ -49,11 +49,6 @@ BIG_PR_NOTE = (
     '"Rebase and merge". When it is the bottom of the stack, merge it by fast-forward: '
     "git fetch {remote} && git push {remote} {remote}/{branch}:{target}"
 )
-RESTACKED_UPDATE = (
-    "Merged into {target}: {merged}. The PRs above were rebased onto it with the same tree "
-    "and pushed: {prs}. The bottom one is now based on {target}; nothing is called ready "
-    "before CI passes."
-)
 LOCAL_REPORT = (
     "Sprint {sprint}'s review branches are built and checked but not pushed ({why}): {branches}."
     " No CI result exists."
@@ -102,6 +97,8 @@ class Stage(StrEnum):
     CHECK = "check"
     REVIEW = "review"
     PUSH = "push"
+    REBASE = "rebase"
+    RESTACK = "restack"
     CI = "ci"
 
 
@@ -192,8 +189,8 @@ PR_KIND = {
 }
 
 
-STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.CI)
-RESTACK_ONLY = frozenset({Stage.REVIEW, Stage.PUSH, Stage.CI})
+STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI)
+END_ONLY = frozenset(STAGES[2:])
 STALL_HINTS = {BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)"}
 FIX_KINDS = {
     FixCase.TEAM_CHECK: StepKind.TEAM_FIX,
@@ -325,8 +322,8 @@ class FixContext:
 
 
 def next_stage(b: Boundary) -> Stage | None:
-    """The stage after ``b.stage`` (skipping restack-only ones at a plain start), or ``None``."""
-    skip = RESTACK_ONLY if b.edge is Edge.START and not b.restack else frozenset()
+    """The stage after ``b.stage`` (skipping end-only ones at a start), or ``None``."""
+    skip = END_ONLY if b.edge is Edge.START else frozenset()
     later = STAGES[STAGES.index(b.stage) + 1 :]
     return next((s for s in later if s not in skip), None)
 

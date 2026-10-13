@@ -311,6 +311,11 @@ class Upstream:
         """The commit the team branch shares with the target."""
         return self.git.run("merge-base", "HEAD", self.target).strip()
 
+    def behind(self) -> int:
+        """How many commits the target has that HEAD lacks."""
+        out = self.git.run("rev-list", "--count", f"HEAD..{self.target}")
+        return int(out.strip() or 0)
+
     def rebase_onto(self, old: str) -> Rebase:
         """Rebase HEAD onto the target; abort and report on a conflict, check the result."""
         start, target_sha = self.git.head(), self.git.run("rev-parse", self.target).strip()
