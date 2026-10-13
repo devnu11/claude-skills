@@ -118,7 +118,12 @@ command fails.
    order ("s30 before s29"), relay it to the PO. The board shows each
    story's `#position`. A story that cannot move shows `⏸ <reason>` and what
    it waits on; it keeps its place in the order and runs once it is
-   released.
+   released. **Dependencies** are data too: a story file's frontmatter
+   `depends_on: [s31]` keeps the story from running until s31 is done.
+   A stall then reads `waiting on s31`. When the human says "s32 needs s31",
+   relay it to the PO. If `$AT start` fails with `story files: …; fix
+   depends_on in .team/stories`, show the human the message. The PO (or the
+   human) fixes the named files.
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
    something the PO did not ask for, write the human's words verbatim to a
    file with the Write tool (for example `.team/run/liaison/draft.md`), then

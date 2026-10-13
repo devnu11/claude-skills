@@ -67,7 +67,13 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 - **Backlog:** every story that isn't done, in the order the team will take
   them, in two groups: **Current sprint** and **Backlog**. Each row shows
   its position, id, title, step, status, delivery, and why it is held.
-  Cancelled and held stories are labelled. Click a row to open it: the
+  Cancelled and held stories are labelled. A story that needs others done
+  first shows `depends on s1, s5 (done)`: `(done)` marks a dependency that
+  is already finished, and the story won't start until the rest are. A
+  story ranked above one of its own dependencies shows a warning pill,
+  for example `⚠ s2 is above s5, which it depends on`. Such a move is
+  allowed, but the story will wait. The timeline's **priority** row for that
+  move ends with the same `⚠` warning. Click a row to open it: the
   story file, its state (sprint, step, status, rounds, disputes, hold,
   developer, delivery, commits), links to its design, review and
   acceptance files when they exist, its spend and turns, its last 10

@@ -443,7 +443,11 @@ model, provider, with PO overrides applied), `stories` (in priority order;
 state plus `opened_at`, `repeated`, the story file's `acceptance`,
 `position`, `tier`, `hold`, `wait`: `{"reason", "on"}` or
 `null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
-`/api/file` kinds that exist) and `label`: `cancelled`, `held` or `""`).
+`/api/file` kinds that exist) and `label`: `cancelled`, `held` or `""`;
+from s86 `depends_on` (the state list), `waiting_on` (its ids that are not
+done, in list order) and `dependency_warnings` (`s2 is above s5, which it
+depends on` for each dependency the story is above in the queue); the last
+two are `[]` for a done story).
 `reorders` lists the last 20 reorder requests with `status`
 `pending`/`applied`/`refused` and `reason`. The **Backlog** tab lists
 `run.order` in two groups, Current sprint (no handles) and Backlog (up,
@@ -463,7 +467,12 @@ place. A row whose latest opinion is not `keep` and has no act shows a
 `liaison: <kind>` pill. Its expanded row shows the opinion's kind, time and
 text above the thread and, once acted on, `dismissed`/`applied` with the
 ref and the reorder's status; with the token, `dismiss` and `apply: …`
-buttons (a reorder apply is disabled while a reorder is pending). The board keeps that order in every column and shows each
+buttons (a reorder apply is disabled while a reorder is pending). Since
+s86, in both groups, a row with dependencies shows `depends on s1, s5
+(done)`, where ` (done)` marks each id not in `waiting_on`. Each
+`dependency_warnings` text is a `⚠ <text>` warning pill. A `priority`
+timeline entry with `warnings` appends ` · ⚠ <w1>; <w2>` to its meta and
+takes the warning tone. The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
 `⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
 `needs the human` (blocked, or an open question names it) or `held` (any
@@ -1416,7 +1425,9 @@ involved, in this order:
 3. the `scribe`, on each story that has just reached done (`scribe_due`);
 4. the next step of the movable story that comes first in the **priority
    ranking** (see "Story priority"). A movable story is in the current sprint,
-   `active` and not held, and no open question blocks it. A story that is not
+   `active` and not held, no open question blocks it, and every story in its
+   `depends_on` is done (s86, at every step, not only the first; see "Story
+   dependencies"). A story that is not
    movable keeps its place in the order and is skipped until it is released.
    Step 2 also takes the escalated story that comes first in the ranking.
 
@@ -1464,7 +1475,9 @@ not seen, listed by id with the question, or `tell` messages it has not
 been handed, each as a path to read; see "Liaison messages"), `sprint_end` (every story
 in the sprint is done and the sprint's end boundary has finished; a
 `Review: …` line says what was pushed) and `stalled` (nothing can move; the
-reason for each story is listed, or the held boundary). Gate bounces, `changes_requested` to a pipeline role, a
+reason for each story is listed, or the held boundary). A story's reason is
+its hold first (`held (…)`), then its undone dependencies in list order
+(`s2 at design: waiting on s1`), then its status. Gate bounces, `changes_requested` to a pipeline role, a
 gated role's malformed handoff and `returned` do **not** hand over. The
 runner passes their reasons on in the next standard brief. An `escalate`
 verdict does not hand over either: the runner runs the Manager on the
@@ -1514,8 +1527,9 @@ story.
   setbacks since the key last changed), `run` (the bounces and returns in a
   row between one pair of steps), `repeated` (the repeated reason while
   escalated, else `null`), `escalated_by` (`repeat`, `backstop` or
-  `null`) and `interrupted` (saved work from an interrupted step, offered to
-  the next step; see "Interrupted steps"); run-level `order` (the PO's
+  `null`), `interrupted` (saved work from an interrupted step, offered to
+  the next step; see "Interrupted steps") and `depends_on` (the validated
+  copy of the story file's list, s86; see "Story dependencies"); run-level `order` (the PO's
   story order; see "Story priority"), `scribe_due`, `delivered` (answer ids the
   PO has seen), `goal` (the current sprint's goal), `boundary` and
   `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after
@@ -1561,12 +1575,15 @@ committed to, or `null` when it is in the backlog.
 
 - `open_story` puts a story in the backlog. It refuses an existing id and a
   `delivery` that is not a configured `[[delivery]]` name (empty means the
-  first one), and changes nothing when it refuses.
+  first one), and changes nothing when it refuses. Its `depends_on`
+  argument (s86) is checked next; see "Story dependencies".
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
   go back to the backlog. Done stories never move; they keep the sprint they
   finished in. It refuses an empty list or unknown ids (`unknown stories: s7;
   open them with open_story first`) and changes nothing when it refuses.
+  Once those checks pass, it reloads every open story's `depends_on` from
+  its file and is refused if the files are bad (see "Story dependencies").
 - The `sprint-start` event carries `{"sprint", "goal", "stories"}`.
 - `run_role` on a backlog story is refused: `story sN is in the backlog; add
   it to a sprint`. The status refusals (done, blocked, round cap) come first.
@@ -1583,6 +1600,69 @@ committed to, or `null` when it is in the backlog.
 - The order in which `start_sprint` lists its stories is their priority
   within each group. Started stories still come first (see "Story
   priority").
+
+## Story dependencies
+
+A story that needs others done first lists them (s86) in its file's YAML
+frontmatter as a block list. A comment can give the reason:
+
+```yaml
+depends_on:
+  - s31  # hooks
+  - s36
+```
+
+A missing key means `[]`, and a duplicate id is dropped (the first one is
+kept). The PO writes the list. Never write "Depends on sN" in a story's
+prose. `state.json` keeps a validated copy per story (`depends_on`). The
+router, the `priority` events and the snapshot read only that copy.
+
+**Load points.** The copy is reloaded from the files only at these points:
+
+| When | What loads | On a refusal |
+|---|---|---|
+| `agile-team start` (every mode), before the PO or router runs | every story that is not done and has a file | the command fails with `story files: <refusal>; fix depends_on in .team/stories` and the run does not start |
+| `start_sprint`, after its other refusals pass, before the sprint opens | the same | the tool returns the refusal and the sprint does not begin |
+| `open_story` | the new story only, from its `depends_on` argument | the tool returns the refusal and the story is not opened |
+
+For the loaded stories, the file's list wins. A story with no file keeps the
+list it had in state, and a done story is never reloaded. A refusal changes
+no story's list and saves nothing. A file edited mid-sprint is not read
+until the next start or `start_sprint`.
+
+**Validation.** The loaded lists replace those stories' lists in the graph
+of every story in state, and the whole graph is checked. The first
+refusal wins:
+
+| # | Check | Refusal |
+|---|---|---|
+| a | the frontmatter does not parse, or `depends_on` is not a list of strings (`depends_on: s1`, `depends_on: null` and a bare `depends_on:` all count) | `depends_on must be a list of story ids: s3, s9` |
+| b | a story lists itself | `a story cannot depend on itself: s4` |
+| c | a listed id is not a story in state (done stories are known, and a done dependency is satisfied) | `depends_on names unknown stories: s2 on s77, s5 on s78; open them with open_story first` |
+| d | the graph has a cycle | `depends_on has a cycle: s1 -> s2 -> s3 -> s1` |
+
+Ids are in natural order (`s9` before `s10`). The cycle is the first one
+found by a depth-first walk from each id in natural order, following each
+list in its own order. A story file that is not valid UTF-8 is not refused:
+reading it raises an error.
+
+`open_story(…, depends_on=[…])` checks, after the duplicate-id and delivery
+checks: the argument is a list of strings (a missing or empty argument means
+`[]`); if the story's file already exists, its frontmatter is good and its
+list is the same, in the same order (`s7's file has depends_on [s1, s2], not
+[s2]; pass the same list, or fix the file`); then checks b–d, with the new id
+counted as known. The `story-opened` event's data gains `"depends_on"`.
+
+**Routing.** A story whose dependencies are not all done is not movable
+(see "Routing"). `run_role` by the PO is not checked. A started story whose
+list gains an undone dependency stops too. A dependency outside the sprint,
+or on a cancelled story, waits until the PO changes the sprint or the file.
+
+**Moves are never refused for dependencies.** Every `priority` event (from
+the PO's tools, `start_sprint` or a dashboard reorder) has `warnings`: one
+`s2 is above s5, which it depends on` for each story the change newly put
+above one of its dependencies in the queue, in queue order. When there are
+none, it is `[]`.
 
 ## Story priority
 
@@ -1659,9 +1739,11 @@ no place in the order: s1`, `position must be a whole number from 1 to N`,
 and the pull refusal above. Each change is logged as a `priority` event
 (role `product-owner`; `story` is the moved story for a move):
 `{"change": "set" | "move" | "sprint", "order": [...], "moves": [{"story",
-"from", "to"}], "reason": "...", "pulled": [...]}`. `order` is the queue
-after the change. `moves` lists only the stories whose position changed.
-`pulled` lists the stories this change pulled ahead. `story_status` returns
+"from", "to"}], "reason": "...", "pulled": [...], "warnings": [...]}`.
+`order` is the queue after the change. `moves` lists only the stories whose
+position changed. `pulled` lists the stories this change pulled ahead.
+`warnings` (s86) lists the dependency inversions the change caused (see
+"Story dependencies"). `story_status` returns
 the stories in ranking order, with `order` set to the queue and `pulled`.
 The snapshot gives each unfinished story its `tier`.
 

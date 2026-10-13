@@ -70,6 +70,27 @@ tells the Product Owner at its next turn. From then on your backlog order
 binds the PO: a change to it without a reason is refused, and the reason
 appears in the timeline.
 
+### Stories that depend on others
+
+When a story needs other stories done first, the Product Owner lists them in
+the story file's `depends_on`:
+
+```yaml
+---
+depends_on:
+  - s31  # hooks
+---
+```
+
+The runner won't run any step of that story until every story it lists is
+done. If the sprint can't go on, the Product Owner is told why, for
+example `s32 at design: waiting on s31`. The fix is to add s31 to the sprint
+or change the file. The runner checks the lists each time a run or a sprint
+starts. A list that names an unknown story, the story itself or a loop
+(`s1 -> s2 -> s1`) stops the start and names the stories. Moving a story
+above one it depends on is allowed, but the Backlog tab and the timeline
+warn about it.
+
 `agile-team status` shows the stories in the order they were created. The
 Product Owner's `story_status` and the dashboard show the priority order.
 
