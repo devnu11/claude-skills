@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done)
+
+## s97 complete: Step time leaves out machine sleep (no new tool, no new hand-over)
+
+Dashboard now shows awake time—machine sleep is subtracted from step durations. **What you see:**
+- **Flow boxes and Time chart:** Times shown are "awake time" (machine awake only). On macOS/Linux, monotonic clock pauses during sleep; on Windows, the runner counts sleep via heartbeat, and wall time minus sleep gives awake time.
+- **Running step:** Shows elapsed awake time. "may include sleep" note appears for old steps without sleep data.
+- **Time legend:** Says "Awake time (agent steps only; runner stages: see A6)".
+
+**How it works:** Step events record two clocks: monotonic (POSIX) and sleep counter (all). Heartbeat counts sleep between beats. Snapshot builds awake duration per step using platform-specific rules (POSIX: monotonic delta; Windows: wall delta minus sleep). Old steps without data fall back to wall time and are marked. No new tools, no new hand-overs. Verification: all unit tests pass, P1 node-harness page tests pending (integration-tester).
+
+No new ADR (extends snapshot data pattern from s96). See design `agile-team/docs/design/s97.md` (rules AW1–AW13, snapshot contract).
 
 ## s104 complete: Flow chart readable in all scopes—unused roles hidden (no new tool, no new hand-over)
 

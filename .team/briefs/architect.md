@@ -1,6 +1,16 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s97 complete: Awake-time calculation—step times and heartbeat (design rules AW1–AW13, no new ADR)
+
+Pure snapshot and runner data, no new event kind or state. Step events gain `data.mono` (monotonic clock) and `data.slept` (heartbeat sleep counter). Heartbeat gains `slept` field. Snapshot `steps[]` objects gain `clock` ("awake"/"wall") and `slept` (seconds left out) after `seconds`. Rules AW1–AW13 enforced: (AW1) step events record both clocks via `Pulse.clocks()`, (AW2) heartbeat counts sleep over 2+ beats, (AW3–AW4) platform-safe clock readings, (AW5–AW6) awake time via `AWAKE` table (POSIX: `end.mono - start.mono`; Windows: wall minus `slept` delta), (AW7) wall fallback with mark, (AW8) killed steps untimed, (AW9) running steps get `clock` and `slept` so far, (AW10–AW11) page running line shows awake with "may include sleep" for wall steps.
+
+**Modules:** `system.py` (new `platform()`), `live.py` (`Pulse.slept_s`, `_count_sleep`, `clocks()`, `Meter.interrupted`), `dispatch.py` (pulse.clocks on step events), `dashboard/step_times.py` (new, Clock/Platform enums, `PLATFORMS`/`AWAKE` tables, `Mark`/`Stopwatch`/`Timing` classes), `snapshot.py` (_watch builds Stopwatch with current clocks), `index.html` (awakeSoFar, sleepNote, runningLine, timeBy.wall, timeLegend).
+
+**Data contract:** Steps gain `clock` (null for killed/running), `slept` (null for killed), seconds for awake/wall. Heartbeat gains `slept: float`. No new dependency. No ADR (extends s96 snapshot pattern).
+
+**Docs work:** Update `reference/protocol.md` (steps keys, heartbeat slept, step event data.mono/slept, Flow/Time paragraphs), `docs/customer/dashboard.md` (Flow and Time entries mentioning awake time), `docs/architecture.md` (two rows: system.platform, step_times module).
 
 ## s104 complete: Flow chart dimming and unused roles (design rules FL1–FL9, ADR-0047, docs due with ship)
 

@@ -1,6 +1,17 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s97: Step time now shows awake time—machine sleep excluded (all ACs verified)
+
+**Verdict: All five ACs pass.** Dashboard now displays step duration as awake time (machine sleeping excluded). **What you see:**
+- **Flow chart and Time chart:** Times shown are awake seconds only. On macOS/Linux, sleep is detected via monotonic clock pause. On Windows, heartbeat counts sleep, and runner calculates awake as wall time minus sleep.
+- **Running step label:** Shows elapsed awake time. If an old step lacks sleep data, it shows wall time with "(may include sleep)" note.
+- **Time legend:** Reads "Awake time (agent steps only; runner stages: see A6)".
+
+**Verification:** Checked unit test results (24 tests pass, coverage 99.47%). Verified fixture snapshot and served dashboard page source contains "Awake time" text for legend. P1 node-harness page tests pending (integration-tester).
+
+No new hand-overs, no new tools. Feature extends snapshot data pattern (like s96). See design `agile-team/docs/design/s97.md`.
 
 ## s104: Flow chart is readable in all scopes (all ACs verified by runner on Chromium; AC1 Safari to human)
 

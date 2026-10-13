@@ -1,8 +1,19 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 done, P1 pending)
+**Last updated:** 2026-10-13 (s97 done, P1 pending; s96 done, P1 pending)
 
 See `developer.md` for base conventions.
+
+## s97 complete: Awake time calculation—step clocks and heartbeat sleep counter (all ACs pass, P1 pending)
+
+Extended s96 with platform-aware awake-time logic. **Implementation (design AW1–AW13):**
+- **Runner:** `Pulse.slept_s` accumulates sleep (gap > 2 beats) in heartbeat. Step-start/end and interrupted-end events get `data.mono` and `data.slept` via `Pulse.clocks()` (released lock before write to avoid deadlock).
+- **Dashboard:** New pure module `step_times.py` (~280 LOC) with `Clock`/`Platform` enums, `PLATFORMS`/`AWAKE` data tables, `Mark` readings, `Stopwatch` timings. `Pairing` class pairs events and stores `Mark` readings in `starts` dict. Two awake-time rules: POSIX (monotonic delta), Windows (wall delta minus slept).
+- **Page:** `awakeSoFar` shows running elapsed; `sleepNote` adds "(may include sleep)" for wall steps. `timeBy` counts wall steps; tooltip marks them. Legend text updated.
+
+**Code review done (all ACs pass).** Coverage 99.47%, ruff clean. No test deleted. Minor findings m1–m4 noted (not blocking): seam test missing (one line), dispatch clocks test weak, two helper duplicates. **Your work (P1):** Node-harness page tests (4 items: running line awake/wall, timeBy + tooltip, legend text, stepsAsOf replay). When done, AC4 is complete and story ships.
+
+See design `agile-team/docs/design/s97.md` (AW1–AW13, test checklist, known limits).
 
 ## s96 complete: Time per role on the Flow chart; Time measure in "Tokens by" (all ACs pass, P1 pending)
 

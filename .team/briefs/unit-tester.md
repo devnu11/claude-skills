@@ -1,6 +1,38 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s97 complete: Awake-time calculation—clocks, heartbeat, platform rules (24 unit tests pass, P1 pending)
+
+**Files:** `tests/test_s97_step_times.py` (pure, ~350 LOC), `tests/test_s97_clocks.py` (runner clocks with FakeSystem), `tests/test_s97_snapshot.py` (snapshot awake building).
+
+**Unit tests (step_times.py, pure):**
+- POSIX: mono 1000→1100, wall 100→400 gives seconds=100, clock="awake", slept=200 (AC2, AC5).
+- Windows: wall 100→400, slept 30→230 gives seconds=100 (same formula); mono-only falls back to wall (AC3, AC5).
+- Fallback: no clocks → wall, clock="wall", slept=0 on both platforms (AC2, AC5).
+- Reboot: end mono < start mono → wall fallback. Windows end slept < start slept → wall (AW5–AW6).
+- Bool/string mono → missing. `number()` rejects non-numeric (AW3).
+- Killed: seconds/clock/slept all None (AW8).
+- Running: start at=100, mono=1000; now at=700, mono=1300 → seconds=None, clock="awake", slept=300 (AW9).
+- Platform POSIX: win32→Windows, darwin/linux/cygwin→POSIX (AW4).
+- AWAKE has exactly two keys (Platform.POSIX, WINDOWS) (AW7).
+
+**Runner tests (live.py, Pulse with FakeSystem):**
+- `_count_sleep`: gap=beat_s adds 0; gap=2×beat_s adds 0 (boundary); gap=10×beat_s adds 9×beat_s. Rounding to 0.1 (AW2).
+- `clocks()`: returns {"mono": fake monotonic, "slept": counter} (AW1).
+- Step events carry mono/slept on start/end (AW1, AC1).
+- `_close_interrupted` writes them on interrupted end (AW1).
+- `system.platform()` returns `sys.platform` (seam test). (missing, m2)
+
+**Snapshot tests (snapshot.py):**
+- Platform darwin/win32: step with mono 1000→1100, wall/at 100→400 gives seconds=100 on both (AC5).
+- Windows: running step with slept uses heartbeat counter (AW9).
+- Running without heartbeat → wall time (AW9 fallback).
+- Fixture contract: steps have clock/slept; fixture-build test unchanged (s96 contract holds).
+
+**Coverage 99.47%, ruff clean. No test deleted. S96 exact-dict test gains two keys (clock/slept). S44/S78 heartbeat tests gain slept key.**
+
+See design `agile-team/docs/design/s97.md` (AW1–AW13, test checklist, known limits).
 
 ## s96 complete: Step time pairing and dashboard display (23 tests pass, P1 pending)
 

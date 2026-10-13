@@ -1,6 +1,25 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s97: Awake-time calculation—two clocks on step events, platform-aware rules (1 round, all ACs pass) — verdict ship (P1 tests pending)
+
+**Scope:** `system.py` (+platform), `live.py` (Pulse.slept_s, _count_sleep, clocks(), Meter.interrupted), `dispatch.py` (pulse.clocks on step events), `dashboard/step_times.py` (new, ~280 LOC pure), `snapshot.py` (_watch), `index.html` (running line, timeBy, legend), tests. **Verdict: ship (P1 node-harness pending).**
+
+**Design rules enforced (AW1–AW13):**
+- **AW1–AW2:** Pulse beats every 20s, counts gaps > 2 beats, accumulates in slept_s. Step events carry `data.mono` and `data.slept` via `clocks()` (released lock).
+- **AW3–AW4:** `Mark` readings validate numbers (not bool), `PLATFORMS` table maps `win32`→Windows, others→POSIX.
+- **AW5–AW6:** `AWAKE` dict routes to platform rule. POSIX: `end.mono - start.mono`. Windows: `(end.at - start.at) - (end.slept - start.slept)`.
+- **AW7:** `Stopwatch.between` → `wall_timing` (fallback with mark) or `awake_timing` (clock name + slept delta).
+- **AW8–AW13:** Killed steps untimed; running steps via `so_far(now)` with snapshot's current clocks; page running line formula; wall steps marked; legend text.
+
+**Module structure:** `step_times.py` pure + frozen dataclasses, `Clock`/`Platform` enums, `AWAKE` table (no branching), `Pairing` stores `Mark` in `starts[index]`, `_timing` returns `UNTIMED`/`Timing`, no `closed`/`wall_seconds` functions (replaced by `_closed`/_running). Snapshot `_watch` builds `now` from files and heartbeat.
+
+**Test coverage (all items from design checklist pass):** POSIX sleep span, Windows counter, Windows fallback, no clocks, platform_of names, AWAKE keys, killed, running (POSIX/Windows/no-clocks), mono/slept going back, bool/string/None handling, as_dict keys. S96 exact-dict test gains two keys. No test deleted or weakened.
+
+**Minor findings (m1–m4, don't block):** m2 seam test (one line) missing; m3 dispatch clocks test weak (doze only before both); m4 duplicate event helper.
+
+See design `agile-team/docs/design/s97.md` (AW1–AW13, per-module, test checklist, known limits).
 
 ## s104: Flow chart fixes—dimming by colour, unused roles marked (1 round, all ACs pass) — verdict ship (P1 e2e pending)
 
