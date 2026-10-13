@@ -48,14 +48,6 @@ OLD_ENVIRONMENT_NAME = "delivery"  # the alias (s93 E1); the only place the old 
 RENAMED_SECTIONS: dict[str, str] = {OLD_ENVIRONMENT_NAME: ENVIRONMENT_SECTION}
 BOTH_SECTIONS = "[[{new}]] and [[{old}]] are both set; move every [[{old}]] into [[{new}]]"
 RENAMED_WARNING = "[[{old}]] is the old name of [[{new}]]; rename the section"
-UNKNOWN_ENVIRONMENT = (
-    "acceptance environment {name!r} is not a configured [[environment]]; use one of: {names}"
-)
-NO_ENVIRONMENT = (
-    "acceptance environment {name!r} is not a configured [[environment]]; "
-    ".agile-team.toml configures none, so leave environment empty or ask the human "
-    "to add an [[environment]]"
-)
 
 
 class ConfigError(Exception):
@@ -226,15 +218,6 @@ class Config:
         if not name:
             return self.environments[0] if self.environments else None
         return next((d for d in self.environments if d.name == name), None)
-
-    def environment_refusal(self, name: str | None) -> str | None:
-        """Why ``name`` cannot be a story's environment, or None when it can (s64 V1-V5)."""
-        if not name or self.environment(name):
-            return None
-        names = ", ".join(d.name for d in self.environments)
-        if names:
-            return UNKNOWN_ENVIRONMENT.format(name=name, names=names)
-        return NO_ENVIRONMENT.format(name=name)
 
 
 def config_path(repo: Path) -> Path:

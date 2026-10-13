@@ -43,6 +43,7 @@ from . import (
     salvage,
     sandbox,
     stages,
+    story_spec,
     system,
 )
 from . import owners as owners_mod
@@ -512,7 +513,7 @@ class Runtime:
             presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
 
     def _attach_environment(self, plan: Plan) -> None:
-        environment = self.config.environment(plan.story.environment if plan.story else None)
+        environment = self._environment_for(plan)
         if environment is None:
             raise sandbox.SandboxError("no [[environment]] is configured for the customer proxy")
         with self.stage_log.open(stages.Name.ENV_PREPARE):
@@ -520,6 +521,12 @@ class Runtime:
         role_writes, plan.scope = plan.scope.write, sandbox.proxy_scope(self.config, plan.prepared)
         plan.scope.write += role_writes
         self._fit_role_to_environment(plan)
+
+    def _environment_for(self, plan: Plan) -> Environment | None:
+        """The story's first environment (SF9); the first configured without a story."""
+        if plan.story is None:
+            return self.config.environment(None)
+        return story_spec.first_environment(self.config, plan.story.id)
 
     def _order(self, environment: Environment, story: StoryState | None) -> sandbox.Order:
         return sandbox.Order(environment, presentation.presented_source(self.config, story))
@@ -630,7 +637,11 @@ class Runtime:
     async def _run_step(self, request: StepRequest) -> dict[str, Any]:
         """Settle the PO, return an unpresented request or run the planned step, then note it."""
         self.settle_po()
-        report = self._unpresented(request) or await self._plan_and_run(request)
+        report = (
+            self._unready(request)
+            or self._unpresented(request)
+            or await self._plan_and_run(request)
+        )
         self._note_if_ran(request, report)
         return report
 
@@ -696,6 +707,12 @@ class Runtime:
         if report.get("role") == SCRIBE and story.id in self.state.scribe_due:
             self.state.scribe_due.remove(story.id)
         self.save()
+
+    def _unready(self, request: StepRequest) -> dict[str, Any] | None:
+        """Hold a Proxy request whose story file has problems, billing nothing (SF7)."""
+        story = self.state.stories.get(request.story_id or "")
+        outcome = self.pipeline.unready(story) if story and request.role == PROXY else None
+        return self._returned(request, outcome) if outcome else None
 
     def _unpresented(self, request: StepRequest) -> dict[str, Any] | None:
         """Return a Proxy request on an unpresented story to e2e, billing nothing."""

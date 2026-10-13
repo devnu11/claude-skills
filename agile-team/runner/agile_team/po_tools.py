@@ -24,6 +24,7 @@ from . import (
     priority,
     reorders,
     salvage,
+    story_spec,
     system,
     threads,
 )
@@ -109,12 +110,12 @@ class Tools:
         return text_result(await self.runtime.run_role(request))
 
     def _open_refusal(self, args: dict[str, Any]) -> str | None:
-        """Why ``open_story`` must refuse ``args``, or None (duplicate id, then s64 V1)."""
+        """Why ``open_story`` must refuse ``args``, or None (duplicate id, the story file, depends_on)."""
         if args["id"] in self.runtime.state.stories:
             return f"story {args['id']} already exists"
-        return self.runtime.config.environment_refusal(
-            args.get("environment")
-        ) or self._depends_refusal(args)
+        return story_spec.read(self.runtime.config, args["id"]).refusal() or self._depends_refusal(
+            args
+        )
 
     def _depends_refusal(self, args: dict[str, Any]) -> str | None:
         """DP6: the checks on ``open_story``'s ``depends_on``."""
@@ -138,9 +139,7 @@ class Tools:
             return text_result(refused(reason))
         first = rt.pipeline.first()
         given = dependencies.listed(args.get("depends_on") or []) or []
-        rt.state.stories[sid] = StoryState(
-            sid, args["title"], first, environment=args.get("environment"), depends_on=given
-        )
+        rt.state.stories[sid] = StoryState(sid, args["title"], first, depends_on=given)
         rt.save()
         data = {"title": args["title"], "step": first, "depends_on": given}
         rt.events.emit(Event(EventKind.STORY_OPENED, PO, sid, data))
@@ -509,13 +508,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "open_story": (
         "Register a story; it starts in the backlog until start_sprint lists it. "
-        "environment must be the name of a configured [[environment]], the acceptance environment "
-        "the customer proxy tries the story in (empty = the first one); any other name is "
-        "refused with the valid names. "
+        "Write `.team/stories/<id>.md` first: frontmatter `id`, `title` and "
+        "`acceptance: [{id, text, environment}]`, where every AC's environment is a "
+        "configured [[environment]]. A bad file is refused with every problem; fix the file "
+        "and call again. "
         "depends_on: the ids of stories that must be done before this one starts. Write the "
         "same list in the story file's frontmatter `depends_on`; a different list is refused. "
         "Unknown ids, the story itself and cycles are refused.",
-        {"id": str, "title": str, "environment": str, "depends_on": list},
+        {"id": str, "title": str, "depends_on": list},
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "

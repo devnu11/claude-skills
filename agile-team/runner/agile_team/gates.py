@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import fingerprint, loops, stages, suite_runs, system
+from . import fingerprint, loops, stages, story_spec, suite_runs, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .holds import PoHold
@@ -197,7 +197,6 @@ class StoryState:
     rounds: int = 0
     status: StoryStatus = StoryStatus.ACTIVE
     commit: str | None = None
-    environment: str | None = None
     sprint: int | None = None
     developer: str | None = None
     po_developer: str | None = None
@@ -371,6 +370,10 @@ def _no_suite_runs(_story: str) -> suite_runs.Wanted:
     return suite_runs.Wanted()
 
 
+def _clean_spec(_story: str) -> story_spec.Read:
+    return story_spec.Read()
+
+
 def _passed() -> Outcome:
     return Outcome(Verdict.PASS)
 
@@ -388,6 +391,7 @@ class Checks:
     read: Callable[[str], str | None] = _unread
     stages: stages.Opener = stages.unlogged
     suite_runs: Callable[[str], suite_runs.Wanted] = _no_suite_runs
+    story_spec: Callable[[str], story_spec.Read] = _clean_spec
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -683,6 +687,13 @@ class Pipeline:
         """A return to e2e when the Proxy would start without a presentation."""
         reason = self.checks.presentation(story)
         return self.return_to_e2e(reason) if reason else None
+
+    def unready(self, story: StoryState) -> Outcome | None:
+        """A hold when the story file has problems (s94 SF7), else ``None``."""
+        refusal = self.checks.story_spec(story.id).refusal()
+        if refusal is None:
+            return None
+        return Outcome(Verdict.HOLD, story_spec.STORY_FILE_HOLD.format(refusal=refusal))
 
     def return_to_e2e(self, reason: str) -> Outcome | None:
         """A no-round return to e2e, or ``None`` when the pipeline has no e2e step."""

@@ -16,6 +16,7 @@ import yaml
 from .. import backlog, dependencies, health, live, opinions, system, threads, tool_calls, waits
 from .. import config as config_mod
 from .. import roles as roles_mod
+from .. import story_spec
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
@@ -283,7 +284,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "id": story.id,
         "title": story.title,
         "sprint": story.sprint,
-        "environment": story.environment or "",
+        "environment": ", ".join(story_spec.environment_names(files.config, story.id)),
         "step": story.step,
         "status": str(story.status),
         "rounds": story.rounds,

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from . import sandbox, system
+from . import sandbox, story_spec, system
 from .config import Config
 from .gates import READY, Outcome, StoryState, Verdict
 from .git_ops import Git
@@ -62,7 +62,7 @@ def source_dir(config: Config, story_id: str) -> Path:
 
 def recipe_of(config: Config, story: StoryState) -> Recipe:
     """The story's environment recipe (guide only when none is configured)."""
-    environment = config.environment(story.environment)
+    environment = story_spec.first_environment(config, story.id)
     return PRESENTATIONS[environment.kind] if environment else Recipe(Need.GUIDE_ONLY)
 
 
@@ -83,7 +83,7 @@ class Trial:
 
     def liveness(self, story: StoryState) -> Outcome:
         """Pass a file-only environment; for a service, start it, probe it and stop it."""
-        environment = self.config.environment(story.environment)
+        environment = story_spec.first_environment(self.config, story.id)
         if environment is None or recipe_of(self.config, story).check is Check.FILES:
             return Outcome(Verdict.PASS, READY)
         return self._try(sandbox.Order(environment, presented_source(self.config, story)), story)
@@ -133,7 +133,7 @@ def _ready_workspace(config: Config, story: StoryState) -> None:
 
 def story_seeds(config: Config, story: StoryState) -> Seeds:
     """The story environment's seeds for its source workspace (S3a)."""
-    environment = config.environment(story.environment)
+    environment = story_spec.first_environment(config, story.id)
     return Seeds(seed_dir(config.repo, environment), workspace_of(config, story.id))
 
 
