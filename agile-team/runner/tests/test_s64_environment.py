@@ -38,7 +38,8 @@ def test_message_constants_are_exact() -> None:
     )
     assert config_mod.NO_ENVIRONMENT == (
         "acceptance environment {name!r} is not a configured [[environment]]; "
-        ".agile-team.toml configures none, so leave environment empty or ask the human to add an [[environment]]"
+        ".agile-team.toml configures none, so leave environment empty "
+        "or ask the human to add an [[environment]]"
     )
 
 
