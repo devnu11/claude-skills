@@ -41,7 +41,7 @@ def test_every_text_size_is_at_least_12_and_ink_is_never_muted() -> None:
     body = page().split("const TL_TEXT = {")[1].split("};")[0]
     sizes = [int(n) for n in re.findall(r"px:\s*(\d+)", body)]
     inks = re.findall(r'ink:\s*"([^"]+)"', body)
-    assert len(sizes) == len(inks) == 12
+    assert len(sizes) == len(inks) == 14  # s102 RD3 adds barLabel, barValue
     assert min(sizes) >= 12
     assert set(inks) <= {"--ink", "--ink-2"}
 
