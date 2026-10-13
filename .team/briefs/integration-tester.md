@@ -1,192 +1,25 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s77 done)
+**Last updated:** 2026-10-12 (s81 done, e2e pending)
 
-## s77: E2E bridge step, moved tests, P3 system functions covered (P3 of s71, no new ADR)
+## s81: E2E test for CI with stub gh on PATH (AC7, carried to this step)
 
-P3 e2e: **e2e bridge (Z9, storyless, after unit tests, before implement):** Replace two `monkeypatch.setattr(cli, "Preflight", partial(..., which=lambda e: e))` with `monkeypatch.setattr(system, "which", lambda name: name)`. Patches in `test_halt_e2e.py:100` and `test_budget_e2e.py:26`; drop `partial`, `preflight` imports if unused. **New file `tests/e2e/test_system_e2e.py`:** Six P3 functions on real OS (Z2, Z13): `asyncio.run(async_sleep(0))` is None; `which("sh")` absolute, made-up name is None; `home() == Path.home()`; `cwd()` after chdir matches; `open_browser` patched, returns result, never opens tab; `on_signal(SIGUSR1, event.set)` then `raise_signal` sets event in 1s. **Paths:** Moved tests use `parents[4]` (one more level), no imports of git helpers or file helpers from `s29_helpers.py`. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s77.md` (Z9, Z13, e2e checklist).
+Story accepted. All ACs pass except AC7 (e2e test), which is your work. New file `tests/e2e/test_s81_ci_e2e.py` (REAL world, 30s limit).
 
-## s76: Unit tests touch no process/signal/network (P2 of s71, no new ADR)
+**What to build:**
+1. Stub `gh` script in `tmp_path/bin`, first on PATH via `monkeypatch.setenv("PATH", ...)`.
+2. Stub records its argv to a file.
+3. Answers: `pr checks N --watch` (exit 1), `pr checks N --json …` (one fail check with Actions job link), `run view --job J --log-failed` (log with `FAILED tests/x.py::test_y` line).
+4. Test: `CiWatch(GhPrs(command_runner(tmp_path)), 30).results([entry])` → RED with that failing line.
+5. Assert stub argv: `pr checks N --watch`, `--json name,state,bucket,link,workflow`, `run view --job J --log-failed`.
+6. Never touch real HOME.
 
-P2 of s71: e2e tests for all 13 new `system.py` functions (P2 rows): `connect`, `environ`, `hostname`, `http_get`, `killpg`, `listen_http`, `pgid`, `pgrp`, `run`, `run_shell`, `spawn_logged`, `spawn_piped`, `wait_event`. New `tests/e2e/test_system_e2e.py` tests each on real OS (stdlib `true`/`sh`, real HTTP, real session). Moves to e2e: 4 whole files (`test_s70_ids`, `test_dashboard_ui`, `test_dashboard_live_ui`, `test_docs_commands`). Key fix (J7): `test_service_stop_e2e.py:93` patches `system.killpg`, not `process_groups.os.killpg`. AC2 e2e checklist verified: 4 files moved with new paths (parent level +1, e.g., `parents[3]` → `parents[4]`). Coverage ≥95%; ruff clean. See design `agile-team/docs/design/s76.md` (J7–J9, e2e checklist), ADR-0036 (s71).
+**Setup:** `entry = StackEntry(pr=5, mode=PrMode.READY, branch="review", url="https://…#5")`. Command runner uses `tmp_path` repo.
 
-## s78: Health e2e tests—tool activity and gate activity show as amber, not red (no new test file; refined existing)
+The test is integration (real CLI-like gh stub), not unit. Covers the full wait/read/log path. Existing `test_ci_git_e2e.py` test name available if needed.
 
-The existing health e2e tests stay green with one context update. S44 rules R0–R15 remain; three new rules (R16, R18, R19) are tested in unit tests (`test_s78_health.py`). For e2e scenarios:
+See design `agile-team/docs/design/s81.md` § Test checklist, AC7.
 
-- **Tool activity:** A role's tool (Bash, etc.) opening and running for 240+ seconds shows as amber in the dashboard ("heartbeat N old while Bash runs"), not red. Unit tests cover the rules; e2e acceptance testing verified it live.
-- **Gate activity:** While the implement gate runs (90+ seconds), the heartbeat is amber or green with chore shown ("heartbeat N old while runner: gate: implement on s71 for N min"), not red. Verified live.
-- **Sleep:** When a Mac sleeps 11+ minutes, on wake health is red with reason "the machine slept for 11 min". Unit tests pin the calculation; e2e acceptance verified detection.
+## Scope (unchanged)
 
-No new e2e test file; existing health.e2e.py tests stay green. The accuracy of health (no false reds) is now tested unit-level via the new health rules; e2e focuses on the dashboard rendering and UI responsiveness. See design `agile-team/docs/design/s78.md`, ADR-0038.
-
-## s79: Zone-independent tests and git isolation guard
-
-**Z1, Z2:** Tests that depend on local time must compare instants, not time-of-day strings. For `test_halt_line_reset_wins_over_po_text`, parse `next_wake` with `datetime.fromisoformat()`, assert it is zone-aware, convert to the target zone (`ZoneInfo("America/Chicago")`), then assert the time-of-day is correct. Parametrize tests over zones with static labels `["UTC", "Asia/Kolkata"]`; set `TZ` with `monkeypatch.setenv("TZ", zone)` before the test starts. The child process inherits TZ; the pytest process itself does not call `time.tzset()`.
-
-**G3 guard test:** `tests/e2e/test_ci_git_e2e.py` verifies git isolation cannot be accidentally broken. Import `AMBIENT_IDENTITY`, `git`, `set_git_identity` from `..conftest`. Write five guard tests: (1) repo with no identity cannot commit (stderr has `auto-detection is disabled`), (2) no global identity is read from a fresh repo, (3) ambient identity variables are cleared, (4) `set_git_identity` lets a new repo commit with expected author, (5) the `repo` fixture has its own identity in local config.
-
-See design `agile-team/docs/design/s79.md` (rules Z1–Z2, G3, test checklist).
-
-## s82: Service stop race on Linux—e2e reproduces race without Linux (no ADR)
-
-New file `tests/e2e/test_service_stop_e2e.py` (30s limit) verifies the service stop works. The race (dash leader dies at SIGTERM, child keeps running) cannot be shown locally without Linux CI. Instead, reproduce it: delivery prepare is `sh -c '<python> <slow_server.py> {port} & wait'` (leader dies at SIGTERM, server on SIGTERM sleeps 1s then exits). Test cases: (1) stop → None, port free at once (fails on pre-s82, passes now); (2) server ignores SIGTERM, STOP_WAIT_S=0.2 → SIGKILL ends it; (3) leader already exited before stop is called → no signal sent (spy on process_groups.signal_child_group); (4) existing dashboard trial test unchanged, passes. Linux proof via CI on PR #14. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s82.md` test checklist.
-
-## s67: E2E test—first watch records, then waits (liaison behavior)
-
-One e2e test in `tests/e2e/test_liaison_e2e.py` updated for AC4 (first watch with populated outbox waits instead of reporting history):
-
-- Tell posts m1 (the history).
-- `watch --timeout 1` (no `.team/run/liaison/watch.json` yet) → exit 0, `triggers == ["heartbeat"]`, `messages == []`; `.team/run/liaison/watch.json` now exists with `messages == 1`.
-- Post m2; `watch --timeout 5` → `"message"` in triggers, message ids `== ["m2"]` only.
-- `watch --timeout 1` → `["heartbeat"]` (as today, no change).
-
-All in the `configured` scratch repo. The watch.json now always exists after the first watch, with the baseline count and status. Docs updated: SKILL.md § `watch` command and `reference/protocol.md` § Watch section say a first run records before waiting.
-
-## s69: Run e2e tests by file name only; full suite denied
-
-You can run e2e tests from your test directory by file name (e.g., `pytest -q tests/e2e/test_x.py`), but you cannot run:
-- The full suite (`pytest` with no arguments, or a directory like `pytest tests/`)
-- Any coverage check (`pytest --cov`)
-
-Both are denied with a message. The runner runs the full suite at gates. Use file-name runs to verify your e2e tests work before handing off. See ADR-0034, design `agile-team/docs/design/s69.md` (rules S1–S8).
-
-## s44: Live meter E2E tests (six items open)
-
-Python unit tests and UI tests pass. E2E tests for the health rules are now your responsibility. From design section E2E test checklist:
-
-1. **Green→Amber→Red:** Fake step process opens a Pulse and meter, streams fake `AssistantMessage`s, then goes silent. `state.json` says running. Config: `[health] beat_s = 0.5, stale_s = 30, amber_quiet_s = 2, amber_tool_s = 1, red_quiet_s = 4`. `/api/stream` shows `health.level` green (turns arriving), then amber (no turn for 2s while tool runs), then red (no turn for 4s; "no turn for…").
-2. **SIGKILL:** Kill the fake step process (stale_s = 2). Stream turns red with `the runner is not running (pid…)`, then heartbeat goes stale. Verify both reasons appear.
-3. **Graceful stop (R15):** Same killed setup, but `state.json` has status `stopped` and no `halt_kind`. Stream stays `idle` (`stopped`) past `stale_s` and never shows red or notification.
-4. **Scope toggle:** Served snapshot through `run_page(driver)` node harness. For story/sprint/run scope, `scopeTotals` matches ledger sum (F3 entries), idle role dimmed in Story scope, PO never dimmed.
-5. **URL lines:** `agile-team dashboard` prints `dashboard: http://localhost:<port>/` first, then `from other machines: http://<host>.local:<port>/` (or nothing if loopback).
-6. **Coverage ≥95%, ruff clean.**
-
-Use `conftest.FakePulse` with configurable pace and real Pulse/Meter. Write to `tests/e2e/test_dashboard_e2e.py`. See ADR-0032, design `agile-team/docs/design/s44.md` (E2E checklist).
-
-## s30: Dispute gate compares content, not commits
-
-E2E tests for the dispute gate now verify that it compares the disputed test file's **content hash** (ignoring whitespace and comments) against a baseline stored at dispute raise time. Test cases: unchanged file bounces with exact reason text (test id, file, baseline[:12]); cosmetic fix (comments/blanks only) bounces; real fix passes; file now missing passes; confirmed disputes pass without reading. Also verify: path resolution through `git ls-files` (exact + suffix match), unresolvable files bounce to `implement` with `UNTRACKED` text and no `test-dispute` event, legacy disputes (before s30) pass with `LEGACY_PASS`. See design `agile-team/docs/design/s30.md` (E2E checklist).
-
-## s11: Test disputes in e2e flows
-
-Test disputes are a developer → tester → architect route for resolving test/design contradictions. Your e2e tests verify that:
-1. A developer's dispute at `implement` (test id, rule, reason) sends the story to `tests` with no bounce.
-2. Tester fixes the test (file changed, git diff exit 1) → story passes to `implement` (dispute cleared, no handover).
-3. Tester confirms the test (changes_requested, next_role: architect) → story goes to `design` (dispute stage confirmed), architect rules, goes back to `tests`, then `implement`.
-4. Free disputes: first `round_cap` disputes per story don't count rounds; later disputes cost 1 round each.
-5. Rulings apply at any step; unapplied ruling shows why in report (no-story, done story cases).
-
-See ADR-0018, design `agile-team/docs/design/s11.md` (test checklist section 7 covers end-to-end flows).
-
-## s9: Interrupted steps—edits saved and offered in next brief
-
-When a step is cut short, the runner saves its edits in a commit and reverts it. On resume, the runner offers the sha to the next step on that story via the brief. Your tests should verify the full cycle:
-
-- **Interrupted step with edits:** A role writes both in-scope and out-of-scope files, then gets interrupted (error, limit, SIGTERM, or kill -9). Both files are in the saved commit; out-of-scope ones are quarantined again on cherry-pick.
-- **Resume after interruption:** `start --resume` detects the in-flight step, saves it (cause matches the interrupt kind), and the resume prompt lists it with the sha. Status shows `interrupted: true, status: "interrupted"`.
-- **Offer in next brief:** The next role on that story gets the brief line `Interrupted work: …` with the exact `git cherry-pick -n <sha>` command. It remains until the story's step settles.
-- **Settlement clears the offer:** A clean settlement (any verdict) clears the interruption from that story; later steps do not see it.
-- **Live scenario (AC5 verified):** Stale `runner.pid` with state `running` and `in_flight` set → `agile-team status` reports `status: "interrupted"`, `running: false`, with `in_flight` and `interrupted` shown. No process behind it.
-
-Test areas from the design (checklist sections 2, 4, 5, 10, 11, 13):
-1. Halt flow captures edits and clears in-flight on settlement.
-2. Resume after kill detects stale pid and saves (cause `killed`).
-3. Next brief on story includes the offer (with sha from state, not memory).
-4. Status keys `in_flight`, `interrupted` appear in the report.
-5. Snapshot in mock mode shows `in_flight`, `interrupted` fields.
-
-See ADR-0017, design `agile-team/docs/design/s9.md` for exact strings and module changes.
-
-## s40: Snapshot now includes priority and wait state
-
-The snapshot and state.json now carry explicit priority information:
-
-- **`state.json`:** `order` field holds the queue (list of unfinished story ids in priority order). Legacy files without it load with `[]`.
-- **Snapshot stories:** Each story now has `position` (1-based int or null when done), `in_progress` (bool), `hold` (reason string or null), and `wait` ({reason, on} or null).
-- **Observable on the board:** Stories show `#<position>` in the id line. Held or blocked stories show `⏸ <reason>` pill and `waits on:` line with the full reason they can't move.
-- **Fixture updates:** `run.order` key added. Stories listed in ranking order (not creation order). At least one held story with open question naming it, showing the `wait` structure.
-
-For your presentations, note that `state.order` is now part of the state, and stories' `position` and `wait` fields are observable on the board. See ADR-0016, design `agile-team/docs/design/s40.md` (rules D1–D5).
-
-## s19: Runner drives the fixed pipeline automatically
-
-The runner now drives sprint stories through the pipeline automatically (design → implement → review → acceptance → scribe). The PO is called only for judgement (hand-overs). This means:
-- **Your scope unchanged:** Your e2e steps (acceptance, e2e gate) stay in the pipeline. You are called the same way (standard brief, step request).
-- **No more mid-pipeline PO calls:** Steps move continuously between your gate and the next step. If a step bounces or hands over, the PO gets control; otherwise the router carries on.
-- **Integration test cases:** Your e2e tests should verify the full pipeline runs to completion (all steps, all rolls, all gates) without manual PO intervention for routing. A fake PO that yields only `done` handoffs should show every story reaching `DONE` with the scribe running.
-
-See ADR-0009 and `agile-team/docs/design/s19.md` for the new architecture.
-
-## Your mission: prepare the presentation for the Customer Proxy (s13)
-
-For each e2e step, the runner creates an empty `.team/run/presentation/<story>/` directory with a fresh `workspace/`. Your job is to fill it with what the Customer Proxy will judge the product on:
-
-1. **Build the workspace:** Follow the recipe for your story's delivery kind (see table below)
-2. **Write PRESENTATION.md:** For each acceptance criterion, describe what to try and what the customer should see
-3. **Capture live-run output:** For ACs that only show in a live run (sprints, stops, spend), capture `agile-team status` or other output as JSON
-4. **Check before handoff:** Run the commands you document; verify the output matches what you wrote
-
-The e2e gate will check that PRESENTATION.md exists and is non-blank, and that workspace/ is non-empty. A missing or incomplete presentation bounces to e2e with a round increment.
-
-## Presentation recipes by delivery kind
-
-Build the workspace the way a customer would have it after following the team's install and setup docs. The absolute path to your presentation dir is in the runner's output.
-
-| Delivery kind | Recipe |
-|---|---|
-| **cli** (package) | Run `agile-team --repo <presentation-path>/workspace init --preset python --delivery package`. Then write any state files the ACs need into `workspace/.team/run/` (e.g., `state.json` with sprints or a blocked status, `outbox.jsonl` note, `crash.log` entry). For live-run ACs, capture: `agile-team --repo <presentation-path>/workspace status > <presentation-path>/live-status.json`. Before handing off: `agile-team --repo <presentation-path>/workspace status` should print the state you meant to show. |
-| **dashboard** (web) | Run `agile-team --repo <presentation-path>/workspace init --preset python --delivery package`. Then add sample run files: `state.json`, `events.jsonl`, `ledger.jsonl`, `outbox.jsonl`, `inbox.jsonl` in `workspace/.team/run/`, chosen so every AC's feature shows (tabs, sprints, a bounce, a question, spend). Before handing off: `agile-team --repo <presentation-path>/workspace dashboard --no-open --port 0` prints a URL; `curl <url>api/snapshot` returns data (then stop the server). |
-| **library** | A sample consumer project that uses the library, set up and tested by the customer | reference next to the empty `consumer/` project, which stays cwd |
-| **harness** | Sample inputs for the listed commands | through the listed commands |
-| **manual** | Only PRESENTATION.md (no workspace needed); it is the human's starting point | quoted in the prompt |
-| **script** | Sample inputs the scripts run on | same as **cli** (work in workspace/) |
-| **package** | A project set up the way a customer has it after following install docs | same as **cli** (cwd stays sandbox) |
-
-## Write scope: tests/e2e and presentation only
-
-Your writes are limited to:
-- `tests/e2e/`: integration test files (for e2e regression tests and acceptance manual checklist)
-- `.team/run/presentation/<story>/`: the presentation (PRESENTATION.md, workspace, live-status.json, etc.)
-
-The runner enforces this. When you find a unit-level bug:
-- Add a regression test to `tests/e2e/` if it shows up in e2e, or
-- Document it clearly for the Unit Tester if it's unit-level; they will add it to `tests/unit/`
-
-## s8: Clean halt – mandatory e2e regression tests
-
-Code review (round 2) deferred three test cases to your scope because they need the full harness (fake query_fn, scratch git repo):
-
-1. **D1 fixed:** Limit error reason strips ` (exit code: 1)`. Test: build a `ResultError` with `exit_code=1` (as the SDK does), include a trailing `errors` list, verify the exact AC1 reason (no exit code suffix, ends at semicolon if present).
-2. **D2 fixed:** After a role step halts with a limit, both uncommitted in-scope and out-of-scope edits stay as-is. Test: role writes one file inside PO scope and one outside, then raises limit. Verify both files are uncommitted, HEAD unchanged, no QUARANTINE event, story step/rounds unchanged.
-3. **Regression:** An empty limit error message. Test: a limit with no reset time or kind phrasing. Verify it classifies as a limit (not a crash) and reason is extracted (or defaulted).
-
-## s5: Dashboard live UI – manual acceptance checklist
-
-Customer-proxy reported s5 done (AC2–AC7 verified, AC1 reconnect by simulation, AC8 not runnable by them). Manual checks for you:
-
-1. **Live updates:** Run `agile-team dashboard --port 0 --no-open`, open the URL, touch `.team/run/events.jsonl`. The page updates without a refresh (via EventSource).
-2. **Reconnect:** Stop the server, restart on the same port. The status pill goes "reconnecting…" and back to "live" once the server is ready.
-3. **Mock replay:** Open `/?mock` from the file (`index.html` as a local file). All five tabs render: Flow (Mermaid graph), Board (cards), Tokens (bars + chart), Questions (two lists), Requirements (tiles + matrix).
-4. **Themes:** Toggle ◐/☀/☾ buttons. Dark mode is usable; colors match CSS tokens. `prefers-color-scheme` is respected by default.
-5. **Error recovery:** Break a file in `.team/run/` (e.g., truncate `events.jsonl` mid-line). The dashboard reconnects and renders without crashing. A render error pill appears in the status row if needed.
-
-Known gaps:
-- No executable test for live dot animation or halo movement. These were verified by hand in headless Chrome (ADR-0003).
-- Without internet, Flow shows source text instead of diagram (Mermaid off CDN). Other tabs work offline.
-- Dashboard does not show AC1 (reconnect after server restart) in a way that automated tests can verify; simulation confirms it.
-
-## s26: Self-contained presentations and the e2e gate trial
-
-The e2e gate now tests service delivery liveness before the Proxy runs. Your presentation must be self-contained (no repo paths). Key changes:
-
-- **Self-contained rule (L13):** The Proxy's sandbox can't read repo paths. Include only copies of what the customer needs (ADR, protocol section, files to try) and captured command output (test, ruff results with command and exit code). No repo paths in PRESENTATION.md.
-- **Gate trial (L10):** For `web` deliveries, the gate runs a `Trial` from your presentation: starts the service, probes it, stops it. `NotUp` bounces to e2e (round +1, reason has command output). Port conflict holds (no round, hand-over to PO). Pass means something answered.
-- **Clean up your own server:** If you start a service for your own testing, stop it before handing off. The gate will start one too; if your port is in use, the gate holds and the PO must fix it.
-- **Web delivery recipe:** Same as cli (init, add state files). Before handing off: `agile-team dashboard --no-open --port 0` prints a URL; `curl <url>api/snapshot` returns 200 JSON.
-
-See ADR-0013, design `agile-team/docs/design/s26.md` (rules L3, L10, L13, reason strings).
-
-## Backlog and sprint membership
-
-Stories stay in the backlog until the Product Owner calls `start_sprint`. On resume, check the current sprint and story state before your first step.
+E2E tests only. Run by file name (`pytest tests/e2e/test_s81_ci_e2e.py`). Never full suite or `--cov`. Real OS and clock; 30s timeout. No monkeypatch for `system.<name>` (use real calls). Moved tests from unit use `parents[4]` (one more parent level). Coverage ≥95%, ruff clean.
