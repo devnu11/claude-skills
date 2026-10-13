@@ -98,10 +98,13 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   arrow lights up briefly instead.
   Above the chart, **Story / Sprint / Run** picks what each role's box
   totals: its tokens, dollars and time on one story, one sprint or the
-  whole run. Tokens and dollars come from the ledger. Time is the wall time
-  of the role's finished steps, shown in h and min. The Product Owner's box
+  whole run. Tokens and dollars come from the ledger. Time is the awake time
+  of the role's finished steps, shown in h and min: if you close the lid
+  mid-step, the time asleep is left out. The Product Owner's box
   shows no time, because its queries are not steps. A role that is working
-  now also shows `⏱ running 12 min`, which moves on each minute. The page
+  now also shows `⏱ running 12 min`, which moves on each minute. Steps
+  recorded before this feature have no awake clock and count their full
+  wall time; a running one says `(may include sleep)`. The page
   remembers your choice. Story starts on
   the story being worked on now. Pick another in the box beside the toggle.
   Roles that have not worked on that story are dimmed: their box turns
@@ -126,8 +129,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   over time. Above the bars, the first buttons pick the grouping (Role,
   Story, Model). The second pick the unit: **Tokens** (bars split by token
   kind), **Dollars** (one bar of cost per row) or **Time** (one bar of step
-  time per row, titled "Time by"). A Time bar's tooltip gives the number of
-  steps and the row's share of all step time. Time counts agent steps only.
+  time per row, titled "Time by", with the legend "Awake time"). A Time
+  bar's tooltip gives the number of steps and the row's share of all step
+  time. It also says how many of them may include sleep, if any were
+  recorded before awake time was measured. Time counts agent steps only.
   The runner's own work between steps, such as gate runs, syncs and
   presentation builds, is not in it. A step cut off by a killed runner
   counts as a step but adds no time. The unit changes only that
