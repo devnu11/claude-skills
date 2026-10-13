@@ -1,6 +1,14 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git confinement—acceptance runs safe from the team repo (AC2, AC7 all pass)
+
+Story accepted. Git in your acceptance sandbox is isolated: you cannot reach the team repo by accident. **Your scope unchanged.** Sandbox still wiped and recopied each acceptance step. Presentation workspace (from integration-tester's e2e step) is copied into your sandbox for your acceptance runs. Inside the workspace, git commands the delivery allows run freely. Git targeting the team repo is denied with reason naming the repo. You will see git denials only if the delivery's commands try to escape the workspace—a safety feature, not a blocker.
+
+Same sandbox procedure, same service startup, same `Presentation.md` delivery contract. No changes to your interaction with the runner.
+
+See design `agile-team/docs/design/s65.md` (AC2 denial, AC7 workspace, G2 environment, G9 copy).
 
 ## s59: Sprint-start sync rebases; no false conflicts from now on (AC1–AC7 all pass)
 

@@ -1,6 +1,20 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git confinement—S61 incident solved, no ADR (extends s41/s43/s69 guard pattern)
+
+During s61, integration-tester's git demo had no `.git`, so git climbed to the team repo and moved the human's `main`. Two-layer solution in code:
+
+**Layer 1: Environment (G2).** Confined steps (e2e, acceptance) get `GIT_CEILING_DIRECTORIES=<run_dir>` and `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` in launch env. Git can't climb above `.team/run`, so a demo with no `.git` fails "not a git repository", not reaching the team repo.
+
+**Layer 2: Guard (G3–G7).** New pure module `git_check.py` classifies git segments. The PreToolUse hook now sees through command prefixes (env, command, timeout, etc.) via `WRAPPERS` table (G3). For each git segment, tracks where it works via cd tracking and places (G5), looks up `GIT_RULES` by `Where` (G6), and denies writes/reads to elsewhere. In confined steps, additionally denies mentions of locked env vars (GIT_CEILING_DIRECTORIES, GIT_DIR, GIT_WORK_TREE, GIT_DISCOVERY_ACROSS_FILESYSTEM, CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR) (G7).
+
+**Data tables (no branching):** `GIT_CONFINED` (e2e, acceptance → workspace getters), `WRAPPERS` (env, command, timeout, etc.), `PATH_ARGS` (init, clone, push, etc. → ALL/FIRST), `GIT_RULES` (Where → allows/reason), `ALLOWS` (READ_ONLY/ANY/NONE predicates).
+
+**Modules:** New `git_check.py` (pure, ~380 LOC, I/O only via `paths.resolve_in`). Changed: `guard.py` (moves SAFE_GIT/NO_COMMIT_FLAGS, calls git_check), `presentation.py` (workspace survives bounce via `_ensure_workspace`), `dispatch.py` (GIT_CONFINED table, _confine_git call at setup end).
+
+**Coverage:** ≥95%, all AC1–AC10 pass. E2E test `test_git_confinement.py` runs in real git (isolated_git fixture). No new dependency. See design `agile-team/docs/design/s65.md` (G1–G10, test checklist).
 
 ## s59: Rebase at sprint start (ADR-0041, rule R1–R12, docs updated)
 

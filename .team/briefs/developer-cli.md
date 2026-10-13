@@ -1,8 +1,20 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s89 done)
+**Last updated:** 2026-10-12 (s65 done)
 
 See `developer.md` for the base conventions.
+
+## s65: Git confinement—roles can't reach team repo (AC1–AC10 all pass)
+
+**Deliverable:** cli (runner's guard and role steps). New module `git_check.py`, changes to `guard.py`, `presentation.py`, `dispatch.py`. Design rules G1–G10, no new ADR (extends s41/s43/s69 guard pattern).
+
+**Implementation:** Two layers stop roles' git from reaching the team repo:
+1. **Environment (G2):** Confined steps (`e2e`, `acceptance`) get `GIT_CEILING_DIRECTORIES=<run_dir>` and `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1`, so git can't climb past `.team/run`.
+2. **Guard (G3–G7):** New `git_check.git_denial()` sees through prefixes (`X=1`, `env`, `command`, etc.), decides *where* each git segment works (G5), and looks up `GIT_RULES` (G6) to allow/deny.
+
+**Key rules:** Unconfined steps get read-only git (status/diff/log, no commit). Confined steps (presentation/acceptance) can use git freely inside their workspace (`git init`, `git -C demo …`, `git clone`). Any git targeting the team repo is denied with `GIT_OUTSIDE`, naming the repo. Git can't find the repo from the workspace (G2 ceiling). AC1–AC10 pass: environment stops discovery, guard stops explicit access, prefixes are seen, workspace survives bounce.
+
+See design `agile-team/docs/design/s65.md` (G1–G10, test checklist).
 
 ## s89: Unit suite passes on 3.13 (OS guard refined, test infrastructure only)
 

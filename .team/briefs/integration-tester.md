@@ -1,6 +1,16 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done, e2e pending)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git confinement—build demos in the presentation workspace (AC9 e2e test, all pass)
+
+Story accepted. Runner now isolates roles' git to prevent reaching the team repo. **For your presentations:**
+- **Workspace location:** `.team/run/presentation/<story>/workspace`. Runner creates it with `git init` on first use, keeps it on bounce.
+- **Where git works:** Build demos *inside* `workspace/`. Commands that work: `cd <ws> && git init demo`, `git -C <ws>/demo commit …`, `git -C <ws>/demo rebase main`, `git clone demo copy`, `git -C <ws>/demo checkout -b topic`. Commits and pushes all allowed inside workspace.
+- **What's blocked:** Git targeting the team repo or outside the workspace is denied: `git -C <team> status`, `cd <ws> && git clone /etc /tmp/x`. Git outside the workspace is read-only in your cwd only: `git status`, `git log` in the cwd pass; `git commit` in the cwd is denied.
+- **Environment:** Git can't climb above `.team/run` (ceiling set by runner). If your demo has no `.git`, `git status` fails with "not a git repository", not reaching the team repo.
+
+See AC9 e2e test design, `agile-team/docs/design/s65.md`. Workspace is your story's sandbox; keep it clean between steps (ACM: you may wipe it by overwriting files, but only you do).
 
 ## s59: E2E tests for rebase at sprint start (AC6, five cases, carried to this step)
 

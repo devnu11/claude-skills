@@ -1,6 +1,22 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git confinement (unit tests, coverage ≥95%, no new ADR)
+
+Tests for `git_check.py` (new pure module), `guard.py` (G3, G4, G7 checks), `presentation.py` (workspace survival), `dispatch.py` (confined setup). Key test areas:
+
+**`git_check.py`:** Strip prefixes (G3: `X=1`, `env`, `command`, `timeout`, etc.), parse git (first/sub words, options), bases (cd tracking, unknown on unanchored move), where (D location: UNCONFINED/STEP_DIR/WORKSPACE/ELSEWHERE/UNKNOWN), denial reasons (G4/G6/G7 applied). Path resolution through `-C`, `--git-dir`, `--work-tree`, `-c name=value`. Outside words (URLs, scp, flags). Cd tracking across separators (`&&` carries base, `;` makes it unknown).
+
+**Guard integration:** G3 sees through `env -C`/`-S`, finds git after wrappers. Git segment check returns denial reason or None. Environment vars in `GIT_ENV_LOCKED` denied (G7) in confined steps. Regression: unconfined `git status`/`cherry-pick -n` allowed, `git commit`/`git -C x status` denied with today's text.
+
+**Presentation:** Workspace persists across bounce (lay_out creates dir and runs `git init -q` only when missing). Integration-tester's workspace contains git repos.
+
+**Dispatch:** `GIT_CONFINED` table maps `e2e`/`acceptance` to workspace getter; `_confine_git` sets `scope.git_workspace` and `launch.env` with ceiling/cwd-keep. Developer steps unconfined (neither set).
+
+**E2E** (new `tests/e2e/test_git_confinement.py`, isolated_git + set_git_identity): in a scratch "team" repo, workspace below `.team/run/presentation/<id>/workspace`, git inside workspace passes (init, cd, commit, checkout, rebase, clone), git at team repo fails (guard denial or ceiling).
+
+All existing tests pass; no test deleted. Coverage ≥95%, ruff clean. See design `agile-team/docs/design/s65.md`.
 
 ## s59: Rebase at sprint start (unit tests, coverage 99.43%, no new ADR scope)
 

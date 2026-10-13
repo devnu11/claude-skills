@@ -1,6 +1,16 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git safety—presentations and acceptance run in isolated git (no new ADR)
+
+S61 incident fixed: integration-tester's demo no longer has a path to the human's branches. Two safeguards now:
+1. **Environment:** Confined steps get `GIT_CEILING_DIRECTORIES` so git can't climb out of `.team/run`.
+2. **Guard:** New `git_check` module sees through `env`, `command`, prefixes; denies git targeting the team repo, allows git in the workspace.
+
+**What changes for you:** Nothing. No new hand-overs, no new tools. Presentations and acceptance work as before, but safer. If a delivery's script accidentally targets the team repo, the guard denies it with a clear message (naming the repo). S67's e2e watch test passed, so the workspace demo rebuilt safely.
+
+No new dependency, no ADR (extends guard pattern). See design `agile-team/docs/design/s65.md` (rules G1–G10).
 
 ## s59: Sprint-start sync rebases the team branch onto main (ADR-0041)
 

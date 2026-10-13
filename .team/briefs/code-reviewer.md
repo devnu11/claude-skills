@@ -1,6 +1,27 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s59 done)
+**Last updated:** 2026-10-12 (s65 done)
+
+## s65: Git confinement (one round, design matched, no new ADR) — verdict ship
+
+**Scope:** `git_check.py` (new pure module), `guard.py`, `presentation.py`, `dispatch.py`, role files, docs. **Verdict: ship.** Diff matches design G1–G10 line for line. Coverage ≥95%, ruff clean. No test deleted or weakened.
+
+**Design rules enforced in code:**
+- **G1–G2:** `GIT_CONFINED` table (e2e, acceptance), `git_env(run_dir)` returns ceiling+cwd vars, `_confine_git` merges into launch.env.
+- **G3:** `strip_prefixes(words)` skips assignments, WRAPPERS, returns command words after them.
+- **G4:** `_read_only(call)` on unconfined segments, today's text.
+- **G5:** `bases(links, start)` tracks cd moves (cd/pushd on AND only, unknown after other separators), `where(site, call, base)` resolves places (env -C, -C, --git-dir, --work-tree, -c) and args (PATH_ARGS), classifies Where (UNCONFINED/STEP_DIR/WORKSPACE/ELSEWHERE/UNKNOWN).
+- **G6:** `GIT_RULES[Where]` table maps to `GitRule(allows, reason)`, `ALLOWS` predicates enforce them.
+- **G7:** `_locked_mention(name)` denies GIT_ENV_LOCKED vars in confined steps.
+- **G10:** `_check_view` order: secret, git (G7 then G3–G6), allowlist, tokens, waits, kills, suite.
+
+**Module structure:** `git_check.py` pure (I/O only `resolve_in`), exports classes (Wrapper, Where, Allows, GitRule, Link, Stripped, GitCall, Site) and functions (strip_prefixes, parse_git, bases, where, git_denial, git_env); guard.py imports from git_check, `_check_git` lambda calls `git_denial(_site(scope), links)`.
+
+**Regression tests:** Unconfined `git status`, `git cherry-pick -n x` allowed; `git commit`, `git -C x status` denied. Command prefixes (env, command, timeout) seen through. Option-first placement denied.
+
+**All AC1–AC10 pass:** Environment stops discovery (test with git_env on real repo). Guard denies explicit access and sees through prefixes (parametrized tests). Workspace persists (lay_out creates/keeps). Denial texts name targets exactly.
+
+See design `agile-team/docs/design/s65.md` (G1–G10, test checklist).
 
 ## s59: Rebase at sprint start (3 rounds, all defects fixed) — verdict ship (e2e pending)
 
