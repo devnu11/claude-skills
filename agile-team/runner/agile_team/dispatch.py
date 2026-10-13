@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -44,6 +44,7 @@ from . import (
     sandbox,
     system,
 )
+from . import owners as owners_mod
 from . import results as results_mod
 from . import state as state_mod
 from .boundary import BoundaryHold, StepKind
@@ -53,6 +54,8 @@ from .commands import CommandRunner, shell_runner
 from .config import CONFIG_NAME, Config, Delivery
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
+    ROUTED_COMMANDS,
+    STEP_ROLES,
     UNGATED_ROLES,
     Outcome,
     Pipeline,
@@ -60,6 +63,7 @@ from .gates import (
     StoryStatus,
     Verdict,
     dispatch_refusal,
+    fix_refusal,
     role_fits_step,
     ruling_refusal,
     setback_reason,
@@ -74,6 +78,7 @@ from .insights import (
 )
 from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
+from .owners import Fix, FixRecord, Owners, Writer
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
@@ -102,7 +107,6 @@ REWORK_BRIEF = (
 )
 GATE_CHORE = "gate: {step} on {story}"
 QUALITY_CHORE = "quality checks for {story}"
-QUALITY_COMMANDS = ("lint", "static")
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
@@ -110,7 +114,7 @@ MANAGER = "manager"
 SCRIBE = "scribe"
 ARCHITECT = "architect"
 GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
-SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD})
+SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD, Verdict.ROUTE})
 FAULT_MISSING = 'story {id} repeated a setback; name its fault: "fault": a role or "runner"'
 FAULT_UNKNOWN = 'unknown fault {fault!r}; name a role or "runner"'
 RUNNER_FAULT_NOTE = (
@@ -122,6 +126,8 @@ NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", "delivery")
 BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
+BARE_KINDS = frozenset({StepKind.GATE_FIX})
+FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
 
 QueryFn = Callable[..., AsyncIterator[Any]]
@@ -163,6 +169,8 @@ class Plan:
     summary: str = ""
     text: str = ""
     meter: live.Meter | None = None
+    kind: StepKind = StepKind.ROLE
+    commit: str | None = None
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -397,7 +405,8 @@ class Runtime:
         if sid in self.relay.blocked_stories():
             return f"story {sid} is blocked waiting on an answer"
         story = self.state.stories.get(sid or "")
-        return self._boundary_refusal(request.role, story) or dispatch_refusal(request.role, story)
+        check = STORY_REFUSALS.get(request.kind, dispatch_refusal)
+        return self._boundary_refusal(request.role, story) or check(request.role, story)
 
     def _boundary_refusal(self, role: str, story: StoryState | None) -> str | None:
         """Sprint stories wait while a boundary is pending (the Manager and Scribe may run)."""
@@ -416,7 +425,7 @@ class Runtime:
         """Resolve the role and build its scope, prompt and launch settings."""
         role = self.resolve(request.role)
         story = self.state.stories.get(request.story_id or "")
-        plan = Plan(role, self.scope_for(role), story, request.brief)
+        plan = Plan(role, self.scope_for(role), story, request.brief, kind=request.kind)
         try:
             self._set_up(plan, request.kind)
             return self.finish(plan)
@@ -425,15 +434,19 @@ class Runtime:
             raise
 
     def _set_up(self, plan: Plan, kind: StepKind) -> None:
+        if kind not in BARE_KINDS:
+            self._role_set_up(plan)
+        if kind in FIX_SETUPS:
+            FIX_SETUPS[kind](self, plan)
+        self._confine_git(plan)
+
+    def _role_set_up(self, plan: Plan) -> None:
         setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
         if plan.role.name in setups:
             setups[plan.role.name](plan)
         step = fitting_step(plan.role.name, STEP_SETUPS)
         if step:
             STEP_SETUPS[step](self, plan)
-        if kind in FIX_SETUPS:
-            FIX_SETUPS[kind](self, plan)
-        self._confine_git(plan)
 
     def _confine_git(self, plan: Plan) -> None:
         """Confine a GIT_CONFINED step's git to its workspace and set git's ceiling (G2)."""
@@ -465,9 +478,9 @@ class Runtime:
                 self._keep(plan.story, self.pipeline.checks.ran(name), "before quality")
 
     def _quality_due(self, story: StoryState) -> list[str]:
-        """The configured QUALITY_COMMANDS, plus coverage when its kept run is not at HEAD (Q2)."""
+        """The configured ROUTED_COMMANDS, plus coverage when its kept run is not at HEAD (Q2)."""
         commands = self.pipeline.checks.commands
-        due = [name for name in QUALITY_COMMANDS if commands.get(name)]
+        due = [name for name in ROUTED_COMMANDS if commands.get(name)]
         kept = self.results.latest(story.id, "coverage")
         return due if kept and kept.at == self.git.head() else [*due, "coverage"]
 
@@ -852,6 +865,7 @@ class Runtime:
         return handoff
 
     def _apply(self, plan: Plan, parsed: Handoff | HandoffError) -> dict[str, Any]:
+        parsed = _settled(plan, parsed)
         if isinstance(parsed, HandoffError):
             gate = self._bounce(plan, str(parsed))
             return {
@@ -870,10 +884,46 @@ class Runtime:
         """The Manager rules; any other role on a story goes through its gate."""
         if plan.role.name == MANAGER:
             return self.apply_manager(plan, handoff)
+        if plan.kind in KIND_EFFECTS:
+            return KIND_EFFECTS[plan.kind](self, plan, handoff)
         effect = STORY_EFFECTS.get(plan.role.name)
         if effect and plan.story:
             effect(plan.story, handoff)
         return {"gate": self.gate(plan, handoff)} if plan.story else {}
+
+    def _fix_effects(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """Settle a gate fix step: pop it when done, else set the story back (R17)."""
+        story, fix = plan.story, plan.story.fixes[0]
+        report: dict[str, Any] = {"fix": self._record_fix(plan, handoff, fix)}
+        outcome = fix_outcome(story, handoff)
+        if outcome is None:
+            story.fixes.pop(0)
+            return report
+        return report | {"gate": self._advance_and_log(plan, outcome)}
+
+    def _record_fix(self, plan: Plan, handoff: Handoff, fix: Fix) -> dict[str, Any]:
+        story = plan.story
+        diff = self.git.run("diff", f"{plan.commit}^", plan.commit) if plan.commit else ""
+        record = FixRecord(
+            fix.role,
+            [i.shown for i in fix.items],
+            plan.commit,
+            handoff.asserts,
+            owners_mod.asserts_changed(diff),
+        )
+        story.fixed.append(record)
+        left = [f.role for f in story.fixes[1:]]
+        self.emit(
+            EventKind.GATE_FIX,
+            plan,
+            status=handoff.status,
+            files=record.files,
+            commit=record.commit,
+            asserts=record.asserts,
+            assertions_changed=record.changed,
+            left=left,
+        )
+        return asdict(record)
 
     def _bounce(self, plan: Plan, reason: str) -> dict[str, Any] | None:
         story = plan.story
@@ -915,6 +965,7 @@ class Runtime:
     def commit_step(self, plan: Plan, paths: list[str]) -> str:
         """First commit of a story is ``feat``; later ones are fixups of it."""
         sha = self.git.commit(paths, commit_message(plan, self._subject(plan)))
+        plan.commit = sha
         if plan.story and not plan.story.commit:
             plan.story.commit = sha
         self._record_commit(plan, sha, paths)
@@ -922,6 +973,8 @@ class Runtime:
 
     def _record_commit(self, plan: Plan, sha: str, paths: list[str]) -> None:
         """Run the COMMIT_RECORDS rows that fit the committing role (s46, R7)."""
+        if plan.story:
+            _note_files(plan.story, paths)
         for step, record in COMMIT_RECORDS:
             if plan.story and role_fits_step(plan.role.name, step):
                 record(plan.story, sha, paths)
@@ -942,7 +995,22 @@ class Runtime:
     def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
         chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
         with self.pulse.doing(chore):
-            return self.pipeline.evaluate(plan.story, handoff)
+            outcome = self.pipeline.evaluate(plan.story, handoff)
+            return self.pipeline.route(outcome, self.owners(plan.story))
+
+    def owners(self, story: StoryState) -> Owners:
+        """Who may write what, in pipeline order, for this story (R2)."""
+        rows = [(step, self._writer_role(story, step)) for step in self.pipeline.steps]
+        return Owners(
+            _writers(rows, lambda role: tuple(self.scope_for(self.resolve(role)).write)),
+            story.step,
+            frozenset(story.files),
+        )
+
+    def _writer_role(self, story: StoryState, step: str) -> str:
+        role = STEP_ROLES[step]
+        known = role == "developer" and story.developer in self.book.names()
+        return story.developer if known else role
 
     def _queue_done_renewal(self, story: Any) -> None:
         reason = f"{story.id} done"
@@ -968,6 +1036,10 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
+        if outcome.fixes:
+            result["fixes"] = [
+                {"role": f.role, "files": [i.shown for i in f.items]} for f in outcome.fixes
+            ]
         result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
         result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
         event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
@@ -1199,3 +1271,52 @@ def bad_handoff(error: HandoffError) -> dict[str, Any]:
         "next_role": None,
         "friction": "",
     }
+
+
+def _writers(
+    rows: Iterable[tuple[str, str]], scope: Callable[[str], tuple[str, ...]]
+) -> tuple[Writer, ...]:
+    """One Writer per role, first step wins (R2)."""
+    seen: dict[str, Writer] = {}
+    for step, role in rows:
+        seen.setdefault(role, Writer(step, role, scope(role)))
+    return tuple(seen.values())
+
+
+def _note_files(story: StoryState, paths: list[str]) -> None:
+    """Add committed paths to the story's files, once each (R7)."""
+    story.files.extend(p for p in dict.fromkeys(paths) if p not in story.files)
+
+
+def _settled(plan: Plan, parsed: Handoff | HandoffError) -> Handoff | HandoffError:
+    """A malformed handoff on a gate fix step counts as failed (R17)."""
+    if isinstance(parsed, HandoffError) and plan.kind is StepKind.GATE_FIX:
+        return Handoff("failed", summary=str(parsed))
+    return parsed
+
+
+def _fix_disagrees(story: StoryState, handoff: Handoff) -> Outcome:
+    reason = FIX_DISAGREES.format(role=story.fixes[0].role, summary=handoff.summary)
+    return Outcome(Verdict.BOUNCE, reason, story.step, author=Author.ROLE)
+
+
+def _fix_holds(story: StoryState, handoff: Handoff) -> Outcome:
+    reason = f"role reported {handoff.status}: {handoff.summary}"
+    return Outcome(Verdict.HOLD, reason, author=Author.ROLE)
+
+
+FIX_OUTCOMES: dict[str, Callable[[StoryState, Handoff], Outcome]] = {
+    "changes_requested": _fix_disagrees,
+    "blocked": _fix_holds,
+    "failed": _fix_holds,
+}
+
+
+def fix_outcome(story: StoryState, handoff: Handoff) -> Outcome | None:
+    """The setback a gate fix handoff causes, or ``None`` when it is done."""
+    make = FIX_OUTCOMES.get(handoff.status)
+    return make(story, handoff) if make else None
+
+
+STORY_REFUSALS = {StepKind.GATE_FIX: fix_refusal}
+KIND_EFFECTS = {StepKind.GATE_FIX: Runtime._fix_effects}

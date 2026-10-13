@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import dependencies, halt, handover, loops, system, threads
+from . import dependencies, halt, handover, loops, owners, system, threads
 from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
@@ -55,8 +55,16 @@ HEADINGS = {Rule.REPEAT: REPEAT_HEADING, Rule.BACKSTOP: BACKSTOP_HEADING}
 SENT_BACK_LINES = {
     "bounce": "- Sent back to this step: {reason}",
     "return": "- Sent back to this step: {reason}",
+    "route": "- Other roles fix items in their files first, then this step runs again: {reason}",
     "escalate": "- The same setback repeated, so the manager ruled on it: {reason}",
 }
+FIX_HEADING = (
+    "Gate fix on story {id}: the {step} gate failed on files you own. Fix only the items "
+    "below, then hand off done; the story goes back to {step} with no round counted. "
+    "If a fix changes what a test asserts, put the AC or design rule that makes the old "
+    'assertion wrong in your handoff\'s "asserts" field. If the failure is not yours to fix, '
+    "hand off changes_requested and say why; the story goes back to {step} as a round."
+)
 
 
 @dataclass
@@ -154,7 +162,31 @@ def standard_brief(config: Config, work: Work) -> str:
     """The brief every router step gets: heading, artifact paths, history and the PO's note."""
     story = work.story  # story steps only; the Manager's brief is MANAGER_BRIEF
     heading = BRIEF_HEADINGS.get(work.role, STEP_HEADING).format(id=story.id)  # type: ignore[union-attr]
-    return "\n".join([heading, *_path_lines(config, story.id), *_history_lines(story)])
+    extras = BRIEF_EXTRAS.get(work.role, _no_lines)(story)
+    return "\n".join([heading, *_path_lines(config, story.id), *_history_lines(story), *extras])
+
+
+def fix_brief(config: Config, story: StoryState) -> str:
+    """The brief of the story's first queued gate fix (R14)."""
+    heading = FIX_HEADING.format(id=story.id, step=story.step)
+    items = owners.fix_lines(story.fixes[0])
+    return "\n".join([heading, *items, *_path_lines(config, story.id)])
+
+
+def _no_lines(story: StoryState) -> list[str]:
+    return []
+
+
+def _fixed_lines(story: StoryState) -> list[str]:
+    """One line per settled gate fix, for the code-reviewer (R19)."""
+    return [
+        f"- Gate fix by {r.role} (commit {(r.commit or 'none')[:12]}) on "
+        f"{', '.join(r.files)}: {owners.fix_note(r)}"
+        for r in story.fixed
+    ]
+
+
+BRIEF_EXTRAS: dict[str, Callable[[StoryState], list[str]]] = {"code-reviewer": _fixed_lines}
 
 
 # ----- the router -------------------------------------------------------------------
@@ -242,7 +274,13 @@ class Router:
 
     def _story_work(self) -> Work | None:
         story = self._first_ranked(self._movable)
-        return self._briefed(step_role(story), story) if story else None
+        if story is None:
+            return None
+        return self._fix_work(story) if story.fixes else self._briefed(step_role(story), story)
+
+    def _fix_work(self, story: StoryState) -> Work:
+        brief = fix_brief(self.runtime.config, story)
+        return Work(story.fixes[0].role, story, brief, StepKind.GATE_FIX)
 
     def _movable(self, story: StoryState) -> bool:
         rt = self.runtime
