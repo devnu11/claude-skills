@@ -127,6 +127,7 @@ section[hidden] { display: none; }
 
 /* flow */
 #flow { overflow-x: auto; }
+#mix { overflow-x: auto; }
 .tl { background: var(--surface); }
 .tl [data-tl-plot] { overflow-x: auto; }
 .tl svg { display: block; max-width: none; }
@@ -601,8 +602,17 @@ const clockNow = (view) => (MOCK ? view.generated_at : nowS());
 
 /** The heartbeat's step while the runner is beating, else null. */
 function liveStep(view) {
-  const beating = view.heartbeat?.beat === "beating" && healthLevel(view) !== "idle";
-  return beating ? view.heartbeat.step ?? null : null;
+  return beating(view) ? view.heartbeat.step ?? null : null;
+}
+
+/** Whether the heartbeat is beating and the health is not idle. */
+function beating(view) {
+  return view.heartbeat?.beat === "beating" && healthLevel(view) !== "idle";
+}
+
+/** The stage runs open now (HB3). */
+function openStages(view) {
+  return beating(view) && Array.isArray(view.heartbeat.stages) ? view.heartbeat.stages : [];
 }
 
 /** The health level, mapped through the whitelist so nothing unknown reaches HTML (P2). */
@@ -860,7 +870,7 @@ function nodeLabel(view, name, ctx) {
   const info = roleInfo(view, name), s = ctx.stats[name], t = ctx.totals[name];
   const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
   const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
-  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${statsText(view, ctx, name)}${bounced}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
+  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${statsText(view, ctx, name)}${bounced}${shareLine(stepSplit(view, name))}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
 }
 
 const STEER = "grpSteering";
@@ -873,10 +883,13 @@ const PHASE_ROLES = {
 const SIDE_ROLES = { "customer-proxy": "Customer", manager: "Steering" };
 const GROUP_ORDER = ["Customer", "Steering", "Design", "Build", "Verify", "Support"];
 
+/** Whether `name` is `prefix` or `prefix-…`. */
+const matchesRole = (name, prefix) => name === prefix || name.startsWith(prefix + "-");
+
 /** The flow group a role belongs to. */
 function groupOf(name) {
   if (SIDE_ROLES[name]) return SIDE_ROLES[name];
-  const hit = Object.entries(PHASE_ROLES).find(([, roles]) => roles.some((p) => name === p || name.startsWith(p + "-")));
+  const hit = Object.entries(PHASE_ROLES).find(([, roles]) => roles.some((p) => matchesRole(name, p)));
   return hit ? hit[0] : "Support";
 }
 
@@ -917,8 +930,10 @@ function flowEdgeList(view, stats, ids) {
 /** Node declarations wrapped in one subgraph per group; empty groups are skipped. */
 function flowGroupLines(view, ctx, ids) {
   const po = ctx.totals[PO], poStats = ui.scope === "story" ? "—" : `${fmt.tok(po?.tokens ?? 0)} · ${fmt.usd(po?.cost ?? 0)}`;
-  const groups = { Steering: [`po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${poStats}"]`] };
+  const poShare = ui.scope === "story" ? "" : shareLine(turnSplit(view));
+  const groups = { Steering: [`po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${poStats}${poShare}"]`] };
   for (const [n, id] of ids) (groups[groupOf(n)] ??= []).push(`${id}["${nodeLabel(view, n, ctx)}"]`);
+  addStageNodes(view, groups);
   return GROUP_ORDER.filter((t) => groups[t]).flatMap((t) => [
     `subgraph grp${t}["${t}"]`, ...(t === "Steering" ? ["direction LR"] : []), ...groups[t], "end",
   ]);
@@ -934,7 +949,7 @@ function roleNodeId(view, role) {
 /** Node id of the running role, or of the PO when no step is open. */
 function activeNodeId(view) {
   const act = activeStep(view.events);
-  return act ? roleNodeId(view, act.role) : "po";
+  return act ? roleNodeId(view, act.role) : liveStageNodeId(view) ?? "po";
 }
 
 /** The dimmed class: colour only, never opacity (FL1, FL2). */
@@ -947,11 +962,9 @@ function flowSource(view) {
   const ctx = flowContext(view), stats = ctx.stats, names = ringRoles(view);
   const ids = names.map((n, i) => [n, "r" + i]);
   const lines = ["flowchart TB", `you(["You (via liaison)"])`, ...flowGroupLines(view, ctx, ids)];
-  const edges = flowEdgeList(view, stats, ids), max = Math.max(1, ...edges.map((e) => e.n));
-  for (const e of edges) lines.push(`${e.from} ${e.arrow}|"${e.label}"| ${e.to}`);
-  edges.forEach((e, k) => lines.push(`linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`));
+  lines.push(...edgeLines([...flowEdgeList(view, stats, ids), ...stageEdges(view, ids)]));
   lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, idleClassDef());
-  lines.push(...liveClassLines(ctx), ...flowClassLines(view, ctx, ids));
+  lines.push(...liveClassLines(ctx), ...flowClassLines(view, ctx, ids), ...stageClassLines(view, activeNodeId(view)));
   return lines.join("\n");
 }
 
@@ -974,6 +987,140 @@ function flowClassLines(view, ctx, ids) {
   const dim = ui.scope === "story" ? (n) => !touchedFocus(view, n) : (n) => !ctx.stats[n];
   for (const [n, id] of ids) if (dim(n) && id !== active) lines.push(`class ${id} idle`);
   return lines;
+}
+
+
+// ----- runner stages and the model/tool share on the flow chart (s102) -----
+
+const RUNNER = "runner";
+const SHARE_CELLS = 10;
+const STAGE_NODES = [
+  { id: "st_env", label: "Prepare env", group: "Customer", anchor: "customer-proxy", side: "before",
+    stages: ["env.prepare"] },
+  { id: "st_gate", label: "Implement gate", group: "Build", anchor: "developer", side: "after",
+    stages: ["gate.tests+coverage", "gate.route-lint", "gate.dispute-output"] },
+  { id: "st_e2e", label: "E2E gate", group: "Verify", anchor: "integration-tester", side: "after",
+    stages: ["presentation.trial"] },
+  { id: "st_boundary", label: "Boundary", group: "Steering", anchor: PO, side: "after",
+    stages: ["boundary.sync", "boundary.check", "boundary.review", "boundary.push", "boundary.ci-wait"] },
+];
+
+/** The `runner-stage` events of the node's stages, in event order. */
+const stageRuns = (view, node) =>
+  view.events.filter((e) => e.kind === "runner-stage" && node.stages.includes(e.data.stage));
+
+/** The first open stage row of the node's stages, or undefined (SN7). */
+const stageOpen = (view, node) => openStages(view).find((r) => node.stages.includes(r.stage));
+
+/** Whether the node is drawn: a run happened or one is open (SN2). */
+const stageDrawn = (view, node) => stageRuns(view, node).length > 0 || !!stageOpen(view, node);
+
+/** The nodes to draw, in table order. */
+const drawnStageNodes = (view) => STAGE_NODES.filter((n) => stageDrawn(view, n));
+
+/** A finite seconds value, else 0. */
+const finiteS = (v) => (Number.isFinite(v) ? v : 0);
+
+/** `{runs, last, total}` of the node's runs inside the scope (SN5). */
+function stageStats(view, node) {
+  const mine = stageRuns(view, node).filter(inScope(view));
+  return { runs: mine.length, last: finiteS(mine.at(-1)?.data.seconds), total: sum(mine, (e) => finiteS(e.data.seconds)) };
+}
+
+/** "last … · total … · n runs", or "idle" (SN5). */
+function stageStatsText(stats) {
+  if (!stats.runs) return "idle";
+  return `last ${fmt.age(stats.last)} · total ${fmt.age(stats.total)} · ${stats.runs} ${stats.runs === 1 ? "run" : "runs"}`;
+}
+
+/** `<br/>⏱ running …` while the node's stage is open (SN7). */
+function stageRunningLine(view, node) {
+  const row = stageOpen(view, node);
+  if (!row) return "";
+  const slept = Math.max(0, finiteS(view.heartbeat.slept) - finiteS(row.started_slept));
+  const awake = Math.max(0, clockNow(view) - row.started_at - slept);
+  return "<br/>" + mmdText("⏱ running " + fmt.age(awake));
+}
+
+/** The node's label (SN5). */
+function stageLabel(view, node) {
+  const stats = mmdText("runner · " + stageStatsText(stageStats(view, node)));
+  return `${mmdText(node.label)}<br/>${stats}${stageRunningLine(view, node)}`;
+}
+
+/** The node's Mermaid line: a hexagon (SN3). */
+const stageNodeLine = (view, node) => `${node.id}{{"${stageLabel(view, node)}"}}`;
+
+/** Add each drawn stage node to its group, after the roles (SN3). */
+function addStageNodes(view, groups) {
+  for (const node of drawnStageNodes(view)) (groups[node.group] ??= []).push(stageNodeLine(view, node));
+}
+
+/** Node ids of the drawn roles the node joins (SN4). */
+function anchorIds(view, ids, node) {
+  if (node.anchor === PO) return ["po"];
+  return ids.filter(([n]) => matchesRole(n, node.anchor)).map(([, id]) => id);
+}
+
+/** The dotted edges, one per drawn anchor of each drawn node (SN4). */
+function stageEdges(view, ids) {
+  const color = cssVar("--ink-2");
+  return drawnStageNodes(view).flatMap((node) => anchorIds(view, ids, node).map((a) => {
+    const [from, to] = node.side === "before" ? [node.id, a] : [a, node.id];
+    return { from, to, n: 0, label: "", color, arrow: "-.->" };
+  }));
+}
+
+/** One edge line; unlabelled edges have no `|…|`. */
+const edgeLine = (e) => e.label ? `${e.from} ${e.arrow}|"${e.label}"| ${e.to}` : `${e.from} ${e.arrow} ${e.to}`;
+
+/** Every edge line, then every linkStyle line. */
+function edgeLines(edges) {
+  const max = Math.max(1, ...edges.map((e) => e.n));
+  return [...edges.map(edgeLine),
+    ...edges.map((e, k) => `linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`)];
+}
+
+/** Id of the first running stage node, or undefined (SN8). */
+const liveStageNodeId = (view) => STAGE_NODES.find((n) => stageOpen(view, n))?.id;
+
+/** `class` lines for the stage nodes: running lights up, the rest of the idle ones dim (SN6, SN7). */
+function stageClassLines(view, active) {
+  return drawnStageNodes(view).filter((n) => n.id !== active).flatMap((n) => {
+    if (stageOpen(view, n)) return [`class ${n.id} active`];
+    return stageStats(view, n).runs ? [] : [`class ${n.id} idle`];
+  });
+}
+
+/** `{model, tools, waiting}` of a PO turn's data (TM3). */
+function poSplit(d) {
+  const m = finiteS(d.model_s), t = finiteS(d.tool_s), w = finiteS(d.waiting_s);
+  return { model: m, tools: Math.max(0, t - w), waiting: w };
+}
+
+/** Model and tool seconds of a role's finished steps in scope (SB1). */
+function stepSplit(view, role) {
+  const out = { model: 0, tools: 0 };
+  for (const s of scopeSteps(view).filter((x) => x.role === role)) {
+    const d = stepEndOf({ view }, s)?.data;
+    if (Number.isFinite(d?.model_s) && Number.isFinite(d?.tool_s)) { out.model += d.model_s; out.tools += d.tool_s; }
+  }
+  return out;
+}
+
+/** Model and tool seconds of the PO turns in scope (SB2). */
+function turnSplit(view) {
+  const mine = view.events.filter((e) => e.kind === "po-turn").filter(inScope(view));
+  const parts = mine.map((e) => poSplit(e.data));
+  return { model: sum(parts, (p) => p.model), tools: sum(parts, (p) => p.tools) };
+}
+
+/** `<br/>model p% ███░░ tools q%`, or "" with no split (SB3). */
+function shareLine({ model, tools }) {
+  const all = model + tools;
+  if (!(all > 0)) return "";
+  const cells = Math.round((SHARE_CELLS * model) / all), p = Math.round((100 * model) / all);
+  return `<br/>model ${p}% ${"█".repeat(cells)}${"░".repeat(SHARE_CELLS - cells)} tools ${100 - p}%`;
 }
 
 let mermaidModule = null;
@@ -1742,19 +1889,41 @@ function totalsBy(ledger, key) {
 /** Ledger totals per group, for the Tokens and Dollars units. */
 function ledgerTotals(view, key) { return totalsBy(view.ledger, key); }
 
-/** Step-time totals per group over finished steps, for the Time unit. */
-function stepTotals(view, key) { return timeBy(view.steps.filter(finished), key); }
+/** Time pieces of finished agent steps (TM2). */
+const stepPieces = (view) => view.steps.filter(finished).filter((s) => s.role !== PO).map((s) => ({
+  role: s.role, story: s.story, model: s.model, count: "steps", parts: { work: s.seconds ?? 0 }, wall: s.clock === "wall",
+}));
 
-/** `{group: {steps, seconds, wall}}` over `steps` (killed steps count, adding 0 s; `wall` counts wall-clock steps). */
-function timeBy(steps, key) {
+/** Time pieces of runner stages, except those inside a step (TM2). */
+const stagePieces = (view) => view.events
+  .filter((e) => e.kind === "runner-stage" && e.data.when !== "during" && Number.isFinite(e.data.seconds))
+  .map((e) => ({ role: RUNNER, story: e.story, model: RUNNER, count: "runs", parts: { runner: e.data.seconds }, wall: false }));
+
+/** Time pieces of PO turns (TM2). */
+const turnPieces = (view) => view.events.filter((e) => e.kind === "po-turn").map((e) => ({
+  role: PO, story: null, model: roleInfo(view, PO).model, count: "turns", parts: poSplit(e.data), wall: false,
+}));
+
+const TIME_SOURCES = [stepPieces, stagePieces, turnPieces];
+
+/** Every time piece of the run (TM1). */
+const timePieces = (view) => TIME_SOURCES.flatMap((f) => f(view));
+
+/** `{group: {steps, runs, turns, wall, seconds, parts}}` over time pieces (TM4). */
+function timeBy(pieces, key) {
   const out = {};
-  for (const s of steps) {
-    const t = (out[s[key] ?? "(no story)"] ??= { steps: 0, seconds: 0, wall: 0 });
-    t.steps++; t.seconds += s.seconds ?? 0;
-    if (s.clock === "wall") t.wall++;
+  for (const p of pieces) {
+    const t = (out[p[key] ?? "(no story)"] ??= { steps: 0, runs: 0, turns: 0, wall: 0, seconds: 0,
+      parts: { work: 0, runner: 0, model: 0, tools: 0, waiting: 0 } });
+    t[p.count]++;
+    for (const [k, v] of Object.entries(p.parts)) { t.parts[k] += v; t.seconds += v; }
+    if (p.wall) t.wall++;
   }
   return out;
 }
+
+/** Time totals per group for the Time unit (TM4). */
+function timeTotals(view, key) { return timeBy(timePieces(view), key); }
 
 function renderTokens(view) {
   renderTiles(view);
@@ -1835,7 +2004,7 @@ function renderGroup() {
 function barRows(view) {
   const unit = UNITS[ui.unit];
   const groups = Object.entries(unit.totals(view, ui.group));
-  const whole = sum(groups, ([, t]) => unit.total(t));
+  const whole = sum(groups, ([, t]) => unit.share(t));
   return groups
     .map(([role, t]) => ({ role, t, whole, total: unit.total(t) }))
     .sort((a, b) => b.total - a.total);
@@ -1849,7 +2018,7 @@ function renderBars(view) {
   const scale = rows[0].total ? span / rows[0].total : 0;
   const h = rows.length * (MIX.bar + MIX.gap);
   const bars = rows.map((r, i) => unit.row(r, i, scale)).join("");
-  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" role="img" aria-label="${unit.title} ${ui.group}">
+  $("#mix").innerHTML = `<svg viewBox="0 0 ${MIX.w} ${h}" width="${MIX.w}" height="${h}" style="width:${MIX.w}px;height:${h}px;max-width:none" role="img" aria-label="${unit.title} ${ui.group}">
     <line class="baseline" x1="${MIX.label}" x2="${MIX.label}" y1="0" y2="${h - MIX.gap}"/>${bars}</svg>`;
   for (const seg of document.querySelectorAll("#mix [data-tip]")) {
     seg.addEventListener("mousemove", (ev) => showTip(ev, seg.dataset.tip));
@@ -1867,13 +2036,20 @@ function costLegend() {
 
 /** Legend of the Time unit (ST14). */
 function timeLegend() {
-  return `<span><i class="sw" style="background:var(--s2)"></i>Awake time (agent steps only; runner stages: see A6)</span>`;
+  const parts = TIME_PARTS.map(([, label, v]) => `<span><i class="sw" style="background:var(${v})"></i>${label}</span>`);
+  return `<span>Awake time:</span>${parts.join("")}`;
 }
 
+const TIME_PARTS = [
+  ["work", "Agent steps", "--s2"], ["runner", "Runner stages", "--s3"],
+  ["model", "PO model", "--s1"], ["tools", "PO tools", "--s4"],
+  ["waiting", "PO waiting on a step", "--ink-2"],
+];
+
 const UNITS = {
-  tokens: { label: "Tokens", title: "Tokens by", totals: ledgerTotals, total: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), legend: tokenLegend, row: mixRow },
-  usd: { label: "Dollars", title: "Spend by", totals: ledgerTotals, total: (t) => t.cost, legend: costLegend, row: costRow },
-  time: { label: "Time", title: "Time by", totals: stepTotals, total: (t) => t.seconds, legend: timeLegend, row: timeRow },
+  tokens: { label: "Tokens", title: "Tokens by", totals: ledgerTotals, total: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), share: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), legend: tokenLegend, row: mixRow },
+  usd: { label: "Dollars", title: "Spend by", totals: ledgerTotals, total: (t) => t.cost, share: (t) => t.cost, legend: costLegend, row: costRow },
+  time: { label: "Time", title: "Time by", totals: timeTotals, total: (t) => t.seconds, share: (t) => t.seconds - t.parts.waiting, legend: timeLegend, row: timeRow },
 };
 
 function renderUnit() {
@@ -1888,18 +2064,43 @@ function costRow({ role, t, whole, total }, i, scale) {
   return oneBar(i, { role, w, fill: "var(--s1)", tip, value: fmt.usd(total) });
 }
 
+/** "n steps · n runs · n turns", non-zero counts only (TM7). */
+function countsText(t) {
+  return [["steps", "step"], ["runs", "run"], ["turns", "turn"]].filter(([k]) => t[k])
+    .map(([k, one]) => `${t[k]} ${t[k] === 1 ? one : k}`).join(" · ");
+}
+
+/** The row's summary line(s) (TM7). */
+function timeTip(role, t, whole) {
+  const share = whole ? (100 * (t.seconds - t.parts.waiting)) / whole : 0;
+  const wall = t.wall ? ` · ${t.wall} may include sleep` : "";
+  const wait = t.parts.waiting ? `<br>waiting ${fmt.span(t.parts.waiting)} overlaps the steps (not in the share)` : "";
+  return `<b>${esc(role)}</b><br>${fmt.span(t.seconds)} <span class="k">(${fmt.pct(share)} of time)</span> · ${countsText(t)}${wall}${wait}`;
+}
+
+/** A segmented Time row: one segment per non-zero part (TM5). */
 function timeRow({ role, t, whole, total }, i, scale) {
-  const w = Math.max(0, t.seconds * scale), share = whole ? (100 * t.seconds) / whole : 0;
-  const tip = `<b>${esc(role)}</b><br>${fmt.span(t.seconds)} <span class="k">(${fmt.pct(share)} of time)</span> · ${t.steps} steps${t.wall ? ` · ${t.wall} may include sleep` : ""}`;
-  return oneBar(i, { role, w, fill: "var(--s2)", tip, value: fmt.span(total) });
+  const y = i * (MIX.bar + MIX.gap), shown = TIME_PARTS.filter(([k]) => t.parts[k] > 0);
+  let x = MIX.label;
+  const segs = shown.map(([k, label, v], j) => {
+    const w = t.parts[k] * scale, last = j === shown.length - 1;
+    const part = `<b>${esc(role)}</b><br>${label}: ${fmt.span(t.parts[k])}`;
+    const tip = j === 0 ? `${timeTip(role, t, whole)}<br>${part}` : part;
+    const shape = segment(x, y, Math.max(0, w - (last ? 0 : 2)), last);
+    x += w;
+    return `<path d="${shape}" fill="var(${v})" data-tip="${esc(tip)}"/>`;
+  }).join("");
+  const ty = y + MIX.bar / 2 + 4;
+  return `${tlText("barLabel", role, `x="${MIX.label - 8}" y="${ty}" text-anchor="end"`)}${segs}${tlText("barValue", fmt.span(total), `x="${x + 6}" y="${ty}"`)}`;
 }
 
 /** One single-colour bar row: label, rounded bar with tooltip, value text. */
 function oneBar(i, bar) {
   const y = i * (MIX.bar + MIX.gap);
-  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(bar.role)}</text>
+  const ty = y + MIX.bar / 2 + 4;
+  return `${tlText("barLabel", bar.role, `x="${MIX.label - 8}" y="${ty}" text-anchor="end"`)}
     <path d="${segment(MIX.label, y, bar.w, true)}" fill="${bar.fill}" data-tip="${esc(bar.tip)}"/>
-    <text x="${MIX.label + bar.w + 6}" y="${y + MIX.bar / 2 + 4}">${bar.value}</text>`;
+    ${tlText("barValue", bar.value, `x="${MIX.label + bar.w + 6}" y="${ty}"`)}`;
 }
 
 function mixRow({ role, t, total }, i, scale) {
@@ -1912,8 +2113,9 @@ function mixRow({ role, t, total }, i, scale) {
     x += w;
     return `<path d="${shape}" fill="var(${v})" data-tip="${esc(tip)}"/>`;
   }).join("");
-  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(role)}</text>${segs}
-    <text x="${x + 6}" y="${y + MIX.bar / 2 + 4}">${fmt.tok(total)}</text>`;
+  const ty = y + MIX.bar / 2 + 4;
+  return `${tlText("barLabel", role, `x="${MIX.label - 8}" y="${ty}" text-anchor="end"`)}${segs}
+    ${tlText("barValue", fmt.tok(total), `x="${x + 6}" y="${ty}"`)}`;
 }
 
 /** A bar segment; the data end of the last one gets 4px rounded corners. */
@@ -2040,6 +2242,7 @@ const TL_TEXT = {
   note:    { px: 13, ink: "--ink-2" },
   call:    { px: 13, ink: "--ink" },   detail: { px: 12, ink: "--ink-2" },
   misc:    { px: 12, ink: "--ink" },
+  barLabel: { px: 12, ink: "--ink-2" }, barValue: { px: 12, ink: "--ink" },
 };
 const NEST = { LANE_H: 44, STRIP_H: 8, INDENT: 12, MIN_DETAIL_CHARS: 8, MISC_PAD: 8 };
 const TOOL_WAITING = new Set(["po.run_role"]);
