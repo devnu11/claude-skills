@@ -353,13 +353,13 @@ def test_scope_toggle_totals_match_the_ledger(dash) -> None:
     console.log(JSON.stringify(out));
     """
     out = dashboard_node.run_page(driver)
-    assert out["story"] == {"developer-cli": {"tokens": 20, "cost": 2.0}}
+    assert out["story"] == {"developer-cli": {"tokens": 20, "cost": 2.0, "seconds": 0}}
     assert out["sprint"] == {
-        "developer-cli": {"tokens": 40, "cost": 4.0},
-        "product-owner": {"tokens": 80, "cost": 8.0},
+        "developer-cli": {"tokens": 40, "cost": 4.0, "seconds": 0},
+        "product-owner": {"tokens": 80, "cost": 8.0, "seconds": 0},
     }
-    assert out["run"]["product-owner"] == {"tokens": 90, "cost": 9.0}
-    assert out["run"]["developer-cli"] == {"tokens": 60, "cost": 6.0}
+    assert out["run"]["product-owner"] == {"tokens": 90, "cost": 9.0, "seconds": 0}
+    assert out["run"]["developer-cli"] == {"tokens": 60, "cost": 6.0, "seconds": 0}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
