@@ -7,7 +7,7 @@ from agile_team import dispatch, git_check, presentation, system
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState
 
-from .conftest import present
+from .conftest import present, write_story
 from .fake_system import FakeSystem
 
 
@@ -39,6 +39,7 @@ def test_integration_tester_is_confined_to_the_presentation_workspace(make_runti
 def test_proxy_is_confined_to_its_copy_of_the_workspace(make_runtime) -> None:
     rt = make_runtime()
     story_at(rt, "acceptance")
+    write_story(rt.config, "s1", "cli")
     present(rt.config)
     plan = plan_of(rt, "customer-proxy")
     workspace = plan.scope.git_workspace
@@ -82,6 +83,7 @@ def test_lay_out_keeps_what_is_there(configured: Path, fake: FakeSystem) -> None
     from agile_team import config as cfg
 
     config = cfg.load(configured)
+    write_story(config, "s4", "cli")
     source = presentation.lay_out(config, story_of())
     system.write_text(source / "workspace" / "a.txt", "keep")
     system.write_text(source / "PRESENTATION.md", "guide")
@@ -99,6 +101,7 @@ def test_lay_out_inits_a_workspace_that_lacks_git_and_keeps_files(
     from agile_team import config as cfg
 
     config = cfg.load(configured)
+    write_story(config, "s4", "cli")
     source = present(config, "s4")
     presentation.lay_out(config, story_of())
     assert system.read_text(source / "workspace" / "todo.txt") == "milk\n"

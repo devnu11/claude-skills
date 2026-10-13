@@ -26,6 +26,7 @@ from agile_team.priority import (
 from agile_team.router import Router
 from agile_team.state import RunState
 
+from .conftest import write_story
 from .pipeline_helpers import add_story
 from .test_snapshot import FIXTURE_TEXT
 
@@ -310,6 +311,7 @@ def test_prioritise_listing_a_pulled_story_after_a_started_one_unpulls_it(make_r
 def test_start_sprint_never_pulls_from_its_list(make_runtime) -> None:
     t = Tools(make_runtime())
     for sid in ("s1", "s2"):
+        write_story(t.runtime.config, sid, "cli")
         call(t.open_story({"id": sid, "title": sid}))
     t.runtime.state.stories["s2"].commit = "abc"
     out = call(t.start_sprint({"goal": "G", "stories": ["s1", "s2"]}))
@@ -324,6 +326,7 @@ def test_start_sprint_never_pulls_from_its_list(make_runtime) -> None:
 def test_start_sprint_pulls_the_pending_ci_bug_story(make_runtime) -> None:
     t = Tools(make_runtime())
     for sid in ("s1", "s2"):
+        write_story(t.runtime.config, sid, "cli")
         call(t.open_story({"id": sid, "title": sid}))
     t.runtime.state.stories["s2"].commit = "abc"
     t.runtime.state.upstream.ci_bug = "s1"

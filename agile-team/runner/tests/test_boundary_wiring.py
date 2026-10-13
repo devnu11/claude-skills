@@ -14,6 +14,8 @@ from agile_team.handover import Trigger as T
 from agile_team.po_tools import Tools
 from agile_team.roles import Handoff
 
+from .conftest import write_story
+
 
 def call(coro) -> dict:
     return json.loads(asyncio.run(coro)["content"][0]["text"])
@@ -33,13 +35,19 @@ def sprint_story(rt, sid: str = "s1", **kw) -> None:
     rt.state.stories[sid] = StoryState(sid, "T", kw.pop("step", "design"), sprint=1, **kw)
 
 
+def story(rt, sid: str) -> None:
+    """Open ``sid`` with a valid story file (s94)."""
+    write_story(rt.config, sid, "cli")
+    call(Tools(rt).open_story({"id": sid, "title": "Add"}))
+
+
 # ----- U1/U14: start_sprint, continue_boundary, set_push_permission ----------
 
 
 def test_start_sprint_opens_a_start_boundary_and_sets_the_goal(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
-    call(t.open_story({"id": "s1", "title": "Add"}))
+    story(rt, "s1")
     call(t.start_sprint({"goal": "MVP", "stories": ["s1"]}))
     assert rt.state.boundary == bd.Boundary(Edge.START, 1) and rt.state.goal == "MVP"
 
@@ -47,7 +55,7 @@ def test_start_sprint_opens_a_start_boundary_and_sets_the_goal(make_runtime) -> 
 def test_start_sprint_is_refused_while_a_boundary_is_pending(make_runtime) -> None:
     rt = make_runtime()
     t = Tools(rt)
-    call(t.open_story({"id": "s1", "title": "Add"}))
+    story(rt, "s1")
     rt.state.boundary = bd.Boundary(Edge.END, 3, stage=Stage.CHECK, hold=BoundaryHold.ERROR)
     out = call(t.start_sprint({"goal": "MVP", "stories": ["s1"]}))
     assert out["status"] == "refused"
@@ -246,14 +254,14 @@ BOUNDARY_ROWS = [
     (
         brep(
             "sync_conflict",
-            edge="start",
-            stage="sync",
+            edge="end",
+            stage="rebase",
             files=["a/x.py", "a/y.py", "docs/z.md"],
             commit="abc123def456",
             subject="fix x",
         ),
         T.SYNC_CONFLICT,
-        "run: sprint 2 start: rebasing agile-team onto origin/main stopped at abc123def456 "
+        "run: sprint 2 end: rebasing agile-team onto origin/main stopped at abc123def456 "
         '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
         "aborted and the team branch is unchanged. Ask the human to rebase agile-team onto "
         "origin/main by hand (git rebase origin/main, resolve, git rebase --continue), then "
