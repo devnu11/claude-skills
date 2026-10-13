@@ -1,6 +1,17 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done)
+**Last updated:** 2026-10-13 (s96 done; s86 done)
+
+## s96 complete: Time per role on Flow chart and "Time by" chart (no new tool, no new hand-over)
+
+Dashboard now shows step wall time (agent steps only, from events.jsonl). **What you see:**
+- **Flow boxes:** Each role's box now displays total time spent (e.g., "architect · 124 tokens · $0.42 · 2 h 5 min"), updated as steps finish. Active (running) box adds a live line (e.g., "⏱ running 12 min") updated once per minute without new snapshot.
+- **Time measure on "Tokens by" chart:** New third measure button next to Tokens and Dollars. Shows time spent per group (Role, Story, or Model), largest first, with step count and share in tooltips. Legend: "Step time (agent steps only; runner stages: see A6)".
+- **No runner stages counted:** Only agent work (dev, architect, unit-tester, etc.) counts. PO queries, gate runs, syncs, and presentation builds are excluded.
+
+**No changes to your workflow.** No new tools. No new hand-overs. Time is data-driven from the snapshot like tokens and cost. Runner stages (A6) are not yet measured (future story).
+
+All ACs pass (23 unit tests, code review done; P1 tests pending). See design `agile-team/docs/design/s96.md` (no ADR: extends snapshot data pattern).
 
 ## s86 complete: Story dependencies as data (ADR-0046)
 

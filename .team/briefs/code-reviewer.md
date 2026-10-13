@@ -1,6 +1,20 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s96: Time per role on dashboard (1 round, all ACs pass) — verdict ship (P1 pending)
+
+**Scope:** `step_times.py` (new pure module, ~150 LOC), `snapshot.py` (_steps function), `index.html` (five helpers, Flow scope predicates, box time, Time unit), tests. **Verdict: ship (P1 node-harness/e2e pending).**
+
+**Design rules enforced (ST1–ST15):**
+- **ST1–ST8:** Event pairing by (role, story); killing first on duplicate; wall time from end - start rounded to 0.1; null for killed steps; open steps running; sprint from last sprint-start event; model from end, fallback to configured, else "unknown"; only agent steps count.
+- **ST9:** Span format: 0 min, <1 min, N min, H h M min.
+- **ST10–ST11:** Box time sums finished steps in scope (Story/Sprint/Run); running line shows elapsed time, updates once/sec via `tick`.
+- **ST12–ST14:** Time unit with label/title/totals/total/legend/row; bars per group, largest first, tooltip with step count and share; legend text exact.
+
+**Module structure:** `step_times.py` pure, `Pairing` class, `spans()` function, `FEEDS` dispatch table. Snapshot adds `_steps()` via new `_step()` helper with model fallback (ST7). Dashboard: `fmt.span()`, `finished()`, `stepsAsOf()` (ST15), `inScope()`/`inSprint()` predicates, `scopeSteps()`, `addStepTimes()`, `openStep()`, `runningLine()`, `ledgerTotals()`, `stepTotals()`, `timeBy()`, `timeRow()`, `timeLegend()`.
+
+**Coverage ≥95%, ruff clean.** All ST1–ST8 rules enforced. See design `agile-team/docs/design/s96.md`.
 
 ## s86: Story dependencies as data (1 round, all ACs pass) — verdict ship (P1 pending)
 

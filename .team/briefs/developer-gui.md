@@ -1,8 +1,14 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s85 done)
+**Last updated:** 2026-10-13 (s96 done, P1 pending)
 
 See `developer.md` for base conventions.
+
+## s96 complete: Time per role on the Flow chart; Time measure in "Tokens by" (all ACs pass, P1 pending)
+
+Pure Python module `step_times.py` (new, ~150 LOC) pairs start/end events from events.jsonl to calculate wall time. Snapshot gains `steps` section with step objects. JavaScript adds time display to Flow boxes and Time measure in "Tokens by" chart with Time button, title, bars, and legend. Code review done (ship). Node harness and e2e tests pending (integration-tester P1).
+
+See design `agile-team/docs/design/s96.md` (ST1–ST15, test checklist), no ADR (extends existing snapshot data pattern).
 
 ## s85 complete: The liaison's opinions on stories, highlighted in backlog (code done, P1 pending)
 

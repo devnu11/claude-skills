@@ -1,6 +1,12 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s96 done; s86 done; s85 done; s84 docs done)
+
+## s96: Time per role and role-by-time chart data (design rules ST1–ST15, docs due with ship)
+
+Pure snapshot building, no new event kind or state. `steps` section (new list after `ledger`) records agent step wall times paired from events.jsonl: role, story, model, sprint, at, ended_at, seconds (null for killed steps), status. Rules ST1–ST8 pair and count steps; ST9 formats spans (0 min, <1 min, N min, H h M min); ST10–ST11 scope filtering and running time on Flow boxes; ST12–ST14 Time unit in chart. No dependency added; snapshot/dashboard/index.html changes only. Code review done (ship). E2E test pending (integration-tester P1). **Your work:** Update `reference/protocol.md` (steps section, Flow paragraph, Time measure entry), `docs/customer/dashboard.md` (Flow and Tokens entries), `docs/architecture.md` (index line, `step_times.py` row).
+
+See design `agile-team/docs/design/s96.md` (ST1–ST15, test checklist), no ADR.
 
 ## s86 complete: Story dependencies as data (design rules DP1–DP15, ADR-0046, docs complete)
 
