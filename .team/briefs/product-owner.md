@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 done)
+**Last updated:** 2026-10-12 (s89 done)
+
+## s89: Unit suite passes on 3.13 (OS guard refined, test infrastructure, no new ADR)
+
+Bug fix. 36 unit tests failed on 3.13 when formatting tracebacks because Python 3.13's `linecache` read source via a path the guard charged to the wrong caller. Guard refined with rules T1–T6: allow stdlib source reads inside guarded frames, still catch real code. Accepted on AC1–AC3 (unit pass, traceback works, guard still catches real OS). AC4 (CI green on PR #16) verified at s81 CI boundary. No runtime changes, no new ADR (extends s71).
 
 ## s81: Boundary waits for PR's CI checks; "ready to merge" only from green (ADR-0040)
 

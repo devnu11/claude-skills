@@ -1,8 +1,14 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 done)
+**Last updated:** 2026-10-12 (s89 done)
 
 See `developer.md` for the base conventions.
+
+## s89: Unit suite passes on 3.13 (OS guard refined, test infrastructure only)
+
+Bug fix: 36 tests failed on 3.13 with "unit test reached the real OS: open (filesystem)" when formatting tracebacks. Root cause: Python 3.13's `linecache`/`traceback` read source files via a different path that the guard charged to the wrong caller. Guard refined with rules T1–T6: source reads by stdlib modules (`traceback`, `linecache`) inside a guarded frame (agile_team/tests) are now allowed. Real `agile_team` code that reaches the OS still fails. **No runtime changes, no new ADR.** See design `agile-team/docs/design/s89.md`.
+
+AC1–AC3 pass: 3.13 and 3.12 unit suites green, traceback formatting works, guard still catches real OS calls. AC4 (CI on PR #16) verified at s81 boundary.
 
 ## s81: New CI module and boundary stage (no new ADR, extends s29)
 
