@@ -88,6 +88,12 @@ prepare = "uv run --directory {repo}/agile-team/runner agile-team --repo {sandbo
 url = "http://127.0.0.1:8799/"
 probe = "api/snapshot"
 
+# For ACs with nothing to run (prompt, docs or design changes): the proxy reads
+# the presentation's guide and the changed files and judges each AC (A14a AC5).
+[[environment]]
+name = "review"
+kind = "document"
+
 [roles.architect]
 write = [
     "{docs}",
