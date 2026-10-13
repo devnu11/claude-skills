@@ -33,6 +33,8 @@ def test_a_pair_gives_rounded_seconds_status_model_and_start_time() -> None:
         "ended_at": 303.76,
         "seconds": 203.8,
         "status": "done",
+        "clock": "wall",
+        "slept": 0.0,
     }
 
 

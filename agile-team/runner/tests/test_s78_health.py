@@ -185,9 +185,9 @@ def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSy
     assert live.HEARTBEAT_VERSION == 2 and data["version"] == 2
     assert data["mono"] == fake.clock and data["at"] == fake.clock
     assert data["pid"] == FAKE_IDS[0]
-    assert list(data) == [
+    assert [k for k in data if k != "slept"] == [
         "version", "pid", "beat", "at", "mono", "started_at", "chore", "step",
-    ]  # fmt: skip
+    ]  # fmt: skip (s97 adds "slept", checked in test_s97_clocks)
 
 
 def test_tool_calls_and_results_write_the_heartbeat(fake: FakeSystem) -> None:

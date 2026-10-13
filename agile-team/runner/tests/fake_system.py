@@ -171,6 +171,8 @@ class FakeSystem:
         self.denied: set[str] = set()
         self.full = False
         self.clock = START_CLOCK
+        self.asleep = 0.0
+        self.platform_name = "darwin"
         self.slept: list[float] = []
         self.signals: list[tuple[str, int, int]] = []
         self.groups: dict[int, int] = {FAKE_IDS[0]: FAKE_IDS[1]}
@@ -443,8 +445,17 @@ class FakeSystem:
         return self.clock
 
     def monotonic(self) -> float:
-        """The fake monotonic clock (the same timeline)."""
-        return self.clock
+        """The fake monotonic clock: the wall timeline less the time spent asleep."""
+        return self.clock - self.asleep
+
+    def doze(self, seconds: float) -> None:
+        """The machine sleeps: wall time moves on, the monotonic clock does not (s97)."""
+        self.clock += seconds
+        self.asleep += seconds
+
+    def platform(self) -> str:
+        """The fake OS name (``darwin`` unless a test sets ``platform_name``)."""
+        return self.platform_name
 
     def local_time(self, fmt: str) -> str:
         """The fake clock formatted (UTC, so tests do not depend on a zone)."""
