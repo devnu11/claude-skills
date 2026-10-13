@@ -16,7 +16,7 @@ def failure(**kw) -> b.Failure:
 def test_enum_values() -> None:
     assert [e.value for e in b.Edge] == ["start", "end"]
     assert [e.value for e in b.Stage] == ["sync", "check", "review", "push", "ci"]
-    assert [e.value for e in b.StepKind] == ["role", "boundary", "team-fix", "review-fix"]
+    assert [e.value for e in b.StepKind] == ["role", "boundary", "team-fix", "review-fix", "gate-fix"]
     assert [e.value for e in b.BoundaryHold] == [
         "sync_conflict",
         "escalated",

@@ -136,7 +136,7 @@ def test_item_shown_is_the_single_file_else_the_printed_path() -> None:
 
 def test_own_writer_wins_when_its_globs_match() -> None:
     both = Owners((UNIT, Writer("implement", "developer", ("**",))), "implement")
-    assert both.writer_of("tests/test_a.py").step == "tests"  # first in order
+    assert both.writer_of("tests/test_a.py").step == "implement"  # R3: own writer wins
     assert both.own.step == "implement"
     assert both.writer_of("agile_team/x.py").step == "implement"
 
@@ -377,17 +377,17 @@ def test_fix_refusal_without_story() -> None:
 
 
 def test_fix_refusal_with_no_queue() -> None:
-    s = gates.StoryState("s1", "t", "implement")
+    s = gates.StoryState("s1", "t", "implement", sprint=1)
     assert gates.fix_refusal("integration-tester", s) == "story s1 has no gate fix queued"
 
 
 def test_fix_refusal_wrong_role() -> None:
-    s = gates.StoryState("s1", "t", "implement", fixes=[Fix("unit-tester", [item("tests/a.py")])])
+    s = gates.StoryState("s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])])
     assert gates.fix_refusal("integration-tester", s) == "story s1's next gate fix is for unit-tester"
 
 
 def test_fix_refusal_right_role() -> None:
-    s = gates.StoryState("s1", "t", "implement", fixes=[Fix("unit-tester", [item("tests/a.py")])])
+    s = gates.StoryState("s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])])
     assert gates.fix_refusal("unit-tester", s) is None
 
 
