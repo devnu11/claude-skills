@@ -24,8 +24,8 @@ TOKEN = "e2e-token"
 
 
 def _url(proc: subprocess.Popen) -> str:
-    deadline = time.time() + 20
-    while time.time() < deadline:
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
         if select.select([proc.stdout], [], [], 0.5)[0]:
             match = re.search(r"dashboard: (http://\S+)", proc.stdout.readline())
             if match:

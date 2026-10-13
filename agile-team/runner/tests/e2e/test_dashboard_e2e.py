@@ -28,8 +28,9 @@ RUNNER = Path(events_mod.__file__).parent.parent
 
 
 def _read_url(proc: subprocess.Popen, timeout: float = 20) -> str:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
+    # monotonic, not wall time: a host sleep mid-run must not expire the deadline
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         ready, _, _ = select.select([proc.stdout], [], [], 0.5)
         if ready:
             match = re.search(r"dashboard: (http://\S+)", proc.stdout.readline())
@@ -91,8 +92,8 @@ def test_stream_pushes_new_event(dash) -> None:
     assert b"data:" in resp.fp.readline()
     with (run / "events.jsonl").open("a") as fh:
         fh.write(json.dumps({"id": "e2", "kind": "gate", "at": time.time(), "data": {}}) + "\n")
-    deadline, seen = time.time() + 6, b""
-    while time.time() < deadline and b"e2" not in seen:
+    deadline, seen = time.monotonic() + 6, b""
+    while time.monotonic() < deadline and b"e2" not in seen:
         seen += resp.fp.readline()
     conn.close()
     assert b"e2" in seen
@@ -184,8 +185,8 @@ def test_budget_follows_config_file_and_pushes(dash) -> None:
     assert b"data:" in resp.fp.readline()
     old = _budget(url)
     toml.write_text(re.sub(r"budget_usd = [\d.]+", "budget_usd = 4321.0", toml.read_text()))
-    deadline, seen = time.time() + 6, b""
-    while time.time() < deadline and b"4321" not in seen:
+    deadline, seen = time.monotonic() + 6, b""
+    while time.monotonic() < deadline and b"4321" not in seen:
         seen += resp.fp.readline()
     conn.close()
     assert b"4321" in seen
@@ -254,8 +255,8 @@ def _stream_health(url: str, seconds: float) -> list[tuple[str, str]]:
     conn.request("GET", "/api/stream")
     resp = conn.getresponse()
     seen: list[tuple[str, str]] = []
-    deadline = time.time() + seconds
-    while time.time() < deadline:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
         try:
             line = resp.fp.readline()
         except TimeoutError:

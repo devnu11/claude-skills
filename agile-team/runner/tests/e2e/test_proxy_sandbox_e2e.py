@@ -114,7 +114,13 @@ def make_model(curl: str, recorded: list[str]) -> type[BaseHTTPRequestHandler]:
                     "type": "tool_use",
                     "id": "toolu_1",
                     "name": "Bash",
-                    "input": {"command": curl, "description": "probe the service"},
+                    # the CLI's Bash timeout counts host sleep; the max keeps a sleep
+                    # mid-run from backgrounding curl (the outer run's timeout bounds it)
+                    "input": {
+                        "command": curl,
+                        "description": "probe the service",
+                        "timeout": 600000,
+                    },
                 }
                 return message([call], "tool_use")
             return message([{"type": "text", "text": "ok"}], "end_turn")
