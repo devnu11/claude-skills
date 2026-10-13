@@ -314,10 +314,10 @@ def test_cmd_dashboard_prints_both_links_and_opens_local(
     args = dashboard_args(configured, "--host", "0.0.0.0", "--port", "0")
     assert cli.cmd_dashboard(args) == 0
     assert capsys.readouterr().out == (
-        f"dashboard: http://localhost:{FREE_PORT}/\n"
+        f"dashboard: http://localhost:{FREE_PORT}/?token=tok1\n"
         f"from other machines: http://{FAKE_HOSTNAME}.local:{FREE_PORT}/\n"
     )
-    assert fake.opened == [f"http://localhost:{FREE_PORT}/"]
+    assert fake.opened == [f"http://localhost:{FREE_PORT}/?token=tok1"]
 
 
 # ----- watch: the health trigger (W1, W2) --------------------------------------------

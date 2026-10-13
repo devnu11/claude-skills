@@ -259,8 +259,8 @@ def test_dashboard_port_zero_prints_real_url_and_opens(
     args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0")
     assert cli.cmd_dashboard(args) == 0
     out = capsys.readouterr().out
-    assert out == f"dashboard: http://localhost:{FREE_PORT}/\n"
-    assert fake.opened == [f"http://localhost:{FREE_PORT}/"]
+    assert out == f"dashboard: http://localhost:{FREE_PORT}/?token=tok1\n"
+    assert fake.opened == [f"http://localhost:{FREE_PORT}/?token=tok1"]
     assert fake.servers[0].closed
 
 
