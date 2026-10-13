@@ -1,6 +1,37 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s100 complete: Story timeline—every step, bounce, runner stage, wait on one time axis (all ACs verified)
+
+**Verdict: All ACs pass.** Timeline section on expanded Backlog stories shows a story's whole life on one horizontal time axis.
+
+**What you see on the dashboard:**
+- **Timeline section (new):** Below the story file, state, and events, a new "Timeline" section displays an SVG timeline with:
+  - **Rows:** One row per role that ran a step, in pipeline order, then a `PO` row and a `runner` row. Each row label shows the role name (truncated to 20 chars).
+  - **Bars:** Each step is a coloured bar on its role's row, coloured by outcome: green (passed), orange (bounced), yellow (disputed), grey (held), red (escalated). Each bar spans from step start to end (or now if running). Tooltips show step id, outcome, timing.
+  - **Bounce arrows:** When a step bounces back to another role, a thin curved arrow runs from the bounce verdict to the next step's row, showing the path clearly. Same-row bounces curve above the row.
+  - **Runner stages:** Each runner stage (quality checks, boundary sync, e2e) appears as a bar on the `runner` row, coloured green (ok) or red (failed).
+  - **PO turns:** Each PO action that touched the story is a bar on the `PO` row, spanning from when the PO started working to when they finished.
+  - **Ruling marks:** Manager rulings and faults appear as diamond marks on the `manager` row (if applicable).
+- **Waits shaded:** Gaps between bars are shaded and labelled to show what the story was waiting for: asleep (machine sleeping), question (waiting for your answer via outbox), hold (Manager hold on the step), other work (another story or runner stage running), idle (no activity recorded). A legend shows the shading colours. The gap colours and labels help diagnose where time went.
+- **Header totals:** At the top, a summary row shows: `Work` (agent step time), `Runner` (runner stage time, excluding during-stages), `PO` (time the PO spent on this story), `Waiting` (total wait time), `Asleep` (machine sleep time). Each total is formatted as a span. Hover over Waiting to see the breakdown (question, hold, other, idle).
+- **Live "now" line:** While the story is running, a vertical line marks "now" and moves as time passes. The view follows "now" automatically unless you pan.
+- **Zoom and pan:** Use ctrl+scroll to zoom in/out (tighten or stretch the time axis). Shift+scroll or sideways scroll to pan left/right. Buttons pan left/right by half the visible span, zoom in/out by 2×, fit to full range, or jump to now. Zoom and pan state is saved per story.
+- **Sprint scope toggle:** A toggle at the top-right lets you switch between Story scope (this story only) and Sprint scope. In Sprint scope, every story in the sprint appears as groups of rows on the same timeline, so you can see how stories interleave and wait on each other.
+- **Done stories:** At the bottom of the Backlog tab, a folded "Done" group lists done stories. Click "show done stories" to expand and see their timelines (helpful for reviewing how long they took).
+- **Board link:** Each card on the Board tab now has a "timeline" link; clicking it opens the Backlog tab, expands that story, and scrolls to its timeline.
+
+**Acceptance notes (all pass on seeded dashboard):**
+1. **AC1 (Rows and scope toggle):** Story scope shows s3's roles in pipeline order, then PO, then runner. Sprint scope shows all sprint 1 stories as groups. Toggle controls scope; state persists per story.
+2. **AC2 (Bars and bounce arrows):** s2's review bounce (e71) shows as arrow from code-reviewer to developer row. s3's bounced implement steps are orange bars. Manager ruling (s7 fault, e90) is a diamond on manager row.
+3. **AC3 (Waits explained):** Gaps shaded and labelled: s3's sleep row inside bar (hatched band), m3 question to you (open → now), s4's hold (→ next step), s3 gaps during s1/s2 work (other work, lists story ids). Header totals work/runner/PO/waiting/asleep all displayed with exact values.
+4. **AC4 (Live):** Running s3 step's bar extends to now line. Now line moves as time passes. Pan and zoom buttons respond. View follows now until you pan.
+5. **AC-R (Readability):** All text ≥12px and ≥4.5:1 contrast (light and dark themes). Measured in node-harness test (P1, integration-tester).
+
+**Acceptance unchanged:** Same sandbox, same service, same Presentation.md contract. Timeline is a browser view over existing data (sleeps.jsonl, events, snapshot).
+
+See design `agile-team/docs/design/s100.md` (AC1–AC-R, TL1–TL20, TR1–TR5), review round 2 (ship).
 
 ## s99 complete: Runner stages named and timed (all ACs verified; no changes to acceptance)
 

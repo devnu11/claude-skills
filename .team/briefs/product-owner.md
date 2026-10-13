@@ -1,6 +1,21 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s100 complete: Story timeline—every step, bounce, runner stage, PO turn, wait on one time axis (no new tool, no new hand-over)
+
+A story's whole life on one time axis is now visible on the Backlog tab. **What you see:**
+- **Expanded Backlog story** gains a "Timeline" section (new SVG below the story file and events).
+- **Timeline shows:** One row per role that ran a step, then `PO` and `runner` rows, all aligned on a horizontal time axis from story-opened to done (or now). Each step is a coloured bar (outcome: passed, bounced, disputed, held, escalated). Bounces draw arrows to the next step's row. Runner stages show as bars too. Manager rulings are diamond marks.
+- **Waits explained:** Gaps between bars are shaded and labelled: asleep (machine sleeping), question (waiting for your answer), hold (Manager hold), other work (another story/runner stage), idle (nothing recorded). Header totals work, runner, PO, waiting, and asleep time.
+- **Live:** While a story runs, the timeline grows with a "now" line that moves. The view follows "now" until you pan; zoom and pan are sticky per story.
+- **Sprint view:** A toggle shows every story in the sprint as groups of rows on one timeline.
+- **Done stories:** A folded "Done" group appears at the bottom of the Backlog tab; click to see timelines of done stories.
+- **Board link:** Each Board card now has a "timeline" link that expands the story and opens its timeline.
+
+**How it works:** Runner now records every sleep to `.team/run/sleeps.jsonl` (wall time in, wall time out, duration). Snapshot carries a new `sleeps` section. Page derives timeline views from step events, po-turn events, runner-stage events, messages, answers, and sleeps—all raw data, no aggregation in Python. All text is sized ≥12px with 4.5:1 contrast (accessible). **No new tools, no new hand-overs, no new ADR** (extends s98 tools/po-turn append-only pattern and s96 snapshot raw-data-view pattern).
+
+See design `agile-team/docs/design/s100.md` (TL1–TL20, TR1–TR5, test checklist), review round 2 (ship verdict).
 
 ## s99 complete: Runner stages are named and timed (no new tool, no new hand-over)
 

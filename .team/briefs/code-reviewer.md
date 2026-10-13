@@ -1,6 +1,37 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s100 complete: Story timeline SVG (2 rounds, all defects fixed) — verdict ship (P1 pending)
+
+**Scope:** `live.py` (Sleep class, _count_sleep, _log_sleep), `dashboard/snapshot.py` (_sleeps, SLEEPS_TAIL_BYTES), `dashboard/index.html` (timeline SVG builder and controls, ~1000 LOC). **Verdict: ship (P1 node-harness/e2e pending).**
+
+**Design rules enforced (TL1–TL20, TR1–TR5):**
+- **TL1–TL4:** Timeline section under spend/links with rows per role in RING_ORDER order, PO row, runner row. Spans from story-opened to done/now. No events → note text only.
+- **TL5–TL6:** Step bars coloured by verdict (passed/bounced/disputed/held/escalated) with outcome markers. Runner-stage bars on runner row. During-stages noted.
+- **TL7–TL9:** PO bars from po-turn events with touches check (PO_TOUCH_KINDS). Rulings as diamonds. Bounce arrows from verdict to next step.
+- **TL10–TL11:** Gaps shaded by wait kind (asleep/question/hold/other/idle) with labels. Wait intervals clipped to gaps. Sleep band hatching over rows.
+- **TL12–TL13:** Totals: work (step seconds), runner (stage seconds, excluding during), po (tool_s + model_s from touching turns), waiting (gap sum), asleep (sleep union). Breakdown in tooltip.
+- **TL14–TL16:** Sprint scope toggle. Story groups in sprint order. Window with zoom/pan/follow/fit. Axis ticks auto-spaced.
+- **TR1–TR5:** All text from TL_TEXT table (≥12px, --ink or --ink-2), no class sizing. SVG width equals viewBox (no scale), container scroll. Flow chart: FLOW_FONT_PX ≥12, useMaxWidth false, scroll, idleClassDef colour-only.
+- **TL19–TL20:** Sleep record on beat gap >2 beats; snapshot sleeps section with tail read, valid rows, sorted by from.
+
+**Module structure:** `live.py` Sleep dataclass (start, end, slept), _count_sleep/clocks/step events unchanged, _log_sleep appends JSON line (OSError suppressed). `snapshot.py` _sleep_row validator, _sleeps tail reader, SLEEPS in RUN_FILES, SLEEPS_TAIL_BYTES=262144. Browser: 40+ pure model functions ≤8 LOC each (roleRank, tlNow, storyRange, verdictOf, stepBars, stageBars, poBars, rulingMarks, bounceArrows, gapSegments, sleepWaits, questionWaits, holdWaits, otherWaits, storyGroup, sprintGroup, groupTotals, modelTotals, timelineModel, tlState, tlWindow, zoomed, pannedBy, tlTicks, tlText/tlSpan/tlButton, timelineSvg, totalsHtml, legendHtml, timelineHtml, setTlScope, onTlWheel, doneStories, openTimeline, keepTimelineScroll). Data tables exact: TL, TL_WIDTH, TL_TEXT, TL_SCOPES, VERDICT_KINDS, OUTCOMES, STEP_STATES, STAGE_STATES, ARROW_VERDICTS, HOLD_LABELS, RULING_KINDS, PO_TOUCH_KINDS, WAIT_KINDS, IDLE, TOTALS, TICK_STEPS. SVG attributes contract: data-group, data-row-label, data-bar, data-outcome, data-from, data-to, data-wait, data-sleep, data-now, data-arrow, data-mark (exact names).
+
+**Coverage ≥95%, ruff clean. No tests deleted.**
+
+**Round 1 findings (all fixed in round 2):**
+- **D1:** Arrows outside window are clipped via clip-path (tlSeen check, groupDefs adds clip per group, groupSvg wraps content).
+- **D2:** All 19 functions now have one-line `/** … */` docs.
+- **D3:** X-mapping extracted to `tlX` (used by plot.x, axisSvg, nowSvg); sleepIntervals extracted (used by storyGroup, modelTotals).
+- **m1:** Header title cut properly via tlCut.
+- **m3:** nowSvg signature takes range, win, now, h (four params, page JS acceptable per review).
+
+**Minor findings (don't block):**
+- **m4:** storyGroup doc displaced by sleepIntervals helper; move back at next index.html touch.
+- **m5:** SVG ids (tl-<group>-clip, -sleep, -arrow) repeat across open timelines (same content, HTML invalid); prefix with story id at next touch.
+
+See design `agile-team/docs/design/s100.md` (TL1–TL20, TR1–TR5, per-module, test checklist), review round 2, fixtures contract snapshot.json.
 
 ## s99 complete: Runner stages as data (1 round, all ACs pass) — verdict ship (P1 e2e pending)
 

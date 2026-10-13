@@ -1,6 +1,25 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s100 complete: Sleep recording and timeline source checks (coverage ≥95%, ruff clean, all pass)
+
+**Files:** `tests/test_s100_sleeps.py` (new, ~200 LOC, pure + runner), `tests/test_s100_timeline_source.py` (new, ~100 LOC, static).
+
+**Python sleeps (TL19–TL20):**
+- **TL19 record:** Beat gap > 2 beats appends one `sleeps.jsonl` line `{"from", "to", "slept"}`. Normal beat appends none (TL19, AW2 integration). Gap=beat_s→0; gap=2×beat_s→0; gap=10×beat_s→9×beat_s (rounded to 1 decimal). OSError on append suppressed; slept_s still counts (TL19 robustness).
+- **TL20 snapshot:** `_sleeps` reads tail (SLEEPS_TAIL_BYTES=262144), validates rows (numeric from/to/slept, from≤to, 0≤slept≤to-from), drops invalid, sorts by from (TL20). Fixture's sleeps equal `_sleeps` over captured lines. SLEEPS joins RUN_FILES (watched).
+
+**Page source (static):**
+- TL_TEXT table: every entry has `px≥12` and `ink` in {"--ink", "--ink-2"} (TR3).
+- CSS: `.tl { background: var(--surface); }`, `.tl svg { max-width: none; }`, `.tl [data-tl-plot] { overflow-x: auto; }` (TR2, TR3).
+- TL constants exact: LABEL_W, PLOT_W, AXIS_H, GROUP_H, WAITS_H, ROW_H, BAR_H, MIN_SPAN_S, FOLLOW_PAD, TICK_MIN_PX, CHAR_EM, MIN_BAR_PX (TL means fixed).
+- Tables present: VERDICT_KINDS, OUTCOMES, STEP_STATES, STAGE_STATES, ARROW_VERDICTS, HOLD_LABELS, RULING_KINDS, PO_TOUCH_KINDS, WAIT_KINDS, IDLE, TOTALS, TICK_STEPS (exact members/order, TL contracts).
+- Flow chart: FLOW_FONT_PX ≥12, `useMaxWidth: false`, `overflow-x: auto`, `.flow svg { max-width: none }`, `idleClassDef()` returns colour-only class, no opacity/filter/transform/mix-blend-mode (TR5, FL1–FL2).
+
+**Coverage ≥95%, ruff clean. No tests deleted.** P1 timeline behavior checklist (TL1–TL5, TL7–TL14, AC5–AC-R measured page tests) and readability contrast test are carried to integration-tester (node-harness).
+
+See design `agile-team/docs/design/s100.md` (TL19–TL20, TR1–TR5, test checklist items TL19, TL20, TR1–TR5 source/static), review round 2.
 
 ## s99 complete: Runner stages table, timing, config loading (coverage ≥95%, ruff clean, all pass)
 

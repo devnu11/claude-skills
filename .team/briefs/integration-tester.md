@@ -1,6 +1,35 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s100: Node-harness and measured tests for timeline behaviour and readability (P1, your work)
+
+**File:** `tests/test_s100_timeline_page.py` (new, under `tests/dashboard_node.run_page` setup).
+
+**Design checklist (all via node harness or measured page tests):**
+
+**Behaviour (TL1–TL16):**
+- **TL2:** s1 (done) range from story-opened to done gate's at, running=false. s3's range ends at now (running=true). No events → note text, no SVG.
+- **TL4/AC1:** s3's rows are its roles in RING_ORDER, then PO, then runner. Injected ruling for s3 adds manager row.
+- **TL5/AC2:** Bounced steps have data-outcome="bounced"; passed steps "passed"; test-dispute adds "disputed"; running step "running"; data-to equals now for running.
+- **TL6:** rs1 stage bar "failed" on runner; checkout.guard (s2) "ok"; boundary.sync (story=null) not in any story group.
+- **TL7:** po-turn touching s3 gate is PO bar for s3 (not s1); po-turn with outbox message naming s3 also touches s3.
+- **TL8/AC5 bounce arrow:** s2's review bounce draws data-arrow="bounce" from code-reviewer to developer row. s3 bounce to itself has same row. Bounce with no next step draws no arrow (tooltip says "back to"). Window after next step clips arrow (none drawn). Arrow inside window sits in clip-path group.
+- **TL9:** s7's fault (e90) is data-mark="fault" on manager.
+- **TL10/TL11/AC5 waits:** asleep (s3 sleep row), question (m3 on s3, open → now), hold (s4 e79 → next step or now), other (s3 gap while s1/s2 step, label lists ids, depends_on id has "(dependency)"), idle (no wait). Precedence: sleep inside question is asleep.
+- **TL12:** s1 architect step's sleep band draws data-sleep over bar span.
+- **TL13/AC5 totals:** s3 work = Σ steps + running, runner excludes during, po = Σ tool_s + model_s of touches, waiting = gap pieces, asleep = clipped union. Numbers exact, data-total keys in TOTALS order.
+- **TL14/AC5 Sprint scope:** Groups are sprint-1, then s1/s2/s3/s4 in view.stories order. boundary.sync (story=null) in sprint-1's runner. Turn touching s2 and s3 counts once in po. Sprint disabled for s5 (no sprint).
+- **TL15:** zoomed in/out/fit and pannedBy (pure state). Wheel with ctrl zooms, shift pans, plain vertical does nothing.
+- **TL16/AC5 live now line:** Fixed window (end set), now T→T+600 moves data-now x right. Following (end=null), running bar right edge and now line share x. Done s1 no data-now.
+
+**Readability (AC-R, TR1–TR5, measured):**
+- **TR1–TR4:** Parse timelineHtml (s3 story and sprint scope) as HTML. Every text node outside <title> has ancestor with data-text in TL_TEXT. Inline font-size × (svg width ÷ viewBox width) ≥12 CSS px (measure computed style, not inline). Colour var resolved from `:root` and `:root[data-theme="dark"]` blocks, WCAG contrast ≥4.5 against --surface.
+- **TR5:** FLOW_FONT_PX ≥12, useMaxWidth false, CSS scroll, idleClassDef colour-only. Default node (--ink) on --surface ≥4.5. Stub getComputedStyle with theme values.
+
+**Coverage:** All checklist items (design lines 260–276) verified. No node/process tests written yet; all via node harness and measured page checks.
+
+See design `agile-team/docs/design/s100.md` (test checklist, TL1–TL5, TL7–TL16, TR1–TR5), review round 2.
 
 ## s99 complete: Runner stages—naming, timing, events (all ACs verified; P1 e2e with real repo)
 

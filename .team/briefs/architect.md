@@ -1,6 +1,18 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s99 done; s98 done; s105 docs due; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s100 complete: Story timeline—raw data in snapshot, views in browser (no new ADR, extends s96/s98 patterns)
+
+**Decision:** Sleeps are recorded as raw data (wall-time intervals) in `sleeps.jsonl`, shipped in snapshot's `sleeps` section (rules TL19–TL20). Timeline view (SVG with rows, bars, arrows, waits, totals) is browser-computed from step events, po-turn events, runner-stage events, messages, answers, and sleeps (TL1–TL18). All text ≥12px with 4.5:1 contrast (TR1–TR5). Rows per role in `RING_ORDER` plus `PO` and `runner`. Bars by outcome (passed/bounced/disputed/held/escalated). Bounces draw curves to next step. Waits are shaded gaps (asleep/question/hold/other/idle). Manager rulings marked. Live view with "now" line. Sprint scope as toggle. Done stories folded. Board cards link to timelines.
+
+**Architecture:** Pure modules: no new one (follows s98/s96 pattern). Python: `live.py` gains `Sleep` class and `_count_sleep` method (TL19); `Pulse._log_sleep` appends to `sleeps.jsonl`. `dashboard/snapshot.py` gains `_sleeps` reader and `SLEEPS_TAIL_BYTES`. Browser: `index.html` gains timeline section (TL1) with pure model functions (roleRank, tlNow, storyRange, verdictOf, stepBars, stageBars, poBars, rulingMarks, bounceArrows, gapSegments, sleepWaits, questionWaits, holdWaits, otherWaits, storyGroup, sprintGroup, groupTotals, timelineModel), state (tlState), view (tlWindow, tlTicks, timelineSvg, totalsHtml, legendHtml, timelineHtml), and controls (zoom/pan/follow/scope buttons, wheel/scroll handlers). SVG with clip-path (arrows clipped to window), hatched sleep bands, data attributes for testing. CSS all inline (TR1).
+
+**Data contract:** `sleeps.jsonl` lines `{"from", "to", "slept"}` (wall seconds, 1 decimal). Snapshot `sleeps` section (tail read, valid rows only, sorted by `from`). No new event kinds or state fields. `live.SLEEPS` joins `RUN_FILES` (watched). Browser data: step/event/message/answer/answer/role/story/runner-stage all unchanged; `sleeps` array new.
+
+**Your docs work (shipped with s100):** `reference/protocol.md` (sleeps.jsonl format, heartbeat mechanism, snapshot sleeps section, Backlog Timeline rules TL1–TL16 summary, Done group, Board link); `docs/customer/dashboard.md` ("Story timeline" section with rows, colours, arrows, waits, totals, scope, zoom/pan/now, Done group); `docs/architecture.md` (two rows: live.py sleeps/heartbeat, dashboard/snapshot.py sleeps reader).
+
+No new ADR (extends s96 snapshot pattern and s98 append-only tools/po-turn pattern). No new dependency. See design `agile-team/docs/design/s100.md` (TL1–TL20, TR1–TR5), review round 2 (ship).
 
 ## s99 complete: Runner stages—named data, timed events, repo tools config (ADR-0048, extends s44/s98, no new ADR per design)
 
