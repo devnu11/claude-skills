@@ -218,8 +218,10 @@ def test_a_malformed_fix_handoff_is_settled_as_failed(make_runtime) -> None:
 def test_a_done_fix_runs_no_gate_and_leaves_previous_alone(make_runtime) -> None:
     rt, _ = routed(make_runtime, handoff())
     before = story_of(rt).previous
+    gates = len(events_of(rt, "gate"))
     fix_step(rt, "integration-tester")
-    assert story_of(rt).previous == before and len(events_of(rt, "gate")) == 0
+    assert story_of(rt).previous == before
+    assert len(events_of(rt, "gate")) == gates
     assert len(events_of(rt, "gate-fix")) == 1
 
 
