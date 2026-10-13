@@ -73,12 +73,12 @@ class Preflight:
         return keys.KeyLocations(self.config.repo, self.config.team.key_file, self.home)
 
     def toolchain(self) -> list[str]:
-        """Every configured toolchain and delivery e2e command's executable is on PATH."""
+        """Every configured toolchain and environment e2e command's executable is on PATH."""
         exes = {
             f"toolchain.{n}": executable_of(c) for n, c in self.config.toolchain.commands.items()
         }
-        for d in self.config.deliveries:
-            exes[f"delivery.{d.name}.e2e"] = executable_of(d.e2e) if d.e2e else ""
+        for d in self.config.environments:
+            exes[f"environment.{d.name}.e2e"] = executable_of(d.e2e) if d.e2e else ""
         return [
             f"{name}: `{exe}` not found on PATH"
             for name, exe in sorted(exes.items())

@@ -36,8 +36,8 @@ another role's work.
    and acceptance criteria are clear. Ask few, sharp questions at a time, then
    `wait_for_answers`.
 2. Write stories to `.team/stories/<id>.md` (user story, acceptance criteria,
-   delivery it applies to), then `open_story` each one. Pass `delivery` as
-   the exact `name` of a `[[delivery]]` in `.agile-team.toml` (or leave it empty
+   acceptance environment it applies to), then `open_story` each one. Pass `environment` as
+   the exact `name` of an `[[environment]]` (acceptance environment) in `.agile-team.toml` (or leave it empty
    for the first one); prose is refused, and the refusal lists the valid names.
    A new story sits in
    the backlog (`sprint: null`) and cannot move yet.
@@ -165,9 +165,9 @@ line to your brief.
 
 ## Returned stories
 
-A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself. `returned` also comes when the delivery's service did not start for the Proxy; the reason holds its output.
+A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself. `returned` also comes when the acceptance environment's service did not start for the Proxy; the reason holds its output.
 
-A `gate_hold` hand-over means the gate could not run for an environment reason (e.g. the delivery's port is in use by another process). Tell the human, and `continue_story` once it is fixed.
+A `gate_hold` hand-over means the gate could not run for an environment reason (e.g. the acceptance environment's port is in use by another process). Tell the human, and `continue_story` once it is fixed.
 
 ## Cadence
 

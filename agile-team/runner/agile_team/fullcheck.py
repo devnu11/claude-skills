@@ -1,4 +1,4 @@
-"""The full checks a sprint boundary runs: lint, static, test, coverage, each delivery's e2e."""
+"""The full checks a sprint boundary runs: lint, static, test, coverage, each environment's e2e."""
 
 from __future__ import annotations
 
@@ -106,10 +106,10 @@ JUDGES: dict[Judge, Callable[[int, str, Judging], str]] = {
 
 
 def full_checks(config: Config) -> list[FullCheck]:
-    """Toolchain checks that are set, then each delivery's e2e command."""
+    """Toolchain checks that are set, then each environment's e2e command."""
     commands = config.toolchain.commands
     chosen = [FullCheck(n, commands[n], j) for n, j in TOOLCHAIN_CHECKS if commands.get(n)]
-    e2e = [FullCheck(f"e2e:{d.name}", d.e2e) for d in config.deliveries if d.e2e]
+    e2e = [FullCheck(f"e2e:{d.name}", d.e2e) for d in config.environments if d.e2e]
     return [*chosen, *e2e]
 
 

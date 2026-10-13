@@ -172,7 +172,7 @@ def detection(repo: Path, presets: dict[str, Any]) -> dict[str, Any]:
     preset = presets[name]
     return {
         "preset": name,
-        "delivery_kind": onboard.suggest_kind(repo, preset),
+        "environment_kind": onboard.suggest_kind(repo, preset),
         "commands": preset["commands"],
         "globs": preset["globs"],
     }
@@ -195,8 +195,8 @@ def _require_init_inputs(repo: Path, args: argparse.Namespace) -> None:
         raise CliError(f"not a git repository: {repo}; run git init first")
     if not Git(repo).is_clean():
         raise CliError("working tree is dirty; commit or stash first")
-    if not args.preset or not args.delivery_kind:
-        raise CliError("--preset and --delivery are required (see --detect)")
+    if not args.preset or not args.environment_kind:
+        raise CliError("--preset and --environment are required (see --detect)")
 
 
 def answers_from(args: argparse.Namespace) -> onboard.Answers:
@@ -209,17 +209,23 @@ def answers_from(args: argparse.Namespace) -> onboard.Answers:
 
 def cmd_config_check(args: argparse.Namespace) -> int:
     place = Place.of(args)
-    problems = check_config(_load_config(place.repo), place.home)
-    for problem in problems:
-        print(f"problem: {problem}")
+    config = _load_config(place.repo)
+    problems = check_config(config, place.home)
+    _print_lines("warning", config.warnings)
+    _print_lines("problem", problems)
     print("config ok" if not problems else f"{len(problems)} problem(s)")
     return 1 if problems else 0
+
+
+def _print_lines(prefix: str, lines: list[str]) -> None:
+    for line in lines:
+        print(f"{prefix}: {line}")
 
 
 def check_config(config: config_mod.Config, home: Path) -> list[str]:
     """Static config problems plus every role's resolution and glob expansion."""
     book = role_book(config, home)
-    known = config_mod.Known(book.names(), set(sandbox.DELIVERY_KINDS))
+    known = config_mod.Known(book.names(), set(sandbox.ENVIRONMENT_KINDS))
     return config_mod.validate(config, known) + _role_problems(book, config)
 
 
@@ -622,8 +628,11 @@ INIT_ARGS: tuple[Arg, ...] = (
     (("--detect",), {"action": "store_const", "dest": "func", "const": cmd_detect,
                      "help": "print the detected preset and exit"}),
     (("--preset",), {}),
-    (("--delivery",), {"dest": "delivery_kind", "choices": sorted(sandbox.DELIVERY_KINDS)}),
-    (("--url",), {"default": "", "help": "web delivery URL"}),
+    (
+        ("--environment",),
+        {"dest": "environment_kind", "choices": sorted(sandbox.ENVIRONMENT_KINDS)},
+    ),
+    (("--url",), {"default": "", "help": "web environment URL"}),
     (("--docs-dir",), {"default": "docs"}),
     (("--artifacts",), {"choices": config_mod.ARTIFACT_POLICIES, "default": "committed"}),
     (("--key-file",), {"default": config_mod.DEFAULT_KEY_FILE}),
@@ -639,7 +648,7 @@ START_ARGS: tuple[Arg, ...] = (
     (("--task",), {"help": "the task for the Product Owner"}),
     (("--cadence",), {"choices": config_mod.CADENCES}),
     (("--onboard",), {"action": "store_const", "dest": "mode", "const": StartMode.ONBOARD,
-                      "default": StartMode.DELIVERY, "help": "run the onboarding sprint"}),
+                      "default": StartMode.WORK, "help": "run the onboarding sprint"}),
     (("--resume",), {"action": "store_const", "dest": "mode", "const": StartMode.RESUME,
                      "help": "continue the previous run"}),
 )  # fmt: skip

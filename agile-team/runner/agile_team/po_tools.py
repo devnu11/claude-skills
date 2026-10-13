@@ -85,7 +85,7 @@ AFTER_REVIEW = frozenset({BoundaryHold.ESCALATED, BoundaryHold.REVIEWED})
 class StartMode(StrEnum):
     """How ``agile-team start`` begins the PO loop."""
 
-    DELIVERY = "delivery"
+    WORK = "work"
     ONBOARD = "onboarding sprint (phase B)"
     RESUME = "resume"
 
@@ -95,7 +95,7 @@ class Start:
     """The human's task and the start mode."""
 
     task: str
-    mode: StartMode = StartMode.DELIVERY
+    mode: StartMode = StartMode.WORK
 
 
 @dataclass
@@ -112,9 +112,9 @@ class Tools:
         """Why ``open_story`` must refuse ``args``, or None (duplicate id, then s64 V1)."""
         if args["id"] in self.runtime.state.stories:
             return f"story {args['id']} already exists"
-        return self.runtime.config.delivery_refusal(args.get("delivery")) or self._depends_refusal(
-            args
-        )
+        return self.runtime.config.environment_refusal(
+            args.get("environment")
+        ) or self._depends_refusal(args)
 
     def _depends_refusal(self, args: dict[str, Any]) -> str | None:
         """DP6: the checks on ``open_story``'s ``depends_on``."""
@@ -139,7 +139,7 @@ class Tools:
         first = rt.pipeline.first()
         given = dependencies.listed(args.get("depends_on") or []) or []
         rt.state.stories[sid] = StoryState(
-            sid, args["title"], first, delivery=args.get("delivery"), depends_on=given
+            sid, args["title"], first, environment=args.get("environment"), depends_on=given
         )
         rt.save()
         data = {"title": args["title"], "step": first, "depends_on": given}
@@ -509,12 +509,13 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "open_story": (
         "Register a story; it starts in the backlog until start_sprint lists it. "
-        "delivery must be the name of a configured [[delivery]] (empty = the first one); "
-        "any other name is refused with the valid names. "
+        "environment must be the name of a configured [[environment]], the acceptance environment "
+        "the customer proxy tries the story in (empty = the first one); any other name is "
+        "refused with the valid names. "
         "depends_on: the ids of stories that must be done before this one starts. Write the "
         "same list in the story file's frontmatter `depends_on`; a different list is refused. "
         "Unknown ids, the story itself and cycles are refused.",
-        {"id": str, "title": str, "delivery": str, "depends_on": list},
+        {"id": str, "title": str, "environment": str, "depends_on": list},
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
@@ -639,7 +640,7 @@ def resume_session(runtime: Runtime, start: Start) -> str | None:
 
 def first_prompt(runtime: Runtime, start: Start) -> str:
     """The PO's kickoff message."""
-    mode = StartMode.DELIVERY if start.mode is StartMode.RESUME else start.mode
+    mode = StartMode.WORK if start.mode is StartMode.RESUME else start.mode
     roles = ", ".join(role_label(runtime, name) for name in runtime.book.enabled_names())
     return (
         f"Mode: {mode}\nCadence: {runtime.state.cadence}\nRoles available: {roles}\n\n"

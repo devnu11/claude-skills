@@ -31,8 +31,8 @@ read-only in your cwd only. Git cannot climb out of `.team/run` (the runner
 sets `GIT_CEILING_DIRECTORIES`), so give every demo repo its own `git init`.
 Never point git at the team repo. Build the workspace the way the team would
 hand the product to a customer (follow the design's recipe for the story's
-delivery). Write `PRESENTATION.md` there: for each AC, what to run or open and
-what the customer should see. For ACs that only a live run shows (sprints,
+acceptance environment). Write `PRESENTATION.md` there: for each AC, what to run or open and
+what the customer should see. For a `document` environment, copy the files the story changed (prompts, docs, designs) into `workspace/`, keeping their repo paths. In the guide, say for each AC which file and section shows it. For ACs that only a live run shows (sprints,
 stops, spend), capture the real output, e.g. `agile-team status` of the live
 run as `live-status.json`, and say in `PRESENTATION.md` what it is.
 
@@ -41,7 +41,7 @@ repo paths, so `PRESENTATION.md` names none and the presentation holds no
 links into the repo. Put in copies of what the customer needs (the ADR, the
 protocol section, files to try) and captured command output (test and ruff
 results, each with its command and exit code).
-A dashboard presentation (a `web` delivery whose start command runs
+A dashboard presentation (a `web` acceptance environment whose start command runs
 `agile-team dashboard`) needs only the run data its story's ACs show.
 You need not write the config, because the runner seeds the config: `workspace/.agile-team.toml` with
 `[dashboard] token = "presentation"` appears when you start and again in the
@@ -57,7 +57,7 @@ and `PRESENTATION.md` says: open the dashboard, Backlog tab, row s3 reads
 the ACs need. A failed start names a broken seeded file and how to fix it.
 
 Check that it works before you hand off. The e2e gate refuses a missing
-presentation. For a delivery that runs as a service (`web`), the gate also
+presentation. For an acceptance environment that runs as a service (`web`), the gate also
 starts it from your presentation, the way the Proxy will get it, and passes
 only if it answers. A failed start comes back to you with the command's
 output. Stop any server you started for your own check, or the gate finds

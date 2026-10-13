@@ -12,7 +12,7 @@ from typing import Any
 from . import system
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .ci import CiResult
-from .config import PIPELINE_STEPS
+from .config import OLD_ENVIRONMENT_NAME, PIPELINE_STEPS
 from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, load_dispute
 from .holds import PoHold
 from .ledger import SessionCost
@@ -165,6 +165,7 @@ NESTED = {
 }
 
 
+STORY_RENAMES = {OLD_ENVIRONMENT_NAME: "environment"}
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
 
 
@@ -172,7 +173,16 @@ def _legacy_implemented(data: dict[str, Any]) -> int:
     return int(data.get("step") in PAST_IMPLEMENT)
 
 
+def _renamed(data: dict[str, Any]) -> dict[str, Any]:
+    """``data`` with old keys moved to their new names; a new key already present wins (E5)."""
+    moved = {
+        new: data[old] for old, new in STORY_RENAMES.items() if old in data and new not in data
+    }
+    return {**{k: v for k, v in data.items() if k not in STORY_RENAMES}, **moved}
+
+
 def _story(data: dict[str, Any]) -> StoryState:
+    data = _renamed(data)
     status = StoryStatus(data.get("status", StoryStatus.ACTIVE))
     nested = {k: _nested(cls, data.get(k)) for k, cls in NESTED.items()}
     implemented = data.get("implemented", _legacy_implemented(data))

@@ -72,7 +72,7 @@ bounced back and forth between two steps. The context has `repeated_setback`:
 the reason, the history, the events and the last output. Decide who owns the
 fault: the role it was sent back to, another role, or `runner` (the runner's
 own setup or a gate no role can satisfy, such as a failed prepare line or a
-delivery that never starts; `"author": "runner"` hints at this but does not
+an acceptance environment that never starts; `"author": "runner"` hints at this but does not
 prove it). Hand off `"fault"`, and optionally a `"ruling"`, which wins. Use
 `followups` to tell the fault role what to fix.
 

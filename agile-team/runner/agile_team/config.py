@@ -1,7 +1,7 @@
 """Load and validate ``<repo>/.agile-team.toml``.
 
 The file is the single place a repo customizes the team: toolchain commands
-and globs, gates, deliveries, budget and per-role overrides. Role prompt
+and globs, gates, acceptance environments, budget and per-role overrides. Role prompt
 addenda live beside it in ``.team/roles/*.md`` and are handled by ``roles``.
 """
 
@@ -43,10 +43,18 @@ TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 DASHBOARD_TOKEN = "[dashboard] token must be a string"
 DASHBOARD_COLLAPSE = "[dashboard] collapse_under_s must be a number of seconds, 0 or more"
 GLOB_KEYS = ("source", "tests", "e2e", "ci")
-UNKNOWN_DELIVERY = "delivery {name!r} is not a configured [[delivery]]; use one of: {names}"
-NO_DELIVERY = (
-    "delivery {name!r} is not a configured [[delivery]]; .agile-team.toml configures none, "
-    "so leave delivery empty or ask the human to add a [[delivery]]"
+ENVIRONMENT_SECTION = "environment"
+OLD_ENVIRONMENT_NAME = "delivery"  # the alias (s93 E1); the only place the old name appears
+RENAMED_SECTIONS: dict[str, str] = {OLD_ENVIRONMENT_NAME: ENVIRONMENT_SECTION}
+BOTH_SECTIONS = "[[{new}]] and [[{old}]] are both set; move every [[{old}]] into [[{new}]]"
+RENAMED_WARNING = "[[{old}]] is the old name of [[{new}]]; rename the section"
+UNKNOWN_ENVIRONMENT = (
+    "acceptance environment {name!r} is not a configured [[environment]]; use one of: {names}"
+)
+NO_ENVIRONMENT = (
+    "acceptance environment {name!r} is not a configured [[environment]]; "
+    ".agile-team.toml configures none, so leave environment empty or ask the human "
+    "to add an [[environment]]"
 )
 
 
@@ -103,8 +111,10 @@ class Gates:
 
 
 @dataclass
-class Delivery:
-    """One way a customer reaches the product (see ``sandbox.DELIVERY_KINDS``).
+class Environment:
+    """One acceptance environment: how the customer proxy tries the product.
+
+    The kind is one of ``sandbox.ENVIRONMENT_KINDS``.
 
     ``probe``: path joined to ``url`` that must answer 200 before a service counts as up.
     ``seed``: repo-relative directory whose files the runner plants in the presentation
@@ -184,10 +194,11 @@ class Config:
     upstream: UpstreamSettings = field(default_factory=UpstreamSettings)
     health: HealthLimits = field(default_factory=HealthLimits)
     dashboard: DashboardSettings = field(default_factory=DashboardSettings)
-    deliveries: list[Delivery] = field(default_factory=list)
+    environments: list[Environment] = field(default_factory=list)
     tools: list[Tool] = field(default_factory=list)
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def run_dir(self) -> Path:
@@ -210,20 +221,20 @@ class Config:
         values["config"] = [CONFIG_NAME]
         return values
 
-    def delivery(self, name: str | None) -> Delivery | None:
-        """The named delivery, or the first one when ``name`` is empty."""
+    def environment(self, name: str | None) -> Environment | None:
+        """The named acceptance environment, or the first one when ``name`` is empty."""
         if not name:
-            return self.deliveries[0] if self.deliveries else None
-        return next((d for d in self.deliveries if d.name == name), None)
+            return self.environments[0] if self.environments else None
+        return next((d for d in self.environments if d.name == name), None)
 
-    def delivery_refusal(self, name: str | None) -> str | None:
-        """Why ``name`` cannot be a story's delivery, or None when it can (s64 V1-V5)."""
-        if not name or self.delivery(name):
+    def environment_refusal(self, name: str | None) -> str | None:
+        """Why ``name`` cannot be a story's environment, or None when it can (s64 V1-V5)."""
+        if not name or self.environment(name):
             return None
-        names = ", ".join(d.name for d in self.deliveries)
+        names = ", ".join(d.name for d in self.environments)
         if names:
-            return UNKNOWN_DELIVERY.format(name=name, names=names)
-        return NO_DELIVERY.format(name=name)
+            return UNKNOWN_ENVIRONMENT.format(name=name, names=names)
+        return NO_ENVIRONMENT.format(name=name)
 
 
 def config_path(repo: Path) -> Path:
@@ -243,19 +254,34 @@ def read_raw(repo: Path) -> dict[str, Any]:
 
 def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
     """Build a ``Config`` from parsed TOML data."""
+    sections = renamed(raw)
     return Config(
         repo=repo,
-        team=_team(raw.get("team", {})),
-        toolchain=_toolchain(raw.get("toolchain", {})),
-        gates=_section(Gates, raw.get("gates", {})),
-        upstream=_upstream(raw.get("upstream", {})),
-        health=_section(HealthLimits, raw.get("health", {})),
-        dashboard=_dashboard(raw.get("dashboard", {})),
-        deliveries=[_delivery(d) for d in raw.get("delivery", [])],
-        tools=_tools(raw.get("tool", [])),
-        roles=dict(raw.get("roles", {})),
-        providers={n: _provider(n, p) for n, p in raw.get("providers", {}).items()},
+        team=_team(sections.get("team", {})),
+        toolchain=_toolchain(sections.get("toolchain", {})),
+        gates=_section(Gates, sections.get("gates", {})),
+        upstream=_upstream(sections.get("upstream", {})),
+        health=_section(HealthLimits, sections.get("health", {})),
+        dashboard=_dashboard(sections.get("dashboard", {})),
+        environments=[_environment(e) for e in sections.get(ENVIRONMENT_SECTION, [])],
+        tools=_tools(sections.get("tool", [])),
+        roles=dict(sections.get("roles", {})),
+        providers={n: _provider(n, p) for n, p in sections.get("providers", {}).items()},
+        warnings=rename_warnings(raw),
     )
+
+
+def renamed(raw: dict[str, Any]) -> dict[str, Any]:
+    """``raw`` with old section names moved to their new names (E2); both set is an error (E3)."""
+    for old, new in RENAMED_SECTIONS.items():
+        if old in raw and new in raw:
+            raise ConfigError(BOTH_SECTIONS.format(old=old, new=new))
+    return {RENAMED_SECTIONS.get(key, key): value for key, value in raw.items()}
+
+
+def rename_warnings(raw: dict[str, Any]) -> list[str]:
+    """One ``RENAMED_WARNING`` per old section name in ``raw`` (E4)."""
+    return [RENAMED_WARNING.format(old=o, new=n) for o, n in RENAMED_SECTIONS.items() if o in raw]
 
 
 def load(repo: Path) -> Config:
@@ -306,8 +332,8 @@ def _upstream(raw: dict[str, Any]) -> UpstreamSettings:
     )
 
 
-def _delivery(raw: dict[str, Any]) -> Delivery:
-    return Delivery(**{k: v for k, v in raw.items() if k in Delivery.__dataclass_fields__})
+def _environment(raw: dict[str, Any]) -> Environment:
+    return Environment(**{k: v for k, v in raw.items() if k in Environment.__dataclass_fields__})
 
 
 def _provider(name: str, raw: dict[str, Any]) -> Provider:
@@ -317,10 +343,10 @@ def _provider(name: str, raw: dict[str, Any]) -> Provider:
 
 @dataclass(frozen=True)
 class Known:
-    """Names the config may refer to: resolvable roles and delivery kinds."""
+    """Names the config may refer to: resolvable roles and environment kinds."""
 
     roles: set[str]
-    delivery_kinds: set[str]
+    environment_kinds: set[str]
 
 
 Rule = tuple[Callable[[Any], bool], str]
@@ -374,7 +400,7 @@ UPSTREAM_RULES: tuple[Rule, ...] = (
         "upstream.prefix must be a branch name prefix",
     ),
 )
-DELIVERY_RULES: tuple[Rule, ...] = (
+ENVIRONMENT_RULES: tuple[Rule, ...] = (
     (lambda d: bool(SAFE_NAME.fullmatch(d.name)), "name must be lowercase letters, digits, - or _"),
     (lambda d: d.kind != "web" or bool(d.url), "(web) needs a url"),
     (lambda d: d.kind != "harness" or bool(d.commands), "(harness) needs commands"),
@@ -386,7 +412,7 @@ PROVIDER_RULES: tuple[Rule, ...] = (
     (lambda p: p.base_url.startswith(("http://", "https://")), "base_url must be an http(s) URL"),
 )
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
-REPEATED_DELIVERY = "delivery name {name!r} is repeated"
+REPEATED_ENVIRONMENT = "acceptance environment name {name!r} is repeated"
 MISSING_ROLE = "roles.{name} is unknown; set extends or add .team/roles/{name}.md"
 DANGLING_ROLE = "roles.{name} extends unknown role {base!r}"
 
@@ -436,7 +462,7 @@ def validate(config: Config, known: Known) -> list[str]:
         *broken(GATE_RULES, config.gates),
         *broken(UPSTREAM_RULES, config.upstream),
         *broken(HEALTH_RULES, config.health),
-        *_validate_deliveries(config.deliveries, known.delivery_kinds),
+        *_validate_environments(config.environments, known.environment_kinds),
         *_validate_roles(config.roles, known.roles),
         *_validate_providers(config.providers),
     ]
@@ -447,18 +473,18 @@ def _validate_providers(providers: dict[str, Provider]) -> list[str]:
     return [f"providers.{name} {m}" for name, messages in problems.items() for m in messages]
 
 
-def _validate_deliveries(deliveries: list[Delivery], kinds: set[str]) -> list[str]:
-    names = [d.name for d in deliveries]
+def _validate_environments(environments: list[Environment], kinds: set[str]) -> list[str]:
+    names = [d.name for d in environments]
     repeated = sorted({n for n in names if names.count(n) > 1})
-    problems = [p for d in deliveries for p in _delivery_problems(d, kinds)]
-    return problems + [REPEATED_DELIVERY.format(name=n) for n in repeated]
+    problems = [p for d in environments for p in _environment_problems(d, kinds)]
+    return problems + [REPEATED_ENVIRONMENT.format(name=n) for n in repeated]
 
 
-def _delivery_problems(delivery: Delivery, kinds: set[str]) -> list[str]:
-    messages = broken(DELIVERY_RULES, delivery)
-    if delivery.kind not in kinds:
-        messages.append(f"has unknown kind {delivery.kind!r}")
-    return [f"delivery {delivery.name!r} {m}" for m in messages]
+def _environment_problems(environment: Environment, kinds: set[str]) -> list[str]:
+    messages = broken(ENVIRONMENT_RULES, environment)
+    if environment.kind not in kinds:
+        messages.append(f"has unknown kind {environment.kind!r}")
+    return [f"acceptance environment {environment.name!r} {m}" for m in messages]
 
 
 def _validate_roles(roles: dict[str, dict[str, Any]], known: set[str]) -> list[str]:

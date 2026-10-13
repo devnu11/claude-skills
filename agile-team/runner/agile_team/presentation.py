@@ -49,6 +49,7 @@ PRESENTATIONS: dict[str, Recipe] = {
     "library": Recipe(Need.WORKSPACE),
     "harness": Recipe(Need.WORKSPACE),
     "manual": Recipe(Need.GUIDE_ONLY),
+    "document": Recipe(Need.WORKSPACE),
 }
 STOP_HELD = "story {story} presentation did not stop: {held}"
 TRIAL_VERDICTS = {sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
@@ -60,9 +61,9 @@ def source_dir(config: Config, story_id: str) -> Path:
 
 
 def recipe_of(config: Config, story: StoryState) -> Recipe:
-    """The story's delivery recipe (guide only when none is configured)."""
-    delivery = config.delivery(story.delivery)
-    return PRESENTATIONS[delivery.kind] if delivery else Recipe(Need.GUIDE_ONLY)
+    """The story's environment recipe (guide only when none is configured)."""
+    environment = config.environment(story.environment)
+    return PRESENTATIONS[environment.kind] if environment else Recipe(Need.GUIDE_ONLY)
 
 
 def presented_source(config: Config, story: StoryState | None) -> Path | None:
@@ -81,11 +82,11 @@ class Trial:
     prepare: sandbox.PrepareFn = field(default_factory=lambda: sandbox.Preparer().prepare)
 
     def liveness(self, story: StoryState) -> Outcome:
-        """Pass a file-only delivery; for a service, start it, probe it and stop it."""
-        delivery = self.config.delivery(story.delivery)
-        if delivery is None or recipe_of(self.config, story).check is Check.FILES:
+        """Pass a file-only environment; for a service, start it, probe it and stop it."""
+        environment = self.config.environment(story.environment)
+        if environment is None or recipe_of(self.config, story).check is Check.FILES:
             return Outcome(Verdict.PASS, READY)
-        return self._try(sandbox.Order(delivery, presented_source(self.config, story)), story)
+        return self._try(sandbox.Order(environment, presented_source(self.config, story)), story)
 
     def _try(self, order: sandbox.Order, story: StoryState) -> Outcome:
         try:
@@ -131,9 +132,9 @@ def _ready_workspace(config: Config, story: StoryState) -> None:
 
 
 def story_seeds(config: Config, story: StoryState) -> Seeds:
-    """The story delivery's seeds for its source workspace (S3a)."""
-    delivery = config.delivery(story.delivery)
-    return Seeds(seed_dir(config.repo, delivery), workspace_of(config, story.id))
+    """The story environment's seeds for its source workspace (S3a)."""
+    environment = config.environment(story.environment)
+    return Seeds(seed_dir(config.repo, environment), workspace_of(config, story.id))
 
 
 def _ensure_workspace(workspace: Path) -> None:

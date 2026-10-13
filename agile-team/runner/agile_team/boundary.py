@@ -174,14 +174,14 @@ FIX_LINES = {
     FixCase.TEAM_CHECK: (
         "The full checks failed on the team branch {team} at {sha}.",
         "Fix it on the team branch. In this step you may edit source, tests, e2e tests, CI and "
-        "the [toolchain] and [[delivery]] config. The runner commits your changes and runs "
+        "the [toolchain] and [[environment]] config. The runner commits your changes and runs "
         "the full checks again.",
     ),
     FixCase.REVIEW_CHECK: (
         "The full checks failed on review branch {branch} (sprints {sprints} rebased onto "
         "{target}), checked out in {worktree}. Read that copy to diagnose; do not edit it.",
         "Fix it on the team branch (this repo). In this step you may edit source, tests, e2e "
-        "tests, CI and the [toolchain] and [[delivery]] config. The runner rebuilds the review "
+        "tests, CI and the [toolchain] and [[environment]] config. The runner rebuilds the review "
         "branches from the team branch and checks them again.",
     ),
     FixCase.REVIEW_CONFLICT: (

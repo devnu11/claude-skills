@@ -16,8 +16,16 @@ from typing import Any
 
 import tomli_w
 
+from . import config as config_mod
 from . import system
-from .config import API_KEY_AUTH, CONFIG_NAME, DEFAULT_KEY_FILE, PIPELINE_STEPS, config_path
+from .config import (
+    API_KEY_AUTH,
+    CONFIG_NAME,
+    DEFAULT_KEY_FILE,
+    ENVIRONMENT_SECTION,
+    PIPELINE_STEPS,
+    config_path,
+)
 from .git_ops import Git
 from .roles import REPO_ROLES, Layer, RoleBook
 
@@ -60,7 +68,7 @@ def detect(repo: Path, presets: dict[str, dict[str, Any]]) -> str | None:
 
 
 def suggest_kind(repo: Path, preset: dict[str, Any]) -> str:
-    """Likely delivery kind: ``web`` when package.json depends on a web framework."""
+    """Likely environment kind: ``web`` when package.json depends on a web framework."""
     web = set(preset.get("web_dependencies", []))
     pkg = repo / "package.json"
     if web and system.is_file(pkg):
@@ -68,7 +76,7 @@ def suggest_kind(repo: Path, preset: dict[str, Any]) -> str:
         deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
         if web & set(deps):
             return "web"
-    return preset.get("delivery", "manual")
+    return preset.get("environment_kind", "manual")
 
 
 class WriteMode(StrEnum):
@@ -83,7 +91,7 @@ class Answers:
     """The human's answers to the init questions."""
 
     preset: str
-    delivery_kind: str
+    environment_kind: str
     docs_dir: str = "docs"
     artifacts: str = "committed"
     key_file: str = DEFAULT_KEY_FILE
@@ -113,16 +121,20 @@ def build_config(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
             "globs": preset["globs"],
         },
         "gates": {"coverage": 95, "round_cap": 3, "steps": list(PIPELINE_STEPS)},
-        "delivery": [delivery_entry(preset, answers)],
+        ENVIRONMENT_SECTION: [environment_entry(preset, answers)],
         "roles": {},
     }
 
 
-def delivery_entry(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
-    """The first ``[[delivery]]``: installable kinds reuse the preset's prepare step."""
+def environment_entry(preset: dict[str, Any], answers: Answers) -> dict[str, Any]:
+    """The first ``[[environment]]``: installable kinds reuse the preset's prepare step."""
     installed = {"prepare": preset.get("prepare", ""), "bin": preset.get("bin", [])}
     extras = {"package": installed, "script": installed, "web": {"prepare": "", "url": answers.url}}
-    return {"name": "main", "kind": answers.delivery_kind, **extras.get(answers.delivery_kind, {})}
+    return {
+        "name": "main",
+        "kind": answers.environment_kind,
+        **extras.get(answers.environment_kind, {}),
+    }
 
 
 def merge_keep(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +174,7 @@ def write_config(repo: Path, answers: Answers) -> None:
     if system.is_file(path):
         if answers.mode is not WriteMode.RECONFIGURE:
             raise FileExistsError(f"{CONFIG_NAME} exists; use --reconfigure")
-        data = merge_keep(tomllib.loads(system.read_text(path)), data)
+        data = merge_keep(config_mod.renamed(tomllib.loads(system.read_text(path))), data)
     system.write_text(path, tomli_w.dumps(data))
 
 

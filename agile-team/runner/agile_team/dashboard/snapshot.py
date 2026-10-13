@@ -279,7 +279,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "id": story.id,
         "title": story.title,
         "sprint": story.sprint,
-        "delivery": story.delivery or "",
+        "environment": story.environment or "",
         "step": story.step,
         "status": str(story.status),
         "rounds": story.rounds,

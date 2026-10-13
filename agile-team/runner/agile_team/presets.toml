@@ -1,13 +1,13 @@
 # Stack presets for `agile-team init`. DATA ONLY: add a stack by adding a table.
 #
 # markers   files whose presence selects the preset (first preset with a match wins)
-# delivery  likely delivery kind; [<name>.web] markers in package.json upgrade it to "web"
+# environment_kind  likely acceptance environment kind; [<name>.web] markers in package.json upgrade it to "web"
 # commands  test / coverage / lint / static; coverage must print a total percentage
 # globs     source / tests / e2e / ci, repo-relative, gitignore-style
 
 [python]
 markers = ["pyproject.toml", "setup.py", "setup.cfg"]
-delivery = "package"
+environment_kind = "package"
 pragma = "# pragma: no cover"
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
 bin = ["venv/bin"]
@@ -26,7 +26,7 @@ ci = [".github/workflows/**", "Makefile", "pyproject.toml", "uv.lock", "noxfile.
 
 [node]
 markers = ["package.json"]
-delivery = "package"
+environment_kind = "package"
 web_dependencies = ["next", "react", "vue", "svelte", "@angular/core", "express", "vite", "astro"]
 pragma = "/* istanbul ignore next */"
 prepare = "npm pack --pack-destination {sandbox} && npm i -g --prefix {sandbox}/prefix {sandbox}/*.tgz"
@@ -46,7 +46,7 @@ ci = [".github/workflows/**", "package.json", "package-lock.json", "tsconfig.jso
 
 [rust]
 markers = ["Cargo.toml"]
-delivery = "package"
+environment_kind = "package"
 pragma = "#[cfg_attr(coverage_nightly, coverage(off))]"
 prepare = "cargo install --path {repo} --root {sandbox}/prefix"
 bin = ["prefix/bin"]

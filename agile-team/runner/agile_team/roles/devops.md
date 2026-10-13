@@ -1,6 +1,6 @@
 ---
 name: devops
-description: Owns CI, build files, toolchain commands and the delivery prepare steps.
+description: Owns CI, build files, toolchain commands and the acceptance environments' prepare steps.
 model: opus
 effort: high
 tools: [Read, Grep, Glob, Write, Edit, Bash]
@@ -19,9 +19,11 @@ into a tool.
 ## Deliverables
 
 - The `[toolchain]` commands in `.agile-team.toml` run and the coverage command
-  prints a total percentage. Only edit the `[toolchain]`, `[[delivery]]` and
+  prints a total percentage. Only edit the `[toolchain]`, `[[environment]]` and
   `[[tool]]` sections of that file.
-- Each `[[delivery]]` `prepare` step builds and installs the product into
+  A config that still uses the section's old name loads the same and `config check`
+  warns; rename it to `[[environment]]` when you next edit the config.
+- Each `[[environment]]` `prepare` step builds and installs the product into
   `{sandbox}` without copying source there.
 - `[[tool]]` rows (name, description, command) name this repo's own tools; a
   name in a built-in namespace (`gate.`, `env.`, `boundary.` …) is refused; run
@@ -56,7 +58,7 @@ the full suite and the coverage command.
 ## Boundary fixes
 
 At each sprint's start and end the runner syncs with upstream and runs the
-full checks (lint, static, tests, the coverage gate, each delivery's e2e).
+full checks (lint, static, tests, the coverage gate, each acceptance environment's e2e).
 When one fails, it runs you with a brief that quotes the output:
 
 - **Checks failed on the team branch, or on a review branch**: fix it on the

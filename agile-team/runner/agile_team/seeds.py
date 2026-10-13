@@ -1,4 +1,4 @@
-"""Seed files a delivery's presentation workspace needs; the runner plants missing ones (s105)."""
+"""Seed files an environment's presentation workspace needs; the runner plants missing ones."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from importlib import resources
 from pathlib import Path
 
 from . import config, system
-from .config import Delivery
+from .config import Environment
 
 SEED_GONE = (
     "seed directory {source} is missing from the repo; restore it or remove "
-    "`seed` from the delivery in .agile-team.toml"
+    "`seed` from the acceptance environment in .agile-team.toml"
 )
 BROKEN = (
     "workspace/{name} is broken: {error}. Fix it in the presentation's "
@@ -35,19 +35,19 @@ def config_problem(path: Path) -> str | None:
 CHECKS: dict[str, Check] = {config.CONFIG_NAME: config_problem}
 
 
-def seed_dir(repo: Path, delivery: Delivery | None) -> Path | None:
-    """The delivery's seed directory per S1: its override, its kind's default, or ``None``."""
-    if delivery is None:
+def seed_dir(repo: Path, environment: Environment | None) -> Path | None:
+    """The environment's seed directory per S1: its override, its kind's default, or ``None``."""
+    if environment is None:
         return None
-    if delivery.seed is None:
-        return DEFAULT_SEEDS.get(delivery.kind)
+    if environment.seed is None:
+        return DEFAULT_SEEDS.get(environment.kind)
     # repo / "" is the repo itself, so "" must return before the join.
-    return repo / delivery.seed if delivery.seed else None
+    return repo / environment.seed if environment.seed else None
 
 
 @dataclass(frozen=True)
 class Seeds:
-    """One delivery's seed directory and the workspace it seeds."""
+    """One environment's seed directory and the workspace it seeds."""
 
     source: Path | None
     workspace: Path

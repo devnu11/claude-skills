@@ -108,7 +108,7 @@
    "id": "s2",
    "title": "Choose which columns to export",
    "sprint": 1,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "review",
    "status": "active",
    "rounds": 1,
@@ -154,7 +154,7 @@
    "id": "s5",
    "title": "Export through the HTTP API",
    "sprint": null,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "design",
    "status": "active",
    "rounds": 0,
@@ -186,7 +186,7 @@
    "id": "s3",
    "title": "Stream large exports without loading them into memory",
    "sprint": 1,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "implement",
    "status": "needs_manager",
    "rounds": 3,
@@ -229,7 +229,7 @@
    "id": "s4",
    "title": "Excel-friendly encoding",
    "sprint": 1,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "design",
    "status": "active",
    "rounds": 0,
@@ -272,11 +272,11 @@
    "id": "s7",
    "title": "Serve the report dashboard",
    "sprint": null,
-   "delivery": "web",
+   "environment": "web",
    "step": "acceptance",
    "status": "needs_manager",
    "rounds": 0,
-   "repeated": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "repeated": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
    "opened_at": 1791471900.0,
    "acceptance": [
     {
@@ -291,7 +291,7 @@
    "wait": {
     "reason": "manager",
     "on": [
-     "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
+     "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
     ],
     "title": "manager"
    },
@@ -310,7 +310,7 @@
    "id": "s6",
    "title": "Scheduled exports",
    "sprint": null,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "design",
    "status": "active",
    "rounds": 0,
@@ -354,7 +354,7 @@
    "id": "s1",
    "title": "Export a report as CSV",
    "sprint": 1,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "acceptance",
    "status": "done",
    "rounds": 0,
@@ -394,7 +394,7 @@
    "id": "s8",
    "title": "Export to XML",
    "sprint": null,
-   "delivery": "cli",
+   "environment": "cli",
    "step": "design",
    "status": "cancelled",
    "rounds": 0,
@@ -2098,11 +2098,11 @@
    "data": {
     "step": "acceptance",
     "verdict": "return",
-    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
     "now_at": "e2e",
     "story_status": "active",
     "rounds": 0,
-    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
     "author": "runner",
     "count": 1,
     "history": [],
@@ -2118,7 +2118,7 @@
    "data": {
     "fault": "runner",
     "kind": "runner",
-    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
     "now_at": "acceptance"
    }
   },
@@ -2143,11 +2143,11 @@
    "data": {
     "step": "acceptance",
     "verdict": "return",
-    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
     "now_at": "e2e",
     "story_status": "active",
     "rounds": 0,
-    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
     "author": "runner",
     "count": 1,
     "history": [],
@@ -2163,11 +2163,11 @@
    "data": {
     "step": "acceptance",
     "verdict": "escalate",
-    "reason": "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+    "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
     "now_at": "acceptance",
     "story_status": "needs_manager",
     "rounds": 0,
-    "key": "acceptance>e2e story <id> presentation is not up: delivery 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+    "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
     "author": "runner",
     "count": 2,
     "history": [

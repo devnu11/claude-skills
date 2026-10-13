@@ -874,12 +874,12 @@ function nodeLabel(view, name, ctx) {
 }
 
 const STEER = "grpSteering";
-/** Pipeline phase of each delivery role (prefix match); unlisted roles fall to Support. */
+/** Pipeline phase of each pipeline role (prefix match); unlisted roles fall to Support. */
 const PHASE_ROLES = {
   Design: ["architect"], Build: ["unit-tester", "developer"],
   Verify: ["quality-czar", "code-reviewer", "integration-tester"],
 };
-/** Roles that sit beside the PO rather than in the delivery team. */
+/** Roles that sit beside the PO rather than in the pipeline team. */
 const SIDE_ROLES = { "customer-proxy": "Customer", manager: "Steering" };
 const GROUP_ORDER = ["Customer", "Steering", "Design", "Build", "Verify", "Support"];
 
@@ -911,7 +911,7 @@ function twoWayEdge(from, sent, got) {
   return n ? { from, to: STEER, n, label, color: parts[0].color, arrow: "<-->" } : null;
 }
 
-/** The labelled edges: top-row nodes (you, customer proxy) first, then the delivery roles. */
+/** The labelled edges: top-row nodes (you, customer proxy) first, then the pipeline roles. */
 function flowEdgeList(view, stats, ids) {
   const edges = [];
   for (const [name, id] of ids) {
@@ -1413,7 +1413,8 @@ function renderTimelineFilter(view) {
 const READ_ONLY = "read-only: open the link the dashboard printed (it carries the token), on this machine";
 const WAITING = "waiting for the runner: moves apply between steps";
 const STALE_TEXT = "the order changed since the dashboard showed it; reload";
-const DETAIL_FIELDS = ["sprint", "step", "status", "rounds", "disputes", "hold", "developer", "delivery"];
+const DETAIL_FIELDS = ["sprint", "step", "status", "rounds", "disputes", "hold", "developer", "environment"];
+const DETAIL_LABELS = { environment: "acceptance environment" };
 const LABEL_TONE = { cancelled: "critical", "cancel requested": "serious", held: "warning" };
 
 /** The stories that aren't done, split by the snapshot's backlog list (B1). */
@@ -1472,7 +1473,7 @@ function backlogRow(story, place, count, view) {
   return `<div class="brow" data-expand="${esc(story.id)}" aria-expanded="${open}" ${drag}>
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
-    <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.delivery ? " · " + esc(story.delivery) : ""}</span>
+    <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.environment ? " · " + esc(story.environment) : ""}</span>
     ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}${depsLine(story)}${depWarnings(story)}
     ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
 }
@@ -1596,7 +1597,7 @@ function reviewBarHtml(view) {
 
 /** What an expanded row shows (B5). */
 function storyDetails(story, view) {
-  const fields = DETAIL_FIELDS.map((k) => `<span>${k}: <b>${esc(story[k] ?? "—")}</b></span>`).join(" ");
+  const fields = DETAIL_FIELDS.map((k) => `<span>${DETAIL_LABELS[k] ?? k}: <b>${esc(story[k] ?? "—")}</b></span>`).join(" ");
   const commits = story.commits.length ? story.commits.map((c) => `<code>${esc(c.slice(0, 8))}</code>`).join(" ") : "none";
   const links = story.files.filter((k) => k !== "story").map((k) => fileLink(story, k)).join(" · ");
   const events = view.events.filter((e) => e.story === story.id).slice(-10).reverse();
@@ -1865,7 +1866,7 @@ function storyCard(view, s, act) {
     s.wait ? pill(`⏸ ${s.wait.title}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
-    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.delivery ? " · " + esc(s.delivery) : ""}
+    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.environment ? " · " + esc(s.environment) : ""}
       <a class="tl-link" href="#backlog" data-timeline="${esc(s.id)}">${tlSpan("control", "timeline")}</a></div>
     <div class="title">${esc(s.title)}</div>
     ${s.wait ? waitLine(s.wait) : ""}

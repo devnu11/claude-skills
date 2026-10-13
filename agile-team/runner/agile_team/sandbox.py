@@ -1,6 +1,6 @@
-"""The Customer Proxy's sandbox: one per delivery, holding no source.
+"""The Customer Proxy's sandbox: one per acceptance environment, holding no source.
 
-``DELIVERY_KINDS`` is the data table that decides, per kind, which tools the
+``ENVIRONMENT_KINDS`` is the data table that decides, per kind, which tools the
 Proxy gets and how a customer reaches the product. ``prepare`` runs the
 DevOps-owned prepare command; ``proxy_scope`` and ``os_sandbox_settings``
 build the three read-blocking layers (tool globs, Bash hook, OS sandbox).
@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from . import stages, system
-from .config import Config, Delivery
+from .config import Config, Environment
 from .guard import Scope
 from .paths import literal_root, under_root
 from .process_groups import Recorded, RunnerIds, signal_child_group
@@ -39,7 +39,7 @@ KILL_WAIT_S = 5
 PORT_WAIT_S = 5
 POLL_EVERY_S = 0.05
 PORT_HELD = (
-    "delivery {name!r} did not let go of {host}:{port}: it was still in use "
+    "acceptance environment {name!r} did not let go of {host}:{port}: it was still in use "
     "{seconds:g}s after the service was stopped; keep the service in its start "
     "command's process group"
 )
@@ -51,15 +51,15 @@ PLAYWRIGHT = {"type": "stdio", "command": "npx", "args": ["@playwright/mcp@lates
 
 
 class SandboxError(Exception):
-    """The prepare step failed or the delivery is unusable."""
+    """The prepare step failed or the environment is unusable."""
 
 
 class NotUp(SandboxError):
-    """The delivery's service did not come up and answer."""
+    """The environment's service did not come up and answer."""
 
 
 class PortBusy(SandboxError):
-    """The delivery's port is taken by a process the runner did not start."""
+    """The environment's port is taken by a process the runner did not start."""
 
 
 class Start(StrEnum):
@@ -85,7 +85,7 @@ class Shell(StrEnum):
 
 
 @dataclass(frozen=True)
-class DeliveryKind:
+class EnvironmentKind:
     """How the Proxy reaches one kind of product."""
 
     tools: tuple[str, ...]
@@ -96,18 +96,18 @@ class DeliveryKind:
     mcp: tuple[str, ...] = ()
 
 
-DELIVERY_KINDS: dict[str, DeliveryKind] = {
-    "package": DeliveryKind(
+ENVIRONMENT_KINDS: dict[str, EnvironmentKind] = {
+    "package": EnvironmentKind(
         tools=("Bash", "Read", "Grep", "Glob", "Write"),
         guidance="The product is installed in your working directory. Run it the way the "
         "customer docs say. Use the installed files; do not read them.",
     ),
-    "script": DeliveryKind(
+    "script": EnvironmentKind(
         tools=("Bash", "Read", "Grep", "Glob", "Write"),
         guidance="The shipped scripts and sample inputs are in your working directory. "
         "Run them as the customer docs describe; do not read their source.",
     ),
-    "web": DeliveryKind(
+    "web": EnvironmentKind(
         tools=("Bash", "Read", "Write"),
         guidance="The product is a running web app at {url}. Use the browser tools as a "
         "customer would; `curl` is available for API checks.",
@@ -115,21 +115,27 @@ DELIVERY_KINDS: dict[str, DeliveryKind] = {
         shell=Shell.CURL,
         mcp=("playwright",),
     ),
-    "library": DeliveryKind(
+    "library": EnvironmentKind(
         tools=("Bash", "Read", "Grep", "Glob", "Write", "Edit"),
         guidance="Your working directory is an empty consumer project that depends on the "
         "library. Write small programs from the customer docs and run them.",
         workdir=Workdir.CONSUMER,
     ),
-    "harness": DeliveryKind(
+    "harness": EnvironmentKind(
         tools=("Bash", "Read", "Write"),
         guidance="DevOps prepared a harness. Only these commands are available: {commands}.",
         shell=Shell.LISTED,
     ),
-    "manual": DeliveryKind(
+    "manual": EnvironmentKind(
         tools=("Read", "Write"),
         guidance="The team cannot reach this product. Write a numbered, step-by-step "
         "acceptance script a human can follow, with the expected result of each step.",
+    ),
+    "document": EnvironmentKind(
+        tools=("Read", "Grep", "Glob", "Write"),
+        guidance="Nothing runs for this story: it changes prompts, docs or designs. "
+        "The presentation's workspace holds the changed files. Read the guide and those "
+        "files, and judge each criterion against them. Do not ask the human anything.",
     ),
 }
 MCP_SERVERS = {"playwright": PLAYWRIGHT}
@@ -141,8 +147,8 @@ NETWORK_BY_START: dict[Start, dict[str, Any]] = {Start.BACKGROUND: LOCAL_SERVICE
 class Prepared:
     """A ready sandbox; ``stop`` tears down anything started in the background."""
 
-    delivery: Delivery
-    kind: DeliveryKind
+    environment: Environment
+    kind: EnvironmentKind
     repo: Path
     root: Path
     workdir: Path
@@ -177,18 +183,18 @@ class Prepared:
         return _beside(self.root, LOG_SUFFIX)
 
     def address(self) -> tuple[str, int | str]:
-        """The delivery url's host and port (the scheme's default port; ``""`` without a url)."""
-        parts = urlsplit(self.delivery.url)
+        """The environment url's host and port (the scheme's default port; ``""`` without a url)."""
+        parts = urlsplit(self.environment.url)
         return parts.hostname or "", parts.port or DEFAULT_PORTS.get(parts.scheme, "")
 
     def probe_url(self) -> str:
         """The url that must answer for the service to count as up."""
-        return urljoin(self.delivery.url, self.delivery.probe)
+        return urljoin(self.environment.url, self.environment.probe)
 
     def guidance(self) -> str:
-        """Prompt text telling the proxy how to reach this delivery."""
-        commands = ", ".join(self.delivery.commands) or "none"
-        return self.kind.guidance.format(url=self.delivery.url, commands=commands)
+        """Prompt text telling the proxy how to reach this environment."""
+        commands = ", ".join(self.environment.commands) or "none"
+        return self.kind.guidance.format(url=self.environment.url, commands=commands)
 
     def expand(self, command: str) -> str:
         """Fill ``{repo}``, ``{sandbox}`` (absolute), ``{host}`` and ``{port}`` in a command."""
@@ -203,11 +209,11 @@ class Prepared:
 
     def bash_allowed(self) -> list[str] | None:
         """The Proxy's Bash allowlist, or ``None`` for any command."""
-        lists = {Shell.CURL: ["curl"], Shell.LISTED: list(self.delivery.commands)}
+        lists = {Shell.CURL: ["curl"], Shell.LISTED: list(self.environment.commands)}
         return lists.get(self.kind.shell)
 
     def mcp_servers(self) -> dict[str, Any]:
-        """MCP servers the Proxy needs (the browser for web deliveries)."""
+        """MCP servers the Proxy needs (the browser for web environments)."""
         return {name: dict(MCP_SERVERS[name]) for name in self.kind.mcp}
 
 
@@ -317,7 +323,7 @@ def port_in_use(host: str, port: int) -> bool:
 
 
 def port_released(prepared: Prepared, listening: Listening = port_in_use) -> str | None:
-    """Wait up to PORT_WAIT_S until nothing listens on the delivery's port (Q4).
+    """Wait up to PORT_WAIT_S until nothing listens on the environment's port (Q4).
 
     Returns PORT_HELD filled in when the port is still in use, else ``None``.
     """
@@ -326,7 +332,9 @@ def port_released(prepared: Prepared, listening: Listening = port_in_use) -> str
         return None
     if wait_until(lambda: not listening(host, int(port)), PORT_WAIT_S):
         return None
-    return PORT_HELD.format(name=prepared.delivery.name, host=host, port=port, seconds=PORT_WAIT_S)
+    return PORT_HELD.format(
+        name=prepared.environment.name, host=host, port=port, seconds=PORT_WAIT_S
+    )
 
 
 Runner = Callable[[str, Prepared], int]
@@ -339,12 +347,12 @@ def run_shell(command: str, prepared: Prepared) -> int:
     return code
 
 
-def kind_of(delivery: Delivery) -> DeliveryKind:
-    """The registered kind for ``delivery`` (``SandboxError`` if unknown)."""
+def kind_of(environment: Environment) -> EnvironmentKind:
+    """The registered kind for ``environment`` (``SandboxError`` if unknown)."""
     try:
-        return DELIVERY_KINDS[delivery.kind]
+        return ENVIRONMENT_KINDS[environment.kind]
     except KeyError:
-        raise SandboxError(f"unknown delivery kind {delivery.kind!r}") from None
+        raise SandboxError(f"unknown acceptance environment kind {environment.kind!r}") from None
 
 
 def fresh_dir(path: Path) -> Path:
@@ -355,26 +363,28 @@ def fresh_dir(path: Path) -> Path:
     return path
 
 
-def sandbox_env(delivery: Delivery, root: Path) -> dict[str, str]:
-    """The current environment with the delivery's ``bin`` dirs prepended to PATH."""
+def sandbox_env(environment: Environment, root: Path) -> dict[str, str]:
+    """The current environment with the environment's ``bin`` dirs prepended to PATH."""
     env = dict(system.environ())
-    path = [str(root / b) for b in delivery.bin] + [env.get("PATH", "")]
+    path = [str(root / b) for b in environment.bin] + [env.get("PATH", "")]
     env["PATH"] = os.pathsep.join(p for p in path if p)
     return env
 
 
-def sandbox_root(config: Config, delivery: Delivery) -> Path:
+def sandbox_root(config: Config, environment: Environment) -> Path:
     """``.team/run/customer/<name>``; refuses names that would escape it (it gets wiped)."""
-    if not SAFE_NAME.fullmatch(delivery.name):
-        raise SandboxError(f"delivery name {delivery.name!r} must match {SAFE_NAME.pattern}")
-    return config.run_dir / CUSTOMER_DIR / delivery.name
+    if not SAFE_NAME.fullmatch(environment.name):
+        raise SandboxError(
+            f"acceptance environment name {environment.name!r} must match {SAFE_NAME.pattern}"
+        )
+    return config.run_dir / CUSTOMER_DIR / environment.name
 
 
 @dataclass(frozen=True)
 class Order:
-    """What to prepare: the delivery and, if any, the presentation to copy in."""
+    """What to prepare: the environment and, if any, the presentation to copy in."""
 
-    delivery: Delivery
+    environment: Environment
     presentation: Path | None = None
 
 
@@ -392,17 +402,19 @@ class Preparer:
 
     def prepare(self, config: Config, order: Order) -> Prepared:
         """Replace any stale service, lay out the sandbox, copy the presentation, then start."""
-        stop_stale(sandbox_root(config, order.delivery))
-        prepared = layout(config, order.delivery)
+        stop_stale(sandbox_root(config, order.environment))
+        prepared = layout(config, order.environment)
         _present(prepared, order.presentation)
         launches = {Start.BACKGROUND: self._serve, Start.FOREGROUND: self._run_blocking}
-        launches[prepared.kind.start](prepared, order.delivery.prepare)
+        launches[prepared.kind.start](prepared, order.environment.prepare)
         return prepared
 
     def _run_blocking(self, prepared: Prepared, prepare: str) -> None:
         command = prepared.expand(prepare)
         if prepare and self.runner(command, prepared) != 0:
-            raise SandboxError(f"prepare for delivery {prepared.delivery.name!r} failed: {command}")
+            raise SandboxError(
+                f"prepare for environment {prepared.environment.name!r} failed: {command}"
+            )
 
     def _serve(self, prepared: Prepared, prepare: str) -> None:
         if prepare:
@@ -431,8 +443,9 @@ class Preparer:
         host, port = prepared.address()
         if host and port and self.listening(host, int(port)):
             raise PortBusy(
-                f"delivery {prepared.delivery.name!r} cannot start: {host}:{port} is already in "
-                "use by a process the runner did not start; stop it or change the delivery's url"
+                f"acceptance environment {prepared.environment.name!r} cannot start: "
+                f"{host}:{port} is already in use by a process the runner did not start; "
+                "stop it or change the environment's url"
             )
 
     def _await_answer(self, prepared: Prepared) -> None:
@@ -450,14 +463,18 @@ class Preparer:
         return "\n".join([*prepared.seed_problems(), self._start_failure(prepared)])
 
     def _start_failure(self, prepared: Prepared) -> str:
-        name, url = prepared.delivery.name, prepared.probe_url()
+        name, url = prepared.environment.name, prepared.probe_url()
         tail = _log_tail(prepared.log_file())
         code = prepared.process.poll() if prepared.process else None
         if code is None:
             waited = f"{self.attempts * PROBE_EVERY_S:g}"
-            return f"delivery {name!r} did not answer {url} within {waited}s. Last output:\n{tail}"
+            return (
+                f"acceptance environment {name!r} did not answer {url} within {waited}s. "
+                f"Last output:\n{tail}"
+            )
         return (
-            f"delivery {name!r} did not start: the start command exited with code {code} "
+            f"acceptance environment {name!r} did not start: "
+            f"the start command exited with code {code} "
             f"before {url} answered. Last output:\n{tail}"
         )
 
@@ -474,16 +491,16 @@ def _present(prepared: Prepared, source: Path | None) -> None:
     if source is not None:
         prepared.presentation = presentation.copy_into(source, prepared.root)
     workspace = presentation.copied_workspace(prepared.root)
-    prepared.seeds = Seeds(seed_dir(prepared.repo, prepared.delivery), workspace)
+    prepared.seeds = Seeds(seed_dir(prepared.repo, prepared.environment), workspace)
     prepared.seeds.plant()
 
 
-def layout(config: Config, delivery: Delivery) -> Prepared:
-    """Wipe and recreate the delivery's sandbox (and consumer project, if any)."""
-    kind = kind_of(delivery)
-    root = fresh_dir(sandbox_root(config, delivery))
+def layout(config: Config, environment: Environment) -> Prepared:
+    """Wipe and recreate the environment's sandbox (and consumer project, if any)."""
+    kind = kind_of(environment)
+    root = fresh_dir(sandbox_root(config, environment))
     workdir = fresh_dir(root / "consumer") if kind.workdir is Workdir.CONSUMER else root
-    return Prepared(delivery, kind, config.repo, root, workdir, sandbox_env(delivery, root))
+    return Prepared(environment, kind, config.repo, root, workdir, sandbox_env(environment, root))
 
 
 def _rel(config: Config, path: Path) -> str:
@@ -531,7 +548,7 @@ def os_sandbox_settings(config: Config, prepared: Prepared) -> dict[str, Any]:
     """Claude Code settings for the Proxy's OS sandbox.
 
     The sandbox denies reading the repo except the allowed paths and, for a
-    delivery that serves locally (``NETWORK_BY_START``), allows reaching it on
+    acceptance environment that serves locally (``NETWORK_BY_START``), allows reaching it on
     loopback. ``tests/e2e/test_proxy_sandbox_e2e.py`` runs the bundled claude
     CLI with these settings on macOS (Seatbelt): a sandboxed ``curl`` gets 200
     from a live local service, and exits 7 when the ``network`` key is removed.
@@ -556,7 +573,7 @@ def _sandbox_section(config: Config, prepared: Prepared) -> dict[str, Any]:
 
 
 def _network(prepared: Prepared) -> dict[str, Any]:
-    """The ``network`` key for a delivery that serves locally; nothing for the rest."""
+    """The ``network`` key for an environment that serves locally; nothing for the rest."""
     network = NETWORK_BY_START.get(prepared.kind.start)
     return {"network": dict(network)} if network else {}
 

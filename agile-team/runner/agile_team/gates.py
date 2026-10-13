@@ -197,7 +197,7 @@ class StoryState:
     rounds: int = 0
     status: StoryStatus = StoryStatus.ACTIVE
     commit: str | None = None
-    delivery: str | None = None
+    environment: str | None = None
     sprint: int | None = None
     developer: str | None = None
     po_developer: str | None = None

@@ -480,7 +480,7 @@ for sid, title in STORIES:
             "id": sid,
             "title": title,
             "sprint": INITIAL[sid],
-            "delivery": "cli",
+            "environment": "cli",
             "step": "design",
             "status": "active",
             "rounds": 0,

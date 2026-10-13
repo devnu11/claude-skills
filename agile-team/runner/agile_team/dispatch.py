@@ -52,7 +52,7 @@ from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
 from .checkout import CheckoutChanged
 from .commands import CommandRunner, shell_runner
-from .config import CONFIG_NAME, Config, Delivery
+from .config import CONFIG_NAME, ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, Config, Environment
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
     ROUTED_COMMANDS,
@@ -125,7 +125,7 @@ RUNNER_FAULT_NOTE = (
 )
 RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
-DEVOPS_SECTIONS = ("toolchain", "delivery", "tool")
+DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool")
 BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
 BARE_KINDS = frozenset({StepKind.GATE_FIX})
@@ -278,7 +278,7 @@ def with_secret_denials(settings: dict[str, Any] | None, secrets: list[Path]) ->
 
 
 def restrict_config(audit: guard.Audit, git: Git) -> guard.Audit:
-    """A config edit may only touch ``[toolchain]``, ``[[delivery]]`` and ``[[tool]]``.
+    """A config edit may only touch ``[toolchain]``, ``[[environment]]`` and ``[[tool]]``.
 
     Anything else (roles, gates, team) would let a role widen its own scope on
     the next run, so such an edit is moved to the quarantine list.
@@ -446,7 +446,7 @@ class Runtime:
         self._confine_git(plan)
 
     def _role_set_up(self, plan: Plan) -> None:
-        setups = {PROXY: self._attach_delivery, INTEGRATION_TESTER: self._lay_out_presentation}
+        setups = {PROXY: self._attach_environment, INTEGRATION_TESTER: self._lay_out_presentation}
         if plan.role.name in setups:
             setups[plan.role.name](plan)
         step = fitting_step(plan.role.name, STEP_SETUPS)
@@ -511,20 +511,20 @@ class Runtime:
         with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
             presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
 
-    def _attach_delivery(self, plan: Plan) -> None:
-        delivery = self.config.delivery(plan.story.delivery if plan.story else None)
-        if delivery is None:
-            raise sandbox.SandboxError("no [[delivery]] is configured for the customer proxy")
+    def _attach_environment(self, plan: Plan) -> None:
+        environment = self.config.environment(plan.story.environment if plan.story else None)
+        if environment is None:
+            raise sandbox.SandboxError("no [[environment]] is configured for the customer proxy")
         with self.stage_log.open(stages.Name.ENV_PREPARE):
-            plan.prepared = self.prepare_fn(self.config, self._order(delivery, plan.story))
+            plan.prepared = self.prepare_fn(self.config, self._order(environment, plan.story))
         role_writes, plan.scope = plan.scope.write, sandbox.proxy_scope(self.config, plan.prepared)
         plan.scope.write += role_writes
-        self._fit_role_to_delivery(plan)
+        self._fit_role_to_environment(plan)
 
-    def _order(self, delivery: Delivery, story: StoryState | None) -> sandbox.Order:
-        return sandbox.Order(delivery, presentation.presented_source(self.config, story))
+    def _order(self, environment: Environment, story: StoryState | None) -> sandbox.Order:
+        return sandbox.Order(environment, presentation.presented_source(self.config, story))
 
-    def _fit_role_to_delivery(self, plan: Plan) -> None:
+    def _fit_role_to_environment(self, plan: Plan) -> None:
         prepared = plan.prepared
         allowed = [t for t in plan.role.tools if t in prepared.kind.tools]
         plan.role.tools = allowed or list(prepared.kind.tools)
@@ -952,7 +952,7 @@ class Runtime:
         return None
 
     def _manual_question(self, plan: Plan) -> dict[str, Any]:
-        if not plan.prepared or plan.prepared.delivery.kind != "manual":
+        if not plan.prepared or plan.prepared.environment.kind != "manual":
             return {}
         stories = [plan.story.id] if plan.story else []
         return {"question_id": self.relay.post(Note("question", plan.text, stories)).id}
