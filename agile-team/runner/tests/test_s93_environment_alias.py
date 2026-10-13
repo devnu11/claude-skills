@@ -267,4 +267,3 @@ def test_the_backlog_detail_line_labels_the_field_acceptance_environment() -> No
     assert 'const DETAIL_LABELS = { environment: "acceptance environment" };' in page
     assert '"environment"]' in page
     assert "${DETAIL_LABELS[k] ?? k}: " in page
-
