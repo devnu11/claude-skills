@@ -384,3 +384,15 @@ def key_home(
         os_guard.World.REAL: lambda: _real_key_home(request),
     }
     return makers[world]()
+
+
+def write_story(config: config_mod.Config, story_id: str, *environments: str) -> None:
+    """Write ``.team/stories/<id>.md`` with one AC per environment (s94 SF1)."""
+    items = "".join(
+        f'  - id: AC{n}\n    text: "criterion {n}"\n    environment: {name}\n'
+        for n, name in enumerate(environments, 1)
+    )
+    folder = config.repo / ".team" / "stories"
+    system.make_dirs(folder)
+    head = f'---\nid: {story_id}\ntitle: "A story"\nacceptance:\n{items}---\nbody\n'
+    system.write_text(folder / f"{story_id}.md", head)
