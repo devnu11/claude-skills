@@ -1,6 +1,35 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s104: E2E tests for Flow chart fixes (unit/code-review done, P1: your work)
+
+**File:** `tests/e2e/test_s104_flow_e2e.py` (new). Cause and rendering checks run on fixture via node harness (dashboard_node.run_page). Served-snapshot AC5 test real dashboard.
+
+**Design checklist (all via node harness + served dashboard):**
+
+1. **AC4 (cause):** On fixture, Story scope with focus that dims ≥1 node, and Sprint scope on same data:
+   - No `classDef` line contains `opacity`, `filter`, `transform`, `mix-blend-mode` (FL1, FL2).
+   - `classDef idle` sets only `fill`, `stroke`, `color` (exact text).
+   - This check **fails on today's code** (test confirms fix works).
+
+2. **AC4 (hidden then shown):** Stub `mermaidModule` to record `initialize` options and `render` sources.
+   - With `ui.tab = "board"`, call `render()`; stub records nothing.
+   - Call `showTab("flow")`; let microtasks run.
+   - Expect one `initialize` with `flowchart.useMaxWidth === false`, `themeVariables.fontSize === "16px"`.
+   - Rendered source passes FL1 check (no opacity).
+
+3. **AC3 (size):** `parseFloat(mermaidConfig(themeVars()).themeVariables.fontSize) >= 16` and `useMaxWidth === false`. Box stats ≥ 12 CSS px.
+
+4. **AC2 (idle text):** Story scope, role with no totals and no open step has label `· idle`, not `$0.00`. Role with totals still shows `tokens · $ · time`.
+
+5. **AC5 (unused roles):** With `developer-db` `used: false`, `flowSource` has no `developer-db` node. With `used: true`, has one. Role with no `used` key still drawn.
+
+6. **S96 labels:** Running box shows `⏱ running <time>`. Existing s96 expectations still hold.
+
+7. **Served snapshot AC5:** Serve on scratch repo. Snapshot has no `developer-db`. Append `step-start` event for `developer-db` to `events.jsonl`. Next `/api/snapshot` has it `used: true` and `flowSource` draws it (AC5, FL9).
+
+See design `agile-team/docs/design/s104.md` (test checklist items in E2E section), ADR-0047.
 
 ## s96: Node harness and e2e for Flow time display (unit/code-review done, P1: your work)
 

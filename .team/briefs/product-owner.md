@@ -1,6 +1,20 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 done; s86 done)
+**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done)
+
+## s104 complete: Flow chart readable in all scopes—unused roles hidden (no new tool, no new hand-over)
+
+Bug fixed. Flow chart labels were stacked at top-left in Story scope, boxes empty. **Cause confirmed:** WebKit renders opacity-applied HTML in foreignObject on its own layer at SVG origin. 
+
+**What you see now:**
+- **Flow chart is readable:** Every role's label sits inside its box, in Story, Sprint, and Run scopes. Works after tab switch, live update, window resize.
+- **Unused roles not shown:** A built-in role that has never run (e.g., `developer-db`) doesn't clutter the chart. The chart draws only roles the pipeline routes to or that have run. A role becomes visible with its first step event.
+- **Dimmed roles by colour:** Roles with no data in a scope are dimmed by colour, not faded—no WebKit rendering bug.
+- **Idle indicator:** A dimmed box shows "idle" instead of `$0.00`, making it clear no activity happened.
+
+**No changes to your workflow.** No new tools, no new hand-overs. The dashboard continues to show the team's state at a glance. All ACs verified by the runner on Chromium; AC1's Safari check left to the human per this ruling.
+
+No new ADR (extends s27/s4 snapshot pattern). See design `agile-team/docs/design/s104.md` (rules FL1–FL9), ADR-0047.
 
 ## s96 complete: Time per role on Flow chart and "Time by" chart (no new tool, no new hand-over)
 

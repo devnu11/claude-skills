@@ -1,6 +1,6 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done)
+**Last updated:** 2026-10-13 (s104 done; s86 done)
 
 See `developer.md` for the base conventions.
 
@@ -60,6 +60,16 @@ See ADR-0040, design `agile-team/docs/design/s81.md`.
 - **s71:** Seam architecture—all OS calls flow through `system.py`. Unit tests run on fake with audit hook. Three phases: P1 (s71), P2 (s76), P3 (s77).
 
 See ADR-0036 (s71 architecture).
+
+## s104 complete: Flow chart labels pile up fixed (ADR-0047)
+
+**Bug fixed:** Flow chart labels were piled at the top-left corner in Story scope, boxes empty. **Cause confirmed:** WebKit compositing bug—opacity on dimmed nodes renders the label layer at SVG origin (0,0), not inside the box. Sprint/Run rendered correctly (different dimming logic).
+
+**Decision:** Dim nodes by colour only (fill/stroke/color), never opacity/filter/transform/mix-blend-mode (FL1–FL2). Add `used: bool` field to roles (FL7); draw only used roles (FL8). Natural-size Mermaid config (useMaxWidth: false), 16px font, scroll sideways (FL5–FL6). Roles with no stats show "idle" (FL4). All rules FL1–FL9 enforced in code; no new dependency, no new ADR (extends s27/s4 pattern).
+
+**Changes:** `snapshot.py` adds four functions (_assigned_developers, _routed_roles, _stepped_roles, _used_roles) and `used` field to roles; `index.html` fixes CSS, adds idleClassDef(), statsText(), natural-size Mermaid options. Fixture adds developer-db with used: false.
+
+No new CLI, no new hand-over. All tests pass (unit/code-review done; e2e P1 pending for integration-tester). See ADR-0047, design `agile-team/docs/design/s104.md` (FL1–FL9).
 
 ## Context reduction (s23, s71)
 

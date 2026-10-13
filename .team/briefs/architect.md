@@ -1,6 +1,16 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s104 complete: Flow chart dimming and unused roles (design rules FL1–FL9, ADR-0047, docs due with ship)
+
+Pure snapshot building, no new event kind or state. `roles[]` section gains `used: bool` field. Rules FL1–FL9 enforced: no compositing styles (opacity/filter/transform/mix-blend-mode) on classDef (FL1–FL2), nodes dimmed by colour only, every role has `used` (FL7), chart draws only used + PO (FL8), natural-size SVG with scroll (FL5–FL6), "idle" text for no-data roles (FL4), first step-start shows box (FL9). No dependency added; snapshot/dashboard/index.html changes only. Code review done (ship). E2E test pending (integration-tester P1).
+
+**Data contract:** Each role gains `"used": bool` (routed to by STEP_ROLES or has step-start event). **Module pattern:** `_used_roles` = `_routed_roles(files)` ∪ `_stepped_roles(events)`. `_routed_roles` maps pipeline steps to roles via STEP_ROLES with generic developer expansion to assigned developers (or itself if none assigned). `_stepped_roles` reads events for step-start role keys. Functions ≤8 LOC.
+
+**Your work:** Update `reference/protocol.md` (roles section: `used` field definition, FL7 rule), `reference/protocol.md` Flow paragraph (used roles only, PO always, colour dimming, "idle" text, natural size, scroll), `docs/customer/dashboard.md` (Flow section, same points in customer words), `docs/architecture.md` (one row: snapshot.py _used_roles, _routed_roles, _stepped_roles).
+
+See design `agile-team/docs/design/s104.md` (FL1–FL9, per-module changes), ADR-0047.
 
 ## s96: Time per role and role-by-time chart data (design rules ST1–ST15, docs due with ship)
 
