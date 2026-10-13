@@ -1,6 +1,22 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s97: Node-harness tests for awake-time page display (unit/code-review done, P1: your work)
+
+**File:** `tests/test_s97_awake_page.py` (new, under `tests/dashboard_node.py` setup).
+
+**Design checklist (all via node harness, 4 items):**
+
+1. **Running line awake/wall (AW10):** With `clockNow - step.at = 600s`, `step.slept = 120`, `clock = "awake"`, `runningLine()` reads `⏱ running 8 min`. Same step with `clock = "wall"`, `slept = 0` reads `⏱ running 10 min (may include sleep)` (AW10).
+
+2. **Time chart wall count (AW11):** `timeBy` builds groups with `wall` sum. Tooltip for a group with wall steps says `· N may include sleep`. Group with no wall steps has no mark. `timeRow` renders exact text.
+
+3. **Legend text (AC4, AW12):** `timeLegend()` contains exactly "Awake time (agent steps only; runner stages: see A6)".
+
+4. **Replay reopens (AW13):** `stepsAsOf(view, step)` nulls `clock` and `slept` when reopening a step, so replayed steps show wall time unmarked (clock=null, slept=null).
+
+See design `agile-team/docs/design/s97.md` (test checklist, AW10–AW13).
 
 ## s104: E2E tests for Flow chart fixes (unit/code-review done, P1: your work)
 
