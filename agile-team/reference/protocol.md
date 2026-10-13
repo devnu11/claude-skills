@@ -500,9 +500,15 @@ for a latest opinion with no act, else `""`, and `act` is `{"id", "act",
 or null; `review`, the last review `{"id", "text", "at"}` or null), `ledger`,
 `steps` (s96: every agent step in start order, paired from `step-start` and
 `step-end` by role and story, each `{"role", "story", "model", "sprint",
-"at", "ended_at", "seconds", "status"}`; `at` is the start, `seconds` the
-wall time; a running step has `ended_at`, `seconds` and `status` null; a
-step closed after a kill has `seconds` null; `model` falls back to the
+"at", "ended_at", "seconds", "status", "clock", "slept"}`; `at` is the
+start; `seconds` is the awake time (s97): on macOS and Linux the step
+events' `data.mono` span, on Windows the wall span less the heartbeat's
+`data.slept` span; `clock` is `"awake"`, or `"wall"` for a step whose
+events lack those readings (logged before s97, or straddling a reboot), timed
+by wall clock and marked "may include sleep"; `slept` is the wall time
+left out (`0.0` for a wall step; so far, for a running step); a running step
+has `ended_at`, `seconds` and `status` null; a step closed after a kill has
+`seconds`, `clock` and `slept` null; `model` falls back to the
 role's configured model, then `"unknown"`; `sprint` is the sprint running
 when it started), `messages`,
 `answers`, `thread` (every thread entry in time order, each `{"id",
@@ -567,7 +573,7 @@ gate runs. A failed write never stops the thread. Its first failure goes to
 
 ```json
 {"version": 2, "pid": 4242, "beat": "beating", "at": 1791800020.0, "mono": 523000.0, "started_at": 1791799000.0,
- "chore": null,
+ "slept": 0.0, "chore": null,
  "step": {"role": "developer-cli", "story": "s29", "step": "implement", "started_at": 1791799500.0,
           "turn": 12, "model": "claude-sonnet-4-5-20250929", "configured_model": "sonnet",
           "last_turn_at": 1791800012.5, "quiet_since": 1791800012.5,
@@ -580,7 +586,13 @@ gate runs. A failed write never stops the thread. Its first failure goes to
 (done, halted, stopped, crashed). After a `kill -9` it stays `beating`
 and goes stale. `at` is the last write (wall clock). `mono` is the
 system's monotonic clock at the same moment. That clock stops while the
-machine sleeps, so a reader can tell a sleep from a late beat. `step` is the
+machine sleeps, so a reader can tell a sleep from a late beat. `slept`
+(s97) is the sleep this runner process has counted so far: each beat gap
+longer than two beats adds the gap less one beat. Windows' monotonic clock
+counts through sleep, so this counter is how step times leave sleep out
+there. Every `step-start` and `step-end` the runner writes carries
+`data.mono` and `data.slept` read at that moment. Recovery's `killed`
+step-end does not. `step` is the
 innermost open query (a role step inside the PO's `run_role` call), else
 `null`. `chore` is runner-side work such as `{"what": "settling
 developer-cli on s29", "since": …}`, else `null`. Other chores are
@@ -649,8 +661,8 @@ shows `↻ restarted`.
 The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
 It defaults to Story: the active step's story, or another story picked in
 the box beside it. Each role box shows that role's ledger tokens and dollars
-for the scope, and its step time: the summed wall time of its finished
-steps in the scope (snapshot `steps`). Only used roles are drawn (snapshot
+for the scope, and its step time: the summed awake time of its finished
+steps in the scope (snapshot `steps`; time the machine slept is left out). Only used roles are drawn (snapshot
 `roles[].used`; a role without the key is drawn); the Product Owner always
 is. A role's box appears with its first `step-start`. In Story scope a role
 that has not touched the story in focus is dimmed; in Sprint and Run scope
@@ -659,15 +671,18 @@ stroke, muted text) and never uses opacity or another compositing style. A
 role with no data in the scope and no open step reads `idle` instead of
 zero stats. The chart is drawn at its natural size (16 px text, Mermaid
 `useMaxWidth: false`) and a wide chart scrolls sideways. A role with an
-open step adds `⏱ running N min`,
+open step adds `⏱ running N min` (the time since its start less the
+step's `slept`; ` (may include sleep)` is added for a wall-clock step),
 updated each minute. The active box adds its live rate, sparkline, turn,
 tool and the step's estimate, outlined in the health colour. The Product
 Owner's queries are not steps, so its box shows no time.
 
 The Tokens tab's measure toggle is **Tokens / Dollars / Time** (one row
 each in the page's `UNITS` table). Time draws "Time by" bars of summed step
-time per role, story or model, in h and min; each tooltip gives the step
-count and the share of the total time. Only agent steps count: the runner's
+time per role, story or model, in h and min, under the legend "Awake
+time"; each tooltip gives the step count and the share of the total time,
+and `N may include sleep` when the group has wall-clock steps. Only agent
+steps count: the runner's
 own stages (gates, syncs, presentation builds) are left to A6.
 
 On red, the tab title gets a `⚠` prefix. On `localhost` (a secure context)
