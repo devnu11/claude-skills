@@ -19,7 +19,7 @@ from .. import roles as roles_mod
 from .. import state as state_mod
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
-from ..gates import StoryStatus
+from ..gates import STEP_ROLES, StoryStatus
 from ..ledger import LEDGER, Entry, corrected
 from ..priority import Priority
 from ..relay import INBOX, OUTBOX, REPLY
@@ -166,9 +166,42 @@ def _steps(files: RunFiles) -> list[dict]:
     return [_step(files, span) for span in step_times.spans(files.events)]
 
 
+GENERIC_DEVELOPER = STEP_ROLES["implement"]  # stands for the repo's developer roles
+
+
+def _assigned_developers(state: RunState) -> frozenset[str]:
+    """Every story's developer and PO-chosen developer that is set (FL7a)."""
+    names = (n for s in state.stories.values() for n in (s.developer, s.po_developer))
+    return frozenset(n for n in names if n)
+
+
+def _step_role(files: RunFiles, step: str) -> frozenset[str]:
+    role = STEP_ROLES.get(step)
+    if role != GENERIC_DEVELOPER:
+        return frozenset({role} if role else ())
+    return _assigned_developers(files.state) or frozenset({role})
+
+
+def _routed_roles(files: RunFiles) -> frozenset[str]:
+    """Roles the repo's pipeline steps route to (FL7a)."""
+    return frozenset().union(*(_step_role(files, step) for step in _pipeline(files)))
+
+
+def _stepped_roles(events: list[dict]) -> frozenset[str]:
+    """Roles with at least one ``step-start`` event (FL7b)."""
+    return frozenset(e["role"] for e in events if e.get("kind") == "step-start" and e.get("role"))
+
+
+def _used_roles(files: RunFiles) -> frozenset[str]:
+    """Roles routed to by the pipeline or already stepped (FL7)."""
+    return _routed_roles(files) | _stepped_roles(files.events)
+
+
 def _roles(files: RunFiles) -> list[dict]:
+    """Enabled roles, each with ``used`` (FL7)."""
+    used = _used_roles(files)
     found = (_role(files, name) for name in sorted(files.book.names()))
-    return [role for role in found if role is not None]
+    return [{**role, "used": role["name"] in used} for role in found if role is not None]
 
 
 def _frontmatter(path: Path) -> tuple[dict, str]:

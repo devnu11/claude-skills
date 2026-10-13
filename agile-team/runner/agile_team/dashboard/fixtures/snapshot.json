@@ -39,52 +39,68 @@
   {
    "name": "product-owner",
    "model": "opus",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": false
   },
   {
    "name": "architect",
    "model": "opus",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "unit-tester",
    "model": "sonnet",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "developer-cli",
    "model": "sonnet",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
+  },
+  {
+   "name": "developer-db",
+   "model": "sonnet",
+   "provider": "anthropic",
+   "used": false
   },
   {
    "name": "quality-czar",
    "model": "qwen3-coder",
-   "provider": "local"
+   "provider": "local",
+   "used": true
   },
   {
    "name": "code-reviewer",
    "model": "opus",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "integration-tester",
    "model": "sonnet",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "customer-proxy",
    "model": "sonnet",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "manager",
    "model": "sonnet",
-   "provider": "anthropic"
+   "provider": "anthropic",
+   "used": true
   },
   {
    "name": "scribe",
    "model": "qwen3-coder",
-   "provider": "local"
+   "provider": "local",
+   "used": true
   }
  ],
  "stories": [
