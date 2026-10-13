@@ -2893,7 +2893,8 @@
    "model": "sonnet",
    "seconds": 411.6,
    "clock": "wall",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "architect",
@@ -2905,7 +2906,8 @@
    "model": "opus",
    "seconds": 183.7,
    "clock": "awake",
-   "slept": 120.0
+   "slept": 120.0,
+   "recorded_model": null
   },
   {
    "role": "unit-tester",
@@ -2917,7 +2919,8 @@
    "model": "sonnet",
    "seconds": 377.8,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -2929,7 +2932,8 @@
    "model": "sonnet",
    "seconds": 216.7,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "quality-czar",
@@ -2941,7 +2945,8 @@
    "model": "haiku",
    "seconds": 400.6,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "code-reviewer",
@@ -2953,7 +2958,8 @@
    "model": "opus",
    "seconds": 479.9,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "architect",
@@ -2965,7 +2971,8 @@
    "model": "opus",
    "seconds": 137.7,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "integration-tester",
@@ -2977,7 +2984,8 @@
    "model": "sonnet",
    "seconds": 317.3,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "customer-proxy",
@@ -2989,7 +2997,8 @@
    "model": "sonnet",
    "seconds": 201.3,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "scribe",
@@ -3001,7 +3010,8 @@
    "model": "haiku",
    "seconds": 159.9,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "architect",
@@ -3013,7 +3023,8 @@
    "model": "opus",
    "seconds": 92.1,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "unit-tester",
@@ -3025,7 +3036,8 @@
    "model": "sonnet",
    "seconds": 487.8,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "architect",
@@ -3037,7 +3049,8 @@
    "model": "opus",
    "seconds": 124.4,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3049,7 +3062,8 @@
    "model": "sonnet",
    "seconds": 397.1,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "unit-tester",
@@ -3061,7 +3075,8 @@
    "model": "sonnet",
    "seconds": 472.3,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3073,7 +3088,8 @@
    "model": "sonnet",
    "seconds": 441.9,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3085,7 +3101,8 @@
    "model": "sonnet",
    "seconds": 553.2,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "quality-czar",
@@ -3097,7 +3114,8 @@
    "model": "haiku",
    "seconds": 524.9,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "code-reviewer",
@@ -3109,7 +3127,8 @@
    "model": "opus",
    "seconds": 104.2,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3121,7 +3140,8 @@
    "model": "sonnet",
    "seconds": 577.0,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "architect",
@@ -3133,7 +3153,8 @@
    "model": "opus",
    "seconds": 334.6,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3145,7 +3166,8 @@
    "model": "sonnet",
    "seconds": 572.9,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "quality-czar",
@@ -3157,7 +3179,8 @@
    "model": "haiku",
    "seconds": 393.9,
    "clock": "awake",
-   "slept": 0
+   "slept": 0,
+   "recorded_model": null
   },
   {
    "role": "code-reviewer",
@@ -3169,7 +3192,8 @@
    "model": "opus",
    "seconds": 413.9,
    "clock": "awake",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   },
   {
    "role": "developer-cli",
@@ -3181,7 +3205,8 @@
    "model": "claude-sonnet-4-5-20250929",
    "seconds": 190.0,
    "clock": "wall",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": "claude-sonnet-4-5-20250929"
   },
   {
    "role": "developer-cli",
@@ -3193,7 +3218,8 @@
    "model": "sonnet",
    "seconds": null,
    "clock": "wall",
-   "slept": 0.0
+   "slept": 0.0,
+   "recorded_model": null
   }
  ],
  "tools": [
