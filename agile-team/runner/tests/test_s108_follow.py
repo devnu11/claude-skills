@@ -473,4 +473,6 @@ def test_the_end_sync_only_adds_the_entry_and_follows_nothing(env: Env, fake: Fa
 def test_the_end_rebase_stage_fetches_first(env: Env, fake: FakeSystem) -> None:
     fresh_stack(env, 1, Stage.REBASE)
     env.br.step()
-    assert any(c.argv[:2] == ("git", "fetch") for c in fake.commands)
+    argvs = [c.argv for c in fake.commands]
+    fetch = next(i for i, a in enumerate(argvs) if a[:2] == ("git", "fetch"))
+    assert all("rebase" not in a for a in argvs[:fetch])  # fetched before any rebase
