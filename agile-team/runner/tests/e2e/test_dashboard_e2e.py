@@ -155,8 +155,8 @@ def test_only_outside_urls_are_pinned_libraries(dash) -> None:
     urls = set(re.findall(r"https?://[^\s\"'`)<>]+", _index(url)))
     urls -= {"http://www.w3.org/2000/svg"}
     patterns = [
-        r"https://cdn\.jsdelivr\.net/npm/mermaid@\d+\.\d+\.\d+/\S+",
-        r"https://cdn\.jsdelivr\.net/npm/markdown-it@\d+\.\d+\.\d+/\S+",
+        r"https://cdn\.jsdelivr\.net/npm/mermaid@11\.4\.1/\S+",
+        r"https://cdn\.jsdelivr\.net/npm/markdown-it@14\.1\.0/\S+",
     ]
     assert len(urls) == len(patterns)
     for pattern in patterns:
