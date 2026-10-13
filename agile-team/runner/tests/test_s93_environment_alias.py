@@ -258,3 +258,12 @@ def _done() -> str:
     from .conftest import handoff
 
     return handoff("done")
+
+
+def test_the_backlog_detail_line_labels_the_field_acceptance_environment() -> None:
+    from importlib import resources
+
+    page = system.read_text(resources.files("agile_team.dashboard").joinpath("index.html"))
+    assert 'const DETAIL_LABELS = { environment: "acceptance environment" };' in page
+    assert '"environment"]' in page
+    assert "${DETAIL_LABELS[k] ?? k}: " in page
