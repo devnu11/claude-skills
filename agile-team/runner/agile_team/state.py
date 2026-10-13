@@ -16,6 +16,7 @@ from .config import PIPELINE_STEPS
 from .gates import PreviousStep, StoryState, StoryStatus, load_dispute
 from .ledger import SessionCost
 from .loops import Rule, Setback
+from .owners import FixRecord, load_fix
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .salvage import RUN_ENDING, Cause, InFlight, Interruption
 
@@ -172,6 +173,10 @@ def _story(data: dict[str, Any]) -> StoryState:
     setbacks = {k: [Setback(**s) for s in data.get(k, [])] for k in ("streak", "run")}
     by = data.get("escalated_by")
     extra = {"implemented": implemented, "escalated_by": Rule(by) if by else None}
+    extra |= {
+        "fixes": [load_fix(f) for f in data.get("fixes", [])],
+        "fixed": [FixRecord(**r) for r in data.get("fixed", [])],
+    }
     return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
 
 

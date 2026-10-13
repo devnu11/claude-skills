@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from . import fingerprint, loops, system
+from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .loops import Author, Fault, Rule, Setback
+from .owners import Fix, FixRecord, Item, Owners, Source, Split
 from .results import Ran, result_tail
 from .roles import Dispute, Handoff, TestClaim
 from .salvage import Interruption
@@ -39,6 +41,13 @@ STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager", "s
 STOPPED_HANDOFFS = frozenset({"blocked", "failed"})
 BASELINE = ".team/baseline.json"
 LS_FILES_COMMAND = "git ls-files -- {path} {suffix}"
+LS_ALL_COMMAND = "git ls-files"
+ROUTED_COMMANDS = ("lint", "static")
+ROUTED = "routed to {owners}; the story comes back to this step after their fix steps"
+ALSO_ROUTED = "also routed to {owners}; their fix steps run first"
+FIX_NEEDS_STORY = "a gate fix needs a story"
+FIX_NONE = "story {id} has no gate fix queued"
+FIX_ROLE = "story {id}'s next gate fix is for {role}"
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%")
 
 REWORK_UNCLAIMED = (
@@ -85,6 +94,8 @@ class Verdict(StrEnum):
     ``HOLD`` stays put without counting a round (a block). ``RETURN`` moves back
     without counting a round (the team, not the product, missed a step).
     ``ESCALATE`` stays put, counts no round and waits for the Manager's ruling.
+    ``ROUTE`` stays at the step, counts no round, queues gate fix steps for the
+    items' owners (s92).
     """
 
     PASS = "pass"
@@ -93,6 +104,7 @@ class Verdict(StrEnum):
     RETURN = "return"
     DISPUTE = "dispute"
     ESCALATE = "escalate"
+    ROUTE = "route"
 
 
 class DisputeStage(StrEnum):
@@ -142,11 +154,8 @@ def load_dispute(**data: Any) -> OpenDispute:
 
 def pick_tracked(file: str, listing: str) -> str | None:
     """``file`` if listed, else the one listed path ending with ``/file``."""
-    lines = listing.splitlines()
-    if file in lines:
-        return file
-    ends = [x for x in lines if x.endswith("/" + file)]
-    return ends[0] if len(ends) == 1 else None
+    found = owners_mod.candidates(file, listing)
+    return found[0] if len(found) == 1 else None
 
 
 def read_repo_file(repo: Path, path: str) -> str | None:
@@ -201,6 +210,9 @@ class StoryState:
     escalated_by: Rule | None = None
     interrupted: Interruption | None = None
     depends_on: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    fixes: list[Fix] = field(default_factory=list)
+    fixed: list[FixRecord] = field(default_factory=list)
 
 
 @dataclass
@@ -214,6 +226,8 @@ class Outcome:
     author: Author = Author.RUNNER
     rule: Rule = Rule.REPEAT
     ran: Ran | None = None
+    fixes: list[Fix] = field(default_factory=list)
+    output: str = field(default="", repr=False)
 
 
 def role_fits_step(role: str, step: str) -> bool:
@@ -257,12 +271,23 @@ def dispatch_refusal(role: str, story: StoryState | None) -> str | None:
         return None
     if story is None:
         return None if role in STORYLESS_ROLES else f"{role} only runs on a story; open_story"
-    return (
-        _repeat_refusal(story)
-        or _status_refusal(story)
-        or _backlog_refusal(story)
-        or _step_refusal(role, story)
-    )
+    return _story_checks(story) or _step_refusal(role, story)
+
+
+def _story_checks(story: StoryState) -> str | None:
+    return _repeat_refusal(story) or _status_refusal(story) or _backlog_refusal(story)
+
+
+def fix_refusal(role: str, story: StoryState | None) -> str | None:
+    """Why ``role`` may not run the story's next gate fix, or ``None``."""
+    if story is None:
+        return FIX_NEEDS_STORY
+    if refusal := _story_checks(story):
+        return refusal
+    if not story.fixes:
+        return FIX_NONE.format(id=story.id)
+    head = story.fixes[0].role
+    return None if role == head else FIX_ROLE.format(id=story.id, role=head)
 
 
 REPEAT_REFUSAL = "story {id} repeated a setback ({key}); the manager rules on it first"
@@ -407,6 +432,17 @@ class Checks:
         """Run toolchain command ``name``; keep its exit code and output tail (Q1, Q2)."""
         return _ran(name, *self.run(self.commands[name]))
 
+    def listing(self) -> str:
+        """Every tracked path, or ``""`` when git fails."""
+        code, out = self.run(LS_ALL_COMMAND)
+        return out if code == 0 else ""
+
+    def lint_outputs(self) -> list[str]:
+        """Output of each configured lint/static command that failed (not timed out)."""
+        configured = [self.commands[n] for n in ROUTED_COMMANDS if n in self.commands]
+        ran = [self.run(command) for command in configured]
+        return [out for code, out in ran if code not in (0, TIMED_OUT)]
+
     def tests_red(self) -> Outcome:
         code, out = self.run(self.commands["test"])
         return _with_ran(self._red_outcome(code, out), _ran("test", code, out))
@@ -439,7 +475,8 @@ class Checks:
     def tests_green_and_covered(self) -> Outcome:
         """One coverage run proves green and gives the total (s68 C1-C5)."""
         code, out = self.run(self.commands["coverage"])
-        return _with_ran(self._covered_outcome(code, out), _ran("coverage", code, out))
+        covered = _with_ran(self._covered_outcome(code, out), _ran("coverage", code, out))
+        return covered if code == TIMED_OUT else replace(covered, output=out)
 
     def _covered_outcome(self, code: int, out: str) -> Outcome:
         if timeout := timed_out(code, out):
@@ -571,6 +608,30 @@ class Pipeline:
             return None
         return Outcome(Verdict.RETURN, f"{reason}; run the integration-tester on it", "e2e")
 
+    def route(self, outcome: Outcome, owners: Owners) -> Outcome:
+        """Queue gate fixes for items in files other roles own (R1, s92)."""
+        if outcome.verdict is Verdict.DISPUTE:
+            return self._route_dispute(outcome, owners)
+        return self._route_items(outcome, owners) if outcome.output else outcome
+
+    def _route_items(self, outcome: Outcome, owners: Owners) -> Outcome:
+        found = [*owners_mod.findings(outcome.output, Source.TEST), *self._lint_findings()]
+        items = owners_mod.placed(found, self.checks.listing())
+        return _routed(outcome, owners_mod.split(items, owners))
+
+    def _lint_findings(self) -> list[owners_mod.Finding]:
+        outputs = self.checks.lint_outputs()
+        return [f for out in outputs for f in owners_mod.findings(out, Source.LINT)]
+
+    def _route_dispute(self, outcome: Outcome, owners: Owners) -> Outcome:
+        d = outcome.dispute
+        item = Item(d.test, Source.TEST, [d.file], d.output.splitlines()[: owners_mod.ITEM_LINES])
+        writer = owners.fixer(item)
+        if writer is None:
+            return outcome
+        fix = Fix(writer.role, [item], d.rule, d.reason)
+        return Outcome(Verdict.ROUTE, outcome.reason, author=Author.ROLE, fixes=[fix])
+
     def advance(self, story: StoryState, outcome: Outcome) -> None:
         """Move ``story`` forward on a pass, back (counting a round) on a bounce."""
         moves = {
@@ -584,6 +645,7 @@ class Pipeline:
             moves[outcome.verdict]()
         if story.step == "implement":
             story.dispute = None
+        story.fixes = list(outcome.fixes)
 
     def screen(self, story: StoryState, setback: Setback) -> Outcome | None:
         """An escalation when ``setback`` repeats the last one or ends a back-and-forth."""
@@ -639,6 +701,7 @@ class Pipeline:
         story.rounds, story.disputes, story.dispute = 0, 0, None
         story.streak, story.run = [], []
         story.repeated, story.escalated_by = None, None
+        story.fixes = []
 
     def _dispute(self, story: StoryState, outcome: Outcome) -> None:
         story.dispute = outcome.dispute
@@ -707,6 +770,24 @@ STUCK_STATUSES = frozenset({StoryStatus.NEEDS_MANAGER, StoryStatus.BLOCKED})
 
 def _stuck(story: StoryState) -> bool:
     return bool(story.dispute or story.status in STUCK_STATUSES or story.repeated)
+
+
+def _owners_text(fixes: list[Fix]) -> str:
+    return "; ".join(f"{f.role} ({', '.join(i.shown for i in f.items)})" for f in fixes)
+
+
+def _routed(base: Outcome, split: Split) -> Outcome:
+    """``base`` with the split's fixes: ROUTE, or BOUNCE for own failing tests (R9, R10)."""
+    if not split.fixes:
+        return base
+    text = _owners_text(split.fixes)
+    own_tests = any(i.source is Source.TEST for i in split.own)
+    if base.verdict is Verdict.BOUNCE and (own_tests or not split.tested):
+        reason = f"{base.reason}\n{ALSO_ROUTED.format(owners=text)}"
+        return replace(base, reason=reason, fixes=split.fixes)
+    return replace(
+        base, verdict=Verdict.ROUTE, reason=ROUTED.format(owners=text), fixes=split.fixes
+    )
 
 
 def _retry_here(outcome: Outcome, step: str) -> Outcome:

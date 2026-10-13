@@ -26,6 +26,7 @@ class EventKind(StrEnum):
     CHECKOUT = "checkout"
     STEP_END = "step-end"
     GATE = "gate"
+    GATE_FIX = "gate-fix"
     QUARANTINE = "quarantine"
     RULING = "ruling"
     STORY_OPENED = "story-opened"

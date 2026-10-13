@@ -78,12 +78,13 @@ class Stage(StrEnum):
 
 
 class StepKind(StrEnum):
-    """What a router step is: a role, the runner's boundary, or a boundary fix."""
+    """What a router step is: a role, the runner's boundary, a boundary fix or a gate fix (s92)."""
 
     ROLE = "role"
     BOUNDARY = "boundary"
     TEAM_FIX = "team-fix"
     REVIEW_FIX = "review-fix"
+    GATE_FIX = "gate-fix"
 
 
 class BoundaryHold(StrEnum):

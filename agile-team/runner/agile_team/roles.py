@@ -167,6 +167,7 @@ class Handoff:
     tests: TestClaim | None = None
     fault: str | None = None
     ruling_reason: str = ""
+    asserts: str = ""
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -421,6 +422,7 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
         lambda d: d.get("dispute") is None or d.get("status") == "changes_requested",
         "dispute needs status changes_requested",
     ),
+    (lambda d: isinstance(d.get("asserts", ""), str), "asserts must be a string"),
     (lambda d: d.get("tests") in (None, *TEST_CLAIMS), f"tests must be one of {TEST_CLAIMS}"),
     (
         lambda d: d.get("fault") is None or _text(d.get("fault")),
@@ -473,6 +475,7 @@ def _handoff_from(data: Any) -> Handoff:
         tests=_claim(data.get("tests")),
         fault=data.get("fault"),
         ruling_reason=data.get("ruling_reason") or str(data.get("summary", "")),
+        asserts=data.get("asserts", ""),
     )
 
 
