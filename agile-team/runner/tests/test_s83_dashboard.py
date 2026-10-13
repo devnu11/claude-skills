@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import tomli_w
 from agile_team import cli, system
+from agile_team import config as config_mod
 from agile_team.backlog import Ask, order_version
 from agile_team.dashboard import server, snapshot, story_files
 from agile_team.dashboard.server import Dashboard
@@ -539,6 +542,54 @@ def test_a_fixed_token_is_used_as_given(configured, capsys, fake: FakeSystem) ->
     cli.cmd_dashboard(args)
     assert capsys.readouterr().out == f"dashboard: http://localhost:{FREE_PORT}/?token=abc\n"
     assert fake.servers[0].app.token == "abc"
+
+
+def set_config_token(repo: Path, token: str) -> None:
+    from .conftest import PY_CONFIG
+
+    raw = {**PY_CONFIG, "dashboard": {"token": token}}
+    system.write_text(repo / config_mod.CONFIG_NAME, tomli_w.dumps(raw))
+
+
+@pytest.mark.parametrize(
+    ("cli_args", "config_token", "shown"),
+    [
+        ((), "cfg", "cfg"),
+        (("--token", "abc"), "cfg", "abc"),
+        ((), "", "tok1"),
+    ],
+)
+def test_the_token_comes_from_the_flag_then_the_config_then_random(
+    configured, capsys, fake: FakeSystem, cli_args, config_token, shown
+) -> None:
+    set_config_token(configured, config_token)
+    args = dashboard_args(configured, "--host", "127.0.0.1", "--port", "0", *cli_args)
+    cli.cmd_dashboard(args)
+    assert capsys.readouterr().out == f"dashboard: http://localhost:{FREE_PORT}/?token={shown}\n"
+    assert fake.servers[0].app.token == shown
+
+
+def test_a_config_token_never_reaches_the_snapshot_or_the_run_files(gate) -> None:
+    app, rt = gate
+    app = replace(app, token="presentation")
+    post(PostWire(app, GOOD, token="presentation"))
+    assert len(request_files(rt)) == 1
+    snap = snapshot.build(rt.config, RoleBook.for_repo(rt.config.repo, rt.config.roles))
+    assert "presentation" not in json.dumps(snap)
+    for path in system.list_dir(rt.config.run_dir):
+        if system.is_file(path):
+            assert "presentation" not in system.read_text(path)
+
+
+def test_dashboard_config_defaults_to_an_empty_token(scratch: Path) -> None:
+    assert config_mod.from_raw(scratch, {}).dashboard.token == ""
+    assert config_mod.from_raw(scratch, {"dashboard": {"token": "x"}}).dashboard.token == "x"
+
+
+def test_a_non_string_dashboard_token_is_a_config_error(scratch: Path) -> None:
+    with pytest.raises(config_mod.ConfigError) as err:
+        config_mod.from_raw(scratch, {"dashboard": {"token": 1}})
+    assert str(err.value) == config_mod.DASHBOARD_TOKEN
 
 
 def test_the_lan_line_carries_no_token(configured, capsys, fake: FakeSystem) -> None:
