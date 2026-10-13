@@ -68,3 +68,15 @@ def test_an_assigned_developer_replaces_the_generic_one(
 def test_every_role_carries_used(config: cfg.Config, scratch: Path) -> None:
     assert all(isinstance(r["used"], bool) for r in build(config, scratch)["roles"])
     assert all("used" in r for r in json.loads(FIXTURE_TEXT)["roles"])
+
+
+def test_a_pipeline_step_with_no_role_routes_nowhere(scratch: Path) -> None:
+    config = make_config(scratch / "repo2", steps=["design", "mystery", "implement"])
+    flags = used(config, scratch)
+    assert flags["architect"] is True and flags["developer"] is True
+
+
+def test_a_pipeline_without_implement_adds_no_developer(scratch: Path) -> None:
+    config = make_config(scratch / "repo3", steps=["design", "tests"])
+    flags = used(config, scratch)
+    assert flags["developer"] is False and flags["architect"] is True
