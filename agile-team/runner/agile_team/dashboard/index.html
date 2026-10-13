@@ -870,7 +870,7 @@ function nodeLabel(view, name, ctx) {
   const info = roleInfo(view, name), s = ctx.stats[name], t = ctx.totals[name];
   const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
   const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
-  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${statsText(view, ctx, name)}${bounced}${shareLine(stepSplit(view, name))}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
+  return `${mmdText(name)}<br/>${mmdText(familyOf(info.model) + local)} · ${statsText(view, ctx, name)}${bounced}${shareLine(stepSplit(view, name))}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
 }
 
 const STEER = "grpSteering";
@@ -931,7 +931,7 @@ function flowEdgeList(view, stats, ids) {
 function flowGroupLines(view, ctx, ids) {
   const po = ctx.totals[PO], poStats = ui.scope === "story" ? "—" : `${fmt.tok(po?.tokens ?? 0)} · ${fmt.usd(po?.cost ?? 0)}`;
   const poShare = ui.scope === "story" ? "" : shareLine(turnSplit(view));
-  const groups = { Steering: [`po["Product Owner<br/>${mmdText(roleInfo(view, PO).model)} · ${poStats}${poShare}"]`] };
+  const groups = { Steering: [`po["Product Owner<br/>${mmdText(familyOf(roleInfo(view, PO).model))} · ${poStats}${poShare}"]`] };
   for (const [n, id] of ids) (groups[groupOf(n)] ??= []).push(`${id}["${nodeLabel(view, n, ctx)}"]`);
   addStageNodes(view, groups);
   return GROUP_ORDER.filter((t) => groups[t]).flatMap((t) => [
@@ -1884,16 +1884,55 @@ function rounds(n, cap) {
 
 // ----- tokens -----------------------------------------------------------------
 
+/** Model families; an alias and every exact id of one family share a row (MF1). */
+const MODEL_FAMILIES = ["opus", "sonnet", "haiku"];
+const NOT_RECORDED = "version not recorded";
+const UNKNOWN_MODEL = "unknown";
+
+/** The family of a model id: the first family that is a whole word of it, else the id (MF1). */
+function familyOf(model) {
+  if (!model) return UNKNOWN_MODEL;
+  const words = String(model).toLowerCase().split(/[^a-z]+/);
+  return MODEL_FAMILIES.find((f) => words.includes(f)) ?? model;
+}
+
+/** The exact id of a model, or NOT_RECORDED for a missing, unknown or alias model (MF4). */
+function versionOf(model) {
+  const bare = String(model ?? "").replace(/\[[^\]]*\]$/, "");
+  return !model || model === UNKNOWN_MODEL || MODEL_FAMILIES.includes(bare) ? NOT_RECORDED : model;
+}
+
+const GROUP_KEYS = { role: (x) => x.role, story: (x) => x.story, model: (x) => familyOf(x.model) };
+
+/** The group an item falls in for the chosen key (MF2). */
+function groupKeyOf(item, key) { return GROUP_KEYS[key](item) ?? "(no story)"; }
+
+const newLineTotal = (model) => ({ steps: 0, cost: 0, model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, measured: 0, measured_prompt: 0, latest: 0 });
+
+/** Adds one ledger line into a total. */
+function addLine(t, l) {
+  t.steps++; t.cost += l.cost_usd;
+  if (l.turns > 0) { t.turns += l.turns; t.measured++; t.measured_prompt += sumTok({ ...l.tokens, output: 0 }); t.latest = l.turns; }
+  for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
+}
+
 function totalsBy(ledger, key) {
   const out = {};
   for (const l of ledger) {
-    const k = l[key] ?? "(no story)";
-    const t = (out[k] ??= { steps: 0, cost: 0, model: l.model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, measured: 0, measured_prompt: 0, latest: 0 });
-    t.steps++; t.cost += l.cost_usd;
-    if (l.turns > 0) { t.turns += l.turns; t.measured++; t.measured_prompt += sumTok({ ...l.tokens, output: 0 }); t.latest = l.turns; }
-    for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
+    const t = (out[groupKeyOf(l, key)] ??= { ...newLineTotal(l.model), versions: {} });
+    addLine(t, l);
+    addLine(t.versions[versionOf(l.model)] ??= newLineTotal(l.model), l);
   }
   return out;
+}
+
+/** The "versions:" tooltip line of a row total, shares in the chosen unit (MF5). */
+function versionsLine(unit, t) {
+  const whole = unit.share(t);
+  const subs = Object.entries(t.versions ?? {}).map(([v, sub]) => [v, unit.share(sub)])
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  if (!subs.length) return "";
+  return `<br><span class="k">versions:</span> ${subs.map(([v, n]) => `${esc(v)} ${fmt.pct(whole ? (100 * n) / whole : 0)}`).join(" · ")}`;
 }
 
 /** Ledger totals per group, for the Tokens and Dollars units. */
@@ -1901,7 +1940,7 @@ function ledgerTotals(view, key) { return totalsBy(view.ledger, key); }
 
 /** Time pieces of finished agent steps (TM2). */
 const stepPieces = (view) => view.steps.filter(finished).filter((s) => s.role !== PO).map((s) => ({
-  role: s.role, story: s.story, model: s.model, count: "steps", parts: { work: s.seconds ?? 0 }, wall: s.clock === "wall",
+  role: s.role, story: s.story, model: s.model, version: versionOf(s.recorded_model), count: "steps", parts: { work: s.seconds ?? 0 }, wall: s.clock === "wall",
 }));
 
 /** Time pieces of runner stages, except those inside a step (TM2). */
@@ -1911,7 +1950,7 @@ const stagePieces = (view) => view.events
 
 /** Time pieces of PO turns (TM2). */
 const turnPieces = (view) => view.events.filter((e) => e.kind === "po-turn").map((e) => ({
-  role: PO, story: null, model: roleInfo(view, PO).model, count: "turns", parts: poSplit(e.data), wall: false,
+  role: PO, story: null, model: roleInfo(view, PO).model, version: versionOf(roleInfo(view, PO).model), count: "turns", parts: poSplit(e.data), wall: false,
 }));
 
 const TIME_SOURCES = [stepPieces, stagePieces, turnPieces];
@@ -1923,13 +1962,20 @@ const timePieces = (view) => TIME_SOURCES.flatMap((f) => f(view));
 function timeBy(pieces, key) {
   const out = {};
   for (const p of pieces) {
-    const t = (out[p[key] ?? "(no story)"] ??= { steps: 0, runs: 0, turns: 0, wall: 0, seconds: 0,
-      parts: { work: 0, runner: 0, model: 0, tools: 0, waiting: 0 } });
-    t[p.count]++;
-    for (const [k, v] of Object.entries(p.parts)) { t.parts[k] += v; t.seconds += v; }
-    if (p.wall) t.wall++;
+    const t = (out[groupKeyOf(p, key)] ??= { ...newTimeTotal(), versions: {} });
+    addPiece(t, p);
+    if (p.version) addPiece(t.versions[p.version] ??= newTimeTotal(), p);
   }
   return out;
+}
+
+const newTimeTotal = () => ({ steps: 0, runs: 0, turns: 0, wall: 0, seconds: 0, parts: { work: 0, runner: 0, model: 0, tools: 0, waiting: 0 } });
+
+/** Adds one time piece into a total. */
+function addPiece(t, p) {
+  t[p.count]++;
+  for (const [k, v] of Object.entries(p.parts)) { t.parts[k] += v; t.seconds += v; }
+  if (p.wall) t.wall++;
 }
 
 /** Time totals per group for the Time unit (TM4). */
@@ -2011,12 +2057,15 @@ function renderGroup() {
 }
 
 /** Bar rows for the chosen grouping, largest first in the chosen unit. */
+/** Extra tooltip text per grouping: only Model lists versions (MF5). */
+const MORE_LINES = { model: versionsLine };
+
 function barRows(view) {
   const unit = UNITS[ui.unit];
   const groups = Object.entries(unit.totals(view, ui.group));
   const whole = sum(groups, ([, t]) => unit.share(t));
   return groups
-    .map(([role, t]) => ({ role, t, whole, total: unit.total(t) }))
+    .map(([role, t]) => ({ role, t, whole, total: unit.total(t), more: MORE_LINES[ui.group]?.(unit, t) ?? "" }))
     .sort((a, b) => b.total - a.total);
 }
 
@@ -2068,9 +2117,9 @@ function renderUnit() {
   $("#mix-title").textContent = UNITS[ui.unit].title;
 }
 
-function costRow({ role, t, whole, total }, i, scale) {
+function costRow({ role, t, whole, total, more }, i, scale) {
   const w = Math.max(0, t.cost * scale), share = whole ? (100 * t.cost) / whole : 0;
-  const tip = `<b>${esc(role)}</b><br>${fmt.usd(t.cost)} <span class="k">(${fmt.pct(share)} of spend)</span> · ${t.steps} steps`;
+  const tip = `<b>${esc(role)}</b><br>${fmt.usd(t.cost)} <span class="k">(${fmt.pct(share)} of spend)</span> · ${t.steps} steps${more}`;
   return oneBar(i, { role, w, fill: "var(--s1)", tip, value: fmt.usd(total) });
 }
 
@@ -2089,12 +2138,12 @@ function timeTip(role, t, whole) {
 }
 
 /** A segmented Time row: one segment per non-zero part (TM5). */
-function timeRow({ role, t, whole, total }, i, scale) {
+function timeRow({ role, t, whole, total, more }, i, scale) {
   const y = i * (MIX.bar + MIX.gap), shown = TIME_PARTS.filter(([k]) => t.parts[k] > 0);
   let x = MIX.label;
   const segs = shown.map(([k, label, v], j) => {
     const w = t.parts[k] * scale, last = j === shown.length - 1;
-    const part = `<b>${esc(role)}</b><br>${label}: ${fmt.span(t.parts[k])}`;
+    const part = `<b>${esc(role)}</b><br>${label}: ${fmt.span(t.parts[k])}${more}`;
     const tip = j === 0 ? `${timeTip(role, t, whole)}<br>${part}` : part;
     const shape = segment(x, y, Math.max(0, w - (last ? 0 : 2)), last);
     x += w;
@@ -2113,12 +2162,12 @@ function oneBar(i, bar) {
     ${tlText("barValue", bar.value, `x="${MIX.label + bar.w + 6}" y="${ty}"`)}`;
 }
 
-function mixRow({ role, t, total }, i, scale) {
+function mixRow({ role, t, total, more }, i, scale) {
   const y = i * (MIX.bar + MIX.gap);
   let x = MIX.label;
   const segs = TOKEN_KINDS.map(([k, label, v], j) => {
     const w = t[k] * scale, last = j === TOKEN_KINDS.length - 1;
-    const tip = `<b>${esc(role)}</b><br>${label}: ${fmt.tok(t[k])} <span class="k">(${fmt.pct(total ? (100 * t[k]) / total : 0)})</span>`;
+    const tip = `<b>${esc(role)}</b><br>${label}: ${fmt.tok(t[k])} <span class="k">(${fmt.pct(total ? (100 * t[k]) / total : 0)})</span>${more}`;
     const shape = segment(x, y, Math.max(0, w - (last ? 0 : 2)), last);
     x += w;
     return `<path d="${shape}" fill="var(${v})" data-tip="${esc(tip)}"/>`;
