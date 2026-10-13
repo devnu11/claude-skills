@@ -332,12 +332,19 @@ def _thread(files: RunFiles) -> list[dict]:
     return [entry.as_dict() for entry in threads.Threads(files.config.run_dir).all()]
 
 
+def _item_act(act: opinions.Settled | None) -> dict | None:
+    """The act on an opinion as the snapshot shows it (the item names the opinion)."""
+    if act is None:
+        return None
+    return {k: v for k, v in act.as_dict().items() if k not in ("opinion", "story")}
+
+
 def _opinion_item(opinion: opinions.Opinion, board: opinions.Board, view: backlog.View) -> dict:
     latest = board.latest()[opinion.story] == opinion
     act = board.act_of(opinion.id)
     route = opinions.route_of(opinion, view) if latest and act is None else opinions.Route.NONE
     return {**opinion.as_dict(), "latest": latest, "route": str(route),
-            "act": act.as_dict() if act else None}  # fmt: skip
+            "act": _item_act(act)}  # fmt: skip
 
 
 def _opinions(files: RunFiles) -> dict:
