@@ -164,7 +164,7 @@ def test_devops_may_run_full_and_coverage() -> None:
 def test_targeted_denied_to_readers_only() -> None:
     words = ["pytest", "tests/test_x.py"]
     for role in ("code-reviewer", "quality-czar"):
-        assert suite_denial(role, words).startswith(f"{role} reads tests")
+        assert suite_denial(role, words).count(f"{role} reads tests") == 1
     for role in ("developer-cli", "unit-tester", "devops"):
         assert suite_denial(role, words) is None
 

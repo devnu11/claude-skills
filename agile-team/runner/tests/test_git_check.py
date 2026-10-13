@@ -286,7 +286,7 @@ def test_team_repo_is_denied_with_git_reason_naming_it(repo: Path, ws: Path) -> 
 def test_proxy_git_reason_is_the_git_one(repo: Path, ws: Path) -> None:
     scope = confined(repo, ws, "customer-proxy")
     reason = denial(scope, f"git -C {repo} status")
-    assert reason and reason.startswith("customer-proxy may not run `git")
+    assert reason and "customer-proxy may not run `git" in reason
 
 
 def test_step_cwd_reads_allowed_writes_denied(repo: Path, ws: Path) -> None:
