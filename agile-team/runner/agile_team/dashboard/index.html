@@ -383,7 +383,16 @@ const fmt = {
     const min = Math.floor(seconds / 60);
     return min < 90 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
   },
+  /** `0 min`, `<1 min`, `N min` or `H h M min`; minutes floored (ST9). */
+  span(seconds) {
+    if (seconds <= 0) return "0 min";
+    if (seconds < 60) return "<1 min";
+    const min = Math.floor(seconds / 60);
+    return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
+  },
 };
+/** Whether a step has ended. */
+const finished = (s) => s.ended_at != null;
 const pill = (text, tone = "", dot = true) =>
   `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
 const storyChip = (id) => id ? `<span class="story-chip">${esc(id)}</span>` : "";
@@ -430,7 +439,7 @@ function md(text) {
 
 // ----- empty states -----------------------------------------------------------
 
-const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns", "reorders", "thread"];
+const LIST_KEYS = ["pipeline", "roles", "stories", "requirements", "events", "ledger", "messages", "answers", "turns", "reorders", "thread", "steps"];
 const HEALTH_DEFAULT = { level: "idle", reason: "", model_note: null };
 const RUN_DEFAULTS = {
   status: "idle", sprint: 0, task: "", budget_usd: 0, manager_every_pct: 25, round_cap: 3, manager_due: [],
@@ -467,6 +476,7 @@ function asOf(snap, cursor) {
     run: { ...snap.run, sprint: stories.some((s) => s.sprint) ? 1 : 0,
            manager_due: capped.map((s) => `story ${s.id} ${s.repeated ? "repeated a setback" : "hit the round cap"}`) },
     ledger: snap.ledger.filter(upto),
+    steps: stepsAsOf(snap.steps, cursor),
     turns: snap.turns.filter(upto), heartbeat: null, health: HEALTH_DEFAULT,
     messages: snap.messages.filter(upto),
     answers: snap.answers.filter(upto),
@@ -474,6 +484,12 @@ function asOf(snap, cursor) {
       .map((r) => ({ ...r, history: r.history.filter(upto) }))
       .filter((r) => r.history.length),
   };
+}
+
+/** Steps as they stood at `cursor`: later starts dropped, later ends reopened (ST15). */
+function stepsAsOf(steps, cursor) {
+  const reopen = { ended_at: null, seconds: null, status: null };
+  return steps.filter((s) => s.at <= cursor).map((s) => (s.ended_at > cursor ? { ...s, ...reopen } : s));
 }
 
 function replayStories(stories, events) {
@@ -652,29 +668,44 @@ function focusStory(view) {
   return liveStep(view)?.story || activeStep(view.events)?.story || lastEnd?.story || "";
 }
 
-/** Ledger entries inside the chosen scope (F3). */
-function scopeEntries(view) {
-  if (ui.scope === "run") return view.ledger;
+/** Whether a row (ledger entry or step) is inside the chosen scope (F3, ST10). */
+function inScope(view) {
+  if (ui.scope === "run") return () => true;
   const focus = focusStory(view);
-  if (ui.scope === "story") return view.ledger.filter((l) => l.story === focus);
-  return sprintEntries(view, view.stories.find((s) => s.id === focus)?.sprint ?? view.run.sprint);
+  if (ui.scope === "story") return (row) => row.story === focus;
+  return inSprint(view, view.stories.find((s) => s.id === focus)?.sprint ?? view.run.sprint);
 }
 
-/** Entries of sprint `n`: its stories' entries, and unstoried ones inside its time window. */
-function sprintEntries(view, n) {
+/** Whether a row belongs to sprint `n`: its story is a member, or it is unstoried inside the window. */
+function inSprint(view, n) {
   const members = new Set(view.stories.filter((s) => s.sprint === n).map((s) => s.id));
   const starts = view.events.filter((e) => e.kind === "sprint-start");
   const at = starts.findIndex((e) => e.data.sprint === n);
   const from = at < 0 ? Infinity : starts[at].at, to = starts[at + 1]?.at ?? Infinity;
-  return view.ledger.filter((l) => (l.story ? members.has(l.story) : l.at >= from && l.at < to));
+  return (row) => (row.story ? members.has(row.story) : row.at >= from && row.at < to);
 }
 
-/** `{role: {tokens, cost}}` over the scope's entries; the ledger is the only source (D5). */
+/** Ledger entries inside the chosen scope (F3). */
+function scopeEntries(view) { return view.ledger.filter(inScope(view)); }
+
+/** Finished steps inside the chosen scope (ST10). */
+function scopeSteps(view) { return view.steps.filter(finished).filter(inScope(view)); }
+
+/** `{role: {tokens, cost, seconds}}`: the ledger's tokens and cost, the steps' time (D5, ST10). */
 function scopeTotals(view) {
   const totals = {};
   for (const l of scopeEntries(view)) {
-    const t = (totals[l.role] ??= { tokens: 0, cost: 0 });
+    const t = (totals[l.role] ??= { tokens: 0, cost: 0, seconds: 0 });
     t.tokens += sumTok(l.tokens); t.cost += l.cost_usd;
+  }
+  return addStepTimes(totals, scopeSteps(view));
+}
+
+/** Add each finished step's seconds to its role's totals (killed steps add 0). */
+function addStepTimes(totals, steps) {
+  for (const s of steps) {
+    const t = (totals[s.role] ??= { tokens: 0, cost: 0, seconds: 0 });
+    t.seconds += s.seconds ?? 0;
   }
   return totals;
 }
@@ -786,12 +817,21 @@ function liveLines(view, ctx, name) {
   return [rate, turn, spent].map((l) => "<br/>" + mmdText(l)).join("");
 }
 
+/** The newest open step of role `name`, or undefined. */
+const openStep = (view, name) => view.steps.findLast((s) => s.role === name && !finished(s));
+
+/** `<br/>⏱ running 12 min` for a role whose step is open, else "" (AC2, ST11). */
+function runningLine(view, name) {
+  const step = openStep(view, name);
+  return step ? "<br/>" + mmdText("⏱ running " + fmt.span(clockNow(view) - step.at)) : "";
+}
+
 function nodeLabel(view, name, ctx) {
   const info = roleInfo(view, name), s = ctx.stats[name], t = ctx.totals[name];
   const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
   const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
-  const total = `${fmt.tok(t?.tokens ?? 0)} · ${fmt.usd(t?.cost ?? 0)}`;
-  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${total}${bounced}${liveLines(view, ctx, name)}`;
+  const total = `${fmt.tok(t?.tokens ?? 0)} · ${fmt.usd(t?.cost ?? 0)} · ${fmt.span(t?.seconds ?? 0)}`;
+  return `${mmdText(name)}<br/>${mmdText(info.model + local)} · ${total}${bounced}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
 }
 
 const STEER = "grpSteering";
@@ -1651,6 +1691,22 @@ function totalsBy(ledger, key) {
   return out;
 }
 
+/** Ledger totals per group, for the Tokens and Dollars units. */
+function ledgerTotals(view, key) { return totalsBy(view.ledger, key); }
+
+/** Step-time totals per group over finished steps, for the Time unit. */
+function stepTotals(view, key) { return timeBy(view.steps.filter(finished), key); }
+
+/** `{group: {steps, seconds}}` over `steps` (killed steps count, adding 0 s). */
+function timeBy(steps, key) {
+  const out = {};
+  for (const s of steps) {
+    const t = (out[s[key] ?? "(no story)"] ??= { steps: 0, seconds: 0 });
+    t.steps++; t.seconds += s.seconds ?? 0;
+  }
+  return out;
+}
+
 function renderTokens(view) {
   renderTiles(view);
   renderSpend(view);
@@ -1728,10 +1784,11 @@ function renderGroup() {
 
 /** Bar rows for the chosen grouping, largest first in the chosen unit. */
 function barRows(view) {
-  const groups = Object.entries(totalsBy(view.ledger, ui.group));
-  const spend = sum(groups, ([, t]) => t.cost);
+  const unit = UNITS[ui.unit];
+  const groups = Object.entries(unit.totals(view, ui.group));
+  const whole = sum(groups, ([, t]) => unit.total(t));
   return groups
-    .map(([role, t]) => ({ role, t, spend, total: UNITS[ui.unit].total(t) }))
+    .map(([role, t]) => ({ role, t, whole, total: unit.total(t) }))
     .sort((a, b) => b.total - a.total);
 }
 
@@ -1759,9 +1816,15 @@ function costLegend() {
   return `<span><i class="sw" style="background:var(--s1)"></i>Cost (USD)</span>`;
 }
 
+/** Legend of the Time unit (ST14). */
+function timeLegend() {
+  return `<span><i class="sw" style="background:var(--s2)"></i>Step time (agent steps only; runner stages: see A6)</span>`;
+}
+
 const UNITS = {
-  tokens: { label: "Tokens", title: "Tokens by", total: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), legend: tokenLegend, row: mixRow },
-  usd: { label: "Dollars", title: "Spend by", total: (t) => t.cost, legend: costLegend, row: costRow },
+  tokens: { label: "Tokens", title: "Tokens by", totals: ledgerTotals, total: (t) => sum(TOKEN_KINDS, ([k]) => t[k]), legend: tokenLegend, row: mixRow },
+  usd: { label: "Dollars", title: "Spend by", totals: ledgerTotals, total: (t) => t.cost, legend: costLegend, row: costRow },
+  time: { label: "Time", title: "Time by", totals: stepTotals, total: (t) => t.seconds, legend: timeLegend, row: timeRow },
 };
 
 function renderUnit() {
@@ -1770,13 +1833,24 @@ function renderUnit() {
   $("#mix-title").textContent = UNITS[ui.unit].title;
 }
 
-function costRow({ role, t, spend, total }, i, scale) {
-  const y = i * (MIX.bar + MIX.gap), w = Math.max(0, t.cost * scale);
-  const share = spend ? (100 * t.cost) / spend : 0;
+function costRow({ role, t, whole, total }, i, scale) {
+  const w = Math.max(0, t.cost * scale), share = whole ? (100 * t.cost) / whole : 0;
   const tip = `<b>${esc(role)}</b><br>${fmt.usd(t.cost)} <span class="k">(${fmt.pct(share)} of spend)</span> · ${t.steps} steps`;
-  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(role)}</text>
-    <path d="${segment(MIX.label, y, w, true)}" fill="var(--s1)" data-tip="${esc(tip)}"/>
-    <text x="${MIX.label + w + 6}" y="${y + MIX.bar / 2 + 4}">${fmt.usd(total)}</text>`;
+  return oneBar(i, { role, w, fill: "var(--s1)", tip, value: fmt.usd(total) });
+}
+
+function timeRow({ role, t, whole, total }, i, scale) {
+  const w = Math.max(0, t.seconds * scale), share = whole ? (100 * t.seconds) / whole : 0;
+  const tip = `<b>${esc(role)}</b><br>${fmt.span(t.seconds)} <span class="k">(${fmt.pct(share)} of time)</span> · ${t.steps} steps`;
+  return oneBar(i, { role, w, fill: "var(--s2)", tip, value: fmt.span(total) });
+}
+
+/** One single-colour bar row: label, rounded bar with tooltip, value text. */
+function oneBar(i, bar) {
+  const y = i * (MIX.bar + MIX.gap);
+  return `<text class="ink2" x="${MIX.label - 8}" y="${y + MIX.bar / 2 + 4}" text-anchor="end">${esc(bar.role)}</text>
+    <path d="${segment(MIX.label, y, bar.w, true)}" fill="${bar.fill}" data-tip="${esc(bar.tip)}"/>
+    <text x="${MIX.label + bar.w + 6}" y="${y + MIX.bar / 2 + 4}">${bar.value}</text>`;
 }
 
 function mixRow({ role, t, total }, i, scale) {
@@ -2052,11 +2126,12 @@ function adopt(snap) {
   data.skew = data.snap.generated_at - Date.now() / 1000;
 }
 
-/** Once a second, move the ages and re-judge the alert; the flow chart is not redrawn. */
+/** Once a second, move the ages and re-judge the alert; the flow chart redraws when its source changes. */
 function tick() {
   if (!data.view || MOCK) return;
   safely(renderStatusRow, data.view);
   safely(applyAlert, data.view);
+  if (ui.tab === "flow") safely(renderFlow, data.view);
 }
 
 function onStreamError() {

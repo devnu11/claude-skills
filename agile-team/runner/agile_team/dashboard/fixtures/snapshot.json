@@ -1821,6 +1821,19 @@
    }
   },
   {
+   "id": "e87b",
+   "at": 1791472300.0,
+   "kind": "step-end",
+   "role": "code-reviewer",
+   "story": "s2",
+   "data": {
+    "status": "done",
+    "summary": "Re-review clean.",
+    "next_role": null,
+    "open_questions": []
+   }
+  },
+  {
    "id": "e88",
    "at": 1791471900.0,
    "kind": "story-opened",
@@ -2555,6 +2568,268 @@
     "cache_creation": 17320
    },
    "turns": 5
+  }
+ ],
+ "steps": [
+  {
+   "role": "manager",
+   "story": null,
+   "at": 1791451776.5,
+   "sprint": 1,
+   "ended_at": 1791452188.1,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 411.6
+  },
+  {
+   "role": "architect",
+   "story": "s1",
+   "at": 1791452316.6,
+   "sprint": 1,
+   "ended_at": 1791452620.3,
+   "status": "done",
+   "model": "opus",
+   "seconds": 303.7
+  },
+  {
+   "role": "unit-tester",
+   "story": "s1",
+   "at": 1791453376.4,
+   "sprint": 1,
+   "ended_at": 1791453754.2,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 377.8
+  },
+  {
+   "role": "developer-cli",
+   "story": "s1",
+   "at": 1791454322.5,
+   "sprint": 1,
+   "ended_at": 1791454539.2,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 216.7
+  },
+  {
+   "role": "quality-czar",
+   "story": "s1",
+   "at": 1791454920.3,
+   "sprint": 1,
+   "ended_at": 1791455320.9,
+   "status": "done",
+   "model": "haiku",
+   "seconds": 400.6
+  },
+  {
+   "role": "code-reviewer",
+   "story": "s1",
+   "at": 1791455669.7,
+   "sprint": 1,
+   "ended_at": 1791456149.6,
+   "status": "done",
+   "model": "opus",
+   "seconds": 479.9
+  },
+  {
+   "role": "architect",
+   "story": "s1",
+   "at": 1791456558.6,
+   "sprint": 1,
+   "ended_at": 1791456696.3,
+   "status": "done",
+   "model": "opus",
+   "seconds": 137.7
+  },
+  {
+   "role": "integration-tester",
+   "story": "s1",
+   "at": 1791457254.8,
+   "sprint": 1,
+   "ended_at": 1791457572.1,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 317.3
+  },
+  {
+   "role": "customer-proxy",
+   "story": "s1",
+   "at": 1791458071.8,
+   "sprint": 1,
+   "ended_at": 1791458273.1,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 201.3
+  },
+  {
+   "role": "scribe",
+   "story": null,
+   "at": 1791458714.5,
+   "sprint": 1,
+   "ended_at": 1791458874.4,
+   "status": "done",
+   "model": "haiku",
+   "seconds": 159.9
+  },
+  {
+   "role": "architect",
+   "story": "s3",
+   "at": 1791459025.0,
+   "sprint": 1,
+   "ended_at": 1791459117.1,
+   "status": "done",
+   "model": "opus",
+   "seconds": 92.1
+  },
+  {
+   "role": "unit-tester",
+   "story": "s3",
+   "at": 1791460131.0,
+   "sprint": 1,
+   "ended_at": 1791460618.8,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 487.8
+  },
+  {
+   "role": "architect",
+   "story": "s2",
+   "at": 1791460963.5,
+   "sprint": 1,
+   "ended_at": 1791461087.9,
+   "status": "done",
+   "model": "opus",
+   "seconds": 124.4
+  },
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "at": 1791461681.1,
+   "sprint": 1,
+   "ended_at": 1791462078.2,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 397.1
+  },
+  {
+   "role": "unit-tester",
+   "story": "s2",
+   "at": 1791462331.5,
+   "sprint": 1,
+   "ended_at": 1791462803.8,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 472.3
+  },
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "at": 1791463383.1,
+   "sprint": 1,
+   "ended_at": 1791463825.0,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 441.9
+  },
+  {
+   "role": "developer-cli",
+   "story": "s2",
+   "at": 1791464423.3,
+   "sprint": 1,
+   "ended_at": 1791464976.5,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 553.2
+  },
+  {
+   "role": "quality-czar",
+   "story": "s2",
+   "at": 1791465739.1,
+   "sprint": 1,
+   "ended_at": 1791466264.0,
+   "status": "done",
+   "model": "haiku",
+   "seconds": 524.9
+  },
+  {
+   "role": "code-reviewer",
+   "story": "s2",
+   "at": 1791466490.1,
+   "sprint": 1,
+   "ended_at": 1791466594.3,
+   "status": "changes_requested",
+   "model": "opus",
+   "seconds": 104.2
+  },
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "at": 1791467405.9,
+   "sprint": 1,
+   "ended_at": 1791467982.9,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 577.0
+  },
+  {
+   "role": "architect",
+   "story": "s4",
+   "at": 1791468674.4,
+   "sprint": 1,
+   "ended_at": 1791469009.0,
+   "status": "blocked",
+   "model": "opus",
+   "seconds": 334.6
+  },
+  {
+   "role": "developer-cli",
+   "story": "s2",
+   "at": 1791469697.9,
+   "sprint": 1,
+   "ended_at": 1791470270.8,
+   "status": "done",
+   "model": "sonnet",
+   "seconds": 572.9
+  },
+  {
+   "role": "quality-czar",
+   "story": "s2",
+   "at": 1791470832.4,
+   "sprint": 1,
+   "ended_at": 1791471226.3,
+   "status": "done",
+   "model": "haiku",
+   "seconds": 393.9
+  },
+  {
+   "role": "code-reviewer",
+   "story": "s2",
+   "at": 1791471886.1,
+   "sprint": 1,
+   "ended_at": 1791472300.0,
+   "status": "done",
+   "model": "opus",
+   "seconds": 413.9
+  },
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "at": 1791472640.0,
+   "sprint": 1,
+   "ended_at": 1791472830.0,
+   "status": "interrupted",
+   "model": "claude-sonnet-4-5-20250929",
+   "seconds": 190.0
+  },
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "at": 1791472960.0,
+   "sprint": 1,
+   "ended_at": null,
+   "status": null,
+   "model": "sonnet",
+   "seconds": null
   }
  ],
  "messages": [

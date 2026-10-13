@@ -26,7 +26,7 @@ from ..relay import INBOX, OUTBOX, REPLY
 from ..reorders import APPLIED, REORDERS_DIR, Request, Requests
 from ..roles import RoleBook, RoleError
 from ..state import STATE_FILE, RunState
-from . import story_files
+from . import step_times, story_files
 
 RUN_FILES = (STATE_FILE, EVENTS, LEDGER, OUTBOX, INBOX, live.HEARTBEAT, live.TURNS)
 TURN_TAIL_BYTES = 262_144
@@ -143,6 +143,27 @@ def _role(files: RunFiles, name: str) -> dict | None:
     if not role.enabled:
         return None
     return {"name": name, "model": role.model, "provider": role.provider}
+
+
+UNKNOWN_MODEL = "unknown"
+
+
+def _configured_model(files: RunFiles, role: str) -> str:
+    """The role's model as configured now (ST7), or ``UNKNOWN_MODEL``."""
+    found = _role(files, role)
+    return found["model"] if found else UNKNOWN_MODEL
+
+
+def _step(files: RunFiles, span: step_times.Span) -> dict:
+    """One ``steps`` object; ``model`` falls back to the configured one (ST7)."""
+    step = span.as_dict()
+    step["model"] = span.model or _configured_model(files, span.role)
+    return step
+
+
+def _steps(files: RunFiles) -> list[dict]:
+    """Every agent step with its wall time (s96)."""
+    return [_step(files, span) for span in step_times.spans(files.events)]
 
 
 def _roles(files: RunFiles) -> list[dict]:
@@ -435,6 +456,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "reorders": _reorders,
     "events": _events,
     "ledger": _ledger,
+    "steps": _steps,
     "messages": _messages,
     "answers": _answers,
     "thread": _thread,
