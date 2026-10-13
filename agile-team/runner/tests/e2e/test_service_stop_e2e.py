@@ -42,7 +42,7 @@ def free_port() -> int:
 
 
 def make_config(configured: Path, tmp_path: Path, mode: str) -> tuple[config_mod.Config, int]:
-    """A repo whose web delivery runs a shell leader that backgrounds a slow server."""
+    """A repo whose web acceptance environment runs a shell leader that backgrounds a slow server."""
     script = tmp_path / "slow_server.py"
     script.write_text(SERVER)
     port = free_port()
@@ -57,7 +57,7 @@ def make_config(configured: Path, tmp_path: Path, mode: str) -> tuple[config_mod
         }
     ]
     (configured / config_mod.CONFIG_NAME).write_text(tomli_w.dumps(cfg))
-    git(configured, "commit", "-qam", "slow delivery")
+    git(configured, "commit", "-qam", "slow acceptance environment")
     return config_mod.load(configured), port
 
 

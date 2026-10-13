@@ -1,4 +1,4 @@
-"""s26 end to end: a `web` delivery is started from its presentation and probed, for real."""
+"""s26 end to end: a `web` acceptance environment is started from its presentation and probed, for real."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def free_port() -> int:
 
 @pytest.fixture
 def web(configured: Path):
-    """A repo with a real `dashboard` delivery on a free port, and the trial for it."""
+    """A repo with a real `dashboard` acceptance environment on a free port, and the trial for it."""
     port = free_port()
     cfg = dict(PY_CONFIG)
     cfg["environment"] = [
@@ -43,7 +43,7 @@ def web(configured: Path):
         }
     ]
     (configured / config_mod.CONFIG_NAME).write_text(tomli_w.dumps(cfg))
-    git(configured, "commit", "-qam", "web delivery")
+    git(configured, "commit", "-qam", "web acceptance environment")
     config = config_mod.load(configured)
     story = gates.StoryState("s1", "Dash", "e2e", sprint=1, environment="dashboard")
     return config, story, port

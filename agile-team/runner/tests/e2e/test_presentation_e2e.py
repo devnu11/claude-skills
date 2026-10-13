@@ -70,7 +70,7 @@ def test_e2e_gate_fails_without_a_presentation_and_passes_with_one(make_runtime)
     assert story.step == "acceptance"
 
 
-def test_each_delivery_gets_its_own_presentation_dir(make_runtime) -> None:
+def test_each_environment_gets_its_own_presentation_dir(make_runtime) -> None:
     """AC1/G9: each story has its own dir; laying out never wipes existing files."""
     rt = make_runtime(FakeQuery())
     rt.pipeline.steps = ["e2e", "acceptance"]
