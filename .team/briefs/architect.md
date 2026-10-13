@@ -1,6 +1,19 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 done)
+**Last updated:** 2026-10-12 (s89 done)
+
+## s89: Guard refined to let stdlib read source on 3.13 (no new ADR, extends s71)
+
+Python 3.13 changed `linecache.updatecache` to use `__spec__.loader.get_source`, causing `open` calls charged to a non-exempt module (e.g. `_pytest.assertion.rewrite`). Rules T1–T6 fix the guard:
+
+- **T1:** Source read is stdlib's. An audited event allowed when a frame of `SOURCE_READERS` (`traceback`, `linecache`) is on the stack **inside** the nearest guarded frame (`agile_team`, `tests`). With no guarded frame, whole stack counts.
+- **T2:** Opener rule unchanged. `"traceback"` joins `EXEMPT_CALLERS`.
+- **T3:** Code under test still fails. An open from `agile_team.*` or `tests.*` is refused even while traceback formats.
+- **T4:** No new relaxation elsewhere. No event allowed by outer exempt modules (xdist, coverage).
+- **T5:** Violation names its caller with `(caller: {caller})` suffix.
+- **T6:** Patched calls (line 209) unchanged.
+
+New helper `call_audited_through(names, event)` builds relay chains from synthetic modules for testing multi-frame stacks. See design `agile-team/docs/design/s89.md`.
 
 ## s81: CI stage at boundary; verdict rules data-driven (ADR-0040, extends s29)
 

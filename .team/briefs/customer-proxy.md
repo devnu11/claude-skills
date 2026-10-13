@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 acceptance complete)
+**Last updated:** 2026-10-12 (s89 done)
+
+## s89: Unit suite green on 3.13 and 3.12 (bug fix, acceptance complete)
+
+Story accepted on AC1–AC3. AC1: 36 unit tests that failed on 3.13 with OS-guard errors now pass. AC2: Traceback formatting does not trigger guard. AC3: Guard still catches real code reaching OS. AC4 (CI on PR #16) will be verified when review branch is pushed and s81 CI stage runs at sprint boundary—only `ci_green` hand-over marks PR ready. No new sandbox rules or interaction changes.
 
 ## s81: Sprint boundary waits for PR's CI; you'll see outcomes in docs
 

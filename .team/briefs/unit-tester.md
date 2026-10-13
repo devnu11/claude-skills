@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 done)
+**Last updated:** 2026-10-12 (s89 done)
+
+## s89: OS guard refined to allow stdlib source reads on 3.13 (test infrastructure, no new ADR)
+
+Guard rules T1–T6 (design): T1 allows source reads by `traceback`/`linecache` inside a guarded frame. T2–T4 unchanged (exempt callers, code under test still fails, no other relaxation). T5 names the caller in violations. T6 patched calls unchanged. **Changes:** `tests/os_guard.py` (add `_modules()` generator, `_reading_source()`, `SOURCE_READERS` tuple, `CALLER_NOTE`); `tests/test_os_guard.py` (new helper `call_audited_through` for multi-frame stacks, 7 parametrized T1/T3/T4 test cases, AC2 test `test_formatting_a_real_traceback_passes_the_guard`). All existing tests unchanged and pass. 36 earlier 3.13 failures now pass. Coverage 99.31%, ruff clean. See design `agile-team/docs/design/s89.md`.
 
 ## s81: Test CI module, boundary changes, fake Prs (no new ADR)
 

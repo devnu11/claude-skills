@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s81 done, e2e pending)
+**Last updated:** 2026-10-12 (s89 done)
+
+## s89: OS guard refined for 3.13 (test infrastructure, no new ADR) — verdict ship
+
+**Scope:** `tests/os_guard.py`, `tests/test_os_guard.py`, `docs/architecture.md` (one row), `docs/design/s89.md`. **Verdict: ship.** Diff matches design line for line. Coverage 99.31%, ruff clean. No test deleted or weakened, no runtime code changed. Guard refined with rules T1–T6. New helper `call_audited_through` builds relay chains for testing multi-frame stacks (reuses `as_module`). `_modules()` is new generator yielding stack module names; `_caller()` refactored to use it (DRY). `_reading_source()` implements T1 (reader on stack inside guarded frame). AC1 (3.13 pass, 36 failures fixed), AC2 (traceback formatting test), AC3 (guard still catches real agile_team code) verified. AC4 will be checked at s81 CI boundary. See design `agile-team/docs/design/s89.md`.
 
 ## s81: CI module, boundary stage, Prs protocol — verdict ship (e2e work pending)
 
