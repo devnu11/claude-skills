@@ -75,7 +75,8 @@ def run_dir(scratch: Path) -> Path:
 
 
 def test_triggers_table_names() -> None:
-    assert tuple(name for name, _ in watch.TRIGGERS) == ("message", "liaison_message", "status", "health")
+    names = tuple(name for name, _ in watch.TRIGGERS)
+    assert names == ("message", "liaison_message", "status", "health")
 
 
 def test_a_first_watch_with_a_populated_outbox_does_not_report_it(run_dir: Path) -> None:
