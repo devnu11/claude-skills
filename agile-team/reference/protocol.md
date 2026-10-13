@@ -413,6 +413,7 @@ the runner applies the request between steps.
 | `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for the question, answer and handoff text (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead. |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
+| `GET /api/misc?role=R&story=S&step=P&opened_at=T` | a step's or PO turn's `misc` calls (s101) as a JSON array: the `tools.jsonl` rows that the snapshot's `tools` gathering puts in that group's `misc`, re-gathered from the same tail under the current `[dashboard] collapse_under_s`, sorted by `at`, each as written (`[]` when none or when the tail has moved on). Each parameter is its first value or `""`; `story` and `step` `""` mean none. An empty `role`, or an `opened_at` that is not a finite number, is a 404. It is a read, so it needs no token. |
 | `POST /api/reorder` | body `{"story", "position", "version"}`: `position` is the place in the Backlog group, and `version` is the snapshot's `run.order_version`. It needs the `X-Agile-Team-Token` header and a localhost peer, else 403. A bad body gets 400. Otherwise it writes `.team/run/reorders/r<N>.json` and answers 202 `{"id": "r<N>", "status": "queued"}`. The body may hold at most 4096 bytes. |
 | `POST /api/thread` | body `{"story", "to", "text"}`: `to` is `product-owner` or `liaison`, `story` an opened story's id, and `text` 1 to 4000 characters once stripped. Checked in order: a localhost peer and the `X-Agile-Team-Token` header, else 403 (the body is not read); `Content-Length` from 1 to 32768, else 400; the body's shape, else 400; a known story, else 400. Otherwise it writes the post (see "Story threads") and answers 202 `{"id": "t<N>" or "lp<N>", "status": "posted"}`. |
 | `POST /api/review` | body: any JSON object (its keys are ignored). Checked in order: a localhost peer and the token, else 403 (the body is not read); `Content-Length` from 1 to 4096 and a JSON object, else 400. Otherwise it posts the review request (see "Liaison opinions") and answers 202 `{"id": "lp<N>", "status": "asked"}`. |
@@ -580,7 +581,11 @@ gate runs. A failed write never stops the thread. Its first failure goes to
           "last_turn_at": 1791800012.5, "quiet_since": 1791800012.5,
           "tool": {"name": "Bash", "started_at": 1791800013.0},
           "tokens": {"input": 30, "output": 5120, "cache_read": 912340, "cache_creation": 40100},
-          "cost_usd": 0.4213}}
+          "cost_usd": 0.4213},
+ "calls": [{"role": "developer-cli", "story": "s29", "step": "implement", "opened_at": 1791799500.0,
+            "tool": "Bash", "tool_use_id": "toolu_01…", "label": "Dev: run the unit tests",
+            "detail": "uv run pytest -q tests/test_x.py", "at": 1791800013.0, "mono": 522993.0,
+            "slept": 0.0, "status": "open"}]}
 ```
 
 `beat` is `beating`, or `ended` once the runner has exited through Python
@@ -602,6 +607,30 @@ developer-cli on s29", "since": …}`, else `null`. Other chores are
 `waiting for answers to m3` while the PO waits on the human. `quiet_since` is when
 the query last had the floor back: its last turn, a tool's end, the end of
 an inner query (a role step inside `run_role`), or the end of a chore.
+`calls` (s101) lists the tool calls still open in **every** open query,
+the outer one first (the PO's `po.run_role`), then the inner one (the
+role's calls). Each row has the `tools.jsonl` keys up to `slept` (the
+detail already masked) and `"status": "open"`. Once `beat` is `ended`,
+`calls` is `[]`. The key is additive, so `version` stays 2.
+
+**Expandable timeline rows (s101).** On a story's timeline, a step bar or
+a PO-turn bar (or its row label, for all its bars) opens nested rows on
+the same axis. A step bar takes the snapshot `tools` group with its role
+and story whose `opened_at` falls in the step (never a `po-session`); a
+PO-turn bar takes the PO group whose `opened_at` equals the `po-turn`
+event's `data.opened_at`. Both add the heartbeat's open `calls` that
+match. The rows are a `model` row (the bar's span less the union of its
+calls; its total is `model_s` from the `step-end` or `po-turn` event,
+else that measure), one lane per stacking level of calls (overlapping
+calls take different lanes, touching ones share), and a `misc` box off
+the axis when the group gathered any. A strip's look comes from its
+status: `ok`, `error`, `timeout`, `unfinished` (hatched), `open` (ends
+at now), or `waiting` for an ok or open `po.run_role`. Its name and
+detail sit under it when they fit, else in its tooltip. Clicking the
+misc box loads its calls once from `GET /api/misc`. A bar with no group
+and no open calls shows one `no tool calls` row. In a replay, calls
+after the cursor are dropped and a call still running at the cursor
+shows as open; the misc list is the whole step's.
 
 **Interrupted steps.** A step that ends without a handoff (an error, a
 limit, `stop --now`, a crash, a budget or checkout halt) gets a `step-end`

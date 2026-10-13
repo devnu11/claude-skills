@@ -164,6 +164,47 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 The page follows your system's light or dark setting. The ◐ button in the
 header switches between automatic, light and dark.
 
+## Story timeline
+
+Open a story's row on the Backlog tab. Under **Timeline** is one time axis
+from when the story was opened to when it was done, or to now. Each role
+that worked on it has a row, then **PO** (the Product Owner's turns) and
+**runner** (the runner's own stages, such as gates). Step bars are
+coloured by how the step ended, a bounce draws an arrow to the next step,
+and gaps say why nothing ran: asleep, a question, a hold, other work or
+idle. The header totals the work, the runner, the PO, the waiting and the
+sleep. Switch **Story / Sprint** to see the sprint's other stories, and
+zoom, pan or follow now. Done stories sit in a folded **Done** group, and a
+Board card's `timeline` link opens its row.
+
+**See a step's tool calls.** Click a step bar or a PO-turn bar, or the
+label of its row to open every bar on that row. Click again to close.
+Rows open under it, on the same time axis:
+
+- **model**: the bar's time not spent in a tool call, with its total
+  (for example `model · 41.2 s`). For a PO turn, the wait on the role it
+  ran is a tool call, so it is not counted as model time.
+- **tools**: one strip per tool call. Calls that ran at the same time stack
+  into extra lanes (`tools 2`, `tools 3`). Under each strip is the tool's
+  name (for example `Dev: run the unit tests` or `po.run_role`), and under
+  that the first 80 characters of what it ran, in grey. When a strip is
+  too narrow for them, hover it: the tooltip gives the name, the detail,
+  the start, the duration and how it ended.
+- **misc**: a dashed box such as `misc · 3 calls · 0.04 s`. It gathers the
+  shortest calls, which would be too thin to see (the
+  `[dashboard] collapse_under_s` setting), so it is not placed on the time
+  axis. Click it to list those calls under the chart, loaded from the
+  runner when you ask.
+
+A strip's colour says how the call ended: teal for ok, red for an error or
+a timeout, hatched for a call cut off when its step ended, grey for the
+PO's `po.run_role` (waiting on the step it ran), and the accent colour for
+a call still running, which grows towards now. A step with no recorded
+calls (from before tool calls were recorded, or too old for the file's
+tail) says `no tool calls`. In a replay, the misc list still shows the
+whole step. If the tail of the calls file has moved on, the list can be
+shorter than the box's count, or say so when it is empty.
+
 ## Discuss a story
 
 Open a story's row on the Backlog tab. Under its details is the story's
