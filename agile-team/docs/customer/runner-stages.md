@@ -28,6 +28,24 @@ This prints one JSON object:
 - `attach` is what the stage belongs to: a `step`, a `story` or the sprint
   `boundary`.
 
+## Sprint boundary stages
+
+A sprint start runs `boundary.sync` (fetch, and report how far main moved;
+nothing is rebased) and `boundary.check`. A sprint end runs, in order:
+
+| Stage | What it does |
+|---|---|
+| `boundary.sync` | Fetch the target, record the team branch, add the sprint to the review stack |
+| `boundary.check` | Run the full checks |
+| `boundary.review` | Build the sprint's review branch on the target and check it |
+| `boundary.push` | Push the sprint's review branch |
+| `boundary.rebase` | Rebase the team branch onto the target (sprint end only) |
+| `boundary.restack` | Bring every review PR up to date, bottom up: rebase, same tree, push, retarget |
+| `boundary.ci-wait` | Wait for CI on every PR in the stack and read failing logs |
+
+See [review-stack.md](review-stack.md) for what each one means for your
+pull requests.
+
 ## See what each stage did
 
 Every time a stage runs, the runner adds one `runner-stage` line to
