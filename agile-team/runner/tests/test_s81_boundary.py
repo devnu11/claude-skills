@@ -60,6 +60,32 @@ def test_red_holds_with_the_failing_lines_and_says_nothing_is_ready(env: Env) ->
     assert FAILED_LINE in data["checks"]
     assert ci.READY_PHRASE not in env.rt.state.upstream.report
     assert env.rt.state.upstream.stack[0].ci.verdict is CiVerdict.RED
+    assert not unsaid_ready(env)
+
+
+def unsaid_ready(env: Env) -> list:
+    """The posted notes that call a PR ready."""
+    return [m for m in env.rt.relay.messages() if ci.READY_PHRASE in m.text]
+
+
+def test_red_report_becomes_the_ci_failed_handover_line(env: Env) -> None:
+    from agile_team import handover
+
+    at_ci(env, RED)
+    (report,) = env.drive()
+    assert handover.triggers(report) == [handover.Trigger.CI_FAILED]
+    (line,) = handover.report_lines(report, None)
+    assert "unit" in line and FAILED_LINE in line and "NOT ready" in line
+    assert "record_ci_bug" in line and ci.READY_PHRASE not in line
+    due = env.br.due()
+    assert due is None or due.kind is not bd.StepKind.BOUNDARY
+
+
+def test_a_held_boundary_makes_a_sprint_story_wait(env: Env) -> None:
+    at_ci(env, RED)
+    env.drive()
+    assert env.rt.state.boundary.hold is BoundaryHold.CI_FAILED
+    assert env.br.open_end() is False
 
 
 def test_timeout_holds_pending_then_continue_goes_green(env: Env) -> None:
@@ -69,6 +95,8 @@ def test_timeout_holds_pending_then_continue_goes_green(env: Env) -> None:
     data = done_event(env)
     assert b.hold is BoundaryHold.CI_PENDING and data["ci"] == "pending"
     assert "CI checks still running" in data["reason"]
+    assert "unit" in data["checks"]
+    assert not unsaid_ready(env)
     env.prs.check_list, env.prs.wait_checks = GREEN, lambda n, s: True
     call(Tools(env.rt).continue_boundary({"note": ""}))
     env.drive()
@@ -93,6 +121,7 @@ def test_no_checks_finish_as_none_and_never_call_it_ready(env: Env) -> None:
     assert env.rt.state.boundary is None and done_event(env)["ci"] == "none"
     assert up.report.startswith("Sprint 1's review branches are pushed")
     assert ci.NO_CHECKS_WHY in up.report and ci.READY_PHRASE not in up.report
+    assert not unsaid_ready(env)
 
 
 def test_no_non_draft_pr_finishes_as_none(env: Env) -> None:
@@ -237,11 +266,13 @@ def test_a_done_bug_story_gives_no_refusal_and_is_cleared(env: Env) -> None:
 def test_a_legacy_state_without_ci_or_ci_bug_loads() -> None:
     legacy = state.RunState()
     data = json.loads(legacy.to_json())
+    legacy.upstream.stack = [entry(1, pr=5)]
+    data = json.loads(legacy.to_json())
     data["upstream"].pop("ci_bug", None)
     for e in data["upstream"]["stack"]:
         e.pop("ci", None)
     loaded = state.RunState.from_json(json.dumps(data))
-    assert loaded.upstream.ci_bug == "" and loaded.upstream.stack == []
+    assert loaded.upstream.ci_bug == "" and loaded.upstream.stack[0].ci is None
 
 
 def test_a_saved_entry_ci_loads_back_as_a_ci_result() -> None:
