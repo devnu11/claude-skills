@@ -4,7 +4,6 @@ import json
 from dataclasses import asdict
 
 import pytest
-
 from agile_team import gates, owners, roles
 from agile_team.owners import Fix, FixRecord, Item, Owners, Source, Writer
 
@@ -260,7 +259,9 @@ def test_tested_is_true_for_a_test_item_in_a_fix() -> None:
 
 
 def test_not_tested_when_only_lint_fixes() -> None:
-    split = owners.split([item("tests/a.py", Source.LINT)], owners_at(touched=frozenset({"tests/a.py"})))
+    split = owners.split(
+        [item("tests/a.py", Source.LINT)], owners_at(touched=frozenset({"tests/a.py"}))
+    )
     assert split.fixes and not split.tested
 
 
@@ -291,7 +292,12 @@ def test_added_assert_is_a_change() -> None:
 
 @pytest.mark.parametrize(
     "line",
-    ["with pytest.raises(ValueError):", "expect(a).toBe(1)", "assert_eq!(a, b);", "assertEquals(a, b)"],
+    [
+        "with pytest.raises(ValueError):",
+        "expect(a).toBe(1)",
+        "assert_eq!(a, b);",
+        "assertEquals(a, b)",
+    ],
 )
 def test_other_toolchain_assertions_are_marked(line: str) -> None:
     assert owners.asserts_changed(f"+{line}\n")
@@ -382,18 +388,28 @@ def test_fix_refusal_with_no_queue() -> None:
 
 
 def test_fix_refusal_wrong_role() -> None:
-    s = gates.StoryState("s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])])
-    assert gates.fix_refusal("integration-tester", s) == "story s1's next gate fix is for unit-tester"
+    s = gates.StoryState(
+        "s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])]
+    )
+    assert (
+        gates.fix_refusal("integration-tester", s) == "story s1's next gate fix is for unit-tester"
+    )
 
 
 def test_fix_refusal_right_role() -> None:
-    s = gates.StoryState("s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])])
+    s = gates.StoryState(
+        "s1", "t", "implement", sprint=1, fixes=[Fix("unit-tester", [item("tests/a.py")])]
+    )
     assert gates.fix_refusal("unit-tester", s) is None
 
 
 def test_fix_refusal_keeps_the_story_checks() -> None:
     s = gates.StoryState(
-        "s1", "t", "implement", status=gates.StoryStatus.DONE, fixes=[Fix("unit-tester", [item("tests/a.py")])]
+        "s1",
+        "t",
+        "implement",
+        status=gates.StoryStatus.DONE,
+        fixes=[Fix("unit-tester", [item("tests/a.py")])],
     )
     assert gates.fix_refusal("unit-tester", s) == gates.dispatch_refusal("developer", s)
     assert gates.fix_refusal("unit-tester", s) is not None
