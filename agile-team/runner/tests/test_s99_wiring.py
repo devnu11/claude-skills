@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from agile_team import boundary_runner, presentation, sandbox, stages, system, upstream
 from agile_team.boundary import Edge, Stage
-from agile_team.config import Delivery, Targeted
+from agile_team.config import Environment, Targeted
 from agile_team.dispatch import StepRequest
 from agile_team.events import EventKind
 from agile_team.gates import OpenDispute, StoryState
@@ -157,8 +157,8 @@ def test_presentation_layout_is_a_stage(make_runtime, monkeypatch) -> None:
 
 def test_the_customer_proxy_prepare_is_the_env_prepare_stage(make_runtime, monkeypatch) -> None:
     rt = make_runtime(FakeQuery())
-    delivery = Delivery("cli", "package")
-    monkeypatch.setattr(rt.config, "delivery", lambda name: delivery)
+    environment = Environment("cli", "package")
+    monkeypatch.setattr(rt.config, "environment", lambda name: environment)
     monkeypatch.setattr(rt, "_order", lambda d, story: None)
 
     def refuse(config, order):
@@ -167,7 +167,7 @@ def test_the_customer_proxy_prepare_is_the_env_prepare_stage(make_runtime, monke
     rt.prepare_fn = refuse
     plan = type("P", (), {"story": None})()
     with pytest.raises(sandbox.SandboxError):
-        rt._attach_delivery(plan)  # type: ignore[arg-type]
+        rt._attach_environment(plan)  # type: ignore[arg-type]
     (run,) = seen(rt)
     assert run["name"] == "env.prepare" and run["raised"]
 
@@ -226,11 +226,11 @@ def test_a_refused_run_tests_opens_no_stage(make_runtime) -> None:
 
 def test_sandbox_run_shell_notes_the_command_and_code(configured: Path, fake: FakeSystem) -> None:
     fake.reply(("make",), Done(4))
-    d = Delivery("cli", "package", prepare="make it")
+    d = Environment("cli", "package", prepare="make it")
     from agile_team import config as cfg
 
     c = cfg.load(configured)
-    c.deliveries = [d]
+    c.environments = [d]
     p = sandbox.layout(c, d)
     with stages.unlogged(NAME.ENV_PREPARE) as run:
         assert sandbox.run_shell("make it", p) == 4
@@ -240,9 +240,9 @@ def test_sandbox_run_shell_notes_the_command_and_code(configured: Path, fake: Fa
 def web(configured: Path):
     from agile_team import config as cfg
 
-    d = Delivery("ui", "web", prepare="exec serve 8799", url="http://127.0.0.1:8799/")
+    d = Environment("ui", "web", prepare="exec serve 8799", url="http://127.0.0.1:8799/")
     c = cfg.load(configured)
-    c.deliveries = [d]
+    c.environments = [d]
     return c, d
 
 
@@ -269,12 +269,14 @@ def test_a_served_prepare_that_never_answers_notes_not_up_and_re_raises(
     assert (run.detail, run.code) == ("exec serve 8799", stages.NOT_UP)
 
 
-def test_a_web_delivery_without_prepare_notes_nothing(configured: Path, fake: FakeSystem) -> None:
+def test_a_web_environment_without_prepare_notes_nothing(
+    configured: Path, fake: FakeSystem
+) -> None:
     from agile_team import config as cfg
 
-    d = Delivery("ui", "web", url="http://127.0.0.1:8799/")
+    d = Environment("ui", "web", url="http://127.0.0.1:8799/")
     c = cfg.load(configured)
-    c.deliveries = [d]
+    c.environments = [d]
     fake.web["http://127.0.0.1:8799/"] = system.HttpReply(200, "text/html", b"ok")
     with stages.unlogged(NAME.ENV_PREPARE) as run:
         sandbox.Preparer().prepare(c, sandbox.Order(d))

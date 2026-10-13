@@ -108,10 +108,10 @@ def test_login_auth_needs_no_key_but_refuses_an_inherited_one(
     assert "team.auth is login" in msg
 
 
-def test_toolchain_checks_each_delivery_e2e_executable(configured: Path, key_home: Path) -> None:
+def test_toolchain_checks_each_environment_e2e_executable(configured: Path, key_home: Path) -> None:
     pre = check(configured, key_home)
-    pre.config.deliveries[0].e2e = "e2erunner --all"
-    assert pre.toolchain() == ["delivery.cli.e2e: `e2erunner` not found on PATH"]
+    pre.config.environments[0].e2e = "e2erunner --all"
+    assert pre.toolchain() == ["environment.cli.e2e: `e2erunner` not found on PATH"]
 
 
 def test_toolchain_ignores_an_empty_e2e(configured: Path, key_home: Path) -> None:

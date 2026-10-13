@@ -20,10 +20,12 @@ def call(coro) -> dict:
 
 def test_open_story_and_status(make_runtime) -> None:
     t = Tools(make_runtime())
-    assert call(t.open_story({"id": "s1", "title": "Add", "delivery": "cli"}))["step"] == "design"
+    assert (
+        call(t.open_story({"id": "s1", "title": "Add", "environment": "cli"}))["step"] == "design"
+    )
     assert call(t.open_story({"id": "s1", "title": "Add"}))["status"] == "refused"
     status = call(t.story_status({}))
-    assert status["stories"]["s1"]["delivery"] == "cli"
+    assert status["stories"]["s1"]["environment"] == "cli"
     opened = t.runtime.events.events()
     want = {"title": "Add", "step": "design", "depends_on": []}
     assert len(opened) == 1 and opened[0].data == want

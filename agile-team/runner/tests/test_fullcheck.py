@@ -1,4 +1,4 @@
-"""s29 U7: the full checks (lint, static, test, coverage, each delivery's e2e)."""
+"""s29 U7: the full checks (lint, static, test, coverage, each environment's e2e)."""
 
 from pathlib import Path
 
@@ -9,8 +9,8 @@ from agile_team.fullcheck import CheckReport, FullCheck, Judge, Judging, full_ch
 from .conftest import FakeRunner
 
 
-def config_with(scratch: Path, commands: dict, deliveries: list | None = None) -> cfg.Config:
-    c = cfg.from_raw(scratch, {"delivery": deliveries or []})
+def config_with(scratch: Path, commands: dict, environments: list | None = None) -> cfg.Config:
+    c = cfg.from_raw(scratch, {"environment": environments or []})
     c.toolchain.commands = commands
     return c
 

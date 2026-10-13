@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from agile_team import config as cfg
 from agile_team import presentation, sandbox, system
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.gates import StoryState
 from agile_team.presentation import Need
 
@@ -13,8 +13,8 @@ from .conftest import GUIDE_TEXT, present
 from .fake_system import FAKE_ROOT, FakeSystem
 
 
-def story_of(story_id: str = "s4", delivery: str | None = None) -> StoryState:
-    return StoryState(story_id, "A story", "e2e", sprint=1, delivery=delivery)
+def story_of(story_id: str = "s4", environment: str | None = None) -> StoryState:
+    return StoryState(story_id, "A story", "e2e", sprint=1, environment=environment)
 
 
 @pytest.fixture
@@ -53,15 +53,15 @@ def test_presentation_table(kind: str, need: Need) -> None:
     assert presentation.PRESENTATIONS[kind].need is need
 
 
-def test_table_covers_every_delivery_kind() -> None:
-    assert set(presentation.PRESENTATIONS) == set(sandbox.DELIVERY_KINDS)
+def test_table_covers_every_environment_kind() -> None:
+    assert set(presentation.PRESENTATIONS) == set(sandbox.ENVIRONMENT_KINDS)
 
 
-def test_need_of_named_default_and_missing_delivery(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("cli", "package"), Delivery("hw", "manual")]
+def test_need_of_named_default_and_missing_environment(config: cfg.Config) -> None:
+    config.environments = [Environment("cli", "package"), Environment("hw", "manual")]
     assert presentation.recipe_of(config, story_of()).need is Need.WORKSPACE
-    assert presentation.recipe_of(config, story_of(delivery="hw")).need is Need.GUIDE_ONLY
-    config.deliveries = []
+    assert presentation.recipe_of(config, story_of(environment="hw")).need is Need.GUIDE_ONLY
+    config.environments = []
     assert presentation.recipe_of(config, story_of()).need is Need.GUIDE_ONLY
 
 
@@ -119,13 +119,13 @@ def test_complete_presentation(config: cfg.Config) -> None:
 
 
 def test_manual_needs_only_the_guide(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("hw", "manual")]
+    config.environments = [Environment("hw", "manual")]
     present(config, "s4", workspace=False)
-    assert presentation.missing(config, story_of(delivery="hw")) is None
+    assert presentation.missing(config, story_of(environment="hw")) is None
 
 
-def test_no_delivery_needs_only_the_guide(config: cfg.Config) -> None:
-    config.deliveries = []
+def test_no_environment_needs_only_the_guide(config: cfg.Config) -> None:
+    config.environments = []
     present(config, "s4", workspace=False)
     assert presentation.missing(config, story_of()) is None
 
@@ -165,8 +165,8 @@ def test_lay_out_leaves_the_empty_workspace_incomplete(config: cfg.Config) -> No
 
 
 def test_lay_out_manual_has_no_workspace(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("hw", "manual")]
-    source = presentation.lay_out(config, story_of(delivery="hw"))
+    config.environments = [Environment("hw", "manual")]
+    source = presentation.lay_out(config, story_of(environment="hw"))
     assert system.is_dir(source) and system.list_dir(source) == []
 
 
@@ -220,7 +220,7 @@ def test_prompt_section_names_the_path_the_rule_and_quotes_the_guide() -> None:
 def seeded_config(config: cfg.Config, *, seed: str = "seedsrc") -> None:
     system.make_dirs(config.repo / "seedsrc")
     system.write_text(config.repo / "seedsrc" / ".agile-team.toml", "[dashboard]\n")
-    config.deliveries = [Delivery("cli", "package", seed=seed)]
+    config.environments = [Environment("cli", "package", seed=seed)]
 
 
 def test_lay_out_plants_the_seed_in_the_source_workspace(config: cfg.Config) -> None:
@@ -245,8 +245,8 @@ def test_lay_out_plants_nothing_without_a_seed(config: cfg.Config) -> None:
 
 
 def test_lay_out_manual_plants_no_seed(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("hw", "manual", seed="seedsrc")]
-    source = presentation.lay_out(config, story_of(delivery="hw"))
+    config.environments = [Environment("hw", "manual", seed="seedsrc")]
+    source = presentation.lay_out(config, story_of(environment="hw"))
     assert system.list_dir(source) == []
 
 
@@ -266,7 +266,7 @@ def test_workspace_with_another_file_beside_the_seed_is_complete(config: cfg.Con
     assert presentation.missing(config, story_of()) is None
 
 
-def test_story_seeds_point_at_the_delivery_seed_and_the_workspace(config: cfg.Config) -> None:
+def test_story_seeds_point_at_the_environment_seed_and_the_workspace(config: cfg.Config) -> None:
     seeded_config(config)
     s = presentation.story_seeds(config, story_of())
     assert s.source == config.repo / "seedsrc"

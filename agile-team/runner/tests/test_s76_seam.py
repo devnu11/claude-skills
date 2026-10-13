@@ -7,7 +7,7 @@ from pathlib import Path
 
 from agile_team import process_groups, sandbox, system, upstream
 from agile_team.commands import NO_HUNG_LINE, TIMED_OUT, CommandShell
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.git_ops import Git
 
 from .fake_system import FAKE_IDS, FIRST_CHILD_PID, START_CLOCK, Done, FakeSystem, Hang
@@ -48,7 +48,7 @@ def test_a_command_shell_run_of_a_hung_child_times_out_kills_its_group_and_keeps
 
 def test_sandbox_env_reads_the_fake_environment(fake: FakeSystem, scratch: Path) -> None:
     fake.env.update({"PATH": "/usr/bin", "HOME": "/fake/home"})
-    env = sandbox.sandbox_env(Delivery("x", "package", bin=["b"]), scratch)
+    env = sandbox.sandbox_env(Environment("x", "package", bin=["b"]), scratch)
     assert env["HOME"] == "/fake/home"
     assert env["PATH"].endswith(":/usr/bin") and env["PATH"].startswith(str(scratch / "b"))
 

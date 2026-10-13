@@ -1,4 +1,4 @@
-"""s105: seeds.py plants a delivery's seed files in a presentation workspace and checks them."""
+"""s105: seeds.py plants an environment's seed files in a presentation workspace and checks them."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agile_team import config as cfg
 from agile_team import seeds, system
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.seeds import Seeds
 
 from .fake_system import FAKE_ROOT
@@ -33,33 +33,35 @@ def config_seed(text: str = GOOD) -> Seeds:
 # ----- config ---------------------------------------------------------------
 
 
-def test_delivery_seed_defaults_to_none() -> None:
-    assert Delivery("a", "web").seed is None
+def test_environment_seed_defaults_to_none() -> None:
+    assert Environment("a", "web").seed is None
 
 
-def test_delivery_seed_loads_from_the_config(repo: Path) -> None:
-    raw = {"delivery": [{"name": "a", "kind": "web", "seed": "x/y"}, {"name": "b", "kind": "web"}]}
+def test_environment_seed_loads_from_the_config(repo: Path) -> None:
+    raw = {
+        "environment": [{"name": "a", "kind": "web", "seed": "x/y"}, {"name": "b", "kind": "web"}]
+    }
     c = cfg.from_raw(repo, raw)
-    assert [d.seed for d in c.deliveries] == ["x/y", None]
+    assert [d.seed for d in c.environments] == ["x/y", None]
 
 
 # ----- seed_dir -------------------------------------------------------------
 
 
-def test_seed_dir_without_a_delivery_is_none() -> None:
+def test_seed_dir_without_a_environment_is_none() -> None:
     assert seeds.seed_dir(FAKE_ROOT, None) is None
 
 
 def test_seed_dir_with_an_empty_seed_is_none_not_the_repo() -> None:
-    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "web", seed="")) is None
+    assert seeds.seed_dir(FAKE_ROOT, Environment("a", "web", seed="")) is None
 
 
-def test_seed_dir_of_a_web_delivery_without_a_key_is_the_packaged_seed() -> None:
-    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "web")) == seeds.PACKAGED_SEED
+def test_seed_dir_of_a_web_environment_without_a_key_is_the_packaged_seed() -> None:
+    assert seeds.seed_dir(FAKE_ROOT, Environment("a", "web")) == seeds.PACKAGED_SEED
 
 
-def test_seed_dir_of_a_package_delivery_without_a_key_is_none() -> None:
-    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "package")) is None
+def test_seed_dir_of_a_package_environment_without_a_key_is_none() -> None:
+    assert seeds.seed_dir(FAKE_ROOT, Environment("a", "package")) is None
 
 
 def test_default_seeds_and_packaged_seed_location() -> None:
@@ -76,7 +78,7 @@ def test_packaged_seed_names_and_config_are_valid() -> None:
 
 
 def test_seed_dir_joins_the_repo_and_the_seed() -> None:
-    d = Delivery("a", "web", seed="a/b")
+    d = Environment("a", "web", seed="a/b")
     assert seeds.seed_dir(FAKE_ROOT, d) == FAKE_ROOT / "a/b"
 
 
@@ -209,7 +211,7 @@ def test_config_problem_reports_a_mistyped_table() -> None:
 def test_texts_are_exact() -> None:
     assert seeds.SEED_GONE == (
         "seed directory {source} is missing from the repo; restore it or remove "
-        "`seed` from the delivery in .agile-team.toml"
+        "`seed` from the acceptance environment in .agile-team.toml"
     )
     assert seeds.BROKEN == (
         "workspace/{name} is broken: {error}. Fix it in the presentation's "

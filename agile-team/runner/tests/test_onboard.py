@@ -35,16 +35,16 @@ def test_detect_nothing(repo: Path) -> None:
 
 def test_presets_validate(repo: Path) -> None:
     for name, preset in PRESETS.items():
-        data = onboard.build_config(preset, onboard.Answers(name, preset["delivery"]))
+        data = onboard.build_config(preset, onboard.Answers(name, preset["environment_kind"]))
         known = cfg.Known(set(), {"package"})
         assert cfg.validate(cfg.from_raw(repo, data), known) == []
 
 
 def test_build_config_web_and_script() -> None:
     web = onboard.build_config(PRESETS["node"], onboard.Answers("node", "web", url="http://x"))
-    assert web["delivery"][0]["url"] == "http://x"
+    assert web["environment"][0]["url"] == "http://x"
     script = onboard.build_config(PRESETS["python"], onboard.Answers("python", "script"))
-    assert script["delivery"][0]["bin"] == ["venv/bin"]
+    assert script["environment"][0]["bin"] == ["venv/bin"]
 
 
 def test_merge_keep() -> None:

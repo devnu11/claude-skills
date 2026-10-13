@@ -111,7 +111,7 @@ def test_tell_is_a_registered_command() -> None:
     assert "tell" in [c.name for c in cli.COMMANDS]
 
 
-# ----- delivery (T5) -----------------------------------------------------------------
+# ----- environment (T5) -----------------------------------------------------------------
 
 
 def ready(make_runtime):

@@ -44,7 +44,7 @@ PY_CONFIG: dict[str, Any] = {
             "ci": [".github/**"],
         },
     },
-    "delivery": [{"name": "cli", "kind": "package", "prepare": "", "bin": ["bin"]}],
+    "environment": [{"name": "cli", "kind": "package", "prepare": "", "bin": ["bin"]}],
 }
 
 # The audit hook is installed once per process; it acts only inside a unit test's phases.

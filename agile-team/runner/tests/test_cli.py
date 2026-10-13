@@ -36,7 +36,7 @@ def test_init_requires_answers(repo: Path, capsys) -> None:
 def test_init_and_reinit(repo: Path, capsys, fake: FakeSystem) -> None:
     clean, dirty = Done(0, ""), Done(0, "?? .agile-team.toml\0")
     fake.reply(("git", "status"), clean, dirty, clean, clean, clean)
-    args = ["--repo", str(repo), "init", "--preset", "python", "--delivery", "package"]
+    args = ["--repo", str(repo), "init", "--preset", "python", "--environment", "package"]
     assert run(*args) == 0
     assert "onboarded" in capsys.readouterr().out
     assert run(*args) == 1
@@ -187,7 +187,7 @@ def test_check_config_flags_unknown_provider(configured: Path) -> None:
 def test_init_refuses_dirty_tree(repo: Path, capsys, fake: FakeSystem) -> None:
     system.write_text(repo / "wip.txt", "x")
     fake.reply(("git", "status"), Done(0, "?? wip.txt\0"))
-    assert run("--repo", str(repo), "init", "--preset", "python", "--delivery", "package") == 1
+    assert run("--repo", str(repo), "init", "--preset", "python", "--environment", "package") == 1
     assert "dirty" in capsys.readouterr().err
     assert system.read_text(repo / "wip.txt") == "x"
 
@@ -230,7 +230,7 @@ def test_login_auth_runtime_carries_no_key(configured: Path, scratch: Path) -> N
 
 
 def test_init_writes_auth(repo: Path) -> None:
-    args = ["--repo", str(repo), "init", "--preset", "python", "--delivery", "package"]
+    args = ["--repo", str(repo), "init", "--preset", "python", "--environment", "package"]
     assert run(*args, "--auth", "login") == 0
     assert cfg.load(repo).team.auth == "login"
 
@@ -317,7 +317,7 @@ def plain(scratch: Path, fake: FakeSystem) -> Path:
     return path
 
 
-INIT = ["init", "--preset", "python", "--delivery", "package"]
+INIT = ["init", "--preset", "python", "--environment", "package"]
 
 
 def test_init_outside_git_prints_the_message_and_exits_1(plain: Path, capsys) -> None:

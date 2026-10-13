@@ -24,20 +24,20 @@ def test_load_full(configured: Path) -> None:
     c = cfg.load(configured)
     assert c.team.budget_usd == 10.0
     assert c.toolchain.commands["test"] == "pytest"
-    assert c.deliveries[0].kind == "package"
+    assert c.environments[0].kind == "package"
     assert c.run_dir == configured / ".team/run"
     assert c.placeholders()["docs"] == ["docs/**"]
     assert c.placeholders()["config"] == [cfg.CONFIG_NAME]
     assert cfg.validate(c, KNOWN) == []
 
 
-def test_delivery_lookup(configured: Path) -> None:
+def test_environment_lookup(configured: Path) -> None:
     c = cfg.load(configured)
-    assert c.delivery(None).name == "cli"
-    assert c.delivery("cli").name == "cli"
-    assert c.delivery("nope") is None
-    c.deliveries = []
-    assert c.delivery(None) is None
+    assert c.environment(None).name == "cli"
+    assert c.environment("cli").name == "cli"
+    assert c.environment("nope") is None
+    c.environments = []
+    assert c.environment(None) is None
 
 
 def test_unknown_keys_are_ignored(repo: Path) -> None:
@@ -46,18 +46,18 @@ def test_unknown_keys_are_ignored(repo: Path) -> None:
         {
             "team": {"bogus": 1},
             "gates": {"x": 2},
-            "delivery": [{"name": "a", "kind": "package", "extra": True}],
+            "environment": [{"name": "a", "kind": "package", "extra": True}],
         },
     )
     assert c.team.cadence == "sprint"
-    assert c.deliveries[0].name == "a"
+    assert c.environments[0].name == "a"
 
 
 def test_validate_reports_every_problem(repo: Path) -> None:
     raw = {
         "team": {"cadence": "x", "artifacts": "x", "budget_usd": 0, "manager_every_pct": 0},
         "gates": {"coverage": 101, "round_cap": 0, "steps": ["nope"]},
-        "delivery": [
+        "environment": [
             {"name": "w", "kind": "web"},
             {"name": "w", "kind": "harness"},
             {"name": "z", "kind": "bogus"},
@@ -115,7 +115,7 @@ def test_providers_load_and_validate(repo: Path) -> None:
     ]
 
 
-# ----- s29: [upstream] and Delivery.e2e -------------------------------------
+# ----- s29: [upstream] and Environment.e2e -------------------------------------
 
 
 def test_upstream_defaults(repo: Path) -> None:
@@ -133,11 +133,12 @@ def test_upstream_loads_and_ignores_unknown_keys(repo: Path) -> None:
     assert (u.remote, u.branch, u.prefix) == ("up", "dev", "rev/s")
 
 
-def test_delivery_e2e_loads(repo: Path) -> None:
-    c = cfg.from_raw(repo, {"delivery": [{"name": "a", "kind": "package", "e2e": "pytest e2e"}]})
-    assert c.deliveries[0].e2e == "pytest e2e"
+def test_environment_e2e_loads(repo: Path) -> None:
+    c = cfg.from_raw(repo, {"environment": [{"name": "a", "kind": "package", "e2e": "pytest e2e"}]})
+    assert c.environments[0].e2e == "pytest e2e"
     assert (
-        cfg.from_raw(repo, {"delivery": [{"name": "b", "kind": "package"}]}).deliveries[0].e2e == ""
+        cfg.from_raw(repo, {"environment": [{"name": "b", "kind": "package"}]}).environments[0].e2e
+        == ""
     )
 
 

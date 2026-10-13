@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from agile_team import config as cfg
 from agile_team import guard, sandbox, system
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.guard import Scope, ToolCall
 
 REPO_GLOBS = {
@@ -24,7 +24,7 @@ def nested_config(repo: Path) -> cfg.Config:
     raw = {
         "team": {"docs_dir": "agile-team/docs"},
         "toolchain": {"globs": REPO_GLOBS},
-        "delivery": [{"name": "cli", "kind": "package"}],
+        "environment": [{"name": "cli", "kind": "package"}],
     }
     return cfg.from_raw(repo, raw)
 
@@ -55,8 +55,8 @@ def test_duplicate_globs_give_one_root(repo: Path) -> None:
 
 def test_deny_rules_are_per_root_and_skip_docs(repo: Path) -> None:
     c = nested_config(repo)
-    d = Delivery("cli", "package")
-    c.deliveries = [d]
+    d = Environment("cli", "package")
+    c.environments = [d]
     s = sandbox.os_sandbox_settings(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
     repo = str(system.resolve(repo))
     expected = [
@@ -191,8 +191,8 @@ def test_flat_layout_parity(repo: Path, command: str, allowed: bool) -> None:
 
 def test_proxy_end_to_end_in_nested_layout(repo: Path) -> None:
     c = nested_config(repo)
-    d = Delivery("cli", "package")
-    c.deliveries = [d]
+    d = Environment("cli", "package")
+    c.environments = [d]
     scope = sandbox.proxy_scope(c, sandbox.Preparer().prepare(c, sandbox.Order(d)))
     read = lambda p: guard.check_tool_use(scope, ToolCall("Read", {"file_path": str(repo / p)}))  # noqa: E731
     run = lambda cmd: guard.check_tool_use(scope, ToolCall("Bash", {"command": cmd}))  # noqa: E731

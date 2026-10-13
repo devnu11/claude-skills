@@ -1,4 +1,4 @@
-"""s26: a presentation starts the delivery; "presentation ready" needs it up and answering."""
+"""s26: a presentation starts the environment; "presentation ready" needs it up and answering."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from agile_team import cli, gates, handover, presentation, sandbox, system
 from agile_team import config as cfg
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState, StoryStatus, Verdict
 from agile_team.presentation import Check, Need, Recipe, Trial
@@ -24,7 +24,7 @@ from .fake_system import FAKE_REPO, FIRST_CHILD_PID, START_CLOCK, Done, FakeSyst
 PORT = 8799
 URL = f"http://127.0.0.1:{PORT}/"
 PROBE_URL = URL + "api/snapshot"
-DASHBOARD = Delivery(
+DASHBOARD = Environment(
     "ui",
     "web",
     prepare="serve --host {host} --port {port} --repo {sandbox}/presentation/workspace",
@@ -57,7 +57,7 @@ def preparer(probe: Any = None, *, busy: bool = False, **kw: Any) -> Preparer:
 @pytest.fixture
 def config(configured: Path) -> cfg.Config:
     c = cfg.load(configured)
-    c.deliveries = [DASHBOARD]
+    c.environments = [DASHBOARD]
     return c
 
 
@@ -88,16 +88,16 @@ def stale_service(fake: FakeSystem, config: cfg.Config, pid: int = LEADER) -> No
 # ----- config ---------------------------------------------------------------
 
 
-def test_delivery_probe_defaults_to_empty_and_is_the_last_field() -> None:
-    assert Delivery("a", "web").probe == ""
-    assert list(Delivery.__dataclass_fields__)[-1] == "probe"
+def test_environment_probe_defaults_to_empty_and_is_the_last_field() -> None:
+    assert Environment("a", "web").probe == ""
+    assert list(Environment.__dataclass_fields__)[-1] == "probe"
 
 
 def test_probe_is_read_from_the_toml(configured: Path) -> None:
     toml = system.read_text(configured / ".agile-team.toml")
-    toml += '\n[[delivery]]\nname = "ui"\nkind = "web"\nurl = "http://h/"\nprobe = "api/x"\n'
+    toml += '\n[[environment]]\nname = "ui"\nkind = "web"\nurl = "http://h/"\nprobe = "api/x"\n'
     system.write_text(configured / ".agile-team.toml", toml)
-    assert cfg.load(configured).delivery("ui").probe == "api/x"
+    assert cfg.load(configured).environment("ui").probe == "api/x"
 
 
 # ----- L1 / L2: placeholders ------------------------------------------------
@@ -112,8 +112,8 @@ def test_constants() -> None:
     assert sandbox.DEFAULT_PORTS == {"http": 80, "https": 443}
 
 
-def bare(delivery: Delivery, repo: Path, root: Path) -> sandbox.Prepared:
-    return sandbox.Prepared(delivery, sandbox.DELIVERY_KINDS["web"], repo, root, root)
+def bare(environment: Environment, repo: Path, root: Path) -> sandbox.Prepared:
+    return sandbox.Prepared(environment, sandbox.ENVIRONMENT_KINDS["web"], repo, root, root)
 
 
 def test_expand_makes_repo_and_sandbox_absolute() -> None:
@@ -133,7 +133,7 @@ def test_expand_makes_repo_and_sandbox_absolute() -> None:
     ],
 )
 def test_expand_fills_host_and_port_from_the_url(url: str, host: str, port: str) -> None:
-    p = bare(Delivery("ui", "web", url=url), Path("."), Path("."))
+    p = bare(Environment("ui", "web", url=url), Path("."), Path("."))
     assert p.expand("{host}:{port}") == f"{host}:{port}"
 
 
@@ -144,7 +144,7 @@ def test_address_probe_url_and_service_files(scratch: Path) -> None:
     assert p.probe_url() == PROBE_URL
     assert p.pid_file() == scratch / "customer/ui.pid"
     assert p.log_file() == scratch / "customer/ui.log"
-    assert bare(Delivery("ui", "web", url=URL), scratch, root).probe_url() == URL
+    assert bare(Environment("ui", "web", url=URL), scratch, root).probe_url() == URL
 
 
 def test_make_pipeline_wires_the_trial(configured: Path) -> None:
@@ -166,15 +166,15 @@ def test_only_web_is_a_service() -> None:
 
 def test_service_check_matches_background_start() -> None:
     for kind, recipe in presentation.PRESENTATIONS.items():
-        background = sandbox.DELIVERY_KINDS[kind].start is Start.BACKGROUND
+        background = sandbox.ENVIRONMENT_KINDS[kind].start is Start.BACKGROUND
         assert (recipe.check is Check.SERVICE) is background
 
 
-def test_recipe_of_reads_the_delivery(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("cli", "package"), DASHBOARD]
-    assert presentation.recipe_of(config, story_of(delivery="ui")).check is Check.SERVICE
+def test_recipe_of_reads_the_environment(config: cfg.Config) -> None:
+    config.environments = [Environment("cli", "package"), DASHBOARD]
+    assert presentation.recipe_of(config, story_of(environment="ui")).check is Check.SERVICE
     assert presentation.recipe_of(config, story_of()).check is Check.FILES
-    config.deliveries = []
+    config.environments = []
     assert presentation.recipe_of(config, story_of()) == Recipe(Need.GUIDE_ONLY)
 
 
@@ -227,8 +227,8 @@ def test_prepare_with_a_relative_repo_still_gives_absolute_paths(
 def test_prepare_runs_a_service_with_pid_and_log(config: cfg.Config, fake: FakeSystem) -> None:
     """L6: the child's output reaches the log, and stop() removes the pid file."""
     fake.reply(("echo",), Hang("hello\n"))
-    d = Delivery("ui", "web", prepare="echo hello; exec sleep 60", url=URL)
-    config.deliveries = [d]
+    d = Environment("ui", "web", prepare="echo hello; exec sleep 60", url=URL)
+    config.environments = [d]
     p = preparer().prepare(config, Order(d))
     assert p.process.poll() is None
     assert system.read_text(pid_file(config)) == str(system.pgid(p.process.pid))
@@ -241,8 +241,8 @@ def test_prepare_runs_a_service_with_pid_and_log(config: cfg.Config, fake: FakeS
 def test_the_log_is_truncated_at_each_start(config: cfg.Config, fake: FakeSystem) -> None:
     fake.reply(("echo", "first"), Done(0, "first\n"))
     fake.reply(("echo", "second"), Done(0, "second\n"))
-    d = Delivery("ui", "web", url=URL, prepare="echo first")
-    config.deliveries = [d]
+    d = Environment("ui", "web", url=URL, prepare="echo first")
+    config.environments = [d]
     made = preparer()
     made.prepare(config, Order(d))
     d.prepare = "echo second"
@@ -261,19 +261,19 @@ def test_service_files_sit_beside_the_sandbox_not_inside_it(
     assert not [f for f in inside if f.suffix in {".pid", ".log"}]
 
 
-def test_background_delivery_without_a_command_is_still_probed(
+def test_background_environment_without_a_command_is_still_probed(
     config: cfg.Config, fake: FakeSystem
 ) -> None:
-    d = Delivery("ui", "web", url=URL, probe="api/snapshot")
+    d = Environment("ui", "web", url=URL, probe="api/snapshot")
     probe = Probe()
     p = preparer(probe).prepare(config, Order(d))
     assert fake.commands == [] and p.process is None and probe.urls == [PROBE_URL]
 
 
-def test_background_delivery_without_a_command_that_never_answers_is_not_up(
+def test_background_environment_without_a_command_that_never_answers_is_not_up(
     config: cfg.Config,
 ) -> None:
-    d = Delivery("ui", "web", url=URL, probe="api/snapshot")
+    d = Environment("ui", "web", url=URL, probe="api/snapshot")
     with pytest.raises(NotUp, match="did not answer"):
         preparer(Probe(None), attempts=2).prepare(config, Order(d))
 
@@ -286,7 +286,7 @@ def test_exited_process_fails_at_once_with_the_output(config: cfg.Config, fake: 
     assert len(probe.urls) == 1
     text = str(info.value)
     assert text.startswith(
-        "delivery 'ui' did not start: the start command exited with code 1 "
+        "acceptance environment 'ui' did not start: the start command exited with code 1 "
         f"before {PROBE_URL} answered. Last output:\n"
     )
     assert "agile-team dashboard: .agile-team.toml not found" in text
@@ -302,7 +302,7 @@ def test_a_service_that_never_answers_is_stopped_and_reported(
         preparer(probe, attempts=3).prepare(config, Order(DASHBOARD))
     assert len(probe.urls) == 3
     assert str(info.value).startswith(
-        f"delivery 'ui' did not answer {PROBE_URL} within 0.75s. Last output:\n"
+        f"acceptance environment 'ui' did not answer {PROBE_URL} within 0.75s. Last output:\n"
     )
     assert "warming up" in str(info.value)
     assert killpgs(fake)[0] == (LEADER, signal.SIGTERM)
@@ -314,10 +314,12 @@ def test_a_hung_service_is_reported_as_not_answering_not_as_killed(
 ) -> None:
     """The runner's own SIGTERM must not turn a timeout into 'exited with code -15'."""
     fake.reply(("exec",), Hang())
-    d = Delivery("ui", "web", prepare="exec sleep 60", url=URL, probe="api/snapshot")
+    d = Environment("ui", "web", prepare="exec sleep 60", url=URL, probe="api/snapshot")
     with pytest.raises(NotUp) as info:
         preparer(Probe(None), attempts=2).prepare(config, Order(d))
-    assert str(info.value).startswith(f"delivery 'ui' did not answer {PROBE_URL} within 0.5s.")
+    assert str(info.value).startswith(
+        f"acceptance environment 'ui' did not answer {PROBE_URL} within 0.5s."
+    )
     assert "exited with code" not in str(info.value)
     assert killpgs(fake) == [(LEADER, signal.SIGTERM)]
 
@@ -339,7 +341,7 @@ def test_only_the_last_twenty_log_lines_are_quoted(config: cfg.Config, fake: Fak
 
 def test_foreground_kinds_are_unchanged(configured: Path, fake: FakeSystem) -> None:
     fake.reply(("exit",), Done(3))
-    d = Delivery("cli", "package", prepare="exit 3")
+    d = Environment("cli", "package", prepare="exit 3")
     probe = Probe()
     with pytest.raises(sandbox.SandboxError, match="prepare"):
         preparer(probe=probe).prepare(cfg.load(configured), Order(d))
@@ -360,8 +362,8 @@ def test_a_busy_port_is_refused_before_anything_starts(
     with pytest.raises(PortBusy) as info:
         preparer(busy=True).prepare(config, Order(DASHBOARD))
     assert str(info.value) == (
-        "delivery 'ui' cannot start: 127.0.0.1:8799 is already in use by a process "
-        "the runner did not start; stop it or change the delivery's url"
+        "acceptance environment 'ui' cannot start: 127.0.0.1:8799 is already in use by a process "
+        "the runner did not start; stop it or change the environment's url"
     )
     assert fake.commands == []
 
@@ -498,8 +500,8 @@ def test_stop_with_a_started_process_ends_the_group_and_the_file(
     config: cfg.Config, fake: FakeSystem
 ) -> None:
     fake.reply(("exec",), Hang())
-    d = Delivery("ui", "web", prepare="exec sleep 60", url=URL)
-    config.deliveries = [d]
+    d = Environment("ui", "web", prepare="exec sleep 60", url=URL)
+    config.environments = [d]
     p = preparer().prepare(config, Order(d))
     p.stop()
     assert p.process.poll() is not None and not system.exists(pid_file(config))
@@ -520,7 +522,7 @@ class Fakes:
         self.orders.append(order)
         if self.raises:
             raise self.raises
-        p = bare(order.delivery, config.repo, config.run_dir / "customer/ui")
+        p = bare(order.environment, config.repo, config.run_dir / "customer/ui")
         p.stop = self._stop  # type: ignore[method-assign]
         return p
 
@@ -549,25 +551,31 @@ def test_trial_without_a_presentation_dir_orders_none(config: cfg.Config) -> Non
     assert fake.orders[0].presentation is None
 
 
-def test_trial_uses_the_stories_own_delivery(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("cli", "package"), DASHBOARD]
+def test_trial_uses_the_stories_own_environment(config: cfg.Config) -> None:
+    config.environments = [Environment("cli", "package"), DASHBOARD]
     t, fake = trial(config)
-    t.liveness(story_of(delivery="ui"))
-    assert fake.orders[0].delivery.name == "ui"
+    t.liveness(story_of(environment="ui"))
+    assert fake.orders[0].environment.name == "ui"
 
 
 def test_trial_bounces_a_service_that_is_not_up(config: cfg.Config) -> None:
-    t, _ = trial(config, NotUp("delivery 'ui' did not start: boom"))
+    t, _ = trial(config, NotUp("acceptance environment 'ui' did not start: boom"))
     out = t.liveness(story_of())
     assert out.verdict is Verdict.BOUNCE
-    assert out.reason == "story s4 presentation is not up: delivery 'ui' did not start: boom"
+    assert (
+        out.reason
+        == "story s4 presentation is not up: acceptance environment 'ui' did not start: boom"
+    )
 
 
 def test_trial_holds_on_a_busy_port(config: cfg.Config) -> None:
-    t, _ = trial(config, PortBusy("delivery 'ui' cannot start: busy"))
+    t, _ = trial(config, PortBusy("acceptance environment 'ui' cannot start: busy"))
     out = t.liveness(story_of())
     assert out.verdict is Verdict.HOLD
-    assert out.reason == "story s4 presentation is not up: delivery 'ui' cannot start: busy"
+    assert (
+        out.reason
+        == "story s4 presentation is not up: acceptance environment 'ui' cannot start: busy"
+    )
 
 
 def test_trial_lets_other_sandbox_errors_propagate(config: cfg.Config) -> None:
@@ -580,16 +588,16 @@ def test_trial_verdicts_are_data() -> None:
     assert {NotUp: Verdict.BOUNCE, PortBusy: Verdict.HOLD} == presentation.TRIAL_VERDICTS
 
 
-def test_trial_never_prepares_a_file_only_delivery(config: cfg.Config) -> None:
-    config.deliveries = [Delivery("cli", "package")]
+def test_trial_never_prepares_a_file_only_environment(config: cfg.Config) -> None:
+    config.environments = [Environment("cli", "package")]
     t, fake = trial(config)
     out = t.liveness(story_of())
     assert (out.verdict, out.reason) == (Verdict.PASS, "presentation ready")
     assert fake.orders == []
 
 
-def test_trial_never_prepares_without_a_delivery(config: cfg.Config) -> None:
-    config.deliveries = []
+def test_trial_never_prepares_without_a_environment(config: cfg.Config) -> None:
+    config.environments = []
     t, fake = trial(config)
     assert t.liveness(story_of()).verdict is Verdict.PASS and fake.orders == []
 
@@ -638,7 +646,7 @@ def test_complete_files_then_the_liveness_outcome_decides() -> None:
 
 
 def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round() -> None:
-    reason = "story s4 presentation is not up: delivery 'dashboard' did not start: x"
+    reason = "story s4 presentation is not up: acceptance environment 'dashboard' did not start: x"
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, reason))
     s = story_of("e2e")
     out = p.evaluate(s, Handoff("done"))
@@ -723,7 +731,9 @@ def failing_prepare(exc: Exception, calls: list[Any] | None = None):
 
 def test_a_service_that_is_not_up_returns_the_story_to_e2e_without_a_round(make_runtime) -> None:
     q, calls = FakeQuery(), []
-    exc = NotUp("delivery 'cli' did not start: the start command exited with code 1 ...")
+    exc = NotUp(
+        "acceptance environment 'cli' did not start: the start command exited with code 1 ..."
+    )
     rt = make_runtime(q, prepare_fn=failing_prepare(exc, calls))
     s = open_acceptance(rt)
     report = run(rt, "customer-proxy")
@@ -771,7 +781,7 @@ def test_other_sandbox_errors_are_refused(make_runtime) -> None:
 
 def prepared_probe(rt, stops: list[int]):
     def prepare(config, order):
-        p = bare(order.delivery, config.repo, config.run_dir / "customer/cli")
+        p = bare(order.environment, config.repo, config.run_dir / "customer/cli")
         p.stop = lambda: stops.append(1)  # type: ignore[method-assign]
         return p
 
@@ -814,7 +824,7 @@ def test_the_service_is_stopped_when_planning_fails_after_prepare(make_runtime, 
     def broken(_plan) -> None:
         raise exc
 
-    rt._fit_role_to_delivery = broken  # type: ignore[method-assign]
+    rt._fit_role_to_environment = broken  # type: ignore[method-assign]
     if isinstance(exc, sandbox.SandboxError):
         assert run(rt, "customer-proxy")["status"] == "refused"
     else:
@@ -878,10 +888,10 @@ def test_json_round_trip_of_a_report_still_matches() -> None:
 BAD_NAME = "workspace/.agile-team.toml is broken: "
 
 
-def seeded_dashboard(config: cfg.Config) -> Delivery:
+def seeded_dashboard(config: cfg.Config) -> Environment:
     system.make_dirs(config.repo / "seedsrc")
     system.write_text(config.repo / "seedsrc" / ".agile-team.toml", '[dashboard]\ntoken = "p"\n')
-    return Delivery("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="seedsrc")
+    return Environment("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="seedsrc")
 
 
 def test_broken_seeded_config_leads_the_not_up_reason(config: cfg.Config, fake: FakeSystem) -> None:
@@ -893,20 +903,20 @@ def test_broken_seeded_config_leads_the_not_up_reason(config: cfg.Config, fake: 
         preparer(Probe(None)).prepare(config, Order(d, source))
     first, second = str(info.value).split("\n", 1)
     assert first.startswith(BAD_NAME) and first.endswith("a working one")
-    assert second.startswith("delivery 'ui' did not start: ")
+    assert second.startswith("acceptance environment 'ui' did not start: ")
     assert "Last output:\nboom" in second
 
 
 def test_missing_seed_dir_is_named_in_the_not_up_reason(
     config: cfg.Config, fake: FakeSystem
 ) -> None:
-    d = Delivery("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="gone")
+    d = Environment("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="gone")
     fake.reply(("serve",), Done(1, "boom\n"))
     with pytest.raises(NotUp) as info:
         preparer(Probe(None)).prepare(config, Order(d))
     expected = [
         "seed directory " + str(config.repo / "gone") + " is missing from the repo; restore it "
-        "or remove `seed` from the delivery in .agile-team.toml"
+        "or remove `seed` from the acceptance environment in .agile-team.toml"
     ]
     assert str(info.value).split("\n")[0] == expected[0]
 
@@ -918,4 +928,4 @@ def test_good_seeded_config_leaves_the_reason_unchanged(
     fake.reply(("serve",), Done(1, "boom\n"))
     with pytest.raises(NotUp) as info:
         preparer(Probe(None)).prepare(config, Order(d))
-    assert str(info.value).startswith("delivery 'ui' did not start: ")
+    assert str(info.value).startswith("acceptance environment 'ui' did not start: ")

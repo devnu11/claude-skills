@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from agile_team import dispatch, gates, guard, sandbox, system
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus, Verdict
 from agile_team.ledger import Tokens
@@ -238,18 +238,18 @@ def test_local_provider_reaches_the_customer_sandbox(make_runtime) -> None:
     assert "PATH" in env
 
 
-def test_customer_proxy_without_delivery(make_runtime) -> None:
+def test_customer_proxy_without_environment(make_runtime) -> None:
     rt = make_runtime()
-    rt.config.deliveries = []
+    rt.config.environments = []
     open_story(rt, "acceptance")
     present(rt.config, workspace=False)
-    assert "no [[delivery]]" in run(rt, "customer-proxy", story="s1")["reason"]
+    assert "no [[environment]]" in run(rt, "customer-proxy", story="s1")["reason"]
 
 
 def test_manual_acceptance_script_reaches_outbox(make_runtime) -> None:
     script = "1. Plug in the device.\n" + handoff("done")
     rt = make_runtime(FakeQuery(script))
-    rt.config.deliveries = [Delivery("hw", "manual")]
+    rt.config.environments = [Environment("hw", "manual")]
     open_story(rt, "acceptance")
     present(rt.config, workspace=False)
     report = run(rt, "customer-proxy", story="s1")
@@ -265,8 +265,8 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
 
     def fake_prepare(config, order):
         p = sandbox.Prepared(
-            order.delivery,
-            sandbox.DELIVERY_KINDS["web"],
+            order.environment,
+            sandbox.ENVIRONMENT_KINDS["web"],
             config.repo,
             config.run_dir,
             config.run_dir,
@@ -275,7 +275,7 @@ def test_web_proxy_gets_browser(make_runtime) -> None:
         return p
 
     rt = make_runtime(q, prepare_fn=fake_prepare)
-    rt.config.deliveries = [Delivery("ui", "web", url="http://localhost:3000")]
+    rt.config.environments = [Environment("ui", "web", url="http://localhost:3000")]
     open_story(rt, "acceptance")
     present(rt.config)
     run(rt, "customer-proxy", story="s1")
@@ -289,8 +289,8 @@ def _web_proxy_order(make_runtime, events: list[str], action):
 
     def fake_prepare(config, order):
         p = sandbox.Prepared(
-            order.delivery,
-            sandbox.DELIVERY_KINDS["web"],
+            order.environment,
+            sandbox.ENVIRONMENT_KINDS["web"],
             config.repo,
             config.run_dir,
             config.run_dir,
@@ -299,7 +299,7 @@ def _web_proxy_order(make_runtime, events: list[str], action):
         return p
 
     rt = make_runtime(FakeQuery(action=action), prepare_fn=fake_prepare)
-    rt.config.deliveries = [Delivery("ui", "web", url="http://localhost:3000")]
+    rt.config.environments = [Environment("ui", "web", url="http://localhost:3000")]
     open_story(rt, "acceptance")
     present(rt.config)
     return rt
@@ -533,7 +533,7 @@ def test_prepare_receives_the_order_with_the_presentation_source(make_runtime) -
     open_story(rt, "acceptance")
     source = present(rt.config)
     run(rt, "customer-proxy", story="s1")
-    assert orders[0].presentation == source and orders[0].delivery.name == "cli"
+    assert orders[0].presentation == source and orders[0].environment.name == "cli"
 
 
 def test_without_a_presentation_dir_the_order_carries_none(make_runtime) -> None:
@@ -625,11 +625,13 @@ def test_web_proxy_keeps_read_to_rewrite_its_report(make_runtime) -> None:
     q = FakeQuery()
 
     def fake_prepare(config, order):
-        kind = sandbox.DELIVERY_KINDS["web"]
-        return sandbox.Prepared(order.delivery, kind, config.repo, config.run_dir, config.run_dir)
+        kind = sandbox.ENVIRONMENT_KINDS["web"]
+        return sandbox.Prepared(
+            order.environment, kind, config.repo, config.run_dir, config.run_dir
+        )
 
     rt = make_runtime(q, prepare_fn=fake_prepare)
-    rt.config.deliveries = [Delivery("ui", "web", url="http://x")]
+    rt.config.environments = [Environment("ui", "web", url="http://x")]
     open_story(rt, "acceptance")
     present(rt.config)
     run(rt, "customer-proxy", story="s1")

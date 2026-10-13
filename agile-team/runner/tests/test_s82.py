@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from agile_team import config as cfg
 from agile_team import presentation, sandbox, system
-from agile_team.config import Delivery
+from agile_team.config import Environment
 from agile_team.gates import READY, StoryState, Verdict
 from agile_team.presentation import Trial
 
@@ -17,12 +17,14 @@ from .fake_system import FAKE_REPO, Done, FakeSystem, Hang
 
 PORT = 8799
 URL = f"http://127.0.0.1:{PORT}/"
-UI = Delivery("ui", "web", prepare="serve", url=URL, probe="api/snapshot")
+UI = Environment("ui", "web", prepare="serve", url=URL, probe="api/snapshot")
 
 
-def prepared(delivery: Delivery = UI) -> sandbox.Prepared:
+def prepared(environment: Environment = UI) -> sandbox.Prepared:
     root = Path("/fake/customer/ui")
-    return sandbox.Prepared(delivery, sandbox.DELIVERY_KINDS["web"], Path("/fake"), root, root)
+    return sandbox.Prepared(
+        environment, sandbox.ENVIRONMENT_KINDS["web"], Path("/fake"), root, root
+    )
 
 
 # ----- constants --------------------------------------------------------------
@@ -84,7 +86,7 @@ def test_port_released_reports_a_port_that_never_frees(fake: FakeSystem) -> None
     start = fake.clock
     note = sandbox.port_released(prepared(), lambda _h, _p: True)
     assert note == (
-        f"delivery 'ui' did not let go of 127.0.0.1:{PORT}: it was still in use "
+        f"acceptance environment 'ui' did not let go of 127.0.0.1:{PORT}: it was still in use "
         "5s after the service was stopped; keep the service in its start "
         "command's process group"
     )
@@ -95,7 +97,7 @@ def test_port_released_without_a_url_never_looks() -> None:
     def listening(_h: str, _p: int) -> bool:
         raise AssertionError("must not be called")
 
-    assert sandbox.port_released(prepared(Delivery("ui", "web")), listening) is None
+    assert sandbox.port_released(prepared(Environment("ui", "web")), listening) is None
 
 
 # ----- Trial ------------------------------------------------------------------
@@ -104,7 +106,7 @@ def test_port_released_without_a_url_never_looks() -> None:
 @pytest.fixture
 def config(configured: Path) -> cfg.Config:
     c = cfg.load(configured)
-    c.deliveries = [UI]
+    c.environments = [UI]
     return c
 
 
@@ -205,7 +207,7 @@ def test_end_group_waits_for_a_member_that_outlives_its_leader(fake: FakeSystem)
 def stoppable(fake: FakeSystem) -> sandbox.Prepared:
     root = FAKE_REPO / "customer" / "ui"
     return sandbox.Prepared(
-        UI, sandbox.DELIVERY_KINDS["web"], FAKE_REPO, root, root, process=started(fake)
+        UI, sandbox.ENVIRONMENT_KINDS["web"], FAKE_REPO, root, root, process=started(fake)
     )
 
 
