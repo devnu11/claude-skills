@@ -180,6 +180,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             commit=commit_for(s, pulled),
             disputes=s["disputes"],
             developer=s["developer"],
+            depends_on=s["depends_on"],
         )
         for s in fixture["stories"]
     }
@@ -365,6 +366,9 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "commits": ["abc"],
         "files": [],
         "label": "",
+        "depends_on": [],
+        "waiting_on": [],
+        "dependency_warnings": [],
     }
     assert "commit" not in story
 
