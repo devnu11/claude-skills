@@ -1780,9 +1780,8 @@
     "edge": "end",
     "sprint": 10,
     "stage": "sync",
-    "outcome": "rebased",
-    "rewritten": 4,
-    "sha": "3f9c2ab41d7e",
+    "outcome": "pass",
+    "note": "sprint 10 is on the review stack",
     "target": "origin/main",
     "team_branch": "agile-team"
    }

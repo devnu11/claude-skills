@@ -249,6 +249,7 @@ class BoundaryRunner:
 
     def _rebase(self, b: Boundary) -> None:
         b.sync_from = b.sync_from or self.runtime.git.head()
+        self.runtime.save()  # a crash mid-rebase must not lose the old hashes
         result = self.remote.rebase_onto(b.sync_from)
         AFTER_REBASE[result.outcome](self, b, result)
 
