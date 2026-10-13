@@ -24,6 +24,8 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
+| `opinion STORY KIND SOURCE` | The liaison records its opinion on story `STORY` (s85). `KIND` is `keep`, `move-up`, `move-down`, `fold`, `close`, `scope` or `ask`; `SOURCE` is a file, or `-` for stdin. Appends `{"story", "kind", "text", "at"}` to `.team/run/liaison/opinions.jsonl` and prints `recorded o<N>: <kind> on <story>`. Checked in order, first refusal wins and nothing is written (exit 1): an unknown story (`no story 's9'`; a done story is allowed), an unknown kind (`no opinion kind 'x'; use one of: keep, move-up, …`), an empty or over-long text (as `reply`). Works in any run state. See "Liaison opinions". |
+| `reviewed SOURCE` | The liaison records that it reviewed the backlog, with a short summary from a file or `-` (stdin). Appends `{"text", "at"}` to `.team/run/liaison/reviews.jsonl` and prints `recorded backlog review v<N>`. Exit 1 on an empty or over-long text. See "Liaison opinions". |
 | `watch [--timeout S]` | Block, polling the run files every 2 s (no tokens), until something needs the liaison. Then print one JSON line and exit 0. See "Watch". |
 | `stop [--now]` | Stop after the current role step; `--now` also SIGTERMs the runner, which stops cleanly with status `stopped` (exit 143). |
 | `accept-checkout` | Keep the current branch and HEAD as the team's after a `checkout-changed` halt (see "Checkout guard"). Refused (exit 1) while a runner is alive, on a detached HEAD, or with a git operation in progress. |
@@ -137,6 +139,54 @@ comes from `reply_story`. A `tell` file without the head belongs to no
 thread. JSONL lines that are blank, torn or lack a str `story`, a str `text`
 and a number `at` are skipped; only a last line can be torn, so earlier ids
 never shift. The PO sees only the new post, not the thread before it.
+
+### Liaison opinions
+
+The liaison gives its opinion on stories, and the human reviews them in the
+Backlog tab (s85). Like a thread, opinions are read from append-only files
+in `liaison/`, each with one writer; nothing goes to `events.jsonl` or
+`state.json`.
+
+| File | Written by | Line | Id |
+|---|---|---|---|
+| `opinions.jsonl` | `agile-team opinion` | `{"story", "kind", "text", "at"}` | `o<N>` |
+| `reviews.jsonl` | `agile-team reviewed` | `{"text", "at"}` | `v<N>` |
+| `opinion-acts.jsonl` | `POST /api/opinion` | `{"opinion", "story", "act", "route", "ref", "at"}` | `a<N>` |
+
+Ids count well-formed lines in line order; blank, torn or malformed lines
+(a missing field, an unknown `kind` or `act`, a non-number `at`) are
+skipped. The **latest** opinion on a story is its last line, whatever its
+`at`. The last line of `reviews.jsonl` is the last review.
+
+**Asking for a review.** `POST /api/review` appends a thread post to
+`liaison/inbox.jsonl` with an empty `story`:
+
+```text
+Please review the backlog. Record an opinion on each story you would change with `agile-team opinion <story> <kind> -` (kinds: keep, move-up, move-down, fold, close, scope, ask), then a short summary with `agile-team reviewed -`.
+```
+
+So `watch` fires `liaison_message`, with that post under `posts`
+(`"story": ""`). The snapshot's `opinions.asked_at` is the time of the
+latest such post.
+
+**Acting on an opinion.** The human dismisses or applies a latest,
+non-`keep` opinion that has no act yet. The act is refused (409), in this
+order: `no opinion 'o9'`, `o3 is no longer the latest opinion on s6;
+reload`, `o3 is keep: there is nothing to dismiss or apply`, `o3 was
+already applied` (or `dismissed`). An act is final: there is no undo, and a
+new opinion on the story starts afresh. The server works out the route from
+`state.json`, never from the page:
+
+| Act | Route | What happens | `ref` |
+|---|---|---|---|
+| dismiss | `""` | nothing but the act line | `""` |
+| apply `move-up` / `move-down` on a Backlog story | `reorder` | a reorder request (see "Reorder requests") to place 1 or the Backlog's last place, with the page's `version`; the router applies or refuses it between steps | `r<N>` |
+| apply anything else (`fold`, `close`, `scope`, `ask`, or a move on a current-sprint story) | `product-owner` | a thread post to the PO on the story (see "Story threads"): `The human applied the liaison's opinion o3 on s6 from the dashboard: scope.`, a blank line, then the opinion's text | `t<N>` |
+
+The PO treats an applied opinion as the human's request and answers with
+`reply_story`. For a `close` the human still decides the cancel. An
+applied move whose reorder is later refused still counts as applied; the
+refusal shows in the snapshot's `reorders`.
 
 ### Watch
 
@@ -345,9 +395,10 @@ on the story (`interrupted`) and logged as a `step-interrupted` event
 ## Dashboard
 
 `agile-team dashboard` is an HTTP server (Python stdlib). Reads need no
-auth. It never serves files by path. It has two writes: it queues a backlog
-reorder request (s83), and it writes a post on a story's thread (s84). Each
-is accepted only from `127.0.0.1` or `::1` and
+auth. It never serves files by path. Its writes: it queues a backlog
+reorder request (s83), writes a post on a story's thread (s84), asks the
+liaison for a backlog review, and dismisses or applies a liaison opinion
+(s85). Each is accepted only from `127.0.0.1` or `::1` and
 only with the token printed in the local URL
 (`dashboard: http://localhost:<port>/?token=<t>`). The token is random at
 each start unless `--token T` is given or the served repo's
@@ -363,6 +414,8 @@ the runner applies the request between steps.
 | `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
 | `POST /api/reorder` | body `{"story", "position", "version"}`: `position` is the place in the Backlog group, and `version` is the snapshot's `run.order_version`. It needs the `X-Agile-Team-Token` header and a localhost peer, else 403. A bad body gets 400. Otherwise it writes `.team/run/reorders/r<N>.json` and answers 202 `{"id": "r<N>", "status": "queued"}`. The body may hold at most 4096 bytes. |
 | `POST /api/thread` | body `{"story", "to", "text"}`: `to` is `product-owner` or `liaison`, `story` an opened story's id, and `text` 1 to 4000 characters once stripped. Checked in order: a localhost peer and the `X-Agile-Team-Token` header, else 403 (the body is not read); `Content-Length` from 1 to 32768, else 400; the body's shape, else 400; a known story, else 400. Otherwise it writes the post (see "Story threads") and answers 202 `{"id": "t<N>" or "lp<N>", "status": "posted"}`. |
+| `POST /api/review` | body: any JSON object (its keys are ignored). Checked in order: a localhost peer and the token, else 403 (the body is not read); `Content-Length` from 1 to 4096 and a JSON object, else 400. Otherwise it posts the review request (see "Liaison opinions") and answers 202 `{"id": "lp<N>", "status": "asked"}`. |
+| `POST /api/opinion` | body `{"opinion", "act", "version"}`: `opinion` an id `o<N>`, `act` `dismiss` or `apply`, `version` the snapshot's `run.order_version` (a string); extra keys are ignored. Checked in order: a localhost peer and the token, else 403 (the body is not read); `Content-Length` from 1 to 4096 and that shape, else 400; an act refusal, else 409 `{"status": "refused", "reason"}`. Otherwise it runs the route, records the act and answers 202 `{"id": "a<N>", "status": "dismissed" or "applied", "route", "ref"}` (see "Liaison opinions"). |
 | `GET /api/stream` | Server-Sent Events. It sends a `data:` line holding the full snapshot JSON right away, and again whenever a watched file changes or the health verdict (level and reason) changes (both checked once a second). Otherwise it sends a `: keepalive` comment every second. |
 | anything else | 404 (methods other than GET and POST: 501) |
 
@@ -400,7 +453,17 @@ thread: each entry as `you → PO`, `PO → you`, `you → liaison` or
 `liaison → you` with its time and Markdown text (`No messages yet.` when
 there is none). With the token, a text box, a PO/liaison picker (PO by
 default) and a send button follow; a draft and its cursor survive live
-updates, and the entry shows with the next snapshot. The board keeps that order in every column and shows each
+updates, and the entry shows with the next snapshot. Since s85 the tab
+opens with the review bar (`Last review: <time>` and its summary, or `The
+liaison has not reviewed the backlog yet.`; `Asked <time>; waiting for the
+liaison.` while a request is newer than the last review; with the token,
+an `Ask the liaison to review the backlog` button, disabled while waiting)
+and an `only suggestions (N)` filter that keeps each row's full-group
+place. A row whose latest opinion is not `keep` and has no act shows a
+`liaison: <kind>` pill. Its expanded row shows the opinion's kind, time and
+text above the thread and, once acted on, `dismissed`/`applied` with the
+ref and the reorder's status; with the token, `dismiss` and `apply: …`
+buttons (a reorder apply is disabled while a reorder is pending). The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
 `⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
 `needs the human` (blocked, or an open question names it) or `held` (any
@@ -412,8 +475,17 @@ keys are `requirements` (from `<docs>/requirements/REQ-*.md`, with
 outbox and inbox entries as `message`/`answer` events, and every thread
 entry as a `thread` event `{"id": "thread-<entry id>", "kind": "thread",
 "story", "role": "product-owner" for the PO's reply else null, "data":
-{"entry", "author", "to"}}`, all in time order; an outbox `reply` is a
-`thread` event only, never also a `message`), `ledger`, `messages`,
+{"entry", "author", "to"}}` (`story` null for a review request), every
+opinion as `{"id": "opinion-<oN>", "kind": "opinion", "role": null,
+"story", "data": {"opinion", "kind"}}` and every act as `{"id":
+"opinion-act-<aN>", "kind": "opinion-act", "role": null, "story", "data":
+{"opinion", "act", "route", "ref"}}`, all in time order; an outbox `reply` is a
+`thread` event only, never also a `message`), `opinions` (s85: `items`,
+every opinion in line order, each `{"id", "story", "kind", "text", "at",
+"latest", "route", "act"}`, where `route` is the route an apply would take
+for a latest opinion with no act, else `""`, and `act` is `{"id", "act",
+"route", "ref", "at"}` or null; `asked_at`, the last review request's time
+or null; `review`, the last review `{"id", "text", "at"}` or null), `ledger`, `messages`,
 `answers`, `thread` (every thread entry in time order, each `{"id",
 "story", "author", "to", "text", "at"}` with `author`/`to` one of
 `human`, `product-owner`, `liaison`; the timeline shows it, filtered by

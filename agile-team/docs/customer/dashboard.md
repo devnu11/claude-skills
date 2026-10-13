@@ -161,6 +161,42 @@ without the token shows the thread read-only. Example: on s12, ask the PO
 "Can the export also cover CSV?" and the answer appears under s12 once the
 PO's turn comes.
 
+## The liaison's opinions
+
+The liaison (the Claude session you started the team from) can tell you
+which stories it would change: move up, move down, fold into another,
+close, rescope, or ask about. You decide what to do with each one.
+
+- **Ask for a review.** At the top of the Backlog tab, press **Ask the
+  liaison to review the backlog**. The liaison is woken within a few
+  seconds while it watches the run. It records an opinion on each story it
+  would change, then a short summary. While you wait, the bar reads `Asked
+  <time>; waiting for the liaison.` Once the summary arrives, it reads
+  `Last review: <time>` with the summary below. The liaison may also give
+  opinions without being asked.
+- **See the suggestions.** A story with a suggestion has a `liaison:
+  <kind>` badge, for example `liaison: move-up`. Tick **only suggestions**
+  to list just those stories. Their `#position` and handles stay the same
+  as in the full list. An opinion of `keep` means "leave it as it is" and
+  gets no badge.
+- **Act on one.** Expand the story to read the opinion's text and date.
+  Then press **dismiss** to set it aside, or **apply** to agree with it:
+  - `apply: move to the top of the backlog` (or `… bottom …`) queues a
+    reorder, as if you had dragged the story there. You see its status
+    (pending, applied or refused) under the opinion.
+  - `apply: send to the PO` (for fold, close, scope, ask, or a move on a
+    story in the current sprint) sends the opinion to the PO on the
+    story's thread. The PO treats it as your request and answers there. A
+    `close` still needs your say before anything is cancelled.
+
+An opinion that has been acted on shows `dismissed` or `applied`, and you
+can't act on it again. If the liaison has since given a newer opinion on
+the story, you are asked to reload. Without the token the opinions are
+read-only. Opinions and your acts on them also appear in the Flow tab's
+timeline. Example: the liaison suggests `move-up` on s14 because s9
+depends on it. Apply it and s14 goes to the top of the Backlog between
+steps.
+
 ## Is the team working?
 
 The runner, not the agents, records every turn of every step and keeps a

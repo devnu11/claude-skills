@@ -95,7 +95,14 @@ command fails.
    thread: write the answer to a file with the Write tool and run
    `$AT reply <story> <file>` (or `-` for stdin; never the text on a command
    line), or relay it to the human. The reply shows under the story; it
-   works while the run is stopped. The PO speaks only when the runner needs its
+   works while the run is stopped. A post with an empty `story` is the
+   human asking you to **review the backlog**: read the stories, record an
+   opinion on each one you would change with
+   `$AT opinion <story> <kind> <file>` (`kind` is `keep`, `move-up`,
+   `move-down`, `fold`, `close`, `scope` or `ask`; the latest opinion per
+   story wins), then `$AT reviewed <file>` with a short summary (both take
+   `-` for stdin). You may record opinions unasked too. The Backlog tab
+   badges each suggestion; the human dismisses or applies it there. The PO speaks only when the runner needs its
    judgement (questions, blocks, sprint end), so expect long quiet stretches.
    The dashboard shows step-by-step progress. When a question is open and
    nothing else can move, the runner waits for the answer rather than
