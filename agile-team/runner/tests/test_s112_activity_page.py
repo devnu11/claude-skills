@@ -71,7 +71,7 @@ def test_a_failed_markdown_load_shows_a_notice() -> None:
 
 
 def test_the_live_panel_is_in_the_header_and_the_meter_in_the_status_bar() -> None:
-    right = PAGE.split('class="head-right"')[1].split("</header>")[0]
+    right = PAGE.split('class="head-right"')[1].split('class="status-bar"')[0]
     assert 'id="live-panel"' in right and 'id="meter"' not in right
     bar = PAGE.split('class="status-bar"')[1]
     assert bar.index('id="meter"') < bar.index('id="status-row"')
