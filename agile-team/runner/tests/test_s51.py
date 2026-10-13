@@ -540,12 +540,7 @@ def test_the_worked_example_step_by_step(make_runtime) -> None:
     assert st.order == ["s50", "s45", "s38", "s21"] and queue_of(t) == ["s45", "s38", "s21", "s50"]
     call(t.prioritise({"stories": ["s21", "s45"], "reason": ""}))
     assert st.order == ["s21", "s45", "s50", "s38"] and st.pulled == []
-    assert queue_of(t) == ["s21", "s38", "s45", "s50"] or queue_of(t) == [
-        "s38",
-        "s21",
-        "s45",
-        "s50",
-    ]
+    assert queue_of(t) == ["s21", "s38", "s45", "s50"]
     out = call(t.move_story({"story": "s21", "position": 4, "reason": ""}))
     assert st.order == ["s45", "s50", "s38", "s21"]
     assert queue_of(t) == ["s38", "s21", "s45", "s50"]
