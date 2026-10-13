@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s92 complete: Gate fix steps for lint findings in test files (no new ADR)
+
+When the implement gate fails with a lint finding (ruff, flake8, mypy, etc.) in `tests/` files, the runner creates a gate fix step for you. Your brief lists only your items (failing tests or lint findings in files you own) and the exact ruff output. Fix only those items, then hand off `done`. The story pops the queue and returns to the developer, no round counted. **Dispatch notes:** Failing unit tests stay with the developer (TDD rule: red tests are theirs to make green). Lint in unit-test files comes to you. E2E test failures go to integration-tester. Design spec: rules R1–R20, test checklist items 1–27 in `agile-team/docs/design/s92.md`.
 
 ## s97 complete: Awake-time calculation—clocks, heartbeat, platform rules (24 unit tests pass, P1 pending)
 

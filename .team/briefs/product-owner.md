@@ -1,6 +1,10 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s92 complete: Gate failures route to file owners; no disputes, no rounds (no new ADR)
+
+Gate failures (coverage, lint, static) now route by file ownership. A failing e2e test goes to integration-tester; ruff finding in tests/ goes to unit-tester; developer's files bounce to implement. Each owner gets a gate-fix step (queued, no round). Multiple owners → multiple fix steps before returning to implement. **Your new visibility:** Next `_advance_and_log` shows `"fixes": [{role, files}]` for each routed item. Hand-over says "Other roles fix items first, then this step runs again." No new tools, no new disputes. See design `agile-team/docs/design/s92.md` (rules R1–R20).
 
 ## s97 complete: Step time leaves out machine sleep (no new tool, no new hand-over)
 

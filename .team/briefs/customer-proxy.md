@@ -1,6 +1,10 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s92 complete: Gate failures in foreign files route silently; no disputes for e2e (all ACs pass)
+
+When the implement gate fails (coverage or lint), the runner routes each failing item to its owner: test failures by test file, lint findings by file. A developer's e2e test failure routes to integration-tester without a dispute or round. A ruff finding in tests/ routes to unit-tester. The developer's own items bounce as usual. **What you see:** All six ACs pass on captured e2e runs. The workflow is transparent: stories skip foreign-file disputes and return without cycles.
 
 ## s97: Step time now shows awake time—machine sleep excluded (all ACs verified)
 

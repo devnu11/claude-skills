@@ -1,6 +1,10 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s92 complete: Gate fixes with assertion changes require a named rule (no new ADR)
+
+Your brief now lists gate fixes: "Gate fix by `<role>` (commit `<sha>`) on `<files>`: `<note>`." When a fix changed what a test asserts without naming an AC or design rule, the note flags it: "assertion lines changed, but no rule was named; check them." Request changes if the rule doesn't support the change or is missing. All gate fix records show in exact order (R18). See `agile-team/docs/design/s92.md` (R19, test items 25, AC5).
 
 ## s97: Awake-time calculation—two clocks on step events, platform-aware rules (1 round, all ACs pass) — verdict ship (P1 tests pending)
 

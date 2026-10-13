@@ -1,12 +1,12 @@
 # Developer: Current context and conventions
 
-**Last updated:** 2026-10-10 (s19 done)
+**Last updated:** 2026-10-13 (s92 done)
 
-## s19: Runner calls you automatically with a standard brief
+## s92 complete: Gate failures in foreign files route to their owners, no round
 
-The runner now automatically calls each developer step with a standard brief that includes story, design, review, previous handoff (if returning), and bounce reason (if bounced). You will not see the PO except in rare cases where a step hands over (open questions, blocked, round cap). The architect names your specialisation (e.g., `developer-cli`, `developer-gui`) in a `"developer"` field; the PO can override it per story with `set_developer`.
+When the implement gate fails (coverage, lint, or static), the runner routes items by file ownership. Items you own stay with you and bounce as usual. Items in files you can't edit (e2e tests, lint in tests/, design files) route to the owner role without counting a round or opening a dispute. The story returns to you after all fix steps complete. **Your brief will show:** "Other roles fix items in their files first, then this step runs again."
 
-See ADR-0009 for the routing architecture.
+If a gate fails only in files you can't edit, hand off `done` and the runner sends them onward. Do not block, do not dispute.
 
 ## Process: you cannot edit tests
 
@@ -18,7 +18,7 @@ When you have questions about test expectations, ask during design reviews or ha
 
 Stories stay in the backlog until the Product Owner calls `start_sprint`. You cannot start implementation on a backlog story; only sprint stories can proceed. On resume, check the current sprint before your first step.
 
-## Design decisions affecting your work
+## Design decisions
 
-- **Nested forbidden roots (s7):** The Customer Proxy can reach customer docs even when they share a parent directory with source. Keep docs clean and separate concerns clearly.
-- **Deny on any view (s7):** The Proxy's Bash enforcement is conservative (denies on any plausible interpretation). Design customer workflows to avoid quoted comments or ambiguous constructs.
+- **Git confinement (s65):** Your steps have no git ceiling. **Nested roots (s7):** Docs and source may share a parent; keep them separate.
+- **Deny on any view (s7):** The Proxy's Bash enforcement is conservative. Design workflows to avoid quoted comments or ambiguous constructs.

@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s92 complete: Gate routing to file owners—new verdict (ROUTE) and step kind (GATE_FIX) (no new ADR)
+
+Implement gate now routes items by file ownership (rules R1–R20). New verdict `ROUTE` (stays at step, no round). New step kind `GATE_FIX` (queued for owner role). New module `owners.py` (pure, ~200 LOC): Source enum (TEST, LINT), Item/Fix/FixRecord dataclasses, Owners table (role/file matching via write globs), fixer logic, split (own vs. foreign), fix_lines builders. Dispatch: SETBACKS gains ROUTE; fix_outcome/FIX_OUTCOMES handle bounces/blocks/holds; _fix_effects pops queue or logs. Router: fix_work queues GATE_FIX with brief showing only owner's items; SENT_BACK_LINES["route"]. Dashboard: STATUS_TONE.route="warning"; TIMELINE.gate and TIMELINE["gate-fix"] rows; prompt sections in _shared.md, developer.md, code-reviewer.md. **Your docs work (ship step):** `reference/protocol.md` (Verdict table: ROUTE definition, rules R1–R20 summary; gate fix steps section), `SKILL.md` (pipeline paragraph mentions routing, gate fix steps), `docs/customer/routing.md` (new: "When the gate fails in another role's file"), `docs/customer/dashboard.md` (Flow timeline rows for ROUTE and GATE_FIX).
 
 ## s97 complete: Awake-time calculation—step times and heartbeat (design rules AW1–AW13, no new ADR)
 

@@ -1,6 +1,10 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s92 P1: Node-harness tests for gate routing to e2e test owner (your work)
+
+When implement gate fails with an e2e test failure (pytest FAILED in tests/e2e/), the runner routes it to you as a gate fix step. Your brief lists only the e2e items, exact pytest output, and the design rule if the developer cited one. Fix only those items (update the e2e test), then hand off `done`. The queue pops, story returns to developer, no round counted. **Your P1 work:** Node-harness tests for `STATUS_TONE.route = "warning"`, the `gate` row with route verdict showing which roles fix next, and the `gate-fix` row showing your role, status, and files. See checklist items in design `agile-team/docs/design/s92.md` § Test checklist, Page section.
 
 ## s97: Node-harness tests for awake-time page display (unit/code-review done, P1: your work)
 
