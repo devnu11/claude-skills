@@ -48,6 +48,7 @@ PACKAGE_DATA = (
     "presets.toml",
     "dashboard/index.html",
     "dashboard/fixtures/*.json",
+    "dashboard/seed/.agile-team.toml",
 )
 
 

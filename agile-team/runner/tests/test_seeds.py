@@ -33,14 +33,14 @@ def config_seed(text: str = GOOD) -> Seeds:
 # ----- config ---------------------------------------------------------------
 
 
-def test_delivery_seed_defaults_to_empty() -> None:
-    assert Delivery("a", "web").seed == ""
+def test_delivery_seed_defaults_to_none() -> None:
+    assert Delivery("a", "web").seed is None
 
 
 def test_delivery_seed_loads_from_the_config(repo: Path) -> None:
     raw = {"delivery": [{"name": "a", "kind": "web", "seed": "x/y"}, {"name": "b", "kind": "web"}]}
     c = cfg.from_raw(repo, raw)
-    assert [d.seed for d in c.deliveries] == ["x/y", ""]
+    assert [d.seed for d in c.deliveries] == ["x/y", None]
 
 
 # ----- seed_dir -------------------------------------------------------------
@@ -51,7 +51,28 @@ def test_seed_dir_without_a_delivery_is_none() -> None:
 
 
 def test_seed_dir_with_an_empty_seed_is_none_not_the_repo() -> None:
-    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "web")) is None
+    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "web", seed="")) is None
+
+
+def test_seed_dir_of_a_web_delivery_without_a_key_is_the_packaged_seed() -> None:
+    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "web")) == seeds.PACKAGED_SEED
+
+
+def test_seed_dir_of_a_package_delivery_without_a_key_is_none() -> None:
+    assert seeds.seed_dir(FAKE_ROOT, Delivery("a", "package")) is None
+
+
+def test_default_seeds_and_packaged_seed_location() -> None:
+    import agile_team
+
+    assert seeds.DEFAULT_SEEDS == {"web": seeds.PACKAGED_SEED}
+    assert seeds.PACKAGED_SEED == Path(agile_team.__file__).parent / "dashboard" / "seed"
+
+
+def test_packaged_seed_names_and_config_are_valid() -> None:
+    assert Seeds(seeds.PACKAGED_SEED, WORKSPACE).names() == [cfg.CONFIG_NAME]
+    assert seeds.config_problem(seeds.PACKAGED_SEED / cfg.CONFIG_NAME) is None
+    assert cfg.load(seeds.PACKAGED_SEED).dashboard.token == "presentation"
 
 
 def test_seed_dir_joins_the_repo_and_the_seed() -> None:

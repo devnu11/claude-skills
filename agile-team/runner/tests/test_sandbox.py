@@ -403,3 +403,25 @@ def test_prepare_without_a_seed_plants_nothing(configured: Path) -> None:
 def test_seed_problems_are_empty_before_anything_is_seeded(configured: Path) -> None:
     d = seeded(configured)
     assert sandbox.layout(load(configured, d), d).seed_problems() == []
+
+
+def prepared_web(configured: Path, fake: FakeSystem, **extra: str) -> sandbox.Prepared:
+    """Prepare a web delivery with no presentation; its fake server hangs and answers."""
+    fake.reply(("serve",), Hang())
+    d = Delivery("ui", "web", prepare="serve", url=URL, **extra)
+    return sandbox.Preparer(probe=lambda _u: True).prepare(load(configured, d), sandbox.Order(d))
+
+
+def test_prepare_seeds_a_web_delivery_without_a_seed_key_with_the_packaged_seed(
+    configured: Path, fake: FakeSystem
+) -> None:
+    p = prepared_web(configured, fake)
+    target = p.root / "presentation" / "workspace" / ".agile-team.toml"
+    assert system.read_text(target) == SEED_TOML
+    assert p.seed_problems() == []
+
+
+def test_prepare_with_seed_off_plants_nothing_for_web(configured: Path, fake: FakeSystem) -> None:
+    p = prepared_web(configured, fake, seed="")
+    assert not system.exists(p.root / "presentation" / "workspace" / ".agile-team.toml")
+    assert p.seed_problems() == []
