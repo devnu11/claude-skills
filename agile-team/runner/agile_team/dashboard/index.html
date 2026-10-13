@@ -2133,10 +2133,12 @@ function verdictOf(ctx, step) {
   return storyEvents(ctx, step.story).find((e) => VERDICT_KINDS.has(e.kind) && e.at >= step.ended_at && (!next || e.at < next.at));
 }
 
+/** The state word of a step. */
 function stepState(step) {
   return STEP_STATES[step.ended_at == null ? "running" : step.seconds == null ? "killed" : "ended"];
 }
 
+/** The tooltip of a step bar. */
 function stepTitle(ctx, step, verdict, outcome) {
   const reason = verdict?.data?.reason ? ` — ${firstLine(verdict.data.reason)}` : "";
   const back = ARROW_VERDICTS.has(verdict?.data?.verdict) && !nextStepOf(ctx, step) ? ` · back to ${verdict.data.now_at}` : "";
@@ -2155,6 +2157,7 @@ function stepBar(ctx, step) {
 /** Bars for a story's steps (TL5). */
 function stepBars(ctx, id) { return storySteps(ctx, id).map((s) => stepBar(ctx, s)); }
 
+/** A runner-stage event as a bar. */
 function stageBar(e) {
   const d = e.data, look = STAGE_STATES[(d.code ?? 0) === 0 && d.raised == null ? "ok" : "failed"];
   const during = d.when === "during" ? " · during the step; counted in work" : "";
@@ -2239,6 +2242,7 @@ function otherWaits(ctx, story) {
   return [...steps, ...stages, ...turns];
 }
 
+/** The label of an 'other' wait. */
 function otherLabel(story, keys) {
   const name = (k) => (list(story.depends_on).includes(k) ? `${k} (dependency)` : k);
   const extra = keys.length > 3 ? ` +${keys.length - 3}` : "";
@@ -2263,6 +2267,7 @@ function pieceOf([a, b], waits, story) {
   return { from: a, to: b, kind: IDLE.kind, label: IDLE.label };
 }
 
+/** Joins neighbouring pieces of the same kind. */
 function mergePieces(pieces) {
   const out = [];
   for (const p of pieces) {
@@ -2286,13 +2291,18 @@ function gapSegments(ctx, story, group) {
 }
 
 /** A story's group: rows, bars, marks, arrows, waits and sleeps; null with no activity (TL4-TL12). */
+/** The sleep intervals of the run, clipped to a range. */
+function sleepIntervals(ctx, range) {
+  return tlClip(sleepWaits(ctx).map((w) => [w.from, w.to]), range);
+}
+
 function storyGroup(ctx, story) {
   const range = storyRange(ctx, story);
   if (!range) return null;
   const bars = [...stepBars(ctx, story.id), ...stageBars(ctx, story.id), ...poBars(ctx, story.id)];
   const marks = rulingMarks(ctx, story.id);
   const group = { id: story.id, story, title: story.title, range, rows: groupRows(bars, marks), bars, marks,
-                  arrows: bounceArrows(ctx, story.id), segments: [], sleeps: tlClip(sleepWaits(ctx).map((w) => [w.from, w.to]), range) };
+                  arrows: bounceArrows(ctx, story.id), segments: [], sleeps: sleepIntervals(ctx, range) };
   return { ...group, segments: gapSegments(ctx, story, group) };
 }
 
@@ -2336,7 +2346,7 @@ function modelTotals(ctx, groups) {
   const parts = groups.map((g) => groupTotals(ctx, g));
   const turns = new Map(groups.flatMap((g) => g.bars).filter((b) => b.kind === "po").map((b) => [b.event.id, b]));
   const waits = Object.fromEntries(WAIT_BREAKDOWN.map((k) => [k, sum(parts, (p) => p.waits[k])]));
-  const sleeps = tlClip(sleepWaits(ctx).map((w) => [w.from, w.to]), modelRange(groups));
+  const sleeps = sleepIntervals(ctx, modelRange(groups));
   return { work: sum(parts, (p) => p.work), runner: sum(parts, (p) => p.runner), po: sum([...turns.values()], turnSeconds),
            waiting: sum(Object.values(waits)), asleep: tlMeasure(sleeps), waits, stories: groups.filter((g) => g.story).length };
 }
@@ -2390,6 +2400,7 @@ function tlTicks(win) {
   return ticks.map((t, i) => ({ t, label: tickLabel(t, i ? ticks[i - 1] : t) }));
 }
 
+/** The text of one axis tick. */
 function tickLabel(t, before) {
   const d = new Date(t * 1000), clock = fmt.time(t);
   return d.toDateString() === new Date(before * 1000).toDateString() ? clock : `${d.toLocaleDateString([], { weekday: "short" })} ${clock}`;
@@ -2419,14 +2430,18 @@ function tlButton(kind, attrs, body) {
 // -- drawing --
 
 const tlClamp = (x) => Math.min(TL_WIDTH, Math.max(TL.LABEL_W, x));
+/** The x of time t in a window. */
+const tlX = (win, t) => TL.LABEL_W + ((t - win.from) / (win.to - win.from)) * TL.PLOT_W;
 const tlSeen = (win, from, to) => to > win.from && from < win.to;
 
+/** Row positions of a group at a given top. */
 function groupLayout(group, top) {
   const waitsTop = top + TL.GROUP_H, rowsTop = waitsTop + (group.story ? TL.WAITS_H : 0);
   const rowY = (row) => rowsTop + group.rows.indexOf(row) * TL.ROW_H + TL.ROW_H / 2;
   return { top, waitsTop, rowsTop, rowY, bottom: rowsTop + group.rows.length * TL.ROW_H };
 }
 
+/** One bar, clamped to the plot. */
 function barSvg(bar, lay, plot) {
   if (!tlSeen(plot.win, bar.from, bar.to)) return "";
   const x1 = tlClamp(plot.x(bar.from)), x2 = tlClamp(plot.x(bar.to));
@@ -2434,6 +2449,7 @@ function barSvg(bar, lay, plot) {
     + ` x="${x1}" y="${lay.rowY(bar.row) - TL.BAR_H / 2}" width="${Math.max(TL.MIN_BAR_PX, x2 - x1)}" height="${TL.BAR_H}" rx="2" fill="var(${bar.fill})"><title>${esc(bar.title)}</title></rect>`;
 }
 
+/** One ruling diamond. */
 function markSvg(mark, lay, plot) {
   if (!tlSeen(plot.win, mark.at, mark.at)) return "";
   const x = plot.x(mark.at), y = lay.rowY(mark.row), r = TL.BAR_H / 2 + 1;
@@ -2441,7 +2457,9 @@ function markSvg(mark, lay, plot) {
   return `<path data-mark="${mark.kind}" data-row="${esc(mark.row)}" d="M${x} ${y - r} L${x + r} ${y} L${x} ${y + r} L${x - r} ${y} Z" fill="var(${fill})"><title>${esc(mark.title)}</title></path>`;
 }
 
+/** One bounce arrow, skipped outside the window. */
 function arrowSvg(arrow, lay, plot, group) {
+  if (!tlSeen(plot.win, arrow.from, arrow.to)) return "";
   const [x1, x2] = [plot.x(arrow.from), plot.x(arrow.to)];
   const [y1, y2] = [lay.rowY(arrow.fromRow), lay.rowY(arrow.toRow)];
   const lift = y1 === y2 ? 16 : 0;
@@ -2449,6 +2467,7 @@ function arrowSvg(arrow, lay, plot, group) {
   return `<path data-arrow="bounce" data-from-row="${esc(arrow.fromRow)}" data-to-row="${esc(arrow.toRow)}" d="${d}" fill="none" stroke="var(--serious)" stroke-width="1.25" marker-end="url(#tl-${esc(group.id)}-arrow)"/>`;
 }
 
+/** One wait segment and its shade. */
 function segmentSvg(seg, lay, plot) {
   if (!tlSeen(plot.win, seg.from, seg.to)) return "";
   const x1 = tlClamp(plot.x(seg.from)), x2 = tlClamp(plot.x(seg.to)), fill = WAIT_FILLS[seg.kind];
@@ -2460,50 +2479,57 @@ function segmentSvg(seg, lay, plot) {
     + (fits ? tlText("wait", seg.label, `x="${x1 + 3}" y="${strip - 4}"`) : "");
 }
 
+/** One hatched sleep interval. */
 function sleepSvg([from, to], lay, plot, group) {
   if (!tlSeen(plot.win, from, to)) return "";
   const x1 = tlClamp(plot.x(from)), x2 = tlClamp(plot.x(to));
   return `<rect data-sleep data-from="${tlFixed(from)}" data-to="${tlFixed(to)}" x="${x1}" y="${lay.rowsTop}" width="${x2 - x1}" height="${lay.bottom - lay.rowsTop}" fill="url(#tl-${esc(group.id)}-sleep)"/>`;
 }
 
+/** Clip path, hatch pattern and arrow marker of a group. */
 function groupDefs(group) {
   const id = esc(group.id);
-  return `<pattern id="tl-${id}-sleep" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="var(--ink-2)" fill-opacity=".25"/></pattern>`
+  return `<clipPath id="tl-${id}-clip"><rect x="${TL.LABEL_W}" y="0" width="${TL.PLOT_W}" height="100000"/></clipPath>`
+    + `<pattern id="tl-${id}-sleep" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="var(--ink-2)" fill-opacity=".25"/></pattern>`
     + `<marker id="tl-${id}-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--serious)"/></marker>`;
 }
 
+/** The row labels of a group. */
 function rowLabelsSvg(group, lay) {
   const labels = group.rows.map((row) => tlText("label", tlCut(row, 20), `x="4" y="${lay.rowY(row) + 4}" data-row-label="${esc(row)}"`));
   const waits = group.story ? [tlText("label", "waits", `x="4" y="${lay.waitsTop + 15}" data-row-label="waits"`)] : [];
   return [...waits, ...labels].join("");
 }
 
+/** A whole group's SVG and its bottom. */
 function groupSvg(group, top, plot) {
   const lay = groupLayout(group, top);
-  const head = tlText("group", tlCut(`${group.story ? group.id + " · " : ""}${group.title}`, 80), `x="4" y="${top + 15}"`);
+  const head = tlText("group", (group.story ? `${group.id} · ` : "") + tlCut(group.title, 80), `x="4" y="${top + 15}"`);
   const body = [
     ...group.segments.map((s) => segmentSvg(s, lay, plot)), ...group.sleeps.map((s) => sleepSvg(s, lay, plot, group)),
     ...group.bars.map((b) => barSvg(b, lay, plot)), ...group.marks.map((m) => markSvg(m, lay, plot)),
     ...group.arrows.map((a) => arrowSvg(a, lay, plot, group)),
   ];
-  return { svg: `<g data-group="${esc(group.id)}"><defs>${groupDefs(group)}</defs>${head}${rowLabelsSvg(group, lay)}${body.join("")}</g>`, bottom: lay.bottom };
+  return { svg: `<g data-group="${esc(group.id)}"><defs>${groupDefs(group)}</defs>${head}${rowLabelsSvg(group, lay)}<g clip-path="url(#tl-${esc(group.id)}-clip)">${body.join("")}</g></g>`, bottom: lay.bottom };
 }
 
+/** The time axis and grid. */
 function axisSvg(win, height) {
-  const x = (t) => TL.LABEL_W + ((t - win.from) / (win.to - win.from)) * TL.PLOT_W;
+  const x = (t) => tlX(win, t);
   return tlTicks(win).map(({ t, label }) => `<line x1="${x(t)}" x2="${x(t)}" y1="${TL.AXIS_H}" y2="${height}" stroke="var(--grid)"/>`
     + tlText("axis", label, `x="${x(t)}" y="16" text-anchor="middle"`)).join("");
 }
 
-function nowSvg(range, win, now) {
+/** The now line, when running and in the window. */
+function nowSvg(range, win, now, h) {
   if (!range.running || now < win.from || now > win.to) return "";
-  const x = TL.LABEL_W + ((now - win.from) / (win.to - win.from)) * TL.PLOT_W;
-  return `<line data-now x1="${x}" x2="${x}" y1="${TL.AXIS_H - 4}" y2="__H__" stroke="var(--accent)" stroke-width="1.5"/>` + tlText("now", "now", `x="${x + 3}" y="${TL.AXIS_H - 8}"`);
+  const x = tlX(win, now);
+  return `<line data-now x1="${x}" x2="${x}" y1="${TL.AXIS_H - 4}" y2="${h}" stroke="var(--accent)" stroke-width="1.5"/>` + tlText("now", "now", `x="${x + 3}" y="${TL.AXIS_H - 8}"`);
 }
 
 /** The SVG for a model in a window, drawn at scale 1 (TR2). */
 function timelineSvg(model, win, now) {
-  const plot = { win, x: (t) => TL.LABEL_W + ((t - win.from) / (win.to - win.from)) * TL.PLOT_W };
+  const plot = { win, x: (t) => tlX(win, t) };
   let top = TL.AXIS_H;
   const groups = model.groups.map((g) => {
     const drawn = groupSvg(g, top, plot);
@@ -2512,7 +2538,7 @@ function timelineSvg(model, win, now) {
   });
   const h = top;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${TL_WIDTH}" height="${h}" viewBox="0 0 ${TL_WIDTH} ${h}">`
-    + `<rect width="${TL_WIDTH}" height="${h}" fill="var(--surface)"/>${axisSvg(win, h)}${groups.join("")}${nowSvg(model.range, win, now).replace("__H__", h)}</svg>`;
+    + `<rect width="${TL_WIDTH}" height="${h}" fill="var(--surface)"/>${axisSvg(win, h)}${groups.join("")}${nowSvg(model.range, win, now, h)}</svg>`;
 }
 
 /** The totals line (TL13). */
@@ -2531,6 +2557,7 @@ function legendHtml() {
   return `<div class="legend">${looks.map(swatch).join("")}</div>`;
 }
 
+/** The scope, zoom and pan buttons. */
 function toolbarHtml(story, state) {
   const scopes = TL_SCOPES.map(([id, label]) => {
     const off = id === "sprint" && story.sprint == null ? ` disabled title="not in a sprint"` : "";
@@ -2568,6 +2595,7 @@ function tlTarget(id) {
   return range ? { state, range } : null;
 }
 
+/** Applies a zoom, pan or follow change to a story's window. */
 function tlChange(id, change) {
   const target = tlTarget(id);
   if (!target) return;
