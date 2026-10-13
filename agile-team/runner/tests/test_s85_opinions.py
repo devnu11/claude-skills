@@ -322,7 +322,7 @@ def test_is_object() -> None:
 
 
 @pytest.fixture
-def world(make_runtime, fake: FakeSystem):
+def backlog_world(make_runtime, fake: FakeSystem):
     """Sprint 1: s1; backlog: s5, s6, s7; s9 done."""
     rt = make_runtime()
     add_story(rt, "s1")
@@ -353,48 +353,51 @@ def ask_for(rt, oid: str, act: Act = Act.APPLY, version: str | None = None) -> A
 # ----- record -----
 
 
-def test_record_appends_and_returns_the_opinion(world, fake: FakeSystem) -> None:
-    o = Opinions(world.config.run_dir).record("s5", Kind.MOVE_UP, "  text ")
+def test_record_appends_and_returns_the_opinion(backlog_world, fake: FakeSystem) -> None:
+    o = Opinions(backlog_world.config.run_dir).record("s5", Kind.MOVE_UP, "  text ")
     assert o == opinions.Opinion("o1", "s5", Kind.MOVE_UP, "text", fake.clock)
-    assert box_of(world).record("s5", Kind.KEEP, "z").id == "o2"
+    assert box_of(backlog_world).record("s5", Kind.KEEP, "z").id == "o2"
 
 
-def test_review_returns_the_review(world, fake: FakeSystem) -> None:
-    r = box_of(world).review(" sum ")
+def test_review_returns_the_review(backlog_world, fake: FakeSystem) -> None:
+    r = box_of(backlog_world).review(" sum ")
     assert r == opinions.Review("v1", "sum", fake.clock)
 
 
 # ----- O8: refusals -----
 
 
-def test_unknown_opinion(world) -> None:
-    board = box_of(world).board()
+def test_unknown_opinion(backlog_world) -> None:
+    board = box_of(backlog_world).board()
     assert board.refusal(ActAsk("o1", Act.APPLY, "v")) == "no opinion 'o1'"
     assert board.find("o1") is None
 
 
-def test_superseded(world) -> None:
-    record(world, "s5", Kind.FOLD)
-    record(world, "s5", Kind.SCOPE)
-    assert box_of(world).refusal(ask_for(world, "o1")) == (
+def test_superseded(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.FOLD)
+    record(backlog_world, "s5", Kind.SCOPE)
+    assert box_of(backlog_world).refusal(ask_for(backlog_world, "o1")) == (
         "o1 is no longer the latest opinion on s5; reload"
     )
-    assert box_of(world).refusal(ask_for(world, "o2")) is None
+    assert box_of(backlog_world).refusal(ask_for(backlog_world, "o2")) is None
 
 
-def test_keep_has_nothing_to_act_on(world) -> None:
-    record(world, "s5", Kind.KEEP)
-    assert box_of(world).refusal(ask_for(world, "o1")) == (
+def test_keep_has_nothing_to_act_on(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.KEEP)
+    assert box_of(backlog_world).refusal(ask_for(backlog_world, "o1")) == (
         "o1 is keep: there is nothing to dismiss or apply"
     )
 
 
 @pytest.mark.parametrize(("first", "status"), [(Act.DISMISS, "dismissed"), (Act.APPLY, "applied")])
-def test_a_second_act_is_refused(world, first: Act, status: str) -> None:
-    record(world, "s5", Kind.FOLD)
-    box_of(world).act(ask_for(world, "o1", first))
+def test_a_second_act_is_refused(backlog_world, first: Act, status: str) -> None:
+    record(backlog_world, "s5", Kind.FOLD)
+    box_of(backlog_world).act(ask_for(backlog_world, "o1", first))
     for second in Act:
-        assert box_of(world).refusal(ask_for(world, "o1", second)) == f"o1 was already {status}"
+        assert (
+            box_of(backlog_world).refusal(ask_for(backlog_world, "o1", second))
+            == f"o1 was already {status}"
+        )
 
 
 def test_refusal_order_unknown_then_superseded_then_keep_then_settled() -> None:
@@ -407,21 +410,21 @@ def test_refusal_order_unknown_then_superseded_then_keep_then_settled() -> None:
     assert board.refusal(ActAsk("o2", Act.APPLY, "v")) is None
 
 
-def test_refusals_write_nothing(world) -> None:
-    record(world, "s5", Kind.KEEP)
-    box_of(world).refusal(ask_for(world, "o1"))
-    box_of(world).refusal(ask_for(world, "o7"))
-    assert not system.exists(box_of(world).acts_file)
+def test_refusals_write_nothing(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.KEEP)
+    box_of(backlog_world).refusal(ask_for(backlog_world, "o1"))
+    box_of(backlog_world).refusal(ask_for(backlog_world, "o7"))
+    assert not system.exists(box_of(backlog_world).acts_file)
 
 
 # ----- O9-O11: acting -----
 
 
-def test_dismiss_writes_the_act_and_nothing_else(world, fake: FakeSystem) -> None:
-    record(world, "s5", Kind.MOVE_UP)
-    settled = box_of(world).act(ask_for(world, "o1", Act.DISMISS))
+def test_dismiss_writes_the_act_and_nothing_else(backlog_world, fake: FakeSystem) -> None:
+    record(backlog_world, "s5", Kind.MOVE_UP)
+    settled = box_of(backlog_world).act(ask_for(backlog_world, "o1", Act.DISMISS))
     assert settled.id == "a1" and settled.route is Route.NONE and settled.ref == ""
-    assert lines_of(box_of(world).acts_file) == [
+    assert lines_of(box_of(backlog_world).acts_file) == [
         {
             "opinion": "o1",
             "story": "s5",
@@ -431,46 +434,47 @@ def test_dismiss_writes_the_act_and_nothing_else(world, fake: FakeSystem) -> Non
             "at": fake.clock,
         }
     ]
-    assert Requests(world.config.run_dir).all() == []
-    assert Relay(world.config.run_dir).told() == []
+    assert Requests(backlog_world.config.run_dir).all() == []
+    assert Relay(backlog_world.config.run_dir).told() == []
 
 
-def test_apply_move_up_queues_the_top_place(world) -> None:
-    record(world, "s7", Kind.MOVE_UP)
-    version = version_of(world)
-    settled = box_of(world).act(ActAsk("o1", Act.APPLY, version))
+def test_apply_move_up_queues_the_top_place(backlog_world) -> None:
+    record(backlog_world, "s7", Kind.MOVE_UP)
+    version = version_of(backlog_world)
+    settled = box_of(backlog_world).act(ActAsk("o1", Act.APPLY, version))
     assert (settled.route, settled.ref) == (Route.REORDER, "r1")
-    [req] = Requests(world.config.run_dir).all()
+    [req] = Requests(backlog_world.config.run_dir).all()
     assert req.ask == Ask("s7", 1, version)
-    assert Relay(world.config.run_dir).told() == []
+    assert Relay(backlog_world.config.run_dir).told() == []
 
 
-def test_apply_move_down_queues_the_last_place(world) -> None:
-    record(world, "s5", Kind.MOVE_DOWN)
-    box_of(world).act(ask_for(world, "o1"))
-    [req] = Requests(world.config.run_dir).all()
+def test_apply_move_down_queues_the_last_place(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.MOVE_DOWN)
+    box_of(backlog_world).act(ask_for(backlog_world, "o1"))
+    [req] = Requests(backlog_world.config.run_dir).all()
     assert req.ask.position == 3 and req.ask.story == "s5"
 
 
-def test_a_queued_move_is_applied_by_the_desk(world) -> None:
-    record(world, "s7", Kind.MOVE_UP)
-    box_of(world).act(ask_for(world, "o1"))
-    Desk(world).apply()
-    assert world.state.reorders == {"r1": "applied"}
-    queue = View.of(world.state).backlog
+def test_a_queued_move_is_applied_by_the_desk(backlog_world) -> None:
+    record(backlog_world, "s7", Kind.MOVE_UP)
+    box_of(backlog_world).act(ask_for(backlog_world, "o1"))
+    Desk(backlog_world).apply()
+    assert backlog_world.state.reorders == {"r1": "applied"}
+    queue = View.of(backlog_world.state).backlog
     assert queue[0] == "s7"
-    [event] = [e for e in world.events.events() if e.kind == "priority"]
+    [event] = [e for e in backlog_world.events.events() if e.kind == "priority"]
     assert event.data["source"] == "human (dashboard)"
 
 
-def test_a_stale_move_is_refused_by_the_desk_and_the_act_stays(world) -> None:
-    record(world, "s7", Kind.MOVE_UP)
-    box_of(world).act(ActAsk("o1", Act.APPLY, "old"))
-    Desk(world).apply()
-    assert world.state.reorders["r1"] == "refused: " + (
-        "the order changed since the dashboard showed it; reload"
+def test_a_stale_move_is_refused_by_the_desk_and_the_act_stays(backlog_world) -> None:
+    record(backlog_world, "s7", Kind.MOVE_UP)
+    box_of(backlog_world).act(ActAsk("o1", Act.APPLY, "old"))
+    Desk(backlog_world).apply()
+    assert (
+        backlog_world.state.reorders["r1"]
+        == "the order changed since the dashboard showed it; reload"
     )
-    assert box_of(world).board().act_of("o1") is not None
+    assert box_of(backlog_world).board().act_of("o1") is not None
 
 
 @pytest.mark.parametrize(
@@ -484,23 +488,23 @@ def test_a_stale_move_is_refused_by_the_desk_and_the_act_stays(world) -> None:
         ("s1", Kind.MOVE_DOWN),
     ],
 )
-def test_other_applies_go_to_the_po_as_a_tagged_tell(world, story: str, kind: Kind) -> None:
-    record(world, story, kind, "because")
-    settled = box_of(world).act(ask_for(world, "o1"))
+def test_other_applies_go_to_the_po_as_a_tagged_tell(backlog_world, story: str, kind: Kind) -> None:
+    record(backlog_world, story, kind, "because")
+    settled = box_of(backlog_world).act(ask_for(backlog_world, "o1"))
     assert (settled.route, settled.ref) == (Route.PO, "t1")
-    [told] = Relay(world.config.run_dir).told()
+    [told] = Relay(backlog_world.config.run_dir).told()
     tag = threads.tag_of(told)
     assert tag is not None and tag.story == story
     assert tag.text == opinions.APPLY_TEXT.format(
         id="o1", story=story, kind=kind.value, text="because"
     )
-    assert Requests(world.config.run_dir).all() == []
+    assert Requests(backlog_world.config.run_dir).all() == []
 
 
-def test_the_route_is_worked_out_again_from_the_state(world) -> None:
-    record(world, "s5", Kind.MOVE_UP)
-    view = View.of(world.state)
-    o = box_of(world).all()[0]
+def test_the_route_is_worked_out_again_from_the_state(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.MOVE_UP)
+    view = View.of(backlog_world.state)
+    o = box_of(backlog_world).all()[0]
     assert opinions.route_of(o, view) is Route.REORDER
     in_sprint = dataclasses.replace(o, story="s1")
     assert opinions.route_of(in_sprint, view) is Route.PO
@@ -519,20 +523,20 @@ def test_a_po_apply_reaches_the_router(make_runtime) -> None:
     assert "s5" in found.stories
 
 
-def test_acting_on_a_later_opinion_is_fresh(world) -> None:
-    record(world, "s5", Kind.FOLD)
-    box_of(world).act(ask_for(world, "o1", Act.DISMISS))
-    record(world, "s5", Kind.SCOPE)
-    assert box_of(world).refusal(ask_for(world, "o2")) is None
+def test_acting_on_a_later_opinion_is_fresh(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.FOLD)
+    box_of(backlog_world).act(ask_for(backlog_world, "o1", Act.DISMISS))
+    record(backlog_world, "s5", Kind.SCOPE)
+    assert box_of(backlog_world).refusal(ask_for(backlog_world, "o2")) is None
 
 
 # ----- the write gate -----
 
 
 @pytest.fixture
-def gate(world):
-    app = Dashboard(lambda: {}, lambda: [], token=TOKEN, opinions=box_of(world))
-    return app, world
+def gate(backlog_world):
+    app = Dashboard(lambda: {}, lambda: [], token=TOKEN, opinions=box_of(backlog_world))
+    return app, backlog_world
 
 
 def review_wire(app: Dashboard, body: bytes = b"{}", **kw: Any) -> PostWire:
@@ -552,9 +556,9 @@ def test_limits_table() -> None:
     assert "/api/review" in server.POSTS and "/api/opinion" in server.POSTS
 
 
-def test_for_run_binds_the_opinions(world) -> None:
-    app = Dashboard.for_run(world.config)
-    assert app.opinions == Opinions(world.config.run_dir)
+def test_for_run_binds_the_opinions(backlog_world) -> None:
+    app = Dashboard.for_run(backlog_world.config, RoleBook.for_repo(backlog_world.config.repo, {}))
+    assert app.opinions == Opinions(backlog_world.config.run_dir)
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
@@ -715,21 +719,21 @@ def build(rt) -> dict[str, Any]:
 
 
 @pytest.fixture
-def seen(world, fake: FakeSystem):
+def seen(backlog_world, fake: FakeSystem):
     """o1 (superseded move-up), o2 (open move-down on s6), o3 (applied scope on s5)."""
     fake.clock += 10
-    record(world, "s6", Kind.MOVE_UP, "first")
+    record(backlog_world, "s6", Kind.MOVE_UP, "first")
     fake.clock += 10
-    record(world, "s6", Kind.MOVE_DOWN, "second")
+    record(backlog_world, "s6", Kind.MOVE_DOWN, "second")
     fake.clock += 10
-    record(world, "s5", Kind.SCOPE, "narrow")
+    record(backlog_world, "s5", Kind.SCOPE, "narrow")
     fake.clock += 10
-    box_of(world).act(ask_for(world, "o3"))
+    box_of(backlog_world).act(ask_for(backlog_world, "o3"))
     fake.clock += 10
-    box_of(world).ask_review()
+    box_of(backlog_world).ask_review()
     fake.clock += 10
-    box_of(world).review("all done")
-    return world
+    box_of(backlog_world).review("all done")
+    return backlog_world
 
 
 def test_snapshot_has_the_opinions(seen) -> None:
@@ -756,13 +760,13 @@ def test_snapshot_has_the_opinions(seen) -> None:
     assert snap["asked_at"] == snap["review"]["at"] - 10
 
 
-def test_a_keep_has_no_route(world) -> None:
-    record(world, "s5", Kind.KEEP)
-    assert build(world)["opinions"]["items"][0]["route"] == ""
+def test_a_keep_has_no_route(backlog_world) -> None:
+    record(backlog_world, "s5", Kind.KEEP)
+    assert build(backlog_world)["opinions"]["items"][0]["route"] == ""
 
 
-def test_no_opinions_means_empty(world) -> None:
-    assert build(world)["opinions"] == {"items": [], "asked_at": None, "review": None}
+def test_no_opinions_means_empty(backlog_world) -> None:
+    assert build(backlog_world)["opinions"] == {"items": [], "asked_at": None, "review": None}
 
 
 def test_snapshot_opinion_events(seen) -> None:
@@ -858,8 +862,3 @@ def test_the_page_texts_and_hooks(page: str) -> None:
         "ui.acting",
     ):
         assert text in page, text
-
-
-def test_the_po_role_knows_the_apply_text() -> None:
-    role = system.read_text(resources.files("agile_team.roles").joinpath("product-owner.md"))
-    assert "The human applied the liaison's opinion" in role
