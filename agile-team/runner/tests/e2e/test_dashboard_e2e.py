@@ -403,5 +403,5 @@ def test_cli_prints_local_link_then_other_machines(configured: Path, tmp_path: P
     finally:
         proc.kill()
         proc.wait(timeout=10)
-    assert re.fullmatch(r"dashboard: http://localhost:\d+/\n", lines[0]), lines
+    assert re.fullmatch(r"dashboard: http://localhost:\d+/\?token=\S+\n", lines[0]), lines
     assert re.fullmatch(r"from other machines: http://\S+:\d+/\n", lines[1]), lines
