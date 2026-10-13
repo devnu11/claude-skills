@@ -348,3 +348,58 @@ def test_os_sandbox_allows_reading_the_acceptance_dir(configured: Path) -> None:
 )
 def test_read_joins_the_restricted_kinds(kind: str, tools: tuple[str, ...]) -> None:
     assert sandbox.DELIVERY_KINDS[kind].tools == tools
+
+
+# ----- s105: seeds ----------------------------------------------------------
+
+SEED_TOML = '[dashboard]\ntoken = "presentation"\n'
+
+
+def seeded(configured: Path) -> Delivery:
+    system.make_dirs(configured / "seedsrc")
+    system.write_text(configured / "seedsrc" / ".agile-team.toml", SEED_TOML)
+    return Delivery("cli", "package", prepare="true", seed="seedsrc")
+
+
+def test_prepare_plants_the_seed_before_the_runner_without_a_presentation(
+    configured: Path,
+) -> None:
+    d = seeded(configured)
+    c = load(configured, d)
+    seen: list[str | None] = []
+
+    def runner(_command, prepared) -> int:
+        target = prepared.root / "presentation" / "workspace" / ".agile-team.toml"
+        seen.append(system.read_text(target) if system.exists(target) else None)
+        return 0
+
+    sandbox.Preparer(runner=runner).prepare(c, sandbox.Order(d))
+    assert seen == [SEED_TOML]
+
+
+def test_prepare_keeps_the_workspaces_own_config_in_the_copy(configured: Path) -> None:
+    d = seeded(configured)
+    c = load(configured, d)
+    source = present(c, "s1")
+    system.write_text(source / "workspace" / ".agile-team.toml", 'x = "mine"\n')
+    p = sandbox.Preparer().prepare(c, sandbox.Order(d, source))
+    assert system.read_text(p.presentation / "workspace" / ".agile-team.toml") == 'x = "mine"\n'
+
+
+def test_prepare_plants_into_a_copy_that_lacks_the_seed(configured: Path) -> None:
+    d = seeded(configured)
+    c = load(configured, d)
+    p = sandbox.Preparer().prepare(c, sandbox.Order(d, present(c, "s1")))
+    assert system.read_text(p.presentation / "workspace" / ".agile-team.toml") == SEED_TOML
+
+
+def test_prepare_without_a_seed_plants_nothing(configured: Path) -> None:
+    d = Delivery("cli", "package")
+    p = sandbox.Preparer().prepare(load(configured, d), sandbox.Order(d))
+    assert not system.exists(p.root / "presentation")
+    assert p.seed_problems() == []
+
+
+def test_seed_problems_are_empty_before_anything_is_seeded(configured: Path) -> None:
+    d = seeded(configured)
+    assert sandbox.layout(load(configured, d), d).seed_problems() == []

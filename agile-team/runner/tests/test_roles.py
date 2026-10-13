@@ -311,3 +311,9 @@ def test_devops_scopes_its_test_runs(repo: Path) -> None:
         "run the failing tests the brief names",
     ):
         assert phrase in text
+
+
+def test_integration_tester_prompt_explains_the_seeded_config(repo: Path) -> None:
+    body = RoleBook.for_repo(repo, {}).resolve("integration-tester").body
+    assert "the runner seeds the config" in body
+    assert 'token = "presentation"' in body

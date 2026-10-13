@@ -871,3 +871,51 @@ def test_gate_reason_field() -> None:
 
 def test_json_round_trip_of_a_report_still_matches() -> None:
     assert handover.triggers(json.loads(json.dumps(held()))) == [handover.Trigger.GATE_HOLD]
+
+
+# ----- s105: a failed start names a broken seeded file ----------------------
+
+BAD_NAME = "workspace/.agile-team.toml is broken: "
+
+
+def seeded_dashboard(config: cfg.Config) -> Delivery:
+    system.make_dirs(config.repo / "seedsrc")
+    system.write_text(config.repo / "seedsrc" / ".agile-team.toml", '[dashboard]\ntoken = "p"\n')
+    return Delivery("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="seedsrc")
+
+
+def test_broken_seeded_config_leads_the_not_up_reason(config: cfg.Config, fake: FakeSystem) -> None:
+    d = seeded_dashboard(config)
+    source = present(config, "s1")
+    system.write_text(source / "workspace" / ".agile-team.toml", "[dashboard\n")
+    fake.reply(("serve",), Done(1, "boom\n"))
+    with pytest.raises(NotUp) as info:
+        preparer(Probe(None)).prepare(config, Order(d, source))
+    first, second = str(info.value).split("\n", 1)
+    assert first.startswith(BAD_NAME) and first.endswith("a working one")
+    assert second.startswith("delivery 'ui' did not start: ")
+    assert "Last output:\nboom" in second
+
+
+def test_missing_seed_dir_is_named_in_the_not_up_reason(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    d = Delivery("ui", "web", prepare="serve", url=URL, probe="api/snapshot", seed="gone")
+    fake.reply(("serve",), Done(1, "boom\n"))
+    with pytest.raises(NotUp) as info:
+        preparer(Probe(None)).prepare(config, Order(d))
+    expected = [
+        "seed directory " + str(config.repo / "gone") + " is missing from the repo; restore it "
+        "or remove `seed` from the delivery in .agile-team.toml"
+    ]
+    assert str(info.value).split("\n")[0] == expected[0]
+
+
+def test_good_seeded_config_leaves_the_reason_unchanged(
+    config: cfg.Config, fake: FakeSystem
+) -> None:
+    d = seeded_dashboard(config)
+    fake.reply(("serve",), Done(1, "boom\n"))
+    with pytest.raises(NotUp) as info:
+        preparer(Probe(None)).prepare(config, Order(d))
+    assert str(info.value).startswith("delivery 'ui' did not start: ")

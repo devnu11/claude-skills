@@ -212,3 +212,62 @@ def test_prompt_section_names_the_path_the_rule_and_quotes_the_guide() -> None:
     assert "workspace" in text
     assert "changes_requested" in text and "integration-tester" in text
     assert GUIDE_TEXT.strip() in text
+
+
+# ----- s105: seeds ----------------------------------------------------------
+
+
+def seeded_config(config: cfg.Config, *, seed: str = "seedsrc") -> None:
+    system.make_dirs(config.repo / "seedsrc")
+    system.write_text(config.repo / "seedsrc" / ".agile-team.toml", "[dashboard]\n")
+    config.deliveries = [Delivery("cli", "package", seed=seed)]
+
+
+def test_lay_out_plants_the_seed_in_the_source_workspace(config: cfg.Config) -> None:
+    seeded_config(config)
+    source = presentation.lay_out(config, story_of())
+    assert system.read_text(source / "workspace" / ".agile-team.toml") == "[dashboard]\n"
+
+
+def test_lay_out_keeps_the_testers_own_config(config: cfg.Config) -> None:
+    seeded_config(config)
+    source = presentation.source_dir(config, "s4")
+    system.make_dirs(source / "workspace" / ".git")
+    system.write_text(source / "workspace" / ".agile-team.toml", "mine\n")
+    presentation.lay_out(config, story_of())
+    assert system.read_text(source / "workspace" / ".agile-team.toml") == "mine\n"
+
+
+def test_lay_out_plants_nothing_without_a_seed(config: cfg.Config) -> None:
+    seeded_config(config, seed="")
+    source = presentation.lay_out(config, story_of())
+    assert not system.exists(source / "workspace" / ".agile-team.toml")
+
+
+def test_lay_out_manual_plants_no_seed(config: cfg.Config) -> None:
+    config.deliveries = [Delivery("hw", "manual", seed="seedsrc")]
+    source = presentation.lay_out(config, story_of(delivery="hw"))
+    assert system.list_dir(source) == []
+
+
+def test_workspace_holding_only_git_and_the_seed_is_incomplete(config: cfg.Config) -> None:
+    seeded_config(config)
+    source = present(config, "s4", workspace=False)
+    presentation.lay_out(config, story_of())
+    assert system.exists(source / "workspace" / ".agile-team.toml")
+    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+
+
+def test_workspace_with_another_file_beside_the_seed_is_complete(config: cfg.Config) -> None:
+    seeded_config(config)
+    source = present(config, "s4", workspace=False)
+    presentation.lay_out(config, story_of())
+    system.write_text(source / "workspace" / "state.json", "{}")
+    assert presentation.missing(config, story_of()) is None
+
+
+def test_story_seeds_point_at_the_delivery_seed_and_the_workspace(config: cfg.Config) -> None:
+    seeded_config(config)
+    s = presentation.story_seeds(config, story_of())
+    assert s.source == config.repo / "seedsrc"
+    assert s.workspace == presentation.workspace_of(config, "s4")
