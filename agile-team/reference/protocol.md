@@ -21,6 +21,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
+| `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command"}`. Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
@@ -763,6 +764,11 @@ probe = ""                     # web only: path joined to url that must answer 2
 commands = []                  # harness only: the Proxy's Bash allowlist
 # prepare placeholders: {repo}, {sandbox} (absolute paths), {host}, {port} (from url)
 
+[[tool]]                       # optional, DevOps-owned (s99); a format only: nothing runs it yet
+name = "deploy.preview"        # lowercase letters, digits, - _ + and dots; not a built-in name or namespace
+description = "Deploy the branch to the preview site"
+command = "make preview"
+
 [roles.integration-tester]
 enabled = false                # disable a role
 [roles.developer]
@@ -787,6 +793,24 @@ story opens: `delivery 'x' is not a configured [[delivery]]; use one of: cli,
 web`. With no `[[delivery]]` configured, the refusal says so and lists no
 names. One check (`Config.delivery_refusal`) serves every path that sets a
 story's delivery.
+
+`[[tool]]` rows (s99) name a repo's own tools: `name`, `description` and
+`command`, each a non-empty string after strip. Loading refuses the whole
+file (`config check`, `start`, `tools` exit 1) when any row breaks a rule,
+listing every problem `; `-joined, in rule order, then repeats:
+
+| Rule | Message |
+|---|---|
+| name matches `[a-z0-9][a-z0-9_+-]*(\.[a-z0-9][a-z0-9_+-]*)*` | `[[tool]] 'Deploy' name must be lowercase letters, digits, -, _, + and dots` |
+| not a built-in stage name, and not in a built-in namespace (`env`, `presentation`, `quality`, `checkout`, `gate`, `boundary`, `runner-tool`, `po`) | `[[tool]] 'gate.mine' clashes with a built-in name; pick another` |
+| description not blank | `[[tool]] 'x' needs a description` |
+| command not blank | `[[tool]] 'x' needs a command` |
+| name not repeated | `[[tool]] name 'x' is repeated` |
+
+DevOps owns `[[tool]]` as it owns `[toolchain]` and `[[delivery]]`: a role's
+config edit touching only those sections is kept, any other is quarantined.
+In s99 the rows are a format only: the runner runs no `[[tool]]` command, and
+an agent's Bash call is never matched to one by its text.
 
 ## Roles
 
@@ -1090,6 +1114,60 @@ results in their briefs instead:
   and logs a `tests-run` event with the tests, exit codes and seconds. With
   no `[[toolchain.targeted]]` rows the tools refuse, and the developer names
   tests in Bash.
+
+### Runner stages (s99)
+
+The work the runner does itself (gates, quality checks, checkout checks,
+environment preparation, presentation lay-out and trial, boundary stages,
+runner tools) is a table of named stages, `stages.STAGES`. Run
+`agile-team tools` for the list; this page does not repeat it. Each row has
+a `name` (`<namespace>.<stage>`, e.g. `gate.tests+coverage`), a
+`description`, `when` and `attach`:
+
+- `when`: `before` (runs before the step it attaches to, or before a
+  sprint), `after` (after the step, or closing a sprint), or `during` (a
+  runner tool working inside an agent step at the agent's request).
+- `attach`: `step`, `story` (the PO's `pass_tests` green check) or
+  `boundary`.
+
+The code that decides to do the work opens the stage by name; nothing infers
+a stage from command text, and an unlisted name fails. The places that run
+commands (the gate shell, git, the `gh` runner, the sandbox's prepare and
+service start) only note each command and its exit code into the stage that
+is open. A command run with no stage open (a git query between steps) is
+recorded nowhere.
+
+Each stage run, whether it returns or raises, writes one `runner-stage` event
+to `events.jsonl`, however many commands it ran:
+
+```json
+{"kind": "runner-stage", "role": "runner", "story": "s99",
+ "data": {"stage": "gate.tests+coverage", "when": "after", "attach": "step",
+          "step": "implement", "detail": "uv run pytest --cov -q", "code": 0,
+          "raised": null, "started_at": 1760313600.0, "started_mono": 5321.4,
+          "started_slept": 0.0, "seconds": 41.253},
+ "at": 1760313641.3, "id": "e812"}
+```
+
+- `story` and `data.step`: the step the runner is running when the stage
+  runs (set for the whole step, from its request), or the story of a
+  `pass_tests` check; both `null` elsewhere (router tick, PO turn, boundary).
+  `when` and `attach` are the table row's.
+- `detail`: the first command that exited non-zero, else the last command
+  noted; masked like a tool call's detail (secrets `***`, whitespace
+  collapsed, at most 80 characters); `""` when none ran.
+- `code`: that command's exit code; with no command, `0` when the stage
+  returned and `null` when it raised. A service that never answered is code
+  `1`; a missing binary is `127`; a command killed at its limit is `124`.
+- `raised`: the exception's class name when the stage raised (it still
+  propagates), else `null`.
+- `started_at`, `started_mono`, `started_slept`: the wall clock, monotonic
+  clock and heartbeat sleep counter at the start; `seconds` is the awake time
+  (POSIX: monotonic span; Windows: wall less counted sleep), 3 decimals.
+- A runner tool writes both its `tests-run` event and a `runner-stage` event.
+  A failed write of the line never stops the run. A killed runner writes no
+  event for the stage it was in.
+- The Timeline tab does not draw `runner-stage` events yet.
 
 ### Time limits
 

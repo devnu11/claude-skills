@@ -258,6 +258,14 @@ command fails.
   gap for DevOps or the human, not a team fault. DevOps is exempt from the
   deny only so onboarding can record the coverage baseline; otherwise it
   runs only what proves its change, normally one named test (s75).
+- The runner's own work is named stages (s99): each gate, quality check,
+  checkout check, prepare, presentation and boundary stage, and runner tool
+  writes one `runner-stage` event (story, step, command, exit code, awake
+  seconds). `agile-team tools` prints the built-in stages and the repo's
+  `[[tool]]` rows as JSON. DevOps owns `[[tool]]` (name, description,
+  command) as it owns `[toolchain]` and `[[delivery]]`; a repeated name or
+  one in a built-in namespace (`gate.`, `env.`, `boundary.` …) is refused on
+  load. Nothing runs a `[[tool]]` command yet.
 - In this repo the runner's suite runs in parallel with pytest-xdist (s70):
   the gate runs `uv run --directory agile-team/runner pytest -n auto --cov
   --cov-report=term -q`, and named tests run with
