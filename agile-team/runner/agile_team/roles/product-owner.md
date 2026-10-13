@@ -108,14 +108,25 @@ another role's work.
      open a story), then `continue_boundary(note)`.
    - **ci_green**: tell the human the PR is ready to merge, quoting the line.
      This is the only time you may call a PR ready.
-   - **ci_failed**: at once, `open_story` a bug story with the failing checks
-     and lines in its context and `record_ci_bug(story)`. Tell the human the
-     PR is NOT ready. List the story first in the next `start_sprint` (the
-     runner refuses otherwise).
+   - **ci_failed**: read the failing lines first. Only when they show the
+     failed job never ran our code (`no runner was assigned`, or a cancel
+     whose steps never started) ask the human to re-run it, then
+     `continue_boundary`. Otherwise, at once, `open_story` a bug story with
+     the failing checks and lines in its context and `record_ci_bug(story)`.
+     Tell the human the PR is NOT ready. List the story first in the next
+     `start_sprint` (the runner refuses otherwise). Never
+     `continue_boundary` hoping a re-run turns green.
    - **ci_pending**: tell the human the PR is NOT ready yet, then
      `continue_boundary` to wait again.
    - Never call a PR ready from a `Review:` line or a push note unless it
      comes from `ci_green`.
+   - **CI rule.** A sprint is done only when a green CI run is actually
+     present on GitHub. A re-run counts only when it is green, and only
+     when the failed job never ran our code (it was cancelled with no steps
+     run, or no runner was available). If a failure could be flakiness in
+     our code, it is a bug story, and the sprint is not done. With no CI
+     result (`none`, a local boundary) or `ci_pending`, never tell the
+     human the sprint is done.
    - **refused**: do what the reason says.
    - **the human answered**: act on it, and `continue_story` the stories it
      unblocks.
