@@ -1907,15 +1907,6 @@ const GROUP_KEYS = { role: (x) => x.role, story: (x) => x.story, model: (x) => f
 /** The group an item falls in for the chosen key (MF2). */
 function groupKeyOf(item, key) { return GROUP_KEYS[key](item) ?? "(no story)"; }
 
-const newLineTotal = (model) => ({ steps: 0, cost: 0, model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, measured: 0, measured_prompt: 0, latest: 0 });
-
-/** Adds one ledger line into a total. */
-function addLine(t, l) {
-  t.steps++; t.cost += l.cost_usd;
-  if (l.turns > 0) { t.turns += l.turns; t.measured++; t.measured_prompt += sumTok({ ...l.tokens, output: 0 }); t.latest = l.turns; }
-  for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
-}
-
 function totalsBy(ledger, key) {
   const out = {};
   for (const l of ledger) {
@@ -1924,6 +1915,15 @@ function totalsBy(ledger, key) {
     addLine(t.versions[versionOf(l.model)] ??= newLineTotal(l.model), l);
   }
   return out;
+}
+
+const newLineTotal = (model) => ({ steps: 0, cost: 0, model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, measured: 0, measured_prompt: 0, latest: 0 });
+
+/** Adds one ledger line into a total. */
+function addLine(t, l) {
+  t.steps++; t.cost += l.cost_usd;
+  if (l.turns > 0) { t.turns += l.turns; t.measured++; t.measured_prompt += sumTok({ ...l.tokens, output: 0 }); t.latest = l.turns; }
+  for (const [kind] of TOKEN_KINDS) t[kind] += l.tokens[kind];
 }
 
 /** The "versions:" tooltip line of a row total, shares in the chosen unit (MF5). */
