@@ -1035,6 +1035,26 @@
    }
   },
   {
+   "id": "rs4",
+   "at": 1791457830.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s1",
+   "data": {
+    "stage": "presentation.trial",
+    "when": "after",
+    "attach": "step",
+    "step": "e2e",
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791457800.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 30.0
+   }
+  },
+  {
    "id": "e35",
    "at": 1791457844.2,
    "kind": "gate",
@@ -1047,6 +1067,26 @@
     "rounds": 0,
     "story_status": "active",
     "reason": ""
+   }
+  },
+  {
+   "id": "rs5",
+   "at": 1791458045.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s1",
+   "data": {
+    "stage": "env.prepare",
+    "when": "before",
+    "attach": "step",
+    "step": "acceptance",
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791458000.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 45.0
    }
   },
   {
@@ -4123,6 +4163,7 @@
   "at": 1791473157.0,
   "mono": 523000.0,
   "started_at": 1791469560.0,
+  "slept": 0.0,
   "chore": null,
   "step": {
    "role": "developer-cli",
@@ -4161,7 +4202,7 @@
     "status": "open"
    }
   ],
-  "slept": 0.0
+  "stages": []
  },
  "health": {
   "level": "green",

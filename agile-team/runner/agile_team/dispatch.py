@@ -357,7 +357,7 @@ class Runtime:
     def __post_init__(self) -> None:
         self.events = EventLog(self.config.run_dir / EVENTS)
         self.pulse = live.Pulse(self.config.run_dir, self.config.health.beat_s)
-        self.stage_log = StageLog(self.events, self.pulse)
+        self.stage_log = StageLog(self.events, self.pulse, board=self.pulse)
         self.pipeline.checks.stages = self.stage_log.open
         self.results = results_mod.Results(self.config.run_dir)
         if self.upstream is None:

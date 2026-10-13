@@ -326,6 +326,7 @@ class Pulse:
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
     _open: list[Meter] = field(init=False, default_factory=list)
     _chore: dict[str, Any] | None = field(init=False, default=None)
+    _stages: list[dict[str, Any]] = field(init=False, default_factory=list)
     _ended: bool = field(init=False, default=False)
     _reported: bool = field(init=False, default=False)
     _stop: threading.Event = field(init=False, default_factory=threading.Event)
@@ -399,6 +400,19 @@ class Pulse:
             with self._lock:
                 self._chore = previous
                 self._wake_innermost()
+            self.write()
+
+    @contextmanager
+    def showing(self, row: dict[str, Any]) -> Iterator[None]:
+        """List an open stage row in the heartbeat for the block (HB1)."""
+        with self._lock:
+            self._stages.append(row)
+        self.write()
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._stages = [r for r in self._stages if r is not row]
             self.write()
 
     def start(self) -> None:
@@ -486,4 +500,5 @@ class Pulse:
             "chore": self._chore if live else None,
             "step": step,
             "calls": self._open_calls() if live else [],
+            "stages": list(self._stages) if live else [],
         }

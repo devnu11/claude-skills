@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -24,6 +24,39 @@ class Marker(Protocol):
     def mark(self) -> Mark:
         """The current clock reading."""
         ...
+
+
+class StageBoard(Protocol):
+    """Where open stage runs are listed while they run (HB1); ``live.Pulse`` is one."""
+
+    def showing(self, row: dict[str, Any]) -> AbstractContextManager[None]:
+        """List ``row`` for the duration of the ``with`` block."""
+        ...
+
+
+class Hidden:
+    """A board that lists nothing (HB4)."""
+
+    def showing(self, row: dict[str, Any]) -> AbstractContextManager[None]:
+        """No listing; a ``nullcontext``."""
+        return nullcontext()
+
+
+HIDDEN = Hidden()
+
+
+def open_row(run: stages.Run, start: Mark) -> dict[str, Any]:
+    """The heartbeat's row for a stage run still open (HB2)."""
+    return {
+        "stage": str(run.stage.name),
+        "when": str(run.stage.when),
+        "attach": str(run.stage.attach),
+        "story": run.place.story,
+        "step": run.place.step,
+        "started_at": start.at,
+        "started_mono": start.mono,
+        "started_slept": start.slept,
+    }
 
 
 def place_of(story: StoryState | None) -> stages.Place:
@@ -65,6 +98,7 @@ class StageLog:
     log: EventLog
     clock: Marker
     place: stages.Place = stages.NOWHERE
+    board: StageBoard = HIDDEN
 
     @contextmanager
     def within(self, place: stages.Place) -> Iterator[None]:
@@ -81,7 +115,7 @@ class StageLog:
         start = self.clock.mark()
         run = stages.Run(stages.STAGES[name], self.place)
         try:
-            with stages.entered(run):
+            with stages.entered(run), self.board.showing(open_row(run, start)):
                 yield run
         finally:
             self._emit(run, start)
