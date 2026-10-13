@@ -439,7 +439,10 @@ task, budget, Manager checkpoint percentage, round cap, `manager_due`,
 `order`: the priority queue, `backlog`: the queued stories outside the
 current sprint, `order_version`: a 12-hex digest of both), `pipeline`
 (enabled steps), `roles` (name,
-model, provider, with PO overrides applied), `stories` (in priority order;
+model, provider, with PO overrides applied, and from s104 `used`: true when
+a step in the repo's pipeline routes to the role, where the generic
+`developer` stands for the developers assigned to stories (or itself when
+none is), or when the role has a `step-start` event), `stories` (in priority order;
 state plus `opened_at`, `repeated`, the story file's `acceptance`,
 `position`, `tier`, `hold`, `wait`: `{"reason", "on"}` or
 `null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
@@ -647,8 +650,16 @@ The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
 It defaults to Story: the active step's story, or another story picked in
 the box beside it. Each role box shows that role's ledger tokens and dollars
 for the scope, and its step time: the summed wall time of its finished
-steps in the scope (snapshot `steps`). A role that has not touched the story
-in focus is dimmed. A role with an open step adds `⏱ running N min`,
+steps in the scope (snapshot `steps`). Only used roles are drawn (snapshot
+`roles[].used`; a role without the key is drawn); the Product Owner always
+is. A role's box appears with its first `step-start`. In Story scope a role
+that has not touched the story in focus is dimmed; in Sprint and Run scope
+a role with no data is. Dimming recolours the box (surface fill, grid
+stroke, muted text) and never uses opacity or another compositing style. A
+role with no data in the scope and no open step reads `idle` instead of
+zero stats. The chart is drawn at its natural size (16 px text, Mermaid
+`useMaxWidth: false`) and a wide chart scrolls sideways. A role with an
+open step adds `⏱ running N min`,
 updated each minute. The active box adds its live rate, sparkline, turn,
 tool and the step's estimate, outlined in the health colour. The Product
 Owner's queries are not steps, so its box shows no time.
