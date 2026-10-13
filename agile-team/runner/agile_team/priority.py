@@ -170,8 +170,7 @@ class Priority:
     def key(self, story: StoryState) -> tuple[Any, ...]:
         """The one ranking rule (G3)."""
         done = story.status is StoryStatus.DONE
-        listed = self.order.index(story.id) if story.id in self.order else len(self.order)
-        return (done, RANK[self.tier(story)], listed, natural(story.id))
+        return (done, RANK[self.tier(story)], *self._listed(story))
 
     def ranked(self, stories: Iterable[StoryState]) -> list[StoryState]:
         """Every story, best first."""
