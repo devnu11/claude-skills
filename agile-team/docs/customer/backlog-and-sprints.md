@@ -57,7 +57,8 @@ then s37"). The PO records it, and the runner follows it:
 
 On the dashboard's **Board**, every column lists stories in that order, and
 each card shows its position (`#1` is next). A waiting story shows
-`⏸ questions`, `⏸ manager`, `⏸ round cap`, `⏸ needs the human` or `⏸ held`,
+`⏸ PO hold: …`, `⏸ cancel requested: …`, `⏸ questions`, `⏸ manager`,
+`⏸ round cap`, `⏸ needs the human` or `⏸ held`,
 with a `waits on:` line naming the question (for example `m38: …`) or the
 reason. Each change to the order appears in the timeline as a **priority**
 row: who moved what (the Product Owner, or `human (dashboard)`), from which
@@ -69,6 +70,35 @@ the current sprint move. The runner applies your move between steps and
 tells the Product Owner at its next turn. From then on your backlog order
 binds the PO: a change to it without a reason is refused, and the reason
 appears in the timeline.
+
+### Holding and cancelling a story
+
+The Product Owner can set a story aside without asking you anything:
+
+- **Hold.** The PO holds a story with a reason. The card shows `⏸ PO hold:
+  <reason>` (for example `⏸ PO hold: waits on s38`). The team skips the
+  story, but it keeps its place in the order and its `#position`.
+- **Release.** The PO releases a held story, or a blocked one with no open
+  question, and the reason goes to the next step's brief. If a question of
+  yours is open on that story, the PO is told to pass on your answer
+  instead.
+- **Cancel request.** Only you can cancel a story. When the PO thinks a
+  story should go, it asks you one question: `Cancel story s7 ("…")? The
+  PO asks because: … Answer "cancel" to cancel it or "keep" to keep it.`
+  Until you answer, the card shows `⏸ cancel requested: <reason>`. For a
+  story that already has code, the reason says what happens to that code.
+
+Answer `cancel` and the story is cancelled: it leaves the order and its
+sprint, and the team never runs it again, even after a restart. Its story
+file and commits stay. Answer `keep` and the story carries on. Any other
+answer leaves the story held for the PO, which can release it or ask
+again. Each hold, release, request and answer shows in the timeline as a
+**story-admin** row with the reason.
+
+The **Backlog** tab lists cancelled stories in a **Cancelled** group after
+Backlog. They have a `cancelled` pill and can't be moved. A story that
+depends on a cancelled one keeps waiting until the PO edits its
+dependencies.
 
 ### Stories that depend on others
 

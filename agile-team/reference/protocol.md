@@ -446,13 +446,15 @@ a step in the repo's pipeline routes to the role, where the generic
 `developer` stands for the developers assigned to stories (or itself when
 none is), or when the role has a `step-start` event), `stories` (in priority order;
 state plus `opened_at`, `repeated`, the story file's `acceptance`,
-`position`, `tier`, `hold`, `wait`: `{"reason", "on"}` or
-`null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
-`/api/file` kinds that exist) and `label`: `cancelled`, `held` or `""`;
+`position`, `tier`, `hold`, from s53 `po_hold` (`{"kind", "reason",
+"question"}` or `null`; see "PO story admin"), `wait`: `{"reason", "on",
+"title"}` or `null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
+`/api/file` kinds that exist) and `label`: `cancelled`, `cancel requested`,
+`held` or `""`;
 from s86 `depends_on` (the state list), `waiting_on` (its ids that are not
 done, in list order) and `dependency_warnings` (`s2 is above s5, which it
 depends on` for each dependency the story is above in the queue); the last
-two are `[]` for a done story).
+two are `[]` for a done or cancelled story).
 `reorders` lists the last 20 reorder requests with `status`
 `pending`/`applied`/`refused` and `reason`. The **Backlog** tab lists
 `run.order` in two groups, Current sprint (no handles) and Backlog (up,
@@ -479,11 +481,19 @@ s86, in both groups, a row with dependencies shows `depends on s1, s5
 timeline entry with `warnings` appends ` · ⚠ <w1>; <w2>` to its meta and
 takes the warning tone. The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
-`⏸ <reason>`: `questions`, `manager` (a repeated setback), `round cap`,
+`⏸ <wait.title>`. The first matching reason wins: `cancel requested` and
+`PO hold` (s53; for these two the title is `<reason>: <PO's reason>`, e.g.
+`⏸ PO hold: waits on s38`, so a PO-held story never reads `needs the
+human`), then `questions`, `manager` (a repeated setback), `round cap`,
 `needs the human` (blocked, or an open question names it) or `held` (any
-other hold). Below the pill is a `waits on: …` line with the open question
-ids and texts, and the last step's summary or the repeated reason. The
-timeline shows `escalation`, `fault` and `priority` events. The remaining
+other hold); for these the title is the reason alone. A done or cancelled
+story has no `wait`. Below the pill is a `waits on: …` line with the open question
+ids and texts, and the last step's summary or the repeated reason. Since
+s53 the Backlog tab lists cancelled stories in a read-only **Cancelled**
+group after Backlog, with their label pill and no move handles. The
+timeline shows `escalation`, `fault`, `priority` and `story-admin` events
+(`story-admin`: `<tool>: <PO hold kind or status after>`, the reason as its
+body and the question id as its meta). The remaining
 keys are `requirements` (from `<docs>/requirements/REQ-*.md`, with
 `history` from `requirement-changed` events), `events` (`events.jsonl` plus
 outbox and inbox entries as `message`/`answer` events, and every thread
@@ -1718,7 +1728,8 @@ story.
   developer. `pass_tests(story, reason)` (s30) moves a story stuck at
   `tests` on when the suite is green (see "Test disputes").
   `reply_story(story, text)` (s84) answers the human on a story's thread
-  (see "Story threads").
+  (see "Story threads"). `hold_story`, `release_story` and `request_cancel`
+  (s53) hold, release and ask to cancel a story; see "PO story admin".
 - When nothing can move but a question is open, the runner waits for an
   answer (polling every 5 s, no timeout). `stop` ends the wait. Each poll
   reads the inbox first, so an answer ends the wait within one poll, whether
@@ -1824,6 +1835,71 @@ committed to, or `null` when it is in the backlog.
   within each group. Started stories still come first (see "Story
   priority").
 
+## PO story admin: hold, release, cancel (s53)
+
+Three PO tools, each taking `story` and `reason`, park, release and ask
+to cancel a story. A **PO hold** is its own field on the story,
+`po_hold: {"kind", "reason", "question"}` (`kind` is `PO hold` or `cancel
+requested`; `question` is the cancel question's id, else `null`). It is
+not the hand-over `hold`: `continue_story` clears `hold` but never
+`po_hold`. Old `state.json` without the key loads `po_hold: null`.
+
+- `hold_story(story, reason)` sets a `PO hold` with the stripped reason.
+  It posts no question. Holding a held story again replaces the reason.
+  The router skips a PO-held story (story steps, Manager steps and its
+  Scribe), but its rank, tier, `order` and `pulled` entries stay as they
+  are, so it keeps its board position. Use it instead of an `ask_user`
+  nobody should answer.
+- `release_story(story, reason)` clears `po_hold` and `hold`, sets the
+  status to `active` and puts the reason in the next step's brief (as
+  `pass_tests` does). The step is unchanged. It works on a PO-held story
+  or a `blocked` story with no open question.
+- `request_cancel(story, reason)` posts one question naming the story:
+  `Cancel story sN ("<title>")? The PO asks because: <reason> Answer
+  "cancel" to cancel it or "keep" to keep it.` It sets a `cancel requested`
+  hold with that question's id. The status is unchanged.
+
+**Only the human's answer cancels.** Each answered cancel request is
+settled at the start of every router tick (right after reorders apply), in
+`wait_for_answers` after it polls, and before each of the three tools
+checks anything. The answer is stripped of spaces and `.!"'` and read case
+blind:
+
+| Answer | Effect |
+|---|---|
+| `cancel` | status `cancelled`; the id leaves `order`, `pulled`, `human_order` and `scribe_due`; `sprint`, `po_hold` and `hold` become `null`. The story file, its commits, `code_commits` and events are kept |
+| `keep` | `po_hold` becomes `null`; the story carries on with its status unchanged |
+| anything else | a `PO hold` with reason `the answer to mN was neither "cancel" nor "keep": <answer>`; the PO releases it or asks again (the question is used up) |
+
+The answer still reaches the PO as a normal `human_message`. No tool can
+set `cancelled`. A cancelled story is **finished**, like a done one: it
+leaves the queue, the plan and the sprint, `start_sprint` skips it,
+`prioritise`/`move_story` refuse it (`cancelled stories can't be ordered:
+sN`), `run_role` refuses it (`was cancelled by the human`), and so do
+rulings and faults. That holds after a resume. Known limits: a story that
+`depends_on` a cancelled story keeps waiting (edit its frontmatter), and
+the timeline folds only `done` stories.
+
+**Refusals**, in order, the first wins; a refusal changes, saves and emits
+nothing:
+
+| Tool | Refused when (text) |
+|---|---|
+| all | unknown story (`unknown story 'sN'; open it with open_story`); blank reason (`a reason is required`); done or cancelled (`story sN is done; there is nothing to hold`, with `release` or `cancel`) |
+| `hold_story` | a cancel request is pending (`story sN already waits on the human's answer to mN about cancelling it; answer mN instead`) |
+| `release_story` | an open question names the story (`story sN has an open question; answer m3, m7 instead`); the story waits on the Manager (`… run the manager on it`); no PO hold and not blocked (`… nothing to release (continue_story releases a hand-over hold)`) |
+| `request_cancel` | a cancel request is pending (as for `hold_story`); the story has commits (or `code_commits`) and the reason contains neither `code` nor `commit` (`story sN has commits (N); say in the reason what happens to its code (kept, reverted by a new story, …)`) |
+
+A success returns `{"status": "held" | "released" | "cancel requested",
+"story", "step", "story_status", "question"}`, saves the state once and
+writes one `story-admin` event. From a tool: role `product-owner`, data
+`{"tool", "reason", "question", "before", "after"}`. From a settled
+answer: role `null`, data `{"tool": "answer", "reason", "question",
+"answer", "decision", "before", "after"}` (`decision` is `cancel`, `keep`
+or `unclear`). `before` and `after` are `{"status", "step", "sprint",
+"hold", "po_hold"}`. The story's `label` is `cancelled`, then `cancel
+requested`, then `held` (any PO hold or held tier), else `""`.
+
 ## Story dependencies
 
 A story that needs others done first lists them (s86) in its file's YAML
@@ -1897,7 +1973,7 @@ start a story. Every unfinished story is in one **group**:
 | Group (`tier`) | Stories |
 |---|---|
 | `in progress` | started (or pulled, below) and not held |
-| `held` | started (or pulled) and held: a `hold`, `blocked` or `needs_manager` |
+| `held` | started (or pulled) and held: a `hold`, `blocked` or `needs_manager` (a PO hold, s53, does not count, so a PO-held story keeps its group) |
 | `not started` | everything else |
 
 `state.json` `order` is the PO's explicit list of story ids. It covers
