@@ -1,6 +1,58 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-13 (s83 done)
+
+## s83: Backlog reorder on dashboard; human order binding (design rules B1–B20, ADR-0043)
+
+Human can read stories and reorder the backlog on the dashboard. Requests queue as files, apply between steps through the PO, and record the human's chosen order. The PO cannot change that order without a stated reason.
+
+**Architectural decisions (ADR-0043 D1–D18):**
+
+**D1–D4: Request flow.** Dashboard stateless; POST → file queue in `.team/run/reorders/`. Between steps (router._tick after checkout), `desk.apply()` processes pending requests, updates state, emits events. No apply = no hand-over; human sees result in next snapshot (SSE). One pending request at a time (handles disabled while pending).
+
+**D5–D7: Human order record and rule.** When applied, backlog order → `state.human_order`. PO `prioritise`/`move_story` that changes the guarded projection (stories the human moved) requires a non-blank `reason`, recorded in event. Empty `human_order` guards nothing; `start_sprint` never triggers the rule.
+
+**D8–D10: Write security.** Localhost (127.0.0.1, ::1) + token required. Random token on start (printed in URL), fixed via config for presentations. Token never logged; appears only in URL.
+
+**D11–D12: Event audit.** Priority events gain `source` field ("product-owner" or "human (dashboard)"). Human moves have `role=None`.
+
+**D13–D14: Request refusals.** Five checks in order (stale, unknown/done, sprint-story, bad-place, move-refusal). First refusal recorded; nothing else changes.
+
+**D15–D16: File serving.** By story id via `/api/file?kind=K&id=I`. Kind from whitelist (story, design, review, acceptance), id matches pattern, story exists, file exists and is regular. Path built only from table and validated id.
+
+**D17–D18: Implementation scope.** New `backlog.py` (pure, groups/version/refusals), `reorders.py` (queue/apply), `story_files.py` (file table/read). Updated `priority.py` (Source enum), `po_tools.py` (human check), `state.py` (three fields), `dispatch.py` (Runtime.reorder), `router.py` (Desk instance), `config.py` (DashboardSettings), `server.py` (POST/GET routes), `snapshot.py` (order_version, backlog, reorders, new fields), `index.html` (Backlog tab).
+
+**Data-driven design (rules B1–B20):**
+- `STORY_ID` regex: the id pattern.
+- `View.of(state)`: one definition for groups.
+- `order_version()`: pure hash function.
+- `story_files.FOLDERS`: whitelist table (kind → path getter).
+- `backlog.label()`: label logic (cancelled/held/"").
+- Refusal checks: `stale_refusal()`, `sprint_refusal()`, `place_refusal()`, then `priority` move-checks.
+- Human-order guarded projection: checked by `human_refusal(HumanCheck, reason)`.
+- Event source: `Source` enum, `SOURCE_ROLES` map.
+- Request status: "pending"/"applied"/<reason text> recorded in `state.reorders`.
+
+**Module boundaries (no branching on type):**
+- `backlog.py` pure → `dispatch.py` and `po_tools.py` call functions; result handed to data.
+- `reorders.py` handles I/O → router and dashboard call methods.
+- `story_files.py` serves files → server routes via callables.
+- Snapshot builds once per SSE tick; no caching.
+
+**Consequences:**
+- **Interactive backlog steering:** Human can read and reorder on the dashboard without asking for PO requests.
+- **Auditable decisions:** Events show source. `human_order` records intent. PO's reason logs overrides.
+- **Data contract extends:** Snapshot adds order_version, backlog, label, disputes, developer, commits, files per story, reorders list, source on events.
+- **Three new state fields:** `human_order`, `reorders`, `reorders_told` (empty defaults for old state.json).
+- **Request pattern:** File queueing (like `reorders/rN.json`) works for async decisions outside the PO's tools.
+
+**New boundaries & seams:**
+- Dashboard ↔ Server: POST /api/reorder, GET /api/file (no state.json writes from server).
+- Request file ↔ Router: `.team/run/reorders/` watched by router._tick.
+- Human order ↔ PO tools: guarded projection check before applying `prioritise`/`move_story`.
+- Event source ↔ audit: Source enum on Reorder, recorded in events and snapshot.
+
+See ADR-0043, design `agile-team/docs/design/s83.md` (B1–B20).
 
 ## s51: Tier-based priority ranking, pull semantics (design rules G1–G17, ADR-0016 amended)
 

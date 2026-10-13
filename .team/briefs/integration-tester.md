@@ -1,6 +1,64 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s15 done)
+**Last updated:** 2026-10-13 (s83 done, P1 work pending)
+
+## s83: E2E tests for Backlog tab (AC8, P1: node-harness and e2e tests pending)
+
+Story shipped. Unit tests pass (coverage ≥95%, ruff clean). Code review done (all ACs pass except P1, which is your work). 
+
+**Your work (P1): node-harness tests and e2e for dashboard reorder.**
+
+### Node harness tests (`tests/dashboard_node.py`, four test functions)
+
+**Setup:** Load fixture as `data.snap` with backlog stories (s5, s6 in sprint 1; s50, s51 in backlog).
+
+1. **Expand/collapse (AC2):** `toggleRow("s5")` → expanded with story file content and state fields. `aria-expanded="true"`. `toggleRow("s5")` again → collapsed, details gone. Prelude's `fetch` rejects (offline), so story file shows `no story file`.
+
+2. **Handles (AC4):** Backlog rows (s50, s51) have `<button data-move="up|down|top">`. Current-sprint rows (s5, s6) have no `data-move` buttons. Without TOKEN, no row has handles and note reads "read-only" text.
+
+3. **`moveTarget` edges (B9):** From place P (1-indexed):
+   - `moveTarget("up", 1, 2)` → null (already first).
+   - `moveTarget("up", 2, 2)` → 1.
+   - `moveTarget("down", 2, 2)` → null (already last).
+   - `moveTarget("down", 1, 2)` → 2.
+   - `moveTarget("top", 2, 2)` → 1.
+   - Invalid place or action → null.
+
+4. **`reorderNote` cases (B16):**
+   - Pending: "waiting for the runner: moves apply between steps".
+   - Applied: clears note (empty string).
+   - Refused (generic): shows reason text.
+   - Refused (STALE): shows reason + reload button with `data-reload` (calls `location.reload()`).
+   - No token (403): "read-only: open the link the dashboard printed (it carries the token), on this machine".
+   - Other HTTP error: status number (e.g., "404").
+   - Network error: error message or generic "network error".
+
+Bonus (from review D2): **No drag posts while pending.** Fixture has request with status="pending". `ui.reorder` set. Drop on another Backlog row posts nothing.
+
+Bonus (from review D4): **Commits shown.** Give a fixture story a `commits: ["abc123"]`. Expanded details show it under state fields.
+
+### E2E test for reorder request (REAL world, 30s timeout)
+
+**File:** `tests/e2e/test_s83_reorder_e2e.py` (new).
+
+**Setup:**
+- Real runner in a scratch team repo (via `isolated_git` + `scratch_team`).
+- State with sprint and backlog stories.
+- Start dashboard with `--port 0 --token test_token`.
+- Verify server is listening and token in URL.
+
+**Test:**
+1. Make a reorder POST from `127.0.0.1` to `http://localhost:<port>/api/reorder` with:
+   - Headers: `X-Agile-Team-Token: test_token`, `Content-Type: application/json`.
+   - Body: `{"story": "s50", "position": 1, "version": "<current_version>"}`.
+2. Expect 202 response with `{"id": "r1", "status": "queued"}`.
+3. Let router run one tick (call `router._tick()` or wait one heartbeat).
+4. Check: `state.reorders["r1"] == "applied"`, order changed (s50 moved), event emitted with `source: "human (dashboard)"`.
+5. Snapshot now shows `reorders[0].status == "applied"`, `reorders[0].story == "s50"`.
+
+**Coverage:** Verifies request queueing (202), routing's apply (event, order, state), and snapshot reflects the change.
+
+See design `agile-team/docs/design/s83.md` (test checklist items 18–23), review round 4, ADR-0043.
 
 ## s15: E2E tests for Markdown rendering (10 cases, all pass)
 

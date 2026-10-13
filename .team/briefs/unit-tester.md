@@ -1,6 +1,73 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-13 (s83 done)
+
+## s83: Backlog, reorders, request parsing, file serving, PO rules tests (coverage ≥95%, ruff clean, all pass)
+
+New modules for dashboard backlog tab and reorder requests. Test all refusals, apply logic, file route, PO human-order rule, state loaders. Design rules B1–B20 enforced in code (test checklist items 1–17 below).
+
+**Module tests:**
+
+**`backlog.py` (pure):**
+- `View.of(state)`: Builds queue, backlog, version from state; handles empty, mixed states.
+- `order_version()`: Hash changes with queue or backlog change; stable for same state.
+- `label()`: Cancelled (hold starts with "cancelled"), held (via `priority.held()`), empty.
+- `stale_refusal()`: Exact `STALE` text when version mismatch.
+- `sprint_refusal()`: Story in current sprint → `SPRINT_STORY` text; backlog story → None.
+- `place_refusal()`: Int 1..len → None; 0, len+1, True, "2" → `BAD_PLACE` with count.
+- `guarded()` and `human_refusal()`: Human order guards only in `before` order; changes in `guarded` require reason.
+
+**`reorders.py` (I/O: file queue, apply):**
+- `parse_ask()`: Valid {story (matching `STORY_ID`), position (int not bool), version (str ≤64)} → Ask; invalid → None.
+- `Request.to_json()`, `Request.from_json()`: Round trip; bad JSON → None.
+- `Requests.queue()`: Writes rN.json (draft then hard link, increment on clash, no draft left).
+- `Requests.all()`: Lists in order, skips unreadable, skips non-r*.json.
+- `Requests.pending()`: Only ids not in settled dict.
+- `Desk.apply()`: Applies pending requests in order, calls refusals, records applied/reason, emits event with source and reason.
+
+**`story_files.py` (dashboard file serving):**
+- `path_of()`: Valid kind+id+story+file → Path; invalid kind/id/unknown story/missing/directory → None.
+- `read()`: Regular file → text; missing/directory → None.
+- `existing()`: List kinds with existing files (no state load).
+- **File route checks (AC3):** kind=story/design/review/acceptance only; id matches STORY_ID; id in state.json; <folder>/<id>.md regular file. Rejects `kind=secrets`, `id=../x`, `id=/etc/passwd`, `id=s1/..`, `id=s999` (unknown), missing file, missing parameter, directory in any folder.
+
+**PO tools (`po_tools.py` updates for human-order rule):**
+- `_human_check()`: Builds HumanCheck with guarded (in before order that changed), before/after queues.
+- `human_refusal()`: If guarded is non-empty and before≠after, refuse with exact `HUMAN_ORDER` text naming guarded ids. With reason, apply.
+- `prioritise()` and `move_story()` add third check: human_refusal after existing checks.
+- `_take_reorders()`: Returns section text with `TOLD_HEAD` and lines; clears `state.reorders_told`; saves.
+
+**State loaders (AC1 compatibility):**
+- Old `state.json` without `human_order`, `reorders`, `reorders_told` loads with empty defaults.
+
+**Dispatch and router (`dispatch.py`, `router.py`):**
+- `Runtime.reorder()`: Builds before, applies move, saves, builds after, emits event with source and reason.
+- `Router._tick`: Calls `self.desk.apply()` right after checkout check, before news and work.
+- No request applied twice (skips ids already in state.reorders).
+
+**Test items (design checklist, all pass):**
+1. Ranking shown: order, backlog in snapshot match Priority.queue order; labels correct (cancelled/held/"").
+2. Snapshot fields: disputes, developer, commits (deduped, no None), files (existing kinds in table order), order_version.
+3. Order version stable and changes on order/sprint change.
+4. Sprint-story refusal: `SPRINT_STORY` recorded, order/events unchanged.
+5. Stale refusal: exactly `STALE`, order unchanged, second request from same version is `STALE`.
+6. Bad place (0, len+1, True, "2"), unknown, done stories.
+7. Apply: Backlog move to place 1 lands at top. Event: role=None, source="human (dashboard)", reason="moved on the dashboard (rN)". human_order equals new backlog; state.reorders["rN"]="applied"; reorders_told has exact `TOLD` line.
+8. PO events: source="product-owner", role="product-owner".
+9. PO reason rule: human_order=[s5,s6]: move swapping them with no reason refused with exact `HUMAN_ORDER` (naming s5,s6), nothing changes. Same move with reason applies; reason in event. Sprint-story move leaving s5/s6 order needs no reason. Empty human_order needs none. start_sprint never refused.
+10. PO told: After applied request, next hand-over contains `TOLD_HEAD` and line; reorders_told empty and saved.
+11. Router: _tick applies pending requests before picking work. Request in state.reorders not applied again.
+12. Requests: queue writes r1, r2, no draft. Clash on N → N+1. all skips unreadable/wrong names. parse_ask rejects non-object, missing key, bool position, bad id, version>64.
+13. File route: GET /api/file?kind=story&id=s1 → text/plain. 404: kind=secrets, id=../state, id=/etc/passwd, id=s1/.., id=s999, missing, missing param, directory.
+14. Write gate: 127.0.0.1 + right token → 202. 10.0.0.5 + right token → 403. 127.0.0.1 + wrong token → 403. Empty app.token + empty header → 403. No body read on 403. Bad body/size → 400. POST elsewhere → 404.
+15. Token never leaks: absent from snapshot JSON, events.jsonl, request file, crash.log.
+16. CLI: Prints `dashboard: http://localhost:<p>/?token=tok1` (fake). --token abc → ?token=abc. [dashboard] token="cfg" and no --token → ?token=cfg. --token wins. token="" → fake random tok1.
+16a. Config: No [dashboard] → token="". token="x" → "x". token=1 → ConfigError with exact `DASHBOARD_TOKEN` text.
+17. State: Old state.json without three fields loads with empty defaults.
+
+**No tests deleted. Coverage ≥95%, ruff clean.** Design rules B1–B20 enforced (see design `agile-team/docs/design/s83.md`).
+
+See ADR-0043.
 
 ## s51: Priority ranking tests (2 rounds, 99.41% coverage, ruff clean, all pass)
 

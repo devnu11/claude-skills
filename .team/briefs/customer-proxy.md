@@ -1,6 +1,32 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-12 (s51 done)
+**Last updated:** 2026-10-13 (s83 done, minor doc gap noted)
+
+## s83: Backlog tab acceptance (all ACs verified; minor doc gap: POST endpoint not named in PRESENTATION.md)
+
+**Verdict: All ACs pass.** Story ships. Integration-tester carries P1 work (node-harness and e2e tests) to next step.
+
+**What you see on the dashboard:**
+- **Backlog tab (new):** Lists all stories not done, split into Current sprint (read-only) and Backlog. Each row shows position, id, title, step, status, delivery, and any hold reason. Click to expand and read the story file, state fields, links to design/review/acceptance docs, spend, turns, last events, and open questions.
+- **Reorder on the backlog:** Backlog rows have move buttons (up, down, top) and are draggable. Current-sprint rows are read-only. Click/drag to reorder. Handles are disabled while a move is pending (applying takes until the next step). The tab shows "waiting for the runner: moves apply between steps" while pending, then clears when applied.
+- **Token and local access:** The dashboard is read-only unless you open the tokened URL the command prints (contains `?token=`). When opened with the token, you see the handles. Without the token (or from another machine), the tab is read-only.
+
+**Acceptance notes:**
+1. **AC1 (the list):** Ranking matches the runner's queue order. Cancelled stories show label; held stories show "held" label; others are unlabelled. Position numbers are correct (1-based in the backlog group).
+2. **AC2 (expand/collapse):** Click row anywhere to toggle details. Story file renders safe Markdown (from s15). State fields, links, ledger sums, events, and questions all shown. No story file → "no story file" message.
+3. **AC3 (file serving):** Only `.team/stories/`, `agile-team/docs/design/`, `.team/reviews/`, `.team/acceptance/` are served, by story id. Other paths return 404. Directory listing blocked.
+4. **AC4 (reorder):** Backlog rows have move buttons; current-sprint rows don't. Drag onto another backlog row to swap. Buttons disabled at edges (first row ↑ and ⤒ disabled; last row ↓ disabled). Disabled while pending.
+5. **AC5 (applied by runner):** Move to position 1 on the Backlog lands the story at the top of the backlog. PO is told: "From the dashboard: The human moved s50 to backlog place 1 on the dashboard (r1). The backlog now reads: s50, s51, s52. Keep it: a prioritise or move_story that changes it needs a reason." Stale requests (order changed) are refused; page shows reload button.
+6. **AC6 (PO respects human's order):** After you reorder, any PO change to that order needs a reason. If they change it without reason, the tool is refused with a message naming the stories. With a reason, it applies and is logged.
+7. **AC7 (token security):** Works only from localhost with the correct token. From another IP, you get a "read-only" message. Wrong/missing token also gets "read-only". No leakage to logs, snapshot, or crash reports.
+8. **AC8 (tests):** Unit tests cover ranking, refusals, apply, PO reason rule, file route, token gate, token secrecy. Integration tests (pending) cover expand/collapse, handles, drag, reorderNote display, and a real POST from localhost.
+
+**Minor doc gap (noted, non-blocking):**
+The `PRESENTATION.md` delivery contract should name the POST endpoint `/api/reorder` (currently only lists GET routes). The endpoint works and is tested; the docs just need a one-line update. Not a blocker for shipping.
+
+**Your scope unchanged:** Same sandbox procedure, same service startup. When you run the dashboard step, the Backlog tab is available. No new acceptance interaction; reorder requests are tested in the runner's test suite.
+
+See design `agile-team/docs/design/s83.md`, ADR-0043, review round 4.
 
 ## s51: Priority ranking acceptance (AC1–AC6 verified on logged test runs, e2e pending)
 

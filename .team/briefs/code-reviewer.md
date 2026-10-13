@@ -1,6 +1,51 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-12 (s15 done)
+**Last updated:** 2026-10-13 (s83 done)
+
+## s83: Backlog reorder with human-order rule (1 round, all ACs pass) — verdict ship (P1 pending)
+
+**Scope:** `backlog.py` (new pure module, ~150 LOC), `reorders.py` (new I/O module, ~200 LOC), `story_files.py` (new, ~100 LOC), `priority.py` (Source enum, source field), `po_tools.py` (human-order check, reorders hand-over), `state.py` (three new fields), `router.py` (Desk instance), `dispatch.py` (Runtime.reorder method), `config.py` (DashboardSettings), `dashboard/server.py` (POST /api/reorder, GET /api/file), `dashboard/snapshot.py` (order_version, backlog, reorders, label, disputes, developer, commits, files), `dashboard/index.html` (Backlog tab with expand/collapse, handles, drag-drop, file loading), tests. **Verdict: ship (P1 node-harness/e2e pending).**
+
+**Design rules enforced (B1–B20, design spec lines):**
+- **B1–B3:** `View.of(state)` lists queued stories (not done), split current/backlog by sprint. Label from `priority.held()` or hold text parsing. Snapshot carries view result.
+- **B6–B7:** `story_files.FOLDERS` whitelist (story, design, review, acceptance). `path_of()` checks kind, id (via `STORY_ID` regex), story existence, file existence and regularity. Path built only from table and checked id.
+- **B9–B10:** `Ask` {story, position (int, 1-based backlog place), version}. `order_version()` = `sha256(json([queue, backlog]))[:12]`.
+- **B12–B13:** `place_refusal()`, `sprint_refusal()`, `stale_refusal()` checks. `placement()` → Placement. `Desk.apply()` calls refusals in order, records first as reason.
+- **B14:** `Reorder.event_data()` includes `source` (Source enum).
+- **B17:** `human_refusal()` checks: guarded projection before/after; if changed and no reason, refuse. PO tools call `_human_check()` which builds check.
+- **B18–B19:** localhost+token check in `may_write()` before body read. `MAX_BODY=4096`. `_body()` length check. Exact 403/400 responses.
+- **B19:** `token()` in `system.py` (secrets.token_urlsafe(16)). Fixed via config or --token arg. Printed in URL, never in snapshot/events/logs.
+
+**Module structure:**
+- `backlog.py`: Pure (no I/O). `View`, `Ask`, `Placement`, `HumanCheck` dataclasses. Functions: `view()`, `order_version()`, `label()`, `stale_refusal()`, `sprint_refusal()`, `place_refusal()`, `guarded()`, `human_refusal()`.
+- `reorders.py`: File I/O and apply. `Request`, `Requests`, `Desk` classes. `parse_ask()` parser. `told_section()` text builder.
+- `story_files.py`: Dashboard file serving. `FOLDERS` table, `path_of()`, `read()`, `existing()` functions. `FileAsk` namedtuple.
+- `priority.py`: `Source` enum (PO, HUMAN), `SOURCE_ROLES` dict, `Reorder.source` field.
+- `po_tools.py`: `_human_check()` builder, `human_refusal()` call, PO tools' third check. `_take_reorders()` hand-over section.
+- `dispatch.py`: `Runtime.reorder()` method (apply, emit event with source).
+- State: `human_order`, `reorders`, `reorders_told` fields (defaults empty, old state.json compatible).
+- Snapshot: `run.order_version`, `run.backlog`, `story.label`, `story.disputes`, `story.developer`, `story.commits`, `story.files`, `reorders` (last 20), source on all priority events.
+- Server: `Dashboard.read_file`, `Dashboard.queue` callables. `Handler.do_POST` routes `/api/reorder` and `/api/file`. `may_write()`, `_body()`, `_reorder()`, `_file()` handlers. `WRITE_HOSTS` set. `TOKEN_HEADER`. `with_token()` URL builder.
+- HTML: New Backlog tab, `TABS`, `ui.expanded`, `ui.files`, `ui.reorder`, `ui.note`, `ui.drag` state. Functions: `backlogGroups()`, `storyLabel()`, `backlogRow()`, `storyDetails()`, `backlogHtml()`, `renderBacklog()`, `toggleRow()`, `loadFile()`, `moveTarget()`, `postReorder()`, `reorderNote()`, `moveFromHandle()`. Handlers for expand, move, reload, drag-drop.
+- Config: `DashboardSettings` dataclass with `token` field. `from_raw()` parsing.
+
+**Test coverage (all items from design checklist pass):**
+- Snapshot fields correct; order_version stable/changes; ranking shown.
+- Refusals: sprint-story, stale (exactly "STALE"), bad place, human-order reason (exact text).
+- Apply: move, event source, human_order updated, told line exact.
+- Router: applies before work, no repeat.
+- Requests: queue, all, pending, parse_ask edge cases.
+- File route: 404 for all bad inputs.
+- Write gate: 403 for wrong network/token, 400 for bad body, 202 on success.
+- Token: absent from snapshot/events/logs/crash.
+- Config: parsing, validation.
+- State: legacy loaders.
+
+**No test deleted or weakened. Coverage ≥95%, ruff clean. CLI prints exact `dashboard: http://localhost:<port>/?token=<token>` URL.**
+
+**Pending (P1):** Node-harness tests (expand/collapse, handles, moveTarget edges, reorderNote cases, no drag while pending) and e2e test (real dashboard POST from 127.0.0.1, router applies). Design checklist items 18–23.
+
+See design `agile-team/docs/design/s83.md`, ADR-0043, review round 4.
 
 ## s15: Markdown rendering safe and pinned (1 round, all ACs pass) — verdict ship
 

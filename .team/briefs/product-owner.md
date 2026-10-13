@@ -1,6 +1,22 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-12 (s15 done)
+**Last updated:** 2026-10-13 (s83 done)
+
+## s83: Backlog tab with human reorder requests (ADR-0043)
+
+Human can read and reorder the backlog on the dashboard. The Backlog tab lists every story not done, in two groups: Current sprint (read-only) and Backlog. Each row shows position, id, title, step, status, delivery, label, and hold reason. Click a row to expand and see the story file, state fields, design/review/acceptance links, spend/turns, and last 10 events. To reorder: click or drag a Backlog story to a new position.
+
+**What's new for you:**
+- **Human's order binds you.** When the human reorders the backlog on the dashboard, `state.human_order` records their backlog. A `prioritise` or `move_story` that changes their order is refused unless you give a non-blank `reason`, which is logged. Empty `human_order` guards nothing; you can change the order freely until the human reorders once.
+- **Reorder requests come between steps.** The dashboard queues requests in `.team/run/reorders/`. Between steps, the router applies them via `desk.apply()`, emitting `priority` events with `source: "human (dashboard)"`. You are told in the hand-over ("From the dashboard: …") about applied moves and the new backlog order. Stale requests (order changed since they were sent) are refused; the human reloads the page.
+- **New hand-over section (`_take_reorders`):** Appears between lead and prompt. Lists applied reorder ids with reasons and resulting backlog. Clears `state.reorders_told` after hand-over.
+- **New tool:** None. The tools you have (`prioritise`, `move_story`) still work; they now check the human-order rule.
+
+**Implementation:** New modules `backlog.py` (groups, order version, refusals) and `reorders.py` (request queue, apply). Snapshot adds `order_version`, `backlog`, `reorders` (last 20). Events gain `source` field. Fixture and contract in `agile-team/docs/design/s83.md` (rules B1–B20) and design spec.
+
+**Shipped:** Code review done (all ACs pass); P1 work (node-harness and e2e tests) for integration-tester. No changes to your existing tools or workflow beyond the new hand-over section and human-order rule.
+
+See ADR-0043, design `agile-team/docs/design/s83.md`.
 
 ## s15: Dashboard renders Markdown safely (ADR-0042)
 
