@@ -174,13 +174,16 @@ class Tools:
     async def prioritise(self, args: dict[str, Any]) -> dict[str, Any]:
         """Set the order the team works in."""
         rt, ids = self.runtime, list(dict.fromkeys(args.get("stories") or []))
-        reason = priority.order_refusal(ids, rt.state.stories)
+        why = args.get("reason", "")
+        reason = priority.first_refusal(
+            [
+                lambda: priority.order_refusal(ids, rt.state.stories),
+                lambda: priority.pull_refusal(priority.set_pull(ids, rt.state.stories), why),
+            ]
+        )
         if reason:
             return text_result(refused(reason))
-        pull, why = priority.set_pull(ids, rt.state.stories), args.get("reason", "")
-        reason = priority.pull_refusal(pull, why)
-        if reason:
-            return text_result(refused(reason))
+        pull = priority.set_pull(ids, rt.state.stories)
         order = rt.priority().with_first(ids, rt.state.stories.values())
         return text_result(self._reorder(Reorder(Change.SET, order, None, why, pull)))
 
@@ -188,14 +191,16 @@ class Tools:
         """Move one story to a position in the order."""
         rt, stories = self.runtime, self.runtime.state.stories
         placement = Placement(args["story"], args.get("position"))
-        reason = rt.priority().move_refusal(placement, stories)
+        why, prio = args.get("reason", ""), rt.priority()
+        reason = priority.first_refusal(
+            [
+                lambda: prio.move_refusal(placement, stories),
+                lambda: priority.pull_refusal(prio.move_pull(placement, stories), why),
+            ]
+        )
         if reason:
             return text_result(refused(reason))
-        pull, why = rt.priority().move_pull(placement, stories), args.get("reason", "")
-        reason = priority.pull_refusal(pull, why)
-        if reason:
-            return text_result(refused(reason))
-        order = rt.priority().with_move(placement, stories.values())
+        pull, order = prio.move_pull(placement, stories), prio.with_move(placement, stories)
         result = self._reorder(Reorder(Change.MOVE, order, placement.story, why, pull))
         return text_result(self._with_note(result, placement))
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -101,6 +101,33 @@ def pull_refusal(pull: Pull, reason: str) -> str | None:
     return None
 
 
+def first_refusal(checks: Iterable[Callable[[], str | None]]) -> str | None:
+    """G17: the first refusal of the checks, called in turn; later ones are not called."""
+    return next((r for check in checks if (r := check())), None)
+
+
+@dataclass(frozen=True)
+class _Slot:
+    """Where in the plan a moved story goes (G16 rules 1-3)."""
+
+    plan: list[str]
+    board: list[str]
+    group: list[str]
+
+    def index(self, story: str) -> int:
+        """The plan index to insert ``story`` at."""
+        at = self.board.index(story)
+        before = [i for i in self.board[:at] if i in self.group]
+        after = [i for i in self.board[at + 1 :] if i in self.group]
+        if before:
+            return self.plan.index(before[-1]) + 1
+        return self._before(after or self.board[at + 1 :])
+
+    def _before(self, later: list[str]) -> int:
+        """The index of the first of ``later`` in the plan, or the end."""
+        return self.plan.index(later[0]) if later else len(self.plan)
+
+
 def natural(sid: str) -> tuple[Any, ...]:
     """Sort key for an id: digit runs compare as numbers (s9 < s10)."""
     return tuple(int(p) if p.isdigit() else p for p in re.split(r"(\d+)", sid))
@@ -154,16 +181,36 @@ class Priority:
         """Ids of the unfinished stories in ranking order."""
         return [s.id for s in self.ranked(stories) if s.status is not StoryStatus.DONE]
 
-    def with_first(self, ids: list[str], stories: Iterable[StoryState]) -> list[str]:
-        """The queue with ``ids`` first, in the order given."""
-        queue = self.queue(stories)
-        return [i for i in ids if i in queue] + [i for i in queue if i not in ids]
+    def _listed(self, story: StoryState) -> tuple[int, tuple[Any, ...]]:
+        """The plan key: the listed place, then the natural id."""
+        listed = self.order.index(story.id) if story.id in self.order else len(self.order)
+        return (listed, natural(story.id))
 
-    def with_move(self, placement: Placement, stories: Iterable[StoryState]) -> list[str]:
-        """The queue with one story put back at its position."""
-        rest = [i for i in self.queue(stories) if i != placement.story]
+    def plan(self, stories: Iterable[StoryState]) -> list[str]:
+        """Ids of the unfinished stories by listed place alone, with no groups (G15)."""
+        open_ = [s for s in stories if s.status is not StoryStatus.DONE]
+        return [s.id for s in sorted(open_, key=self._listed)]
+
+    def with_first(self, ids: list[str], stories: Iterable[StoryState]) -> list[str]:
+        """The plan with ``ids`` first, in the order given."""
+        plan = self.plan(stories)
+        return [i for i in ids if i in plan] + [i for i in plan if i not in ids]
+
+    def board_move(self, placement: Placement, stories: dict[str, StoryState]) -> list[str]:
+        """The queue with one story put at its board position (G16)."""
+        rest = [i for i in self.queue(stories.values()) if i != placement.story]
         rest.insert(placement.position - 1, placement.story)
         return rest
+
+    def with_move(self, placement: Placement, stories: dict[str, StoryState]) -> list[str]:
+        """The plan with the story placed so it lands at its board position (G16)."""
+        board = self.board_move(placement, stories)
+        after = Priority(self.order, self.repulled(self.move_pull(placement, stories), stories))
+        tier = after.tier(stories[placement.story])
+        group = [i for i in board if after.tier(stories[i]) is tier]
+        plan = [i for i in self.plan(stories.values()) if i != placement.story]
+        plan.insert(_Slot(plan, board, group).index(placement.story), placement.story)
+        return plan
 
     def move_refusal(self, placement: Placement, stories: dict[str, StoryState]) -> str | None:
         """Why this move is refused, or None."""
@@ -177,7 +224,7 @@ class Priority:
 
     def move_pull(self, placement: Placement, stories: dict[str, StoryState]) -> Pull:
         """G8: the moved story is pulled when it lands before a started one."""
-        moved = self.with_move(placement, stories.values())
+        moved = self.board_move(placement, stories)
         ahead = (placement.story,) if placement.story in pulls(moved, stories) else ()
         return Pull((placement.story,), ahead)
 
