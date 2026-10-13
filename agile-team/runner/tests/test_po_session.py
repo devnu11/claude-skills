@@ -157,7 +157,7 @@ def test_refused_start_sprint_queues_nothing(make_runtime) -> None:
 def test_done_story_queues_one_boundary_even_if_logged_twice(make_runtime) -> None:
     script = Script()
     rt = build(make_runtime, script, steps=["design"])
-    story = add_story(rt)
+    add_story(rt)
     drive(rt)
     reasons = [r for e in events(rt) for r in e.data["reasons"]] + rt.state.po_renew_due
     assert reasons.count("s1 done") == 1

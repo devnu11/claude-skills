@@ -108,9 +108,7 @@ def test_system_prompt_order(repo: Path) -> None:
     system.write_text(repo / ".team/CLAUDE.md", "CHARTER")
     b = book({"child": "ADDENDUM"}, repo)
     prompt = b.system_prompt(b.resolve("child"), "SCOPE")
-    order = [
-        prompt.index(s) for s in ("SHARED", "BASE", "CHILD", "ADDENDUM", "CHARTER", "SCOPE")
-    ]
+    order = [prompt.index(s) for s in ("SHARED", "BASE", "CHILD", "ADDENDUM", "CHARTER", "SCOPE")]
     assert order == sorted(order)
 
 

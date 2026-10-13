@@ -59,9 +59,9 @@ def test_retired_roles_table() -> None:
 
 
 def test_routing_constants_have_no_scribe() -> None:
-    assert gates.UNGATED_ROLES == frozenset({"manager"})
-    assert gates.STORYLESS_ROLES == frozenset({"architect", "devops", "unit-tester", "manager"})
-    assert dispatch.BOUNDARY_UNGATED == frozenset({dispatch.MANAGER})
+    assert set(gates.UNGATED_ROLES) == {"manager"}
+    assert set(gates.STORYLESS_ROLES) == {"architect", "devops", "unit-tester", "manager"}
+    assert set(dispatch.BOUNDARY_UNGATED) == {dispatch.MANAGER}
     assert not hasattr(dispatch, "SCRIBE")
 
 
@@ -98,7 +98,7 @@ def test_old_state_drops_scribe_override_and_keeps_others() -> None:
 
 
 def test_run_dropped_names_scribe_due() -> None:
-    assert state.RUN_DROPPED == frozenset({"scribe_due"})
+    assert set(state.RUN_DROPPED) == {"scribe_due"}
 
 
 # ----- SC6: [roles.scribe] refused -----------------------------------------------------

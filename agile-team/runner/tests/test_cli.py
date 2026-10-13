@@ -206,7 +206,11 @@ def test_roles_list_shows_layers(configured: Path, isolated_global_roles: Path, 
     out = json.loads(capsys.readouterr().out)
     assert out["_shared"] == {"layers": {"builtin": "base", "global": None, "repo": None}}
     assert out["architect"]["model"] == "opus" and out["architect"]["enabled"]
-    assert out["quality-czar"]["layers"] == {"builtin": "base", "global": "addendum", "repo": "replace"}
+    assert out["quality-czar"]["layers"] == {
+        "builtin": "base",
+        "global": "addendum",
+        "repo": "replace",
+    }
     assert "unknown role" in out["quality-czar"]["error"]
 
 
