@@ -193,6 +193,21 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .tip b { font-weight: 600; }
 .tip .k { color: var(--muted); }
 
+/* markdown */
+.md { white-space: normal; overflow-wrap: anywhere; }
+.md.plain { white-space: pre-line; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0 0 6px; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 1.05em; font-weight: 600; margin: 8px 0 4px; }
+.md ul, .md ol { padding-left: 20px; }
+.md code { background: var(--surface-2); padding: 1px 4px; border-radius: 4px; font-size: .92em; }
+.md pre { background: var(--surface-2); padding: 8px; border-radius: 6px; overflow-x: auto; white-space: pre; }
+.md pre code { background: none; padding: 0; }
+.md table { display: block; overflow-x: auto; width: auto; }
+.md blockquote { border-left: 2px solid var(--grid); padding-left: 8px; color: var(--ink-2); }
+.md a { color: var(--accent); }
+.q-answer { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
 /* questions */
 .q { border-top: 1px solid var(--grid); padding: 12px 0; }
 .q:first-of-type { border-top: 0; padding-top: 4px; }
@@ -353,6 +368,45 @@ const pill = (text, tone = "", dot = true) =>
   `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
 const storyChip = (id) => id ? `<span class="story-chip">${esc(id)}</span>` : "";
 const short = (role) => role === PO ? "PO" : role;
+
+// ----- markdown ---------------------------------------------------------------
+
+const MARKDOWN_URL = "https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js";
+const SAFE_LINK = /^https?:\/\//i;
+let markdown = null; // the configured instance once loaded; null means plain text
+
+/** Open a link in a new tab, without an opener. */
+function safeLinkOpen(tokens, i, options, env, self) {
+  tokens[i].attrSet("target", "_blank");
+  tokens[i].attrSet("rel", "noopener noreferrer");
+  return self.renderToken(tokens, i, options);
+}
+
+/** A Markdown instance for the dashboard: no raw HTML, http(s) links only, no images. */
+function safeMarkdown(markdownit) {
+  const it = markdownit({ html: false, linkify: false, typographer: false, breaks: true });
+  it.disable("image");
+  it.validateLink = (url) => SAFE_LINK.test(url);
+  it.renderer.rules.link_open = safeLinkOpen;
+  return it;
+}
+
+/** Install the library; from now on md() renders Markdown. */
+function useMarkdown(markdownit) { markdown = safeMarkdown(markdownit); }
+
+/** Load the pinned library once; redraw when it arrives, keep plain text if it can't load. */
+function loadMarkdown() {
+  return import(MARKDOWN_URL)
+    .then(() => { useMarkdown(globalThis.markdownit); render(); })
+    .catch((err) => console.warn("markdown unavailable, showing plain text:", err.message));
+}
+
+/** The one Markdown renderer: safe HTML for `text`, or escaped plain text until the library loads. */
+function md(text) {
+  return markdown
+    ? `<div class="md">${markdown.render(String(text ?? ""))}</div>`
+    : `<div class="md plain">${esc(text ?? "")}</div>`;
+}
 
 // ----- empty states -----------------------------------------------------------
 
@@ -1061,13 +1115,16 @@ function timelineRow(e, ctx, isNew) {
   try { return timelineRowHtml(e, ctx, isNew); } catch (err) { console.error(err); return ""; }
 }
 
+const MARKDOWN_KINDS = new Set(["step-end", "message", "answer"]);
+const bodyHtml = (kind, text) => (MARKDOWN_KINDS.has(kind) ? md(text) : esc(text));
+
 function timelineRowHtml(e, ctx, isNew) {
   const t = TIMELINE[e.kind]?.(e, ctx);
   if (!t) return "";
   const to = t.to ? `<span class="arrow">→</span><span class="who">${esc(short(t.to))}</span>` : "";
   return `<li class="${isNew ? "new" : ""}"><time>${fmt.time(e.at)}</time><div>
     <div class="lane"><span class="who">${esc(short(t.from))}</span>${to}${storyChip(e.story)}${pill(t.what, t.tone ?? "", !!t.tone)}</div>
-    ${t.body ? `<div class="tl-body">${esc(t.body)}</div>` : ""}
+    ${t.body ? `<div class="tl-body">${bodyHtml(e.kind, t.body)}</div>` : ""}
     ${t.meta ? `<div class="tl-meta">${esc(t.meta)}</div>` : ""}</div></li>`;
 }
 
@@ -1335,12 +1392,12 @@ function renderQuestions(view) {
   const now = view.generated_at, open = openQuestions(view);
   $("#q-open").innerHTML = open.map((q) => `<div class="q">
       <div class="q-head">${pill(q.id, "warning")}<span>open ${fmt.ago(q.at, now)}</span>${q.stories.length ? "blocks " + q.stories.map(storyChip).join(" ") : "blocks nothing"}</div>
-      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-text">${md(q.text)}</div>
       <div class="q-cmd"><code>agile-team answer ${esc(q.id)} "…"</code><button class="ctl" data-copy='agile-team answer ${esc(q.id)} ""'>Copy</button></div>
     </div>`).join("") || `<p class="empty">Nothing is waiting on you.</p>`;
   $("#q-raised").innerHTML = raisedQuestions(view).reverse().map((q) => `<div class="q">
       <div class="q-head"><span>raised by ${esc(q.role)}</span>${storyChip(q.story)}<span>${fmt.ago(q.at, now)} ago</span></div>
-      <div class="q-text">${esc(q.text)}</div></div>`).join("") || `<p class="empty">No role has raised a question.</p>`;
+      <div class="q-text">${md(q.text)}</div></div>`).join("") || `<p class="empty">No role has raised a question.</p>`;
   renderAnswered(view);
 }
 
@@ -1350,8 +1407,8 @@ function renderAnswered(view) {
   $("#q-done-summary").textContent = `Answered (${done.length})`;
   $("#q-done").innerHTML = done.map((q) => `<div class="q">
       <div class="q-head">${pill(q.id, "good")}<span>${fmt.time(q.at)}</span></div>
-      <div class="q-text">${esc(q.text)}</div>
-      <div class="tl-body"><b>You:</b> ${esc(answers[q.id].text)}</div></div>`).join("") || `<p class="empty">None yet.</p>`;
+      <div class="q-text">${md(q.text)}</div>
+      <div class="q-answer"><b>You:</b>${md(answers[q.id].text)}</div></div>`).join("") || `<p class="empty">None yet.</p>`;
 }
 
 // ----- requirements -----------------------------------------------------------
@@ -1638,6 +1695,7 @@ async function boot() {
   restoreTheme();
   restoreScope();
   setInterval(tick, 1000);
+  loadMarkdown();
   showTab(ui.tab);
   if (!MOCK) return bootLive();
   const res = await fetch("fixtures/snapshot.json");
