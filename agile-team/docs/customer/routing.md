@@ -5,8 +5,9 @@ quality → review → design review → e2e → acceptance. The **runner** move
 each story along that pipeline by itself. It starts the right role for each
 step and gives it a standard brief: the story file, the design, the review
 file, what the previous step reported, and why the story came back, if it
-did. The runner also runs the Manager when a review is due and the Scribe
-after each story is done.
+did. The runner also runs the Manager when a review is due. Nothing runs
+after a story is done: the Architect writes the story's ADRs in `.team/adr/`
+while it designs.
 
 The **Product Owner** (PO) is called in only when a judgement is needed:
 
@@ -100,7 +101,7 @@ The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
 log records why. It can't move a story past its last step. A ruling that can't
 apply, such as one on a done story, is reported to the PO. It is never
 silently dropped. The PO can then clear the done story's hold with
-`continue_story`. A done story's hold never stops its Scribe step.
+`continue_story`.
 
 ## When a story keeps coming back for the same reason
 

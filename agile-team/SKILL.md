@@ -266,6 +266,11 @@ command fails.
 
 ## Rules
 
+- **The Architect owns the ADRs.** It writes `.team/adr/NNNN-<slug>.md` at
+  design for each decision it makes, and amends an ADR when a decision
+  changes. There is no Scribe and no per-role brief (s114). A repo whose
+  `[roles.architect] write` override lacks `.team/adr/**` must add it, and a
+  leftover `[roles.scribe]` section or `scribe.md` role file is refused.
 - **Never edit project files while the team is running.** Not even a typo.
   A test that contradicts the design is the team's to settle: the developer
   sends the story back to the unit-tester (a `test-dispute` on the

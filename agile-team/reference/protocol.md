@@ -816,7 +816,7 @@ enabled = false                # disable a role
 model = "opus"                 # override any frontmatter field
 [roles.developer-embedded]
 extends = "developer"          # add a role without a file
-[roles.scribe]
+[roles.quality-czar]
 provider = "local"             # run on a [providers.*] endpoint (see Providers)
 model = "qwen3-coder"          # that provider's model name
 
@@ -894,6 +894,14 @@ extends: _shared       # or another role, e.g. developer-cli extends developer
 enabled: true
 ```
 
+**ADRs belong to the Architect (s114).** At design, the Architect writes
+`.team/adr/NNNN-<slug>.md` (context, decision, consequences) for each
+decision it makes, numbered after the highest one there, and amends the
+existing ADR when a decision changes. Its built-in write scope is
+`["{docs}", ".team/adr/**"]`; a repo that overrides `[roles.architect]
+write` must list `.team/adr/**` itself. There is no Scribe and no per-role
+brief file: every role reads the story, design, ADRs and code first-hand.
+
 ### Your instructions: global and repo layers
 
 Two layers of human-written role files sit on top of the built-ins:
@@ -914,8 +922,21 @@ Two layers of human-written role files sit on top of the built-ins:
 Global files can live in a dotfiles repo; the runner only reads them.
 
 System prompt order: `_shared` (+ `_shared` addenda) → role chain bodies →
-global addendum → repo addendum → `.team/CLAUDE.md` →
-`.team/briefs/<role>.md` → file scope.
+global addendum → repo addendum → `.team/CLAUDE.md` → file scope. Nothing
+else is added: a `.team/briefs/` directory, if one is left over, is never
+read (s114). Each step's own brief is the message the runner or the PO sends.
+
+**Retired roles (s114).** The Scribe is gone. A `[roles.scribe]` section in
+`.agile-team.toml`, or a global or repo `scribe.md` with frontmatter or with
+text outside comments, stops every command that loads it with:
+
+```
+the Scribe was retired in s114: the architect writes ADRs in .team/adr/ and roles get no briefs; remove [roles.scribe] from .agile-team.toml
+the Scribe was retired in s114: the architect writes ADRs in .team/adr/ and roles get no briefs; delete <path>
+```
+
+A scaffolded `scribe.md` stub (comments only) is ignored, so delete it at
+leisure.
 
 ## Providers
 
@@ -942,7 +963,7 @@ enabled role uses. The PO's kickoff lists each such role as
 `role (provider: model)`. `set_role_model` takes a provider, so the PO can move
 a struggling role back to `anthropic`.
 
-Which roles suit a local model: Scribe and Code Quality Czar; Unit and
+Which roles suit a local model: Code Quality Czar; Unit and
 Integration Tester are worth a try. Keep PO, Architect, DevOps, Code Reviewer
 and Manager on Claude. DevOps runs on Opus at high effort, like the Architect,
 because the tooling and hooks it writes run around every other role. Weak tool use mostly shows up as bad handoffs, which bounce
@@ -1681,8 +1702,7 @@ involved, in this order:
 2. the `manager` on a story escalated for a repeated setback (in the
    current sprint, not held, not blocked by a question; see "Repeated
    setbacks");
-3. the `scribe`, on each story that has just reached done (`scribe_due`);
-4. the next step of the movable story that comes first in the **priority
+3. the next step of the movable story that comes first in the **priority
    ranking** (see "Story priority"). A movable story is in the current sprint,
    `active` and not held, no open question blocks it, and every story in its
    `depends_on` is done (s86, at every step, not only the first; see "Story
@@ -1713,7 +1733,7 @@ The pass ends at the first step whose report matches a row of the
 | `error` | the step raised an error other than a limit (traceback in `crash.log`) |
 | `stopped` | the handoff is `blocked` or `failed` |
 | `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process), or a story file that went bad before a Proxy step (s94, "Story files"); `continue_story` once it is fixed |
-| `bad_handoff` | the `manager` or `scribe` gave no valid handoff |
+| `bad_handoff` | the `manager` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
 | `round_cap` | the story reached the round cap (not an `escalate` verdict) |
@@ -1746,10 +1766,10 @@ story.
 
 - A story named in a hand-over is **held** (`hold` in `status`): the router
   skips it until the PO calls `continue_story(story, note)` or runs a step on
-  it with `run_role`. A done story never moves again, so its hold does not
-  stop its Scribe; the Scribe runs after the PO's turn. `continue_story`
-  clears a done story's hold too (for example after `ruling_not_applied`),
-  and its note reaches the Scribe's brief if the Scribe is still due.
+  it with `run_role`. A done story never moves again; `continue_story`
+  clears its hold too (for example after `ruling_not_applied`). No step runs
+  after done: the Architect records a story's decisions as ADRs while it
+  designs (s114).
 - PO tools added: `continue_story(story, note)` releases a held story (done
   or not) and adds `note` to its next brief. It refuses a `blocked` story,
   with or without a hold, because releasing it would leave the sprint
@@ -1795,10 +1815,12 @@ story.
   (every path a step committed on the story), `fixes` (the queued gate fix
   steps: role, items, cited rule) and `fixed` (the settled ones, s92; see
   "Gate fix steps"); run-level `order` (the PO's
-  story order; see "Story priority"), `scribe_due`, `delivered` (answer ids the
+  story order; see "Story priority"), `delivered` (answer ids the
   PO has seen), `goal` (the current sprint's goal), `boundary` and
   `upstream` (see "Sprint boundaries"). Older files load with these empty. On the first run after
-  the upgrade, every answer already in the inbox counts as seen.
+  the upgrade, every answer already in the inbox counts as seen. An older
+  file's `scribe_due` list, and any PO model override for `scribe`, are
+  dropped on load and gone at the next save (s114).
 
 ## PO sessions
 
@@ -1853,7 +1875,7 @@ committed to, or `null` when it is in the backlog.
 - The `sprint-start` event carries `{"sprint", "goal", "stories"}`.
 - `run_role` on a backlog story is refused: `story sN is in the backlog; add
   it to a sprint`. The status refusals (done, blocked, round cap) come first.
-  `manager`, `scribe` and story-less steps are not affected.
+  `manager` and story-less steps are not affected.
 - A story is in at most one sprint. To carry it over or add it mid-sprint,
   list it in the next `start_sprint`, which queues the Manager again.
 - `state.json` from before backlogs existed loads every story into the
@@ -1878,8 +1900,7 @@ not the hand-over `hold`: `continue_story` clears `hold` but never
 
 - `hold_story(story, reason)` sets a `PO hold` with the stripped reason.
   It posts no question. Holding a held story again replaces the reason.
-  The router skips a PO-held story (story steps, Manager steps and its
-  Scribe), but its rank, tier, `order` and `pulled` entries stay as they
+  The router skips a PO-held story (story steps and Manager steps), but its rank, tier, `order` and `pulled` entries stay as they
   are, so it keeps its board position. Use it instead of an `ask_user`
   nobody should answer.
 - `release_story(story, reason)` clears `po_hold` and `hold`, sets the
@@ -1899,7 +1920,7 @@ blind:
 
 | Answer | Effect |
 |---|---|
-| `cancel` | status `cancelled`; the id leaves `order`, `pulled`, `human_order` and `scribe_due`; `sprint`, `po_hold` and `hold` become `null`. The story file, its commits, `code_commits` and events are kept |
+| `cancel` | status `cancelled`; the id leaves `order`, `pulled` and `human_order`; `sprint`, `po_hold` and `hold` become `null`. The story file, its commits, `code_commits` and events are kept |
 | `keep` | `po_hold` becomes `null`; the story carries on with its status unchanged |
 | anything else | a `PO hold` with reason `the answer to mN was neither "cancel" nor "keep": <answer>`; the PO releases it or asks again (the question is used up) |
 
