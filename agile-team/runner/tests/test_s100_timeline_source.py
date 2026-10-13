@@ -70,6 +70,6 @@ def test_the_flow_chart_stays_natural_size_and_idle_text_is_not_muted() -> None:
     text = page()
     assert "useMaxWidth: false" in text
     body = text.split("function idleClassDef()")[1].split("`;")[0]
-    assert "color:${cssVar(\"--ink-2\")}" in body
+    assert 'color:${cssVar("--ink-2")}' in body
     assert "--muted" not in body
     assert re.search(r"#flow\s*\{[^}]*overflow-x:\s*auto", text)

@@ -239,7 +239,13 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     # No opinion files are written here: only the section's keys must match the fixture.
     assert list(snap["opinions"]) == list(fixture["opinions"])
     assert shape(snap) == shape(
-        {**fixture, "stories": want, "opinions": snap["opinions"], "tools": snap["tools"], "sleeps": snap["sleeps"]}
+        {
+            **fixture,
+            "stories": want,
+            "opinions": snap["opinions"],
+            "tools": snap["tools"],
+            "sleeps": snap["sleeps"],
+        }
     )
     assert [s["commits"] for s in snap["stories"]] == [s["commits"] for s in want]
 
