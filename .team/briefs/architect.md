@@ -1,6 +1,10 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s105 complete: Seeded config for dashboard presentations (no new ADR, extends s26 pattern)
+
+Data extension: `Delivery.seed` field (optional, before `probe`) resolves to a packaged or repo seed directory for planting files into presentation workspaces. **Data contract:** Snapshot: no new keys (seeds planted, not content). Events: no new kinds. State: no new fields. **Module:** `seeds.py` (pure + I/O). **Your docs work (shipped):** Update `reference/protocol.md` (`[[delivery]]` keys table: `seed` row, optional, `web` default → PACKAGED_SEED, `""` off, path override; presentation/e2e gate section: S2–S4, S7 on file seeding and problem naming). Update `SKILL.md` delivery setup paragraph: web deliveries seeded, `seed` overrides. `docs/customer/` page for `[[delivery]]` gains `seed` row. `docs/architecture.md` adds `seeds.py` row (seed resolution, planting, checks). No ADR (extends s26 sandbox pattern with data field).
 
 ## s103 complete: Refusal format standardized, guard clarity improved (no new ADR, extends s69/s43/s41)
 

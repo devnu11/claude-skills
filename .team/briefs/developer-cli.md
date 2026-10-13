@@ -1,8 +1,12 @@
 # Developer (CLI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s104 done; s86 done)
+**Last updated:** 2026-10-13 (s105 done; s103 done; s104 done; s86 done)
 
 See `developer.md` for the base conventions.
+
+## s105 complete: Dashboard presentation seeds config in empty workspace (no new ADR, extends s26)
+
+Dashboard presentations now start in empty workspaces without manual config setup. **Implementation:** `Delivery` gains an optional `seed: str | None` field (before `probe`). Packaged seed directory `agile_team/dashboard/seed/.agile-team.toml` holds a minimal valid config with `[dashboard] token = "presentation"` (t31). The runner plants the seed into presentation workspaces where missing (two points: source workspace via `presentation.lay_out`, sandbox copy via `sandbox.Preparer.prepare`). Existing files are never overwritten. New module `seeds.py` handles seed resolution, planting, and problem checking; `DEFAULT_SEEDS` table maps `web` delivery kind to `PACKAGED_SEED`. When a presentation fails to start, the gate's reason names broken files and their fix (e.g., `workspace/.agile-team.toml is broken: … Fix it …`). Tests pass on units/code-review. AC1–AC3 pass: empty workspace + prepare answers `/api/snapshot` 200, own config kept, broken files named. No new dependency, no ADR (data extension, no branch).
 
 ## s103 complete: Guard accepts named test output redirection, refusals name rules (no new ADR)
 

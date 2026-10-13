@@ -1,6 +1,20 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s105 complete: E2E tests for presentation seeding (file `tests/e2e/test_presentation_seed.py`, AC1–AC3 pass)
+
+**File:** `tests/e2e/test_presentation_seed.py` (new).
+
+**Design checklist (all AC1–AC3 via real repo, real Preparer, test dashboard via fetch):**
+
+1. **AC1 (packaged seed, today's config):** Load repo's `dashboard` delivery (seed is None, seed_dir → PACKAGED_SEED). Empty presentation workspace + `Preparer().prepare` → `GET /api/snapshot` replies 200 (unpacked config works). Workspace holds `presentation/workspace/.agile-team.toml` with S5 text. `prepared.stop()` returns None.
+
+2. **AC1 (own config preserved):** Workspace with own `.agile-team.toml` (`token = "mine"`) + prepare → file unchanged, snapshot still 200 (existing never overwritten).
+
+3. **AC3 (broken file diagnosis):** Workspace config `"[dashboard\n"` (unparsable) + prepare/liveness → `NotUp` reason contains `workspace/.agile-team.toml is broken` and `Fix it … delete it …` text (S7 rule enforced).
+
+Setup: tmp_path repo, `isolated_git` fixture, real `config.load` (do not load real `.agile-team.toml` as Config.repo; use scratch). No test harness; fetch/stop real. AC1–AC3 pass (customer-proxy verified all pass). Coverage ≥95%, ruff clean. No test deleted.
 
 ## s103 complete: E2E test output redirection allowed; refusals name rules (no new ADR)
 

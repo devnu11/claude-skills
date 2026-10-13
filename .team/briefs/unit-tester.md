@@ -1,6 +1,10 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s105 complete: Seed tests—delivery config, planting, checks, problem reporting (coverage ≥95%, ruff clean, all pass)
+
+New module `seeds.py` (pure + I/O, ~220 LOC): `seed_dir()` resolves delivery seed (S1 table: None→default for kind via `DEFAULT_SEEDS`; `""` → None; path → repo/path), `Seeds` class plants files and checks problems (S2–S3), `CHECKS` table with `config_problem` validator. Tests cover: config load/defaults (None absent, web→PACKAGED_SEED, package→None, ""→None), seed_dir table rows, Seeds.names (skips dirs), plant (missing only, creates workspace, preserves existing), problems (SEED_GONE message, BROKEN for unparsable config and bad DASHBOARD_TOKEN, good config→[]). `FakeSystem.PACKAGE_DATA` gains `"dashboard/seed/.agile-team.toml"`. `Delivery.seed` field moves before `probe` (probe still last, per AC). `config.py` seed load as `None`/string. `Prepared.seeds` field and `seed_problems()` method. `presentation.lay_out` and `sandbox._present` plant seeds into source and sandbox workspaces. `_not_up_reason` includes seed problems. `presentation.missing` ignores seeded files via `_has_content(workspace, seeds)`. All 14 checklist items pass (table rows, planting, problem checks, broken config, packaged seed, NotUp reason, lay_out/missing). No test deleted. Coverage ≥95%, ruff clean.
 
 ## s103 complete: Keep unit test output with redirects; refusals name rules (no new ADR)
 
