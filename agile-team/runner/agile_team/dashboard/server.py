@@ -27,6 +27,7 @@ from ..roles import RoleBook
 from ..threads import Entry, Post
 from . import snapshot, story_files
 from .story_files import FileAsk
+from .tool_groups import MiscAsk
 
 POLL_SECONDS = 1.0
 DEFAULT_PORT = 8765
@@ -57,6 +58,7 @@ class Dashboard:
     poll_seconds: float = POLL_SECONDS
     vital_sign: Callable[[], str] = lambda: ""
     read_file: Callable[[FileAsk], str | None] = lambda _ask: None
+    misc_calls: Callable[[MiscAsk], list[dict] | None] = lambda _ask: None
     queue: Callable[[Ask], reorders.Request] | None = None
     post: Callable[[Post], Entry | None] | None = None
     token: str = ""
@@ -70,6 +72,7 @@ class Dashboard:
             partial(snapshot.watched_files, config),
             vital_sign=partial(snapshot.vital_sign, config),
             read_file=partial(story_files.read, config),
+            misc_calls=partial(snapshot.misc_calls, config),
             queue=reorders.Requests(config.run_dir).queue,
             post=partial(threads.post_known, config.run_dir),
             opinions=Opinions(config.run_dir),
@@ -149,6 +152,16 @@ def _file(handler: Handler) -> None:
         _not_found(handler)
     else:
         _send(handler, Body("text/plain; charset=utf-8", text.encode()))
+
+
+def _misc(handler: Handler) -> None:
+    query = parse_qs(urlsplit(handler.path).query)
+    ask = MiscAsk(*(query.get(key, [""])[0] for key in MiscAsk._fields))
+    calls = handler.server.app.misc_calls(ask)  # type: ignore[attr-defined]
+    if calls is None:
+        _not_found(handler)
+    else:
+        _send(handler, Body("application/json", json.dumps(calls).encode()))
 
 
 def may_write(handler: Handler) -> bool:
@@ -256,6 +269,7 @@ ROUTES: dict[str, Callable[[Handler], None]] = {
     "/api/snapshot": _snapshot,
     "/api/stream": _stream,
     "/api/file": _file,
+    "/api/misc": _misc,
 }
 POSTS: dict[str, Callable[[Handler], None]] = {
     "/api/reorder": _reorder,

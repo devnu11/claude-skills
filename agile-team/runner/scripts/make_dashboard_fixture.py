@@ -610,6 +610,24 @@ def live_events(base, now):
     return [*events, po_turn]
 
 
+def open_call(now):
+    """The one call still open in the live step (s101 N11)."""
+    return {
+        "role": LIVE_ROLE,
+        "story": LIVE_STORY,
+        "step": "implement",
+        "opened_at": round(now - 200, 1),
+        "tool": "Bash",
+        "tool_use_id": "toolu_open",
+        "label": "Dev: run the unit tests again",
+        "detail": "uv run pytest -q tests/test_x.py",
+        "at": round(now - 40, 1),
+        "mono": 5160.0,
+        "slept": 0.0,
+        "status": "open",
+    }
+
+
 def live_heartbeat(now, turns):
     mine = [x for x in turns if x["role"] == LIVE_ROLE]
     last = mine[-1]
@@ -634,6 +652,7 @@ def live_heartbeat(now, turns):
             "tokens": tok,
             "cost_usd": round(sum(x["cost_usd"] for x in mine), 4),
         },
+        "calls": [open_call(now)],
     }
 
 
@@ -657,18 +676,39 @@ def tool_row(step, label, seconds, offset):
 
 
 def tools_section(snap):
-    """The snapshot's ``tools`` groups: the live developer step and a PO turn (s98 TC15)."""
+    """The snapshot's ``tools`` groups: interrupted step, live step, PO turn (s98 TC15, s101)."""
+    now = snap["generated_at"]
     beat = snap["heartbeat"]["step"]
     key = ("role", "story", "step")
     live_step = {**{k: beat[k] for k in key}, "opened_at": beat["started_at"]}
-    po_step = {"role": "product-owner", "story": None, "step": "po-session", "opened_at": 0.0}
+    old_step = {**live_step, "opened_at": round(now - 520, 1)}
+    po_step = {
+        "role": "product-owner",
+        "story": None,
+        "step": "po-session",
+        "opened_at": round(now - 400, 1),
+    }
+    cut = {**tool_row(old_step, "Dev: run the unit tests", 130.0, 60.0), "status": "unfinished"}
     slow = tool_row(live_step, "Dev: run the unit tests", 41.2, 30.0)
     timed_out = {**tool_row(live_step, "Dev: run the e2e tests", 120.0, 90.0), "status": "timeout"}
+    read = {
+        **tool_row(live_step, "Dev: Read", 4.0, 75.0),
+        "tool": "Read",
+        "detail": "agile_team/live.py",
+    }
+    grep = {
+        **tool_row(live_step, "Dev: Grep", 3.0, 76.0),
+        "tool": "Grep",
+        "detail": "def heartbeat",
+        "status": "error",
+    }
     misc = {"count": 3, "seconds": 0.042, "tools": {"Read": 2, "Grep": 1}}
+    none = {"count": 0, "seconds": 0.0, "tools": {}}
     po_call = tool_row(po_step, "po.run_role", 312.5, 10.0)
     return [
-        {**live_step, "calls": [slow, timed_out], "misc": misc},
-        {**po_step, "calls": [po_call], "misc": {"count": 0, "seconds": 0.0, "tools": {}}},
+        {**old_step, "calls": [cut], "misc": none},
+        {**live_step, "calls": [slow, read, grep, timed_out], "misc": misc},
+        {**po_step, "calls": [po_call], "misc": none},
     ]
 
 

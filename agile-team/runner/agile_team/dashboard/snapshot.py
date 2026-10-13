@@ -494,6 +494,15 @@ def _tools(files: RunFiles) -> list[dict]:
     return tool_groups.groups(rows, files.config.dashboard.collapse_under_s)
 
 
+def misc_calls(config: Config, ask: tool_groups.MiscAsk) -> list[dict] | None:
+    """A step's misc calls, re-gathered from the ``tools.jsonl`` tail (N12); ``None`` if bad."""
+    key = tool_groups.ask_key(ask)
+    if key is None:
+        return None
+    rows = read_tail(config.run_dir / tool_calls.TOOLS, TOOLS_TAIL_BYTES)
+    return tool_groups.gathered_calls(rows, key, config.dashboard.collapse_under_s)
+
+
 def _sleep_row(row: dict) -> dict | None:
     start, end, slept = (step_times.number(row.get(k)) for k in ("from", "to", "slept"))
     if start is None or end is None or slept is None:

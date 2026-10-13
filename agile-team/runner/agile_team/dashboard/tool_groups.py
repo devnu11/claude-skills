@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import itertools
-from typing import Any
+import math
+from typing import Any, NamedTuple
 
 from .step_times import number
 
@@ -61,3 +63,34 @@ def groups(rows: list[dict], limit: float) -> list[dict]:
     for row in filter(valid, rows):
         by_key.setdefault(key_of(row), []).append(row)
     return [group(members, limit) for members in by_key.values()]
+
+
+class MiscAsk(NamedTuple):
+    """The query of ``GET /api/misc``: one tools group, as strings (N12)."""
+
+    role: str
+    story: str
+    step: str
+    opened_at: str
+
+
+def _seconds_of(text: str) -> float | None:
+    """``text`` as a finite float, or ``None``."""
+    with contextlib.suppress(ValueError):
+        value = float(text)
+        return value if math.isfinite(value) else None
+    return None
+
+
+def ask_key(ask: MiscAsk) -> Key | None:
+    """The group key an ask names, or ``None`` when it is malformed (N12)."""
+    opened_at = _seconds_of(ask.opened_at)
+    if not ask.role or opened_at is None:
+        return None
+    return (ask.role, ask.story or None, ask.step or None, opened_at)
+
+
+def gathered_calls(rows: list[dict], key: Key, limit: float) -> list[dict]:
+    """The rows ``gather`` puts in misc for ``key``, sorted by ``at`` (N12)."""
+    members = [r for r in filter(valid, rows) if key_of(r) == key]
+    return sorted(gather(members, limit)[0], key=lambda r: r["at"])

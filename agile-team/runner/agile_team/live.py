@@ -467,6 +467,10 @@ class Pulse:
             except OSError:
                 pass  # the next beat retries; a heartbeat must never crash the runner
 
+    def _open_calls(self) -> list[dict]:
+        """Every open call of every open meter, the outer meter first (N11)."""
+        return [row for m in self._open for row in m.reading.calls.opened()]
+
     def heartbeat(self) -> dict[str, Any]:
         """The H1 dict as of now; call with the lock held."""
         live = not self._ended
@@ -481,4 +485,5 @@ class Pulse:
             "slept": round(self.slept_s, 1),
             "chore": self._chore if live else None,
             "step": step,
+            "calls": self._open_calls() if live else [],
         }

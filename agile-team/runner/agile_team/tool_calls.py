@@ -159,6 +159,31 @@ class Call:
         return cls(use.id, use.name, label(use), detail(use.input or {}), start)
 
 
+OPEN = "open"
+
+
+def start_row(where: Where, call: Call) -> dict[str, Any]:
+    """A call's TC11 keys up to ``slept``: who, what and its start."""
+    return {
+        "role": where.role,
+        "story": where.story,
+        "step": where.step,
+        "opened_at": where.opened_at,
+        "tool": call.tool,
+        "tool_use_id": call.tool_use_id,
+        "label": call.label,
+        "detail": call.detail,
+        "at": call.start.at,
+        "mono": call.start.mono,
+        "slept": call.start.slept,
+    }
+
+
+def open_row(where: Where, call: Call) -> dict[str, Any]:
+    """An open call as a heartbeat row (N11): ``start_row`` plus ``"status": "open"``."""
+    return {**start_row(where, call), "status": OPEN}
+
+
 @dataclass(frozen=True)
 class ToolSpan:
     """One finished call (TC11)."""
@@ -171,19 +196,8 @@ class ToolSpan:
 
     def as_dict(self) -> dict[str, Any]:
         """The span line's object, keys in order."""
-        where, call = self.where, self.call
         return {
-            "role": where.role,
-            "story": where.story,
-            "step": where.step,
-            "opened_at": where.opened_at,
-            "tool": call.tool,
-            "tool_use_id": call.tool_use_id,
-            "label": call.label,
-            "detail": call.detail,
-            "at": call.start.at,
-            "mono": call.start.mono,
-            "slept": call.start.slept,
+            **start_row(self.where, self.call),
             "seconds": self.seconds,
             "ended_at": self.end.at,
             "status": str(self.status),
@@ -244,6 +258,10 @@ class Calls:
         )
         self.spans.append(span)
         self.fresh.append(span)
+
+    def opened(self) -> list[dict[str, Any]]:
+        """The open calls as heartbeat rows, in opening order."""
+        return [open_row(self.where, c) for c in self.open.values()]
 
     def take_fresh(self) -> list[ToolSpan]:
         """The spans closed since the last call, once."""
