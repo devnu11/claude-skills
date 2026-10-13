@@ -208,9 +208,11 @@ def test_index_toggle_only_on_tokens_chart_and_board_fits(dash) -> None:
 
 # ----- s44: live meter and runner health ---------------------------------------
 
+# amber_quiet_s leaves room for the first SSE event under a loaded `-n auto` run:
+# at 2 s the stream could open amber and miss green.
 HEALTH_TOML = (
     "\n[health]\nbeat_s = 0.5\nstale_s = {stale}\n"
-    "amber_quiet_s = 2\namber_tool_s = 1\nred_quiet_s = 4\n"
+    "amber_quiet_s = 5\namber_tool_s = 1\nred_quiet_s = 8\n"
 )
 STEP_SCRIPT = """
 import sys, time
@@ -281,7 +283,7 @@ def test_health_goes_green_amber_red_as_the_step_goes_quiet(dash, step) -> None:
     """s44 AC4: a silent live step turns the stream amber, then red (no turn for ...)."""
     _set_health(dash, stale=30)
     step.append(_fake_step(dash[2], state_mod.RunStatus.RUNNING))
-    seen = _stream_health(dash[1], 9)
+    seen = _stream_health(dash[1], 13)
     levels = [level for level, _ in seen]
     assert levels[0] == "green" and "amber" in levels and levels[-1] == "red", seen
     assert "no turn for" in seen[-1][1]
