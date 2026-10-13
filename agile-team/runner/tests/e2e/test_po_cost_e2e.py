@@ -52,6 +52,6 @@ def test_role_steps_keep_their_reported_cost(make_runtime) -> None:
 
     rt = make_runtime(Totals([], role_cost=0.6))
     for _ in range(2):
-        asyncio.run(rt.run_role(StepRequest("scribe", "go", None)))
-    costs = [e.cost_usd for e in rt.ledger.entries() if e.role == "scribe"]
+        asyncio.run(rt.run_role(StepRequest("unit-tester", "go", None)))
+    costs = [e.cost_usd for e in rt.ledger.entries() if e.role == "unit-tester"]
     assert costs == pytest.approx([0.6, 0.6])

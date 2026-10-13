@@ -70,7 +70,7 @@ def test_upheld_dispute_goes_to_tests_and_back_free(make_runtime, configured) ->
     add_story(rt, step="implement")
     drive(rt)
     story = rt.state.stories["s1"]
-    assert step_roles(rt) == ["developer", "unit-tester", "developer", "scribe"]
+    assert step_roles(rt) == ["developer", "unit-tester", "developer"]
     assert (story.status, story.rounds, story.disputes) == (StoryStatus.DONE, 0, 1)
     assert story.dispute is None
     (event,) = kinds(rt, EventKind.TEST_DISPUTE)

@@ -37,11 +37,10 @@ def test_two_stories_advance_with_no_po_turn_between_steps(make_runtime) -> None
     add_story(rt, "s1")
     add_story(rt, "s2")
     drive(rt)
-    one = ["architect", "developer", "code-reviewer", "scribe"]
+    one = ["architect", "developer", "code-reviewer"]
     assert step_roles(rt) == one + one
     assert po_turns(script) == 2
     assert all(s.status is StoryStatus.DONE for s in rt.state.stories.values())
-    assert rt.state.scribe_due == []
 
 
 def test_open_questions_hand_over_to_the_po(make_runtime) -> None:
@@ -65,7 +64,7 @@ def test_blocked_hands_over_and_continue_story_resumes_with_the_note(make_runtim
     add_story(rt)
     drive(rt)
     assert "s1: architect reported blocked: no db" in script.po_prompts[1]
-    assert step_roles(rt) == ["architect", "architect", "code-reviewer", "scribe"]
+    assert step_roles(rt) == ["architect", "architect", "code-reviewer"]
     assert "- From the PO: use sqlite" in script.prompts["architect"][1]
     assert rt.state.stories["s1"].status is StoryStatus.DONE
 
@@ -137,12 +136,11 @@ def test_the_architects_developer_field_picks_the_implement_role(make_runtime) -
         "unit-tester",
         "developer-cli",
         "code-reviewer",
-        "scribe",
     ]
 
 
-def test_the_scribe_runs_after_done_even_when_the_final_step_held_the_story(make_runtime) -> None:
-    """R12: a reviewer that finishes with a question holds a DONE story; the Scribe still runs."""
+def test_no_scribe_runs_after_done_even_when_the_final_step_held_the_story(make_runtime) -> None:
+    """R12: a reviewer that finishes with a question holds a DONE story; no Scribe follows."""
     ask = handoff("done", open_questions=["Ship it?"])
     script = Script({"code-reviewer": [ask]})
     rt = build(make_runtime, script, steps=["review"])
@@ -150,9 +148,7 @@ def test_the_scribe_runs_after_done_even_when_the_final_step_held_the_story(make
     drive(rt)
     assert rt.state.stories["s1"].status is StoryStatus.DONE
     assert "s1: code-reviewer asks: Ship it?" in script.po_prompts[1]
-    assert step_roles(rt) == ["code-reviewer", "scribe"]
-    assert rt.state.scribe_due == []
-    assert "Story s1 is done. Record its decisions as ADRs" in script.prompts["scribe"][0]
+    assert step_roles(rt) == ["code-reviewer"]
 
 
 def test_the_product_owner_runs_on_sonnet(make_runtime) -> None:
