@@ -137,7 +137,9 @@ def test_the_pulse_mark_reads_the_three_clocks(fake: FakeSystem) -> None:
     assert (mark.at, mark.mono, mark.slept) == (fake.clock, fake.monotonic(), 0.0)
 
 
-def test_a_failed_write_of_spans_is_ignored(fake: FakeSystem, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_failed_write_of_spans_is_ignored(
+    fake: FakeSystem, monkeypatch: pytest.MonkeyPatch
+) -> None:
     pulse = pulse_of(fake)
     meter = pulse.open(WHO)
 
@@ -164,7 +166,7 @@ def test_an_interrupted_end_carries_the_split(fake: FakeSystem) -> None:
     fake.clock += 2.0
     pulse.close(meter)
     event = meter.interrupted(live.Stop(Cause.ERROR))
-    assert SPLIT_KEYS <= set(event.data)
+    assert set(event.data) >= SPLIT_KEYS
     assert event.data["tool_s"] == 2.0
 
 
@@ -181,7 +183,7 @@ def test_a_role_steps_end_has_the_split(make_runtime: Any, fake: FakeSystem) -> 
     open_story(rt)
     run_step(rt)
     [end] = step_ends(rt)
-    assert SPLIT_KEYS <= set(end.data)
+    assert set(end.data) >= SPLIT_KEYS
     assert end.data["waiting_s"] == 0.0 and end.data["tool_s"] == 0.0
     assert "mono" in end.data and "slept" in end.data
 
@@ -205,7 +207,8 @@ def test_every_po_query_emits_one_po_turn(make_runtime: Any) -> None:
     for turn in turns:
         assert turn.role == "product-owner" and turn.story is None
         assert SPLIT_KEYS | {"mono", "slept"} <= set(turn.data)
-    assert not [e for e in rt.events.events() if e.kind is EventKind.PO_SESSION and "tool_s" in e.data]
+    sessions = [e for e in rt.events.events() if e.kind is EventKind.PO_SESSION]
+    assert not [e for e in sessions if "tool_s" in e.data]
 
 
 def test_a_po_query_that_raises_still_emits_a_po_turn(make_runtime: Any) -> None:

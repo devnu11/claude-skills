@@ -80,7 +80,9 @@ def test_a_finished_call_is_not_closed_twice() -> None:
         ("x" * 300 + " timed out", tc.Status.ERROR),
     ],
 )
-def test_an_error_result_is_a_timeout_only_when_the_text_says_so(content: Any, status: tc.Status) -> None:
+def test_an_error_result_is_a_timeout_only_when_the_text_says_so(
+    content: Any, status: tc.Status
+) -> None:
     assert tc.status_of(result("u", content, is_error=True)) == status
 
 
@@ -190,7 +192,7 @@ def test_detail_is_cut_to_80_and_whitespace_is_collapsed() -> None:
         ("api_key='x y' run", "api_key=*** run"),
         ('export MY_SECRET="s" && go', "export MY_SECRET=*** && go"),
         ("AWS_SECRET_ACCESS_KEY=zzz/yyy cmd", "AWS_SECRET_ACCESS_KEY=*** cmd"),
-        ("export API_KEY=\"a b\"", "export API_KEY=***"),
+        ('export API_KEY="a b"', "export API_KEY=***"),
         ("A_TOKEN=1;B_KEY=2", "A_TOKEN=***;B_KEY=***"),
         ("PATH=/bin ls", "PATH=/bin ls"),
         ("--token abc", "--token abc"),
@@ -263,7 +265,9 @@ def test_a_clamp_keeps_model_time_from_going_negative() -> None:
         ([(5.0, 8.0), (0.0, 6.0)], 8.0),
     ],
 )
-def test_union_measures_the_covered_time(intervals: list[tuple[float, float]], total: float) -> None:
+def test_union_measures_the_covered_time(
+    intervals: list[tuple[float, float]], total: float
+) -> None:
     assert tc.union(intervals) == total
 
 

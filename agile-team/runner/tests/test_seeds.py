@@ -66,7 +66,7 @@ def test_default_seeds_and_packaged_seed_location() -> None:
     import agile_team
 
     assert seeds.DEFAULT_SEEDS == {"web": seeds.PACKAGED_SEED}
-    assert seeds.PACKAGED_SEED == Path(agile_team.__file__).parent / "dashboard" / "seed"
+    assert Path(agile_team.__file__).parent / "dashboard" / "seed" == seeds.PACKAGED_SEED
 
 
 def test_packaged_seed_names_and_config_are_valid() -> None:
