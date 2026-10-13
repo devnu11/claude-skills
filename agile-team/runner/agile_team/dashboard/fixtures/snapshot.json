@@ -131,6 +131,7 @@
    "position": 1,
    "tier": "in progress",
    "hold": null,
+   "po_hold": null,
    "wait": null,
    "disputes": 0,
    "developer": "developer",
@@ -168,6 +169,7 @@
    "position": 2,
    "tier": "in progress",
    "hold": null,
+   "po_hold": null,
    "wait": null,
    "disputes": 0,
    "developer": null,
@@ -203,12 +205,14 @@
    "position": 3,
    "tier": "held",
    "hold": null,
+   "po_hold": null,
    "wait": {
     "reason": "round cap",
     "on": [
      "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
      "round 3: the manager must rule"
-    ]
+    ],
+    "title": "round cap"
    },
    "disputes": 0,
    "developer": "developer",
@@ -244,12 +248,14 @@
    "position": 4,
    "tier": "held",
    "hold": "questions",
+   "po_hold": null,
    "wait": {
     "reason": "questions",
     "on": [
      "m4: s4: should exports write a UTF-8 BOM by default (Excel opens them correctly) or only with a new --excel flag (cleaner for scripts)?",
      "architect: Asked which export encoding Excel on Windows expects"
-    ]
+    ],
+    "title": "questions"
    },
    "disputes": 0,
    "developer": null,
@@ -281,11 +287,13 @@
    "position": 5,
    "tier": "held",
    "hold": null,
+   "po_hold": null,
    "wait": {
     "reason": "manager",
     "on": [
      "story s7 presentation is not up: delivery 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
-    ]
+    ],
+    "title": "manager"
    },
    "disputes": 0,
    "developer": "developer",
@@ -317,6 +325,7 @@
    "position": 6,
    "tier": "not started",
    "hold": null,
+   "po_hold": null,
    "wait": null,
    "disputes": 0,
    "developer": null,
@@ -358,6 +367,7 @@
    "position": null,
    "tier": null,
    "hold": null,
+   "po_hold": null,
    "wait": null,
    "disputes": 0,
    "developer": "developer",
