@@ -42,7 +42,7 @@ def free_port() -> int:
 
 
 def make_config(configured: Path, tmp_path: Path, mode: str) -> tuple[config_mod.Config, int]:
-    """A repo whose web acceptance environment runs a shell leader that backgrounds a slow server."""
+    """A repo whose web acceptance environment runs a shell leader backgrounding a slow server."""
     script = tmp_path / "slow_server.py"
     script.write_text(SERVER)
     port = free_port()

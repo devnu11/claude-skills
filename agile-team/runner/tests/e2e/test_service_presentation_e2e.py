@@ -1,4 +1,4 @@
-"""s26 end to end: a `web` acceptance environment is started from its presentation and probed, for real."""
+"""s26 end to end: a `web` acceptance environment is started from its presentation and probed."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def free_port() -> int:
 
 @pytest.fixture
 def web(configured: Path):
-    """A repo with a real `dashboard` acceptance environment on a free port, and the trial for it."""
+    """A repo with a real `dashboard` acceptance environment on a free port, plus its trial."""
     port = free_port()
     cfg = dict(PY_CONFIG)
     cfg["environment"] = [

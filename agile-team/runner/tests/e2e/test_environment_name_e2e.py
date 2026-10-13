@@ -29,7 +29,7 @@ def test_prose_environment_refused_with_names_and_nothing_saved(make_runtime) ->
 
 
 def test_exact_name_accepted_and_case_refused(make_runtime, configured, capsys) -> None:
-    """AC3: exact name opens; 'CLI' and 'cli ' are refused; status shows the acceptance environment."""
+    """AC3: exact name opens; 'CLI' and 'cli ' are refused; status shows the environment."""
     rt = make_runtime()
     tools = Tools(rt)
     for bad in ("CLI", "cli "):
