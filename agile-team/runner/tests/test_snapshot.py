@@ -14,6 +14,7 @@ from agile_team import system
 from agile_team.backlog import order_version
 from agile_team.dashboard import snapshot
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
+from agile_team.holds import PoHold
 from agile_team.roles import RoleBook
 from agile_team.state import ModelOverride, RunState, RunStatus
 
@@ -179,6 +180,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             sprint=s["sprint"],
             repeated=s.get("repeated"),
             hold=s.get("hold"),
+            po_hold=PoHold(**s["po_hold"]) if s.get("po_hold") else None,
             previous=previous_from(s.get("wait")),
             commit=commit_for(s, pulled),
             disputes=s["disputes"],
