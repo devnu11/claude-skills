@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .gates import StoryState
+    from .salvage import Interruption
     from .state import RunState
 
 FIELD_SEP = "\x1f"
@@ -67,30 +69,28 @@ def remap_state(state: RunState, moved: Mapping[str, str]) -> int:
     return count + _upstream(state, moved)
 
 
-def _story(story, moved: Mapping[str, str]) -> int:
-    before = [story.commit, *story.code_commits]
-    story.commit = _moved(story.commit, moved)
-    story.code_commits = [_moved(c, moved) for c in story.code_commits]
-    after = [story.commit, *story.code_commits]
-    count = sum(_changed(b, a) for b, a in zip(before, after, strict=True))
+def _swap(obj: object, attr: str, moved: Mapping[str, str]) -> int:
+    before = getattr(obj, attr)
+    after = _moved(before, moved)
+    setattr(obj, attr, after)
+    return _changed(before, after)
+
+
+def _story(story: StoryState, moved: Mapping[str, str]) -> int:
+    count = _swap(story, "commit", moved)
+    for i, sha in enumerate(story.code_commits):
+        story.code_commits[i] = _moved(sha, moved)
+        count += _changed(sha, story.code_commits[i])
     return count + _interruptions([story.interrupted] if story.interrupted else [], moved)
 
 
-def _interruptions(items, moved: Mapping[str, str]) -> int:
-    count = 0
-    for item in items:
-        count += _changed(item.sha, _moved(item.sha, moved))
-        item.sha = _moved(item.sha, moved)
-    return count
+def _interruptions(items: Sequence[Interruption], moved: Mapping[str, str]) -> int:
+    return sum(_swap(item, "sha", moved) for item in items)
 
 
 def _upstream(state: RunState, moved: Mapping[str, str]) -> int:
     up = state.upstream
-    count = _changed(up.last_end, _moved(up.last_end, moved))
-    up.last_end = _moved(up.last_end, moved) or ""
+    count = _swap(up, "last_end", moved)
     for entry in up.stack:
-        count += _changed(entry.start, _moved(entry.start, moved))
-        count += _changed(entry.end, _moved(entry.end, moved))
-        entry.start = _moved(entry.start, moved) or ""
-        entry.end = _moved(entry.end, moved) or ""
+        count += _swap(entry, "start", moved) + _swap(entry, "end", moved)
     return count

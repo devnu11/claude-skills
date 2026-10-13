@@ -248,10 +248,16 @@ class BoundaryRunner:
         self._close(b, SKIPPED_REPORT.format(why=why))
 
     def _rebase(self, b: Boundary) -> None:
-        b.sync_from = b.sync_from or self.runtime.git.head()
-        self.runtime.save()  # a crash mid-rebase must not lose the old hashes
+        self._pin_sync_from(b)
         result = self.remote.rebase_onto(b.sync_from)
         AFTER_REBASE[result.outcome](self, b, result)
+
+    def _pin_sync_from(self, b: Boundary) -> None:
+        """R2: pin the pre-rebase HEAD once and save it, so a crash cannot lose the old hashes."""
+        if b.sync_from:
+            return
+        b.sync_from = self.runtime.git.head()
+        self.runtime.save()
 
     def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
         data = {"files": list(result.files), "commit": result.commit[:12]}
