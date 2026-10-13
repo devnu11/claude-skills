@@ -31,6 +31,7 @@ KEYS = [
     "ledger",
     "messages",
     "answers",
+    "thread",
     "upstream",
     "turns",
     "heartbeat",
@@ -589,11 +590,13 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
         config.stories_dir / "s1.md",
         config.stories_dir / "s2.md",
         config.requirements_dir / "REQ-001.md",
+        run / "liaison" / "inbox.jsonl",
+        run / "liaison" / "replies.jsonl",
     ]
 
 
 def test_watched_files_without_dirs(config: cfg.Config) -> None:
-    assert len(snapshot.watched_files(config)) == 8
+    assert len(snapshot.watched_files(config)) == 10
 
 
 # ----- 10. D10 / config / ledger constants -----------------------------------

@@ -325,7 +325,7 @@ def test_cmd_dashboard_prints_both_links_and_opens_local(
 
 def test_health_trigger_fires_on_a_change_into_red() -> None:
     names = [name for name, _ in watch.TRIGGERS]
-    assert names == ["message", "status", "health"]
+    assert names == ["message", "liaison_message", "status", "health"]
     red = watch.Look([], "running", None, "red")
     assert watch.fired(watch.Seen(health="green"), red) == ["health"]
     assert watch.fired(watch.Seen(health=""), red) == ["health"]

@@ -365,7 +365,7 @@ def test_new_statuses_and_note_kinds() -> None:
     assert RunStatus("failed") is RunStatus.FAILED and RunStatus("stopped") is RunStatus.STOPPED
     from agile_team.relay import KINDS
 
-    assert KINDS[-2:] == ("failed", "stopped")
+    assert KINDS[-2:] == ("stopped", "reply")
     assert not RunState(status=RunStatus.FAILED).halted()
 
 
