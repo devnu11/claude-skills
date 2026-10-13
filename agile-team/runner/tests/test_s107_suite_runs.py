@@ -17,18 +17,24 @@ from .test_gates import story
 
 PASS_LINE = "412 passed in 3.2s"
 FAIL_LINE = "1 failed, 3 passed in 1.0s"
+COVERAGE_LINE = "TOTAL 10 0 97%"
 STEPS = ["design", "tests", "implement", "e2e", "acceptance"]
 
 
 class Scripted:
     """A test-command runner returning scripted (code, output) in turn."""
 
-    def __init__(self, *results: tuple[int, str]) -> None:
+    def __init__(
+        self, *results: tuple[int, str], coverage: tuple[int, str] = (0, COVERAGE_LINE)
+    ) -> None:
         self.results = list(results)
+        self.coverage = coverage
         self.calls: list[str] = []
 
     def __call__(self, command: str) -> tuple[int, str]:
         self.calls.append(command)
+        if command == "C":
+            return self.coverage
         return self.results.pop(0) if self.results else (0, PASS_LINE)
 
 
@@ -294,7 +300,7 @@ def test_changes_requested_runs_nothing() -> None:
 def test_implement_does_not_run_when_e2e_is_in_the_steps() -> None:
     runner = Scripted()
     build(runner).evaluate(story("implement"), done())
-    assert runner.calls.count("T") == 1  # the implement gate's own run only
+    assert runner.calls.count("T") == 0  # the gate's own coverage run is "C"
 
 
 def test_implement_runs_the_suite_when_it_is_the_last_code_step() -> None:
@@ -302,19 +308,19 @@ def test_implement_runs_the_suite_when_it_is_the_last_code_step() -> None:
     pipe = build(runner, steps=["design", "tests", "implement"])
     out = pipe.evaluate(story("implement"), done())
     assert out.verdict is Verdict.PASS and "passed 5 runs in a row" in out.reason
-    assert runner.calls.count("T") == 1 + 5
+    assert runner.calls.count("T") == 5
 
 
 def test_a_failed_step_gate_runs_no_suite() -> None:
-    runner = Scripted((1, FAIL_LINE))
+    runner = Scripted(coverage=(1, FAIL_LINE))
     pipe = build(runner, steps=["design", "tests", "implement"])
     out = pipe.evaluate(story("implement"), done())
     assert out.verdict is Verdict.BOUNCE
-    assert runner.calls.count("T") == 1
+    assert runner.calls.count("T") == 0
 
 
 def test_a_story_without_the_key_is_unchanged() -> None:
-    runner = FakeRunner()
+    runner = FakeRunner({"C": (0, COVERAGE_LINE), "T": (0, PASS_LINE)})
     pipe = gates.Pipeline(
         ["design", "tests", "implement"],
         3,
