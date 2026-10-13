@@ -113,7 +113,7 @@ def test_existing_lists_kinds_with_regular_files_in_table_order(team) -> None:
 
 
 def test_routes_now_include_the_file_route() -> None:
-    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file", "/api/misc"}
+    assert set(server.ROUTES) == {"/", "/api/snapshot", "/api/stream", "/api/file", "/api/misc", "/fixtures/snapshot.json"}
     assert set(server.POSTS) == {"/api/reorder", "/api/thread", "/api/review", "/api/opinion"}
 
 
