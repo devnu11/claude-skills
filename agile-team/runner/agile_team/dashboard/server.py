@@ -47,6 +47,7 @@ BODY_LIMITS: dict[str, int] = {
 }
 WHOLE_NUMBER = re.compile(r"[0-9]+")
 INDEX = Path(__file__).parent / "index.html"
+FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.json"
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,10 @@ def _send(handler: Handler, body: Body) -> None:
 
 def _index(handler: Handler) -> None:
     _send(handler, Body("text/html; charset=utf-8", system.read_bytes(INDEX)))
+
+
+def _fixture(handler: Handler) -> None:
+    _send(handler, Body("application/json", system.read_bytes(FIXTURE)))
 
 
 def _snapshot(handler: Handler) -> None:
@@ -266,6 +271,7 @@ def _stream(handler: Handler) -> None:
 
 ROUTES: dict[str, Callable[[Handler], None]] = {
     "/": _index,
+    "/fixtures/snapshot.json": _fixture,
     "/api/snapshot": _snapshot,
     "/api/stream": _stream,
     "/api/file": _file,

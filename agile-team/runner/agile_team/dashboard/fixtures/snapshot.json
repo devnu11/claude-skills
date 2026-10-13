@@ -1249,7 +1249,7 @@
    "role": "architect",
    "story": "s3",
    "data": {
-    "brief": "Design streaming export.",
+    "brief": "Design streaming export for `report run --stream`.\n\n- **Memory bound:** stay under 50 MB for 1M rows.\n- Keep the `--format csv` flags.\n- Name the temp-file rule in the design.",
     "mono": 458905.0,
     "slept": 120.0
    }
@@ -3397,7 +3397,7 @@
   {
    "id": "m3",
    "kind": "question",
-   "text": "s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
+   "text": "s3 keeps failing the memory bound because sorting needs the whole result.\n\n- **Option A:** spill to a temp file (up to 1 GB) when `--sort` is used.\n- **Option B:** refuse `--sort` with `--stream`.\n\nWhich one?",
    "stories": [
     "s3"
    ],

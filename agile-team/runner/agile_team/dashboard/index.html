@@ -50,6 +50,16 @@ header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .brand { font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
 .brand small { font-weight: 400; color: var(--muted); margin-left: 6px; }
 .task { flex: 1 1 320px; color: var(--ink-2); min-width: 0; }
+.live-panel { width: 440px; max-width: 100%; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--grid); border-radius: 8px; padding: 6px 10px; cursor: pointer; line-height: 1.4; }
+.live-panel.running { border-left-color: var(--accent); }
+.live-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lp-head { font-size: 13px; font-weight: 600; color: var(--ink); }
+.lp-meta { font-size: 12px; color: var(--ink-2); }
+.lp-msg { font-size: 12.5px; color: var(--ink-2); }
+.lp-msg .md { max-height: calc(6 * 1.4em); overflow: hidden; }
+.lp-msg .md > * { margin: 0; }
+.lp-more { font-size: 12.5px; color: var(--ink-2); }
+.md-notice { font-size: 12.5px; color: var(--ink-2); border: 1px solid var(--warning); border-radius: 999px; padding: 1px 8px; }
 .head-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .meter { min-width: 220px; }
 .meter-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
@@ -57,7 +67,8 @@ header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .meter-bar { position: relative; height: 6px; background: var(--surface-2); border-radius: 3px; margin-top: 4px; }
 .meter-fill { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 3px; }
 .meter-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--surface); }
-.status-row { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; align-items: center; }
+.status-bar { padding-bottom: 12px; }
+.status-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* pills */
 .pill {
@@ -120,10 +131,9 @@ section[hidden] { display: none; }
 .bfields { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--ink-2); margin: 4px 0; }
 .bevents { margin: 4px 0; padding-left: 18px; color: var(--muted); }
 .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
-.grid-flow { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .stack { display: grid; gap: 16px; }
-@media (max-width: 1000px) { .grid-flow, .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1000px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 
 /* flow */
 #flow { overflow-x: auto; }
@@ -161,6 +171,7 @@ section[hidden] { display: none; }
 .tl-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
 .timeline { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow-y: auto; }
+#tab-activity .timeline { max-height: none; }
 .timeline li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
 .timeline li.new { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } }
@@ -229,7 +240,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0 0 6px; }
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 1.05em; font-weight: 600; margin: 8px 0 4px; }
 .md ul, .md ol { padding-left: 20px; }
-.md code { background: var(--surface-2); padding: 1px 4px; border-radius: 4px; font-size: .92em; }
+.md code { background: var(--surface-2); padding: 1px 4px; border-radius: 4px; font-size: max(12px, .92em); }
 .md pre { background: var(--surface-2); padding: 8px; border-radius: 6px; overflow-x: auto; white-space: pre; }
 .md pre code { background: none; padding: 0; }
 .md table { display: block; overflow-x: auto; width: auto; }
@@ -268,35 +279,42 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
       <div class="brand">agile-team<small id="sprint-label"></small></div>
       <div class="task" id="task"></div>
       <div class="head-right">
-        <div class="meter" id="meter"></div>
+        <div class="live-panel" id="live-panel" role="button" tabindex="0" data-live-panel>
+          <div class="lp-head" id="lp-head"></div>
+          <div class="lp-meta" id="lp-meta"></div>
+          <div class="lp-msg" id="lp-msg"></div>
+        </div>
         <button class="ctl" id="theme" title="Theme">◐</button>
       </div>
     </div>
-    <div class="status-row" id="status-row"></div>
+    <div class="status-bar">
+      <div class="meter" id="meter"></div>
+      <div class="status-row" id="status-row"></div>
+    </div>
     <div class="live-details" id="live-details" hidden></div>
     <nav role="tablist" id="tabs"></nav>
   </div>
 </header>
 <main class="wrap">
   <section id="tab-flow">
-    <div class="grid-flow">
-      <div class="card flow">
-        <h2>Information flow</h2>
-        <p class="sub">Briefs from the Product Owner, handoffs back, and questions to you. Line weight is message count.</p>
-        <div class="flow-scope"><div class="seg" id="flow-scope" role="group" aria-label="Flow scope"></div><select id="flow-focus" aria-label="Story in focus" hidden></select></div>
-        <div id="flow"></div>
-        <div class="legend">
-          <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
-          <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
-          <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
-          <span><i class="sw" style="background:var(--accent);border-radius:50%"></i>live message (moving dot); glowing box = running now</span>
-        </div>
+    <div class="card flow">
+      <h2>Information flow</h2>
+      <p class="sub">Briefs from the Product Owner, handoffs back, and questions to you. Line weight is message count.</p>
+      <div class="flow-scope"><div class="seg" id="flow-scope" role="group" aria-label="Flow scope"></div><select id="flow-focus" aria-label="Story in focus" hidden></select></div>
+      <div id="flow"></div>
+      <div class="legend">
+        <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
+        <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
+        <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
+        <span><i class="sw" style="background:var(--accent);border-radius:50%"></i>live message (moving dot); glowing box = running now</span>
       </div>
-      <div class="card">
-        <h2>Activity</h2>
-        <div class="tl-tools"><select id="tl-filter" aria-label="Filter by story"></select></div>
-        <ol class="timeline" id="timeline"></ol>
-      </div>
+    </div>
+  </section>
+  <section id="tab-activity" hidden>
+    <div class="card">
+      <h2>Activity</h2>
+      <div class="tl-tools"><select id="tl-filter" aria-label="Filter by story"></select></div>
+      <ol class="timeline" id="timeline"></ol>
     </div>
   </section>
   <section id="tab-board" hidden>
@@ -344,7 +362,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 
 const PO = "product-owner";
 const TABS = [
-  ["flow", "Flow"], ["board", "Board"], ["backlog", "Backlog"], ["tokens", "Tokens"],
+  ["flow", "Flow"], ["activity", "Activity"], ["board", "Board"], ["backlog", "Backlog"], ["tokens", "Tokens"],
   ["questions", "Questions"], ["requirements", "Requirements"],
 ];
 const RING_ORDER = [
@@ -432,14 +450,22 @@ function safeMarkdown(markdownit) {
   return it;
 }
 
+const MD = { LOADING: "loading", READY: "ready", FAILED: "failed" };
+let markdownState = MD.LOADING;
+const MD_NOTICE = "Markdown unavailable: showing plain text";
+
 /** Install the library; from now on md() renders Markdown. */
-function useMarkdown(markdownit) { markdown = safeMarkdown(markdownit); }
+function useMarkdown(markdownit) { markdown = safeMarkdown(markdownit); markdownState = MD.READY; }
 
 /** Load the pinned library once; redraw when it arrives, keep plain text if it can't load. */
 function loadMarkdown() {
   return import(MARKDOWN_URL)
     .then(() => { useMarkdown(globalThis.markdownit); render(); })
-    .catch((err) => console.warn("markdown unavailable, showing plain text:", err.message));
+    .catch((err) => {
+      console.warn("markdown unavailable, showing plain text:", err.message);
+      markdownState = MD.FAILED;
+      render();
+    });
 }
 
 /** The one Markdown renderer: safe HTML for `text`, or escaped plain text until the library loads. */
@@ -749,12 +775,122 @@ function flowContext(view) {
   };
 }
 
+// ----- live panel -------------------------------------------------------------
+
+const CLIP_LINES = 6, CLIP_CHARS = 600;
+
+/** The awake clock text for the role's open step, or "" (LP2). */
+function awakeText(view, role) {
+  const open = openStep(view, role);
+  return open ? ` · ⏱ ${fmt.span(awakeSoFar(view, open))} awake${sleepNote(open)}` : "";
+}
+
+/** The panel state for a running step, else null. */
+function stepPanel(view) {
+  const step = liveStep(view);
+  if (!step) return null;
+  const what = step.step ? ` · ${step.step}` : "";
+  return { kind: "step", head: `▶ ${who(step)}${what}${awakeText(view, step.role)}`, story: step.story ?? "" };
+}
+
+/** The panel state for open runner stages, else null. */
+function stagePanel(view) {
+  const open = openStages(view);
+  return open.length ? { kind: "stage", head: `⚙ runner: ${open.map((s) => s.stage).join(", ")}`, story: "" } : null;
+}
+
+/** Why nothing runs: open questions first, else the health reason or run status (LP3). */
+function idleWhy(view) {
+  const open = openQuestions(view);
+  return open.length ? `waiting on ${open.map((q) => q.id).join(", ")}` : view.health.reason || view.run.status;
+}
+
+/** The panel state when nothing runs. */
+function idlePanel(view) {
+  return { kind: "idle", head: `● Nothing running: ${idleWhy(view)}`, story: "" };
+}
+
+const PANEL_STATES = [stepPanel, stagePanel, idlePanel];
+
+/** The first panel state that applies (LP2). */
+function panelState(view) {
+  for (const state of PANEL_STATES) { const found = state(view); if (found) return found; }
+}
+
+/** The timeline row of event `e`, or null when it has none or throws. */
+function rowOf(e, ctx) {
+  try { return TIMELINE[e.kind]?.(e, ctx) ?? null; } catch { return null; }
+}
+
+/** The newest event with a non-blank timeline body, on `story` when given (LP4). */
+function latestMessage(view, story) {
+  const ctx = timelineContext(view);
+  for (const e of [...view.events].reverse()) {
+    if (story && e.story !== story) continue;
+    const t = rowOf(e, ctx);
+    if (t && String(t.body ?? "").trim()) return { e, t };
+  }
+  return null;
+}
+
+/** The first six non-blank lines of `text`, at most 600 characters (LP5). */
+function clip(text) {
+  const lines = String(text ?? "").split("\n");
+  let seen = 0, end = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() && ++seen === CLIP_LINES) { end = i + 1; break; }
+  }
+  const kept = lines.slice(0, end).join("\n");
+  return { text: kept.slice(0, CLIP_CHARS), cut: end < lines.length && lines.slice(end).some((l) => l.trim()) || kept.length > CLIP_CHARS };
+}
+
+/** The panel's plain meta line for a message (LP6). */
+function panelMeta({ e, t }) {
+  const to = t.to ? ` → ${short(t.to)}` : "";
+  return `${fmt.time(e.at)} · ${short(t.from)}${to} · ${t.what}${e.story ? " · " + e.story : ""}`;
+}
+
+/** The panel's message part: Markdown of the clipped body plus a "…" when cut. */
+function panelMessageHtml(msg) {
+  if (!msg) return "No activity yet.";
+  const c = clip(msg.t.body);
+  return bodyHtml(msg.e.kind, c.text) + (c.cut ? `<div class="lp-more">…</div>` : "");
+}
+
+/** The aria-label and title for the panel. */
+const panelLabel = (story) => (story ? `Open the Activity tab for ${story}` : "Open the Activity tab");
+
+/** Fills the header's live panel (LP7). */
+function renderLivePanel(view) {
+  const state = panelState(view), msg = latestMessage(view, state.story);
+  const box = $("#live-panel"), story = state.story || msg?.e.story || "";
+  $("#lp-head").textContent = state.head;
+  $("#lp-meta").textContent = msg ? panelMeta(msg) : "";
+  $("#lp-msg").innerHTML = panelMessageHtml(msg);
+  box.dataset.story = story;
+  box.title = panelLabel(story);
+  box.setAttribute("aria-label", panelLabel(story));
+  box.classList.toggle("running", state.kind === "step");
+}
+
+/** Rewrites only the panel's head line so the clock moves (LP7). */
+function renderPanelHead(view) {
+  $("#lp-head").textContent = panelState(view).head;
+}
+
+/** Opens the Activity tab filtered to `story` when it exists (LP8). */
+function openActivity(story) {
+  ui.story = data.view?.stories?.some((s) => (s.id ?? s) === story) ? story : "";
+  showTab("activity");
+}
+
 // ----- header -----------------------------------------------------------------
 
 function renderHeader(view) {
   $("#sprint-label").textContent = view.run.sprint ? ` · sprint ${view.run.sprint}` : " · backlog";
   $("#task").textContent = view.run.task;
   renderMeter(view);
+  safely(renderLivePanel, view);
   renderStatusRow(view);
   renderTabs(view);
 }
@@ -779,6 +915,7 @@ function statusPills(view, now) {
   if (act || liveStep(view) || healthLevel(view) !== "idle") parts.push(smartPill(view, now));
   const open = openQuestions(view).length;
   if (open) parts.push(pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning"));
+  if (markdownState === MD.FAILED) parts.push(`<span class="md-notice" role="status">${MD_NOTICE}</span>`);
   for (const why of view.run.manager_due ?? []) parts.push(pill(`⚑ manager due: ${why}`, "serious"));
   if (MOCK) parts.push(mockControls());
   return parts;
@@ -1249,7 +1386,6 @@ function renderFlowTab(view) {
   safely(renderFlowScope, view);
   live.queue.push(...view.events.filter((e) => data.fresh.has(e.id)));
   safely(renderFlow, view);
-  safely(renderTimeline, view);
 }
 
 // ----- timeline ---------------------------------------------------------------
@@ -1278,7 +1414,7 @@ const TIMELINE = {
   "story-admin": (e) => ({
     from: e.role ?? "human", to: e.story,
     what: e.data.tool + ": " + (e.data.after.po_hold ? e.data.after.po_hold.kind : e.data.after.status),
-    body: e.data.reason, meta: e.data.question ?? "",
+    body: [e.data.reason, e.data.question].filter(Boolean).join("\n\n"), meta: "",
   }),
   "step-start": (e, ctx) => ({
     from: PO, to: e.role, what: restarted(ctx.events, e) ? "brief (restarted)" : "brief", body: e.data.brief,
@@ -1370,15 +1506,19 @@ TIMELINE.thread = (e, ctx) => ({
   from: WHO[e.data.author], to: WHO[e.data.to], what: "thread", body: ctx.thread[e.data.entry]?.text ?? "",
 });
 
-function renderTimeline(view) {
-  const fresh = data.fresh;
-  const ctx = {
+/** The lookup tables the timeline row builders read. */
+function timelineContext(view) {
+  return {
     events: view.events,
     messages: Object.fromEntries(view.messages.map((m) => [m.id, m])),
     answers: Object.fromEntries(view.answers.map((a) => [a.id, a])),
     thread: Object.fromEntries(view.thread.map((t) => [t.id, t])),
     opinions: Object.fromEntries(view.opinions.items.map((o) => [o.id, o])),
   };
+}
+
+function renderTimeline(view) {
+  const fresh = data.fresh, ctx = timelineContext(view);
   renderTimelineFilter(view);
   const rows = view.events.filter((e) => !ui.story || e.story === ui.story).slice(-120).reverse();
   $("#timeline").innerHTML = rows.map((e) => timelineRow(e, ctx, fresh.has(e.id))).join("")
@@ -1389,8 +1529,8 @@ function timelineRow(e, ctx, isNew) {
   try { return timelineRowHtml(e, ctx, isNew); } catch (err) { console.error(err); return ""; }
 }
 
-const MARKDOWN_KINDS = new Set(["step-end", "message", "answer", "thread", "opinion"]);
-const bodyHtml = (kind, text) => (MARKDOWN_KINDS.has(kind) ? md(text) : esc(text));
+const PLAIN_BODIES = new Set(["gate-fix", "opinion-act"]); // file names; opinion ids
+const bodyHtml = (kind, text) => (PLAIN_BODIES.has(kind) ? esc(text) : md(text));
 
 function timelineRowHtml(e, ctx, isNew) {
   const t = TIMELINE[e.kind]?.(e, ctx);
@@ -3225,7 +3365,7 @@ const ui = {
   tl: {}, showDone: false, tlOpen: new Set(), miscOpen: new Set(), miscCalls: {},
   suggested: false, acting: new Set(), actNote: {}, asking: false, reviewNote: "",
 };
-const RENDER = { flow: renderFlowTab, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
+const RENDER = { flow: renderFlowTab, activity: renderTimeline, board: renderBoard, backlog: renderBacklog, tokens: renderTokens, questions: renderQuestions, requirements: renderRequirements };
 
 function showTab(id) {
   ui.tab = TABS.some(([t]) => t === id) ? id : "flow";
@@ -3269,6 +3409,8 @@ function restoreTheme() {
 }
 
 document.addEventListener("click", (ev) => {
+  const panel = ev.target.closest("[data-live-panel]");
+  if (panel && !ev.target.closest("a")) openActivity(panel.dataset.story ?? "");
   const tab = ev.target.closest("[data-tab]");
   if (tab) showTab(tab.dataset.tab);
   const group = ev.target.closest("[data-group]");
@@ -3293,6 +3435,11 @@ document.addEventListener("mouseover", (ev) => {
 document.addEventListener("mouseout", (ev) => { if (ev.target.closest("[data-live-details]")) hideTip(); });
 $("#tl-filter").addEventListener("change", (ev) => { ui.story = ev.target.value; render(); });
 $("#theme").addEventListener("click", cycleTheme);
+$("#live-panel").addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  ev.preventDefault();
+  openActivity(ev.currentTarget.dataset.story ?? "");
+});
 
 // ----- data sources -----------------------------------------------------------
 
@@ -3370,6 +3517,7 @@ function adopt(snap) {
 function tick() {
   if (!data.view || MOCK) return;
   safely(renderStatusRow, data.view);
+  safely(renderPanelHead, data.view);
   safely(applyAlert, data.view);
   if (ui.tab === "flow") safely(renderFlow, data.view);
 }
