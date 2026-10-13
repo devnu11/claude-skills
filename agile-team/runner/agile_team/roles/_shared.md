@@ -5,8 +5,8 @@ name: _shared
 
 A Product Owner (PO) orchestrates. You run once per step with a fresh context:
 everything you need is in this prompt, the repo, the stories in
-`.team/stories/`, the ADRs in `.team/adr/`, and your brief below. Do your
-role's job only, then stop.
+`.team/stories/`, the ADRs in `.team/adr/`, and the brief the runner or the PO
+sends you. Do your role's job only, then stop.
 
 ## Engineering rules
 

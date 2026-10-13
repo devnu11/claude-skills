@@ -114,7 +114,6 @@ PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
 MANAGER = "manager"
-SCRIBE = "scribe"
 ARCHITECT = "architect"
 GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
 SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD, Verdict.ROUTE})
@@ -127,7 +126,7 @@ RUNNER_FAULT_NOTE = (
 RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool")
-BOUNDARY_UNGATED = frozenset({MANAGER, SCRIBE})
+BOUNDARY_UNGATED = frozenset({MANAGER})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
 BARE_KINDS = frozenset({StepKind.GATE_FIX})
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
@@ -415,7 +414,7 @@ class Runtime:
         return self._boundary_refusal(request.role, story) or check(request.role, story)
 
     def _boundary_refusal(self, role: str, story: StoryState | None) -> str | None:
-        """Sprint stories wait while a boundary is pending (the Manager and Scribe may run)."""
+        """Sprint stories wait while a boundary is pending (the Manager may run)."""
         b = self.state.boundary
         if b is None or story is None or story.sprint != self.state.sprint:
             return None
@@ -699,13 +698,11 @@ class Runtime:
         self.save()
 
     def note_step(self, story: StoryState, report: dict[str, Any]) -> None:
-        """Record a story step: its hold, its gated previous step and the scribe queue."""
+        """Record a story step: its hold and its gated previous step."""
         story.hold = handover.hold_reason(report)
         previous = handover.previous_step(report)
         if previous and report.get("role") not in UNGATED_ROLES:
             story.previous = previous
-        if report.get("role") == SCRIBE and story.id in self.state.scribe_due:
-            self.state.scribe_due.remove(story.id)
         self.save()
 
     def _unready(self, request: StepRequest) -> dict[str, Any] | None:
@@ -1066,8 +1063,6 @@ class Runtime:
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self.pipeline.advance(story, outcome)
-        if story.status is StoryStatus.DONE and story.id not in self.state.scribe_due:
-            self.state.scribe_due.append(story.id)
         self._queue_done_renewal(story)
         result = {
             "step": step,

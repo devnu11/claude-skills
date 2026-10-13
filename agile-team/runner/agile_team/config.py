@@ -17,6 +17,7 @@ from typing import Any
 from . import stages, system
 from .commands import DEFAULT_TIMEOUT_S
 from .providers import DEFAULT as DEFAULT_PROVIDER
+from .roles import retired_sections
 from .providers import Billing, Provider, ProviderKind
 
 CONFIG_NAME = ".agile-team.toml"
@@ -248,7 +249,7 @@ def from_raw(repo: Path, raw: dict[str, Any]) -> Config:
         dashboard=_dashboard(sections.get("dashboard", {})),
         environments=[_environment(e) for e in sections.get(ENVIRONMENT_SECTION, [])],
         tools=_tools(sections.get("tool", [])),
-        roles=dict(sections.get("roles", {})),
+        roles=_roles(sections.get("roles", {})),
         providers={n: _provider(n, p) for n, p in sections.get("providers", {}).items()},
         warnings=rename_warnings(raw),
     )
@@ -428,6 +429,13 @@ def tool_problems(tools: list[Tool]) -> list[str]:
     repeated = sorted({n for n in names if names.count(n) > 1})
     problems = [f"[[tool]] {t.name!r} {m}" for t in tools for m in broken(TOOL_RULES, t)]
     return problems + [REPEATED_TOOL.format(name=n) for n in repeated]
+
+
+def _roles(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The ``[roles.*]`` sections, refusing a retired role (SC6)."""
+    if problems := retired_sections(raw):
+        raise ConfigError("; ".join(problems))
+    return dict(raw)
 
 
 def _tools(raw: list[dict[str, Any]]) -> list[Tool]:

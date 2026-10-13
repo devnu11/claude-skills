@@ -748,7 +748,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (CliError, keys.KeyNotFound) as exc:
+    except (CliError, RoleError, keys.KeyNotFound) as exc:
         print(f"agile-team {args.command}: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

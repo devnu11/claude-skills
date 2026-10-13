@@ -40,7 +40,13 @@ REPO_ROLES = ".team/roles"
 USER_ROLES = ".config/agile-team/roles"
 HOME_ENV = "AGILE_TEAM_HOME"
 CHARTER = ".team/CLAUDE.md"
-BRIEFS = ".team/briefs"
+RETIRED_ROLES: dict[str, str] = {
+    "scribe": "the Scribe was retired in s114: the architect writes ADRs in "
+    ".team/adr/ and roles get no briefs",
+}
+RETIRED_SECTION = "{why}; remove [roles.{name}] from .agile-team.toml"
+RETIRED_FILE = "{why}; delete {path}"
+LIVE_CONTRIBUTIONS = frozenset({"replace", "addendum"})
 OVERRIDABLE = (
     "model",
     "effort",
@@ -238,7 +244,10 @@ class RoleBook:
     ) -> RoleBook:
         """Built-in, global (``user_dir``) and repo role files for ``repo``."""
         user = load_dir(user_dir) if user_dir else {}
-        return cls(load_dir(BUILTIN_DIR), load_dir(repo / REPO_ROLES), config_roles, repo, user)
+        repo_files = load_dir(repo / REPO_ROLES)
+        layers = {repo / REPO_ROLES: repo_files, **({user_dir: user} if user_dir else {})}
+        _refuse_retired(layers)
+        return cls(load_dir(BUILTIN_DIR), repo_files, config_roles, repo, user)
 
     def _human_layers(self) -> tuple[dict[str, str], dict[str, str]]:
         """Human-written files, highest precedence first."""
@@ -322,16 +331,42 @@ class RoleBook:
         return "\n\n".join(p for p in (base, self.addendum(SHARED)) if p)
 
     def system_prompt(self, role: ResolvedRole, scope: str) -> str:
-        """``_shared`` + role chain + addendum + charter + Scribe brief + scope note."""
-        brief = self.repo / BRIEFS / f"{role.name}.md"
+        """``_shared`` + role chain + addendum + charter + scope note."""
         parts = [
             self.shared_body(),
             role.body,
             _section("Repo charter", _read_optional(self.repo / CHARTER)),
-            _section("Brief from the Scribe", _read_optional(brief)),
             _section("Your file scope", scope),
         ]
         return "\n\n".join(p for p in parts if p)
+
+
+def retired_sections(config_roles: Mapping[str, Any]) -> list[str]:
+    """One refusal per ``[roles.<name>]`` section that names a retired role (SC6)."""
+    return [
+        RETIRED_SECTION.format(why=why, name=name)
+        for name, why in RETIRED_ROLES.items()
+        if name in config_roles
+    ]
+
+
+def retired_files(layers: Mapping[Path, Mapping[str, str]]) -> list[str]:
+    """One refusal per role file, keyed by its directory, that still shapes a retired role.
+
+    A stub (comments only) is ignored (SC7).
+    """
+    return [
+        RETIRED_FILE.format(why=why, path=directory / f"{name}.md")
+        for directory, files in layers.items()
+        for name, why in RETIRED_ROLES.items()
+        if contribution(files.get(name)) in LIVE_CONTRIBUTIONS
+    ]
+
+
+def _refuse_retired(layers: Mapping[Path, Mapping[str, str]]) -> None:
+    """Raise ``RoleError`` when a layer still holds a live retired-role file."""
+    if problems := retired_files(layers):
+        raise RoleError("; ".join(problems))
 
 
 def _merge(chain: list[RoleSpec], overrides: list[dict[str, Any]]) -> RoleSpec:

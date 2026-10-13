@@ -19,6 +19,7 @@ from .ledger import SessionCost
 from .loops import Rule, Setback
 from .owners import FixRecord, load_fix
 from .providers import DEFAULT as DEFAULT_PROVIDER
+from .roles import RETIRED_ROLES
 from .salvage import RUN_ENDING, Cause, InFlight, Interruption
 
 STATE_FILE = "state.json"
@@ -83,7 +84,6 @@ class RunState:
     status_reason: str | None = None
     task: str = ""
     followups: dict[str, list[str]] = field(default_factory=dict)
-    scribe_due: list[str] = field(default_factory=list)
     delivered: list[str] | None = None
     po_renew_due: list[str] = field(default_factory=list)
     po_renew_path: str = "compact"
@@ -143,10 +143,14 @@ class RunState:
 
     @classmethod
     def from_json(cls, text: str) -> RunState:
-        data = json.loads(text)
+        data = {k: v for k, v in json.loads(text).items() if k not in RUN_DROPPED}
         data["status"] = RunStatus(data.get("status", RunStatus.IDLE))
         data["stories"] = {k: _story(v) for k, v in data.get("stories", {}).items()}
-        data["overrides"] = {k: ModelOverride(**v) for k, v in data.get("overrides", {}).items()}
+        data["overrides"] = {
+            k: ModelOverride(**v)
+            for k, v in data.get("overrides", {}).items()
+            if k not in RETIRED_ROLES
+        }
         data["po_cost"] = _nested(SessionCost, data.get("po_cost"))
         data["boundary"] = _boundary(data.get("boundary"))
         data["upstream"] = _upstream_state(data.get("upstream"))
@@ -165,6 +169,7 @@ NESTED = {
 }
 
 
+RUN_DROPPED = frozenset({"scribe_due"})
 STORY_DROPPED = frozenset({"environment", OLD_ENVIRONMENT_NAME})
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
 

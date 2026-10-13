@@ -254,7 +254,7 @@ def cancel(state: RunState, settled: Settled) -> None:
     story = settled.story
     story.status = StoryStatus.CANCELLED
     story.sprint, story.po_hold, story.hold = None, None, None
-    for ids in (state.order, state.pulled, state.human_order, state.scribe_due):
+    for ids in (state.order, state.pulled, state.human_order):
         _without(ids, story.id)
 
 

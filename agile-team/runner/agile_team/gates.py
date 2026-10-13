@@ -37,8 +37,8 @@ STEP_ROLES = {
     "e2e": "integration-tester",
     "acceptance": "customer-proxy",
 }
-UNGATED_ROLES = frozenset({"manager", "scribe"})
-STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager", "scribe"})
+UNGATED_ROLES = frozenset({"manager"})
+STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager"})
 STOPPED_HANDOFFS = frozenset({"blocked", "failed"})
 BASELINE = ".team/baseline.json"
 LS_FILES_COMMAND = "git ls-files -- {path} {suffix}"

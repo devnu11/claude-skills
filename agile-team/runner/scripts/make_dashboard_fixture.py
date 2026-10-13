@@ -28,7 +28,6 @@ ROLES = {
     "integration-tester": ("sonnet", "anthropic"),
     "customer-proxy": ("sonnet", "anthropic"),
     "manager": ("sonnet", "anthropic"),
-    "scribe": ("qwen3-coder", "local"),
 }
 
 
@@ -250,7 +249,6 @@ step(
 )
 gate("s1", "acceptance", "pass", "acceptance", 0, status="done")
 ev("po-session", "product-owner", None, path="compact", reasons=["s1 done"], pre_tokens=182000)
-step("scribe", None, "Record s1 decisions.", summary="ADR 0003: csv module over pandas.")
 po_turn()
 
 # s3 starts, then bounces at implement until the round cap

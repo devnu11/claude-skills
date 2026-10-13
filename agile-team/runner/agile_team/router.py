@@ -14,7 +14,7 @@ from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
 from .dispatch import FIX_KINDS_SET as FIX_STEPS
-from .dispatch import MANAGER, NOT_NOTED, SCRIBE, Runtime, StepRequest
+from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest
 from .gates import FINISHED, STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
@@ -25,10 +25,6 @@ from .story_admin import Clerk
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
 MANAGER_BRIEF = "Manager review due: {reasons}"
-BRIEF_HEADINGS = {
-    SCRIBE: "Story {id} is done. Record its decisions as ADRs and refresh the role briefs. "
-    "Read the files below.",
-}
 BRIEF_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Story", (".team/stories/{id}.md",)),
     ("Design", ("{docs}/design/{id}.md", "{docs}/architecture.md")),
@@ -83,11 +79,6 @@ class Work:
 
 def _bounced(story: StoryState) -> bool:
     return bool(story.previous and story.previous.verdict == "bounce")
-
-
-def _scribable(story: StoryState) -> bool:
-    """A story the Scribe may run on: unheld, or done (its hold is the final step's)."""
-    return story.po_hold is None and (not story.hold or story.status is StoryStatus.DONE)
 
 
 def _po_pick(story: StoryState) -> str | None:
@@ -162,7 +153,7 @@ def repeat_brief(config: Config, story: StoryState) -> str:
 def standard_brief(config: Config, work: Work) -> str:
     """The brief every router step gets: heading, artifact paths, history and the PO's note."""
     story = work.story  # story steps only; the Manager's brief is MANAGER_BRIEF
-    heading = BRIEF_HEADINGS.get(work.role, STEP_HEADING).format(id=story.id)  # type: ignore[union-attr]
+    heading = STEP_HEADING
     extras = BRIEF_EXTRAS.get(work.role, _no_lines)(story)
     return "\n".join([heading, *_path_lines(config, story.id), *_history_lines(story), *extras])
 
@@ -253,13 +244,6 @@ class Router:
         due = self.runtime.state.manager_due
         return Work(MANAGER, None, MANAGER_BRIEF.format(reasons="; ".join(due))) if due else None
 
-    def _scribe_work(self) -> Work | None:
-        rt = self.runtime
-        blocked = rt.relay.blocked_stories()
-        ids = (i for i in rt.state.scribe_due if i in rt.state.stories and i not in blocked)
-        story = next((s for s in map(rt.state.stories.get, ids) if s and _scribable(s)), None)
-        return self._briefed(SCRIBE, story) if story else None
-
     def _repeat_work(self) -> Work | None:
         story = self._first_ranked(self._escalated)
         if story is None:
@@ -301,12 +285,11 @@ class Router:
         _boundary_work,
         _manager_work,
         _repeat_work,
-        _scribe_work,
         _story_work,
     )
 
     def next_work(self) -> Work | None:
-        """The first step due: boundary, Manager (review, repeat), Scribe, then a story."""
+        """The first step due: boundary, Manager (review, repeat), then a story."""
         works = (pick(self) for pick in self.PICKERS)
         return next((w for w in works if w), None)
 
