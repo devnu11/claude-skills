@@ -25,6 +25,16 @@ def call_audited(name: str, event: str) -> None:
     scope["go"](os_guard.hook, event)
 
 
+def call_audited_through(names: tuple[str, ...], event: str) -> None:
+    """Fire ``event`` from ``names[-1]``, called by ``names[-2]`` ... called by ``names[0]``."""
+    fire = as_module(names[-1], "def go(hook, event):\n    hook(event, ())\n")["go"]
+    call: Callable[..., Any] = fire
+    for name in reversed(names[:-1]):
+        relay = as_module(name, "def go(inner, *a):\n    return inner(*a)\n")["go"]
+        call = lambda *a, r=relay, c=call: r(c, *a)  # noqa: E731
+    call(os_guard.hook, event)
+
+
 def call_patched(name: str, func: Callable[[], Any]) -> Any:
     """Call ``func`` from a function that belongs to module ``name``."""
     scope = as_module(name, "def go(func):\n    return func()\n")
@@ -75,10 +85,70 @@ def test_an_unaudited_event_is_ignored() -> None:
 
 @pytest.mark.parametrize(
     "exempt",
-    ["importlib._bootstrap_external", "linecache", "coverage.sqldata", "xdist.workermanage"],
+    [
+        "importlib._bootstrap_external",
+        "linecache",
+        "traceback",
+        "coverage.sqldata",
+        "xdist.workermanage",
+    ],
 )
 def test_an_exempt_caller_may_make_an_audited_call(exempt: str) -> None:
     call_audited(exempt, "open")
+
+
+def test_traceback_is_an_exempt_caller() -> None:
+    assert "traceback" in os_guard.EXEMPT_CALLERS
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("agile_team.x", "traceback", "json"),
+        ("tests.test_x", "linecache", "_pytest.assertion.rewrite"),
+        ("linecache", "json"),
+    ],
+)
+def test_a_source_read_under_a_reader_is_the_stdlibs(names: tuple[str, ...]) -> None:
+    call_audited_through(names, "open")
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("traceback", "agile_team.x"),
+        ("agile_team.x", "json"),
+        ("xdist.remote", "_pytest.tmpdir"),
+        ("linecache", "agile_team.x", "json"),
+    ],
+)
+def test_an_open_with_no_reader_inside_the_guarded_frame_raises(names: tuple[str, ...]) -> None:
+    with pytest.raises(RealOsCall):
+        call_audited_through(names, "open")
+    os_guard.reset()
+
+
+def test_a_violation_names_its_caller() -> None:
+    with pytest.raises(RealOsCall, match=r"open \(filesystem\); inject it") as info:
+        call_audited("agile_team.x", "open")
+    assert "(caller: agile_team.x)" in str(info.value)
+    os_guard.reset()
+
+
+def test_formatting_a_real_traceback_passes_the_guard() -> None:
+    import linecache
+    import traceback
+
+    def fail() -> None:
+        raise ValueError("boom")
+
+    linecache.clearcache()
+    with os_guard.watching(World.FAKE):
+        try:
+            fail()
+        except ValueError as err:
+            text = "".join(traceback.format_exception(err))
+    assert 'raise ValueError("boom")' in text
 
 
 def test_the_table_rows_name_a_category() -> None:
