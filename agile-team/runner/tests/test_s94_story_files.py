@@ -200,26 +200,26 @@ def test_a_storyless_proxy_keeps_the_first_configured_environment(make_runtime) 
 
 def test_story_has_no_environment_field() -> None:
     assert "environment" not in StoryState.__dataclass_fields__
-    assert "delivery" not in StoryState.__dataclass_fields__
+    assert cfg.OLD_ENVIRONMENT_NAME not in StoryState.__dataclass_fields__
 
 
-def test_state_drops_environment_and_delivery_keys(scratch: Path) -> None:
+def test_state_drops_environment_and_old_name_keys(scratch: Path) -> None:
     state.save(scratch, RunState(stories={"s1": StoryState("s1", "One", "design")}))
     path = scratch / "state.json"
     data = json.loads(system.read_text(path))
     data["stories"]["s1"]["environment"] = "cli"
-    data["stories"]["s1"]["delivery"] = "web"
+    data["stories"]["s1"][cfg.OLD_ENVIRONMENT_NAME] = "web"
     system.write_text(path, json.dumps(data))
     loaded = state.load(scratch)
     assert loaded.stories["s1"].title == "One"
     state.save(scratch, loaded)
     kept = json.loads(system.read_text(path))["stories"]["s1"]
-    assert "environment" not in kept and "delivery" not in kept
+    assert "environment" not in kept and cfg.OLD_ENVIRONMENT_NAME not in kept
 
 
 def test_state_dropped_keys_are_the_two_names() -> None:
-    assert frozenset({"environment", "delivery"}) == state.STORY_DROPPED
-    assert state._kept({"id": "s1", "environment": "x", "delivery": "y"}) == {"id": "s1"}
+    assert frozenset({"environment", cfg.OLD_ENVIRONMENT_NAME}) == state.STORY_DROPPED
+    assert state._kept({"id": "s1", "environment": "x", cfg.OLD_ENVIRONMENT_NAME: "y"}) == {"id": "s1"}
 
 
 # ----- SF8: the view -------------------------------------------------------------

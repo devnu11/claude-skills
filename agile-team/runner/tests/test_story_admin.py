@@ -13,12 +13,15 @@ from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
 from agile_team.state import RunState
 
+from .conftest import write_story
+
 
 def call(coro) -> dict:
     return asyncio.run(coro)
 
 
 def open_story(rt, sid: str = "s1") -> StoryState:
+    write_story(rt.config, sid, "cli")
     call(Tools(rt).open_story({"id": sid, "title": f"title {sid}", "text": "t"}))
     return rt.state.stories[sid]
 
