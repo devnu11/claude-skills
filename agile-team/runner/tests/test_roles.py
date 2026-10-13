@@ -104,6 +104,7 @@ def test_expand_globs() -> None:
 
 
 def test_system_prompt_order(repo: Path) -> None:
+    system.make_dirs(repo / ".team")
     system.write_text(repo / ".team/CLAUDE.md", "CHARTER")
     b = book({"child": "ADDENDUM"}, repo)
     prompt = b.system_prompt(b.resolve("child"), "SCOPE")

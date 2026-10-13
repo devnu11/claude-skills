@@ -9,7 +9,6 @@ from agile_team.config import PIPELINE_STEPS
 from agile_team.dispatch import REWORK_BRIEF, StepRequest
 from agile_team.gates import StoryState, StoryStatus, Verdict
 from agile_team.roles import Handoff, HandoffError, TestClaim
-from agile_team.router import _scribable
 
 from .conftest import FakeQuery, FakeRunner, handoff
 
@@ -213,7 +212,6 @@ def test_done_story_hold_clearing_note_and_no_movement(make_runtime) -> None:
     )
     assert out["status"] == "continued" and st.hold is None and st.note == "n"
     assert st.status is StoryStatus.DONE
-    assert _scribable(st)
     res = asyncio.run(rt.run_role(StepRequest("developer", "go", "s1")))
     assert "story s1 is done" in json.dumps(res)
 

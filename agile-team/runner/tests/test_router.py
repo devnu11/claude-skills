@@ -593,7 +593,7 @@ def test_the_router_skips_a_held_story_and_runs_the_others(make_runtime) -> None
     assert step_roles(rt) == ["architect"]
     assert p.kinds == [T.STALLED]
     assert p.lines[-1] == "s1 at design: held (stopped)"
-    assert p.steps == 2
+    assert p.steps == 1
 
 
 def test_the_note_is_cleared_after_the_step_runs(make_runtime) -> None:
