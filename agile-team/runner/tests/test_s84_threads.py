@@ -554,7 +554,12 @@ def told_files(rt) -> list:
 
 def test_limits_table() -> None:
     assert server.MAX_POST_BODY == 32768
-    assert server.BODY_LIMITS == {"/api/reorder": 4096, "/api/thread": 32768}
+    assert server.BODY_LIMITS == {
+        "/api/reorder": 4096,
+        "/api/thread": 32768,
+        "/api/review": 4096,
+        "/api/opinion": 4096,
+    }
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "::1"])

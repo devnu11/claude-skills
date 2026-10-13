@@ -32,6 +32,7 @@ KEYS = [
     "messages",
     "answers",
     "thread",
+    "opinions",
     "upstream",
     "turns",
     "heartbeat",
@@ -231,7 +232,9 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     want = [
         {**s, "commits": [c] if (c := commit_for(s, pulled)) else []} for s in fixture["stories"]
     ]
-    assert shape(snap) == shape({**fixture, "stories": want})
+    # No opinion files are written here: only the section's keys must match the fixture.
+    assert list(snap["opinions"]) == list(fixture["opinions"])
+    assert shape(snap) == shape({**fixture, "stories": want, "opinions": snap["opinions"]})
     assert [s["commits"] for s in snap["stories"]] == [s["commits"] for s in want]
 
 
@@ -592,11 +595,14 @@ def test_watched_files_lists_inputs_only(config: cfg.Config) -> None:
         config.requirements_dir / "REQ-001.md",
         run / "liaison" / "inbox.jsonl",
         run / "liaison" / "replies.jsonl",
+        run / "liaison" / "opinions.jsonl",
+        run / "liaison" / "reviews.jsonl",
+        run / "liaison" / "opinion-acts.jsonl",
     ]
 
 
 def test_watched_files_without_dirs(config: cfg.Config) -> None:
-    assert len(snapshot.watched_files(config)) == 10
+    assert len(snapshot.watched_files(config)) == 13
 
 
 # ----- 10. D10 / config / ledger constants -----------------------------------
