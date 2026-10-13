@@ -1,6 +1,14 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s102 complete: Runner stages on Flow and Time charts (1 round, all ACs pass) — verdict ship
+
+**Scope:** `stage_log.py` (StageBoard protocol, Hidden class, open_row function), `live.py` (Pulse.showing, heartbeat.stages), `dispatch.py` (board=pulse assignment), `dashboard/index.html` (50+ functions SN1–SN8, TM1–TM8, SB1–SB3, RD1–RD4, ~1000 LOC), fixture. **Verdict: ship.** Coverage 99.53%, ruff clean. Gate fix: legend test assertion corrected (TM8 rule cited). **No new ADR** (extends s96/s101 patterns).
+
+**Design rules enforced:** Stage nodes (hexagons, STAGE_NODES table, SN1–SN8) drawn from events/open rows, edges to anchors, stats per scope, running line with awake time, active node picks first running stage or PO. Heartbeat stages key (HB1–HB4). Time pieces from three sources (TM1–TM4), runner row, PO split (model/tools/waiting), share bars on nodes (SB1–SB3). Flow and bars at natural size with scroll (RD1–RD4).
+
+See design `agile-team/docs/design/s102.md` (all rules SN1–RD4, test checklist).
 
 ## s101 complete: Nested tool-call expansion (1 round, all ACs pass) — verdict ship (P1 tests pending)
 

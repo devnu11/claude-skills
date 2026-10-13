@@ -1,6 +1,17 @@
 # Architect: Current context and conventions
 
-**Last updated:** 2026-10-13 (s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+**Last updated:** 2026-10-13 (s102 docs due with ship; s101 docs pending; s100 done; s99 done; s98 done; s105 docs done; s103 done; s92 docs pending; s97 done; s104 done; s96 done; s86 done; s85 done; s84 docs done)
+
+## s102 complete: Runner stages on Flow chart and Time chart (no new ADR, extends s96/s101 patterns)
+
+**Decision:** Stage nodes (four hexagons) shown on Flow chart via STAGE_NODES table (Prepare env, Implement gate, E2E gate, Boundary), positioned in groups, with edges to anchors. Open stages listed in heartbeat, running nodes light up with awake-time display. Time chart extends to three sources (agent steps, runner stages, PO turns); runner row counts stage events; PO split into model/tools/waiting (waiting overlaps agent steps, excluded from share). Agent and PO nodes show model/tool time share bar. All text ≥12px with 4.5:1 contrast; charts scroll at scale 1. **No new ADR** (follows s96 snapshot + s101 heartbeat patterns).
+
+**Your docs work (due with ship):**
+1. **`reference/protocol.md`:** Heartbeat `stages` key (HB2 row, HB3 arrays); Stage nodes rules (SN1–SN8, STAGE_NODES table, drawn/position/edges/stats/idle/running); Share bars (SB1–SB3). Time measure: three sources (TM1–TM2), runner row, PO segments, waiting excluded from share (TM3–TM6).
+2. **`docs/customer/dashboard.md`:** "Flow chart" section on four stage hexagons and their stats; "Time by" section on runner row and PO's three segments.
+3. **`docs/architecture.md`:** `stage_log.py` (StageBoard protocol, open_row function); `live.py` (heartbeat.stages key); snapshot stage node display data-driven.
+
+See design `agile-team/docs/design/s102.md` (all rules, no new dependency).
 
 ## s101 complete: Nested tool-call rows on timeline expansion (no new ADR, extends s96/s98/s100 patterns)
 

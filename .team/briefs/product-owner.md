@@ -1,6 +1,14 @@
 # Product Owner: Current context and conventions
 
-**Last updated:** 2026-10-13 (s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+**Last updated:** 2026-10-13 (s102 done; s101 done, P1 tests pending; s100 done; s99 done; s98 done; s103 done; s92 done; s97 done; s104 done; s96 done; s86 done)
+
+## s102 complete: Runner stages on Flow and Time charts (A6e: no new tool, no new hand-over)
+
+**What you see on the dashboard:** Four new hexagon nodes on the Flow chart (Prepare env, Implement gate, E2E gate, Boundary) show the runner's internal stages, with last/total time and run count for your scope (Story/Sprint/Run). They light up while running with a live elapsed timer. The Time measure now breaks down three sources: your agent steps (work time), runner stages (stage row), and your own time (model, tools, waiting on a step). The PO row splits into three colours: your thinking (model), your tool calls (tools), and time waiting for agents. Share bars on agent and PO boxes show you the model/tool split at a glance. All text is sized for readability (≥12 CSS pixels with good contrast).
+
+**How it works:** Runner-stage events record timing for the four internal checkpoints (env prep, implement gate, e2e trial, boundary sync). Heartbeat lists open stages so you see live progress. Page builds everything from raw data: no new Python calls, no new hand-overs. **No new tools, no new ADR** (extends snapshot and heartbeat patterns).
+
+See design `agile-team/docs/design/s102.md`.
 
 ## s101 complete: Step rows expand to show nested tool calls (no new tool, no new hand-over)
 

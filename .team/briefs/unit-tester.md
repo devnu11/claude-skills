@@ -1,6 +1,12 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s102 done; s100 done; s99 done; s98 done; s105 done; s103 done; s92 done; s97 done; s104 done; s96 done, P1 pending; s86 done)
+
+## s102 complete: Stage board and heartbeat stages tests (coverage ≥95%, ruff clean, all pass)
+
+**File:** `tests/test_s102_stage_board.py` (new, ~150 LOC). Python part is small. Tests: `StageBoard` protocol; `Hidden.showing` returns nullcontext; `open_row` produces HB2 keys in order (stage, when, attach, story, step, started_at, started_mono, started_slept); `StageLog.open` lists row inside entered block, removed before event emit (HB1–HB2); nesting outer-first; raise handled. `Pulse.showing` appends/drops by identity under lock, writes on enter/exit; `heartbeat()["stages"]` right after `calls` (HB3); `[]` after `end()`; fixture heartbeat.stages matches. No breaking changes to Clock fake.
+
+See design `agile-team/docs/design/s102.md` (HB1–HB4).
 
 ## s100 complete: Sleep recording and timeline source checks (coverage ≥95%, ruff clean, all pass)
 

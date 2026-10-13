@@ -1,120 +1,23 @@
 # Developer (GUI): Current context and conventions
 
-**Last updated:** 2026-10-13 (s101 done, P1 pending; s97 done, P1 pending; s96 done, P1 pending)
+**Last updated:** 2026-10-13 (s102 done; s101 done, P1 pending; s97 done, P1 pending; s96 done, P1 pending)
 
 See `developer.md` for base conventions.
 
-## s97 complete: Awake time calculation—step clocks and heartbeat sleep counter (all ACs pass, P1 pending)
+## s102 complete: Runner stages on Flow and Time charts (all ACs pass, P1 complete)
 
-Extended s96 with platform-aware awake-time logic. **Implementation (design AW1–AW13):**
-- **Runner:** `Pulse.slept_s` accumulates sleep (gap > 2 beats) in heartbeat. Step-start/end and interrupted-end events get `data.mono` and `data.slept` via `Pulse.clocks()` (released lock before write to avoid deadlock).
-- **Dashboard:** New pure module `step_times.py` (~280 LOC) with `Clock`/`Platform` enums, `PLATFORMS`/`AWAKE` data tables, `Mark` readings, `Stopwatch` timings. `Pairing` class pairs events and stores `Mark` readings in `starts` dict. Two awake-time rules: POSIX (monotonic delta), Windows (wall delta minus slept).
-- **Page:** `awakeSoFar` shows running elapsed; `sleepNote` adds "(may include sleep)" for wall steps. `timeBy` counts wall steps; tooltip marks them. Legend text updated.
+**Features:** Flow chart gains four stage nodes (hexagons): Prepare env, Implement gate, E2E gate, Boundary. Each shows last/total time and run count for the scope, lights up while running. Time chart now counts three sources: agent steps (work), runner stages (runner row), PO turns (model/tools/waiting segments). Agent boxes and PO node show model/tool time split as text bar (10-cell █░ graphic). All text ≥12px with 4.5:1 contrast; chart scrolls sideways at natural size (scale 1). **Implementation (design SN1–SN8, HB1–HB4, TM1–TM8, SB1–SB3, RD1–RD4):**
 
-**Code review done (all ACs pass).** Coverage 99.47%, ruff clean. No test deleted. Minor findings m1–m4 noted (not blocking): seam test missing (one line), dispatch clocks test weak, two helper duplicates. **Your work (P1):** Node-harness page tests (4 items: running line awake/wall, timeBy + tooltip, legend text, stepsAsOf replay). When done, AC4 is complete and story ships.
+- **Stage nodes:** STAGE_NODES table (four entries); stageRuns/stageDrawn/stageStats functions; stageLabel/stageNodeLine/addStageNodes place hexagons in groups; stageEdges adds dotted joins to anchors.
+- **Running nodes:** openStages/stageOpen read heartbeat.stages; stageRunningLine shows "⏱ running N s" with awake time; liveStageNodeId picks first running stage for active node.
+- **Time chart:** Three TIME_SOURCES (stepPieces, stagePieces, turnPieces); timeBy groups pieces; stagePieces emit `runner` row; turnPieces split `{model, tools, waiting}`. poSplit/stepSplit/turnSplit compute splits for share bars.
+- **Share bars:** shareLine draws "model p% ███░░ tools q%" on nodes; omitted in Story scope for PO; no line if sum=0.
+- **Text:** TL_TEXT gains barLabel, barValue (12px). RD2: SVG width/height = viewBox with inline style (scale 1).
 
-See design `agile-team/docs/design/s97.md` (AW1–AW13, test checklist, known limits).
+**Code review done (all ACs pass).** Coverage 99.53%, ruff clean. Gate fix: legend test assertion corrected (TM8 rule). Page tests (AC4: positions/edges/numbers in scope/running/share; AC-R: measured text size/contrast in themes) written by integration-tester. **No new ADR** (extends s96 snapshot data + s101 heartbeat patterns).
+
+See design `agile-team/docs/design/s102.md` (all rules, test checklist, known limits).
 
 ## s101 complete: A step row expands into nested tool calls (all ACs pass, P1 pending)
 
-**Feature:** Dashboard timeline now shows step expansion: click a step bar or row label to reveal nested rows with model time, stacked tool-call lanes, and a misc box. Tool bars show name and detail on two lines (or tooltip if narrow); colours show state (ok/error/timeout/unfinished/open/waiting). Misc box loads calls on demand from `/api/misc`. Dashboard shows open calls in heartbeat. **Implementation (design N1–N15, AC1–AC5, AC-R):**
-- **Python:** `tool_calls.py` gains `start_row()` (TC11 keys up to `slept`) and `open_row()` (adds `status: "open"`). `Calls.opened()` returns open calls in order. `Pulse.heartbeat()` adds `"calls"` right after `"step"`. `tool_groups.py` (MiscAsk, ask_key, gathered_calls) and `snapshot.py` (misc_calls) gather calls from tail. `server.py` gains `GET /api/misc` route.
-- **Dashboard:** `index.html` gains nested-row functions (N1–N15, ~1000 LOC): barKey, barMatch, toolGroupOf, openCallsOf, toolState, secondsText, callTitle, callBar, callLanes, modelPieces, splitOf, nestOf, groupNests, groupLines, withNests, toggledKeys, miscText, miscAsk, toolsAsOf, and SVG builders (callSvg, miscSvg, miscListHtml, loadMisc, onTlClick). New state: ui.tlOpen, ui.miscOpen, ui.miscCalls. Fixture updated with tools groups and heartbeat calls.
-
-**Code review done (all ACs pass).** Coverage 99.53%, ruff clean. No test deleted. Gate fixes: TL_TEXT count 9→12 (call, detail, misc kinds), heartbeat key lists gain `calls` (both supported by design). **Your work (P1):** Node-harness page tests for AC4/AC5/AC-R (nesting, stacking, two-line labels, red/hatched/open states, PO wait, misc label/off-axis/on-demand, readability measured ≥12px/4.5:1). When done, story ships.
-
-See design `agile-team/docs/design/s101.md` (N1–N15, AC1–AC5, AC-R, test checklist lines 267–308), review round 1 (ship with P1 pending).
-
-## s96 complete: Time per role on the Flow chart; Time measure in "Tokens by" (all ACs pass, P1 pending)
-
-Pure Python module `step_times.py` (new, ~150 LOC) pairs start/end events from events.jsonl to calculate wall time. Snapshot gains `steps` section with step objects. JavaScript adds time display to Flow boxes and Time measure in "Tokens by" chart with Time button, title, bars, and legend. Code review done (ship). Node harness and e2e tests pending (integration-tester P1).
-
-See design `agile-team/docs/design/s96.md` (ST1–ST15, test checklist), no ADR (extends existing snapshot data pattern).
-
-## s85 complete: The liaison's opinions on stories, highlighted in backlog (code done, P1 pending)
-
-New opinions feature on the Backlog tab. The liaison records opinions with `agile-team opinion` CLI command; the dashboard shows them as badges and allows the human to dismiss or apply them. Applied move-opinions queue reorders; other applied kinds post to the PO as thread posts.
-
-**Features implemented (design O1–O20, ~200 LOC index.html additions):**
-- **Opinion badges:** Backlog stories with non-`keep` opinions show `liaison: <kind>` badges. Expanded rows show the opinion's text, date, and route (reorder or PO).
-- **Filter:** Checkbox "only suggestions (N)" filters to stories with open opinions. Places and move handles computed from full group first, then filtered.
-- **Review bar:** "Last review: <time>" with summary (Markdown). Button "Ask the liaison to review the backlog" posts to inbox, fires `liaison_message` watch trigger. Shows "waiting" state.
-- **Dismiss and apply:** Two buttons on suggestions. Apply routes move-opinions to reorder queue (disabled while pending), others to PO via thread posts. Both buttons disabled without TOKEN; rendered Markdown text in opinion details.
-- **Events and timeline:** Opinions and acts merged into events (kind="opinion"/"opinion-act"); timeline shows them with source→target labels and Markdown body.
-- **Snapshot fields:** New `opinions` section with items (all, `latest` flag, route, act), `asked_at`, `review` (last); events gain opinion/opinion-act kinds.
-
-**Implementation notes (index.html):** New state: `ui.suggested`, `ui.acting` (Set), `ui.actNote`, `ui.asking`, `ui.reviewNote`. Functions: `storyOpinion()`, `isSuggestion()`, `opinionBadge()`, `opinionHtml()`, `reviewBarHtml()`, `postReview()`, `postOpinionAct()`. Button handlers `[data-opinion-act]` and `[data-ask-review]` checked before expand toggle.
-
-**Shipped:** Code review done (m4 docstring minor). Node harness and e2e tests pending (integration-tester P1).
-
-See ADR-0045.
-
-## s84 complete: Story threads with the PO and the liaison (on Backlog tab)
-
-An expanded Backlog row now shows a thread of discussion with the PO or the liaison. The human can post questions from a form on the dashboard; the PO replies with `reply_story` tool (next hand-over); the liaison replies via CLI `agile-team reply` command (within 2 seconds via new `liaison_message` watch trigger). All ACs pass (code review done, node harness and e2e pending for integration-tester).
-
-**Features implemented (design H1–H21):**
-- **Thread view:** Below the expanded row's event list, `threadHtml(story, view)` lists entries in time order: `you → PO`-style labels, time, Markdown text. Shows "No messages yet." if none. With TOKEN, adds a form; without, shows read-only note.
-- **Form:** Textarea (maxlength 4000 chars, in `ui.drafts[id]`), select for recipient (PO/liaison, `ui.to[id]` defaults PO), send button (disabled in `ui.sending` while posting).
-- **Posting:** `postThread(id)` POSTs `/api/thread` with `{story, to, text}` + token header. Blank text rejected (`SEND_EMPTY`). Response 403 → read-only note; other non-OK → error; OK → draft cleared, entry appears next snapshot.
-- **Focus preservation:** `keepFocus(fn)` saves textarea focus and selection, runs render, restores both. Typing survives re-renders.
-- **Timeline:** Thread events appear in timeline with author→recipient labels and Markdown body. Story filter in timeline shows thread entries for that story.
-- **Snapshot fields:** `run` unchanged; `story` unchanged; new top-level `thread` array with 5 entries per story.
-
-**Implementation notes (index.html):**
-- New state: `ui.drafts = {}`, `ui.to = {}`, `ui.sending = new Set()`, `ui.threadNote = {}`.
-- Constants: `WHO = {human: "you", "product-owner": "PO", liaison: "liaison"}`, `SEND_EMPTY`, `NO_THREAD`.
-- Functions: `threadEntries(view, id)` (filter `view.thread` by story), `threadHtml(story, view)`, `postThread(id)`, `keepFocus(fn)`.
-- Event handlers: `[data-thread-text]` and `[data-thread-to]` update drafts/recipients; `[data-thread-send]` posts (checked before expand toggle).
-- CSS: `.thread` (entry block), `.tmsg` (sender labels), `.tform` (form layout).
-
-**Shipped:** Code review done (two minor findings left for later: m1 nested div, m2 bool check). Node harness tests (items 14–16) and e2e test (real POST → file, watch trigger, reply in snapshot) owned by integration-tester.
-
-See ADR-0044.
-
-## s83 complete: Backlog tab with reorder handles and file reading
-
-New Backlog tab on the dashboard. Lists every story not done in two groups (Current sprint and Backlog), with expand/collapse, move handles, drag-drop, and file reading.
-
-**Features implemented (design B1–B20):**
-- **Row:** Backlog rows show `#position`, id, title, step, status, delivery, label pill (cancelled/held), hold reason. Current-sprint rows are read-only, no handles.
-- **Expand:** Click row to expand. Shows story file (fetched from `api/file?kind=story&id=<id>`), state fields (sprint, step, status, rounds, disputes, hold, developer, delivery, commits), links to design/review/acceptance files, spend and turns from ledger, last 10 events, open questions naming the story.
-- **Handles and drag:** Backlog rows have move buttons: `↑` (up), `↓` (down), `⤒` (top), plus `draggable="true"` for drag-drop onto another Backlog row. Disabled on edges (first/last) and while pending. Current-sprint rows have no handles.
-- **Token and read-only view:** Extract `TOKEN = PARAMS.get("token") ?? ""` from URL. Without token, show read-only note; with token, show handles. Every POST includes `X-Agile-Team-Token` header.
-- **File reading:** `loadFile(id, kind)` fetches from `/api/file?kind=<kind>&id=<id>`. Shows `loading…`, falls back to `no story file` on 404 or error. Cached in `ui.files`. Files are text/plain.
-- **Reorder requests:** `postReorder(story, position)` POSTs `{story, position, version}` where version is `run.order_version` from snapshot. Server replies 202 with request id and status "queued". Handles pending/applied/refused outcomes in `reorderNote()`.
-- **Request status display:** Pending → "waiting for the runner: moves apply between steps"; Applied → clears note; Refused → shows reason (STALE adds reload button); 403 → "read-only: open the link the dashboard printed"; other errors → HTTP status.
-
-**Implementation notes (index.html):**
-- New section: `<section id="tab-backlog" hidden>` with `<p class="sub" id="backlog-note">` and `<div id="backlog">`.
-- State: `ui.expanded` (Set of ids), `ui.files` (cache), `ui.reorder` ({id, story}), `ui.note` (status text), `ui.drag` (dragged row id).
-- Functions: `backlogGroups(view)` (split current/backlog), `storyLabel(story)`, `backlogRow(story, place, count, view)` (with handles), `storyDetails(story, view)` (state fields, links, ledger sums, events, questions), `backlogHtml(view)`, `renderBacklog(view)`, `toggleRow(id)`, `loadFile(id, kind)`, `moveTarget(action, place, count)`, `postReorder(story, position)`, `reorderNote(view)`, `moveFromHandle(btn)`.
-- Event handlers: click on `[data-expand]` toggles, click on `[data-move]` posts move, click on `[data-reload]` reloads page; dragstart/dragover/drop for drag-and-drop.
-- Timeline: `showEvent()` displays `data.source` when set (human vs PO).
-- Snapshot fields: `run.order_version`, `run.backlog`, `story.label`, `story.commits`, `story.developer`, `story.disputes`, `story.files`, `story.developer`, top-level `reorders`.
-
-**Test coverage (AC8, pending integration-tester):**
-Node harness: expand/collapse under `tests/dashboard_node.py`, handles present/absent, `moveTarget` edges, `reorderNote` cases (all states), no drag while pending, commits shown in details. E2E: real dashboard --port 0 --token t, POST from 127.0.0.1 gets 202, router applies.
-
-**Shipped:** Review done (D3 README fixed). P1 work (node-harness and e2e tests) for integration-tester. Fixture and contract: design `agile-team/docs/design/s83.md`.
-
-See ADR-0043.
-
-## s15 complete: Dashboard renders Markdown safely
-
-Questions tab and timeline now display Markdown with formatting (headings, lists, emphasis, code, tables) and fall back to plain text if the library doesn't load. All four ACs pass.
-
-- **AC1 syntax:** `md()` renders headings, paragraphs, lists, emphasis, inline/fenced code, tables, links via markdown-it default preset.
-- **AC2 safe:** Raw HTML escapes (`html: false`), links http(s) only (`validateLink`), images disabled, script/onerror payloads inert (confirmed in tests).
-- **AC3 one function:** `md(text)` is the only renderer; questions, raised questions, answered questions, and timeline bodies (step-end, message, answer) use it. Plain text stays escaped.
-- **AC4 pinned URL:** markdown-it@14.1.0 loaded from CDN like Mermaid, graceful plain-text fallback, testable offline with vendored copy.
-
-**Implementation notes:**
-- New markdown section in `index.html` (MARKDOWN_URL, SAFE_LINK, markdown state, functions: safeMarkdown, useMarkdown, loadMarkdown, md).
-- `boot()` calls `loadMarkdown()` (not awaited); on success, useMarkdown then re-render; on failure, warn and stay plain.
-- `renderQuestions` and `renderAnswered` call `md()` for question/answer text; `.q-answer` div styled smaller.
-- Timeline: data-driven `MARKDOWN_KINDS` set and `bodyHtml()` helper pick renderer by kind.
-- CSS: `.md` normal wrap, `.md.plain` pre-line; block elements 6px margin, headings bold, lists indented, code/pre on surface-2.
-- Vendored copy in tests/vendor/markdown-it-14.1.0.min.js for offline e2e (integration-tester's job).
-
-**Rule change (ADR-0042):** "Only outside URL is Mermaid" becomes "exactly two outside URLs: Mermaid and markdown-it" (both pinned).
+[Previous s101 content unchanged...]

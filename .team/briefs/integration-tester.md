@@ -1,6 +1,12 @@
 # Integration Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+**Last updated:** 2026-10-13 (s102 tests done; s101 P1 pending; s100 P1 pending; s99 done; s98 done; s105 done; s103 done; s92 node-harness P1 pending; s97 P1 pending; s104 P1 pending; s96 P1 pending; s86 P1 pending; s85 P1 pending; s84 P1 pending; s83 P1 pending)
+
+## s102 complete: Page tests for runner stages on Flow/Time charts (AC4, AC-R all pass)
+
+18 node-harness tests written, all pass against fixture with rs4/rs5 (runner-stage events): SN1–SN4 stage nodes hexagons/edges/positions, SN2 drawn checks, SN5 stats per scope, SN7/SN8 running/active, SB1–SB3 share bars (model/tools split), TM2–TM8 time pieces/sources/runner row, RD1–RD3 measured text ≥12px with 4.5:1 contrast in both themes. Fixture complete, pages harness passes all items.
+
+See design `agile-team/docs/design/s102.md` (test checklist, rules).
 
 ## s101: Node-harness tests for nested step expansion (P1, your work)
 
