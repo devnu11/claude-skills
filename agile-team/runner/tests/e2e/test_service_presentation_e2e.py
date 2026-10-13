@@ -6,16 +6,17 @@ import os
 import signal
 import socket
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import tomli_w
-from agile_team import cli, gates, presentation
 from agile_team import config as config_mod
+from agile_team import gates, presentation
 from agile_team.gates import Verdict
 from agile_team.sandbox import port_in_use
 
-from ..conftest import PY_CONFIG, git, set_git_identity
+from ..conftest import PY_CONFIG, git
 
 RUNNER = Path(__file__).resolve().parents[2]
 
@@ -53,11 +54,7 @@ def present_workspace(config, init: bool) -> Path:
         config, gates.StoryState("s1", "Dash", "e2e", delivery="dashboard")
     )
     (source / "PRESENTATION.md").write_text("Open the dashboard.\n")
-    if init:
-        set_git_identity(source / "workspace")  # init commits there (s79 G2)
-        args = ["--repo", str(source / "workspace"), "init", "--preset", "python"]
-        assert cli.main([*args, "--delivery", "package"]) == 0
-    else:
+    if not init:  # seeds opted out (seed = ""), so nothing plants a config
         (source / "workspace" / "note.txt").write_text("no config here\n")
     return source
 
@@ -76,6 +73,8 @@ def test_trial_starts_the_real_dashboard_probes_it_and_stops_it(web) -> None:
 def test_trial_bounces_a_broken_workspace_with_the_dashboards_own_error(web) -> None:
     """AC2: no .agile-team.toml in the workspace; the reason quotes the real output."""
     config, story, port = web
+    bare = replace(config.deliveries[0], seed="")
+    config = replace(config, deliveries=[bare])
     present_workspace(config, init=False)
     outcome = presentation.Trial(config).liveness(story)
     assert outcome.verdict is Verdict.BOUNCE
