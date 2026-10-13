@@ -244,11 +244,21 @@ def brep(hold=None, **fields) -> dict:
 
 BOUNDARY_ROWS = [
     (
-        brep("sync_conflict", edge="start", stage="sync", files=["a.py", "b.py"]),
+        brep(
+            "sync_conflict",
+            edge="start",
+            stage="sync",
+            files=["a/x.py", "a/y.py", "docs/z.md"],
+            commit="abc123def456",
+            subject="fix x",
+        ),
         T.SYNC_CONFLICT,
-        "run: sprint 2 start: merging origin/main into agile-team conflicts in a.py, b.py; the merge was "  # noqa: E501
-        "aborted and the team branch is unchanged. Ask the human to merge origin/main into agile-team by "  # noqa: E501
-        "hand and commit it, then continue_boundary",
+        "run: sprint 2 start: rebasing agile-team onto origin/main stopped at abc123def456 "
+        '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
+        "aborted and the team branch is unchanged. Ask the human to rebase agile-team onto "
+        "origin/main by hand (git rebase origin/main, resolve, git rebase --continue), then "
+        "continue_boundary; the runner rewrites the recorded hashes. If the run halts on the "
+        "moved checkout, they run agile-team accept-checkout first",
     ),
     (
         brep("push_permission", branches=["team/sprint-1", "team/sprint-2"]),

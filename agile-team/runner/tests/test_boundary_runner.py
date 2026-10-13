@@ -108,36 +108,11 @@ def test_fetch_failure_at_the_end_still_adds_the_entry(env: Env, fake: FakeSyste
 # ----- U5 start sync --------------------------------------------------------
 
 
-def test_start_merges_upstream_then_checks_and_finishes(env: Env, fake: FakeSystem) -> None:
-    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"), Done(0, NEW + "\n"))
-    env.open(Edge.START)
-    env.drive()
-    assert env.outcomes() == ["merged", "pass", "done"]
-    assert env.events()[0].data["sha"] == NEW
-    assert env.rt.state.upstream.team_branch == "main"
-    assert env.rt.state.boundary is None
-    assert env.rt.state.upstream.stack == []
-
-
 def test_start_with_nothing_new_is_current_with_no_commit(env: Env) -> None:
     env.open(Edge.START)
     env.drive()
     assert env.outcomes()[0] == "current"
     assert env.rt.state.boundary is None
-
-
-def test_start_conflict_holds_with_the_files_and_leaves_the_branch(
-    env: Env, fake: FakeSystem
-) -> None:
-    fake.reply(("git", "merge", "--no-edit"), Done(1, "CONFLICT"))
-    fake.reply(("git", "diff", "--name-only"), Done(0, "base.txt\n"))
-    env.open(Edge.START)
-    [report] = env.drive()
-    b = env.rt.state.boundary
-    assert b.hold is BoundaryHold.SYNC_CONFLICT and report["boundary"]["hold"] == "sync_conflict"
-    assert report["boundary"]["files"] == ["base.txt"]
-    assert any(c.argv[:2] == ("git", "merge") and "--abort" in c.argv for c in fake.commands)
-    assert env.br.due() is None
 
 
 def test_detached_head_is_an_error_hold(env: Env, fake: FakeSystem) -> None:

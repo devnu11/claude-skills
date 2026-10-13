@@ -3,11 +3,10 @@
 import pytest
 from agile_team import upstream as up
 from agile_team.config import UpstreamSettings
-from agile_team.git_ops import Git, GitError
+from agile_team.git_ops import Git
 from agile_team.upstream import (
     GhPrs,
     Lease,
-    MergeOutcome,
     NoPrs,
     Pr,
     PrMode,
@@ -19,7 +18,6 @@ from agile_team.upstream import (
 
 from .fake_system import FAKE_REPO, Done, FakeSystem
 
-MSG = "chore(team): merge origin/main at sprint 2 start"
 OLD, NEW = "a" * 40, "b" * 40
 
 
@@ -77,40 +75,6 @@ def test_team_branch_and_detached(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(1))
     with pytest.raises(UpstreamError, match="detached HEAD; check out the team branch"):
         upstream_for().team_branch()
-
-
-def test_merge_in_current_makes_no_commit(fake: FakeSystem) -> None:
-    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"))
-    merge = upstream_for().merge_in(MSG)
-    assert merge.outcome is MergeOutcome.CURRENT and not merge.sha
-
-
-def test_merge_in_merges_the_target_with_the_message(fake: FakeSystem) -> None:
-    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"), Done(0, NEW + "\n"))
-    merge = upstream_for().merge_in(MSG)
-    assert merge.outcome is MergeOutcome.MERGED and merge.sha == NEW
-    [argv] = issued(fake, "merge", "--no-edit")
-    assert argv[-1] == "origin/main" and "--no-verify" in argv
-    body = argv[argv.index("-m") + 1]
-    assert body.startswith(MSG) and "Co-Authored-By" in body
-
-
-def test_merge_in_conflict_aborts_and_lists_files(fake: FakeSystem) -> None:
-    fake.reply(("git", "rev-parse", "HEAD"), Done(0, OLD + "\n"))
-    fake.reply(("git", "merge", "--no-edit"), Done(1, "CONFLICT (content)"))
-    fake.reply(("git", "diff", "--name-only"), Done(0, "base.txt\n"))
-    merge = upstream_for().merge_in(MSG)
-    assert merge.outcome is MergeOutcome.CONFLICT and list(merge.files) == ["base.txt"]
-    assert "CONFLICT" in merge.output
-    assert issued(fake, "merge", "--abort")
-
-
-def test_merge_in_failure_without_conflict_is_a_git_error(fake: FakeSystem) -> None:
-    fake.reply(("git", "merge", "--no-edit"), Done(128, "fatal: not something we can merge"))
-    fake.reply(("git", "diff", "--name-only"), Done(0, ""))
-    with pytest.raises(GitError, match="not something we can merge"):
-        upstream_for(branch="nope").merge_in(MSG)
-    assert issued(fake, "merge", "--abort")
 
 
 def test_merge_base(fake: FakeSystem) -> None:
