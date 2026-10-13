@@ -1,6 +1,27 @@
 # Customer Proxy: Current context and conventions
 
-**Last updated:** 2026-10-13 (s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s104 done; s86 done; s85 done; s84 done; s83 done)
+
+## s104: Flow chart is readable in all scopes (all ACs verified by runner on Chromium; AC1 Safari to human)
+
+**Verdict: All ACs pass on runner's headless Chromium.** Story ships. Customer proxy checked AC1 (labels in boxes after load, tab switch, resize) in all three scopes (Story, Sprint, Run). AC1's Safari check left to the human per the PO (ticket m97 asked if human wants to verify on Safari; no browser dependency without an ADR).
+
+**What you see on the Flow chart:**
+- **Labels inside boxes:** Every role's label sits inside its box. No piled-up text at the top-left. Readable at all times.
+- **Correct dimming:** Dimmed roles (no data in scope) appear lighter in colour, not faded. No WebKit bug.
+- **Unused roles hidden:** Built-in roles that have never run (e.g., developer-db) don't appear on the chart. Only active roles (routed to or with events) are shown.
+- **Wide charts scroll:** Charts that don't fit the viewport scroll sideways, don't shrink.
+
+**Acceptance notes (all pass):**
+1. **AC1:** Labels inside boxes on first load, after tab switch back to Flow, after live update, after window resize. Three scopes (Story, Sprint, Run) all checked. Chromium ✓. Safari check → human option (no browser dependency added).
+2. **AC2:** No box is empty when role has data. Idle roles show "idle", not `$0.00`.
+3. **AC3:** Text is 16px (scale 1). Box stats ≥ 12 CSS px. Charts scroll, not shrink.
+4. **AC4 (test):** Node harness test pins the cause: no opacity/filter/transform/mix-blend-mode in classDef. Fails on today's code (before fix). Passes now.
+5. **AC5:** Only used roles drawn. developer-db (unused) absent. After first step-start, appears. Old replays without `used` key still draw.
+
+**Your scope unchanged:** Same sandbox procedure, service startup. No changes to delivery, infrastructure, or acceptance interaction. If a label is still piled in Safari after the human re-pins the runner, open a follow-up bug.
+
+See design `agile-team/docs/design/s104.md` (AC1–AC5, rules FL1–FL9), ADR-0047.
 
 ## s86: Story dependencies shown on the Backlog tab (all ACs verified; P1 tests pending)
 

@@ -1,6 +1,6 @@
 # Unit Tester: Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 done, P1 pending; s86 done)
+**Last updated:** 2026-10-13 (s104 done; s96 done, P1 pending; s86 done)
 
 ## s96 complete: Step time pairing and dashboard display (23 tests pass, P1 pending)
 
@@ -36,6 +36,23 @@
 **Coverage ≥95%, ruff clean. 23 tests pass. P1: node-harness (scope/running/chart tests) and e2e (animation) pending.**
 
 See design `agile-team/docs/design/s96.md` (ST1–ST15, test checklist).
+
+## s104 complete: Flow chart labels pile up fixed—snapshot `used` field, static checks (coverage ≥95%, ruff clean, all pass)
+
+New unit tests `tests/test_s104_snapshot.py` (build on scratch/config fixtures from test_snapshot.py):
+- A built-in role that never ran (developer-db, no events, not assigned, not routed to) has `used: false`. After a `step-start` event, next `build` gives `used: true` (AC5, FL7b, FL9).
+- With pipeline `design, tests, implement` and no events, `architect` and `unit-tester` are used (FL7a).
+- A story with `developer = "developer-cli"` makes `developer-cli` used, then generic `developer` unused. With no story assigned, `developer` is used. `po_developer` same way (FL7a).
+- A step left out of pipeline (e.g. no e2e) → integration-tester unused unless that role has `step-start` (FL7).
+- Every `roles[]` entry has `used`. Fixture-shape and fixture-value tests from test_snapshot.py still pass.
+
+Static source checks (new file `tests/test_s104_flow_page.py`, no node/process):
+- `.flow svg` has no `max-width: 100%`; has `max-width: none`.
+- `useMaxWidth: false`, `FLOW_FONT_PX = 16`, `initialize(mermaidConfig(vars))` all present.
+- No `idle opacity` in code; `idleClassDef` sets only fill/stroke/color.
+- `r.used !== false` filter and `statsText` returning "idle" both present (exact).
+
+Coverage ≥95%, ruff clean. E2E tests (AC4 cause/hidden-then-shown, AC3 size, AC2 idle text, AC5 unused roles, AC1 resize after full run) carried to integration-tester P1. See design `agile-team/docs/design/s104.md` (FL1–FL9, test checklist).
 
 ## s86 complete: Story dependencies as data—validation, routing, warnings, snapshot (coverage 99.46%, ruff clean, all pass)
 

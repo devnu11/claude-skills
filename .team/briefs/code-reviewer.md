@@ -1,6 +1,18 @@
 # Code Reviewer: Current context and conventions
 
-**Last updated:** 2026-10-13 (s96 done; s86 done; s85 done; s84 done; s83 done)
+**Last updated:** 2026-10-13 (s104 done; s96 done; s86 done; s85 done; s84 done; s83 done)
+
+## s104: Flow chart fixes—dimming by colour, unused roles marked (1 round, all ACs pass) — verdict ship (P1 e2e pending)
+
+**Scope:** `snapshot.py` (_used_roles, _assigned_developers, _routed_roles, _stepped_roles functions, `used` field on roles), `index.html` (CSS, idleClassDef, statsText, ringRoles filter, mermaidConfig, natural-size Mermaid), fixture. **Verdict: ship (P1 e2e pending).**
+
+**Design rules (FL1–FL9):** No compositing styles (opacity/filter/transform/mix-blend-mode) in classDef. Dim by colour only (fill/stroke/color). Every role has `used: bool` (routed or stepped). Chart draws only used roles (except PO always). Natural-size SVG (useMaxWidth: false, 16px font), scroll sideways. Show "idle" when role has no totals and no open step. No `used` key = still drawn (backward compat).
+
+**Module structure:** `_used_roles` union of `_routed_roles` (from STEP_ROLES via pipeline) and `_stepped_roles` (from events). `_routed_roles` uses new `_step_role` helper with `.get()` fallback on STEP_ROLES. Generic developer expands to assigned developers or itself. `_roles` adds `used: r.name in used` to each role. Functions ≤8 LOC. `index.html`: `idleClassDef()` returns colour-only class def; `statsText(view, ctx, name)` returns `"idle"` or totals; `ringRoles(view)` filters by `r.used !== false`.
+
+**Coverage ≥95%, ruff clean. No tests deleted. Fixture adds developer-db with used: false.**
+
+See design `agile-team/docs/design/s104.md` (FL1–FL9, per-module changes), ADR-0047.
 
 ## s96: Time per role on dashboard (1 round, all ACs pass) — verdict ship (P1 pending)
 
