@@ -94,4 +94,5 @@ write = [
     "unattended/SKILL.md",
     "unattended/reference/**",
     "README.md",
+    ".team/adr/**",
 ]
