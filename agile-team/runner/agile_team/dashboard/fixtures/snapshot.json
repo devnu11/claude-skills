@@ -1201,6 +1201,42 @@
    }
   },
   {
+   "id": "e40",
+   "at": 1791458714.5,
+   "kind": "step-start",
+   "role": "scribe",
+   "story": null,
+   "data": {
+    "brief": "Record s1 decisions.",
+    "mono": 458594.5,
+    "slept": 120.0
+   }
+  },
+  {
+   "id": "e41",
+   "at": 1791458874.4,
+   "kind": "step-end",
+   "role": "scribe",
+   "story": null,
+   "data": {
+    "status": "done",
+    "summary": "ADR 0003: csv module over pandas.",
+    "next_role": null,
+    "open_questions": [],
+    "tokens": {
+     "input": 7735,
+     "output": 4526,
+     "cache_read": 138895,
+     "cache_creation": 24769
+    },
+    "cost_usd": 0.0,
+    "turns": 28,
+    "commit": "f52ddf5",
+    "mono": 458754.4,
+    "slept": 120.0
+   }
+  },
+  {
    "id": "e42",
    "at": 1791459025.0,
    "kind": "step-start",
@@ -2269,17 +2305,81 @@
    }
   },
   {
-   "id": "e108",
+   "id": "e87b",
+   "at": 1791472300.0,
+   "kind": "step-end",
+   "role": "code-reviewer",
+   "story": "s2",
+   "data": {
+    "status": "done",
+    "summary": "Re-review clean.",
+    "turns": 3,
+    "next_role": null,
+    "open_questions": [],
+    "mono": 472180.0,
+    "slept": 120.0
+   }
+  },
+  {
+   "id": "opinion-o1",
+   "at": 1791472300.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o1",
+    "kind": "move-up"
+   }
+  },
+  {
+   "id": "opinion-o2",
+   "at": 1791472350.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "opinion": "o2",
+    "kind": "move-down"
+   }
+  },
+  {
+   "id": "opinion-o3",
+   "at": 1791472360.0,
+   "kind": "opinion",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "kind": "scope"
+   }
+  },
+  {
+   "id": "opinion-act-a1",
+   "at": 1791472420.0,
+   "kind": "opinion-act",
+   "role": null,
+   "story": "s5",
+   "data": {
+    "opinion": "o3",
+    "act": "apply",
+    "route": "product-owner",
+    "ref": "t2"
+   }
+  },
+  {
+   "id": "e99",
    "at": 1791472640.0,
    "kind": "step-start",
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB."
+    "brief": "Memory test fails at 412MB.",
+    "mono": 472520.0,
+    "slept": 120.0
    }
   },
   {
-   "id": "e109",
+   "id": "e100",
    "at": 1791472830.0,
    "kind": "step-end",
    "role": "developer-cli",
@@ -2305,7 +2405,7 @@
    }
   },
   {
-   "id": "e110",
+   "id": "e101",
    "at": 1791472960.0,
    "kind": "step-start",
    "role": "developer-cli",
@@ -2315,7 +2415,43 @@
    }
   },
   {
-   "id": "e111",
+   "id": "e102",
+   "at": 1791472965.0,
+   "kind": "priority",
+   "role": null,
+   "story": "s6",
+   "data": {
+    "change": "move",
+    "order": [
+     "s3",
+     "s2",
+     "s4",
+     "s7",
+     "s5",
+     "s6"
+    ],
+    "moves": [
+     {
+      "story": "s6",
+      "from": 6,
+      "to": 5
+     },
+     {
+      "story": "s5",
+      "from": 5,
+      "to": 6
+     }
+    ],
+    "reason": "moved on the dashboard (r1)",
+    "pulled": [
+     "s5"
+    ],
+    "source": "human (dashboard)",
+    "warnings": []
+   }
+  },
+  {
+   "id": "e103",
    "at": 1791473100.0,
    "kind": "po-turn",
    "role": "product-owner",
@@ -2327,6 +2463,36 @@
     "waiting_s": 312.5,
     "mono": 5400.0,
     "slept": 0.0
+   }
+  },
+  {
+   "id": "e104",
+   "at": 1791473200.0,
+   "kind": "story-admin",
+   "role": "product-owner",
+   "story": "s6",
+   "data": {
+    "tool": "hold_story",
+    "reason": "waiting for the scheduler design to settle",
+    "question": null,
+    "before": {
+     "status": "active",
+     "step": "design",
+     "sprint": null,
+     "hold": null,
+     "po_hold": null
+    },
+    "after": {
+     "status": "active",
+     "step": "design",
+     "sprint": null,
+     "hold": null,
+     "po_hold": {
+      "kind": "PO hold",
+      "reason": "waiting for the scheduler design to settle",
+      "question": null
+     }
+    }
    }
   }
  ],
@@ -2470,6 +2636,20 @@
     "cache_creation": 23585
    },
    "turns": 35
+  },
+  {
+   "at": 1791458874.4,
+   "role": "scribe",
+   "model": "qwen3-coder",
+   "story": null,
+   "cost_usd": 0.0,
+   "tokens": {
+    "input": 7735,
+    "output": 4526,
+    "cache_read": 138895,
+    "cache_creation": 24769
+   },
+   "turns": 28
   },
   {
    "at": 1791458885.1,
@@ -2812,6 +2992,19 @@
    "seconds": 201.3,
    "clock": "awake",
    "slept": 0,
+   "recorded_model": null
+  },
+  {
+   "role": "scribe",
+   "story": null,
+   "at": 1791458714.5,
+   "sprint": 1,
+   "ended_at": 1791458874.4,
+   "status": "done",
+   "model": "haiku",
+   "seconds": 159.9,
+   "clock": "awake",
+   "slept": 0.0,
    "recorded_model": null
   },
   {
@@ -4066,11 +4259,13 @@
   }
  ],
  "heartbeat": {
-  "version": 1,
+  "version": 2,
   "pid": 4242,
   "beat": "beating",
   "at": 1791473157.0,
+  "mono": 523000.0,
   "started_at": 1791469560.0,
+  "slept": 0.0,
   "chore": null,
   "step": {
    "role": "developer-cli",
@@ -4108,7 +4303,8 @@
     "slept": 0.0,
     "status": "open"
    }
-  ]
+  ],
+  "stages": []
  },
  "health": {
   "level": "green",
