@@ -49,12 +49,24 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 ## What you see
 
-- **Header:** the run's status, sprint, task, spend against the budget, and
-  the live pill for the step that is running now (see "Is the team
-  working?"). The spend is the same corrected figure that
+- **Header:** the sprint and task, with the live panel in the top right
+  corner. Under them is the status row: spend against the budget first,
+  then the run's status and the live pill for the step that is running now
+  (see "Is the team working?"). The spend is the same corrected figure that
   `agile-team status` shows: the Product Owner's costs from before the s25
   fix are counted once each, not as running totals. When spend reaches the
   budget, the run halts and the status reads `blocked`.
+- **Live panel:** the box in the header's top right corner, on every tab.
+  While a step runs, it names the role, its story and step, and the awake
+  time so far, for example `▶ developer-gui on s112 · implement · ⏱ 12 min
+  awake`. Under that it shows the latest Activity message on that story,
+  with its Markdown formatting, up to its first 6 lines. A longer message
+  ends with `…`; the full text is on the Activity tab. While the runner
+  does its own work (a gate, a sprint boundary) it reads `⚙ runner: <stage>`.
+  When nothing runs it says why, for example `● Nothing running: waiting on
+  m121`, and shows the latest message of any story. It updates as the run
+  moves. Click it (or press Enter on it) to open the Activity tab filtered
+  to that story.
 - **Board:** a backlog column, one column per pipeline step, and done. The
   board fits the window, so Done is always in view without scrolling
   sideways. A column with no stories shrinks to a narrow strip with its name
@@ -89,20 +101,14 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
   An open row ends with the story's thread (see "Discuss a story").
 - **Flow:** briefs from the Product Owner to each role, handoffs back by
-  status, and questions and answers between the PO and you, next to a
-  timeline of recent events. You and the customer proxy are in the top row.
+  status, and questions and answers between the PO and you, drawn as a
+  chart across the full width. You and the customer proxy are in the top row.
   The Steering box below them holds the Product Owner and the Manager.
   Under Steering, the roles are grouped as Design, Build, Verify and
   Support. While the run is live, the role that is working now pulses, and
   each new brief, handoff, question or answer sends a dot along its arrow.
   If your system asks for reduced motion, the role glows steadily and the
   arrow lights up briefly instead.
-  When the implement gate sends failures to the roles that own the files,
-  the timeline shows a yellow **implement → fix by <roles>** row, then a
-  **gate fix <status>** row per fix step with its files. Its second line
-  names the rule the role cited for changing a test's assertion, or says
-  `assertion lines changed, no rule named` (see
-  [routing](routing.md#when-the-gate-fails-in-another-roles-file)).
   Above the chart, **Story / Sprint / Run** picks what each role's box
   totals: its tokens, dollars and time on one story, one sprint or the
   whole run. Tokens and dollars come from the ledger. Time is the awake time
@@ -128,10 +134,21 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   The flowchart is drawn by Mermaid, which the page loads from
   `cdn.jsdelivr.net`. Without internet access it shows the chart's source
   text instead, and every other tab still works.
-  Handoff summaries, questions and answers in the timeline are shown with
-  their Markdown formatting: headings, lists, code, tables and links. Links
-  open in a new tab. Raw HTML is shown as text and never runs, and only
-  `http(s)` links become links.
+- **Activity:** the newest 120 events, newest first, across the full
+  width: briefs, handoffs, gate results, questions, answers, threads,
+  notes, priority changes and sprint boundaries. Each row reads `from →
+  to`, with its story and what happened. Pick a story in the box above the
+  list to see only its events. New rows flash as they arrive. Every
+  message is shown with its Markdown formatting: headings, lists, bold,
+  code, tables and links. Ids, times, names and file lists stay plain.
+  Links open in a new tab. Raw HTML is shown as text and never runs, and
+  only `http(s)` links become links.
+  When the implement gate sends failures to the roles that own the files,
+  Activity shows a yellow **implement → fix by <roles>** row, then a
+  **gate fix <status>** row per fix step with its files. Its second line
+  names the rule the role cited for changing a test's assertion, or says
+  `assertion lines changed, no rule named` (see
+  [routing](routing.md#when-the-gate-fails-in-another-roles-file)).
 - **Tokens:** a bar chart by role, story or model, and cumulative spend
   over time. Above the bars, the first buttons pick the grouping (Role,
   Story, Model). The second pick the unit: **Tokens** (bars split by token
@@ -158,12 +175,19 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   handoff. Questions and answers are shown with their Markdown formatting.
   The formatter is `markdown-it`, which the page also loads from
   `cdn.jsdelivr.net`. Without internet access the text is shown plain, line
-  breaks kept.
+  breaks kept, and the status row says `Markdown unavailable: showing
+  plain text`.
 - **Requirements:** each requirement with its status, which acceptance
   criteria it covers, and its change history with the reasons.
 
 The page follows your system's light or dark setting. The ◐ button in the
 header switches between automatic, light and dark.
+
+To see every tab filled without a run, open the dashboard's link with
+`?mock&at=end` added, for example `http://localhost:8765/?mock&at=end`.
+It replays the sample run the dashboard ships with. Leave out `&at=end`
+to watch it replay event by event, with play, speed and restart buttons
+in the status row.
 
 ## Story timeline
 
