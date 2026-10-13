@@ -190,7 +190,12 @@ command fails.
    and test lines. The PO opens a bug story, records it with
    `record_ci_bug`, and puts it first in the next sprint. Both red and
    still-running CI mean the PR is **NOT** ready: never relay those as
-   ready. A repo with no remote or no `gh`, or a "no" to pushing, skips
+   ready. **CI rule.** A sprint is done only when a green CI run is
+   actually present on GitHub. A re-run counts only when it is green, and
+   only when the failed job never ran our code (it was cancelled with no
+   steps run, or no runner was available). If a failure could be
+   flakiness in our code, it is a bug story, and the sprint is not done.
+   A repo with no remote or no `gh`, or a "no" to pushing, skips
    this with a note that no CI result exists. The runner never pushes the
    team branch or main.
 9. **Stops.** If the runner stops on its own, it posts a final note, sets

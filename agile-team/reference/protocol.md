@@ -1696,9 +1696,9 @@ The pass ends at the first step whose report matches a row of the
 | `push_rejected` | a review branch push was refused (its remote branch moved) |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
-| `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready |
-| `ci_failed` | the review PR's CI failed; the line names each failing check (workflow / job), its link and its failing test lines. The PO opens a bug story at once, records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint |
-| `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again |
+| `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
+| `ci_failed` | the review PR's CI failed; the line names each failing check (workflow / job), its link and its failing test lines. The PO opens a bug story at once, records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint. Only when the lines show the failed job never ran our code may the PO ask for a re-run and `continue_boundary` instead; see the CI rule under **Ready.** |
+| `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again; see the CI rule under **Ready.** |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
@@ -2139,7 +2139,8 @@ hand-over):
      calls `record_ci_bug(story)` and tells the human the PR is NOT ready.
      `continue_boundary` waits for the checks again, for when the human
      re-ran them. Only green or a recorded bug story finishes the
-     boundary.
+     boundary. A re-run is only for a job that never ran our code; see
+     the CI rule under **Ready.**
    - **pending** (the deadline passed): held `ci_pending`, naming the
      running checks. The PR is not ready; `continue_boundary` waits again.
    - **none** (no checks reported, only skipped ones, or no non-draft PR):
@@ -2197,6 +2198,15 @@ sprint that lists it clears `ci_bug`.
 **Ready.** Only a green CI result produces the words "ready to merge": the
 `ci_green` hand-over and its `Review:` text. A red, pending, missing or
 unwatched result is always reported as NOT ready.
+
+**CI rule.** A sprint is done only when a green CI run is actually present
+on GitHub. A re-run counts only when it is green, and only when the failed
+job never ran our code (it was cancelled with no steps run, or no runner
+was available). If a failure could be flakiness in our code, it is a bug
+story, and the sprint is not done. The PO role file states it too (s110):
+on `ci_failed` the PO reads the failing lines first and asks for a re-run
+only when they show `no runner was assigned` or a cancel whose steps never
+started; otherwise it opens the bug story and `record_ci_bug`s it.
 
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
 `stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,
