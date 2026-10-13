@@ -80,9 +80,9 @@ live meter, see "Live meter and health"), `runner.pid` (the live runner's pid; a
 stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<environment>/` (Customer Proxy sandboxes, one per acceptance
-environment), `presentation/<story>/`
-(what the Integration Tester presents to the Customer Proxy: see
-"Presentation"), `api-key` (default key location).
+environment), `presentation/<story>/<environment>/`
+(what the Integration Tester presents to the Customer Proxy, one dir per
+acceptance environment the story's ACs name: see "Presentation"), `api-key` (default key location).
 
 ### Liaison messages
 
@@ -843,9 +843,47 @@ Each acceptance criterion names its environment in the story file (s94; see
 "Story files"). The name must equal a configured `[[environment]]` `name`
 exactly (no prose, no case folding); `open_story` refuses any other name and
 lists the valid ones. A story's environments are the distinct names of its
-ACs, in config order. Until one proxy step per environment ships (A14c), the
-e2e recipe, the liveness trial, the seeds and the Proxy's sandbox use the
-story's **first** environment in config order.
+ACs, in config order. Each is presented and tried on its own (s95, see
+"Acceptance per environment").
+
+### Acceptance per environment
+
+Acceptance is a **round** of Customer Proxy steps, one per environment the
+story's ACs name, one after another in config order (s95, ADR-0051).
+
+- **Which environment.** The round's verdicts so far are `StoryState.tried`
+  (one per environment). A Proxy step tries the first environment in config
+  order with no verdict yet. Its sandbox is prepared from that environment
+  alone, with that environment's presentation copied in, and its prompt
+  gains `## Criteria for this step: acceptance environment <name>`, listing
+  only that environment's ACs with their ids.
+- **The report.** One report, `.team/acceptance/<id>.md`, with one
+  `## Environment: <name>` section per environment. Each step rewrites its
+  own section and keeps the others. A step whose handoff comes back without
+  its section bounces to `acceptance` with a round (`the report … has no
+  section `## Environment: <name>`; …`) and records nothing.
+- **Failed ACs.** On any failure the Proxy hands off `changes_requested`
+  with `"failed_acs": ["AC2", …]` and `next_role`. `failed_acs` must be a
+  list of ids and needs `changes_requested`.
+- **Between environments** the gate's verdict is `next`: the story stays at
+  acceptance, no round is counted, the PO is not woken, and the router runs
+  the next Proxy step. Its brief has no "Previous step" line. Every
+  environment runs, even after one fails.
+- **One verdict.** After the last environment: every environment passed →
+  `pass`. Otherwise one `bounce` (one round) with
+  `acceptance failed in <n> of <total> environments:` and one line per
+  failed environment, `- <name>: <ids or "no AC named">: <summary>`, to the
+  earliest pipeline step the failed steps' `next_role`s name (else
+  `implement`).
+- **A new round** starts whenever the story moves into acceptance (after
+  e2e, rework, a return or an `advance` ruling): `tried` is cleared, so
+  every environment runs again. A `blocked` or `failed` Proxy handoff holds
+  the story and records nothing; after `continue_story` the same environment
+  runs.
+- **Events and snapshot.** A Proxy step's `gate` event adds `environment`,
+  `mark` (`pass`/`fail`) and `failed_acs`. The snapshot's story row adds
+  `environments: [{name, verdict}]` (`verdict` `pass`, `fail` or `""`);
+  the Board and Backlog show one pill per environment.
 
 **The old section name** (s93). Before s93 the section had another name.
 A file that still uses it loads exactly as `[[environment]]`; `config check`
@@ -1000,7 +1038,10 @@ with another status, is a malformed handoff. The unit-tester may add
 `tests` with its code in (see "Back at tests with the code in"). A role on
 a gate fix step may add `"asserts": "<AC or design rule>"` when its fix
 changes what a test asserts (see "Gate fix steps"); a non-string `asserts`
-is a malformed handoff. The Manager adds `"ruling"` (`rescope`,
+is a malformed handoff. The Customer Proxy adds `"failed_acs": ["AC2", …]`
+with status `changes_requested` when criteria fail (s95, see "Acceptance per
+environment"); a non-list, an empty id, or ids with another status is a
+malformed handoff. The Manager adds `"ruling"` (`rescope`,
 `upgrade_model`, `revise_design`, `escalate`, `advance`), optionally
 `"ruling_reason": "<why>"` (a string; it defaults to the summary and is
 logged on the `ruling` event), and may add `"followups":
@@ -1336,8 +1377,8 @@ The agile-team runner follows the rule itself (s71):
 A **setback** is a gate outcome that sends a story back or holds it:
 `bounce`, `return`, `hold` or `route` (s92; it stays at its step, so the
 backstop does not count it), including a gated role's malformed handoff
-(which now logs a `gate` event like any bounce). Passes and test disputes
-are not setbacks. For each setback the runner records, on the story's
+(which now logs a `gate` event like any bounce). Passes, test disputes and
+`next` (between acceptance environments, s95) are not setbacks. For each setback the runner records, on the story's
 `streak` in `state.json`: step, step sent to, role, verdict, `author`
 (`role` when the reason is a role's handoff, `runner` when the runner's own
 gate, return or hold wrote it), the reason, the event id and a **key**:
@@ -1586,16 +1627,23 @@ The Integration Tester presents each story to the Customer Proxy; the Proxy
 never builds or repairs an environment (a broken one is `changes_requested`
 to `integration-tester`).
 
-- Before each integration-tester step the runner creates
-  `.team/run/presentation/<story>/` if it is missing and, for every
-  environment kind but `manual`, `workspace/` in it as a git repo (`git init`, only when
-  `workspace/.git` is missing). It never wipes them (s65): the presentation
-  survives a bounce from acceptance back to e2e, and only the tester
-  replaces what is in it.
+- **One presentation per acceptance environment** (s95). Before each
+  integration-tester step the runner creates, for every environment the
+  story's ACs name, `.team/run/presentation/<story>/<environment>/` if it is
+  missing and, for every environment kind but `manual`, `workspace/` in it
+  as a git repo (`git init`, only when `workspace/.git` is missing), with
+  that environment's seeds. It never wipes them (s65): the presentations
+  survive a bounce from acceptance back to e2e, and only the tester
+  replaces what is in them. The tester's prompt gains
+  `## Presentations to build`, one line per environment:
+  `- <name> (<kind>): .team/run/presentation/<story>/<name>/ (<AC ids>)`.
+  Each guide covers only that environment's ACs. A story from before s95
+  with one flat presentation goes back to e2e once, without a round.
 - **Git stays in the workspace** (s65). The integration-tester (step `e2e`)
   and the Customer Proxy (step `acceptance`) are *confined*, per the
   `dispatch.GIT_CONFINED` table. Their workspace is the story's
-  `workspace/` for the tester, and the Proxy's copy
+  presentation dir `.team/run/presentation/<story>/` for the tester (so git
+  reaches every environment's `workspace/`; s95), and the Proxy's copy
   `<sandbox>/presentation/workspace` for the Proxy. Their Bash runs with
   `GIT_CEILING_DIRECTORIES=<.team/run, resolved>`, so git in a directory
   with no `.git` below the run dir says "not a git repository" instead of
@@ -1630,12 +1678,24 @@ to `integration-tester`).
   files the story changed (prompts, docs, designs) into `workspace/` under
   their repo paths, and the guide says for each AC which file and section
   shows it.
-- Complete = `PRESENTATION.md` is not blank and, except for `manual`,
-  `workspace/` holds something besides `.git`. Otherwise the e2e gate
-  bounces with `story sN has no presentation: <path> is missing or empty`.
+- Complete = in every environment's dir, `PRESENTATION.md` is not blank
+  and, except for `manual`, `workspace/` holds something besides `.git` and
+  the seed files: the demo or evidence files themselves. Otherwise the e2e
+  gate bounces (one round) with one line per incomplete environment (s95,
+  s91), each
+  `story sN has no presentation for acceptance environment '<name>': <gap>`,
+  where `<gap>` is the first of:
+  `<dir>/PRESENTATION.md is missing or empty; write the customer's guide there`,
+  `<dir>/workspace is missing; put the demo or evidence files the customer tries there`,
+  `<dir>/workspace is empty; …`, or
+  `<dir>/workspace holds only .git; add the demo or evidence files themselves, for example <dir>/workspace/DEMO.md`
+  (seed files present are listed after `.git`).
 - **Up and answering** (s26). Each kind's row in `presentation.PRESENTATIONS`
   says whether its check is `files` or `service`; only `web` is `service`.
-  For a service, once the files are complete, the e2e gate runs a trial: it
+  For a service, once the files are complete, the e2e gate runs a trial
+  for each `web` environment in config order, one at a time, and the first
+  that fails decides; a `manual` or other files-only environment never
+  starts anything. Each trial
   prepares the sandbox exactly as for the Proxy (presentation copied in),
   starts the environment's `prepare` in the background, and probes
   `url` + `probe` every 0.25 s for up to 30 s. It passes (`presentation
@@ -1647,7 +1707,8 @@ to `integration-tester`).
   its output. A port that another process holds puts the gate on **hold**
   (no round, the PO gets a `gate_hold` hand-over):
   `acceptance environment '<name>' cannot start: <host>:<port> is already in use by a process the runner did not start; stop it or change the environment's url`.
-- For the Proxy step the runner copies the dir to `<sandbox>/presentation/`
+- For the Proxy step the runner copies the step's environment's dir (only
+  that one) to `<sandbox>/presentation/`
   (symlinks kept as links) **before** the environment's `prepare` runs, so a
   `web` prepare can serve `{sandbox}/presentation/workspace`. A `web`
   service is started and probed the same way before the Proxy starts. The
@@ -2021,8 +2082,8 @@ snapshot's story `environment` (a string) is the story's environments joined
 by `", "` in config order (`"cli, dashboard"`), or `""` when the file has
 problems.
 
-**Limit until A14c.** A story whose ACs name two environments is presented and
-tried in the first one, in config order, only.
+**Every environment is tried** (s95). A story whose ACs name two environments
+is presented and tried in both; see "Acceptance per environment".
 
 ## Story dependencies
 

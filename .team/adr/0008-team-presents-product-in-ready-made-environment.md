@@ -70,6 +70,17 @@ The runner enforces a three-layer handoff in code:
 - s9+ (Save partial edits): presentation location is separate from run state; no conflict
 - Future deliveries (harness, manual, library, web): use PRESENTATIONS table and recipe pattern from design
 
+## Amended by s95 (2026-10-13)
+
+- A story has one presentation **per acceptance environment** its ACs name:
+  `.team/run/presentation/<story>/<environment>/` with `PRESENTATION.md` and (except
+  `manual`) `workspace/`. The story dir holds only these.
+- The e2e gate checks every one and names each gap with its environment and the file it
+  expected; a workspace that holds only `.git` says so (s91). Each `web` one is tried in turn.
+- The Proxy step for an environment gets only that environment's dir copied into its sandbox
+  (same layout inside the sandbox as before). See ADR-0051 for the round of Proxy steps.
+- The integration-tester's git is confined to the story dir, so it reaches every workspace.
+
 ## Design reference
 
 - Story: `.team/stories/s13.md`

@@ -121,8 +121,12 @@ acceptance:
 ---
 ```
 
-A story whose criteria name two environments touches both. (For now the
-Customer Proxy tries it in the first of them, in the order of your config.)
+A story whose criteria name two environments touches both, and the Customer
+Proxy tries it in both, one after the other in the order of your config.
+Each try sees only that environment's criteria. Every environment runs even
+when an earlier one fails; the story passes only when all pass, and
+otherwise goes back once, naming every failed environment and criterion.
+After the fix, every environment is tried again.
 The runner refuses to open a story whose file has a missing or unknown
 environment, a missing or repeated criterion id, or YAML it can't read; the
 refusal names the file, the criterion and the problem. To move a criterion

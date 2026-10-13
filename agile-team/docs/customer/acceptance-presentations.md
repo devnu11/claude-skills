@@ -8,25 +8,44 @@ sets anything up itself.
 
 ## Where to find it
 
-For story `s4`:
+A story gets one presentation per acceptance environment its criteria name.
+For story `s4` with criteria in `cli` and `dashboard`:
 
 | Path | What it is |
 |---|---|
-| `.team/run/presentation/s4/PRESENTATION.md` | What to try for each acceptance criterion, and what you should see |
-| `.team/run/presentation/s4/workspace/` | A ready-made project (its own git repo). For this runner, `agile-team init` has already run in it, and it holds the run files the story needs |
-| `.team/run/presentation/s4/live-status.json` | When a criterion needs a live run: the real `agile-team status` output of that run |
-| `.team/acceptance/s4.md` | The Customer Proxy's report: each criterion, what it did, pass or fail |
+| `.team/run/presentation/s4/cli/PRESENTATION.md` | What to try for each `cli` criterion, and what you should see |
+| `.team/run/presentation/s4/cli/workspace/` | A ready-made project (its own git repo) holding the demo or evidence files themselves. For this runner, `agile-team init` has already run in it, and it holds the run files the story needs |
+| `.team/run/presentation/s4/cli/live-status.json` | When a criterion needs a live run: the real `agile-team status` output of that run |
+| `.team/run/presentation/s4/dashboard/…` | The same for the `dashboard` criteria |
+| `.team/acceptance/s4.md` | The Customer Proxy's report: one `## Environment: <name>` section per environment, each criterion with what it did, pass or fail |
 
 These run files are not committed. The next Integration Tester step on the
 story replaces them.
+
+## One try per environment
+
+The Customer Proxy tries the story once per environment, one after the
+other in the order of your config. Each try gets only that environment's
+presentation and criteria. Every environment is tried even when an earlier
+one fails, so the team gets all the feedback at once. The story passes only
+when every environment passes; otherwise it goes back once, for example:
+
+```text
+acceptance failed in 2 of 2 environments:
+- cli: AC2: export prints no header row
+- dashboard: AC4: the Export button is missing
+```
+
+After the fix, every environment is tried again. The dashboard shows each
+environment as a pill: `cli ✓`, `dashboard ✗`, or plain when not tried yet.
 
 ## Try it yourself
 
 Follow `PRESENTATION.md`. For example, with the runner installed:
 
 ```sh
-agile-team --repo .team/run/presentation/s8/workspace status
-agile-team --repo .team/run/presentation/s4/workspace dashboard --no-open --port 0
+agile-team --repo .team/run/presentation/s8/cli/workspace status
+agile-team --repo .team/run/presentation/s4/dashboard/workspace dashboard --no-open --port 0
 ```
 
 A presentation is self-contained. The Customer Proxy can't read your repo, so
@@ -38,7 +57,7 @@ ruff results, each with its command and exit code).
 
 An acceptance environment is the setup the Customer Proxy uses to try a
 story. Each one is an `[[environment]]` section in `.agile-team.toml`, and
-each story names the one it is tried in (the first one if it names none).
+each acceptance criterion in a story file names the one it is tried in.
 
 **Your repo owns the environments; the skill owns the kinds.** Add as many
 environments as your repo needs, each with its own name, `prepare` command,
@@ -103,9 +122,16 @@ the Proxy's step ends.
 
 ## When a story goes back
 
-- The e2e step does not pass until the presentation exists
-  (`story s4 has no presentation: … is missing or empty`). That counts a
-  round.
+- The e2e step does not pass until every environment's presentation is
+  complete. The reason has one line per missing one, naming the environment
+  and the file it expected, for example:
+
+  ```text
+  story s4 has no presentation for acceptance environment 'cli': .team/run/presentation/s4/cli/workspace holds only .git; add the demo or evidence files themselves, for example .team/run/presentation/s4/cli/workspace/DEMO.md
+  story s4 has no presentation for acceptance environment 'dashboard': .team/run/presentation/s4/dashboard/PRESENTATION.md is missing or empty; write the customer's guide there
+  ```
+
+  A missing workspace says `… is missing; …`. That counts a round.
 - For a web environment, it also does not pass until the service answers. If
   the service fails, the reason quotes its output, for example:
 

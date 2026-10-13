@@ -154,8 +154,13 @@ command fails.
    intentional; do not squash them unless the human asks. A change to
    `.team/po/handoff.md` is the PO renewing its session at a sprint start or
    after a story is done; it is expected. Acceptance is
-   judged on what the Integration Tester presented to the Customer Proxy:
-   `.team/run/presentation/<story>/PRESENTATION.md` and its `workspace/`.
+   judged on what the Integration Tester presented to the Customer Proxy,
+   one presentation per acceptance environment the story's ACs name:
+   `.team/run/presentation/<story>/<environment>/PRESENTATION.md` and its
+   `workspace/`. The Proxy tries each environment in its own step, and
+   `.team/acceptance/<story>.md` has one `## Environment: <name>` section
+   per environment. The story passes only when every environment passes;
+   otherwise it bounces once, naming each failed environment and AC (s95).
    Show these when the human asks how a story was accepted. The workspace
    is kept across rounds. Git in it can't reach the team repo: the runner
    sets `GIT_CEILING_DIRECTORIES` for the tester's and the Proxy's steps,

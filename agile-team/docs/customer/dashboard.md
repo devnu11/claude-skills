@@ -78,8 +78,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
 - **Backlog:** every story that isn't done, in the order the team will take
   them, in two groups: **Current sprint** and **Backlog**. Each row shows
-  its position, id, title, step, status, acceptance environment, and why
-  it is held.
+  its position, id, title, step, status, and why it is held, and one pill
+  per acceptance environment the story's criteria name: `cli ✓` when it
+  passed this round, `dashboard ✗` when it failed, plain when not tried yet
+  (the Board's cards show the same pills).
   Cancelled and held stories are labelled. A story that needs others done
   first shows `depends on s1, s5 (done)`: `(done)` marks a dependency that
   is already finished, and the story won't start until the rest are. A
