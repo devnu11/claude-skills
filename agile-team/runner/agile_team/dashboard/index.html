@@ -922,12 +922,12 @@ function activeNodeId(view) {
   return act ? roleNodeId(view, act.role) : "po";
 }
 
-/** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
 /** The dimmed class: colour only, never opacity (FL1, FL2). */
 function idleClassDef() {
   return `classDef idle fill:${cssVar("--surface-2")},stroke:${cssVar("--grid")},color:${cssVar("--muted")}`;
 }
 
+/** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
 function flowSource(view) {
   const ctx = flowContext(view), stats = ctx.stats, names = ringRoles(view);
   const ids = names.map((n, i) => [n, "r" + i]);
