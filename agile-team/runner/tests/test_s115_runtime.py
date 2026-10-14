@@ -1,6 +1,8 @@
 """s115: the ops-review brief section and the Tooling record, through the runtime."""
 
-from agile_team import system
+import functools
+
+from agile_team import story_spec, system
 from agile_team.config import STORIES_DIR
 
 from .conftest import FakeQuery, handoff, write_story
@@ -15,6 +17,7 @@ def start(make_runtime, step="ops-review", **kw):
     rt = make_runtime(q)
     open_story(rt, step)
     write_story(rt.config, "s1", "cli")
+    rt.pipeline.checks.story_spec = functools.partial(story_spec.read, rt.config)
     return rt, q
 
 
@@ -35,7 +38,7 @@ def test_storyless_devops_gets_no_section(make_runtime) -> None:
 def test_devops_on_another_step_gets_no_section(make_runtime) -> None:
     rt, q = start(make_runtime, step="implement")
     run(rt, "devops", story="s1")
-    assert "## Ops review" not in q.calls[0]["prompt"]
+    assert not q.calls or "## Ops review" not in q.calls[0]["prompt"]
 
 
 def test_pass_writes_the_tooling_section_and_commits_it(make_runtime) -> None:

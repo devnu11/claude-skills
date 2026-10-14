@@ -180,7 +180,7 @@ def test_added_row_passes() -> None:
 
 def test_missing_with_known_story_passes() -> None:
     h = hand(tooling=[AUTO, {**AUTO, "ac": "AC2"}, MISSING])
-    assert evaluate(h).verdict is Verdict.PASS
+    assert evaluate(h, files=(".team/stories/s130.md",)).verdict is Verdict.PASS
 
 
 def test_missing_without_story_holds() -> None:
