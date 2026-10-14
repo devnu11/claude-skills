@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import stat
 
+from agile_team import system
 from agile_team.boundary import StackEntry
-from agile_team.ci import CiVerdict, CiWatch
+from agile_team.ci import CiVerdict, CiWatch, label, rerun_due, rerun_key
 from agile_team.upstream import GhPrs, command_runner
 
 STUB = """#!/bin/sh
@@ -48,3 +49,39 @@ def test_stub_gh_red_ci_gives_failing_lines(tmp_path, monkeypatch):
     assert any(
         c.startswith("pr checks 7 --required --json name,state,bucket,link,workflow") for c in calls
     )
+
+
+INFRA_STUB = STUB.replace('"steps":[{"name":"run","conclusion":"failure"}]', '"steps":[]') + ""
+INFRA_STUB = INFRA_STUB.replace(
+    "esac",
+    '  "run rerun --job 99") exit 0 ;;\nesac',
+)
+
+
+def test_stub_gh_job_without_steps_is_rerun_once(tmp_path, monkeypatch):
+    """s111 AC4/AC6, REQ-018: a ``steps: []`` job is infra; one real ``run rerun --job`` argv."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    gh = bin_dir / "gh"
+    gh.write_text(INFRA_STUB)
+    gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+    argv = tmp_path / "argv.txt"
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    monkeypatch.setenv("GH_ARGV", str(argv))
+    monkeypatch.setattr(system, "sleep", lambda s: None)
+    entry = StackEntry(
+        1, "review/s1", "a", "b", head="abc", pr=7, url="https://github.com/o/r/pull/7"
+    )
+    watch = CiWatch(GhPrs(command_runner(tmp_path)), 30)
+    [first] = watch.results([entry])
+    assert first.verdict is CiVerdict.INFRA
+    entry.ci = first
+    [(due_entry, check)] = rerun_due([entry])
+    entry.reran.append(rerun_key(due_entry.head, label(check)))
+    watch.rerun(7, check)
+    calls = argv.read_text().splitlines()
+    assert calls.count("run rerun --job 99") == 1
+    [second] = watch.results([entry])
+    entry.ci = second
+    assert second.verdict is CiVerdict.INFRA
+    assert rerun_due([entry]) == []
