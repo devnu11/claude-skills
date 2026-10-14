@@ -1,4 +1,4 @@
-"""s95: acceptance per environment: the round, the verdict, the handoff field (AE6-AE9, AE11, AE14)."""
+"""s95: acceptance per environment: round, verdict, handoff field (AE6-AE9, AE11, AE14)."""
 
 import json
 
