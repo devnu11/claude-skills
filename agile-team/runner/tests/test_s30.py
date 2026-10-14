@@ -37,7 +37,7 @@ def test_the_schema_and_tool_name_exist() -> None:
     assert schema == {"story": str, "reason": str} and "reason is required" in desc
     assert "mcp__team__pass_tests" in po_tools.tool_names()
     keys = list(po_tools.SCHEMAS)
-    assert keys.index("pass_tests") == keys.index("request_cancel") + 1
+    assert keys.index("pass_tests") == keys.index("revert_story") + 1
     assert keys[keys.index("continue_story") + 1 :][:3] == [
         "hold_story",
         "release_story",

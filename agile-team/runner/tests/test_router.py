@@ -586,7 +586,7 @@ def test_a_blocked_step_holds_the_story_until_continue_story(make_runtime) -> No
 def test_the_router_skips_a_held_story_and_runs_the_others(make_runtime) -> None:
     script = Script()
     rt = build(make_runtime, script, steps=["design"])
-    add_story(rt, "s0", sprint=None)
+    add_story(rt, "s0", sprint=None, hold="stopped")  # held: not offered as ready
     add_story(rt, "s1", hold="stopped")
     add_story(rt, "s2")
     p = advance(rt)
@@ -755,7 +755,7 @@ def test_sprint_end_notice_under_sprint_cadence_ends_the_run(make_runtime) -> No
 
     script = Script(po=[finish])
     rt = build(make_runtime, script)
-    add_story(rt)
+    add_story(rt, status=StoryStatus.DONE)
     drive(rt)
     assert step_roles(rt) == []
     assert rt.state.status is RunStatus.SPRINT_END

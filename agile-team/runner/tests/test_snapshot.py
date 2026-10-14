@@ -414,6 +414,7 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "po_hold": None,
         "wait": None,
         "disputes": 0,
+        "reverts": 0,
         "developer": None,
         "commits": ["abc"],
         "files": [],

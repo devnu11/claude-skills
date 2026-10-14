@@ -146,9 +146,10 @@ def test_moves_lists_only_changed_stories_one_based() -> None:
 PREV = PreviousStep("architect", "done", "Asked which")
 
 
-def test_waits_table_has_the_eight_rows_in_order() -> None:
+def test_waits_table_has_the_nine_rows_in_order() -> None:
     assert [r.reason for r in WAITS] == [
         WaitReason.CANCEL_REQUESTED,
+        WaitReason.REVERT_REQUESTED,
         WaitReason.PO_HOLD,
         WaitReason.HUMAN,
         WaitReason.MANAGER,
