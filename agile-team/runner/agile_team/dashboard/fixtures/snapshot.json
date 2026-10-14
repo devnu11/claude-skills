@@ -23,7 +23,8 @@
   "backlog": [
    "s5",
    "s6"
-  ]
+  ],
+  "requirements_dir": "docs/requirements"
  },
  "pipeline": [
   "design",

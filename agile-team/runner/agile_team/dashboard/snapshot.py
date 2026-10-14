@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -30,7 +30,7 @@ from .. import (
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
-from ..config import Config, ConfigError, config_path
+from ..config import REQUIREMENTS_DIR, Config, ConfigError, config_path
 from ..events import EVENTS
 from ..gates import FINISHED, STEP_ROLES
 from ..ledger import LEDGER, Entry, corrected
@@ -168,6 +168,7 @@ def _run(files: RunFiles) -> dict[str, Any]:
         "order": _priority(files).queue(state.stories.values()),
         "order_version": view.version,
         "backlog": view.backlog,
+        "requirements_dir": (PurePosixPath(config.team.docs_dir) / REQUIREMENTS_DIR).as_posix(),
     }
 
 

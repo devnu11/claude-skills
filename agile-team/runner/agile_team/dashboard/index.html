@@ -260,7 +260,6 @@ select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; bo
 .col.empty { flex: 0 0 44px; padding: 8px 4px; }
 .col.empty h3 { writing-mode: vertical-rl; margin: 2px auto; gap: 6px; justify-content: flex-start; }
 .col h3 span { color: var(--muted); font-weight: 500; }
-.col.backlog { background: transparent; border: 1px dashed var(--axis); }
 .story .pill { white-space: normal; }
 .story { overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; }
 .story.working { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -1110,7 +1109,7 @@ function renderTabs(view) {
   const counts = {
     questions: [openQuestions(view).length, true],
     requirements: [view.requirements.length ? coverage(view).filter((c) => !c.reqs.length && c.story.sprint).length : 0, true],
-    board: [view.stories.length, false],
+    board: [boardStories(view).length, false],
   };
   $("#tabs").innerHTML = TABS.map(([id, label]) => {
     const [n, hot] = counts[id] ?? [0, false];
@@ -2272,11 +2271,18 @@ document.addEventListener("drop", (ev) => {
 
 // ----- board ------------------------------------------------------------------
 
+/** Whether story `s` is on the Board: in the current sprint and not cancelled (s121 BD1). */
+const onBoard = (view, s) => s.sprint === view.run.sprint && s.status !== "cancelled";
+
 function boardColumns(view) {
-  const cols = [["backlog", "Backlog", (s) => !s.sprint && s.status !== "done"]];
-  for (const step of view.pipeline) cols.push([step, step, (s) => s.sprint && s.status !== "done" && s.step === step]);
-  cols.push(["done", "Done", (s) => s.status === "done"]);
+  const cols = view.pipeline.map((step) => [step, step, (s) => onBoard(view, s) && s.status !== "done" && s.step === step]);
+  cols.push(["done", "Done", (s) => onBoard(view, s) && s.status === "done"]);
   return cols;
+}
+
+/** The stories the Board renders, so the tab badge equals the cards shown. */
+function boardStories(view) {
+  return boardColumns(view).flatMap(([, , test]) => view.stories.filter(test));
 }
 
 const STACK_TONE = { ready: "good", draft: "", none: "warning", closed: "critical" };
@@ -2689,12 +2695,16 @@ function renderAnswered(view) {
 
 // ----- requirements -----------------------------------------------------------
 
-const REQ_EMPTY = "No requirements yet. The Architect writes them as <code>&lt;docs&gt;/requirements/REQ-NNN.md</code>.";
+/** The one-line message for an empty Requirements tab, with the real path. */
+function reqEmpty(view) {
+  const dir = view.run.requirements_dir || "docs/requirements";
+  return `No requirement files yet. They live in <code>${esc(dir)}/REQ-NNN.md</code>; story s1 introduces them.`;
+}
 
 function renderRequirements(view) {
   const none = !view.requirements.length;
   $("#req-tiles").hidden = $("#matrix-card").hidden = none;
-  if (none) { $("#reqs").innerHTML = `<p class="empty">${REQ_EMPTY}</p>`; return; }
+  if (none) { $("#reqs").innerHTML = `<p class="empty">${reqEmpty(view)}</p>`; return; }
   const cov = coverage(view), reqs = view.requirements;
   const changes = sum(reqs, (r) => r.history.filter((h) => h.change !== "added").length);
   const gaps = cov.filter((c) => !c.reqs.length && c.story.sprint);
