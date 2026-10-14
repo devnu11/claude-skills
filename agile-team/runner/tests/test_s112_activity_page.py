@@ -120,7 +120,8 @@ def test_the_panel_states_and_helpers_exist() -> None:
     )
     for name in names:
         assert f"function {name}(" in PAGE, name
-    for gone in ("runnerResult", "renderPanelHead", "awakeText", "panelMeta", "lp-more", "lp-meta", 'lp-head"'):
+    gone_names = ("runnerResult", "renderPanelHead", "awakeText", "panelMeta")
+    for gone in (*gone_names, "lp-more", "lp-meta", 'lp-head"'):
         assert gone not in PAGE, gone
     assert "CLIP_LINES = 4" in PAGE and "CLIP_CHARS = 400" in PAGE and "CLAMP_LINES = 3" in PAGE
     assert "● Nothing running" in PAGE
