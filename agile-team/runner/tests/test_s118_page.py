@@ -228,7 +228,6 @@ def test_the_text_table_has_every_kind() -> None:
         "live",
         "tool",
         "toolRun",
-        "toolDesc",
         "caption",
         "title",
         "pill",
@@ -238,8 +237,9 @@ def test_the_text_table_has_every_kind() -> None:
     assert flow_text()["name"][0] == 12
 
 
-def test_the_tool_description_text_is_12_px_ink_2() -> None:
-    assert flow_text()["toolDesc"] == (12, "--ink-2")
+def test_the_tool_description_text_kind_is_gone() -> None:
+    assert "toolDesc" not in flow_text()
+    assert "fc-tooldesc" not in PAGE
 
 
 def test_every_text_is_at_least_10_px() -> None:

@@ -37,25 +37,25 @@ PLACE = stages.Place("s1", "implement")
 # ----- R3: rates -----
 
 
-def test_rate_buckets_tokens_by_minute_from_start() -> None:
+def test_rate_buckets_tokens_by_ten_seconds_from_start() -> None:
     rate = rates.Rate(100.0)
     rate.add(100.0, 10)
     rate.add(130.0, 5)
     rate.add(165.0, 20)
-    assert rate.series() == [15.0, 20.0]
+    assert rate.series() == [60.0, 0.0, 0.0, 30.0, 0.0, 0.0, 120.0]
 
 
-def test_rate_before_start_lands_in_minute_zero() -> None:
+def test_rate_before_start_lands_in_window_zero() -> None:
     rate = rates.Rate(100.0)
     rate.add(90.0, 7)
-    assert rate.series() == [7.0]
+    assert rate.series() == [42.0]
 
 
-def test_rate_fills_quiet_minutes_with_zero() -> None:
+def test_rate_fills_quiet_windows_with_zero() -> None:
     rate = rates.Rate(0.0)
     rate.add(10.0, 4)
     rate.add(190.0, 9)
-    assert rate.series() == [4.0, 0.0, 0.0, 9.0]
+    assert rate.series() == [0.0, 24.0] + [0.0] * 17 + [54.0]
 
 
 def test_rate_with_nothing_is_empty() -> None:
@@ -64,9 +64,9 @@ def test_rate_with_nothing_is_empty() -> None:
 
 def test_rate_series_is_rounded_to_one_decimal_through_squeeze() -> None:
     rate = rates.Rate(0.0)
-    for minute in range(3):
-        rate.add(minute * 60.0, 1)
-    assert rate.series() == [1.0, 1.0, 1.0]
+    for at in (0.0, 10.0, 20.0):
+        rate.add(at, 1)
+    assert rate.series() == [6.0, 6.0, 6.0]
     assert rates.squeeze([0.0, 0.0, 1.0], 2) == [0.0, 0.5]
     assert rates.squeeze([1.0, 1.0, 2.0], 2) == [1.0, 1.5]
 

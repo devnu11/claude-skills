@@ -27,6 +27,7 @@ KEYS = [
     "pipeline",
     "step_roles",
     "stage_descriptions",
+    "stage_labels",
     "roles",
     "stories",
     "requirements",
