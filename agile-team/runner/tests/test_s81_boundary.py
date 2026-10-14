@@ -106,13 +106,13 @@ def test_timeout_holds_pending_then_continue_goes_green(env: Env) -> None:
     assert ci.READY_PHRASE in up.report and done_event(env)["ci"] == "green"
 
 
-def test_red_after_continue_is_held_again(env: Env) -> None:
+def test_continue_at_ci_failed_is_refused_and_changes_nothing(env: Env) -> None:
     b = at_ci(env, RED)
     env.drive()
-    call(Tools(env.rt).continue_boundary({"note": "retry"}))
-    assert b.hold is None
-    env.drive()
-    assert b.hold is BoundaryHold.CI_FAILED and env.outcomes()[-1] == "held"
+    seen = len(env.events())
+    out = call(Tools(env.rt).continue_boundary({"note": "retry"}))
+    assert out["status"] == "refused"
+    assert b.hold is BoundaryHold.CI_FAILED and len(env.events()) == seen
 
 
 def test_no_checks_finish_as_none_and_never_call_it_ready(env: Env) -> None:

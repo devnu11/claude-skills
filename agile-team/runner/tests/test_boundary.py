@@ -31,24 +31,26 @@ def test_enum_values() -> None:
         "review-fix",
         "gate-fix",
     ]
-    assert [e.value for e in b.BoundaryHold] == [
+    assert {e.value for e in b.BoundaryHold} == {
         "sync_conflict",
         "escalated",
         "reviewed",
         "push_permission",
         "push_rejected",
         "ci_failed",
+        "ci_infra",
+        "main_broken",
         "ci_pending",
         "error",
         "fix_handover",
-    ]
+    }
     assert [e.value for e in b.FixCase] == ["team_check", "review_check", "review_conflict"]
     assert [e.value for e in b.Permission] == ["unasked", "yes", "no"]
     assert [e.value for e in b.CheckState] == ["unchecked", "pass", "fail"]
     assert {e.value for e in b.BoundaryOutcome} == {
         "skipped", "current", "merged", "rebased", "conflict", "pass", "fail", "escalate", "built",
         "held", "pushed", "local", "error", "done", "continued", "permission", "restacked",
-        "rebuild",
+        "rebuild", "rerun",
     }  # fmt: skip
 
 

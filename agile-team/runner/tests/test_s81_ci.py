@@ -185,6 +185,9 @@ class ScriptedPrs:
         self.calls.append(("log", link))
         return self.logs.get(link, "")
 
+    def job(self, link: str) -> None:
+        return None
+
 
 def entry(pr: int = 14) -> StackEntry:
     return StackEntry(1, "b", "s", "e", head="abc", pr=pr, url=f"https://h/pull/{pr}")
@@ -278,7 +281,7 @@ class Exec:
 
 
 WATCH = ("gh", "pr", "checks", "14", "--watch")
-JSON = ("gh", "pr", "checks", "14", "--json", "name,state,bucket,link,workflow")
+JSON = ("gh", "pr", "checks", "14", "--required", "--json", "name,state,bucket,link,workflow")
 VIEW = ("gh", "run", "view", "--job", "777", "--log-failed")
 
 
@@ -292,12 +295,16 @@ def test_wait_checks_argv_and_result() -> None:
 
 def test_checks_parse_despite_a_failing_exit_code() -> None:
     body = json.dumps([{"name": "u", "bucket": "fail", "link": JOB, "workflow": "CI"}])
-    got = GhPrs(Exec({JSON: (8, body)})).checks(14)
+    ex = Exec({JSON: (8, body)})
+    got = GhPrs(ex).checks(14)
     assert got == [Check("u", Bucket.FAIL, "CI", JOB)]
+    assert "--required" in ex.calls[0][0]
 
 
 def test_checks_none_reported() -> None:
-    assert GhPrs(Exec({JSON: (1, "no checks reported on the 'b' branch")})).checks(14) == []
+    ex = Exec({JSON: (1, "no checks reported on the 'b' branch")})
+    assert GhPrs(ex).checks(14) == []
+    assert len(ex.calls) == 1
 
 
 def test_failed_log() -> None:
