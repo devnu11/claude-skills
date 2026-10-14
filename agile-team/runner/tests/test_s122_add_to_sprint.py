@@ -58,7 +58,7 @@ def test_add_keeps_the_sprint_and_runs_nothing(make_runtime) -> None:
 
 
 def test_add_dedupes_ids_keeping_order(make_runtime) -> None:
-    rt, t = sprint_of(make_runtime, backlog=("s2", "s3"))
+    _, t = sprint_of(make_runtime, backlog=("s2", "s3"))
     out = add(t, ["s3", "s2", "s3"])
     assert out["stories"] == ["s3", "s2"]
 
@@ -79,7 +79,7 @@ def test_placement_puts_ids_first_but_started_stories_stay_first(make_runtime) -
 
 
 def test_listed_ids_go_first_in_the_order_given(make_runtime) -> None:
-    rt, t = sprint_of(make_runtime, backlog=("s2", "s3"))
+    _, t = sprint_of(make_runtime, backlog=("s2", "s3"))
     out = add(t, ["s3", "s2"])
     assert out["order"][:2] == ["s3", "s2"]
 
@@ -168,9 +168,8 @@ def with_dependency(make_runtime):
 
 def test_refused_for_an_unmet_dependency(make_runtime) -> None:
     rt, t = with_dependency(make_runtime)
-    refused(
-        rt, t, {"stories": ["s2"], "reason": "w"}, dependencies.UNMET.format(pairs="s2 on s4")
-    )
+    text = dependencies.UNMET.format(pairs="s2 on s4")
+    refused(rt, t, {"stories": ["s2"], "reason": "w"}, text)
 
 
 def test_a_dependency_in_the_same_call_is_allowed(make_runtime) -> None:
