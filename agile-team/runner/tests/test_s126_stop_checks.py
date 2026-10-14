@@ -487,7 +487,7 @@ def test_a_plan_without_a_hook_has_no_stop_entry(rig: Callable[..., Rig]) -> Non
 
 
 def test_stop_hook_kinds() -> None:
-    assert stop_checks.STOP_HOOK_KINDS == {StepKind.ROLE, StepKind.GATE_FIX}
+    assert {StepKind.ROLE, StepKind.GATE_FIX} == stop_checks.STOP_HOOK_KINDS
 
 
 def test_runtime_plan_attaches_the_hook_to_role_steps_only(rig: Callable[..., Rig]) -> None:
