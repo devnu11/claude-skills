@@ -1,11 +1,1 @@
-{
-  "s120": [
-    "agile-team/runner/tests/test_s120_docs.py::test_readme_mentions_sharing",
-    "agile-team/runner/tests/test_s120_docs.py::test_the_file_describes_the_share_command[skill]",
-    "agile-team/runner/tests/test_s120_docs.py::test_the_file_describes_the_share_command[template]",
-    "agile-team/runner/tests/test_s120_docs.py::test_the_liaison_docs_say_a_changed_file_fails_acceptance[template]",
-    "agile-team/runner/tests/test_s120_gates.py",
-    "agile-team/runner/tests/test_s120_sharer.py",
-    "agile-team/runner/tests/test_s120_shares.py"
-  ]
-}
+{}
