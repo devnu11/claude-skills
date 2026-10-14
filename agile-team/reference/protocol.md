@@ -21,7 +21,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
-| `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command"}`. Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
+| `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
@@ -739,12 +739,19 @@ interrupted). Its box shows the current tokens per minute with the
 sparkline in that colour, and a live line: story, step, awake time, run
 label and the latest tool call. Runner stages that prepare or gate a
 role's step sit in small dashed boxes touching it, above when they run
-before the step and below when after (`name · ↻ runs · time`); the
-checkout checks and during-step tools are left out. Under that line, idle
-or running, each box gives the stage's description, looked up in the
-snapshot's `stage_descriptions` (`stages.STAGES`, then the repo's
-`[[tool]]` rows), and its tooltip is the newest run's command (`detail`).
-A running stage is solid, outlined in its own run colour, with its elapsed time. When it runs
+before the step and below when after, on one centred line
+(`label · ↻ runs · time`, s127); the checkout checks and during-step tools
+are left out. The label is the stage's short label from the snapshot's
+`stage_labels` (`stages.STAGES`, then each repo `[[tool]]` row's `label`
+or name). The tooltip is `name — description` from `stage_descriptions`,
+then `$ command` on a second line (the newest run's `detail`). The
+Leadership group is as wide as its two role boxes and is centred over the
+four groups. A role box's name and meta lines are centred. A running stage
+is solid, outlined in its own run colour, and reads `▶ label · run label`
+with its elapsed time. Under 2 points, an idle role's sparkline row reads
+`last step · too short for a sparkline` when its step-end has a `rate`, and
+`last step · no rate yet` when it has none (`rate` is tokens per minute over
+10-second windows since s127). When it runs
 pytest, the open stage row's `tests` (`passed`, `warned`, `skipped`,
 `failed`, `total`, `points`, `fail_at`) gives the counts so far out of the
 collected total. Pass is a passed test, Warn a test that recorded a
@@ -856,6 +863,7 @@ commands = []                  # harness only: the Proxy's Bash allowlist
 name = "deploy.preview"        # lowercase letters, digits, - _ + and dots; not a built-in name or namespace
 description = "Deploy the branch to the preview site"
 command = "make preview"
+label = "preview deploy"       # optional (s127): the Flow chart's ≤ 24-character label; else the name
 
 [roles.integration-tester]
 enabled = false                # disable a role
@@ -946,7 +954,9 @@ writes neither. A runner from before s93 can't read state saved after it.
 ### Repo tools
 
 `[[tool]]` rows (s99) name a repo's own tools: `name`, `description` and
-`command`, each a non-empty string after strip. Loading refuses the whole
+`command`, each a non-empty string after strip, and an optional `label`
+(s127: the Flow chart's short label; blank or missing means the name).
+Loading refuses the whole
 file (`config check`, `start`, `tools` exit 1) when any row breaks a rule,
 listing every problem `; `-joined, in rule order, then repeats:
 
@@ -956,7 +966,9 @@ listing every problem `; `-joined, in rule order, then repeats:
 | not a built-in stage name, and not in a built-in namespace (`env`, `presentation`, `quality`, `checkout`, `gate`, `boundary`, `runner-tool`, `po`) | `[[tool]] 'gate.mine' clashes with a built-in name; pick another` |
 | description not blank | `[[tool]] 'x' needs a description` |
 | command not blank | `[[tool]] 'x' needs a command` |
+| label at most 24 characters after strip | `[[tool]] 'x' label must be at most 24 characters` |
 | name not repeated | `[[tool]] name 'x' is repeated` |
+| label (or the name, without one) not repeated, and not a built-in stage's label | `[[tool]] label 'x' is repeated` |
 
 DevOps owns `[[tool]]` as it owns `[toolchain]` and `[[environment]]`: a role's
 config edit touching only those sections is kept, any other is quarantined.
@@ -1296,8 +1308,10 @@ The work the runner does itself (gates, quality checks, checkout checks,
 environment preparation, presentation lay-out and trial, boundary stages,
 runner tools) is a table of named stages, `stages.STAGES`. Run
 `agile-team tools` for the list; this page does not repeat it. Each row has
-a `name` (`<namespace>.<stage>`, e.g. `gate.tests+coverage`), a
-`description`, `when` and `attach`:
+a `name` (`<namespace>.<stage>`, e.g. `gate.tests+coverage`), a `label`
+(s127: what it runs in at most 24 characters, unique, e.g.
+`pytest + coverage`; the Flow chart shows it), a `description`, `when` and
+`attach`:
 
 - `when`: `before` (runs before the step it attaches to, or before a
   sprint), `after` (after the step, or closing a sprint), or `during` (a

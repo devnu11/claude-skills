@@ -67,3 +67,29 @@ which cancelled any moving dot. The human approved a hand-laid HTML mock
   on what (design s118 R12).
 - **Consequence.** The `tools` command and the live panel show the
   rewritten descriptions too, since all of them read `stages.STAGES`.
+
+## Amended by s127 (2026-10-14)
+
+Design: `agile-team/docs/design/s127.md`.
+
+- **A tool box is one line.** The description line of round 3 goes. Its
+  room made the chart much taller than the approved mock. A box shows a
+  short label instead: `label · ↻ runs · time` when idle, and
+  `▶ label · run label` with the time while running. The tooltip now
+  carries the rest: `name — description`, then `$ command` (the newest
+  run's) on a second line. Every tool box has a tooltip.
+- **Labels are data.** The snapshot gains `stage_labels`, `{name: label}`,
+  right after `stage_descriptions`: the built-ins from `stages.STAGES`
+  (ADR-0048, amended by s127), then each repo `[[tool]]` row's label, or
+  its name when it has none. The page falls back to the stage name when a
+  label is missing.
+- **Leadership fits its content.** It is centred over the four groups
+  (the top row is a `1fr auto 1fr` grid), and its role cells are
+  `--group-min` minus a group's borders and padding wide. So the Product
+  Owner's box is never wider than a stage group's.
+- **Rate windows are 10 seconds.** `rates.Rate` buckets by 10 s and scales
+  each window by 6, so the series is still tokens per minute. Most steps
+  are shorter than a minute, and per-minute buckets gave them one point,
+  so no sparkline. Older events keep their per-minute series, which reads
+  the same. A series under 2 points says `too short for a sparkline` when
+  the event has a `rate`, and `no rate yet` when it has none.

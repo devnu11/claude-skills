@@ -129,7 +129,11 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   Product Owner hands out every step.
   Each role's box shows its name, model, tokens, dollars and awake time,
   how often its work bounced, a bar of model time against tool time, and a
-  small chart of tokens per minute over its latest step.
+  small chart of tokens per minute over its latest step, taken every 10
+  seconds. A step too short for a chart reads `too short for a sparkline`.
+  A step from before the runner kept rates reads `no rate yet`. The role
+  names and their numbers are centred in their boxes, and Leadership sits
+  centred over the four groups.
   - **Working now:** the role at work is outlined green on its first run of
     a step, violet on the first re-run and amber after that, and so is its
     group. Its box shows its tokens per minute now and a live line: story,
@@ -137,12 +141,13 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
     measured by the wall clock reads `(may include sleep)` after it.
   - **Runner tools:** the runner's own checks sit in small dashed boxes
     touching the role they serve, above it when they run before its step
-    and below it when after, with `↻` runs and time. A second line says
-    what the tool checks and on what, for example `Implement gate: the
-    full suite with coverage, once; every test must pass and coverage must
-    meet the threshold`. Your own `[[tool]]` rows use their description.
-    Hover over a box to see the command its latest run used. The one
-    running now is solid, with its time. While pytest runs you see a bar of Pass (green),
+    and below it when after. Each box is one line: what it runs in a few
+    words, then `↻` runs and time, for example
+    `pytest + coverage · ↻ 3 · 4.2m`. Your own `[[tool]]` rows show their
+    `label`, or their name without one. Hover over a box to see the
+    stage's name and what it checks, and on the next line the command its
+    latest run used (`$ uv run pytest …`). The one running now is solid and
+    reads `▶ pytest + coverage · first run` with its time. While pytest runs you see a bar of Pass (green),
     Warn (yellow: tests that raised a warning), Skip (grey: skipped and
     expected failures) and Fail (red) so far, a caption such as
     `273 Pass + 32 Warn + 4 Skip + 9 Fail / 506 Total` with empty

@@ -64,6 +64,20 @@ gains `current()`; it stays pure. Why: the Flow chart shows a running test
 command's counts live (s118 AC6). The closing `runner-stage` event is
 unchanged and the heartbeat version stays 2.
 
+## Amended by s127 (2026-10-14)
+
+A stage row gains a `label`, its second field: what the stage runs, in at
+most `stages.LABEL_MAX` (24) characters, unique across the table
+(`stages.LABELS`). A test pins the table and fails on a missing, long or
+repeated label. A repo `[[tool]]` row may give an optional `label`.
+Without one, its name is its label (`config.Tool.chart_label`). Loading
+refuses a label over 24 characters, and one that repeats another row's or
+a built-in's. The `tools` command prints `label` in both lists. Why: the
+Flow chart's tool boxes must be one line (ADR-0052, amended by s127), and
+the stage name is not a description. Like the description, the label lives
+in Python only, and the page reads it from the snapshot. Events don't
+change.
+
 ## References
 
 - Design: `agile-team/docs/design/s99.md` (RS1–RS14, stage table, test checklist)

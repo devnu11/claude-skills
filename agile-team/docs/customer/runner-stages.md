@@ -16,10 +16,11 @@ agile-team tools
 This prints one JSON object:
 
 ```json
-{"built_in": [{"name": "env.prepare", "description": "Prepare the acceptance environment …",
+{"built_in": [{"name": "env.prepare", "label": "env prepare",
+               "description": "Prepare the acceptance environment …",
                "when": "before", "attach": "step"}, …],
  "repo": [{"name": "deploy.preview", "description": "Deploy the branch to the preview site",
-           "command": "make preview"}]}
+           "command": "make preview", "label": "preview deploy"}]}
 ```
 
 - `when` is `before` (the stage runs before a step or a sprint), `after`
@@ -65,9 +66,14 @@ Add `[[tool]]` rows to `.agile-team.toml`. DevOps owns them, as it owns
 name = "deploy.preview"
 description = "Deploy the branch to the preview site"
 command = "make preview"
+label = "preview deploy"
 ```
 
 - `name`: lowercase letters, digits, `-`, `_`, `+` and dots.
+- `label` (optional): what the Flow chart's tool box says, in at most 24
+  characters. Without it, the box shows the name. Each label appears once,
+  and it can't be the label of a built-in stage (`agile-team tools` lists
+  them).
 - It must not be a built-in stage or start with a built-in namespace
   (`env`, `presentation`, `quality`, `checkout`, `gate`, `boundary`,
   `runner-tool`, `po`).
