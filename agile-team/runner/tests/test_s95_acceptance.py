@@ -219,3 +219,9 @@ def test_failed_acs_needs_changes_requested() -> None:
 def test_handoff_report_omits_empty_failed_acs() -> None:
     assert "failed_acs" not in handoff_report(Handoff("done"))
     assert "failed_acs" in handoff_report(Handoff("changes_requested", failed_acs=["AC1"]))
+
+
+def test_brief_section_indents_a_multi_line_acs_continuation_lines() -> None:
+    spec = Spec("s1", "T", (Criterion("AC2", "First line\n- sub one\n- sub two", "cli"),))
+    text = acceptance.brief_section(spec, "cli")
+    assert "- AC2: First line\n  - sub one\n  - sub two" in text
