@@ -1,7 +1,12 @@
+"""Unit tests for ``compaction``: token estimates and the eviction split."""
+
 from __future__ import annotations
 
+import pytest
 from group_chat.compaction import estimate_tokens, split, summary_prompt, turns_tokens
 from group_chat.state import Turn
+
+pytestmark = pytest.mark.unit
 
 
 def turns(n: int, size: int = 40) -> list[Turn]:
@@ -37,3 +42,39 @@ def test_summary_prompt() -> None:
     text = summary_prompt("", [Turn("po", "hi")])
     assert "(none)" in text
     assert "@po: hi" in text
+
+
+def test_keep_at_least_len_turns_evicts_nothing() -> None:
+    history = turns(3)
+    assert split(history, 0, 3) == ([], history)
+    assert split(history, 0, 10) == ([], history)
+
+
+def test_budget_exactly_met_evicts_nothing() -> None:
+    history = turns(4)
+    assert split(history, turns_tokens(history), 0) == ([], history)
+
+
+def test_budget_one_short_evicts_one() -> None:
+    history = turns(4)
+    evicted, kept = split(history, turns_tokens(history) - 1, 0)
+    assert evicted == history[:1]
+    assert kept == history[1:]
+
+
+def test_keep_zero_can_evict_everything() -> None:
+    history = turns(3)
+    assert split(history, 0, 0) == (history, [])
+
+
+def test_split_empty() -> None:
+    assert split([], 0, 4) == ([], [])
+
+
+def test_turns_tokens_counts_rendered_speaker() -> None:
+    assert turns_tokens([Turn("po", "")]) == estimate_tokens("@po: ")
+
+
+def test_summary_prompt_carries_earlier_summary_and_order() -> None:
+    text = summary_prompt("old", [Turn("po", "a"), Turn("manager", "b")])
+    assert text.index("old") < text.index("@po: a") < text.index("@manager: b")

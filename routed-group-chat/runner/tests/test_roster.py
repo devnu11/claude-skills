@@ -1,9 +1,13 @@
+"""Unit tests for ``roster``: loading and validating roster TOML."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 from group_chat.roster import Role, Roster, RosterError, load, parse
+
+pytestmark = pytest.mark.unit
 
 
 def role(**fields: object) -> dict[str, object]:
@@ -69,3 +73,59 @@ def test_get_unknown_role(roster: Roster) -> None:
 def test_example_roster_is_valid() -> None:
     example = Path(__file__).parents[2] / "examples" / "leadership.toml"
     assert load(example).names() == ("liaison", "manager", "po", "proxy")
+
+
+def test_title_and_model_are_kept() -> None:
+    parsed = parse({"role": [role(title="Boss", model="opus")]}, Path())
+    assert parsed.roles[0] == Role("manager", "Boss", "p", "opus")
+
+
+def test_non_string_title_is_stringified() -> None:
+    assert parse({"role": [role(title=7)]}, Path()).roles[0].title == "7"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG: a non-string model is accepted, not rejected on load")
+def test_non_string_model_is_rejected() -> None:
+    with pytest.raises(RosterError):
+        parse({"role": [role(model=3)]}, Path())
+
+
+@pytest.mark.xfail(strict=True, reason="BUG: NAME_RE uses $, so a trailing newline passes")
+def test_name_with_trailing_newline_is_rejected() -> None:
+    with pytest.raises(RosterError):
+        parse({"role": [role(name="po\n")]}, Path())
+
+
+@pytest.mark.parametrize("name", ["a", "a" * 32, "qa-2", "x9"])
+def test_valid_names(name: str) -> None:
+    assert parse({"role": [role(name=name)]}, Path()).names() == (name,)
+
+
+@pytest.mark.parametrize("name", ["a" * 33, "2a", "-a", "a_b", "", "orchestrator"])
+def test_invalid_names(name: str) -> None:
+    with pytest.raises(RosterError):
+        parse({"role": [role(name=name)]}, Path())
+
+
+def test_prompt_is_stripped() -> None:
+    assert parse({"role": [role(prompt="\n  hi  \n")]}, Path()).roles[0].prompt == "hi"
+
+
+def test_empty_prompt_file(tmp_path: Path) -> None:
+    (tmp_path / "e.md").write_text("\n\n")
+    with pytest.raises(RosterError, match="empty prompt"):
+        parse({"role": [{"name": "a", "prompt_file": "e.md"}]}, tmp_path)
+
+
+def test_role_must_be_array_of_tables() -> None:
+    with pytest.raises(RosterError, match="at least one"):
+        parse({"role": {"name": "a"}}, Path())
+
+
+def test_team_is_stringified() -> None:
+    assert parse({"team": 5, "role": [role()]}, Path()).team == "5"
+
+
+def test_roster_order_is_kept() -> None:
+    data = {"role": [role(name="z"), role(name="a"), role(name="m")]}
+    assert parse(data, Path()).names() == ("z", "a", "m")

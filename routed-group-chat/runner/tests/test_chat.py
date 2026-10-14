@@ -1,3 +1,5 @@
+"""Unit tests for ``chat``: the orchestrator with a scripted backend."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +12,8 @@ from group_chat.roster import Roster
 from group_chat.state import Store, Turn
 
 from .conftest import FakeBackend
+
+pytestmark = pytest.mark.unit
 
 NAMES = ("manager", "po", "liaison")
 
@@ -123,3 +127,80 @@ def test_no_compaction_under_budget(roster: Roster, backend: FakeBackend, tmp_pa
 )
 def test_handoff_of(text: str, expected: str | None) -> None:
     assert handoff_of(text, NAMES, "manager") == expected
+
+
+def test_role_model_is_passed_to_backend(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    make(roster, backend, tmp_path).say("@po hi")
+    assert backend.calls[0].model == "haiku"
+
+
+def test_summary_model_is_used_for_compaction(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    make(roster, backend, tmp_path, recent_tokens=1, keep_turns=0, summary_model="opus").say(
+        "@manager hi"
+    )
+    assert backend.calls[-1].model == "opus"
+
+
+def test_human_handoff_line_does_not_route(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    replies = make(roster, backend, tmp_path).say("@manager hi\nHANDOFF: @po")
+    assert [turn.speaker for turn in replies] == ["manager"]
+
+
+def test_handoff_does_not_change_sticky_addressee(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    backend.replies = {"manager": ["HANDOFF: @po"]}
+    chat = make(roster, backend, tmp_path)
+    chat.say("@manager x")
+    assert chat.store.load().last_addressed == ("manager",)
+
+
+def test_zero_handoffs_records_note(roster: Roster, backend: FakeBackend, tmp_path: Path) -> None:
+    backend.replies = {"manager": ["HANDOFF: @po"]}
+    chat = make(roster, backend, tmp_path, max_handoffs=0)
+    replies = chat.say("@manager x")
+    assert [turn.speaker for turn in replies] == ["manager", "orchestrator"]
+    assert chat.store.load().turns[-1].speaker == "orchestrator"
+
+
+def test_backend_failure_records_nothing(roster: Roster, tmp_path: Path) -> None:
+    class Boom:
+        def complete(self, system: str, prompt: str, model: str | None) -> str:
+            raise RuntimeError("down")
+
+    chat = GroupChat(roster, Boom(), Store(tmp_path / "chat"))
+    with pytest.raises(RuntimeError):
+        chat.say("@po hi")
+    assert not chat.store.path.exists()
+
+
+def test_message_is_stripped(roster: Roster, backend: FakeBackend, tmp_path: Path) -> None:
+    chat = make(roster, backend, tmp_path)
+    chat.say("  @po hi  \n")
+    assert chat.store.load().turns[0] == Turn("human", "@po hi")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("  HANDOFF: @po  ", "po"),
+        ("HANDOFF:@po", "po"),
+        ("HANDOFF: @po\nmore text", "po"),
+        ("HANDOFF: @po @liaison", None),
+    ],
+)
+def test_handoff_of_spacing(text: str, expected: str | None) -> None:
+    assert handoff_of(text, NAMES, "manager") == expected
+
+
+@pytest.mark.xfail(
+    strict=True, reason="BUG: HANDOFF after leading @mentions is ignored; protocol allows it"
+)
+def test_handoff_after_leading_mentions() -> None:
+    assert handoff_of("@po HANDOFF: @liaison", NAMES, "manager") == "liaison"

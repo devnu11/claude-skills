@@ -1,12 +1,17 @@
+"""Unit tests for ``cli``: argument handling and output, with a scripted backend."""
+
 from __future__ import annotations
 
 import io
 from pathlib import Path
 
 import pytest
+from group_chat.backend import BackendError
 from group_chat.cli import Io, main, run
 
 from .conftest import FakeBackend
+
+pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
@@ -79,3 +84,51 @@ def test_main_uses_sys_streams(
     assert "## Decisions" in capsys.readouterr().out
     monkeypatch.setattr("sys.argv", ["group-chat", *args(roster_file, "show")])
     assert main() == 0
+
+
+def test_say_joins_words(roster_file: Path, chat_io: Io, backend: FakeBackend) -> None:
+    run(args(roster_file, "say", "@po", "two", "words"), chat_io)
+    assert "@human: @po two words" in backend.calls[0].prompt
+
+
+def test_backend_error_is_a_usage_error(roster_file: Path) -> None:
+    class Failing:
+        def complete(self, system: str, prompt: str, model: str | None) -> str:
+            raise BackendError("rate limited")
+
+    chat_io = Io(io.StringIO(), io.StringIO(), io.StringIO(), Failing)
+    assert run(args(roster_file, "say", "@po hi"), chat_io) == 2
+    assert "group-chat: rate limited" in err(chat_io)
+
+
+def test_recent_tokens_flag(roster_file: Path, chat_io: Io, backend: FakeBackend) -> None:
+    for word in ("a", "b", "c"):
+        run(args(roster_file, "--recent-tokens", "1", "say", f"@po {word}"), chat_io)
+    assert backend.calls[-1].prompt.startswith("--- EARLIER SUMMARY ---")
+
+
+def test_missing_subcommand_exits_2(roster_file: Path, chat_io: Io) -> None:
+    with pytest.raises(SystemExit) as exc:
+        run(args(roster_file), chat_io)
+    assert exc.value.code == 2
+
+
+def test_log_and_show_on_new_chat(roster_file: Path, chat_io: Io) -> None:
+    assert run(args(roster_file, "log"), chat_io) == 0
+    assert run(args(roster_file, "show"), chat_io) == 0
+    assert out(chat_io).endswith("--- summary ---\n(none)\n\n")
+    assert not (roster_file.parent / "chat").exists()
+
+
+def test_chat_quit_with_spaces(roster_file: Path, backend: FakeBackend) -> None:
+    chat_io = Io(io.StringIO("  /quit  \n@po x\n"), io.StringIO(), io.StringIO(), lambda: backend)
+    assert run(args(roster_file, "chat"), chat_io) == 0
+    assert backend.calls == []
+
+
+@pytest.mark.xfail(strict=True, reason="BUG: corrupt state.json crashes with a traceback")
+def test_corrupt_state_is_a_usage_error(roster_file: Path, chat_io: Io) -> None:
+    chat_dir = roster_file.parent / "chat"
+    chat_dir.mkdir()
+    (chat_dir / "state.json").write_text("{oops")
+    assert run(args(roster_file, "log"), chat_io) == 2

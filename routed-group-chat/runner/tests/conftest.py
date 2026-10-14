@@ -1,14 +1,18 @@
-"""Shared fixtures: a three-role roster and a scripted backend."""
+"""Shared fixtures: a three-role roster, a scripted backend and a CLI harness."""
 
 from __future__ import annotations
 
+import io
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from group_chat.backend import Backend
+from group_chat.cli import Io, run
 from group_chat.roster import Role, Roster
+from group_chat.state import STATE_FILE
 
 ROSTER_TOML = """\
 team = "leadership"
@@ -82,3 +86,40 @@ def backend() -> FakeBackend:
 
 
 MakeBackend = Callable[..., FakeBackend]
+
+
+@dataclass(frozen=True)
+class Result:
+    """What one CLI run returned and printed."""
+
+    code: int
+    out: str
+    err: str
+
+
+@dataclass
+class Cli:
+    """Drives ``group_chat.cli.run`` against one roster and chat directory."""
+
+    roster: Path
+    directory: Path
+    backend: Backend
+
+    def run(self, *argv: str, flags: Sequence[str] = (), stdin: str = "") -> Result:
+        out, err = io.StringIO(), io.StringIO()
+        streams = Io(io.StringIO(stdin), out, err, lambda: self.backend)
+        base = ["--roster", str(self.roster), "--dir", str(self.directory), *flags]
+        code = run([*base, *argv], streams)
+        return Result(code, out.getvalue(), err.getvalue())
+
+    def say(self, message: str, flags: Sequence[str] = ()) -> Result:
+        return self.run("say", message, flags=flags)
+
+    @property
+    def state_file(self) -> Path:
+        return self.directory / STATE_FILE
+
+
+@pytest.fixture
+def cli(roster_file: Path, backend: FakeBackend) -> Cli:
+    return Cli(roster_file, roster_file.parent / "chat", backend)

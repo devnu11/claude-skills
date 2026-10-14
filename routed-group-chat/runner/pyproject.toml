@@ -33,7 +33,12 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = [
+    "unit: one module in isolation, no files beyond tmp_path",
+    "integration: several modules and real files together, only the model faked",
+    "acceptance: user-facing behaviour from SKILL.md and protocol.md, through the CLI",
+]
 
 [tool.coverage.run]
 source = ["group_chat"]

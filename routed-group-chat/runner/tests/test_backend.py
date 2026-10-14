@@ -1,11 +1,21 @@
+"""Unit tests for ``backend``: the Agent SDK call, with ``query`` faked."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ThinkingBlock,
+)
 from group_chat.backend import BackendError, ClaudeBackend, options_for, text_of
+
+pytestmark = pytest.mark.unit
 
 
 def assistant(text: str) -> AssistantMessage:
@@ -72,3 +82,36 @@ def test_empty_reply_raises() -> None:
 
 def test_text_of_ignores_other_messages() -> None:
     assert text_of(result("x")) == ""
+
+
+def test_options_default_model_is_none() -> None:
+    assert options_for("sys", None).model is None
+
+
+def test_text_of_joins_text_blocks_and_skips_thinking() -> None:
+    message = AssistantMessage([TextBlock("a"), ThinkingBlock("hmm", "sig"), TextBlock("b")], "m")
+    assert text_of(message) == "a\nb"
+
+
+def test_last_non_empty_assistant_text_wins() -> None:
+    thinking = AssistantMessage([ThinkingBlock("hmm", "sig")], "m")
+    backend, _ = scripted(assistant("first"), assistant("second"), thinking)
+    assert backend.complete("sys", "hi", None) == "second"
+
+
+def test_system_messages_are_ignored() -> None:
+    backend, _ = scripted(SystemMessage("init", {}), assistant("ok"), result("ok"))
+    assert backend.complete("sys", "hi", None) == "ok"
+
+
+def test_no_messages_raises() -> None:
+    backend, _ = scripted()
+    with pytest.raises(BackendError, match="no text"):
+        backend.complete("sys", "hi", None)
+
+
+def test_query_gets_options_for_role() -> None:
+    backend, seen = scripted(result("x"))
+    backend.complete("the system", "p", "opus")
+    options = seen[0]["options"]
+    assert (options.system_prompt, options.model) == ("the system", "opus")
