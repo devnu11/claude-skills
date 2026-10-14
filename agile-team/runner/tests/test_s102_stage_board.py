@@ -21,6 +21,7 @@ ROW_KEYS = [
     "stage",
     "when",
     "attach",
+    "description",
     "story",
     "step",
     "started_at",
