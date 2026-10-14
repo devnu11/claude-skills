@@ -2049,7 +2049,9 @@ The pass ends at the first step whose report matches a row of the
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 | `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
-| `ci_failed` | the review PR's CI failed; the line names each failing check (workflow / job), its link and its failing test lines. The PO opens a bug story at once, records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint. Only when the lines show the failed job never ran our code may the PO ask for a re-run and `continue_boundary` instead; see the CI rule under **Ready.** |
+| `ci_failed` | the review PR's CI failed where our code ran; the line names each failing check (workflow / job), its failing step, its link and its failing test lines. `continue_boundary` is refused here (s111). The PO opens a bug story at once (or picks an open story that fixes it), records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint; see the CI rule under **Ready.** |
+| `ci_infra` | a CI job ran no step, and still ran none after the runner's one re-run. The PR is NOT ready. The PO tells the human; `continue_boundary` reads the checks again once they re-ran it, or `record_ci_bug` records a story that changes the CI job; see the CI rule under **Ready.** |
+| `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO opens a bug story for main and records it with `record_ci_bug`: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
 | `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again; see the CI rule under **Ready.** |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
@@ -2795,33 +2797,64 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      reruns it (heads already moved rebase as no-ops).
 7. **ci** (s81): for each ready PR in the stack (every PR, s108) the runner runs
    `gh pr checks <n> --watch`, all under one deadline of `[gates]
-   ci_timeout_s` (default 1800 s). It then reads `gh pr checks <n> --json
-   name,state,bucket,link,workflow`. While no checks are reported yet (right
+   ci_timeout_s` (default 1800 s). It then reads `gh pr checks <n> --required --json
+   name,state,bucket,link,workflow`, or every check when the repo marks none as
+   required (s111). While no checks are reported yet (right
    after a push), it looks again every 10 s, at most 12 times. For each
    failing or cancelled Actions check it reads `gh run view --job <id>
    --log-failed` and keeps the failing test lines (pytest `FAILED …` and
    `ERROR …::`, go `--- FAIL:`, `N failed`; at most 20; else the last 10
-   lines). The result is saved per stack entry as `ci` (`pr`, `url`,
+   lines). For each Actions check the runner also reads its job
+   (`gh api repos/{owner}/{repo}/actions/jobs/<id>`: commit and steps) and
+   gives the check a **kind** (s111, `ci_triage.py`):
+   - `stale`: its job ran on another commit than the one the runner
+     pushed. It is ignored, so it counts as not reported yet.
+   - `green`, `skipped`, `pending`: from its bucket.
+   - `ours`: it failed or was cancelled after a step ran (GitHub's `Set up
+     job` and `Complete job` don't count). A failing check with no job is
+     `ours` too.
+   - `infra`: it failed or was cancelled with no step run.
+   - `main`: an `ours` check whose name and failing step also fail on
+     `[upstream] branch`'s head (`gh api …/commits/<branch>/check-runs`,
+     read only when something is `ours`).
+
+   The result is saved per stack entry as `ci` (`pr`, `url`,
    `head`, `verdict`, `checks` with `name`, `workflow`, `bucket`, `link`,
-   `lines`). It is also logged on the stage's `boundary` event (`ci`, `prs`,
-   `checks`, `results`). The verdict is green only when every watched PR
-   is green; one PR with no checks makes it **none**. An empty stack
+   `lines`, `kind`, `step`, `head`). It is also logged on the stage's `boundary` event (`ci`, `prs`,
+   `checks`, `results`). A PR's verdict is the first of red (`ours`), infra,
+   main, pending (`pending`, `stale`, `rerun`) and green among its checks.
+   The boundary's verdict is green only when every watched PR is green, and
+   one PR with no checks makes it **none**. An empty stack
    (every sprint is in main) finishes with that note and no watch. No
    merge is followed at this stage: a PR merged during the wait is handled
    at the next sprint end. Verdicts:
-   - **green** (every check passed or was skipped, at least one passed):
-     the boundary finishes. The PO gets `ci_green` ("ready to merge") and
-     tells the human.
-   - **red** (any check failed or was cancelled, even with others still
-     pending): the boundary is held `ci_failed`. The PO gets the failing
-     checks with job names and test lines, opens a bug story at once,
-     calls `record_ci_bug(story)` and tells the human the PR is NOT ready.
-     `continue_boundary` waits for the checks again, for when the human
-     re-ran them. Only green or a recorded bug story finishes the
-     boundary. A re-run is only for a job that never ran our code; see
-     the CI rule under **Ready.**
-   - **pending** (the deadline passed): held `ci_pending`, naming the
-     running checks. The PR is not ready; `continue_boundary` waits again.
+   - **green** (every check passed on the pushed head or was skipped, at
+     least one passed): the boundary finishes and the sprint is done. The
+     PO gets `ci_green` ("ready to merge") and tells the human. This is
+     the only way a sprint is done: no tool, note or answer can do it.
+   - **red** (a check is `ours`, even with others still pending): the
+     boundary is held `ci_failed`. The PO gets the failing checks with job
+     names, failing steps and test lines. `continue_boundary` is
+     **refused** (it names each job and step, and "flaky" is no reason).
+     The PO opens a bug story at once, or picks an open story that fixes
+     it, calls `record_ci_bug(story)` and tells the human the PR is NOT
+     ready.
+   - **infra** (a check is `infra`): the runner re-runs each such job once
+     for the pushed head (`gh run rerun --job <id>`; the key is kept in the
+     entry's `reran`). It emits a `rerun` boundary event, waits until GitHub
+     shows the new attempt, and reads the checks again on the next tick.
+     A check whose re-run also runs no step holds `ci_infra`.
+     `continue_boundary` reads again with no further re-run, and
+     `record_ci_bug(story)` ends the boundary, not done (`ci: infra`).
+   - **main** (a check is `main`): held `main_broken`. The PO opens a bug
+     story for main and calls `record_ci_bug(story)`, which ends the
+     boundary with `ci: main` and the `Review:` text "Sprint N ended, CI
+     blocked by main …". The sprint is not done and its PR stays unmerged
+     in the stack. The story goes first in the next sprint, and the PR is
+     watched again at the next sprint end.
+   - **pending** (the deadline passed, or a check ran on another commit):
+     held `ci_pending`, naming the running checks. The PR is not ready;
+     `continue_boundary` waits again.
    - **none** (no checks reported, only skipped ones, or no open PR):
      the boundary finishes. The human is told that no CI result exists, and
      the PR is not called ready.
@@ -2872,11 +2905,13 @@ write.
 **PO tools.** `continue_boundary(note)` releases a held boundary. Its stage
 reruns, and the note reaches the next fix brief. After an escalation it
 also resets the streak and rounds. At the `ci` stage it waits for the checks
-again. `set_push_permission(answer)`. `record_ci_bug(story)` works only
-while the boundary is held `ci_failed`, and only for a story that exists
-and is not done. It records the story in `upstream.ci_bug` and finishes the
-boundary with a `done` event (`ci: red`, `story`). The `Review:` text reads
-`checks failed, story sN opened`. While `ci_bug` names a story that is not
+again; at `ci_failed` it is refused (s111). `set_push_permission(answer)`.
+`record_ci_bug(story)` works only while the boundary is held `ci_failed`,
+`ci_infra` or `main_broken`, and only for a story that exists and is not
+done. It records the story in `upstream.ci_bug` and finishes the boundary
+with a `done` event (`ci: red`, `infra` or `main`, `story`), never green.
+The `Review:` text reads `checks failed, story sN opened`, or, at
+`main_broken`, `Sprint N ended, CI blocked by main …`. While `ci_bug` names a story that is not
 done, `start_sprint` is refused unless that story is listed first. The
 sprint that lists it clears `ci_bug`.
 
@@ -2889,11 +2924,14 @@ on GitHub. A re-run counts only when it is green, and only when the failed
 job never ran our code (it was cancelled with no steps run, or no runner
 was available). If a failure could be flakiness in our code, it is a bug
 story, and the sprint is not done. The PO role file states it too (s110):
-on `ci_failed` the PO reads the failing lines first and asks for a re-run
-only when they show `no runner was assigned` or a cancel whose steps never
-started; otherwise it opens the bug story and `record_ci_bug`s it. The
-runner does not check this rule: `continue_boundary` at a `ci_failed` hold
-is not refused, and a re-run that turns green finishes the boundary green.
+on `ci_failed` the PO reads the failing lines first, then opens the bug
+story and `record_ci_bug`s it. Since s111 the runner enforces the rule
+itself. It reads each job's commit and steps from GitHub, and counts a green
+run only on the pushed head. It re-runs, once, a job that never ran a step
+(`no runner was assigned`, or a cancel whose steps never started), and
+refuses `continue_boundary` at `ci_failed`, where our code ran. A failure
+that main's head has too is `main_broken`: the sprint ends as "ended, CI
+blocked by main", not done, and the team carries on.
 
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
 `stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,

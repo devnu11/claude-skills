@@ -238,14 +238,27 @@ command fails.
    shows the **Review stack**. The PO asks the human **once** whether the
    team may push and open PRs; relay it like any question. After the push
    the runner waits for CI on every PR in the stack (`gh pr checks --watch`,
-   up to `[gates] ci_timeout_s`, 30 min by default). The boundary is done
-   only when CI is green or the PO has opened a bug story for the failure.
-   Only a green result says **ready to merge**; tell the human to merge
+   up to `[gates] ci_timeout_s`, 30 min by default). The sprint is done
+   only when every required check has a green run on the commit the
+   runner pushed, and the runner read it from GitHub itself. No note or
+   answer can make it done. Only a green result says **ready to merge**;
+   tell the human to merge
    the bottom PR with **Rebase and merge**. A PR with more than 100
    commits is too big for that button; the report gives the fast-forward
-   command to merge it instead. Red CI comes with the failing jobs
-   and test lines. The PO opens a bug story, records it with
-   `record_ci_bug`, and puts it first in the next sprint. Both red and
+   command to merge it instead. Red CI comes with the failing jobs,
+   steps and test lines, and the runner sorts it out (s111):
+   - **Our code ran and failed** (`ci_failed`): `continue_boundary` is
+     refused. The PO opens a bug story (or picks an open one that fixes
+     it), records it with `record_ci_bug`, and puts it first in the next
+     sprint.
+   - **A job never ran a step**: the runner re-runs it once. If it still
+     never runs, the boundary holds `ci_infra`.
+   - **The same job and step fail on main's head** (`main_broken`): the
+     PO records a bug story for main. The sprint ends as **"ended, CI
+     blocked by main"**: not done, and the PR stays unmerged. The team
+     starts the next sprint, and the PR is checked again at its end.
+
+   The Board's Review stack shows each sprint's CI state. Both red and
    still-running CI mean the PR is **NOT** ready: never relay those as
    ready. **CI rule.** A sprint is done only when a green CI run is
    actually present on GitHub. A re-run counts only when it is green, and

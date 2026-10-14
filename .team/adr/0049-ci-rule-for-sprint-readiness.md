@@ -35,6 +35,14 @@ Decision s53/t53 asked: document a standing CI rule—one that the PO reads with
 
 All three documents (role file, SKILL.md, protocol.md) carry the rule word-for-word so the PO reads it consistently across all references to CI boundaries.
 
+## Amended by s111 (2026-10-14)
+
+The rule is now enforced in code (ADR-0064). `continue_boundary` at `ci_failed` is refused. The
+runner itself re-runs, once, a job that never ran a step. A green run counts only on the pushed
+head. The rule text stays word for word in the three files. The role file's `ci_failed` bullet
+is rewritten (it keeps the phrases `test_s110_ci_rule.py` pins), and gains `ci_infra` and
+`main_broken` bullets.
+
 ## Test coverage
 
 Five tests in `tests/test_s110_ci_rule.py` verify:

@@ -78,6 +78,16 @@ The boundary gains one final stage (`Stage.CI`) after push. It waits for the PR'
 - If draft handling becomes complex, revisit when drafts are introduced as a team pattern.
 - The snapshot currently shows `upstream.boundary.stage`, which will now show `ci`; no contract change.
 
+## Amended by s111 (2026-10-14)
+
+ADR-0064 replaces CI10 and CI11. Verdicts now come from each check's kind (`green`, `stale`,
+`ours`, `infra`, `main`, …), which the runner reads from GitHub's job data, and no longer from
+the bucket alone. `continue_boundary` at `ci_failed` is refused: that hold now means our code ran
+and failed. A job that never ran a step is re-run by the runner once; if it still never runs,
+the boundary holds `ci_infra`. A failure that main's head has too holds `main_broken`, and
+`record_ci_bug` there ends the sprint as "ended, CI blocked by main". `record_ci_bug` works at
+all three holds. A green run counts only on the commit the runner pushed.
+
 ## References
 
 - Story: `.team/stories/s81.md`
