@@ -241,8 +241,7 @@ def test_shared_no_longer_says_your_brief_below() -> None:
 
 
 def test_product_owner_does_not_run_a_scribe() -> None:
-    body = RoleBook.for_repo(Path("/none"), {}).resolve("product-owner").body
-    assert "scribe" not in body.lower()
+    assert not SCRIBE_WORD.search(po_body())
 
 
 # ----- SC11: dashboard -----------------------------------------------------------------
@@ -283,4 +282,5 @@ def test_po_item_5_is_a_capitalised_wrapped_sentence() -> None:
     body = po_body()
     assert "\n   `continue_story` it or `run_role` a step on it yourself. Calling\n" in body
     assert "   `continue_story` also clears" in body
-    assert all(len(line) <= 78 for line in body.splitlines() if "continue_story" in line)
+    item = body.split("\n5. A story in your prompt is held.")[1].split("\n6. ")[0]
+    assert all(len(line) <= 78 for line in item.splitlines())
