@@ -287,11 +287,11 @@ def test_one_update_notice(make_runtime) -> None:
 # ----- R1: refusals --------------------------------------------------------------------
 
 
-def refused(rt, t: Tools, reason: str, **kw) -> None:
+def refused(rt, t: Tools, expected: str, **kw) -> None:
     rt.save()
     before, head, n = snapshot(rt), rt.git.head(), len(rt.relay.messages())
     out = revert(t, **kw)
-    assert out == {"status": "refused", "reason": reason}
+    assert out == {"status": "refused", "reason": expected}
     assert snapshot(rt) == before and rt.git.head() == head and rt.git.reverted == []
     assert len(rt.relay.messages()) == n
 
@@ -362,6 +362,8 @@ def test_refused_when_the_first_commit_is_off_the_branch(make_runtime) -> None:
 def test_a_conflict_changes_nothing(make_runtime) -> None:
     rt, t = setup(make_runtime)
     rt.git.conflict = "conflicts in a.py"
+    rt.settle_po()  # R4 (a) commits the story files first; the conflict leaves it as it is
+    rt.record_checkout()
     refused(rt, t, reverts.REVERT_CONFLICT.format(story="s1", why="conflicts in a.py"))
     assert "story-reverted" not in kinds(rt)
 
