@@ -51,6 +51,7 @@ def test_activity_renders_the_timeline_and_flow_does_not() -> None:
     assert "activity: renderTimeline" in PAGE or "RENDER.activity = renderTimeline" in PAGE
     flow = PAGE.split("function renderFlowTab(")[1].split("\n}")[0]
     assert "renderTimeline" not in flow
+    assert 'class="fc"' in PAGE or "fc-chart" in PAGE.split("function renderFlow(")[1].split("\n}")[0]
 
 
 def test_the_timeline_is_not_height_capped_on_its_tab() -> None:
