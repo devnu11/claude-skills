@@ -105,8 +105,10 @@ rule, update in the same story:
   checked story id in the `story_files.FOLDERS` table (s83). A new route is
   a new row there, documented in the protocol.
 - `index.html` is one vanilla-JS file with no build step. Its only outside
-  URLs are the pinned `mermaid@11.4.1` and `markdown-it@14.1.0` (tested;
-  ADR-0042). Markdown becomes HTML only through `md(text)`, never through
+  URL is the pinned `markdown-it@14.1.0` (tested; ADR-0042; Mermaid went
+  with s118, ADR-0052). Charts are the page's own HTML, CSS and inline SVG;
+  their text sizes and inks come from one table each (`TL_TEXT`,
+  `FLOW_TEXT`), measured in node, and nothing scales them. Markdown becomes HTML only through `md(text)`, never through
   another call to the library. Everything else goes through `esc()`.
   Colours come from the CSS
   tokens in `:root`. Every panel survives a missing or empty snapshot

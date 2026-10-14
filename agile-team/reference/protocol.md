@@ -412,7 +412,7 @@ the runner applies the request between steps.
 
 | Route | Returns |
 |---|---|
-| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for every message body on the Activity and Questions tabs and in the live panel (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead; for Markdown the state row also says `Markdown unavailable: showing plain text`. |
+| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resource is one pinned library from `cdn.jsdelivr.net`: `markdown-it@14.1.0` for every message body on the Activity and Questions tabs and in the live panel (raw HTML shown as text, http(s) links only, no images). If it can't load, the page shows plain text instead and the state row says `Markdown unavailable: showing plain text`. The Flow chart is the page's own HTML and needs nothing from outside. |
 | `GET /fixtures/snapshot.json` | the packaged sample snapshot (`dashboard/fixtures/snapshot.json`) as JSON, no token, so `/?mock&at=end` replays it on a served dashboard (s112) |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
@@ -707,24 +707,52 @@ the answering model (and `configured sonnet, answering opus` when they
 differ), the step's tokens and estimated dollars, the current tool and how
 long it has run, and the time of the last turn.
 
-The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
-It defaults to Story: the active step's story, or another story picked in
-the box beside it. Each role box shows that role's ledger tokens and dollars
-for the scope, and its step time: the summed awake time of its finished
-steps in the scope (snapshot `steps`; time the machine slept is left out). Only used roles are drawn (snapshot
-`roles[].used`; a role without the key is drawn); the Product Owner always
-is. A role's box appears with its first `step-start`. In Story scope a role
-that has not touched the story in focus is dimmed; in Sprint and Run scope
-a role with no data is. Dimming recolours the box (surface fill, grid
-stroke, muted text) and never uses opacity or another compositing style. A
-role with no data in the scope and no open step reads `idle` instead of
-zero stats. The chart is drawn at its natural size (16 px text, Mermaid
-`useMaxWidth: false`) and a wide chart scrolls sideways. A role with an
-open step adds `⏱ running N min` (the time since its start less the
-step's `slept`; ` (may include sleep)` is added for a wall-clock step),
-updated each minute. The active box adds its live rate, sparkline, turn,
-tool and the step's estimate, outlined in the health colour. The Product
-Owner's queries are not steps, so its box shows no time.
+The Flow tab's chart is the page's own HTML, CSS and inline SVG (s118,
+ADR-0052), drawn at real size: nothing scales it, and a window narrower
+than the chart scrolls it sideways. The top row is You ↔ Liaison ↔ a boxed
+Leadership group (the Product Owner and the manager, their boxes on one
+row). Below, four boxed groups run left to right: Design (architect), Test
+(devops, unit-tester), Dev (developer-api, -cli, -gui, developer) and Check
+(quality-czar, code-reviewer, integration-tester, customer-proxy). Any
+other role goes to the group of its pipeline step (snapshot `step_roles`),
+or to Leadership. Groups have one fixed width; the arrows between them
+stretch with the window, each level with the first role box of the group
+it points into. One two-way path runs from Leadership down to each group.
+
+The chart has a **Story / Sprint / Run** toggle, remembered per browser. It
+defaults to Story: the active step's story, or another story picked in the
+box beside it. Every number follows the scope. Each role box shows its
+name; its model, ledger tokens and dollars, and awake time (finished steps,
+sleep left out; the Product Owner's is its turns' model and tool time and
+reads `—` in Story scope); `↩ N bounced`; a model/tool bar (dashed `no
+model/tool timing yet` without data); and a tokens-per-minute sparkline of
+its latest step (`rate` on `step-end` and `po-turn`), grey when idle. Only
+used roles are drawn (`roles[].used`); the Product Owner always is. In
+Story scope a role that has not touched the story is dimmed; in Sprint and
+Run a role with no data is. Dimming recolours the box and never uses
+opacity. A role with no data reads `idle`.
+
+The running role's box and its group take the run colour: green on the
+step's first run, violet on the first re-run, amber after that (earlier
+`step-start`s of the same role, story and step whose run was not
+interrupted). Its box shows the current tokens per minute with the
+sparkline in that colour, and a live line: story, step, awake time, run
+label and the latest tool call. Runner stages that prepare or gate a
+role's step sit in small dashed boxes touching it, above when they run
+before the step and below when after (`name · ↻ runs · time`); the
+checkout checks and during-step tools are left out. A running stage is
+solid, outlined in its own run colour, with its elapsed time; when it runs
+pytest, the runner streams the output and the open stage row's `tests`
+gives Pass (`.`), Warn (`s`, `x`, `X`) and Fail (`F`, `E`) so far out of
+the total, drawn as a bar, a caption such as `273 Pass + 32 Warn + 9 Fail /
+506 Total`, and a `% complete` sparkline that turns red at the first
+failure. An orange dot runs along the arrow when work moves into the next
+group; a red dot runs down the PO path when a gate sends work back. A
+redraw never cancels a dot; reduced motion lights the path instead. Times
+read `6s`, `42.0m`, `1.4h`. **⚙ Show…** hides, separately and per
+browser, tokens, cost, time, bounces, the bar, sparklines, runner tools,
+tool counts and time, and the legend; the role name, model, the running
+step and the running tool always show.
 
 The Tokens tab's measure toggle is **Tokens / Dollars / Time** (one row
 each in the page's `UNITS` table). Time draws "Time by" bars of summed step

@@ -81,6 +81,16 @@ Additionally, the chart was configured for `useMaxWidth: true`, shrinking to the
 - **Geometric layout not unit-tested.** The node harness has no browser. Tests pin the cause (FL1, FL2, FL5, FL6) and the hidden-then-shown rendering path. The customer proxy confirms in a real browser that labels are inside boxes (AC1).
 - **Wide charts scroll.** If a chart doesn't fit the viewport, it scrolls horizontally rather than shrinking. Most dashboards fit, but very wide ones require scrolling.
 
+## Amended by s118 (2026-10-13)
+
+The chart is now HTML (ADR-0052). Still in force: FL1 and FL2 (dimming is
+by colour only, now `.fc-box.dim`, and no compositing style applies
+anywhere in `#flow`), FL3 (structure does not depend on scope), FL4
+(`idle`), FL7 to FL9 (used roles). Replaced: FL5 (Mermaid natural size) by
+s118 FC4 (fixed group width, nothing scaled, sideways scroll), and FL6
+(Mermaid measures text) by FC21 (geometry is measured after each write, on
+resize and when the tab is shown). Why: Mermaid is gone.
+
 ## Related decisions
 
 - **ADR-0027 (s4):** Snapshot raw data contract—this decision adds `used` to `roles[]`; the builder is ≤8 lines.

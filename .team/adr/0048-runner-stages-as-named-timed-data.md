@@ -52,6 +52,18 @@ Python; copying it into the page would duplicate it. The closing
 stays 2 because the key is additive. A row from an older runner has no
 `description`; the page shows an empty line for it.
 
+## Amended by s118 (2026-10-13)
+
+The open stage row gains a last key, `tests`: `null`, or the live test
+counts of the command running in the stage (`passed`, `warned`, `failed`,
+`total`, `points`, `fail_at`; ADR-0053). The key is there from the start so
+the row never changes size while the heartbeat serialises it. `StageBoard`
+gains `refresh()` (rewrite the listing now; `Hidden` does nothing, `Pulse`
+writes). `stages.Run` gains `listeners` and `hear(line)`, and `stages`
+gains `current()`; it stays pure. Why: the Flow chart shows a running test
+command's counts live (s118 AC6). The closing `runner-stage` event is
+unchanged and the heartbeat version stays 2.
+
 ## References
 
 - Design: `agile-team/docs/design/s99.md` (RS1–RS14, stage table, test checklist)

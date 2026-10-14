@@ -116,40 +116,45 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   it only with a stated reason, and the reason shows in the timeline. See
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
   An open row ends with the story's thread (see "Discuss a story").
-- **Flow:** briefs from the Product Owner to each role, handoffs back by
-  status, and questions and answers between the PO and you, drawn as a
-  chart across the full width. You and the customer proxy are in the top row.
-  The Steering box below them holds the Product Owner and the Manager.
-  Under Steering, the roles are grouped as Design, Build, Verify and
-  Support. While the run is live, the role that is working now pulses, and
-  each new brief, handoff, question or answer sends a dot along its arrow.
-  If your system asks for reduced motion, the role glows steadily and the
-  arrow lights up briefly instead.
-  Above the chart, **Story / Sprint / Run** picks what each role's box
-  totals: its tokens, dollars and time on one story, one sprint or the
-  whole run. Tokens and dollars come from the ledger. Time is the awake time
-  of the role's finished steps, shown in h and min: if you close the lid
-  mid-step, the time asleep is left out. The Product Owner's box
-  shows no time, because its queries are not steps. A role that is working
-  now also shows `⏱ running 12 min`, which moves on each minute. Steps
-  recorded before this feature have no awake clock and count their full
-  wall time; a running one says `(may include sleep)`. The page
-  remembers your choice. Story starts on
-  the story being worked on now. Pick another in the box beside the toggle.
-  Roles that have not worked on that story are dimmed: their box turns
-  grey, and its text stays in place. In Sprint and Run, roles with nothing
-  to show are dimmed. A box with no tokens, dollars or time in the scope
-  reads `idle` instead of zeros. The chart shows only the roles your
-  pipeline uses or that have worked in this run; a role's box appears when
-  it starts its first step. The chart keeps its full size, with text as
-  large as the rest of the page; if it is wider than the window, scroll it
-  sideways. The working role's
-  box also shows its tokens per minute, a sparkline, its turn number, the
-  tool it is running and the step's estimated cost so far, outlined in the
-  health colour.
-  The flowchart is drawn by Mermaid, which the page loads from
-  `cdn.jsdelivr.net`. Without internet access it shows the chart's source
-  text instead, and every other tab still works.
+- **Flow:** who is working where, and how work moves, readable at 100 %
+  zoom. The top row is **You ↔ Liaison ↔ Leadership** (the Product Owner
+  and the Manager). Below, four groups run left to right: **Design**
+  (architect), **Test** (DevOps, unit tester), **Dev** (the developers) and
+  **Check** (quality czar, code reviewer, integration tester, customer
+  proxy). A role of your own sits in the group of its pipeline step. A
+  two-way path runs from Leadership down to each group, because the
+  Product Owner hands out every step.
+  Each role's box shows its name, model, tokens, dollars and awake time,
+  how often its work bounced, a bar of model time against tool time, and a
+  small chart of tokens per minute over its latest step.
+  - **Working now:** the role at work is outlined green on its first run of
+    a step, violet on the first re-run and amber after that, and so is its
+    group. Its box shows its tokens per minute now and a live line: story,
+    step, time so far, which run it is and its latest tool call.
+  - **Runner tools:** the runner's own checks sit in small dashed boxes
+    touching the role they serve, above it when they run before its step
+    and below it when after, with `↻` runs and time. The one running now is
+    solid, with its time. While tests run you see a bar of Pass (green),
+    Warn (yellow: skipped or expected failures) and Fail (red) so far, a
+    caption such as `273 Pass + 32 Warn + 9 Fail / 506 Total`, and a
+    `% complete` line that turns red at the first failure.
+  - **Dots:** an orange dot runs along the arrow when work moves on to the
+    next group; a red dot runs down from Leadership when a gate sends work
+    back. If your system asks for reduced motion, the path lights up
+    instead.
+  - **Scope:** above the chart, **Story / Sprint / Run** picks what every
+    number counts: one story, one sprint or the whole run. Story starts on
+    the story being worked on now; pick another in the box beside the
+    toggle. Roles that have not worked on that story turn grey. Time is
+    awake time: if you close the lid mid-step, the time asleep is left out.
+    Times read `6s`, `42.0m` or `1.4h`.
+  - **⚙ Show…** turns off, one by one, tokens, cost, time, bounces, the
+    model/tool bar, the small charts, the runner tools, their counts and
+    time, and the legend. Your browser remembers the choice. The role
+    name, model, the running step and the running tool always show.
+  The chart keeps its real size. If your window is narrower than the chart,
+  scroll it sideways; at 1024 px wide or more it fits. It needs no
+  internet access.
 - **Activity:** the newest 120 events, newest first, across the full
   width: briefs, handoffs, gate results, questions, answers, threads,
   notes, priority changes and sprint boundaries. Each row reads `from →

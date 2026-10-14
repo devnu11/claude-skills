@@ -1,8 +1,16 @@
 # ADR-0003: Mermaid flowchart with role grouping and live indication
 
 **Date:** 2026-10-10  
-**Status:** Accepted  
+**Status:** Superseded by ADR-0052 (s118)  
 **Affected:** Dashboard Flow tab (s5)
+
+## Amended by s118 (2026-10-13)
+
+Superseded. The Flow chart is now HTML and CSS with an SVG overlay
+(ADR-0052); Mermaid, its CDN import and the `L_<from>_<to>` edge lookup go.
+Why: Mermaid's own layout could not give the logical layout the human
+approved, its text was hard to read at real size, and each re-render
+cancelled the moving dots. The rest of this record is history.
 
 ## Context
 
