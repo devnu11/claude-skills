@@ -122,7 +122,10 @@ command fails.
    router follows it. Started stories (with commits) always come first, then
    held started ones, then stories not started. The order ranks stories
    within each group. The PO can pull a not-started story ahead only with a
-   reason, and the pull shows in the timeline. When the human states an
+   reason, and the pull shows in the timeline. The PO adds a story to the
+   running sprint with `add_to_sprint(stories, reason)`. The sprint keeps its
+   number and branch, and no boundary or Manager turn runs. A new
+   `start_sprint` while stories are unfinished needs a reason. When the human states an
    order ("s30 before s29"), relay it to the PO. The board shows each
    story's `#position`. A story that cannot move shows `⏸ <reason>` and what
    it waits on; it keeps its place in the order and runs once it is

@@ -34,8 +34,12 @@ the board always shows what is planned and what is in progress.
 The Product Owner starts each sprint with a goal and the list of stories it
 commits to. The team's Manager then reviews that scope against the budget.
 Unfinished stories that the new sprint does not list go back to the backlog.
-To add a story halfway through, the PO starts a new sprint that lists it
-along with the stories still in progress.
+To add a story halfway through, the PO adds it to the running sprint with
+`add_to_sprint` and a reason. The sprint keeps its number, goal and review
+branch, no Manager turn runs, and the story lines up first among the
+stories not yet started. It joins the sprint's review PR like the others.
+The PO starts a new sprint only when the sprint's stories are done or you
+ask for one. Restarting with unfinished stories needs a reason.
 
 ## The order of work
 

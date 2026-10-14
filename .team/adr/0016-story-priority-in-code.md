@@ -145,3 +145,11 @@ The board shows `#<position>` in the story id line and a wait pill `⏸ <reason>
 - Story: `.team/stories/s40.md`
 - Design: `agile-team/docs/design/s40.md` (rules P1–P10, W1–W2, D1–D5, X1, test checklist)
 - Review: `.team/reviews/s40.md` (round 2 approved, D1 and T1 fixed)
+
+## Amended by s122 (2026-10-14)
+
+`add_to_sprint(stories, reason)` is a fourth source of PO reorders. After
+adding the stories to the current sprint, it applies `prioritise`'s placement
+(the listed ids first, in the order given, `with_first`) with no pull, as one
+`Change.SPRINT` reorder that carries the PO's reason. Started stories still
+rank first. See ADR-0055 and `agile-team/docs/design/s122.md`.

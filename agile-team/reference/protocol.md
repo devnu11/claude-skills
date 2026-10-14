@@ -1994,12 +1994,31 @@ committed to, or `null` when it is in the backlog.
   open them with open_story first`) and changes nothing when it refuses.
   Once those checks pass, it reloads every open story's `depends_on` from
   its file and is refused if the files are bad (see "Story dependencies").
-- The `sprint-start` event carries `{"sprint", "goal", "stories"}`.
+- The `sprint-start` event carries `{"sprint", "goal", "stories"}`, plus
+  `"reason"` when one was given.
 - `run_role` on a backlog story is refused: `story sN is in the backlog; add
   it to a sprint`. The status refusals (done, blocked, round cap) come first.
   `manager` and story-less steps are not affected.
-- A story is in at most one sprint. To carry it over or add it mid-sprint,
-  list it in the next `start_sprint`, which queues the Manager again.
+- A story is in at most one sprint. To carry it over, list it in the next
+  `start_sprint`, which queues the Manager again.
+- `add_to_sprint(stories, reason)` (s122) adds open stories to the running
+  sprint. The sprint keeps its number, goal and review branch. No boundary
+  runs, and no Manager turn or PO renewal is queued. The listed ids go first in
+  the order, in the order given, as `prioritise` places them. It never pulls,
+  so started stories still come first, and the change is logged as a
+  `priority` event (`change: "sprint"`) with the reason. It emits one
+  `sprint-add` event `{"sprint", "stories", "reason"}`. It is refused, with
+  nothing changed, in this order: a pending boundary; no open sprint (none
+  started, or the end boundary has closed it); an empty list or unknown, done
+  or cancelled ids; a story already in the sprint (`already in sprint N:
+  …`); a `depends_on` that is neither done nor in the sprint after the add
+  (`depends_on not done and not in the sprint: s5 on s3; …`); a blank
+  reason. Its stories show on the Board and in the sprint's review PR like
+  the ones the sprint started with.
+- While the current sprint has unfinished stories, `start_sprint` needs a
+  `reason` (`sprint N still has unfinished stories (…); use add_to_sprint to
+  add work, or give a reason for starting a new sprint`). The reason is added
+  to the `sprint-start` event as `"reason"`.
 - `state.json` from before backlogs existed loads every story into the
   backlog. Step, rounds, status and commit are kept. On resume, the runner
   tells the PO that nothing can move, and the PO starts a sprint with the
@@ -2273,6 +2292,9 @@ PO tools:
   order listed, within each group. It never pulls from its list, except for
   the s81 CI bug story, which is pulled. Its reason is the goal (plus `CI
   failed on the pushed code; sN fixes it` for that pull).
+- `add_to_sprint(stories, reason)` puts the added stories first, in the
+  order listed, like `prioritise`. It never pulls (`change: "sprint"`, the
+  PO's reason).
 
 Each change builds the new `order` from the old one, never from the queue,
 so a held story keeps the place the PO gave it, even when the PO reorders
