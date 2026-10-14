@@ -123,6 +123,7 @@ class BoundaryHold(StrEnum):
     CI_FAILED = "ci_failed"
     CI_PENDING = "ci_pending"
     ERROR = "error"
+    FIX_HANDOVER = "fix_handover"
 
 
 class BoundaryOutcome(StrEnum):
@@ -191,7 +192,12 @@ PR_KIND = {
 
 STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI)
 END_ONLY = frozenset(STAGES[2:])
-STALL_HINTS = {BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)"}
+STALL_HINTS = {
+    BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)",
+    BoundaryHold.FIX_HANDOVER: (
+        "answer the devops fix's handover, then continue_boundary(note) to rerun the stage"
+    ),
+}
 FIX_KINDS = {
     FixCase.TEAM_CHECK: StepKind.TEAM_FIX,
     FixCase.REVIEW_CHECK: StepKind.TEAM_FIX,

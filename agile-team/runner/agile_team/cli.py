@@ -377,6 +377,7 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     _recover(config, start)
     _require_preflight(config, place.home)
     runtime = make_runtime(place, query_fn or default_query())
+    runtime.report_load_faults()
     _load_dependencies(runtime)
     runtime.state.cadence = args.cadence or config.team.cadence
     _record_task(runtime.state, start)

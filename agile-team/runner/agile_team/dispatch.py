@@ -373,6 +373,16 @@ class Runtime:
     def save(self) -> None:
         state_mod.save(self.config.run_dir, self.state)
 
+    def report_load_faults(self) -> None:
+        """Emit one run-level ``fault`` event per value dropped at load, then clear and save."""
+        faults = self.state.load_faults
+        if not faults:
+            return
+        for f in faults:
+            self.emit(EventKind.FAULT, fault="state", **asdict(f))
+        self.state.load_faults = []
+        self.save()
+
     def stop_requested(self) -> bool:
         return system.exists(self.config.run_dir / state_mod.STOP_FILE)
 

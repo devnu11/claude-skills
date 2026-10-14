@@ -92,6 +92,11 @@ def fetch_failed(why: str) -> bool:
     return why.startswith(FETCH_PREFIX)
 
 
+def fix_hold(report: dict[str, Any]) -> BoundaryHold | None:
+    """``fix_handover`` when the fix's report raises a handover trigger, else ``None``."""
+    return BoundaryHold.FIX_HANDOVER if handover.triggers(report) else None
+
+
 def boundary_data(runtime: Runtime, b: Boundary | None) -> dict[str, Any]:
     """The fields every boundary event and report carries."""
     if b is None:
@@ -190,7 +195,7 @@ class BoundaryRunner:
         return {"role": BOUNDARY_ROLE, "status": "boundary", "boundary": data}
 
     def after_fix(self, report: dict[str, Any]) -> None:
-        """A devops fix is back: record a conflict resolution, count the round, rerun the stage."""
+        """A devops fix is back: record a conflict resolution, count the round, hold if it handed over, rerun the stage."""
         b = self.runtime.state.boundary
         if b is None or report.get("status") == "halted":
             return
@@ -198,7 +203,7 @@ class BoundaryRunner:
         if failure and failure.case is FixCase.REVIEW_CONFLICT:
             self.rebuilder.record(failure.files)
         b.rounds, b.failure, b.note = b.rounds + 1, None, ""
-        b.hold = handover.hold_reason(report)
+        b.hold = fix_hold(report)
         self.runtime.save()
 
     # ----- events and holds

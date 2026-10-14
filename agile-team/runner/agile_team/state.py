@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import acceptance, system
-from .boundary import Boundary, Failure, StackEntry, UpstreamState
+from .boundary import Boundary, BoundaryHold, Failure, StackEntry, UpstreamState
 from .ci import CiResult
 from .config import OLD_ENVIRONMENT_NAME, PIPELINE_STEPS
 from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, load_dispute
@@ -25,6 +25,8 @@ from .salvage import RUN_ENDING, Cause, InFlight, Interruption
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
 PID_FILE = "runner.pid"
+BOUNDARY_HOLDS = frozenset(BoundaryHold)
+BAD_HOLD = "not a valid BoundaryHold; the hold was dropped"
 
 
 class RunStatus(StrEnum):
@@ -69,6 +71,15 @@ class ModelOverride:
     provider: str = DEFAULT_PROVIDER
 
 
+@dataclass(frozen=True)
+class LoadFault:
+    """A stored value that loading dropped, for one ``fault`` event at start (ADR-0054)."""
+
+    field: str
+    value: str
+    reason: str
+
+
 @dataclass
 class RunState:
     """Everything the runner needs to resume."""
@@ -102,6 +113,7 @@ class RunState:
     told: list[str] = field(default_factory=list)
     unsaved: Cause | None = None
     halt_kind: str | None = None  # the HaltKind value of the halt that set the status (s44)
+    load_faults: list[LoadFault] = field(default_factory=list)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
@@ -152,7 +164,9 @@ class RunState:
             if k not in RETIRED_ROLES
         }
         data["po_cost"] = _nested(SessionCost, data.get("po_cost"))
-        data["boundary"] = _boundary(data.get("boundary"))
+        raw = data.get("boundary")
+        data["load_faults"] = _load_faults(data.get("load_faults"), raw)
+        data["boundary"] = _boundary(raw)
         data["upstream"] = _upstream_state(data.get("upstream"))
         data["in_flight"] = _nested(InFlight, data.get("in_flight"))
         data["interrupted"] = [Interruption(**i) for i in data.get("interrupted", [])]
@@ -204,7 +218,29 @@ def _boundary(data: dict[str, Any] | None) -> Boundary | None:
         return None
     failure = _nested(Failure, data.get("failure"))
     streak = [Setback(**s) for s in data.get("streak", [])]
-    return Boundary(**{**data, "failure": failure, "streak": streak})
+    hold = _known_hold(data.get("hold"))
+    return Boundary(**{**data, "failure": failure, "streak": streak, "hold": hold})
+
+
+def _known_hold(hold: Any) -> str | None:
+    """``hold`` when it is a ``BoundaryHold`` value, else ``None``."""
+    return hold if isinstance(hold, str) and hold in BOUNDARY_HOLDS else None
+
+
+def _bad_hold(data: dict[str, Any] | None) -> list[LoadFault]:
+    """A ``LoadFault`` for a stored boundary hold that is not a ``BoundaryHold``; else ``[]``."""
+    hold = (data or {}).get("hold")
+    if not hold or _known_hold(hold):
+        return []
+    return [LoadFault("boundary.hold", str(hold), BAD_HOLD)]
+
+
+def _load_faults(
+    stored: list[dict[str, Any]] | None, boundary: dict[str, Any] | None
+) -> list[LoadFault]:
+    """The stored load faults plus any new one from ``boundary``, without duplicates."""
+    kept = [LoadFault(**f) for f in stored or []]
+    return kept + [f for f in _bad_hold(boundary) if f not in kept]
 
 
 def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
