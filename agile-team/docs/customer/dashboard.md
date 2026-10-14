@@ -82,8 +82,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   It updates as the run moves. Hover over it for the step's details.
   Click it (or press Enter on it) to open the Activity tab filtered to
   that story.
-- **Board:** a backlog column, one column per pipeline step, and done. The
-  board fits the window, so Done is always in view without scrolling
+- **Board:** the current sprint only: one column per pipeline step, and
+  Done. Backlog stories, earlier sprints and cancelled stories are on the
+  Backlog tab, not here. The tab's count is the number of cards on the
+  Board. The board fits the window, so Done is always in view without scrolling
   sideways. A column with no stories shrinks to a narrow strip with its name
   written vertically, and the columns with stories share the rest. Every
   column lists stories in priority order, and each unfinished card shows its
@@ -209,7 +211,9 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   breaks kept, and the status row says `Markdown unavailable: showing
   plain text`.
 - **Requirements:** each requirement with its status, which acceptance
-  criteria it covers, and its change history with the reasons.
+  criteria it covers, and its change history with the reasons. With no
+  requirement files, the tab says so in one line, and names the directory
+  they go in (`<docs_dir>/requirements/REQ-NNN.md`, from your config).
 
 The page follows your system's light or dark setting. The ◐ button in the
 header switches between automatic, light and dark.

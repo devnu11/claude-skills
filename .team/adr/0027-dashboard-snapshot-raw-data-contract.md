@@ -61,6 +61,16 @@ An alternative is to send only the raw data the UI needs, and let the browser as
 - If the dashboard slows down with a large run, incremental snapshots (send only changed sections) could be added without breaking the contract.
 - Requirements rendering (s1) and other new views will plug into the same snapshot keys.
 
+## Amended by s121 (2026-10-13)
+
+`run` gains `requirements_dir`: the repo-relative requirements directory,
+`<docs_dir>/requirements` in POSIX form. `_run` computes it from the config
+and does not read the disk. It is a raw config value, not a view. The page
+needs it to name the real path in the empty Requirements tab, and the
+browser can't derive it. S3 still holds: the Board's membership (current
+sprint only) and its badge count are derived in the browser, not in Python.
+See `agile-team/docs/design/s121.md` RQ1.
+
 ## References
 
 - Story: `.team/stories/s4.md`
