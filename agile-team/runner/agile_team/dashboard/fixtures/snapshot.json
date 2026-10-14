@@ -796,6 +796,7 @@
     "when": "before",
     "attach": "boundary",
     "step": null,
+    "attempt": null,
     "detail": null,
     "code": 0,
     "raised": null,
@@ -1235,6 +1236,7 @@
     "when": "after",
     "attach": "step",
     "step": "e2e",
+    "attempt": null,
     "detail": null,
     "code": 0,
     "raised": null,
@@ -1270,6 +1272,7 @@
     "when": "before",
     "attach": "step",
     "step": "acceptance",
+    "attempt": null,
     "detail": null,
     "code": 0,
     "raised": null,
@@ -1590,6 +1593,7 @@
     "when": "after",
     "attach": "step",
     "step": "implement",
+    "attempt": null,
     "detail": "uv run --directory agile-team/runner pytest --cov",
     "code": 1,
     "raised": null,
@@ -1625,6 +1629,7 @@
     "when": "before",
     "attach": "step",
     "step": "unit-tester",
+    "attempt": null,
     "detail": null,
     "code": 0,
     "raised": null,
@@ -2549,6 +2554,93 @@
    "data": {
     "brief": "Memory test fails at 412MB.",
     "step": "implement"
+   }
+  },
+  {
+   "id": "e101s1",
+   "at": 1791472961.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s3",
+   "data": {
+    "stage": "stop.lint",
+    "when": "after",
+    "attach": "step",
+    "step": "implement",
+    "attempt": {
+     "n": 1,
+     "of": 3
+    },
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791472958.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 3.0
+   }
+  },
+  {
+   "id": "e101s2",
+   "at": 1791472962.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s3",
+   "data": {
+    "stage": "stop.suite",
+    "when": "after",
+    "attach": "step",
+    "step": "implement",
+    "attempt": {
+     "n": 1,
+     "of": 3
+    },
+    "detail": null,
+    "code": 1,
+    "raised": null,
+    "started_at": 1791472749.6,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 212.4
+   }
+  },
+  {
+   "id": "e101c",
+   "at": 1791472962.5,
+   "kind": "stop-check",
+   "role": "developer-cli",
+   "story": "s3",
+   "data": {
+    "check": "suite",
+    "stage": "stop.suite",
+    "attempt": 1,
+    "of": 3,
+    "seconds": 212.4,
+    "text": "1 failing test(s) are yours to fix (run them with run_tests):\nFAILED tests/test_memory.py::test_limit - assert 412 < 400"
+   }
+  },
+  {
+   "id": "e101s3",
+   "at": 1791472964.0,
+   "kind": "runner-stage",
+   "role": "runner",
+   "story": "s3",
+   "data": {
+    "stage": "stop.suite",
+    "when": "after",
+    "attach": "step",
+    "step": "implement",
+    "attempt": {
+     "n": 2,
+     "of": 3
+    },
+    "detail": null,
+    "code": 0,
+    "raised": null,
+    "started_at": 1791472766.0,
+    "started_mono": null,
+    "started_slept": 0.0,
+    "seconds": 198.0
    }
   },
   {
@@ -4452,6 +4544,7 @@
     "description": "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",
     "story": "s3",
     "step": "implement",
+    "attempt": null,
     "started_at": 1791473100.0,
     "started_mono": 522943.0,
     "started_slept": 0.0,
