@@ -100,7 +100,7 @@ def test_boundary_rows_attach_to_boundary() -> None:
 
 def test_as_dict_has_four_string_keys() -> None:
     d = stages.STAGES[NAME.GATE_GREEN].as_dict()
-    assert list(d) == ["name", "description", "when", "attach"]
+    assert list(d) == ["name", "label", "description", "when", "attach"]
     assert d["when"] == "after" and d["attach"] == "story" and d["name"] == "gate.green"
 
 
@@ -395,8 +395,8 @@ def test_tools_command_prints_both_lists(configured: Path, capsys) -> None:
     assert cli.main(["--repo", str(configured), "tools"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert [r["name"] for r in out["built_in"]] == EXPECTED
-    assert list(out["built_in"][0]) == ["name", "description", "when", "attach"]
-    assert out["repo"] == [{"name": "x.y", "description": "D", "command": "C"}]
+    assert list(out["built_in"][0]) == ["name", "label", "description", "when", "attach"]
+    assert out["repo"] == [{"name": "x.y", "description": "D", "command": "C", "label": ""}]
 
 
 def test_tools_command_refuses_broken_rows(configured: Path, capsys) -> None:
