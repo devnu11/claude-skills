@@ -80,6 +80,12 @@ rule, update in the same story:
 
 - `dashboard/fixtures/snapshot.json` is the contract for what the dashboard
   renders. Event `data` shapes must match it.
+- The fixture is generated, so never hand-edit it (s116, ADR-0061). To
+  change it, edit its source, `runner/scripts/dashboard_fixture/<key>.json`
+  (one file per top-level key; a new or removed key also goes in `SECTIONS`
+  in the script). Then rebuild with
+  `uv run --directory agile-team/runner python scripts/make_dashboard_fixture.py`.
+  A test fails when the committed fixture differs from a fresh rebuild.
 - New event kinds go in `events.EventKind`; never reuse a kind for a
   different shape.
 - The dashboard never changes the run itself. `dashboard/snapshot.py` reads

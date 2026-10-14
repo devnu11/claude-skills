@@ -539,7 +539,11 @@ stack** card, and the Activity tab shows `boundary` events), `turns` (the
 `turns.jsonl` lines of the last 10 minutes, at most 500), `heartbeat`
 (`heartbeat.json` as written, or `null`) and `health` (`{"level", "reason",
 "model_note"}`; see "Live meter and health"). The contract is
-`runner/agile_team/dashboard/fixtures/snapshot.json`. The Tokens tab's role
+`runner/agile_team/dashboard/fixtures/snapshot.json`. It is generated, so
+never edit it by hand: edit its source,
+`runner/scripts/dashboard_fixture/<key>.json` (one file per top-level key),
+then rebuild it with `runner/scripts/make_dashboard_fixture.py`. A test fails
+when the committed fixture differs from a fresh rebuild. The Tokens tab's role
 and story tables show turns per step, the latest step's turns and context
 per turn next to tokens and cost (see "Turns and context"). The Activity tab
 shows each step-end's turns and each `po-session` renewal.
