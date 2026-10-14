@@ -44,6 +44,7 @@ SAMPLES = {
     "story-opened": {"title": BODY},
     "boundary": {"outcome": "pass", "sprint": 1, "edge": "end", "stage": "s", "reason": BODY},
     "sprint-start": {"goal": BODY, "sprint": 1},
+    "sprint-add": {"reason": BODY, "sprint": 1, "stories": ["s3"]},
     "opinion": {"opinion": "o1", "kind": "note"},
     "opinion-act": {"act": "done", "route": "", "opinion": BODY},
     "thread": {"author": "human", "to": "product-owner", "entry": "t1"},

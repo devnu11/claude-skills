@@ -48,9 +48,9 @@ def test_start_sprint_membership_flow(make_runtime, configured, capsys) -> None:
     rt.state.stories["s3"].status = state.StoryStatus.DONE
     rt.state.boundary = None  # sprint one's boundary is out of scope here (s29 gates start_sprint)
     rt.save()
-    out = call(tools.start_sprint({"goal": "two", "stories": ["s1"]}))
+    out = call(tools.start_sprint({"goal": "two", "stories": ["s1"], "reason": "restart"}))
     assert out["sprint"] == 2
-    started = {"sprint": 2, "goal": "two", "stories": ["s1"]}
+    started = {"sprint": 2, "goal": "two", "stories": ["s1"], "reason": "restart"}
     assert started in [e.data for e in rt.events.events()]
     report = cli_status(configured, capsys)
     assert {k: v["sprint"] for k, v in report["stories"].items()} == {
