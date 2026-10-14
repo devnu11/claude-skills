@@ -180,7 +180,7 @@ def test_an_edited_environment_between_e2e_and_acceptance_is_used(make_runtime) 
     wire(rt)
     rt.config.environments = [CLI, WEB]
     open_story(rt, "acceptance")
-    present(rt.config)
+    present(rt.config, environment="dashboard")
     write_story(rt.config, "s1", "cli")
     write_story(rt.config, "s1", "dashboard")  # the PO edited the file
     with contextlib.suppress(RuntimeError):
@@ -259,27 +259,30 @@ def test_snapshot_environment_is_empty_without_a_file(scratch: Path) -> None:
     assert build(config, scratch)["stories"][0]["environment"] == ""
 
 
-# ----- SF9: one environment, the first in config order ----------------------------
+# ----- SF9 superseded by AE1: one showing per environment the file names ----------
 
 
 def story_s1() -> StoryState:
     return StoryState("s1", "A story", "e2e", sprint=1)
 
 
-def test_recipe_follows_the_first_environment_in_config_order(configured: Path) -> None:
+def test_showings_follow_the_files_environments_in_config_order(configured: Path) -> None:
     config = cfg.load(configured)
     config.environments = [Environment("hw", "manual"), CLI]
     write_story(config, "s1", "cli", "hw")
-    assert presentation.recipe_of(config, story_s1()).need is Need.GUIDE_ONLY
-    config.environments = [CLI, Environment("hw", "manual")]
-    assert presentation.recipe_of(config, story_s1()) is presentation.PRESENTATIONS["package"]
+    got = presentation.showings(config, "s1")
+    assert [s.environment.name for s in got] == ["hw", "cli"]
+    assert [presentation.recipe_of(s.environment).need for s in got] == [
+        Need.GUIDE_ONLY,
+        Need.WORKSPACE,
+    ]
 
 
-def test_recipe_without_a_usable_file_needs_only_the_guide(configured: Path) -> None:
+def test_a_story_without_a_usable_file_has_no_showings(configured: Path) -> None:
     config = cfg.load(configured)
-    assert presentation.recipe_of(config, story_s1()).need is Need.GUIDE_ONLY
+    assert presentation.showings(config, "s1") == []
     write_story(config, "s1", "mars")
-    assert presentation.recipe_of(config, story_s1()).need is Need.GUIDE_ONLY
+    assert presentation.showings(config, "s1") == []
 
 
 def test_liveness_passes_when_the_file_has_problems(configured: Path) -> None:
@@ -289,11 +292,10 @@ def test_liveness_passes_when_the_file_has_problems(configured: Path) -> None:
     assert trial.liveness(story_s1()).verdict.value == "pass"
 
 
-def test_story_seeds_follow_the_first_environment(configured: Path) -> None:
+def test_each_showing_has_its_own_environments_seeds(configured: Path) -> None:
     config = cfg.load(configured)
     config.environments = [Environment("a", "web", url="http://x", seed="seedA"), CLI]
     write_story(config, "s1", "cli", "a")
-    seeds = presentation.story_seeds(config, story_s1())
-    assert seeds.source == config.repo / "seedA"
-    config.environments = [CLI, Environment("a", "web", url="http://x", seed="seedA")]
-    assert presentation.story_seeds(config, story_s1()).source is None
+    a, cli = presentation.showings(config, "s1")
+    assert presentation.story_seeds(config, a).source == config.repo / "seedA"
+    assert presentation.story_seeds(config, cli).source is None

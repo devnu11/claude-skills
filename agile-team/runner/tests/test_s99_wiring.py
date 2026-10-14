@@ -151,8 +151,11 @@ def test_presentation_layout_is_a_stage(make_runtime, monkeypatch) -> None:
     rt = make_runtime(FakeQuery())
     laid = []
     monkeypatch.setattr(presentation, "lay_out", lambda config, story: laid.append(story))
-    rt._lay_out_presentation(type("P", (), {"story": "S"})())  # type: ignore[arg-type]
-    assert laid == ["S"] and names(rt) == ["presentation.layout"]
+    story = StoryState("s9", "T", "e2e", sprint=1)
+    plan = type("P", (), {"story": story, "prompt": "go"})()
+    rt._lay_out_presentation(plan)  # type: ignore[arg-type]
+    assert laid == [story] and names(rt) == ["presentation.layout"]
+    assert plan.prompt == "go"  # a story without showings adds no section
 
 
 def test_the_customer_proxy_prepare_is_the_env_prepare_stage(make_runtime, monkeypatch) -> None:

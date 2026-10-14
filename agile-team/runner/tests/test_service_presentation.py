@@ -181,19 +181,17 @@ def test_service_check_matches_background_start() -> None:
         assert (recipe.check is Check.SERVICE) is background
 
 
-def test_recipe_of_reads_the_environment(config: cfg.Config) -> None:
-    config.environments = [Environment("cli", "package"), DASHBOARD]
-    assert presentation.recipe_of(config, story_of(environment="ui")).check is Check.SERVICE
-    assert presentation.recipe_of(config, story_of()).check is Check.FILES
-    config.environments = []
-    assert presentation.recipe_of(config, story_of()) == Recipe(Need.GUIDE_ONLY)
+def test_recipe_of_reads_the_environment_kind() -> None:
+    assert presentation.recipe_of(DASHBOARD).check is Check.SERVICE
+    assert presentation.recipe_of(Environment("cli", "package")).check is Check.FILES
 
 
 def test_presented_source(config: cfg.Config) -> None:
+    showing = presentation.Showing("s4", Environment("cli", "package"))
     assert presentation.presented_source(config, None) is None
-    assert presentation.presented_source(config, story_of()) is None
-    source = present(config, "s4")
-    assert presentation.presented_source(config, story_of()) == source
+    assert presentation.presented_source(config, showing) is None
+    source = present(config, "s4", environment="cli")
+    assert presentation.presented_source(config, showing) == source
 
 
 # ----- L4 / L5: start and probe ---------------------------------------------

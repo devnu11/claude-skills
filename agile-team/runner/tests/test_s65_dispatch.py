@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from agile_team import dispatch, git_check, presentation, system
+from agile_team.config import Environment
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState
 
@@ -23,12 +24,13 @@ def test_confined_steps_are_exactly_e2e_and_acceptance() -> None:
     assert set(dispatch.GIT_CONFINED) == {"e2e", "acceptance"}
 
 
-def test_integration_tester_is_confined_to_the_presentation_workspace(make_runtime) -> None:
+def test_integration_tester_is_confined_to_the_story_presentation_root(make_runtime) -> None:
     rt = make_runtime()
     story_at(rt, "e2e")
+    write_story(rt.config, "s1", "cli")
     present(rt.config)
     plan = plan_of(rt, "integration-tester")
-    expected = system.resolve(presentation.workspace_of(rt.config, "s1"))
+    expected = system.resolve(presentation.story_root(rt.config, "s1"))
     assert plan.scope.git_workspace == expected
     env = plan.launch.env
     assert env[git_check.CEILING_ENV] == str(system.resolve(rt.config.run_dir))
@@ -73,8 +75,9 @@ def story_of() -> StoryState:
 
 def test_workspace_and_copy_paths(configured: Path) -> None:
     config = __import__("agile_team.config", fromlist=["load"]).load(configured)
-    source = presentation.source_dir(config, "s4")
-    assert presentation.workspace_of(config, "s4") == source / "workspace"
+    showing = presentation.Showing("s4", Environment("cli", "package"))
+    source = presentation.source_dir(config, showing)
+    assert presentation.workspace_of(config, showing) == source / "workspace"
     root = Path("/x/sandbox")
     assert presentation.copied_workspace(root) == root / "presentation" / "workspace"
 
@@ -84,7 +87,7 @@ def test_lay_out_keeps_what_is_there(configured: Path, fake: FakeSystem) -> None
 
     config = cfg.load(configured)
     write_story(config, "s4", "cli")
-    source = presentation.lay_out(config, story_of())
+    source = presentation.lay_out(config, story_of()) / "cli"
     system.write_text(source / "workspace" / "a.txt", "keep")
     system.write_text(source / "PRESENTATION.md", "guide")
     fake.put(source / "workspace" / ".git" / "HEAD", "ref\n")
@@ -102,7 +105,7 @@ def test_lay_out_inits_a_workspace_that_lacks_git_and_keeps_files(
 
     config = cfg.load(configured)
     write_story(config, "s4", "cli")
-    source = present(config, "s4")
+    source = present(config, "s4", environment="cli")
     presentation.lay_out(config, story_of())
     assert system.read_text(source / "workspace" / "todo.txt") == "milk\n"
     (init,) = [c for c in fake.commands if "init" in c.argv]
@@ -113,6 +116,7 @@ def test_a_bounce_back_to_e2e_keeps_the_workspace_files(make_runtime) -> None:
     rt = make_runtime()
     story_at(rt, "e2e")
     rt.state.stories["s1"].rounds = 1
+    write_story(rt.config, "s1", "cli")
     source = present(rt.config)
     plan_of(rt, "integration-tester")
     assert system.read_text(source / "workspace" / "todo.txt") == "milk\n"

@@ -348,9 +348,16 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
 GUIDE_TEXT = "Run `todo add milk`, then `todo list`: milk is listed.\n"
 
 
-def present(config: config_mod.Config, story_id: str = "s1", workspace: bool = True) -> Path:
-    """Write a complete presentation for ``story_id`` through ``system`` (E1, E5, O15)."""
-    source = config.run_dir / "presentation" / story_id
+def present(
+    config: config_mod.Config,
+    story_id: str = "s1",
+    workspace: bool = True,
+    environment: str | None = None,
+) -> Path:
+    """Write a complete presentation of ``environment`` (default: the first configured one)
+    for ``story_id`` through ``system`` into ``<story>/<environment>/`` (AE1)."""
+    name = environment or config.environments[0].name
+    source = config.run_dir / "presentation" / story_id / name
     system.make_dirs(source)
     system.write_text(source / "PRESENTATION.md", GUIDE_TEXT)
     if workspace:

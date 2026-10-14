@@ -244,7 +244,6 @@ def test_customer_proxy_without_environment(make_runtime) -> None:
     rt = make_runtime()
     rt.config.environments = []
     open_story(rt, "acceptance")
-    present(rt.config, workspace=False)
     assert "no [[environment]]" in run(rt, "customer-proxy", story="s1")["reason"]
 
 
@@ -584,12 +583,12 @@ def test_e2e_done_without_presentation_bounces_to_e2e(make_runtime) -> None:
 
 def test_e2e_with_only_the_empty_workspace_bounces(make_runtime) -> None:
     def guide_only() -> None:
-        system.write_text(rt.config.run_dir / "presentation/s1/PRESENTATION.md", GUIDE_TEXT)
+        system.write_text(rt.config.run_dir / "presentation/s1/cli/PRESENTATION.md", GUIDE_TEXT)
 
     rt = make_runtime(FakeQuery(action=guide_only))
     s = open_story(rt, "e2e")
     report = run(rt, "integration-tester", story="s1")
-    assert "workspace is missing or empty" in report["gate"]["reason"] and s.rounds == 1
+    assert "cli/workspace is empty" in report["gate"]["reason"] and s.rounds == 1
 
 
 def test_e2e_for_an_unsafe_story_id_is_refused_before_wiping(make_runtime) -> None:

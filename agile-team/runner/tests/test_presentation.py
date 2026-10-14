@@ -40,7 +40,9 @@ def test_names_and_source_dir(config: cfg.Config) -> None:
         "PRESENTATION.md",
         "workspace",
     )
-    assert presentation.source_dir(config, "s4") == config.run_dir / "presentation" / "s4"
+    showing = presentation.Showing("s4", Environment("cli", "package"))
+    assert presentation.story_root(config, "s4") == config.run_dir / "presentation" / "s4"
+    assert presentation.source_dir(config, showing) == config.run_dir / "presentation/s4/cli"
 
 
 def test_need_values() -> None:
@@ -66,22 +68,40 @@ def test_table_covers_every_environment_kind() -> None:
     assert set(presentation.PRESENTATIONS) == set(sandbox.ENVIRONMENT_KINDS)
 
 
-def test_need_of_named_default_and_missing_environment(config: cfg.Config) -> None:
-    config.environments = [Environment("cli", "package"), Environment("hw", "manual")]
-    assert presentation.recipe_of(config, story_of()).need is Need.WORKSPACE
-    assert presentation.recipe_of(config, story_of(environment="hw")).need is Need.GUIDE_ONLY
+def test_need_of_an_environment_follows_its_kind() -> None:
+    assert presentation.recipe_of(Environment("cli", "package")).need is Need.WORKSPACE
+    assert presentation.recipe_of(Environment("hw", "manual")).need is Need.GUIDE_ONLY
+
+
+def test_a_story_that_names_no_environment_has_no_showings(config: cfg.Config) -> None:
     config.environments = []
-    assert presentation.recipe_of(config, story_of()).need is Need.GUIDE_ONLY
+    assert presentation.showings(config, "s4") == []
 
 
 # ----- E5 -------------------------------------------------------------------
 
-GUIDE_REASON = (
-    "story s4 has no presentation: .team/run/presentation/s4/PRESENTATION.md is missing or empty"
+HEAD = "story s4 has no presentation for acceptance environment '{env}': "
+BASE = ".team/run/presentation/s4/{env}"
+GUIDE_REASON = HEAD.format(env="cli") + (
+    BASE.format(env="cli")
+    + "/PRESENTATION.md is missing or empty; write the customer's guide there"
 )
-WORKSPACE_REASON = (
-    "story s4 has no presentation: .team/run/presentation/s4/workspace is missing or empty"
+TRIES = "put the demo or evidence files the customer tries there"
+NO_WORKSPACE_REASON = (
+    HEAD.format(env="cli") + BASE.format(env="cli") + f"/workspace is missing; {TRIES}"
 )
+EMPTY_REASON = HEAD.format(env="cli") + BASE.format(env="cli") + f"/workspace is empty; {TRIES}"
+HOLLOW_REASON = (
+    HEAD.format(env="cli")
+    + BASE.format(env="cli")
+    + "/workspace holds only {held}; add the demo or evidence files themselves, for example "
+    + BASE.format(env="cli")
+    + "/workspace/DEMO.md"
+)
+
+
+def cli_dir(config: cfg.Config) -> Path:
+    return presentation.source_dir(config, presentation.showings(config, "s4")[0])
 
 
 def test_missing_when_there_is_no_dir(config: cfg.Config) -> None:
@@ -96,24 +116,25 @@ def test_missing_when_the_guide_is_blank(config: cfg.Config, text: str) -> None:
 
 
 def test_guide_is_checked_before_the_workspace(config: cfg.Config) -> None:
-    system.make_dirs(presentation.source_dir(config, "s4") / "workspace")
+    story_of()
+    system.make_dirs(cli_dir(config) / "workspace")
     assert presentation.missing(config, story_of()) == GUIDE_REASON
 
 
 def test_missing_when_there_is_a_guide_but_no_workspace(config: cfg.Config) -> None:
     present(config, "s4", workspace=False)
-    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+    assert presentation.missing(config, story_of()) == NO_WORKSPACE_REASON
 
 
 def test_missing_when_the_workspace_is_empty(config: cfg.Config) -> None:
     system.make_dirs(present(config, "s4", workspace=False) / "workspace")
-    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+    assert presentation.missing(config, story_of()) == EMPTY_REASON
 
 
 def test_workspace_holding_only_git_is_incomplete(config: cfg.Config) -> None:
     source = present(config, "s4", workspace=False)
     system.make_dirs(source / "workspace" / ".git")
-    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+    assert presentation.missing(config, story_of()) == HOLLOW_REASON.format(held=".git")
 
 
 def test_workspace_with_a_file_beside_git_is_complete(config: cfg.Config) -> None:
@@ -133,10 +154,8 @@ def test_manual_needs_only_the_guide(config: cfg.Config) -> None:
     assert presentation.missing(config, story_of(environment="hw")) is None
 
 
-def test_no_environment_needs_only_the_guide(config: cfg.Config) -> None:
-    config.environments = []
-    present(config, "s4", workspace=False)
-    assert presentation.missing(config, story_of()) is None
+def test_a_story_without_showings_has_nothing_missing(config: cfg.Config) -> None:
+    assert presentation.missing(config, StoryState("s4", "A story", "e2e", sprint=1)) is None
 
 
 def test_each_story_has_its_own_presentation(config: cfg.Config) -> None:
@@ -151,7 +170,7 @@ def test_each_story_has_its_own_presentation(config: cfg.Config) -> None:
 def test_lay_out_keeps_the_old_presentation(config: cfg.Config) -> None:
     source = present(config, "s4")
     system.write_text(source / "stale.txt", "old")
-    assert presentation.lay_out(config, story_of()) == source
+    assert presentation.lay_out(config, story_of()) == presentation.story_root(config, "s4")
     assert system.exists(source / "stale.txt")
     assert system.exists(source / "workspace" / "todo.txt")
     assert system.exists(source / "PRESENTATION.md")
@@ -160,23 +179,23 @@ def test_lay_out_keeps_the_old_presentation(config: cfg.Config) -> None:
 def test_lay_out_gives_a_package_its_own_git_workspace(
     config: cfg.Config, fake: FakeSystem
 ) -> None:
-    source = presentation.lay_out(config, story_of())
-    workspace = source / "workspace"
+    presentation.lay_out(config, story_of())
+    workspace = cli_dir(config) / "workspace"
     assert system.is_dir(workspace)
     (init,) = [c for c in fake.commands if "init" in c.argv]
     assert (init.argv[-2:], init.cwd) == (("init", "-q"), workspace)
 
 
 def test_lay_out_leaves_the_empty_workspace_incomplete(config: cfg.Config) -> None:
-    source = presentation.lay_out(config, story_of())
-    system.write_text(source / "PRESENTATION.md", GUIDE_TEXT)
-    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+    presentation.lay_out(config, story_of())
+    system.write_text(cli_dir(config) / "PRESENTATION.md", GUIDE_TEXT)
+    assert presentation.missing(config, story_of()) == EMPTY_REASON
 
 
 def test_lay_out_manual_has_no_workspace(config: cfg.Config) -> None:
     config.environments = [Environment("hw", "manual")]
-    source = presentation.lay_out(config, story_of(environment="hw"))
-    assert system.is_dir(source) and system.list_dir(source) == []
+    root = presentation.lay_out(config, story_of(environment="hw"))
+    assert system.list_dir(root / "hw") == []
 
 
 @pytest.mark.parametrize("bad", ["../x", "..", "S1", "a/b", ""])
@@ -234,13 +253,15 @@ def seeded_config(config: cfg.Config, *, seed: str = "seedsrc") -> None:
 
 def test_lay_out_plants_the_seed_in_the_source_workspace(config: cfg.Config) -> None:
     seeded_config(config)
-    source = presentation.lay_out(config, story_of())
-    assert system.read_text(source / "workspace" / ".agile-team.toml") == "[dashboard]\n"
+    presentation.lay_out(config, story_of())
+    seeded = cli_dir(config) / "workspace" / ".agile-team.toml"
+    assert system.read_text(seeded) == "[dashboard]\n"
 
 
 def test_lay_out_keeps_the_testers_own_config(config: cfg.Config) -> None:
     seeded_config(config)
-    source = presentation.source_dir(config, "s4")
+    story_of()
+    source = cli_dir(config)
     system.make_dirs(source / "workspace" / ".git")
     system.write_text(source / "workspace" / ".agile-team.toml", "mine\n")
     presentation.lay_out(config, story_of())
@@ -249,14 +270,14 @@ def test_lay_out_keeps_the_testers_own_config(config: cfg.Config) -> None:
 
 def test_lay_out_plants_nothing_without_a_seed(config: cfg.Config) -> None:
     seeded_config(config, seed="")
-    source = presentation.lay_out(config, story_of())
-    assert not system.exists(source / "workspace" / ".agile-team.toml")
+    presentation.lay_out(config, story_of())
+    assert not system.exists(cli_dir(config) / "workspace" / ".agile-team.toml")
 
 
 def test_lay_out_manual_plants_no_seed(config: cfg.Config) -> None:
     config.environments = [Environment("hw", "manual", seed="seedsrc")]
-    source = presentation.lay_out(config, story_of(environment="hw"))
-    assert system.list_dir(source) == []
+    root = presentation.lay_out(config, story_of(environment="hw"))
+    assert system.list_dir(root / "hw") == []
 
 
 def test_workspace_holding_only_git_and_the_seed_is_incomplete(config: cfg.Config) -> None:
@@ -264,7 +285,8 @@ def test_workspace_holding_only_git_and_the_seed_is_incomplete(config: cfg.Confi
     source = present(config, "s4", workspace=False)
     presentation.lay_out(config, story_of())
     assert system.exists(source / "workspace" / ".agile-team.toml")
-    assert presentation.missing(config, story_of()) == WORKSPACE_REASON
+    held = ".agile-team.toml"  # the fake git init leaves no .git
+    assert presentation.missing(config, story_of()) == HOLLOW_REASON.format(held=held)
 
 
 def test_workspace_with_another_file_beside_the_seed_is_complete(config: cfg.Config) -> None:
@@ -277,6 +299,8 @@ def test_workspace_with_another_file_beside_the_seed_is_complete(config: cfg.Con
 
 def test_story_seeds_point_at_the_environment_seed_and_the_workspace(config: cfg.Config) -> None:
     seeded_config(config)
-    s = presentation.story_seeds(config, story_of())
+    story_of()
+    showing = presentation.showings(config, "s4")[0]
+    s = presentation.story_seeds(config, showing)
     assert s.source == config.repo / "seedsrc"
-    assert s.workspace == presentation.workspace_of(config, "s4")
+    assert s.workspace == presentation.workspace_of(config, showing)

@@ -235,7 +235,7 @@ def test_the_hold_text() -> None:
     )
 
 
-# ----- read, file_of, first_environment ---------------------------------------
+# ----- read, file_of, environment_names ---------------------------------------
 
 
 def configured_with(repo: Path, *envs: Environment) -> cfg.Config:
@@ -278,17 +278,15 @@ def test_read_with_no_environments_configured(configured: Path) -> None:
     assert len(lines_) == 2 and "configures no [[environment]]" in lines_[0]
 
 
-def test_first_environment_is_the_config_order_first(configured: Path) -> None:
+def test_environment_names_follow_the_config_order(configured: Path) -> None:
     cli, dash = Environment("cli", "package"), Environment("dashboard", "web", url="http://x")
     config = configured_with(configured, dash, cli)
     put(config, "s120", GOOD)
-    assert story_spec.first_environment(config, "s120") is dash
+    assert story_spec.environment_names(config, "s120") == ["dashboard", "cli"]
 
 
-def test_first_environment_and_names_on_problems(configured: Path) -> None:
+def test_names_on_problems(configured: Path) -> None:
     config = configured_with(configured, Environment("cli", "package"))
-    assert story_spec.first_environment(config, "s120") is None
     assert story_spec.environment_names(config, "s120") == []
     put(config, "s120", "no frontmatter")
-    assert story_spec.first_environment(config, "s120") is None
     assert story_spec.environment_names(config, "s120") == []

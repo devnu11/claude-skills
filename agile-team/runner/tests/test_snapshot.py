@@ -11,6 +11,7 @@ import tomli_w
 from agile_team import config as cfg
 from agile_team import state as state_mod
 from agile_team import system
+from agile_team.acceptance import Mark, Tried
 from agile_team.backlog import order_version
 from agile_team.dashboard import snapshot
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
@@ -164,9 +165,30 @@ def write_reorder_requests(config: cfg.Config, rows: list[dict[str, Any]]) -> No
         system.write_text(folder / f"{row['id']}.json", request.to_json())
 
 
+FIXTURE_ENVIRONMENTS = [
+    {"name": "cli", "kind": "package"},
+    {"name": "web", "kind": "web", "url": "http://127.0.0.1:8765/"},
+    {"name": "manual", "kind": "manual"},
+]
+
+
+def tried_of_fixture(story: dict[str, Any]) -> list[Tried]:
+    """The round's verdicts the fixture row shows (``pass``/``fail``; ``""`` is not tried)."""
+    return [Tried(e["name"], Mark(e["verdict"])) for e in story["environments"] if e["verdict"]]
+
+
+def acceptance_of_fixture(story: dict[str, Any]) -> list[dict[str, str]]:
+    """The fixture's ACs, each naming an environment: the n-th row's, else the only one's."""
+    names = [e["name"] for e in story["environments"]]
+    return [
+        {**ac, "environment": names[n] if len(names) == len(story["acceptance"]) else names[0]}
+        for n, ac in enumerate(story["acceptance"])
+    ]
+
+
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
-    config = make_config(root, steps=fixture["pipeline"])
+    config = make_config(root, steps=fixture["pipeline"], environment=FIXTURE_ENVIRONMENTS)
     run = fixture["run"]
     pulled = pulled_in(fixture["events"])
     stories = {
@@ -185,6 +207,7 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
             disputes=s["disputes"],
             developer=s["developer"],
             depends_on=s["depends_on"],
+            tried=tried_of_fixture(s),
         )
         for s in fixture["stories"]
     }
@@ -214,7 +237,9 @@ def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     if fixture["heartbeat"] is not None:
         system.write_text(config.run_dir / "heartbeat.json", json.dumps(fixture["heartbeat"]))
     for s in fixture["stories"]:
-        meta = json.dumps({"id": s["id"], "title": s["title"], "acceptance": s["acceptance"]})
+        meta = json.dumps(
+            {"id": s["id"], "title": s["title"], "acceptance": acceptance_of_fixture(s)}
+        )
         write_story_file(config, s["id"], meta + "\n")
     for r in fixture["requirements"]:
         meta = json.dumps({k: r[k] for k in ("id", "title", "status", "covers")})
@@ -363,6 +388,7 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "title": "One",
         "sprint": 1,
         "environment": "",
+        "environments": [],
         "step": "design",
         "status": "active",
         "rounds": 0,

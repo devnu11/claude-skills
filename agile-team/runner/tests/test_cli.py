@@ -354,9 +354,10 @@ def test_init_detect_still_works_outside_git(plain: Path, capsys) -> None:
 def test_pipeline_checks_the_story_presentation(configured: Path) -> None:
     from agile_team.gates import StoryState
 
-    from .conftest import present
+    from .conftest import present, write_story
 
     config = cfg.load(configured)
+    write_story(config, "s4", config.environments[0].name)
     pipeline = cli.make_pipeline(config)
     story = StoryState("s4", "T", "e2e", sprint=1)
     assert "no presentation" in pipeline.checks.presentation(story)
