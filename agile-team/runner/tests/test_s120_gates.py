@@ -162,7 +162,7 @@ def test_the_design_gate_only_runs_on_done() -> None:
     out = pipe(shares.Check(listed("mock.html")), "").evaluate(
         at("design"), Handoff("blocked", "stuck")
     )
-    assert shares.UNNAMED.split("{")[0] not in out.reason
+    assert "does not name the shared file" not in out.reason
 
 
 def test_designed_joins_the_shared_reasons_with_the_others() -> None:

@@ -53,7 +53,12 @@ PACKAGE_DATA = (
 
 
 SKILL_DIR = PACKAGE_DIR.parents[1]
-SKILL_DOCS = ("SKILL.md", "reference/protocol.md")  # prose the doc tests read
+SKILL_DOCS = (  # prose the doc tests read
+    "SKILL.md",
+    "reference/protocol.md",
+    "reference/liaison-template.md",
+    "../README.md",
+)
 
 
 def _snapshot_package_data() -> dict[Path, bytes]:
