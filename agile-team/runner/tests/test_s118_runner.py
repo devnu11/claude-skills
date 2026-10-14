@@ -284,7 +284,8 @@ def test_points_have_no_cap() -> None:
     tally = test_tally.EMPTY
     for i in range(1, 101):
         tally = test_tally.read(tally, rec(passed=i, failed=1, total=100))
-    assert len(tally.points) == 99 and tally.points[-1] == 100  # one point per whole percent, 2..100
+    # one point per whole percent, 2..100
+    assert len(tally.points) == 99 and tally.points[-1] == 100
     assert tally.fail_at == 0
 
 
