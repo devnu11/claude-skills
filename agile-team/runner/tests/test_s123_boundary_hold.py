@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 from agile_team import boundary as bd
 from agile_team import boundary_runner as br
-from agile_team import cli, config as config_mod, state as state_mod, system, watch
+from agile_team import cli, system, watch
+from agile_team import config as config_mod
+from agile_team import state as state_mod
 from agile_team.boundary import BoundaryHold, Edge, Stage
 from agile_team.events import EventKind
 from agile_team.po_tools import Tools
