@@ -77,6 +77,25 @@ def test_a_deleted_file_owns_no_hunk_and_the_previous_file_is_not_credited() -> 
     assert got == {FILE: (range(5, 6),)}
 
 
+def test_a_path_with_a_space_loses_the_trailing_tab_git_adds() -> None:
+    # git ends the +++ line of a path holding a space with a tab (D5)
+    diff = "--- a/tests/my test.py\t\n+++ b/tests/my test.py\t\n@@ -1 +1,2 @@\n"
+    assert pending_tests.changed_lines(diff, []) == {"tests/my test.py": (range(1, 3),)}
+
+
+def test_every_kind_of_change_in_one_git_diff() -> None:
+    diff = (
+        "diff --git a/tests/t.py b/tests/t.py\n--- a/tests/t.py\n+++ b/tests/t.py\n"
+        "@@ -0,0 +1,3 @@\n@@ -9 +11 @@\n@@ -20,2 +22,0 @@\n"
+        "diff --git a/gone.py b/gone.py\n--- a/gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n"
+    )
+    got = pending_tests.changed_lines(diff, ["tests/new.py"])
+    assert got == {
+        "tests/t.py": (range(1, 4), range(11, 12), range(22, 24)),
+        "tests/new.py": (WHOLE,),
+    }
+
+
 def test_a_file_named_with_a_non_b_prefix_owns_no_hunk() -> None:
     diff = f"+++ w/{FILE}\n@@ -1 +1 @@\n"
     assert pending_tests.changed_lines(diff, []) == {}
