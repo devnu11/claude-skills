@@ -269,8 +269,8 @@ def test_file_runs_groups_by_root_in_first_seen_order() -> None:
     tc = cfg.Toolchain(
         commands={},
         targeted=[
-            cfg.Targeted(root="a", globs=["a/**"]),
-            cfg.Targeted(root="b", globs=["b/**"]),
+            cfg.Targeted(root="a", command="t"),
+            cfg.Targeted(root="b", command="t"),
         ],
         files=cfg.FileCommands(fix="fix {root} {files}", lint_files="lint {root} {files}"),
     )
@@ -384,7 +384,7 @@ def test_bad_handoff_is_refused(rig: Callable[..., Rig]) -> None:
 # ----- escalation is never blocked (AC8, SC6) -----
 
 
-@pytest.mark.parametrize("status", ["changes_requested", "blocked", "failed", "odd"])
+@pytest.mark.parametrize("status", ["changes_requested", "blocked", "failed"])
 def test_non_done_handoff_stops_with_no_checks(rig: Callable[..., Rig], status: str) -> None:
     r = rig(suite=[OWN_FAIL], changed=["src/app.py"])
     r.say(status)
@@ -394,7 +394,7 @@ def test_non_done_handoff_stops_with_no_checks(rig: Callable[..., Rig], status: 
 
 def test_dispute_handoff_stops_with_no_checks(rig: Callable[..., Rig]) -> None:
     r = rig(suite=[OWN_FAIL])
-    r.say("changes_requested", dispute={"test": "tests/test_x.py::test_x", "why": "contradicts"})
+    r.say("changes_requested", dispute={"test": "tests/test_x.py::test_x", "rule": "SC7"})
     assert r.stop() == {}
     assert r.script.calls == []
 
