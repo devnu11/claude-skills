@@ -190,7 +190,16 @@ def acceptance_of_fixture(story: dict[str, Any]) -> list[dict[str, str]]:
 
 def write_run(root: Path, fixture: dict[str, Any]) -> cfg.Config:
     """Turn the fixture back into the run files it was derived from."""
-    config = make_config(root, steps=fixture["pipeline"], environment=FIXTURE_ENVIRONMENTS)
+    preview = [
+        {
+            "name": "deploy.preview",
+            "description": "Deploy the branch to the preview site",
+            "command": "./deploy-preview",
+        }
+    ]
+    config = make_config(
+        root, steps=fixture["pipeline"], environment=FIXTURE_ENVIRONMENTS, tool=preview
+    )
     run = fixture["run"]
     pulled = pulled_in(fixture["events"])
     stories = {
