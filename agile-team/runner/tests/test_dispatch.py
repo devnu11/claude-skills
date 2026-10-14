@@ -821,3 +821,19 @@ def test_the_step_end_event_shape_does_not_gain_a_developer(make_runtime) -> Non
     run(rt, "architect", story="s1")
     [end] = [e for e in rt.events.events() if e.kind == "step-end"]
     assert "developer" not in end.data
+
+
+def test_step_start_carries_the_story_step(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(), FakeRunner({}))
+    open_story(rt, "design")
+    run(rt, "architect", story="s1")
+    (start,) = [e for e in rt.events.events() if e.kind == "step-start"]
+    assert list(start.data) == ["brief", "step", "mono", "slept"]
+    assert start.data["step"] == "design"
+
+
+def test_step_start_without_a_story_has_no_step(make_runtime) -> None:
+    rt = make_runtime(FakeQuery(), FakeRunner({}))
+    run(rt, "manager")
+    (start,) = [e for e in rt.events.events() if e.kind == "step-start"]
+    assert list(start.data) == ["brief", "step", "mono", "slept"] and start.data["step"] is None

@@ -1,6 +1,8 @@
 """s43: gate commands run under a time limit; a hung test is named."""
 
 import signal
+import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -31,7 +33,7 @@ REPO = FAKE_REPO
 
 
 class Stuck:
-    """A child that never finishes: ``communicate`` always times out, so a drain must give up."""
+    """A child that never finishes: ``wait`` times out and its output never ends (s118 R8)."""
 
     pid = FIRST_CHILD_PID
     returncode = None
@@ -39,8 +41,14 @@ class Stuck:
     def __init__(self, error: BaseException | None = None) -> None:
         self.error = error
         self.timeouts: list[float] = []
+        self.release = threading.Event()
 
-    def communicate(self, timeout: float) -> tuple[str, None]:
+    @property
+    def stdout(self) -> Iterator[str]:
+        yield "started\n"
+        self.release.wait(5)  # a hard bound so a mistake cannot hang the suite
+
+    def wait(self, timeout: float) -> int:
         self.timeouts.append(timeout)
         raise self.error or system.TimeoutExpired("stuck", timeout)
 
@@ -48,7 +56,7 @@ class Stuck:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        return None
+        self.release.set()
 
 
 def killpgs(fake: FakeSystem) -> list[tuple[int, int]]:
@@ -109,8 +117,12 @@ def test_drain_has_a_deadline(fake: FakeSystem, monkeypatch: pytest.MonkeyPatch)
     command = "python3 -c setsid-child & sleep 30"
     code, out = CommandShell(REPO, 0.5).run(command)
     assert code == TIMED_OUT
-    assert stuck.timeouts == [0.5, 0.2]
-    assert out.splitlines() == [TIMEOUT_LINE.format(limit=0.5, command=command), NO_HUNG_LINE]
+    assert stuck.timeouts == [0.5]
+    assert out.splitlines() == [
+        "started",
+        TIMEOUT_LINE.format(limit=0.5, command=command),
+        NO_HUNG_LINE,
+    ]
 
 
 def test_other_exceptions_kill_the_group_and_propagate(

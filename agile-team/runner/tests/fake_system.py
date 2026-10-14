@@ -89,6 +89,11 @@ class FakeProcess:
         self.out = result.out
         self.returncode: int | None = result.code if isinstance(result, Done) else None
 
+    @property
+    def stdout(self) -> Any:
+        """The child's output, line by line; it ends at once (a killed child's pipe is closed)."""
+        return iter(self.out.splitlines(keepends=True))
+
     def poll(self) -> int | None:
         """The exit code, or ``None`` while the child runs."""
         return self.returncode
