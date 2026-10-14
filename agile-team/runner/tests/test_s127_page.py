@@ -64,3 +64,19 @@ def test_the_sparkline_captions_are_a_table() -> None:
     assert "NO_SPARK" in PAGE
     assert "too short for a sparkline" in PAGE
     assert "no rate yet" in PAGE
+
+
+def test_the_tool_label_does_not_wrap() -> None:
+    assert re.search(r"white-space:\s*nowrap", rule(".fc-toollabel"))
+
+
+def test_bad_stage_labels_normalize_to_an_empty_object() -> None:
+    line = next(ln for ln in PAGE.splitlines() if "out.stage_labels =" in ln)
+    assert "typeof out.stage_labels === \"object\"" in line
+    assert "!Array.isArray(out.stage_labels)" in line
+    assert line.rstrip().endswith(": {};")
+
+
+def test_a_label_falls_back_to_the_stage_name() -> None:
+    assert re.search(r"typeof view\.stage_labels\?\.\[stage\] === \"string\"", PAGE)
+    assert re.search(r"view\.stage_labels\[stage\] : stage\)", PAGE)
