@@ -110,7 +110,8 @@ class Toolchain:
         groups: dict[str, list[str]] = {}
         for path in files:
             row = self.targeted_for(path)
-            groups.setdefault(row.root if row else "", []).append(row.relative(path) if row else path)
+            root, name = (row.root, row.relative(path)) if row else ("", path)
+            groups.setdefault(root, []).append(name)
         return [_filled(template, root, names) for root, names in groups.items() if template]
 
     def targeted_for(self, path: str) -> Targeted | None:
@@ -334,7 +335,8 @@ def _files(raw: dict[str, Any]) -> FileCommands:
     preset = load_presets().get(raw.get("preset", ""), {}).get("files", {})
     merged = {**preset, **raw.get("files", {})}
     merged["lintable"] = tuple(merged.get("lintable", ()))
-    return FileCommands(**{k: v for k, v in merged.items() if k in FileCommands.__dataclass_fields__})
+    known = FileCommands.__dataclass_fields__
+    return FileCommands(**{k: v for k, v in merged.items() if k in known})
 
 
 def _toolchain(raw: dict[str, Any]) -> Toolchain:

@@ -1078,7 +1078,7 @@ class Runtime:
             return self._gating(plan).evaluate(plan.story, handoff)
 
     def _gating(self, plan: Plan) -> Pipeline:
-        """The pipeline that gates ``plan``: it reuses the Stop hook's suite run when there is one."""
+        """The pipeline gating ``plan``; reuses the Stop hook's suite run if any."""
         return plan.stop_hook.reusing(self.pipeline) if plan.stop_hook else self.pipeline
 
     def owners(self, story: StoryState) -> Owners:

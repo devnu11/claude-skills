@@ -24,7 +24,6 @@ from .config import (
     DEFAULT_KEY_FILE,
     ENVIRONMENT_SECTION,
     PIPELINE_STEPS,
-    PRESETS,
     config_path,
     load_presets,
 )
@@ -52,6 +51,7 @@ Every role reads this file. Keep it short and specific to this repo.
 
 - (paths or systems the team must leave alone)
 """
+
 
 def detect(repo: Path, presets: dict[str, dict[str, Any]]) -> str | None:
     """Name of the first preset with a marker file in ``repo``."""
