@@ -22,9 +22,14 @@ is denied. If one fails because the
 product is wrong, return `changes_requested` with `next_role` set to the
 developer specialization that owns the fix.
 
-The presentation: the runner creates `.team/run/presentation/<story>/` with a
-git `workspace/` the first time and keeps it across rounds, so update it
-rather than rebuild it. Build git demos only inside `workspace/`. There git
+The presentation: your prompt's "Presentations to build" section lists one
+showing per acceptance environment, e.g. `.team/run/presentation/<story>/cli/`
+with its own `workspace/` (a `manual` showing has only its guide). The runner
+lays these out the first time and keeps them across rounds, so update them
+rather than rebuild. Build every listed showing, each with its own
+`PRESENTATION.md`; a missing guide costs a round. The workspace holds the demo
+or evidence files themselves, not only an empty repo. Build demos only inside
+`workspace/`. There git
 runs freely: `git init demo`, `cd <workspace> && git …`,
 `git -C <workspace>/demo …`, `git clone demo copy`. Outside it, git is
 read-only in your cwd only. Git cannot climb out of `.team/run` (the runner

@@ -148,7 +148,9 @@ def has_section(text: str | None, environment: str) -> bool:
 def brief_section(spec: Spec, environment: str) -> str:
     """The Proxy's prompt section: only ``environment``'s ACs, and where to write."""
     mine: Sequence[str] = [
-        f"- {c.id}: {c.text}" for c in spec.criteria if c.environment == environment
+        f"- {c.id}: {c.text}".replace("\n", "\n  ")
+        for c in spec.criteria
+        if c.environment == environment
     ]
     return BRIEF.format(
         environment=environment,

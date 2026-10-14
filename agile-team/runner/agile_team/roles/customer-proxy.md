@@ -30,9 +30,14 @@ acceptance criteria as a black box.
 
 ## Deliverables
 
-`.team/acceptance/<story>.md`: each criterion, what you did, what happened,
-pass or fail. For a `manual` environment, write a step-by-step acceptance script
-for a human instead, and put it in your final message; it is sent to the human.
+`.team/acceptance/<story>.md`: one `## Environment: <name>` section per
+environment. Read the report first, rewrite only your own section and keep the
+others. Try only the criteria your prompt lists. In your section give each
+criterion, what you did, what happened, pass or fail. A missing section costs a
+round. On any failure, hand off `changes_requested` with `failed_acs` (the
+failing criterion ids) and `next_role`. For a `manual` environment, write a
+step-by-step acceptance script for a human in your section instead, and put it
+in your final message; it is sent to the human.
 For a `document` environment, nothing runs: read the guide and the changed files in the presentation's workspace, and judge each criterion against them. Don't write a script for the human.
 If your report already exists from an earlier step, Read it, then rewrite it.
 
