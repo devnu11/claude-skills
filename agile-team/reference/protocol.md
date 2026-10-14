@@ -22,6 +22,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
+| `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
@@ -757,7 +758,9 @@ pytest, the open stage row's `tests` (`passed`, `warned`, `skipped`,
 collected total. Pass is a passed test, Warn a test that recorded a
 warning, Skip a skipped, xfailed or xpassed test, and Fail a failed or
 erroring one. They are drawn as a bar, with a caption such as `273 Pass +
-32 Warn + 4 Skip + 9 Fail / 506 Total` (zero categories left out), and a
+32 Warn + 4 Skip + 9 Fail / 506 Total` (zero categories left out), then
+` · 3 Pending` when the runner skipped pending tests (s125; `pending`, sent
+by the runner, not the plugin, and not part of the total or the bar), and a
 `% complete` sparkline (reports received / total) that turns red at the
 first failure. The counts come from the runner's pytest plugin
 (`agile_team_tally`). Inside an open stage, `CommandShell` adds the plugin
@@ -822,6 +825,15 @@ fix = "uv run --directory {root} ruff check --fix --exit-zero --quiet {files} &&
 lint_files = "uv run --directory {root} ruff check --quiet {files}"   # non-zero: the stop is refused
 lintable = ["*.py"]            # which changed files are linted
 # {root}: the [[toolchain.targeted]] root holding the files ("." without one); {files}: quoted, relative to it
+
+[toolchain.report]             # optional; JUnit reports and pending tests (s125). Unset keys come from the preset
+option = "--junitxml={file} -o junit_family=xunit1"   # {file}: the report path; empty turns reporting off
+deselect = "--deselect={id}"   # skips a pending test id ({id}: relative to the placeholder's root)
+ignore = "--ignore={id}"       # skips a pending file id (a file that failed to collect)
+# In `test` and `coverage`, put `{report:<root>}` where each pytest's options go,
+# one per link of a `&&` chain (<root>: the repo-relative dir pytest runs in).
+# A command with none gets ` {report}` (root "") at its end. This repo uses
+# `… pytest -n auto -q {report:agile-team/runner} && … pytest -q {report:unattended/runner}`.
 
 [toolchain.globs]              # {source} {tests} {e2e} {ci} in role globs
 source = ["src/**"]
@@ -1257,8 +1269,9 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 
 ## Pipeline and gates
 
-design (architect) → tests (unit-tester; gate: test command **fails**, or
-see "Back at tests with the code in") →
+design (architect) → tests (unit-tester; gate: test command **fails**, and
+with a JUnit report only through the step's new or changed tests, which
+become pending: see "Pending tests"; or see "Back at tests with the code in") →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 `.team/baseline.json` coverage when old debt keeps the total lower; the gate
 runs the suite **once**, through the `coverage` command only: a zero exit
@@ -1344,6 +1357,57 @@ the work first, inside the same conversation:
   open row and event carry `attempt: {n, of}`. On the Flow chart they are the
   role's after tool boxes: `label · ↻ runs · time · n refused`, and
   `▶ label · attempt n of 3` while running.
+
+### Pending tests (s125)
+
+A story's new tests are red from its tests gate until its implement gate. In
+that window they are **pending**: every other run skips them, so other
+stories' gates, the sprint checks and CI stay green.
+
+- **Reports.** Every gate and full-check run of `test` or `coverage` writes
+  JUnit XML (`[toolchain.report] option`, one file per `{report:<root>}`
+  placeholder, under `.team/run/reports/`). The runner reads pass and fail
+  per test from the report, never from the text. The text is still kept for
+  the briefs. Named runs (`run_tests`) write no report and skip nothing. A
+  stack with no `option` (node, rust presets) keeps the old exit-code gates,
+  and nothing is ever pending.
+- **Ids.** An id is a repo-relative pytest node id
+  (`agile-team/runner/tests/test_x.py::TestY::test_z[a]`). A file that fails
+  to collect (for example, it imports a module that does not exist yet) is a
+  file id, `agile-team/runner/tests/test_new.py`. A test id is skipped with
+  `deselect`, a file id with `ignore`.
+- **The registry.** `.team/pending-tests.json` is `{"<story>": ["<id>", …]}`.
+  Only the runner writes it: an agent's write is refused (`may not write …;
+  only the runner writes it`), and a Bash edit is quarantined. Each change is
+  its own commit, `chore(<story>): pending tests`, made right after the gate
+  that caused it. A registry that does not parse holds the gate.
+- **Tests gate.** From the red run's report, the story's pending ids are the
+  failed ids that are new or changed in the step's diff (the lines from a
+  test's line up to the next test's line meet a changed hunk, or a file id's
+  file changed), plus any that were already the story's. Any other failing
+  test is a real failure, and the gate fails: `these tests fail but are not
+  new or changed in this step, so they are not pending: …`. With no pending
+  id, the gate fails as before (`GREEN_TOO_EARLY`).
+- **Implement gate.** The story's own pending ids run. Every other story's are
+  skipped. The gate passes only when the suite passes as before and every own
+  id **passed** in the report: a skip does not count, and a file id needs all
+  its tests passed. Then the ids leave the registry. Otherwise the gate fails
+  with `pending tests of sN still fail: …`. Own ids missing from a passing
+  run (renamed or deleted) are dropped, and the reason says so.
+- **Afterwards.** The story's tests run like any other (review, quality,
+  rework), and a failure fails as usual. A cancel or a revert drops the
+  story's entry.
+- **Who skips what.** A run for a story skips the other stories' pending ids.
+  The boundary's full checks skip them all. A gate's reason, and a full
+  check's `pending` field, count them as `pending (sN): k` (ids skipped and
+  absent from the report). The Flow chart's running test tool shows
+  `· N Pending` after the total.
+- **CI.** `agile-team pending-tests --root <root>` prints the skip options.
+  DevOps passes them as `PYTEST_ADDOPTS`, and lists `.team/pending-tests.json`
+  in the workflow's `paths`, so the review PR is green with a story
+  mid-pipeline. The registry is committed (`artifacts = "ignored"` keeps it
+  through `!.team/pending-tests.json`).
+- Agents still never mark a test `skip` or `xfail`. Only the registry skips.
 
 ### Runner stages (s99)
 

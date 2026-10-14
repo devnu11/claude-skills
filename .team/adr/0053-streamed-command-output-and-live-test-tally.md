@@ -4,7 +4,7 @@
 **Status:** Accepted
 **Amends:** ADR-0048 (the open stage row and the stage board)
 **Design:** `agile-team/docs/design/s118.md` (R5–R10, FC18)
-**Amended:** s118 round 2, see the end
+**Amended:** s118 round 2, s125; see the end
 
 ## Context
 
@@ -95,3 +95,15 @@ plugin, and the progress-line parser goes.
   that clears the environment shows no counts.
 - The total is always known from collection, so it is never estimated.
 - The heartbeat's `stages[].tests` gains `skipped`.
+
+## Amended by s125 (2026-10-14)
+
+The tally also counts the pending tests a run skips (ADR-0058). The plugin
+cannot count them: with xdist, the controller never collects, so it never sees
+a deselect. So before it starts a test or coverage command, the runner itself
+sends the open stage's listeners one extra record, `{"pending": n}`.
+`test_tally.read` keeps that number as `Tally.pending` for the rest of the
+stage, even when a new pytest session starts. The heartbeat's `stages[].tests`
+gains `pending`. The Flow chart's caption shows `· N Pending` after the total,
+and hides it at 0. Pending tests are not part of the total, the bar or the
+percentage.
