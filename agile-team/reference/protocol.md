@@ -741,12 +741,21 @@ label and the latest tool call. Runner stages that prepare or gate a
 role's step sit in small dashed boxes touching it, above when they run
 before the step and below when after (`name · ↻ runs · time`); the
 checkout checks and during-step tools are left out. A running stage is
-solid, outlined in its own run colour, with its elapsed time; when it runs
-pytest, the runner streams the output and the open stage row's `tests`
-gives Pass (`.`), Warn (`s`, `x`, `X`) and Fail (`F`, `E`) so far out of
-the total, drawn as a bar, a caption such as `273 Pass + 32 Warn + 9 Fail /
-506 Total`, and a `% complete` sparkline that turns red at the first
-failure. An orange dot runs along the arrow when work moves into the next
+solid, outlined in its own run colour, with its elapsed time. When it runs
+pytest, the open stage row's `tests` (`passed`, `warned`, `skipped`,
+`failed`, `total`, `points`, `fail_at`) gives the counts so far out of the
+collected total. Pass is a passed test, Warn a test that recorded a
+warning, Skip a skipped, xfailed or xpassed test, and Fail a failed or
+erroring one. They are drawn as a bar, with a caption such as `273 Pass +
+32 Warn + 4 Skip + 9 Fail / 506 Total` (zero categories left out), and a
+`% complete` sparkline (reports received / total) that turns red at the
+first failure. The counts come from the runner's pytest plugin
+(`agile_team_tally`). Inside an open stage, `CommandShell` adds the plugin
+to the command's `PYTHONPATH` and `PYTEST_PLUGINS` and names a scratch
+file in `AGILE_TEAM_TALLY`. On the xdist controller (or the only process)
+the plugin writes a JSON record there at most every 0.5 s, and the runner
+reads it every 0.5 s. A new pytest session starts a new tally. If pytest
+can't import the plugin, the command runs once more without it. An orange dot runs along the arrow when work moves into the next
 group; a red dot runs down the PO path when a gate sends work back. A
 redraw never cancels a dot; reduced motion lights the path instead. Times
 read `6s`, `42.0m`, `1.4h`. **⚙ Show…** hides, separately and per

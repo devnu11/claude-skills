@@ -134,10 +134,13 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   - **Runner tools:** the runner's own checks sit in small dashed boxes
     touching the role they serve, above it when they run before its step
     and below it when after, with `↻` runs and time. The one running now is
-    solid, with its time. While tests run you see a bar of Pass (green),
-    Warn (yellow: skipped or expected failures) and Fail (red) so far, a
-    caption such as `273 Pass + 32 Warn + 9 Fail / 506 Total`, and a
-    `% complete` line that turns red at the first failure.
+    solid, with its time. While pytest runs you see a bar of Pass (green),
+    Warn (yellow: tests that raised a warning), Skip (grey: skipped and
+    expected failures) and Fail (red) so far, a caption such as
+    `273 Pass + 32 Warn + 4 Skip + 9 Fail / 506 Total` with empty
+    categories left out, and a `% complete` line that turns red at the
+    first failure. The runner gets these counts from a small pytest plugin
+    it adds to the test command's environment. Your commands don't change.
   - **Dots:** an orange dot runs along the arrow when work moves on to the
     next group; a red dot runs down from Leadership when a gate sends work
     back. If your system asks for reduced motion, the path lights up
@@ -152,8 +155,9 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
     model/tool bar, the small charts, the runner tools, their counts and
     time, and the legend. Your browser remembers the choice. The role
     name, model, the running step and the running tool always show.
-  The chart keeps its real size. If your window is narrower than the chart,
-  scroll it sideways; at 1024 px wide or more it fits. It needs no
+  The chart keeps its real size. Its groups narrow a little in a smaller
+  window. If your window is narrower than the chart, scroll it sideways.
+  At 1024 px wide or more it fits. It needs no
   internet access.
 - **Activity:** the newest 120 events, newest first, across the full
   width: briefs, handoffs, gate results, questions, answers, threads,
