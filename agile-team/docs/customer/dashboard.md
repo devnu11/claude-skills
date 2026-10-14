@@ -131,7 +131,11 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   how often its work bounced, a bar of model time against tool time, and a
   small chart of tokens per minute over its latest step, taken every 10
   seconds. A step too short for a chart reads `too short for a sparkline`.
-  A step from before the runner kept rates reads `no rate yet`. The role
+  A step from before the runner kept rates reads `no rate yet`. The
+  Product Owner's box also shows how long it waited on the roles it ran
+  (`waiting on roles 4m 10s`). In Story scope it counts the PO turns that
+  worked on that story; a turn that worked on several stories counts in
+  each, and the box then says `shared turns`. The role
   names and their numbers are centred in their boxes, and Leadership sits
   centred over the four groups.
   - **Working now:** the role at work is outlined green on its first run of

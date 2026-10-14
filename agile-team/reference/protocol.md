@@ -730,14 +730,24 @@ The chart has a **Story / Sprint / Run** toggle, remembered per browser. It
 defaults to Story: the active step's story, or another story picked in the
 box beside it. Every number follows the scope. Each role box shows its
 name; its model, ledger tokens and dollars, and awake time (finished steps,
-sleep left out; the Product Owner's is its turns' model and tool time and
-reads `—` in Story scope); `↩ N bounced`; a model/tool bar (dashed `no
+sleep left out; the Product Owner's is its turns' model and tool time,
+with a `waiting on roles …` line under it); `↩ N bounced`; a model/tool bar (dashed `no
 model/tool timing yet` without data); and a tokens-per-minute sparkline of
 its latest step (`rate` on `step-end` and `po-turn`), grey when idle. Only
 used roles are drawn (`roles[].used`); the Product Owner always is. In
 Story scope a role that has not touched the story is dimmed; in Sprint and
 Run a role with no data is. Dimming recolours the box and never uses
 opacity. A role with no data reads `idle`.
+
+**The PO in Story scope (s113).** Each `po-turn` event's `data.stories`
+lists the stories the turn's PO tool calls named (a `story` or `stories`
+argument, and `open_story`'s `id`), once each, `[]` for none; the event's
+`story` stays `null`. In Story scope the PO's time, waiting, bar and
+sparkline come from the turns that named the focus story. A turn that named
+several counts in each, and the waiting line then ends `· shared turns`.
+With no such turn (or only events from before s113) the time reads `—`. The
+PO's tokens and dollars read `—` in Story scope (its ledger rows have no
+story).
 
 The running role's box and its group take the run colour: green on the
 step's first run, violet on the first re-run, amber after that (earlier
