@@ -135,7 +135,7 @@ def _generated_at(files: RunFiles) -> float:
 
 
 def _pipeline(files: RunFiles) -> list[str]:
-    return list(files.config.gates.steps)
+    return list(files.config.gates.pipeline)
 
 
 def _step_roles(files: RunFiles) -> dict[str, list[str]]:

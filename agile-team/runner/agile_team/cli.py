@@ -344,7 +344,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         reporting=reporting_of(config),
     )
     g = config.gates
-    return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
+    return gates.Pipeline(g.pipeline, g.round_cap, checks, g.repeat, g.backstop)
 
 
 def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:

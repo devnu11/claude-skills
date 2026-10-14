@@ -22,6 +22,7 @@ from . import (
     fingerprint,
     junit,
     loops,
+    ops_review,
     pending_tests,
     revert_log,
     stages,
@@ -35,6 +36,7 @@ from .commands import TIMED_OUT, CommandRunner
 from .config import TEST_COMMANDS
 from .holds import PoHold
 from .loops import Author, Fault, Rule, Setback
+from .ops_review import ToolingRow
 from .owners import Fix, FixRecord, Item, Owners, Source, Split
 from .pending_tests import PendingSet, RedAsk, RegistryError
 from .results import Ran, result_tail
@@ -44,6 +46,7 @@ from .test_reports import TestRun
 
 STEP_ROLES = {
     "design": "architect",
+    ops_review.STEP: "devops",
     "tests": "unit-tester",
     "implement": "developer",
     "quality": "quality-czar",
@@ -52,6 +55,8 @@ STEP_ROLES = {
     "e2e": "integration-tester",
     "acceptance": "customer-proxy",
 }
+CHECKPOINT_STEPS = frozenset({ops_review.STEP})  # reached only by passing the step before
+ROUTABLE_STEPS = tuple(s for s in STEP_ROLES if s not in CHECKPOINT_STEPS)
 UNGATED_ROLES = frozenset({"manager"})
 STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager"})
 STOPPED_HANDOFFS = frozenset({"blocked", "failed"})
@@ -466,6 +471,33 @@ class Checks:
     reporting: test_reports.Reporting = field(default_factory=test_reports.Reporting)
     serving: Serving = Serving()
 
+    def tooling_reviewed(self, story_id: str, rows: list[ToolingRow]) -> Outcome:
+        """The ops gate (O1, O2, O4)."""
+        read = self.story_spec(story_id)
+        if refusal := read.refusal():
+            return Outcome(Verdict.HOLD, story_spec.STORY_FILE_HOLD.format(refusal=refusal))
+        found = ops_review.problems(tuple(c.id for c in read.spec.criteria), rows)
+        found += self._tooling_story_problems(story_id, rows)
+        if found:
+            reason = ops_review.BAD_LIST.format(problems="; ".join(found))
+            return Outcome(Verdict.BOUNCE, reason, ops_review.STEP, author=Author.ROLE)
+        if ops_review.unfiled(rows):
+            reason = ops_review.unfiled_text(rows)
+            return Outcome(Verdict.HOLD, reason, author=Author.ROLE)
+        return Outcome(Verdict.PASS, ops_review.passed_text(rows))
+
+    def _tooling_story_problems(self, story_id: str, rows: list[ToolingRow]) -> list[str]:
+        """O2's self and no_story problems, row by row."""
+        return [p for r in rows if r.story and (p := self._story_problem(story_id, r))]
+
+    def _story_problem(self, story_id: str, row: ToolingRow) -> str | None:
+        fmt, file = ops_review.PROBLEMS, ops_review.story_file(row.story)
+        if row.story == story_id:
+            return fmt["self"].format(ac=row.ac)
+        if self.read(file) is None:
+            return fmt["no_story"].format(ac=row.ac, story=row.story, file=file)
+        return None
+
     def redesigned(self, story: StoryState) -> Outcome:
         """Pass when the design of a reverted story has its After revert section (R9)."""
         file, count = self.design_file(story.id), len(story.reverted)
@@ -781,7 +813,8 @@ class Pipeline:
 
     def step_for_role(self, role: str | None) -> str | None:
         """The first enabled step ``role`` owns."""
-        return next((s for s in self.steps if role and role_fits_step(role, s)), None)
+        routable = (s for s in self.steps if s not in CHECKPOINT_STEPS)
+        return next((s for s in routable if role and role_fits_step(role, s)), None)
 
     def serving(self, serving: Serving) -> Pipeline:
         """A copy whose command gates run for ``serving`` (P16)."""
@@ -867,7 +900,20 @@ class Pipeline:
     def _verdict(self, story: StoryState, handoff: Handoff) -> Outcome:
         if story.step == "acceptance" and self.checks.environments(story.id):
             return self._tried(story, handoff)
+        if story.step == ops_review.STEP:
+            return self._reviewed(story, handoff)
         return self._handoff_outcome(handoff)
+
+    def design_step(self) -> str:
+        """The step a redesign goes back to: ``design`` when enabled, else the first."""
+        return "design" if "design" in self.steps else self.first()
+
+    def _reviewed(self, story: StoryState, handoff: Handoff) -> Outcome:
+        """The ops-review verdict (O1, O3); not a ``step_gate``, which would retry here."""
+        if handoff.status == "done":
+            return self.checks.tooling_reviewed(story.id, handoff.tooling)
+        reason = handoff.summary or ops_review.REDESIGN
+        return Outcome(Verdict.BOUNCE, reason, self.design_step(), author=Author.ROLE)
 
     def _tried(self, story: StoryState, handoff: Handoff) -> Outcome:
         """One Proxy step's verdict for the due environment (s95)."""
@@ -1075,7 +1121,7 @@ class Pipeline:
         self._move_for(story, ruling)
 
     def _move_for(self, story: StoryState, ruling: str) -> None:
-        design = "design" if "design" in self.steps else self.first()
+        design = self.design_step()
         moves = {
             "rescope": lambda: setattr(story, "step", self.first()),
             "revise_design": lambda: setattr(story, "step", design),

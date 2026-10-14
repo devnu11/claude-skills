@@ -37,6 +37,38 @@ into a tool.
 - Tools the Manager or other roles ask for through `friction`. Say in your
   summary which role it helps and what it saves.
 
+## Ops review
+
+Every story comes to you once, right after design (step `ops-review`).
+Your brief's "Ops review" section lists the story's ACs with their
+acceptance environments, the toolchain commands, the acceptance
+environments, the repo's tools and the CI files. For each AC, answer: can
+it be checked automatically with what the repo has today? If not, what is
+missing (a browser harness, a CI job, an environment, a toolchain command)?
+
+Hand off one `tooling` row per AC:
+
+    "tooling": [
+      {"ac": "AC1", "verdict": "automatic", "how": "tests/test_x.py::test_y in the test command"},
+      {"ac": "AC2", "verdict": "added", "how": "the e2e-web job in .github/workflows/ci.yml"},
+      {"ac": "AC3", "verdict": "missing", "needs": "a browser harness", "story": "s130"}
+    ]
+
+- Nothing missing: every row `automatic`, status `done`.
+- Missing but in your files (CI, `[toolchain]`, `[[environment]]`,
+  `[[tool]]`): add it now, mark the row `added`, list the files in
+  `changed_files`, status `done`.
+- Missing and outside your files: mark the row `missing` with what it needs.
+  Name an existing story that adds it in `story`, or leave `story` empty;
+  the runner holds the story and the PO opens one, then you run again with
+  its id in your brief and fill it in.
+- The design assumes tooling that cannot exist: status
+  `changes_requested` with the reason in `summary`; the story goes back to
+  the architect.
+
+The runner checks the list (one row per AC, known story ids) and writes it
+into the story file under `## Tooling`.
+
 ## Test runs
 
 Run only what proves your change, normally one named test

@@ -24,14 +24,15 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from . import system
+from . import ops_review, system
+from .ops_review import ToolingRow
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
 BUILTIN_DIR = Path(__file__).parent / "roles"
@@ -175,6 +176,7 @@ class Handoff:
     ruling_reason: str = ""
     asserts: str = ""
     failed_acs: list[str] = field(default_factory=list)
+    tooling: list[ToolingRow] = field(default_factory=list)
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -439,6 +441,15 @@ def parse_handoff(text: str) -> Handoff:
 
 
 HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
+    (
+        lambda d: ops_review.rows_form(d.get("tooling", [])),
+        "tooling must be a list of rows {ac, verdict, how, needs, story}; "
+        "automatic and added need how, missing needs needs",
+    ),
+    (
+        lambda d: not ops_review.adds(d.get("tooling", [])) or bool(d.get("changed_files")),
+        "an added tooling row needs changed_files",
+    ),
     (lambda d: d.get("status") in HANDOFF_STATUSES, f"status must be one of {HANDOFF_STATUSES}"),
     (lambda d: isinstance(d.get("changed_files", []), list), "changed_files must be a list"),
     (lambda d: isinstance(d.get("open_questions", []), list), "open_questions must be a list"),
@@ -522,6 +533,7 @@ def _handoff_from(data: Any) -> Handoff:
         ruling_reason=data.get("ruling_reason") or str(data.get("summary", "")),
         asserts=data.get("asserts", ""),
         failed_acs=list(data.get("failed_acs", [])),
+        tooling=ops_review.rows_of(data.get("tooling", [])),
     )
 
 
@@ -536,4 +548,6 @@ def handoff_report(handoff: Handoff) -> dict[str, Any]:
     }
     if handoff.failed_acs:
         report["failed_acs"] = handoff.failed_acs
+    if handoff.tooling:
+        report["tooling"] = [asdict(r) for r in handoff.tooling]
     return report

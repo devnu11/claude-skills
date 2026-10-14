@@ -14,7 +14,7 @@ from typing import Any
 from . import priority, revert_log, story_admin, story_spec, system
 from .dispatch import Runtime, refused
 from .events import Event, EventKind
-from .gates import FINISHED, StoryState
+from .gates import CHECKPOINT_STEPS, FINISHED, StoryState
 from .git_ops import GitError
 from .holds import HoldKind, PoHold
 from .pending_tests import PendingSet
@@ -88,8 +88,10 @@ def story_commits(log: list[tuple[str, str]], subject: str) -> list[str]:
 
 
 def back_step(steps: list[str], current: str) -> str:
-    """R6: the step before tests; the current step when it comes earlier."""
-    target = max(steps.index(TESTS_STEP) - 1, 0) if TESTS_STEP in steps else 0
+    """R6: the last non-checkpoint step before tests; the current step when it comes earlier."""
+    before = steps[: steps.index(TESTS_STEP)] if TESTS_STEP in steps else []
+    open_steps = [i for i, s in enumerate(before) if s not in CHECKPOINT_STEPS]
+    target = open_steps[-1] if open_steps else 0
     here = steps.index(current) if current in steps else len(steps)
     return steps[min(target, here)]
 

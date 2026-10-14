@@ -38,6 +38,7 @@ from . import (
     keys,
     live,
     loops,
+    ops_review,
     pending_tests,
     presentation,
     recovery,
@@ -1098,7 +1099,37 @@ class Runtime:
         self.verify_checkout()
         outcome = self._evaluate(plan, handoff)
         self._apply_pending(plan, outcome)
-        return self._advance_and_log(plan, outcome)
+        result = self._advance_and_log(plan, outcome)
+        record = PASS_RECORDS.get(result["step"])
+        if record and result["verdict"] is Verdict.PASS:
+            result |= record(self, plan, handoff)
+        return result
+
+    def _record_tooling(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """R1: write the Tooling section into the story file and commit only that file."""
+        file = story_spec.file_of(self.config, plan.story.id)  # type: ignore[union-attr]
+        path = self.config.repo / file
+        old = system.read_text(path)
+        new = ops_review.with_section(old, handoff.tooling)
+        sha = self._commit_text(path, old, new, plan)
+        self.record_checkout()
+        return {"tooling": {"file": file, "commit": sha}}
+
+    def _commit_text(self, path: Path, old: str, new: str, plan: Plan) -> str | None:
+        """Write ``new`` over ``path`` and commit it; ``None`` when nothing changed."""
+        if new == old:
+            return None
+        system.write_text(path, new)
+        subject = ops_review.RECORD_SUBJECT.format(story=plan.story.id)  # type: ignore[union-attr]
+        return self.git.commit([path.relative_to(self.config.repo).as_posix()], subject)
+
+    def _attach_ops_review(self, plan: Plan) -> None:
+        """B1: the ops-review section, only for a story at ops-review."""
+        story = plan.story
+        if story is None or story.step != ops_review.STEP:
+            return
+        facts = ops_review.facts(self.config, story_spec.read(self.config, story.id))
+        plan.prompt += f"\n\n{ops_review.brief_section(facts)}".rstrip()
 
     def _apply_pending(self, plan: Plan, outcome: Outcome) -> None:
         """A passing gate's pending change is committed before the story advances (P13)."""
@@ -1293,8 +1324,13 @@ COMMIT_RECORDS: tuple[tuple[str, Callable[[StoryState, str, list[str]], None]], 
 )
 
 STEP_SETUPS = {
+    ops_review.STEP: Runtime._attach_ops_review,
     "implement": Runtime._attach_runner_tools,
     "quality": Runtime._run_quality_checks,
+}
+
+PASS_RECORDS: dict[str, Callable[[Runtime, Plan, Handoff], dict[str, Any]]] = {
+    ops_review.STEP: Runtime._record_tooling,
 }
 
 GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {

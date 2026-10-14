@@ -11,7 +11,7 @@ from enum import StrEnum
 from typing import Any
 
 from .gates import (
-    STEP_ROLES,
+    ROUTABLE_STEPS,
     STOPPED_HANDOFFS,
     UNGATED_ROLES,
     PreviousStep,
@@ -92,7 +92,7 @@ def _unroutable(report: dict) -> bool:
     target = report.get("next_role")
     if _gate(report).get("verdict") != "bounce" or not target:
         return False
-    return not any(role_fits_step(target, step) for step in STEP_ROLES)
+    return not any(role_fits_step(target, step) for step in ROUTABLE_STEPS)
 
 
 def _bad_ungated(report: dict) -> bool:

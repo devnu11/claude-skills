@@ -34,6 +34,7 @@ AUTH_MODES = (API_KEY_AUTH, LOGIN_AUTH)
 ARTIFACT_POLICIES = ("committed", "ignored")
 PIPELINE_STEPS = (
     "design",
+    "ops-review",
     "tests",
     "implement",
     "quality",
@@ -42,6 +43,8 @@ PIPELINE_STEPS = (
     "e2e",
     "acceptance",
 )
+# (step, the step it follows): built-in steps the config cannot remove (s115 P2)
+ALWAYS_STEPS: tuple[tuple[str, str], ...] = (("ops-review", "design"),)
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 TEST_COMMANDS = ("test", "coverage")
 PLACEHOLDER = re.compile(r"\{report(?::(?P<root>[^{}]*))?\}")
@@ -157,6 +160,15 @@ DEFAULT_CI_TIMEOUT_S = 1800.0
 DEFAULT_STOP_BUDGET_S = 1800.0
 
 
+def pipeline_steps(listed: list[str]) -> list[str]:
+    """The run's steps: ``listed`` with each ALWAYS_STEPS step right after its anchor, or first."""
+    always = {step for step, _ in ALWAYS_STEPS}
+    steps = [s for s in listed if s not in always]
+    for step, anchor in ALWAYS_STEPS:
+        steps.insert(steps.index(anchor) + 1 if anchor in steps else 0, step)
+    return steps
+
+
 @dataclass
 class Gates:
     """Thresholds and switches for the story pipeline."""
@@ -169,6 +181,11 @@ class Gates:
     command_timeout_s: float = DEFAULT_TIMEOUT_S
     ci_timeout_s: float = DEFAULT_CI_TIMEOUT_S
     stop_check_budget_s: float = DEFAULT_STOP_BUDGET_S
+
+    @property
+    def pipeline(self) -> list[str]:
+        """The run's steps: the configured ones plus the built-in steps."""
+        return pipeline_steps(self.steps)
 
 
 @dataclass
