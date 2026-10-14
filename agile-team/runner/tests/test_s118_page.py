@@ -223,8 +223,18 @@ def flow_text() -> dict[str, tuple[int, str]]:
 
 def test_the_text_table_has_every_kind() -> None:
     assert set(flow_text()) == {
-        "name", "meta", "live", "tool", "toolRun", "toolDesc", "caption", "title", "pill", "legend", "settings",
-    }  # fmt: skip
+        "name",
+        "meta",
+        "live",
+        "tool",
+        "toolRun",
+        "toolDesc",
+        "caption",
+        "title",
+        "pill",
+        "legend",
+        "settings",
+    }
     assert flow_text()["name"][0] == 12
 
 
