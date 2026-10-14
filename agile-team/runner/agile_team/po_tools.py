@@ -811,10 +811,7 @@ METHODS = {"budget_status": "budget"}
 
 def mcp_server(tools: Tools) -> Any:
     """SDK MCP server exposing ``tools`` to the PO."""
-    defs = [
-        tool(name, desc, schema)(tools.noted(name))
-        for name, (desc, schema) in SCHEMAS.items()
-    ]
+    defs = [tool(name, desc, schema)(tools.noted(name)) for name, (desc, schema) in SCHEMAS.items()]
     return create_sdk_mcp_server(SERVER, tools=defs)
 
 
