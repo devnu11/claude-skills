@@ -136,7 +136,7 @@ class _Doc:
 
     @property
     def stem(self) -> str:
-        return PurePosixPath(self.source.file).stem
+        return _stem(self.source)
 
 
 class _Stop(Exception):
@@ -402,12 +402,14 @@ def design_reasons(checked: Checked, story: str) -> list[str]:
 
 def next_id(checked: Checked) -> str:
     """One above the highest REQ number among the files' names (``REQ-001`` with none)."""
-    numbers = [int(m.group(1)) for p in checked.files if (m := re.match(r"REQ-(\d+)", _stem(p)))]
+    numbers = [
+        int(m.group(1)) for p in checked.files if (m := re.match(r"REQ-(\d+)", _stem(p.source)))
+    ]
     return f"REQ-{max(numbers, default=0) + 1:03d}"
 
 
-def _stem(parsed: Parsed) -> str:
-    return PurePosixPath(parsed.source.file).stem
+def _stem(source: Source) -> str:
+    return PurePosixPath(source.file).stem
 
 
 COVERAGE_HEAD = (
