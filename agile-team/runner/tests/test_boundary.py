@@ -40,6 +40,7 @@ def test_enum_values() -> None:
         "ci_failed",
         "ci_pending",
         "error",
+        "fix_handover",
     ]
     assert [e.value for e in b.FixCase] == ["team_check", "review_check", "review_conflict"]
     assert [e.value for e in b.Permission] == ["unasked", "yes", "no"]
