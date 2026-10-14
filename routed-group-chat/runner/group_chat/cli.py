@@ -21,6 +21,7 @@ from .chat import GroupChat, Limits
 from .roster import RosterError, load
 from .state import Store, Turn
 
+DESCRIPTION = "Talk to a roster of Claude roles in one shared thread."
 QUIT = "/quit"
 EXIT_USAGE = 2
 
@@ -36,7 +37,7 @@ class Io:
 
 
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="group-chat", description=__doc__.splitlines()[0])
+    top = argparse.ArgumentParser(prog="group-chat", description=DESCRIPTION)
     top.add_argument("--roster", type=Path, required=True, help="roster TOML file")
     top.add_argument("--dir", type=Path, required=True, help="chat state directory")
     top.add_argument("--max-handoffs", type=int, default=Limits.max_handoffs)

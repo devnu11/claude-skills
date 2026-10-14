@@ -7,7 +7,6 @@ leaves the previous state intact.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -81,4 +80,4 @@ class Store:
         self.directory.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(state.to_dict(), indent=2) + "\n")
-        os.replace(tmp, self.path)
+        tmp.replace(self.path)
