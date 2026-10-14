@@ -161,6 +161,7 @@ def test_hollow_workspace_names_git_and_a_file_to_add(config: cfg.Config) -> Non
 
 def test_hollow_workspace_lists_seeds_after_git(config: cfg.Config) -> None:
     config.environments[0] = Environment("cli", "package", seed="seeds")
+    system.make_dirs(config.repo / "seeds")
     system.write_text(config.repo / "seeds" / "b.txt", "b")
     system.write_text(config.repo / "seeds" / "a.txt", "a")
     build_all(config)
