@@ -1,13 +1,1 @@
-{
-  "s116": [
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t1_committed_equals_rebuild",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t2_twice_is_byte_identical",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t3_existing_file_is_ignored[not json]",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t3_existing_file_is_ignored[{\"events\": []}]",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t4_nothing_is_filtered",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t5_key_order",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t6_source_mismatch_fails_and_writes_nothing",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t7_docs_say_it",
-    "agile-team/runner/tests/test_s116_dashboard_fixture.py::test_t8_no_trailing_newline_ascii_only"
-  ]
-}
+{}
