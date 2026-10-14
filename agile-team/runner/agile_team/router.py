@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar
 
-from . import dependencies, halt, handover, loops, owners, system, threads
+from . import dependencies, halt, handover, loops, owners, sprint_end, system, threads
 from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
 from .config import Config
@@ -20,6 +20,7 @@ from .handover import Pass, Trigger
 from .loops import Rule
 from .relay import WAITING_HEAD, Answer, Told
 from .reorders import Desk
+from .reverts import Reverter
 from .story_admin import Clerk
 
 POLL_S = 5.0
@@ -198,11 +199,13 @@ class Router:
     boundaries: BoundaryRunner = field(init=False)
     desk: Desk = field(init=False)
     clerk: Clerk = field(init=False)
+    reverter: Reverter = field(init=False)
 
     def __post_init__(self) -> None:
         self.boundaries = BoundaryRunner(self.runtime)
         self.desk = Desk(self.runtime)
         self.clerk = Clerk(self.runtime)
+        self.reverter = Reverter(self.runtime)
 
     async def advance(self) -> Pass:
         """Run steps until a hand-over trigger, the end of the sprint or the end of the run."""
@@ -218,6 +221,7 @@ class Router:
             return None
         self.desk.apply()
         self.clerk.settle()
+        self.reverter.settle()
         answers, told = self._news(), self._unread()
         if answers or told:
             return self._deliver(answers, told)
@@ -373,11 +377,30 @@ class Router:
     def _idle(self) -> Pass | None:
         mine = self._sprint_stories()
         pending = self.runtime.state.boundary
-        if pending is None and mine and all(s.status is StoryStatus.DONE for s in mine):
+        unfinished = [s for s in mine if s.status not in FINISHED]
+        if pending is None and self.runtime.state.sprint_complete():
             return self._sprint_end()
+        if pending is None and (offer := self._offer(unfinished)):
+            return offer
         if self.runtime.relay.open_questions():
             return None
-        return self._stalled([s for s in mine if s.status is not StoryStatus.DONE])
+        return self._stalled(unfinished)
+
+    def _ready(self) -> list[str]:
+        stories = self.runtime.state.stories
+        return sprint_end.ready_backlog(stories, self.runtime.priority().queue(stories.values()))
+
+    def _offer(self, unfinished: list[StoryState]) -> Pass | None:
+        """K2: hand the PO the ready backlog once per set of stuck and ready stories."""
+        state, ready = self.runtime.state, self._ready()
+        key = [*(s.id for s in unfinished), *ready]
+        if not (state.sprint_open() and unfinished and ready) or key == state.offered:
+            return None
+        state.offered = key
+        self.runtime.save()
+        stalled = self._stalled(unfinished)
+        lines = [*stalled.lines, *sprint_end.ready_lines(state.stories, ready)]
+        return Pass([Trigger.READY_BACKLOG], lines, [])
 
     def _sprint_end(self) -> Pass:
         state = self.runtime.state

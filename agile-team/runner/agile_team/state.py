@@ -19,6 +19,7 @@ from .ledger import SessionCost
 from .loops import Rule, Setback
 from .owners import FixRecord, load_fix
 from .providers import DEFAULT as DEFAULT_PROVIDER
+from .revert_log import RevertEntry
 from .roles import RETIRED_ROLES
 from .salvage import RUN_ENDING, Cause, InFlight, Interruption
 
@@ -114,6 +115,7 @@ class RunState:
     unsaved: Cause | None = None
     halt_kind: str | None = None  # the HaltKind value of the halt that set the status (s44)
     load_faults: list[LoadFault] = field(default_factory=list)
+    offered: list[str] = field(default_factory=list)  # the ready-backlog offer made (s124 K2)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
@@ -148,6 +150,10 @@ class RunState:
     def unfinished_in_sprint(self) -> list[str]:
         """Ids in the current sprint whose status is not in FINISHED."""
         return [i for i in self.sprint_ids() if self.stories[i].status not in FINISHED]
+
+    def sprint_complete(self) -> bool:
+        """The sprint has stories and every one is done, cancelled or reverted (E1)."""
+        return bool(self.sprint_ids()) and not self.unfinished_in_sprint()
 
     def sprint_open(self) -> bool:
         """A sprint has started and its end boundary has not closed it (SA4)."""
@@ -226,6 +232,7 @@ def _story(data: dict[str, Any]) -> StoryState:
         "fixes": [load_fix(f) for f in data.get("fixes", [])],
         "fixed": [FixRecord(**r) for r in data.get("fixed", [])],
         "tried": [acceptance.load_tried(t) for t in data.get("tried", [])],
+        "reverted": [RevertEntry(**r) for r in data.get("reverted", [])],
     }
     return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
 

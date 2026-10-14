@@ -40,6 +40,7 @@ from . import (
     loops,
     presentation,
     recovery,
+    revert_log,
     runner_tools,
     salvage,
     sandbox,
@@ -465,10 +466,18 @@ class Runtime:
         plan = Plan(role, self.scope_for(role), story, request.brief, kind=request.kind)
         try:
             self._set_up(plan, request.kind)
-            return self.finish(plan)
+            return self._told_revert(self.finish(plan))
         except Exception:
             plan.stop()
             raise
+
+    def _told_revert(self, plan: Plan) -> Plan:
+        """R8: the role has the revert note now; it is not owed it again."""
+        owed = plan.story.revert_owed if plan.story else []
+        if plan.role.name in owed:
+            owed.remove(plan.role.name)
+            self.save()
+        return plan
 
     def _set_up(self, plan: Plan, kind: StepKind) -> None:
         if kind not in BARE_KINDS:
@@ -609,10 +618,17 @@ class Runtime:
         if plan.story:
             found = self.results.shown(plan.story.id, plan.story.step)
             parts.append(results_mod.section(found))
+            parts.append(self._revert_note(plan, plan.story))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context(plan.story))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
         return "\n\n".join(p for p in parts if p)
+
+    def _revert_note(self, plan: Plan, story: StoryState) -> str:
+        """R8-R9: the revert brief, to a role owed it and to every design brief."""
+        if plan.role.name in story.revert_owed or story.step == revert_log.DESIGN_STEP:
+            return revert_log.brief_section(story.reverted, story.step)
+        return ""
 
     def _rework_lines(self, story: StoryState | None) -> list[str]:
         """The rework brief exactly when the tests gate would treat the story as reworked."""
@@ -860,9 +876,10 @@ class Runtime:
     def checkout_moved(self) -> Halt | None:
         """K3/K4: halt the run when the checkout drifted; record it when unrecorded and matching."""
         with self.stage_log.open(stages.Name.CHECKOUT_GUARD):
-            return self._drift_halt()
+            return self.drift_halt()
 
-    def _drift_halt(self) -> Halt | None:
+    def drift_halt(self) -> Halt | None:
+        """``checkout_moved`` without its stage event (a refusal must leave the events alone)."""
         drift = checkout.check(self.git, self.state.checkout)
         if drift is not None:
             return self.halt_run(drift.halt())
@@ -873,7 +890,7 @@ class Runtime:
     def verify_checkout(self) -> None:
         """``checkout_moved``, raising ``CheckoutChanged`` with the halt when it halted."""
         with self.stage_log.open(stages.Name.CHECKOUT_VERIFY):
-            moved = self._drift_halt()
+            moved = self.drift_halt()
         if moved is not None:
             raise CheckoutChanged(moved)
 

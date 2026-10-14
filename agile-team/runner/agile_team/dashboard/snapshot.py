@@ -324,6 +324,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "step": story.step,
         "status": str(story.status),
         "rounds": story.rounds,
+        "reverts": len(story.reverted),
         "repeated": story.repeated,
         "position": _position(files, story),
         "tier": _tier(files, story),

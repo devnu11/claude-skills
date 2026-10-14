@@ -61,7 +61,7 @@ FIX_HEADING = (
 )
 OUTPUT_BLOCK = "Output:\n```\n{output}\n```"
 PR_BODY = (
-    "Sprint {sprint} of the agile team.\n\n{stories}\n\n{stacked}"
+    "Sprint {sprint} of the agile team.\n\n{stories}\n\n{reverted}{stacked}"
     'Rebuilt by agile-team from {team} onto {target}. Merge with "Rebase and merge".'
 )
 STACKED_LINE = "Stacked on {base} (#{base_pr}): review and merge that one first.\n\n"
@@ -285,6 +285,7 @@ class StackEntry:
     mode: PrMode = PrMode.NONE
     ci: CiResult | None = None
     commits: int = 0
+    reverted: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.check, self.mode = CheckState(self.check), PrMode(self.mode)

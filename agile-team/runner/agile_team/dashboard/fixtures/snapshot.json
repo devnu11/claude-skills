@@ -197,6 +197,7 @@
    "step": "review",
    "status": "active",
    "rounds": 1,
+   "reverts": 1,
    "opened_at": 1791450479.4,
    "acceptance": [
     {
@@ -257,6 +258,7 @@
    "step": "design",
    "status": "active",
    "rounds": 0,
+   "reverts": 0,
    "opened_at": 1791451059.1,
    "acceptance": [
     {
@@ -295,6 +297,7 @@
    "step": "implement",
    "status": "needs_manager",
    "rounds": 3,
+   "reverts": 0,
    "opened_at": 1791450678.3,
    "acceptance": [
     {
@@ -344,6 +347,7 @@
    "step": "design",
    "status": "active",
    "rounds": 0,
+   "reverts": 0,
    "opened_at": 1791450809.7,
    "acceptance": [
     {
@@ -393,6 +397,7 @@
    "step": "acceptance",
    "status": "needs_manager",
    "rounds": 0,
+   "reverts": 0,
    "repeated": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
    "opened_at": 1791471900.0,
    "acceptance": [
@@ -437,6 +442,7 @@
    "step": "design",
    "status": "active",
    "rounds": 0,
+   "reverts": 0,
    "opened_at": 1791451121.6,
    "acceptance": [
     {
@@ -487,6 +493,7 @@
    "step": "acceptance",
    "status": "done",
    "rounds": 0,
+   "reverts": 0,
    "opened_at": 1791450406.7,
    "acceptance": [
     {
@@ -533,6 +540,7 @@
    "step": "design",
    "status": "cancelled",
    "rounds": 0,
+   "reverts": 0,
    "opened_at": null,
    "acceptance": [
     {

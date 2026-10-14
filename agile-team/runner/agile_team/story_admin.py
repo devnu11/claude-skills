@@ -25,6 +25,10 @@ CANCEL_PENDING = (
     "story {story} already waits on the human's answer to {question} about cancelling it; "
     "answer {question} instead"
 )
+REVERT_PENDING = (
+    "story {story} already waits on the human's answer to {question} about reverting it; "
+    "answer {question} instead"
+)
 ASKED = "story {story} has an open question; answer {ids} instead"
 MANAGER_WAIT = (
     "story {story} waits on the Manager (round cap or repeated setback); run the manager on it"
@@ -112,12 +116,20 @@ def finished_refusal(case: Case) -> str | None:
     return FINISHED_TEXT.format(story=story.id, status=story.status, verb=verb)
 
 
-def pending_refusal(case: Case) -> str | None:
-    """Refuse while a cancel request waits for the human."""
-    hold = _story(case).po_hold
-    if hold is None or hold.kind is not HoldKind.CANCEL:
+ASKED_TEXTS = {HoldKind.CANCEL: CANCEL_PENDING, HoldKind.REVERT: REVERT_PENDING}
+
+
+def asked_text(story: StoryState) -> str | None:
+    """The refusal text while a cancel or revert question waits for the human, else None."""
+    hold = story.po_hold
+    if hold is None or hold.kind not in ASKED_TEXTS:
         return None
-    return CANCEL_PENDING.format(story=case.story_id, question=hold.question)
+    return ASKED_TEXTS[hold.kind].format(story=story.id, question=hold.question)
+
+
+def pending_refusal(case: Case) -> str | None:
+    """Refuse while a cancel or revert question waits for the human."""
+    return asked_text(_story(case))
 
 
 def asked_refusal(case: Case) -> str | None:

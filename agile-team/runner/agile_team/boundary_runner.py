@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops, rewrite, stages
+from . import halt, handover, loops, revert_log, rewrite, stages
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -65,7 +65,6 @@ from .ci import (
 )
 from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
-from .gates import StoryStatus
 from .relay import Note
 from .restack import Plan, Restacker
 from .stack import REVIEW_DIR, Build, Conflict, Rebuilder
@@ -167,11 +166,9 @@ class BoundaryRunner:
         return Due(FIX_KINDS[b.failure.case], FIX_ROLE, fix_brief(b, self._context(b)))
 
     def open_end(self) -> bool:
-        """Open the end boundary when every story of the sprint is done and it has not run."""
+        """Open the end boundary when the sprint is finished (E1) and it has not run."""
         state = self.runtime.state
-        mine = [s for s in state.stories.values() if s.sprint == state.sprint]
-        done = bool(mine) and all(s.status is StoryStatus.DONE for s in mine)
-        if state.boundary or not done or self.mine.closed >= state.sprint:
+        if state.boundary or not state.sprint_complete() or self.mine.closed >= state.sprint:
             return False
         state.boundary = Boundary(Edge.END, state.sprint)
         return True
@@ -325,7 +322,13 @@ class BoundaryRunner:
         branch = f"{self.runtime.config.upstream.prefix}{b.sprint}"
         done = [s.id for s in state.stories.values() if s.sprint == b.sprint]
         title = SPRINT_TITLE.format(sprint=b.sprint, goal=state.goal)
-        return StackEntry(b.sprint, branch, start, self.runtime.git.head(), title, done)
+        head = self.runtime.git.head()
+        return StackEntry(b.sprint, branch, start, head, title, done, reverted=self._reverted(b))
+
+    def _reverted(self, b: Boundary) -> list[str]:
+        """R12: ids of stories with a revert in sprint ``b``."""
+        stories = self.runtime.state.stories
+        return [i for i, s in stories.items() if any(e.sprint == b.sprint for e in s.reverted)]
 
     def _drop(self, b: Boundary, entry: StackEntry) -> None:
         self.stack.remove(entry)
@@ -647,12 +650,22 @@ class BoundaryRunner:
             stacked = STACKED_LINE.format(base=below.branch, base_pr=below.pr)
         return PrSpec(entry.branch, base, entry.title, self._body(entry, stacked), mode)
 
+    def _reverted_lines(self, entry: StackEntry) -> list[str]:
+        stories = self.runtime.state.stories
+        return [
+            revert_log.pr_line(f"{i}: {stories[i].title}", e)
+            for i in entry.reverted
+            for e in stories[i].reverted
+            if e.sprint == entry.sprint
+        ]
+
     def _body(self, entry: StackEntry, stacked: str) -> str:
         titles = self.runtime.state.stories
         lines = [f"- {i}: {titles[i].title if i in titles else i}" for i in entry.stories]
         return PR_BODY.format(
             sprint=entry.sprint,
             stories="\n".join(lines),
+            reverted=revert_log.pr_section(self._reverted_lines(entry)),
             stacked=stacked,
             team=self.mine.team_branch,
             target=self.target,

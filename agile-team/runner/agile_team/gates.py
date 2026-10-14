@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import acceptance, fingerprint, loops, stages, story_spec, suite_runs, system
+from . import acceptance, fingerprint, loops, revert_log, stages, story_spec, suite_runs, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .holds import PoHold
@@ -175,6 +175,12 @@ def read_repo_file(repo: Path, path: str) -> str | None:
     return system.read_bytes(target).decode("utf-8", errors="replace")
 
 
+REDESIGN_MISSING = (
+    'story {id} was reverted ({count}×); its design {file} needs a "## After revert {count}" '  # noqa: RUF001
+    "section saying what changes this time"
+)
+
+
 def _unread(_path: str) -> str | None:
     return None
 
@@ -223,6 +229,8 @@ class StoryState:
     fixes: list[Fix] = field(default_factory=list)
     fixed: list[FixRecord] = field(default_factory=list)
     tried: list[acceptance.Tried] = field(default_factory=list)
+    reverted: list[revert_log.RevertEntry] = field(default_factory=list)
+    revert_owed: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -372,6 +380,10 @@ def _always_live(_story: StoryState) -> Outcome:
     return Outcome(Verdict.PASS, READY)
 
 
+def _no_design_file(_story: str) -> str:
+    return ""
+
+
 def _no_environments(_story: str) -> list[str]:
     return []
 
@@ -408,6 +420,15 @@ class Checks:
     story_spec: Callable[[str], story_spec.Read] = _clean_spec
     environments: Callable[[str], list[str]] = _no_environments
     reuse: Callable[[], Outcome | None] = _nothing_kept
+    design_file: Callable[[str], str] = _no_design_file
+
+    def redesigned(self, story: StoryState) -> Outcome:
+        """Pass when the design of a reverted story has its After revert section (R9)."""
+        file, count = self.design_file(story.id), len(story.reverted)
+        if revert_log.after_heading(self.read(file) or "", count):
+            return Outcome(Verdict.PASS)
+        reason = REDESIGN_MISSING.format(id=story.id, count=count, file=file)
+        return Outcome(Verdict.BOUNCE, reason, "design", author=Author.ROLE)
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -648,7 +669,11 @@ class Pipeline:
             return self._dispute_gate(story, handoff)
         if self.reworked(story):
             return self._rework_gate(handoff)
-        return self._command_gate(story.step) or self._done_gate(story, handoff)
+        return (
+            self._command_gate(story.step)
+            or self._done_gate(story, handoff)
+            or self._redesign_gate(story, handoff)
+        )
 
     def reworked(self, story: StoryState) -> bool:
         """A story back at tests with its code already in and no dispute open."""
@@ -741,6 +766,11 @@ class Pipeline:
         """The e2e presentation check, which applies only to a ``done`` handoff."""
         applies = story.step == "e2e" and handoff.status == "done" and "acceptance" in self.steps
         return (lambda: self.checks.presented(story)) if applies else None
+
+    def _redesign_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+        """The After revert check for a ``done`` design of a reverted story."""
+        applies = story.step == "design" and handoff.status == "done" and story.reverted
+        return (lambda: self.checks.redesigned(story)) if applies else None
 
     def unpresented(self, story: StoryState) -> Outcome | None:
         """A return to e2e when the Proxy would start without a presentation."""

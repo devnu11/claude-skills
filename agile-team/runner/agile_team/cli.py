@@ -28,6 +28,7 @@ from . import (
     opinions,
     presentation,
     recovery,
+    revert_log,
     sandbox,
     stages,
     story_spec,
@@ -327,6 +328,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         suite_runs=suite,
         story_spec=spec,
         environments=functools.partial(story_spec.environment_names, config),
+        design_file=functools.partial(revert_log.design_file, config.team.docs_dir),
     )
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)

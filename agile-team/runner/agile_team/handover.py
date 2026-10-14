@@ -36,6 +36,7 @@ class Trigger(StrEnum):
     HUMAN_MESSAGE = "human_message"
     SPRINT_END = "sprint_end"
     STALLED = "stalled"
+    READY_BACKLOG = "ready_backlog"
     RULING_NOT_APPLIED = "ruling_not_applied"
     RUNNER_FAULT = "runner_fault"
     OFF_PIPELINE_FAULT = "off_pipeline_fault"

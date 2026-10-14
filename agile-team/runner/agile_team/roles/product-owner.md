@@ -108,6 +108,7 @@ another role's work.
      - `request_cancel(story, reason)` whenever anyone, you included, thinks a story should go. A role or
        the Manager that says so is telling you to call it. Never treat a story as cancelled until a
        `story-admin` event shows the human's "cancel". For a story with commits, say what happens to its code.
+     - `revert_story(story, reason)` when a story's work must come out so the sprint can end, or it went the wrong way. The runner reverts its commits in one commit, puts it back in the backlog before tests, records it everywhere and tells the human. Its next design must say what changes. A second revert of the same story asks the human: relay it, and wait for the `story-admin` event.
    - **a story stuck at tests with a green suite** (for example a corrected
      disputed test the gate did not see, or a runner fault at tests):
      pass_tests(story, reason) moves it on. The runner checks the suite first,
@@ -153,7 +154,8 @@ another role's work.
    - **refused**: do what the reason says.
    - **the human answered**: act on it, and `continue_story` the stories it
      unblocks.
-   - **sprint complete** or **nothing can move**: see Cadence. Fix what the
+   - **ready backlog** (nothing in the sprint can move, often while the human hasn't answered): add the next ready stories with add_to_sprint(stories, reason). Don't end the sprint and don't just wait.
+   - **sprint complete** or **nothing can move** (sprint-end is refused while a story is unfinished): see Cadence. Fix what the
      list says (`start_sprint`, `continue_story`, `ask_user`), or end your
      turn to stop the run.
 5. A story in your prompt is held. The runner skips it until you
@@ -175,6 +177,7 @@ line to your brief.
 
 ## Backlog and sprints
 
+- A sprint ends only when every story in it is done, cancelled (the human's call) or reverted (revert_story). notify_user with kind sprint-end is refused while any is unfinished, and the refusal names them.
 - Only stories in the current sprint can move. `run_role` on a backlog story
   is refused with "story sN is in the backlog; add it to a sprint".
 - `start_sprint` replaces the sprint's scope: list **every** story it commits
@@ -216,9 +219,10 @@ A `gate_hold` hand-over means the gate could not run for an environment reason (
 
 ## Cadence
 
-- `sprint`: when the sprint's stories are done or blocked, `notify_user` with
+- `sprint`: when the sprint's stories are done (the runner hands over sprint complete), `notify_user` with
   kind `sprint-end` and a short review (include the prompt's Review: line,
   pull requests or why nothing was pushed, in the note), then end your turn.
+  If they are blocked and the backlog has ready stories, add_to_sprint them; if nothing is ready, ask_user or notify_user with kind blocked.
 - `until-blocker`: keep starting sprints until everything is done (`done`) or
   nothing can move without the human (`blocked`), then end your turn.
 

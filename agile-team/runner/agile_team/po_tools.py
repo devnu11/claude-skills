@@ -24,6 +24,7 @@ from . import (
     priority,
     reorders,
     salvage,
+    sprint_end,
     story_spec,
     system,
     threads,
@@ -57,10 +58,11 @@ from .po_session import RenewPath
 from .priority import Change, Placement, Priority, Pull, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import REPLY, Note
+from .reverts import Reverter
 from .router import Router
 from .runner_tools import text_result
 from .stage_log import place_of
-from .state import ModelOverride, RunStatus
+from .state import ModelOverride, RunState, RunStatus
 from .story_admin import Act, Clerk
 
 SERVER = "team"
@@ -69,6 +71,16 @@ WAIT_CHORE = "waiting for answers to {ids}"
 DEFAULT_WAIT_S = 1800
 RESUME_NOTE = "Resume the run from state."
 USE_REPLY = "use reply_story to answer on a story's thread"
+
+
+def _no_refusal(_state: RunState) -> str | None:
+    return None
+
+
+KIND_REFUSALS: dict[str, Callable[[RunState], str | None]] = {
+    REPLY: lambda _state: USE_REPLY,
+    "sprint-end": sprint_end.end_refusal,
+}
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
 SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
@@ -432,8 +444,8 @@ class Tools:
 
     async def notify_user(self, args: dict[str, Any]) -> dict[str, Any]:
         kind = args.get("kind", "update")
-        if kind == REPLY:
-            return text_result(refused(USE_REPLY))
+        if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime.state):
+            return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
         if kind in STATUS_KINDS:
             self.runtime.state.status = RunStatus(kind)
@@ -458,6 +470,7 @@ class Tools:
         with self.runtime.pulse.doing(WAIT_CHORE.format(ids=", ".join(ids) or "—")):
             await self._poll(ids, limit)
         Clerk(self.runtime).settle()
+        Reverter(self.runtime).settle()
         answers = self.runtime.relay.answers()
         given = {i: answers[i].text for i in ids if i in answers}
         self._mark_delivered(list(given))
@@ -498,6 +511,14 @@ class Tools:
     async def request_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
         """Ask the human to cancel a story (s53)."""
         return text_result(Clerk(self.runtime).run(Act.REQUEST_CANCEL, args))
+
+    async def revert_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Revert a story's commits and put it back in the backlog (s124)."""
+        if moved := self.runtime.drift_halt():
+            return text_result(halted_report(PO, moved))
+        if pending := self._boundary_refusal():
+            return text_result(refused(pending))
+        return text_result(Reverter(self.runtime).run(args))
 
     async def pass_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Move a story stuck at tests on to the next step when the suite is green."""
@@ -662,7 +683,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"text": str, "stories": list},
     ),
     "notify_user": (
-        "Send an update (kind: update, sprint-end, blocked, done).",
+        "Send an update (kind: update, sprint-end, blocked, done)."
+        " kind sprint-end is refused while any story in the sprint is unfinished.",
         {"text": str, "kind": str, "stories": list},
     ),
     "reply_story": (
@@ -691,6 +713,16 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Ask the human to cancel a story: it is held as cancel requested and the human gets one "
         'question (cancel / keep). Only their "cancel" answer cancels it; "keep" releases it. '
         "For a story with commits, say what happens to its code.",
+        {"story": str, "reason": str},
+    ),
+    "revert_story": (
+        "Revert a story's commits on the team branch in one commit and put it back in the "
+        "backlog at the step before tests. The runner records it in the story file, the "
+        "events, the board, the review PR and the next brief of each role that worked on "
+        "it, and tells the human. A story reverted before is not reverted at once: the human "
+        "is asked (revert or keep). Refused for an unknown, done or cancelled story, a blank "
+        "reason, a pending cancel or revert question, a story with no commits, one that "
+        "started stories depend on, and while a boundary is pending.",
         {"story": str, "reason": str},
     ),
     "pass_tests": (

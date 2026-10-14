@@ -1768,6 +1768,11 @@ function priorityLabel(e) {
 }
 
 const TIMELINE = {
+  "story-reverted": (e) => ({
+    from: PO, to: e.story, what: `reverted (${e.data.count}×)`,
+    body: [e.data.reason, `Commits: ${(e.data.commits ?? []).map((c) => c.slice(0, 12)).join(", ")}`,
+           `Revert: ${(e.data.revert ?? "").slice(0, 12)}`, `Back at: ${e.data.step}`].join("\n"),
+  }),
   "story-admin": (e) => ({
     from: e.role ?? "human", to: e.story,
     what: e.data.tool + ": " + (e.data.after.po_hold ? e.data.after.po_hold.kind : e.data.after.status),
@@ -1930,6 +1935,8 @@ function backlogGroups(view) {
   };
 }
 
+const revertPill = (s) => s.reverts ? pill(`reverted (${s.reverts}×)`, "warning", false) : "";
+
 function storyLabel(story) {
   return story.label ? pill(story.label, LABEL_TONE[story.label] ?? "") : "";
 }
@@ -1977,7 +1984,7 @@ function backlogRow(story, place, count, view) {
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
     <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${envPills(story)}</span>
-    ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}${depsLine(story)}${depWarnings(story)}
+    ${storyLabel(story)}${revertPill(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}${depsLine(story)}${depWarnings(story)}
     ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
 }
 
@@ -2373,6 +2380,7 @@ function storyCard(view, s, act) {
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
     working ? pill(`▶ ${act.role}`, "accent") : "",
+    revertPill(s),
     s.wait ? pill(`⏸ ${s.wait.title}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">

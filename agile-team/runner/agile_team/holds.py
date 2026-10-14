@@ -11,6 +11,7 @@ class HoldKind(StrEnum):
 
     HOLD = "PO hold"
     CANCEL = "cancel requested"
+    REVERT = "revert requested"
 
 
 @dataclass

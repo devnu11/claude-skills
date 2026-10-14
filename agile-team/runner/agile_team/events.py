@@ -23,6 +23,7 @@ class EventKind(StrEnum):
     """What happened."""
 
     STORY_ADMIN = "story-admin"
+    STORY_REVERTED = "story-reverted"
     STEP_START = "step-start"
     CHECKOUT = "checkout"
     STEP_END = "step-end"

@@ -100,6 +100,32 @@ class Git:
         self.run("commit", "--no-verify", "-m", with_trailer(f'Revert "{self.subject(sha)}"'))
         return self.head()
 
+    def is_ancestor(self, sha: str) -> bool:
+        """True when ``sha`` is an ancestor of HEAD."""
+        return self._exec("merge-base", "--is-ancestor", sha, "HEAD").code == 0
+
+    def log_from(self, first: str) -> list[tuple[str, str]]:
+        """(sha, subject) of ``first`` and every commit after it up to HEAD, oldest first."""
+        out = self.run("log", "--reverse", "--format=%H%x1f%s", f"{first}..HEAD")
+        rest = [tuple(line.split("\x1f", 1)) for line in out.splitlines() if line]
+        return [(first, self.subject(first)), *rest]
+
+    def revert_all(self, shas: Sequence[str], message: str) -> str:
+        """Revert ``shas`` (newest first) in one commit; on failure abort and raise GitError."""
+        self.run("reset", "-q")
+        code, out = self.attempt("revert", "--no-commit", *shas)
+        if code != 0:
+            raise GitError(self._abort_revert(out))
+        self.run("commit", "--no-verify", "-m", with_trailer(message))
+        return self.head()
+
+    def _abort_revert(self, output: str) -> str:
+        """Abort a failed multi-revert; the conflicting paths, or the output."""
+        _, names = self.attempt("diff", "--name-only", "--diff-filter=U")
+        self.attempt("revert", "--abort")
+        paths = ", ".join(names.split())
+        return f"conflicts in {paths}" if paths else output.strip()
+
 
 def with_trailer(message: str) -> str:
     """Append the co-author trailer to ``message``."""

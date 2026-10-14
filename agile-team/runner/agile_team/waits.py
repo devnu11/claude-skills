@@ -22,9 +22,10 @@ class WaitReason(StrEnum):
     HELD = "held"
     PO_HOLD = "PO hold"
     CANCEL_REQUESTED = "cancel requested"
+    REVERT_REQUESTED = "revert requested"
 
 
-TITLED = frozenset({WaitReason.PO_HOLD, WaitReason.CANCEL_REQUESTED})
+TITLED = frozenset({WaitReason.PO_HOLD, WaitReason.CANCEL_REQUESTED, WaitReason.REVERT_REQUESTED})
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def _needs_manager(story: StoryState) -> bool:
 
 WAITS: tuple[WaitRule, ...] = (
     WaitRule(WaitReason.CANCEL_REQUESTED, lambda s, a: _po_kind(s) is HoldKind.CANCEL, _po_reason),
+    WaitRule(WaitReason.REVERT_REQUESTED, lambda s, a: _po_kind(s) is HoldKind.REVERT, _po_reason),
     WaitRule(WaitReason.PO_HOLD, lambda s, a: _po_kind(s) is HoldKind.HOLD, _po_reason),
     WaitRule(WaitReason.HUMAN, lambda s, a: s.status is StoryStatus.BLOCKED, _summary),
     WaitRule(WaitReason.MANAGER, lambda s, a: _needs_manager(s) and bool(s.repeated), _first_line),
