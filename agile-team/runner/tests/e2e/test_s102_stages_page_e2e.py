@@ -54,7 +54,7 @@ def test_tool_boxes_are_idle_with_runs_and_time() -> None:
     """)
     tool = '<span>presentation.trial</span><span class="f-toolstats">'
     assert tool + " · ↻ 1 · 30s</span>" in out["run"]
-    assert 'class="fc-tool f-tools fc-t-tool"' in out["run"]
+    assert 'class="fc-tool f-tools"' in out["run"] and 'class="fc-t-tool"' in out["run"]
     assert tool + " · ↻ 0</span>" in out["story"]
 
 
