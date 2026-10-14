@@ -654,7 +654,7 @@ def test_complete_files_then_the_liveness_outcome_decides() -> None:
     assert p.checks.presented(story_of()) is live and calls == ["s4"]
 
 
-def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round() -> None:
+def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round(config: cfg.Config) -> None:
     reason = "story s4 presentation is not up: acceptance environment 'dashboard' did not start: x"
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, reason))
     s = story_of("e2e")
@@ -664,7 +664,7 @@ def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_roun
     assert (s.step, s.rounds) == ("e2e", 1)
 
 
-def test_e2e_done_on_a_busy_port_holds_without_a_round() -> None:
+def test_e2e_done_on_a_busy_port_holds_without_a_round(config: cfg.Config) -> None:
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.HOLD, "port busy"))
     s = story_of("e2e")
     out = p.evaluate(s, Handoff("done"))
@@ -673,7 +673,7 @@ def test_e2e_done_on_a_busy_port_holds_without_a_round() -> None:
     assert (s.step, s.rounds) == ("e2e", 0)
 
 
-def test_e2e_done_with_a_live_service_goes_to_acceptance() -> None:
+def test_e2e_done_with_a_live_service_goes_to_acceptance(config: cfg.Config) -> None:
     p, calls = gate_pipeline()
     s = story_of("e2e")
     out = p.evaluate(s, Handoff("done"))
