@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from agile_team import cli, gates, revert_log, reverts, system
 from agile_team import config as config_mod
+from agile_team import requirements as rq
 from agile_team.roles import Handoff
 from agile_team.state import RunState
 
@@ -51,6 +52,13 @@ def gate_story(make_runtime, reasons, **kw):
     return rt, story, calls
 
 
+def revert_setup(rt, story, design_text: str) -> None:
+    """Mark the story reverted once, with a design file holding ``design_text``."""
+    story.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", ["a" * 40], "b" * 40)]
+    rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
+    rt.pipeline.checks.read = lambda path: design_text
+
+
 def test_checked_story_with_untraced_ac_bounces_to_design(make_runtime) -> None:
     reasons = [HEAD, "- s1/AC2 is covered by no active requirement; add it"]
     rt, story, calls = gate_story(make_runtime, reasons)
@@ -63,8 +71,9 @@ def test_checked_story_with_untraced_ac_bounces_to_design(make_runtime) -> None:
 
 def test_a_bounce_counts_a_round(make_runtime) -> None:
     rt, story, _ = gate_story(make_runtime, [HEAD, "- x"])
-    result = rt.pipeline.evaluate(story, Handoff("done"))
-    assert result.verdict is gates.Verdict.BOUNCE
+    report = run(rt, "architect", story="s1")
+    assert report["gate"]["verdict"] == "bounce"
+    assert story.rounds == 1 and story.step == "design"
 
 
 def test_traced_story_passes(make_runtime) -> None:
@@ -87,9 +96,7 @@ def test_the_gate_runs_only_at_the_design_step(make_runtime) -> None:
 
 def test_a_reverted_story_lists_the_revert_reason_then_the_trace(make_runtime) -> None:
     rt, story, _ = gate_story(make_runtime, [HEAD, "- s1/AC1 untraced"])
-    story.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", ["a" * 40], "b" * 40)]
-    rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
-    rt.pipeline.checks.read = lambda path: "# s1\n\nnothing\n"
+    revert_setup(rt, story, "# s1\n\nnothing\n")
     out = rt.pipeline.evaluate(story, Handoff("done"))
     missing = gates.REDESIGN_MISSING.format(id="s1", count=1, file="docs/design/s1.md")
     assert out.verdict is gates.Verdict.BOUNCE
@@ -98,9 +105,7 @@ def test_a_reverted_story_lists_the_revert_reason_then_the_trace(make_runtime) -
 
 def test_a_reverted_exempt_story_still_needs_its_redesign_section(make_runtime) -> None:
     rt, story, calls = gate_story(make_runtime, ["- x"], trace=gates.Trace.EXEMPT)
-    story.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", ["a" * 40], "b" * 40)]
-    rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
-    rt.pipeline.checks.read = lambda path: "# s1\n\nnothing\n"
+    revert_setup(rt, story, "# s1\n\nnothing\n")
     out = rt.pipeline.evaluate(story, Handoff("done"))
     assert out.reason == gates.REDESIGN_MISSING.format(id="s1", count=1, file="docs/design/s1.md")
     assert calls == []
@@ -108,9 +113,7 @@ def test_a_reverted_exempt_story_still_needs_its_redesign_section(make_runtime) 
 
 def test_a_reverted_story_with_section_and_trace_passes(make_runtime) -> None:
     rt, story, _ = gate_story(make_runtime, [])
-    story.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", ["a" * 40], "b" * 40)]
-    rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
-    rt.pipeline.checks.read = lambda path: "# s1\n\n## After revert 1\n\nchanges\n"
+    revert_setup(rt, story, "# s1\n\n## After revert 1\n\nchanges\n")
     assert rt.pipeline.evaluate(story, Handoff("done")).verdict is gates.Verdict.PASS
 
 
@@ -234,6 +237,20 @@ def test_check_without_a_requirements_folder(configured: Path, capsys) -> None:
     code, out = cli_run(configured, capsys)
     assert code == 0
     assert out == {"problems": [], "coverage": {"s1": {"AC1": [], "AC2": []}}, "unreadable": {}}
+
+
+def test_an_unreadable_requirement_file_is_reported_not_raised(
+    configured: Path, monkeypatch
+) -> None:
+    config = config_mod.load(configured)
+    write_req(configured, 1)
+
+    def broken(path):
+        raise UnicodeDecodeError("utf-8", b"", 0, 1, "bad")
+
+    monkeypatch.setattr(rq.system, "read_text", broken)
+    [source] = rq.sources(config)
+    assert source == rq.Source("docs/requirements/REQ-001.md", None)
 
 
 def test_requirements_command_is_registered_after_config() -> None:

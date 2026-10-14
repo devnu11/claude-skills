@@ -8,6 +8,7 @@ from agile_team import gates, sandbox, story_spec, system
 from agile_team.config import Environment
 from agile_team.dispatch import StepRequest
 from agile_team.gates import PreviousStep, StoryStatus, Verdict
+from agile_team.git_ops import Git
 from agile_team.router import Work, standard_brief
 
 from .conftest import FakeQuery, handoff, present, write_story
@@ -53,9 +54,10 @@ def gate_events(rt) -> list:
     return [e for e in rt.events.events() if e.kind == "gate"]
 
 
-def described(prompt: str) -> str:
-    """The prompt without the trace section's 'untraced' lines, which list every AC."""
-    return "\n".join(x for x in prompt.splitlines() if not x.endswith(": untraced"))
+def criteria(prompt: str) -> str:
+    """The prompt's '## Criteria for this step' section, up to the next '## ' heading."""
+    rest = prompt.split("## Criteria for this step", 1)[1]
+    return rest.split("\n## ", 1)[0]
 
 
 def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_runtime) -> None:
@@ -66,7 +68,7 @@ def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_run
     assert orders[0].presentation == rt.config.run_dir / "presentation/s1/cli"
     prompt = rt.query_fn.calls[0]["prompt"]
     assert "acceptance environment cli" in prompt and "- AC1:" in prompt and "- AC3:" in prompt
-    assert "- AC2:" not in described(prompt)
+    assert "- AC2:" not in criteria(prompt)
     assert first["gate"]["verdict"] == "next" and first["gate"]["now_at"] == "acceptance"
     assert (story.step, story.rounds) == ("acceptance", 0)
     step(rt)
@@ -74,8 +76,24 @@ def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_run
     assert orders[1].presentation == rt.config.run_dir / "presentation/s1/api"
     second = rt.query_fn.calls[1]["prompt"]
     assert "acceptance environment api" in second and "- AC2:" in second
-    assert "- AC1:" not in described(second)
+    assert "- AC1:" not in criteria(second)
     assert story.status is StoryStatus.DONE
+
+
+def test_a_requirement_covering_the_other_environments_ac_is_not_in_the_criteria(
+    make_runtime,
+) -> None:
+    rt, _ = build(make_runtime)
+    system.make_dirs(rt.config.requirements_dir)
+    body = "---\nid: REQ-001\ntitle: Api thing\nstatus: active\ncovers: ['s1/AC2']\n---\n\nWords.\n"
+    system.write_text(rt.config.requirements_dir / "REQ-001.md", body)
+    git = Git(rt.config.repo)
+    git.run("add", "docs")
+    git.run("commit", "-q", "-m", "req")
+    step(rt)
+    prompt = rt.query_fn.calls[0]["prompt"]
+    assert "- AC2: REQ-001 (Api thing)" in prompt.split("## Requirements", 1)[1]
+    assert "- AC2:" not in criteria(prompt)
 
 
 def test_a_next_verdict_hands_nothing_over(make_runtime) -> None:

@@ -133,6 +133,12 @@ def test_row7_bad_status() -> None:
     assert got.problems == (line("status is 'draft'; use active or retired"),)
 
 
+@pytest.mark.parametrize(("value", "shown"), [("[active]", "['active']"), ("{a: 1}", "{'a': 1}")])
+def test_row7_non_scalar_status_is_a_bad_status_line(value: str, shown: str) -> None:
+    got = parse(text(status=value))
+    assert got.problems == (line(f"status is {shown}; use active or retired"),)
+
+
 def test_row7_missing_status_is_none() -> None:
     got = parse(text().replace("status: active\n", ""))
     assert got.problems == (line("status is None; use active or retired"),)
