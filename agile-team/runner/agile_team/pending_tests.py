@@ -18,7 +18,7 @@ from . import junit, system
 REGISTRY = ".team/pending-tests.json"
 WHOLE = range(1, sys.maxsize)
 Changed = Mapping[str, tuple[range, ...]]
-NEW_FILE = re.compile(r"^\+\+\+ (?:b/(?P<path>.+)|.*)$")
+NEW_FILE = re.compile(r"^\+\+\+ (?:b/(?P<path>.+?)\t*|.*)$")  # git adds a tab after a path with a space
 HUNK = re.compile(r"^@@ -\S+ \+(?P<start>\d+)(?:,(?P<count>\d+))? @@")
 NOT_AN_OBJECT = "{file} must hold an object of story ids to lists of test ids"
 
