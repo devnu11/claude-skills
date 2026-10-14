@@ -578,14 +578,14 @@ def test_the_token_comes_from_the_flag_then_the_config_then_random(
 
 def test_a_config_token_never_reaches_the_snapshot_or_the_run_files(gate) -> None:
     app, rt = gate
-    app = replace(app, token="presentation")
-    post(PostWire(app, GOOD, token="presentation"))
+    app = replace(app, token="tok-9f3a7c")
+    post(PostWire(app, GOOD, token="tok-9f3a7c"))
     assert len(request_files(rt)) == 1
     snap = snapshot.build(rt.config, RoleBook.for_repo(rt.config.repo, rt.config.roles))
-    assert "presentation" not in json.dumps(snap)
+    assert "tok-9f3a7c" not in json.dumps(snap)
     for path in system.list_dir(rt.config.run_dir):
         if system.is_file(path):
-            assert "presentation" not in system.read_text(path)
+            assert "tok-9f3a7c" not in system.read_text(path)
 
 
 def test_dashboard_config_defaults_to_an_empty_token(scratch: Path) -> None:
