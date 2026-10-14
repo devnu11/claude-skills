@@ -1918,8 +1918,9 @@ The pass ends at the first step whose report matches a row of the
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
-been handed, each as a path to read; see "Liaison messages"), `sprint_end` (every story
-in the sprint is done and the sprint's end boundary has finished; a
+been handed, each as a path to read; see "Liaison messages"), `ready_backlog`
+(s124: nothing in the sprint can move and the backlog has ready stories), `sprint_end` (every story
+in the sprint is done, cancelled or reverted and the sprint's end boundary has finished; a
 `Review: …` line says what was pushed) and `stalled` (nothing can move; the
 reason for each story is listed, or the held boundary). A story's reason is
 its hold first (`held (…)`), then its undone dependencies in list order
@@ -1952,7 +1953,8 @@ story.
   or not a PO session is running, and the PO gets it as a `human_message`
   hand-over. While it waits, `status_reason` lists each story and the
   question ids it waits on (`waiting on answers: s40 waits on m42`). A
-  `stalled` hand-over never happens while a question is open.
+  `stalled` hand-over never happens while a question is open. A
+  `ready_backlog` hand-over can (s124; see "Backlog and sprints").
 - The run ends when a stop is requested, the run halts, the PO sets
   `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
   and the next pass finds only "sprint complete" or "nothing can move" without
@@ -2062,6 +2064,24 @@ committed to, or `null` when it is in the backlog.
   `reason` (`sprint N still has unfinished stories (…); use add_to_sprint to
   add work, or give a reason for starting a new sprint`). The reason is added
   to the `sprint-start` event as `"reason"`.
+- **A sprint ends only when it is finished (s124).** It is finished when it
+  has stories and every one is done, cancelled (the human's call) or reverted
+  (`revert_story`, see "Reverting a story"). Cancelled and reverted stories
+  leave the sprint. The end boundary opens, and `sprint_end` is handed over,
+  only then. `notify_user` with kind `sprint-end` is refused while any sprint
+  story is unfinished: `sprint N can't end: s3 at implement, s5 at design
+  unfinished. Finish them, revert_story(story, reason), or ask the human to
+  cancel them (request_cancel); add_to_sprint ready backlog stories to keep
+  working meanwhile`. Nothing is posted and the status stays.
+- **Ready backlog (s124).** When nothing in the open sprint can move, no
+  boundary is pending, and the backlog has ready stories (active, not held,
+  dependencies done), the runner hands over `ready_backlog`. It does this even
+  while a question is open. The lines are the stall reasons, then `Ready in
+  the backlog (dependencies done, not held):` with up to 5 `- sN: <title>`
+  lines (`- and N more`), and advice to `add_to_sprint` them. It is offered
+  once for each set of stuck and ready stories (`offered` in `state.json`), and
+  names no story, so it holds none. Unlike `stalled`, it is never quiet: a
+  PO turn that ends with it pending gets it rather than ending the run.
 - `state.json` from before backlogs existed loads every story into the
   backlog. Step, rounds, status and commit are kept. On resume, the runner
   tells the PO that nothing can move, and the PO starts a sprint with the
@@ -2136,6 +2156,65 @@ answer: role `null`, data `{"tool": "answer", "reason", "question",
 or `unclear`). `before` and `after` are `{"status", "step", "sprint",
 "hold", "po_hold"}`. The story's `label` is `cancelled`, then `cancel
 requested`, then `held` (any PO hold or held tier), else `""`.
+
+### Reverting a story (s124)
+
+`revert_story(story, reason)` is the PO's call. It takes a story's work out of
+the team branch, so the sprint can end or the story can start again.
+
+**Refusals**, in order (a refusal changes, saves, posts and emits nothing):
+the checkout moved (a `halted` report, as for `pass_tests`); a boundary is
+pending; an unknown story; a blank reason; a done or cancelled story (`story
+sN is done; there is nothing to revert`); a pending cancel or revert
+question (`story sN already waits on the human's answer to mN about
+reverting it; answer mN instead`, and the cancel text for a cancel); no
+recorded commit (`story sN has no commits to revert`); a started, unfinished
+story lists it in `depends_on` (`started stories depend on sN: …; revert
+them first, or keep sN`); its first commit is not on the checked-out branch;
+a git conflict with later commits (`reverting story sN stopped: conflicts
+in …; nothing was reverted`, after `git revert --abort`). While a revert
+question waits, `hold_story` and `request_cancel` are refused with the same
+text.
+
+**The revert.** The runner first commits the PO's open edits (as before a
+`run_role`). The story's commits are its first recorded commit and each later
+commit whose subject is `fixup! <that subject>`. They are reverted, newest
+first, in **one** commit: `revert(sN): <title>`, body `Reverts <shas>.` and
+`Reason: <reason>`. Then the runner:
+
+- appends to `.team/stories/sN.md`, under a `## Reverted` heading added
+  before the first entry, `- <UTC date>, sprint <N>: <reason> Reverted
+  commits: <shas>. Revert commit: <sha>.` (12-character shas). It commits this
+  separately as `chore(sN): record the revert in the story file`;
+- resets the story: back in the backlog (`sprint: null`) at the step before
+  `tests` (or its current step when that comes earlier), with commit, code
+  commits, rounds, holds, dispute and fix records cleared. It keeps its id,
+  title, `depends_on`, developer choices and `reverted` history, keeps its
+  place in `order`, and leaves `pulled`;
+- emits one `story-reverted` event: `{"sprint", "reason", "commits",
+  "revert", "record", "count", "from_step", "step", "roles", "question"}`;
+- tells the human: one `update` note naming the story, reason, commits,
+  revert commit and step.
+
+**Where the team sees it.** The Board card and Backlog row show `reverted
+(n×)`. The sprint's review PR has a `Reverted:` block with one line per revert
+made in that sprint. Each role that worked on the story (its `step-end`
+events) gets a `## Reverted` section in its next brief on the story, once
+(`revert_owed` in `state.json`). Every brief for the story's `design` step
+adds: `Your design must say what changes this time, under a "## After
+revert N" heading; the design gate checks for it`. A `done` at `design`
+without that heading in `<docs>/design/sN.md` bounces back to design.
+
+**A second revert asks the human.** For a story reverted before,
+`revert_story` reverts nothing. It posts `Revert story sN ("<title>") again?
+It was reverted N× already (last: <reason>). The PO asks because: <reason>
+Answer "revert" to revert it or "keep" to keep it.` and sets a `revert
+requested` PO hold (Board `⏸ revert requested: <reason>`). It returns `{"status":
+"revert requested", "story", "step", "question"}`. The answer is settled where
+cancel answers are. `revert` reverts as above (on failure, a `PO hold`
+saying why). `keep` clears the hold. Anything else is a `PO hold` (`the answer
+to mN was neither "revert" nor "keep": …`). Each request and answer writes a
+`story-admin` event, as in s53.
 
 ## Story files
 
@@ -2391,8 +2470,8 @@ Manager):
    sha that last passed them). The start boundary then finishes; review,
    push, rebase, restack and ci run only at a sprint end.
 
-**End** (opened when every sprint story is done, before the `sprint_end`
-hand-over). The stages run in this order:
+**End** (opened when the sprint is finished: every sprint story is done,
+cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run in this order:
 
 1. **sync**: fetch, record the team branch, and add this sprint's entry:
    branch `<prefix><N>`, range `start..end` (start = the previous entry's

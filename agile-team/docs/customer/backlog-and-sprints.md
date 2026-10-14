@@ -41,6 +41,38 @@ stories not yet started. It joins the sprint's review PR like the others.
 The PO starts a new sprint only when the sprint's stories are done or you
 ask for one. Restarting with unfinished stories needs a reason.
 
+## When a sprint ends
+
+A sprint ends only when every story in it is **done**, **cancelled** (only
+you can cancel) or **reverted** (the PO's call). The runner refuses the PO's
+"sprint end" note before then. The refusal names each unfinished story and
+its step, so no review PR carries half-built work.
+
+If everything left in the sprint is stuck, for example waiting on your
+answer, the runner shows the PO the backlog stories that are ready to run.
+The PO adds them to the sprint, so the team keeps working instead of
+stopping.
+
+### Reverting a story
+
+When a story's work has to come out, the PO reverts it. The runner then:
+
+- undoes the story's commits on the team branch in one commit,
+  `revert(s7): <title>`, and puts the story back in the backlog before its
+  tests step;
+- adds a "Reverted" entry to the story file: the date, the sprint, the
+  reason, the commits undone and the revert commit;
+- shows `reverted (1×)` on the story's Board card and Backlog row, adds a
+  row to the timeline, and lists the story under "Reverted" in the sprint's
+  review PR;
+- tells every role that worked on the story, in its next brief, that it was
+  reverted and why. The next design must say what changes this time;
+- sends you an update naming the story, the reason and the commits.
+
+The PO can't revert a story twice on its own. The second time, it asks you:
+`Revert story s7 ("…") again? … Answer "revert" to revert it or "keep" to
+keep it.` Until you answer, the card shows `⏸ revert requested: <reason>`.
+
 ## The order of work
 
 The team works in an explicit order, not in the order stories were written.

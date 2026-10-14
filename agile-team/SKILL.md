@@ -125,7 +125,17 @@ command fails.
    reason, and the pull shows in the timeline. The PO adds a story to the
    running sprint with `add_to_sprint(stories, reason)`. The sprint keeps its
    number and branch, and no boundary or Manager turn runs. A new
-   `start_sprint` while stories are unfinished needs a reason. When the human states an
+   `start_sprint` while stories are unfinished needs a reason. **A sprint
+   ends only when every story in it is done, cancelled or reverted:** the
+   runner refuses the PO's `sprint-end` note before then and names the
+   unfinished stories. When everything left is stuck, the runner lists the
+   ready backlog stories and the PO adds them with `add_to_sprint`, rather
+   than ending or waiting. The PO may `revert_story(story, reason)`: one
+   `revert(sN): <title>` commit, and the story goes back to the backlog
+   before tests. You get an `update` note naming the commits. The Board shows
+   `reverted (n×)`, and the review PR lists it under "Reverted". A second
+   revert of the same story is a question for the human (`revert` / `keep`).
+   Relay it like a cancel. When the human states an
    order ("s30 before s29"), relay it to the PO. The board shows each
    story's `#position`. A story that cannot move shows `⏸ <reason>` and what
    it waits on; it keeps its place in the order and runs once it is
