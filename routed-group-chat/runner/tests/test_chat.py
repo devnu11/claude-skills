@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+from claude_agent_sdk import ProcessError
 from group_chat.addressing import AddressError
+from group_chat.backend import BackendError, ClaudeBackend
 from group_chat.chat import GroupChat, Limits, PartialReplyError, handoff_of
 from group_chat.roster import Roster
 from group_chat.state import StateError, Store, Turn
@@ -224,7 +227,7 @@ def test_held_lock_refuses_and_records_nothing(
     chat = make(roster, backend, tmp_path)
     chat.store.directory.mkdir()
     chat.store.lock_path.write_text("")
-    with pytest.raises(StateError, match="another group-chat"):
+    with pytest.raises(StateError, match="held by another process"):
         chat.say("@po hi")
     assert backend.calls == []
     assert not chat.store.path.exists()
@@ -376,3 +379,39 @@ def test_handoff_not_at_line_start(text: str) -> None:
 
 def test_handoff_to_self_in_other_case_is_ignored() -> None:
     assert handoff_of("HANDOFF: @MANAGER", NAMES, "manager") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "```\nHANDOFF: @po\n```",
+        "~~~\nHANDOFF: @po\n~~~",
+        "Example:\n```text\nHANDOFF: @po",
+    ],
+)
+def test_fenced_handoff_is_ignored(text: str) -> None:
+    assert handoff_of(text, NAMES, "manager") is None
+
+
+def test_handoff_after_fence_counts() -> None:
+    assert handoff_of("```\nHANDOFF: @liaison\n```\nHANDOFF: @po", NAMES, "manager") == "po"
+
+
+def test_partial_reply_error_is_a_backend_error() -> None:
+    assert issubclass(PartialReplyError, BackendError)
+    error = PartialReplyError([Turn("po", "x")], BackendError("down"))
+    assert str(error) == "down"
+    assert error.replies == [Turn("po", "x")]
+
+
+def test_sdk_error_gives_partial_reply_with_note(roster: Roster, tmp_path: Path) -> None:
+    async def query_fn(**_kwargs: object) -> AsyncIterator[object]:
+        raise ProcessError("crashed", exit_code=1)
+        yield  # pragma: no cover
+
+    chat = GroupChat(roster, ClaudeBackend(query_fn), Store(tmp_path / "chat"))
+    with pytest.raises(PartialReplyError) as exc:
+        chat.say("@po hi")
+    assert exc.value.replies[-1].speaker == "orchestrator"
+    assert exc.value.replies[-1].text.startswith("@po could not answer: ProcessError: crashed")
+    assert not chat.store.lock_path.exists()

@@ -6,6 +6,7 @@ Covers error paths of ``python -m group_chat`` that exit before any model call.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -77,7 +78,7 @@ def test_held_lock_exits_2(tmp_path: Path) -> None:
     (chat / "lock").write_text("")
     done = group_chat(tmp_path, "--roster", str(roster), "--dir", str(chat), "say", "@po hi")
     assert done.returncode == 2
-    assert "another group-chat is using this chat" in done.stderr
+    assert "lock is held by another process" in done.stderr
     assert (chat / "lock").exists()
     assert not (chat / "state.json").exists()
 
@@ -89,3 +90,46 @@ def test_negative_flag_exits_2(tmp_path: Path) -> None:
     done = group_chat(tmp_path, *argv, "log")
     assert done.returncode == 2
     assert "must be >= 0" in done.stderr
+
+
+def hold_lock(chat: Path) -> subprocess.Popen[str]:
+    """Start ``tests/hold_lock.py`` and wait until it holds the lock."""
+    helper = Path(__file__).parents[1] / "hold_lock.py"
+    child = subprocess.Popen(
+        [sys.executable, str(helper), str(chat)],
+        cwd=RUNNER_DIR,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert child.stdout is not None
+    assert child.stdout.readline().strip() == "locked"
+    return child
+
+
+def stop(child: subprocess.Popen[str]) -> None:
+    """Kill ``child`` if it still runs and close its pipe."""
+    if child.poll() is None:
+        child.kill()
+        child.wait(timeout=30)
+    if child.stdout is not None:
+        child.stdout.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM handling is POSIX only")
+def test_sigterm_releases_the_lock(tmp_path: Path) -> None:
+    """cli: SIGTERM becomes ``SystemExit`` "so ``finally`` blocks (the chat lock) run"."""
+    # Given another group-chat holds the lock
+    roster = write_roster(tmp_path)
+    chat = tmp_path / "c"
+    holder = hold_lock(chat)
+    try:
+        busy = group_chat(tmp_path, "--roster", str(roster), "--dir", str(chat), "say", "@po hi")
+        assert busy.returncode == 2
+        assert f"held by pid {holder.pid}" in busy.stderr
+        # When it receives SIGTERM
+        holder.send_signal(signal.SIGTERM)
+        # Then it exits 128+15 and leaves no lock behind
+        assert holder.wait(timeout=30) == 128 + signal.SIGTERM
+    finally:
+        stop(holder)
+    assert not (chat / "lock").exists()

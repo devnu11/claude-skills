@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from group_chat.decision_log import PREFIX, DecisionLog, Entry
+from group_chat.decision_log import PREFIX, DecisionLog, Entry, strip_fences, validate
 
 pytestmark = pytest.mark.unit
 
@@ -184,13 +184,23 @@ def test_blank_marker_text_is_ignored(line: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "line", ["RESOLVED: Q1, Q3", "RESOLVED: q1 and q3.", "RESOLVED: Q1/Q3!", "- RESOLVED: Q3; Q1"]
+    ("line", "still_open"),
+    [
+        ("RESOLVED: Q1, Q3", ["Q2"]),
+        ("RESOLVED: q1,q3.", ["Q2"]),
+        ("- RESOLVED: Q1 ,  Q3 settled", ["Q2"]),
+        ("RESOLVED: q1 and q3.", ["Q2", "Q3"]),
+        ("RESOLVED: Q1 now that Q3 is moot", ["Q2", "Q3"]),
+        ("RESOLVED: Q1/Q3!", ["Q2", "Q3"]),
+        ("- RESOLVED: Q3; Q1", ["Q1", "Q2"]),
+        ("RESOLVED: see Q1", ["Q1", "Q2", "Q3"]),
+    ],
 )
-def test_resolved_closes_every_id_on_the_line(line: str) -> None:
+def test_resolved_closes_leading_comma_separated_ids(line: str, still_open: list[str]) -> None:
     log = DecisionLog()
     log.apply("po", "QUESTION: a?\nQUESTION: b?\nQUESTION: c?")
     log.apply("manager", line)
-    assert [e.id for e in log.questions] == ["Q2"]
+    assert [e.id for e in log.questions] == still_open
 
 
 def test_resolved_does_not_match_inside_words() -> None:
@@ -207,4 +217,85 @@ def test_prefix_is_exported_for_handoff() -> None:
 def test_blank_bold_marker_is_ignored() -> None:
     log = DecisionLog()
     log.apply("po", "- **DECISION:**  ")
+    assert log.decisions == []
+
+
+@pytest.mark.parametrize(
+    ("line", "text"),
+    [
+        ("**DECISION: ship**", "ship"),
+        ("- **DECISION:** ship", "ship"),
+        ("- **DECISION: ship Friday**  ", "ship Friday"),
+        ("DECISION: use **bold** here", "use **bold** here"),
+    ],
+)
+def test_trailing_bold_is_dropped(line: str, text: str) -> None:
+    log = DecisionLog()
+    log.apply("po", line)
+    assert [e.text for e in log.decisions] == [text]
+
+
+@pytest.mark.parametrize("line", ["**DECISION:**", "- **DECISION:**  "])
+def test_bold_marker_without_text_is_ignored(line: str) -> None:
+    log = DecisionLog()
+    log.apply("po", line)
+    assert log.decisions == []
+
+
+@pytest.mark.parametrize(
+    ("text", "kept"),
+    [
+        ("a\n```\nDECISION: x\n```\nb", "a\nb"),
+        ("a\n~~~\nDECISION: x\n~~~\nb", "a\nb"),
+        ("a\n```python\nDECISION: x", "a"),
+        ("```x```\nDECISION: y", "```x```\nDECISION: y"),
+        ("```\nq\n~~~\nDECISION: v\n```\nDECISION: u", "DECISION: u"),
+        ("~~~\n```\n~~~\nDECISION: w", "DECISION: w"),
+        ("  ```\n  DECISION: x\n  ```", ""),
+        ("no fences", "no fences"),
+    ],
+)
+def test_strip_fences(text: str, kept: str) -> None:
+    assert strip_fences(text) == kept
+
+
+def test_unclosed_fence_hides_rest_of_message() -> None:
+    log = DecisionLog()
+    log.apply("po", "DECISION: a\n~~~\nDECISION: b\nQUESTION: c?")
+    assert [e.text for e in log.decisions] == ["a"]
+    assert log.questions == []
+
+
+def test_tilde_fenced_markers_are_ignored() -> None:
+    log = DecisionLog()
+    log.apply("po", "~~~md\nRESOLVED: Q1\n~~~")
+    log.apply("po", "QUESTION: open?")
+    assert [e.id for e in log.questions] == ["Q1"]
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        ([], "log must be a table"),
+        ({"next_decision": 1.5}, "next_decision must be a int"),
+        ({"decisions": {}}, "decisions must be a list"),
+        ({"questions": [{"id": "Q1", "text": "a", "by": 1}]}, "by must be a str"),
+        ({"decisions": [{"id": "D1", "text": "a", "by": "po", "x": 1}]}, "unknown key"),
+    ],
+)
+def test_validate_refuses_bad_log(data: object, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        validate(data, ValueError)
+
+
+def test_validate_accepts_to_dict_output() -> None:
+    log = DecisionLog()
+    log.apply("po", "DECISION: a\nQUESTION: b")
+    validate(log.to_dict(), ValueError)
+
+
+@pytest.mark.parametrize("line", ["DECISION: **", "- **DECISION:** ** "])
+def test_marker_text_of_only_bold_is_ignored(line: str) -> None:
+    log = DecisionLog()
+    log.apply("po", line)
     assert log.decisions == []

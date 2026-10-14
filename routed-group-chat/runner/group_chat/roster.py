@@ -1,7 +1,7 @@
 """Load and validate a roster: the roles that share one chat thread.
 
 A roster is TOML data, checked on load against ``TOP_FIELDS`` and
-``ROLE_FIELDS``: unknown keys and wrong types are refused, so a typo such as
+``ROLE_FIELDS`` (see ``schema``): unknown keys and wrong types are refused, so a typo such as
 ``modle`` fails loudly instead of being dropped. Each ``[[role]]`` has a
 ``name`` (the @mention), an optional ``title`` and ``model``, and exactly one of
 ``prompt`` (inline) or ``prompt_file`` (relative to the roster file).
@@ -15,6 +15,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .schema import check
 
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,31}")
 # ``all`` is the broadcast mention; ``human`` and ``orchestrator`` are speakers.
@@ -73,7 +75,7 @@ def load(path: Path) -> Roster:
 
 def parse(data: Mapping[str, Any], base: Path) -> Roster:
     """Validate roster data; ``base`` resolves ``prompt_file`` paths."""
-    check_fields(data, TOP_FIELDS, "roster")
+    check(data, TOP_FIELDS, "roster", RosterError)
     raw = data.get("role")
     if not raw:
         raise RosterError("roster needs at least one [[role]]")
@@ -82,20 +84,8 @@ def parse(data: Mapping[str, Any], base: Path) -> Roster:
     return Roster(data.get("team", "group chat"), roles)
 
 
-def check_fields(table: Any, fields: Mapping[str, type], where: str) -> None:
-    """Refuse a non-table, unknown keys and values of the wrong type."""
-    if not isinstance(table, Mapping):
-        raise RosterError(f"{where} must be a table")
-    unknown = sorted(set(table) - set(fields))
-    if unknown:
-        raise RosterError(f"{where} has unknown key(s): {', '.join(unknown)}")
-    for key, value in table.items():
-        if not isinstance(value, fields[key]):
-            raise RosterError(f"{where}: {key} must be a {fields[key].__name__}")
-
-
 def _role(item: Any, base: Path) -> Role:
-    check_fields(item, ROLE_FIELDS, "each [[role]]")
+    check(item, ROLE_FIELDS, "each [[role]]", RosterError)
     name = _name(item.get("name"))
     return Role(name, item.get("title", name), _prompt(name, item, base), item.get("model"))
 

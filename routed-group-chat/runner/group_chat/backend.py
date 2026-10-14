@@ -15,14 +15,21 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKError,
+    ResultMessage,
+    TextBlock,
+    query,
+)
 
 QueryFn = Callable[..., AsyncIterator[Any]]
 ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
 class BackendError(RuntimeError):
-    """The model returned an error or nothing."""
+    """The model returned an error or nothing, or the SDK or CLI failed."""
 
 
 class Backend(Protocol):
@@ -59,8 +66,11 @@ class ClaudeBackend:
     query_fn: QueryFn = query
 
     def complete(self, system: str, prompt: str, model: str | None) -> str:
-        """The reply text; ``BackendError`` on an error result or no text."""
-        return asyncio.run(self._collect(system, prompt, model))
+        """The reply text; ``BackendError`` on an error result, no text or an SDK error."""
+        try:
+            return asyncio.run(self._collect(system, prompt, model))
+        except ClaudeSDKError as exc:
+            raise BackendError(f"{type(exc).__name__}: {exc}") from exc
 
     async def _collect(self, system: str, prompt: str, model: str | None) -> str:
         text, result = "", None

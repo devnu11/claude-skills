@@ -3,8 +3,8 @@
 Routing is code, not a model's choice: ``addressing`` picks the responders, each
 answers in turn with the whole thread in view, and a reply with a
 ``HANDOFF: @name`` line passes the floor on, up to ``Limits.max_handoffs`` per
-message. A handoff to the speaker, to an unknown name or to a role already
-waiting in this message's queue is ignored.
+message (fenced code does not count). A handoff to the speaker, to an unknown
+name or to a role already waiting in this message's queue is ignored.
 
 The whole message runs under the chat's lock, and state is saved after the
 human's message and after every reply, so a model failure never loses work
@@ -22,15 +22,16 @@ from .addressing import resolve
 from .backend import Backend, BackendError
 from .compaction import SUMMARY_SYSTEM, split, summary_prompt
 from .context import system_prompt, user_prompt
-from .decision_log import PREFIX
+from .decision_log import PREFIX, strip_fences
 from .roster import Roster
 from .state import HUMAN, ChatState, Store, Turn
 
 HANDOFF_RE = re.compile(PREFIX + r"HANDOFF:(?:\*\*)?[ \t]*@([A-Za-z][A-Za-z0-9-]*)", re.MULTILINE)
 
 
-class PartialReplyError(RuntimeError):
-    """A model call failed mid-message; ``replies`` holds what did arrive."""
+class PartialReplyError(BackendError):
+    """A model call failed mid-message; ``replies`` holds what did arrive. Re-sending
+    the message records the human turn again."""
 
     def __init__(self, replies: list[Turn], cause: BackendError) -> None:
         super().__init__(str(cause))
@@ -49,7 +50,7 @@ class Limits:
 
 def handoff_of(text: str, names: tuple[str, ...], speaker: str) -> str | None:
     """The member a reply hands the floor to, if it names a valid other member."""
-    found = [name.lower() for name in HANDOFF_RE.findall(text)]
+    found = [name.lower() for name in HANDOFF_RE.findall(strip_fences(text))]
     valid = [name for name in found if name in names and name != speaker]
     return valid[-1] if valid else None
 
