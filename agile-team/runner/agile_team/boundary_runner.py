@@ -640,11 +640,11 @@ class BoundaryRunner:
         verdict, report = SETTLED[b.hold]  # type: ignore[index,union-attr]
         hit = [e.ci for e in self.stack if e.ci and e.ci.verdict is verdict]
         fields = {
-            "sprint": b.sprint,
+            "sprint": b.sprint,  # type: ignore[union-attr]
             "story": story,
             "target": self.watch.target,
             "prs": prs_text(hit),
-        }  # type: ignore[arg-type,union-attr]
+        }
         text = report.format(**fields)
         self._finish(b, text, ci=verdict, story=story, note=text)  # type: ignore[arg-type]
         self.runtime.save()

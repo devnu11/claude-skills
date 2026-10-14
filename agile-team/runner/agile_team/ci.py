@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from . import system
@@ -235,6 +236,10 @@ def check_lines(results: list[CiResult]) -> str:
     return "\n".join(_check_text(c) for c in shown)
 
 
+def _has_kind(checks: list[Check], kind: CheckKind) -> bool:
+    return any(kind_or_bucket(c) is kind for c in checks)
+
+
 def _of_kind(results: list[CiResult], kind: CheckKind) -> list[Check]:
     return [c for r in results for c in r.checks if kind_or_bucket(c) is kind]
 
@@ -318,6 +323,14 @@ def green_report(sprint: int, results: list[CiResult]) -> str:
 
 
 @dataclass(frozen=True)
+class Look:
+    """One CI read: its deadline and the lazily read, cached failures of main."""
+
+    deadline: float
+    main: Callable[[], frozenset[tuple[str, str]]]
+
+
+@dataclass(frozen=True)
 class CiWatch:
     """Waits for the CI of watched PRs under one deadline."""
 
@@ -327,8 +340,8 @@ class CiWatch:
 
     def results(self, entries: list[StackEntry]) -> list[CiResult]:
         """One CiResult per entry, all under one deadline from now."""
-        deadline = system.monotonic() + self.limit_s
-        return [self._result(e, deadline) for e in entries]
+        look = Look(system.monotonic() + self.limit_s, cache(self._main_failures))
+        return [self._result(e, look) for e in entries]
 
     def rerun(self, number: int, check: Check) -> None:
         """Re-run the check's job, then look until the PR shows its new attempt."""
@@ -344,10 +357,10 @@ class CiWatch:
             label(c) == label(check) and c.link != check.link for c in self.prs.checks(number)
         )
 
-    def _result(self, entry: StackEntry, deadline: float) -> CiResult:
+    def _result(self, entry: StackEntry, look: Look) -> CiResult:
         """Settled checks for the entry's PR, triaged against its head, and their verdict."""
-        settled = self._settled(entry.pr or 0, deadline)
-        checks = self._against_main([self._triaged(c, entry.head) for c in settled])
+        settled = self._settled(entry.pr or 0, look.deadline)
+        checks = self._against_main([self._triaged(c, entry.head) for c in settled], look)
         return CiResult(entry.pr or 0, entry.url, entry.head, verdict_of(checks), checks)
 
     def _triaged(self, check: Check, head: str) -> Check:
@@ -357,13 +370,11 @@ class CiWatch:
         step = failing_step(job) if kind in (CheckKind.OURS, CheckKind.INFRA) else ""
         return replace(self._with_lines(check), kind=kind, step=step, head=job.head if job else "")
 
-    def _against_main(self, checks: list[Check]) -> list[Check]:
-        """Checks that fail on main too become ``main``; main is read only when needed."""
-        if not self.target or not _of_kind(
-            [CiResult(0, "", "", CiVerdict.NONE, checks)], CheckKind.OURS
-        ):
+    def _against_main(self, checks: list[Check], look: Look) -> list[Check]:
+        """Checks that fail on main too become ``main``; main is read once, when needed."""
+        if not self.target or not _has_kind(checks, CheckKind.OURS):
             return checks
-        return mark_main(checks, self._main_failures())
+        return mark_main(checks, look.main())
 
     def _main_failures(self) -> frozenset[tuple[str, str]]:
         """``(check name, failing step)`` of each failing job on the target's head."""
