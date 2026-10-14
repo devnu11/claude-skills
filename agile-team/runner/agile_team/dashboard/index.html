@@ -212,6 +212,7 @@ section[hidden] { display: none; }
 .fc-tool.run1 { border-color: var(--run1); }
 .fc-tool.run2 { border-color: var(--run2); }
 .fc-tool.run3 { border-color: var(--run3); }
+.fc-tooldesc { padding: 0 4px 2px; font-style: normal; }
 .fc-toolhead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .fc-testbar { display: flex; height: 6px; margin: 3px 0; background: var(--grid); }
 .fc-testbar .pass { background: var(--pass); }
@@ -576,6 +577,7 @@ function normalize(snap) {
   out.run = { ...RUN_DEFAULTS, ...(out.run && typeof out.run === "object" ? out.run : {}) };
   out.generated_at ??= Date.now() / 1000;
   out.step_roles = out.step_roles && typeof out.step_roles === "object" && !Array.isArray(out.step_roles) ? out.step_roles : {};
+  out.stage_descriptions = out.stage_descriptions && typeof out.stage_descriptions === "object" && !Array.isArray(out.stage_descriptions) ? out.stage_descriptions : {};
   out.heartbeat ??= null;
   out.opinions = { items: [], asked_at: null, review: null, ...(out.opinions && typeof out.opinions === "object" ? out.opinions : {}) };
   out.opinions.items = list(out.opinions.items);
@@ -1142,7 +1144,7 @@ const FLOW_SHOW_KEY = "agile-team-flow-show";
 const FLOW_TEXT = {
   name: { px: 12, ink: "--ink" },      meta: { px: 10, ink: "--ink-2" },
   live: { px: 10, ink: "--ink" },      tool: { px: 10, ink: "--ink-2" },
-  toolRun: { px: 10, ink: "--ink" },   caption: { px: 10, ink: "--ink-2" },
+  toolRun: { px: 10, ink: "--ink" },   toolDesc: { px: 12, ink: "--ink-2" },   caption: { px: 10, ink: "--ink-2" },
   title: { px: 12, ink: "--ink-2" },   pill: { px: 12, ink: "--ink" },
   legend: { px: 11, ink: "--ink-2" },  settings: { px: 11, ink: "--ink" },
 };
@@ -1295,6 +1297,7 @@ const allStageRuns = (view) => [
 
 /** Add one run to a tool's counts (events in scope) or mark it open (FC17). */
 function addRun(tool, run, inside) {
+  if (!run.open && run.detail) tool.detail = run.detail;
   if (run.open) { tool.open ??= run; return; }
   if (!inside(run)) return;
   tool.runs++;
@@ -1309,7 +1312,7 @@ function roleTools(view) {
     if (!role) continue;
     const list = (out[role] ??= { before: [], after: [] })[run.when === "before" ? "before" : "after"];
     let tool = list.find((t) => t.stage === run.stage);
-    if (!tool) list.push(tool = { stage: run.stage, runs: 0, seconds: 0, open: null });
+    if (!tool) list.push(tool = { stage: run.stage, runs: 0, seconds: 0, open: null, detail: "" });
     addRun(tool, run, inside);
   }
   return out;
@@ -1345,7 +1348,7 @@ function testBar(t) {
 
 /** Percent of the suite reported: ran over total, else the last point. */
 function completePct(t) {
-  return t.total ? Math.min(100, Math.round((100 * testsRan(t)) / t.total)) : t.points.at(-1) ?? 0;
+  return t.total > 0 ? Math.min(100, Math.round((100 * testsRan(t)) / t.total)) : null;
 }
 
 /** An 80×18 progress sparkline, green up to `failAt` and red from there (FC19). */
@@ -1416,23 +1419,33 @@ function roleBox(m, role) {
     `${shareHtml(m, role)}${sparkHtml(m, role)}${running ? liveBlock(m) : ""}</div>`;
 }
 
+/** The stage's one-line description from the snapshot, or "" (FC30). */
+const stageText = (view, stage) => (typeof view.stage_descriptions?.[stage] === "string" ? view.stage_descriptions[stage] : "");
+
+/** The description line of a tool box, or "" when the stage has none (FC30). */
+const toolDescHtml = (m, stage) => (stageText(m.view, stage) ? `<div class="fc-tooldesc fc-t-toolDesc">${esc(stageText(m.view, stage))}</div>` : "");
+
+/** ` title="…"` carrying the newest command, or "" (FC30). */
+const detailTitle = (tool) => (tool.detail ? ` title="${esc(tool.detail)}"` : "");
+
 /** An idle runner tool: name, run count and time (FC17). */
-function idleTool(tool) {
+function idleTool(m, tool) {
   const stats = ` · ↻ ${tool.runs}` + (tool.runs ? ` · ${fmt.dur1(tool.seconds)}` : "");
-  return `<div class="fc-tool f-tools fc-t-tool"><span>${esc(tool.stage)}</span><span class="f-toolstats">${stats}</span></div>`;
+  return `<div class="fc-tool f-tools"${detailTitle(tool)}><div class="fc-t-tool"><span>${esc(tool.stage)}</span><span class="f-toolstats">${stats}</span></div>${toolDescHtml(m, tool.stage)}</div>`;
 }
 
 /** The running tool: run colour, elapsed time and, for a test run, the live counts (FC18). */
 function runningTool(m, tool) {
   const row = tool.open, look = runLook(toolRunNumber(m.view, row)), t = row.tests;
   const head = `<div class="fc-toolhead fc-t-toolRun"><span>▶ ${esc(row.stage)} · ${look.label}</span><span>${fmt.dur1(stageAwake(m.view, row))}</span></div>`;
-  const tests = !t ? "" : `${testBar(t)}<div class="fc-t-toolRun">${captionHtml(t)}</div>` +
-    `<div class="fc-toolhead fc-t-toolRun"><span>${completePct(t)}% complete</span>${statusSpark(t.points, t.fail_at)}</div>`;
-  return `<div class="fc-tool running ${look.cls}" title="${esc(row.description)}">${head}${tests}</div>`;
+  const pct = t ? completePct(t) : null;
+  const done = pct === null ? "" : `<div class="fc-toolhead fc-t-toolRun"><span>${pct}% complete</span>${statusSpark(t.points, t.fail_at)}</div>`;
+  const tests = !t ? "" : `${testBar(t)}<div class="fc-t-toolRun">${captionHtml(t)}</div>${done}`;
+  return `<div class="fc-tool running ${look.cls}"${detailTitle(tool)}>${head}${toolDescHtml(m, row.stage)}${tests}</div>`;
 }
 
 /** A runner tool box, idle or running (FC17, FC18). */
-const toolBox = (m, tool) => (tool.open ? runningTool(m, tool) : idleTool(tool));
+const toolBox = (m, tool) => (tool.open ? runningTool(m, tool) : idleTool(m, tool));
 
 /** A role's tools above, its box, its tools below. */
 function unitParts(m, role) {

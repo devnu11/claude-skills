@@ -61,6 +61,32 @@
    "customer-proxy"
   ]
  },
+ "stage_descriptions": {
+  "env.prepare": "Prepare the acceptance environment for the Customer Proxy: sandbox, prepare command or service start",
+  "presentation.layout": "Lay out the story's presentation and its git workspace before the integration tester",
+  "quality.lint": "Lint the whole repo before the quality step",
+  "quality.static": "Static analysis of the whole repo before the quality step",
+  "quality.coverage": "The full suite with coverage, for the quality step's report",
+  "checkout.guard": "Check the branch and HEAD are the team's before the next step",
+  "checkout.verify": "Check the branch and HEAD did not move during the step",
+  "gate.tests-red": "Tests gate: the full suite must fail, so the story's new tests are red before any code",
+  "gate.tests-rework": "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",
+  "gate.tests+coverage": "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",
+  "gate.suite-runs": "The full suite again, the story's suite_runs times in a row, after its suite step's gate passes",
+  "gate.dispute-output": "The full suite, to show a disputed test's output",
+  "gate.route-lint": "Lint and static analysis of the whole repo, to route a failed gate's items to their owners",
+  "presentation.trial": "The e2e gate: the presentation is complete and its service starts and answers",
+  "gate.green": "The full suite must pass before the PO passes a story stuck at tests",
+  "boundary.sync": "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",
+  "boundary.check": "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch",
+  "boundary.review": "Build and check the per-sprint review branches",
+  "boundary.push": "Push the review branches and open or update their pull requests",
+  "boundary.rebase": "Rebase the team branch onto the target (sprint end only)",
+  "boundary.restack": "Bring every review PR up to date, bottom up: rebase, same tree, push, retarget",
+  "boundary.ci-wait": "Wait for the pull requests' CI checks and read failing logs",
+  "runner-tool.run_tests": "Only the tests a developer named, run for that developer",
+  "runner-tool.run_new_tests": "Only the story's new test files, run for a developer"
+ },
  "roles": [
   {
    "name": "product-owner",
@@ -4396,7 +4422,7 @@
     "stage": "gate.tests+coverage",
     "when": "after",
     "attach": "step",
-    "description": "Run the tests and coverage after a step",
+    "description": "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",
     "story": "s3",
     "step": "implement",
     "started_at": 1791473100.0,

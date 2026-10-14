@@ -20,6 +20,7 @@ from .. import (
     health,
     live,
     opinions,
+    stages,
     story_spec,
     system,
     threads,
@@ -140,6 +141,12 @@ def _pipeline(files: RunFiles) -> list[str]:
 def _step_roles(files: RunFiles) -> dict[str, list[str]]:
     """Each pipeline step's roles, the generic developer expanded (s118 FC1)."""
     return {step: sorted(_step_role(files, step)) for step in _pipeline(files)}
+
+
+def _stage_descriptions(files: RunFiles) -> dict[str, str]:
+    """Each runner stage's and repo tool's one-line description, by name (s118 FC30)."""
+    built_in = {str(name): stage.description for name, stage in stages.STAGES.items()}
+    return {**built_in, **{tool.name: tool.description for tool in files.config.tools}}
 
 
 def _priority(files: RunFiles) -> Priority:
@@ -562,6 +569,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "run": _run,
     "pipeline": _pipeline,
     "step_roles": _step_roles,
+    "stage_descriptions": _stage_descriptions,
     "roles": _roles,
     "stories": _stories,
     "requirements": _requirements,

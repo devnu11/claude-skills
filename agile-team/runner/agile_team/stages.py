@@ -96,28 +96,28 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
         Name.PRESENTATION_LAYOUT, B, STEP,
         "Lay out the story's presentation and its git workspace before the integration tester",
     ),
-    (Name.QUALITY_LINT, B, STEP, "Run the lint command before the quality step"),
-    (Name.QUALITY_STATIC, B, STEP, "Run the static-analysis command before the quality step"),
-    (Name.QUALITY_COVERAGE, B, STEP, "Run the coverage command before the quality step"),
+    (Name.QUALITY_LINT, B, STEP, "Lint the whole repo before the quality step"),
+    (Name.QUALITY_STATIC, B, STEP, "Static analysis of the whole repo before the quality step"),
+    (Name.QUALITY_COVERAGE, B, STEP, "The full suite with coverage, for the quality step's report"),
     (Name.CHECKOUT_GUARD, B, STEP, "Check the branch and HEAD are the team's before the next step"),
     (Name.CHECKOUT_VERIFY, A, STEP, "Check the branch and HEAD did not move during the step"),
-    (Name.GATE_TESTS_RED, A, STEP, "The tests gate: the new tests must fail before implementation"),
+    (Name.GATE_TESTS_RED, A, STEP, "Tests gate: the full suite must fail, so the story's new tests are red before any code"),  # noqa: E501
     (
         Name.GATE_TESTS_REWORK, A, STEP,
-        "The tests gate on a reworked story: red, or green with a tests claim",
+        "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",
     ),
     (
         Name.GATE_TESTS_COVERAGE, A, STEP,
-        "The implement gate: one coverage run proves green and the total",
+        "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",  # noqa: E501,
     ),
     (
         Name.GATE_SUITE_RUNS, A, STEP,
-        "Run the test command a story's suite_runs times in a row after its suite step's gate",
+        "The full suite again, the story's suite_runs times in a row, after its suite step's gate passes",  # noqa: E501
     ),
-    (Name.GATE_DISPUTE, A, STEP, "Run the test command to show a disputed test's output"),
+    (Name.GATE_DISPUTE, A, STEP, "The full suite, to show a disputed test's output"),
     (
         Name.GATE_ROUTE_LINT, A, STEP,
-        "Run lint and static to route a failed gate's items to their owners",
+        "Lint and static analysis of the whole repo, to route a failed gate's items to their owners",  # noqa: E501
     ),
     (
         Name.PRESENTATION_TRIAL, A, STEP,
@@ -125,13 +125,13 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
     ),
     (
         Name.GATE_GREEN, A, STORY,
-        "Prove the suite green before the PO passes a story stuck at tests",
+        "The full suite must pass before the PO passes a story stuck at tests",
     ),
     (
         Name.BOUNDARY_SYNC, B, BOUND,
         "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",  # noqa: E501
     ),
-    (Name.BOUNDARY_CHECK, A, BOUND, "Run the full checks on the team branch"),
+    (Name.BOUNDARY_CHECK, A, BOUND, "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch"),  # noqa: E501
     (Name.BOUNDARY_REVIEW, A, BOUND, "Build and check the per-sprint review branches"),
     (
         Name.BOUNDARY_PUSH, A, BOUND,
@@ -149,8 +149,8 @@ _ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
         Name.BOUNDARY_CI_WAIT, A, BOUND,
         "Wait for the pull requests' CI checks and read failing logs",
     ),
-    (Name.RUN_TESTS, D, STEP, "Run the tests a developer named"),
-    (Name.RUN_NEW_TESTS, D, STEP, "Run the story's new test files for a developer"),
+    (Name.RUN_TESTS, D, STEP, "Only the tests a developer named, run for that developer"),
+    (Name.RUN_NEW_TESTS, D, STEP, "Only the story's new test files, run for a developer"),
 )  # fmt: skip
 
 STAGES: dict[Name, Stage] = {
