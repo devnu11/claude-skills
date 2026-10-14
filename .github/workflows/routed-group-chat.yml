@@ -1,0 +1,31 @@
+name: routed-group-chat runner
+
+on:
+  push:
+    branches: [main]
+    paths: ["routed-group-chat/**", ".github/workflows/routed-group-chat.yml"]
+  pull_request:
+    paths: ["routed-group-chat/**", ".github/workflows/routed-group-chat.yml"]
+
+defaults:
+  run:
+    working-directory: routed-group-chat/runner
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --dev
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pytest --cov
