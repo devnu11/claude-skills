@@ -28,6 +28,7 @@
  },
  "pipeline": [
   "design",
+  "ops-review",
   "tests",
   "implement",
   "quality",
@@ -39,6 +40,9 @@
  "step_roles": {
   "design": [
    "architect"
+  ],
+  "ops-review": [
+   "devops"
   ],
   "tests": [
    "unit-tester"
