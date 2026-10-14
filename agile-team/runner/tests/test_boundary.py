@@ -31,7 +31,7 @@ def test_enum_values() -> None:
         "review-fix",
         "gate-fix",
     ]
-    assert {e.value for e in b.BoundaryHold} == {
+    assert [e.value for e in b.BoundaryHold] == [
         "sync_conflict",
         "escalated",
         "reviewed",
@@ -43,7 +43,7 @@ def test_enum_values() -> None:
         "ci_pending",
         "error",
         "fix_handover",
-    }
+    ]
     assert [e.value for e in b.FixCase] == ["team_check", "review_check", "review_conflict"]
     assert [e.value for e in b.Permission] == ["unasked", "yes", "no"]
     assert [e.value for e in b.CheckState] == ["unchecked", "pass", "fail"]

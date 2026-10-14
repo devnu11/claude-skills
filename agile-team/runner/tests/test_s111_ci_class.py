@@ -469,6 +469,19 @@ def test_the_same_job_on_another_step_is_still_ours(env: Env) -> None:
     assert b.hold is BoundaryHold.CI_FAILED
 
 
+def test_main_is_read_once_for_a_stack_of_two_prs(env: Env) -> None:
+    at_ci(
+        env, [FAIL], {LINK: job(), MAIN_LINK: job("m41n", (SET_UP, Step("Lint", "failure")), "88")}
+    )
+    env.prs.main_list = [Check("unit", Bucket.FAIL, "", MAIN_LINK)]
+    env.rt.state.upstream.stack = [
+        entry(1, pr=5, mode=PrMode.READY, url="https://h/5"),
+        entry(2, pr=6, mode=PrMode.READY, url="https://h/6"),
+    ]
+    env.drive()
+    assert [c for c in env.prs.calls if c[0] == "main_checks"] == [("main_checks", "main")]
+
+
 def test_main_is_not_read_when_nothing_is_ours(env: Env) -> None:
     at_ci(env, [PASS], {LINK: job(steps=(SET_UP, Step("Run", "success")))})
     env.drive()
