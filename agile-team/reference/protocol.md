@@ -412,7 +412,8 @@ the runner applies the request between steps.
 
 | Route | Returns |
 |---|---|
-| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for the question, answer and handoff text (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead. |
+| `GET /` | the dashboard page (`index.html`, packaged with the runner; vanilla JS, no build step). It loads `api/snapshot`, then follows `api/stream` and reconnects by itself. Its only outside resources are two pinned libraries from `cdn.jsdelivr.net`: `mermaid@11.4.1` for the Flow chart, and `markdown-it@14.1.0` for every message body on the Activity and Questions tabs and in the live panel (raw HTML shown as text, http(s) links only, no images). If either can't load, the page shows plain text instead; for Markdown the state row also says `Markdown unavailable: showing plain text`. |
+| `GET /fixtures/snapshot.json` | the packaged sample snapshot (`dashboard/fixtures/snapshot.json`) as JSON, no token, so `/?mock&at=end` replays it on a served dashboard (s112) |
 | `GET /api/snapshot` | the snapshot as JSON |
 | `GET /api/file?kind=K&id=I` | a story's file as `text/plain`. `K` is `story` (`.team/stories/`), `design` (`<docs>/design/`), `review` (`.team/reviews/`) or `acceptance` (`.team/acceptance/`). The file is `<folder>/<I>.md`, and `I` must be an opened story's id. Anything else is a 404. |
 | `GET /api/misc?role=R&story=S&step=P&opened_at=T` | a step's or PO turn's `misc` calls (s101) as a JSON array: the `tools.jsonl` rows that the snapshot's `tools` gathering puts in that group's `misc`, re-gathered from the same tail under the current `[dashboard] collapse_under_s`, sorted by `at`, each as written (`[]` when none or when the tail has moved on). Each parameter is its first value or `""`; `story` and `step` `""` mean none. An empty `role`, or an `opened_at` that is not a finite number, is a 404. It is a read, so it needs no token. |
@@ -527,18 +528,18 @@ role's configured model, then `"unknown"`; `sprint` is the sprint running
 when it started), `messages`,
 `answers`, `thread` (every thread entry in time order, each `{"id",
 "story", "author", "to", "text", "at"}` with `author`/`to` one of
-`human`, `product-owner`, `liaison`; the timeline shows it, filtered by
+`human`, `product-owner`, `liaison`; the Activity tab shows it, filtered by
 its story chip) and `upstream` (remote, branch, team branch, push permission, the
 last end report, the pending boundary and the review stack: each sprint's
 branch, base, PR number and URL, `mode` `none`/`draft`/`ready`/`closed`,
 `check` `unchecked`/`pass`/`fail`; the Board tab shows it as the **Review
-stack** card, and the timeline shows `boundary` events), `turns` (the
+stack** card, and the Activity tab shows `boundary` events), `turns` (the
 `turns.jsonl` lines of the last 10 minutes, at most 500), `heartbeat`
 (`heartbeat.json` as written, or `null`) and `health` (`{"level", "reason",
 "model_note"}`; see "Live meter and health"). The contract is
 `runner/agile_team/dashboard/fixtures/snapshot.json`. The Tokens tab's role
 and story tables show turns per step, the latest step's turns and context
-per turn next to tokens and cost (see "Turns and context"). The timeline
+per turn next to tokens and cost (see "Turns and context"). The Activity tab
 shows each step-end's turns and each `po-session` renewal.
 
 Watched and read files: `.team/run/{state.json, events.jsonl, ledger.jsonl,
@@ -685,20 +686,25 @@ running. A heartbeat without `mono` (version 1) is never excused. Any other watc
 `heartbeat.json` and `state.json`. `agile-team watch` does this for you
 (the `health` trigger).
 
-On the dashboard, the status row's pill takes the health colour (fill and
-border). With a query open it reads `● developer-cli on s29 · 3.2k/min
-▂▃▅▇▆▅▃▂▁▂ · 8 s`: the team's tokens per minute over the last 5 minutes, a
-10-minute sparkline, and the age of the last turn. With no query open it
-shows the health reason (for example the halt and its reset time), or
-`▶ developer-cli on s29 · 2 min` while an old runner with no heartbeat has a
-step open. The run-status pill beside it only names the status: `stopped`
-is plain, because a graceful `agile-team stop` is neutral. The red of
-`stop --now` and the other halts is on the health pill. Hover or
-tap the pill for the step and turn, the answering model (and `configured
-sonnet, answering opus` when they differ), the step's tokens and estimated
-dollars, the current tool and how long it has run, and the time of the last
-turn. A step that follows an interrupted one for the same role and story
-shows `↻ restarted`.
+On the dashboard (since s112), the header's live panel takes the health
+colour on its border. With a query open it reads `developer-cli · s29 ·
+implement`, the awake time and the run (`first run`, `round N`, or
+`↻ restarted` for a step that follows an interrupted one for the same role
+and story), the newest open tool call, and up to 3 lines of the latest
+message on the story. While the runner works between steps it shows the
+open stage (the heartbeat's `stages`) or chore and the runner's latest
+result. With nothing running it reads `● Nothing running` and why: the
+open question ids, else the health reason (for example the halt and its
+reset time), else the run status. With no heartbeat (an old runner, or a
+replay) an open `step-start` still shows as running. The state pill
+(`live · stopped`) only names the connection and the run's status:
+`stopped` is plain, because a graceful `agile-team stop` is neutral. The
+red of `stop --now` and the other halts is on the panel. Hover over the
+panel for the team's tokens per minute over the last 5 minutes, a
+10-minute sparkline and the age of the last turn, then the step and turn,
+the answering model (and `configured sonnet, answering opus` when they
+differ), the step's tokens and estimated dollars, the current tool and how
+long it has run, and the time of the last turn.
 
 The Flow tab has a **Story / Sprint / Run** toggle, remembered per browser.
 It defaults to Story: the active step's story, or another story picked in

@@ -49,24 +49,37 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 
 ## What you see
 
-- **Header:** the sprint and task, with the live panel in the top right
-  corner. Under them is the status row: spend against the budget first,
-  then the run's status and the live pill for the step that is running now
-  (see "Is the team working?"). The spend is the same corrected figure that
-  `agile-team status` shows: the Product Owner's costs from before the s25
-  fix are counted once each, not as running totals. When spend reaches the
-  budget, the run halts and the status reads `blocked`.
-- **Live panel:** the box in the header's top right corner, on every tab.
-  While a step runs, it names the role, its story and step, and the awake
-  time so far, for example `▶ developer-gui on s112 · implement · ⏱ 12 min
-  awake`. Under that it shows the latest Activity message on that story,
-  with its Markdown formatting, up to its first 6 lines. A longer message
-  ends with `…`; the full text is on the Activity tab. While the runner
-  does its own work (a gate, a sprint boundary) it reads `⚙ runner: <stage>`.
-  When nothing runs it says why, for example `● Nothing running: waiting on
-  m121`, and shows the latest message of any story. It updates as the run
-  moves. Click it (or press Enter on it) to open the Activity tab filtered
-  to that story.
+- **Header:** three short rows above the tabs. First the brand and sprint
+  number; then the task on one line (cut with `…` if long; hover for all
+  of it); then the state row. The state row holds one state pill (the
+  connection and the run's status, for example `live · running`), a small
+  `⚑ manager due` flag when a Manager check is due (hover for why), and the
+  budget: `$608 of $1,500 · 41%` with a small bar whose ticks mark the
+  Manager's budget checks (hover for the exact amounts). A
+  `? 1 question waiting on you` pill joins it while questions are open.
+  The spend is the same corrected figure that `agile-team status` shows:
+  the Product Owner's costs from before the s25 fix are counted once
+  each, not as running totals. When spend reaches the budget, the run
+  halts and the status reads `blocked`. The live panel sits to the right,
+  and the far right holds only the theme button.
+- **Live panel:** the box at the top right of the header, on every tab,
+  about 380 px wide. Its border takes the health colour (see "Is the team
+  working?").
+  - While a role runs: `developer-cli · s112 · implement` with the time
+    so far and the run (`first run`, `round 2` or `↻ restarted`) on the
+    right; the latest tool call in italics (`Dev: run the unit tests ·
+    38 s`); then up to 3 lines of the latest Activity message on that
+    story, with its Markdown formatting, ending in `…` when longer. The
+    full text is on the Activity tab.
+  - While the runner works between steps: `⚙ runner · sprint 40` with the
+    stage and its time on the right (`boundary.sync · 45 s`), and the
+    runner's latest result under it (`sprint 40 start · sync: pass · …`).
+  - When nothing runs: `● Nothing running` and why, for example
+    `waiting on m121`.
+
+  It updates as the run moves. Hover over it for the step's details.
+  Click it (or press Enter on it) to open the Activity tab filtered to
+  that story.
 - **Board:** a backlog column, one column per pipeline step, and done. The
   board fits the window, so Done is always in view without scrolling
   sideways. A column with no stories shrinks to a narrow strip with its name
@@ -301,16 +314,16 @@ steps.
 ## Is the team working?
 
 The runner, not the agents, records every turn of every step and keeps a
-heartbeat file fresh. The pill in the status row turns that into one
-signal, colouring its whole fill and border:
+heartbeat file fresh. The live panel in the header turns that into one
+signal: its border takes the health colour, and it names what is running
+(see "What you see"). Hover over it for the team's tokens per minute, the
+last 10 minutes of spend and how long ago the last turn arrived:
 
 ```text
-● developer-cli on s29 · 3.2k/min ▂▃▅▇▆▅▃▂▁▂ · 8 s
+3.2k/min ▂▃▅▇▆▅▃▂▁▂ · last turn 8 s ago
 ```
 
-That is the role and story, the team's tokens per minute, the last 10
-minutes of spend, and how long ago the last turn arrived. Hover over it, or
-tap it, for the step and turn number, the model that is actually answering
+followed by the step and turn number, the model that is actually answering
 (it says so if that is not the configured one, for example `configured
 sonnet, answering opus`), the step's tokens and estimated dollars, the tool
 running now and for how long, and the time of the last turn.
@@ -319,7 +332,7 @@ running now and for how long, and the time of the last turn.
 |---|---|
 | green | turns are arriving, or the runner is doing its own work (for example running the tests gate, or waiting for your answer to the PO's question) |
 | amber | no turn for 3 minutes while a tool runs, or for 5 minutes with none, or the heartbeat is late while a tool or the runner's own work (a gate, a sprint boundary) is running, for example `heartbeat 2 min old while runner: gate: implement on s29 for 2 min` |
-| red | no turn for 10 minutes, the heartbeat is over 90 seconds old with nothing running (or over 10 minutes old whatever runs), the machine slept, the runner has died, or the run has halted (a usage limit, `stop --now`, a crash, the budget, a moved checkout, or the PO is blocked). The pill says why, for example `no turn for 11 min, heartbeat 4 min old`, `the machine slept for 11 min` or `halted: session limit, resets 9pm` |
+| red | no turn for 10 minutes, the heartbeat is over 90 seconds old with nothing running (or over 10 minutes old whatever runs), the machine slept, the runner has died, or the run has halted (a usage limit, `stop --now`, a crash, the budget, a moved checkout, or the PO is blocked). The panel says why (in its hover details while a step runs), for example `no turn for 11 min, heartbeat 4 min old`, `the machine slept for 11 min` or `halted: session limit, resets 9pm` |
 | plain | nothing is running: idle, done, sprint end, or stopped because you ran `agile-team stop` (a stop you asked for never turns red or notifies; `stop --now` does) |
 
 You can change these times in `.agile-team.toml` under `[health]`
