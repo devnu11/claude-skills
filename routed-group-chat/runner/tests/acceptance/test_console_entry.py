@@ -45,7 +45,8 @@ def test_unaddressed_first_message_exits_2(tmp_path: Path) -> None:
     assert done.returncode == 2
     assert "@manager @po @liaison @all" in done.stderr
     assert done.stdout == ""
-    assert not (tmp_path / "c").exists()
+    assert not (tmp_path / "c" / "state.json").exists()
+    assert not (tmp_path / "c" / "lock").exists()
 
 
 def test_bad_roster_exits_2(tmp_path: Path) -> None:
@@ -66,3 +67,25 @@ def test_missing_roster_exits_2(tmp_path: Path) -> None:
     done = group_chat(tmp_path, "--roster", missing, "--dir", str(tmp_path / "c"), "say", "@a x")
     assert done.returncode == 2
     assert "nope.toml" in done.stderr
+
+
+def test_held_lock_exits_2(tmp_path: Path) -> None:
+    """cli: exit 2 for a locked state; the lock of the other process is left alone."""
+    roster = write_roster(tmp_path)
+    chat = tmp_path / "c"
+    chat.mkdir()
+    (chat / "lock").write_text("")
+    done = group_chat(tmp_path, "--roster", str(roster), "--dir", str(chat), "say", "@po hi")
+    assert done.returncode == 2
+    assert "another group-chat is using this chat" in done.stderr
+    assert (chat / "lock").exists()
+    assert not (chat / "state.json").exists()
+
+
+def test_negative_flag_exits_2(tmp_path: Path) -> None:
+    """cli: `--recent-tokens` must be >= 0."""
+    roster = write_roster(tmp_path)
+    argv = ["--roster", str(roster), "--dir", str(tmp_path / "c"), "--recent-tokens", "-5"]
+    done = group_chat(tmp_path, *argv, "log")
+    assert done.returncode == 2
+    assert "must be >= 0" in done.stderr

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from group_chat.compaction import turns_tokens
 
-from ..conftest import FakeBackend
+from ..conftest import FailingBackend, FakeBackend
 from .conftest import MakeChat
 
 pytestmark = pytest.mark.integration
@@ -61,7 +61,8 @@ def test_folded_turns_are_not_repeated_in_summary_prompt(make_chat: MakeChat) ->
     backend = CountingSummary()
     chatter(make_chat, backend, 6, budget=60)
     folded = [c.prompt for c in backend.calls if "EARLIER SUMMARY" in c.prompt]
-    assert sum(p.count("@human: @po DECISION: decision 0") for p in folded) == 1
+    block = '<turn speaker="human">\n@po DECISION: decision 0\n</turn>'
+    assert sum(p.count(block) for p in folded) == 1
 
 
 def test_kept_turns_respect_budget_or_keep(make_chat: MakeChat) -> None:
@@ -70,3 +71,17 @@ def test_kept_turns_respect_budget_or_keep(make_chat: MakeChat) -> None:
     turns = make_chat(backend).store.load().turns
     assert len(turns) >= 4
     assert len(turns) == 4 or turns_tokens(turns) <= 200
+
+
+def test_summary_failure_then_recovery_keeps_log(make_chat: MakeChat) -> None:
+    backend = FailingBackend(fail_summary=True)
+    for i in range(4):
+        make_chat(backend, recent_tokens=40).say(f"@po DECISION: d{i}")
+    stuck = make_chat(backend).store.load()
+    assert stuck.summary == ""
+    assert any(t.text.startswith("summary skipped") for t in stuck.turns)
+    backend.fail_summary = False
+    make_chat(backend, recent_tokens=40).say("@po go on")
+    state = make_chat(backend).store.load()
+    assert state.summary == "SUMMARY"
+    assert [e.text for e in state.log.decisions] == ["d0", "d1", "d2", "d3"]

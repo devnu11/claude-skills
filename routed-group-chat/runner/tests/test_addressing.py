@@ -95,15 +95,33 @@ def test_unknown_reported_even_with_known_names() -> None:
         resolve("@po @cto hi", NAMES, ())
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: @all hides an unknown name; protocol says refuse")
 def test_broadcast_with_unknown_name_is_refused() -> None:
     with pytest.raises(AddressError, match="@cto"):
         resolve("@all @cto hi", NAMES, ())
 
 
-@pytest.mark.xfail(
-    strict=True, reason="BUG: a capitalised leading mention silently goes to the sticky role"
-)
-def test_capitalised_mention_is_refused_not_sent_to_sticky_role() -> None:
-    with pytest.raises(AddressError):
-        resolve("@Manager hi", NAMES, ("po",))
+def test_capitalised_mention_routes_case_insensitively() -> None:
+    assert resolve("@Manager @PO hi", NAMES, ("liaison",)) == ("manager", "po")
+
+
+@pytest.mark.parametrize("message", ["@all @cto hi", "@cto @all hi", "@ALL @Cto hi"])
+def test_unknown_beside_all_is_refused(message: str) -> None:
+    with pytest.raises(AddressError, match="unknown @cto;"):
+        resolve(message, NAMES, ("po",))
+
+
+def test_uppercase_all_broadcasts() -> None:
+    assert resolve("@ALL status", NAMES, ()) == NAMES
+
+
+def test_leading_mentions_are_lowercased() -> None:
+    assert leading_mentions("@PO, @Manager! hi") == ["po", "manager"]
+
+
+def test_sticky_drops_roles_no_longer_in_roster() -> None:
+    assert resolve("and?", NAMES, ("cto", "po")) == ("po",)
+
+
+def test_sticky_refused_when_no_roles_remain() -> None:
+    with pytest.raises(AddressError, match="address someone first"):
+        resolve("and?", NAMES, ("cto",))

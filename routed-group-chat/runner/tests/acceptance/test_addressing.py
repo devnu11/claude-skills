@@ -36,7 +36,7 @@ def test_ordered_multi_mention_each_sees_the_other(cli: Cli, backend: FakeBacken
     result = cli.say("@po @manager thoughts?")
     # Then po answers first and the manager's context holds po's reply
     assert speakers(result.out) == ["po", "manager"]
-    assert "@po: Cut search." in backend.calls[1].prompt
+    assert '<turn speaker="po">\nCut search.\n</turn>' in backend.calls[1].prompt
 
 
 def test_all_answers_in_roster_order(cli: Cli) -> None:
@@ -96,9 +96,37 @@ def test_human_message_is_recorded_as_written(cli: Cli, backend: FakeBackend) ->
     assert turns[0] == {"speaker": "human", "text": "@po, @manager what now?"}
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: @all swallows an unknown name instead of refusing")
 def test_unknown_name_with_all_is_refused(cli: Cli, backend: FakeBackend) -> None:
     """`@cto` is unknown -> refused, exit 2, nothing recorded (even beside `@all`)."""
     result = cli.say("@all @cto status?")
     assert result.code == 2
+    assert "unknown @cto" in result.err
     assert backend.calls == []
+    assert not cli.state_file.exists()
+
+
+def test_mentions_are_case_insensitive(cli: Cli) -> None:
+    """addressing: "Mentions are case-insensitive." (`@Manager` routes to manager)."""
+    result = cli.say("@Manager, timeline?")
+    assert speakers(result.out) == ["manager"]
+
+
+def test_punctuation_after_mention_routes(cli: Cli) -> None:
+    """addressing: mentions are separated by spaces, commas or other punctuation."""
+    assert speakers(cli.say("@po; @manager! plan?").out) == ["po", "manager"]
+
+
+def test_sticky_role_removed_from_roster_is_refused(cli: Cli, backend: FakeBackend) -> None:
+    """addressing: a sticky addressee no longer in the roster is dropped; if none remain the
+    message is refused."""
+    # Given liaison was addressed last
+    cli.say("@liaison status?")
+    # When the roster drops liaison
+    text = cli.roster.read_text()
+    cli.roster.write_text(text[: text.index('[[role]]\nname = "liaison"')])
+    calls = len(backend.calls)
+    # Then an unaddressed follow-up is refused with the valid names
+    result = cli.say("and then?")
+    assert result.code == 2
+    assert "address someone first: @manager @po @all" in result.err
+    assert len(backend.calls) == calls

@@ -20,6 +20,8 @@ from claude_agent_sdk import (
     TextBlock,
 )
 from group_chat.backend import BackendError, ClaudeBackend
+from group_chat.chat import PartialReplyError
+from group_chat.state import Turn
 
 from .conftest import MakeChat
 
@@ -75,9 +77,13 @@ def test_handoff_and_compaction_through_sdk(make_chat: MakeChat) -> None:
     assert chat.store.load().summary == "SDK SUMMARY"
 
 
-def test_sdk_error_records_nothing(make_chat: MakeChat) -> None:
+def test_sdk_error_keeps_human_turn_and_notes_failure(make_chat: MakeChat) -> None:
     sdk = FakeSdk(error="overloaded")
     chat = make_chat(ClaudeBackend(sdk.query))
-    with pytest.raises(BackendError, match="overloaded"):
+    with pytest.raises(PartialReplyError, match="overloaded") as exc:
         chat.say("@po hi")
-    assert not chat.store.path.exists()
+    assert isinstance(exc.value.__cause__, BackendError)
+    assert chat.store.load().turns == [
+        Turn("human", "@po hi"),
+        Turn("orchestrator", "@po could not answer: overloaded"),
+    ]

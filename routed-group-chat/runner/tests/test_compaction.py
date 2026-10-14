@@ -41,7 +41,7 @@ def test_split_always_keeps_last_turns() -> None:
 def test_summary_prompt() -> None:
     text = summary_prompt("", [Turn("po", "hi")])
     assert "(none)" in text
-    assert "@po: hi" in text
+    assert '<turn speaker="po">\nhi\n</turn>' in text
 
 
 def test_keep_at_least_len_turns_evicts_nothing() -> None:
@@ -71,10 +71,11 @@ def test_split_empty() -> None:
     assert split([], 0, 4) == ([], [])
 
 
-def test_turns_tokens_counts_rendered_speaker() -> None:
-    assert turns_tokens([Turn("po", "")]) == estimate_tokens("@po: ")
+def test_turns_tokens_counts_blocks() -> None:
+    turn = Turn("po", "")
+    assert turns_tokens([turn]) == estimate_tokens(turn.block())
 
 
 def test_summary_prompt_carries_earlier_summary_and_order() -> None:
     text = summary_prompt("old", [Turn("po", "a"), Turn("manager", "b")])
-    assert text.index("old") < text.index("@po: a") < text.index("@manager: b")
+    assert text.index("old") < text.index('speaker="po"') < text.index('speaker="manager"')

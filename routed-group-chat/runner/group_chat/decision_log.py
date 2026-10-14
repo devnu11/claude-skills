@@ -2,13 +2,15 @@
 
 Anyone in the chat, human or role, updates it with marker lines in a message:
 
-``DECISION: <text>``  records decision ``D<n>``
-``QUESTION: <text>``  opens question ``Q<n>``
-``RESOLVED: Q<n>``    closes that question
+``DECISION: <text>``     records decision ``D<n>``
+``QUESTION: <text>``     opens question ``Q<n>``
+``RESOLVED: Q<n>[, Q<m>]`` closes those questions
 
-A marker starts its line, optionally after the line's leading @mentions, so
-``@po DECISION: ship Friday`` counts. The log is code-kept, so it cannot drift
-the way a summary can.
+A marker starts its line, optionally after the line's leading @mentions, a
+``-``/``*`` bullet or ``**`` bold, so ``@po DECISION: ship Friday`` and
+``- **DECISION:** ship`` count. Markers are upper case. Lines inside ``` fenced
+code blocks never count, and a marker with blank text is ignored. The log is
+code-kept, so it cannot drift the way a summary can.
 """
 
 from __future__ import annotations
@@ -18,10 +20,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+PREFIX = r"^[ \t]*(?:[-*][ \t]+)?(?:@[A-Za-z][A-Za-z0-9-]*[ \t,]*)*(?:\*\*)?"
 MARKER_RE = re.compile(
-    r"^\s*(?:@[a-z][a-z0-9-]*[ \t,]*)*(DECISION|QUESTION|RESOLVED):[ \t]*(.+?)[ \t]*$",
+    PREFIX + r"(DECISION|QUESTION|RESOLVED):(?>(?:\*\*)?)[ \t]*(\S.*?)[ \t]*$",
     re.MULTILINE,
 )
+FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.MULTILINE | re.DOTALL)
+QUESTION_ID_RE = re.compile(r"\bQ\d+\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -43,8 +48,8 @@ class DecisionLog:
     next_question: int = 1
 
     def apply(self, speaker: str, text: str) -> None:
-        """Apply every marker line in ``text``, in order."""
-        for marker, value in MARKER_RE.findall(text):
+        """Apply every marker line in ``text`` outside fenced code, in order."""
+        for marker, value in MARKER_RE.findall(FENCE_RE.sub("", text)):
             HANDLERS[marker](self, speaker, value)
 
     def render(self) -> str:
@@ -59,6 +64,7 @@ class DecisionLog:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """JSON-ready form, read back by ``from_dict``."""
         return {
             "decisions": [vars(entry) for entry in self.decisions],
             "questions": [vars(entry) for entry in self.questions],
@@ -68,6 +74,7 @@ class DecisionLog:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DecisionLog:
+        """The log saved by ``to_dict``; missing keys take their defaults."""
         return cls(
             [Entry(**entry) for entry in data.get("decisions", [])],
             [Entry(**entry) for entry in data.get("questions", [])],
@@ -91,8 +98,8 @@ def _ask(log: DecisionLog, speaker: str, text: str) -> None:
 
 
 def _resolve(log: DecisionLog, _speaker: str, text: str) -> None:
-    wanted = text.split(maxsplit=1)[0].upper()
-    log.questions = [entry for entry in log.questions if entry.id != wanted]
+    closed = {found.upper() for found in QUESTION_ID_RE.findall(text)}
+    log.questions = [entry for entry in log.questions if entry.id not in closed]
 
 
 HANDLERS: dict[str, Callable[[DecisionLog, str, str], None]] = {

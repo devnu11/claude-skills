@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 from group_chat.backend import BackendError
-from group_chat.cli import Io, main, run
+from group_chat.cli import Io, main, non_negative, run
 
-from .conftest import FakeBackend
+from .conftest import FailingBackend, FakeBackend
 
 pytestmark = pytest.mark.unit
 
@@ -88,17 +88,18 @@ def test_main_uses_sys_streams(
 
 def test_say_joins_words(roster_file: Path, chat_io: Io, backend: FakeBackend) -> None:
     run(args(roster_file, "say", "@po", "two", "words"), chat_io)
-    assert "@human: @po two words" in backend.calls[0].prompt
+    assert '<turn speaker="human">\n@po two words\n</turn>' in backend.calls[0].prompt
 
 
-def test_backend_error_is_a_usage_error(roster_file: Path) -> None:
+def test_backend_error_exits_1(roster_file: Path) -> None:
     class Failing:
         def complete(self, system: str, prompt: str, model: str | None) -> str:
             raise BackendError("rate limited")
 
     chat_io = Io(io.StringIO(), io.StringIO(), io.StringIO(), Failing)
-    assert run(args(roster_file, "say", "@po hi"), chat_io) == 2
-    assert "group-chat: rate limited" in err(chat_io)
+    assert run(args(roster_file, "say", "@po hi"), chat_io) == 1
+    assert "group-chat: model call failed: rate limited" in err(chat_io)
+    assert out(chat_io) == "@orchestrator: @po could not answer: rate limited\n\n"
 
 
 def test_recent_tokens_flag(roster_file: Path, chat_io: Io, backend: FakeBackend) -> None:
@@ -126,9 +127,80 @@ def test_chat_quit_with_spaces(roster_file: Path, backend: FakeBackend) -> None:
     assert backend.calls == []
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: corrupt state.json crashes with a traceback")
 def test_corrupt_state_is_a_usage_error(roster_file: Path, chat_io: Io) -> None:
     chat_dir = roster_file.parent / "chat"
     chat_dir.mkdir()
     (chat_dir / "state.json").write_text("{oops")
     assert run(args(roster_file, "log"), chat_io) == 2
+
+
+def test_partial_reply_prints_earlier_replies_and_exits_1(roster_file: Path) -> None:
+    chat_io = Io(
+        io.StringIO(), io.StringIO(), io.StringIO(), lambda: FailingBackend(fail_roles={"po"})
+    )
+    assert run(args(roster_file, "say", "@manager @po hi"), chat_io) == 1
+    assert out(chat_io) == (
+        "@manager: manager reply\n\n@orchestrator: @po could not answer: overloaded\n\n"
+    )
+    assert err(chat_io) == "group-chat: model call failed: overloaded\n"
+
+
+def test_held_lock_exits_2(roster_file: Path, chat_io: Io, backend: FakeBackend) -> None:
+    chat_dir = roster_file.parent / "chat"
+    chat_dir.mkdir()
+    (chat_dir / "lock").write_text("")
+    assert run(args(roster_file, "say", "@po hi"), chat_io) == 2
+    assert "another group-chat" in err(chat_io)
+    assert backend.calls == []
+
+
+@pytest.mark.parametrize("flag", ["--max-handoffs", "--recent-tokens"])
+def test_negative_limit_is_refused(
+    roster_file: Path, chat_io: Io, flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        run(args(roster_file, flag, "-1", "say", "@po hi"), chat_io)
+    assert exc.value.code == 2
+    assert "must be >= 0, got -1" in capsys.readouterr().err
+
+
+def test_non_integer_limit_is_refused(roster_file: Path, chat_io: Io) -> None:
+    with pytest.raises(SystemExit):
+        run(args(roster_file, "--max-handoffs", "two", "say", "@po hi"), chat_io)
+
+
+@pytest.mark.parametrize("text", ["0", "7"])
+def test_non_negative_accepts(text: str) -> None:
+    assert non_negative(text) == int(text)
+
+
+@pytest.mark.parametrize("command", ["log", "show"])
+def test_log_and_show_validate_roster(tmp_path: Path, chat_io: Io, command: str) -> None:
+    assert run(args(tmp_path / "missing.toml", command), chat_io) == 2
+    assert "missing.toml" in err(chat_io)
+
+
+def test_log_on_corrupt_state_names_the_file(roster_file: Path, chat_io: Io) -> None:
+    chat_dir = roster_file.parent / "chat"
+    chat_dir.mkdir()
+    (chat_dir / "state.json").write_text("[]")
+    assert run(args(roster_file, "show"), chat_io) == 2
+    assert "state.json is unreadable or malformed" in err(chat_io)
+
+
+def test_chat_continues_after_partial_failure_and_lock(roster_file: Path) -> None:
+    backend = FailingBackend(fail_roles={"po"})
+    stdin = io.StringIO("@po hi\n@manager hi\n")
+    chat_io = Io(stdin, io.StringIO(), io.StringIO(), lambda: backend)
+    assert run(args(roster_file, "chat"), chat_io) == 0
+    assert "model call failed: overloaded" in err(chat_io)
+    assert out(chat_io).endswith("@manager: manager reply\n\n")
+
+
+def test_chat_warns_on_held_lock(roster_file: Path, backend: FakeBackend) -> None:
+    chat_dir = roster_file.parent / "chat"
+    chat_dir.mkdir()
+    (chat_dir / "lock").write_text("")
+    chat_io = Io(io.StringIO("@po a\n@po b\n"), io.StringIO(), io.StringIO(), lambda: backend)
+    assert run(args(roster_file, "chat"), chat_io) == 0
+    assert err(chat_io).count("another group-chat") == 2

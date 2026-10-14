@@ -7,11 +7,11 @@ from typing import Any
 
 import pytest
 from group_chat.addressing import AddressError
-from group_chat.chat import GroupChat, Limits, handoff_of
+from group_chat.chat import GroupChat, Limits, PartialReplyError, handoff_of
 from group_chat.roster import Roster
-from group_chat.state import Store, Turn
+from group_chat.state import StateError, Store, Turn
 
-from .conftest import FakeBackend
+from .conftest import FailingBackend, FakeBackend
 
 pytestmark = pytest.mark.unit
 
@@ -40,8 +40,8 @@ def test_each_role_sees_the_whole_thread(
     chat.say("@po scope?")
     chat.say("@manager does that work?")
     last = backend.calls[-1].prompt
-    assert "@human: @po scope?" in last
-    assert "@po: scope is fixed" in last
+    assert '<turn speaker="human">\n@po scope?\n</turn>' in last
+    assert '<turn speaker="po">\nscope is fixed\n</turn>' in last
     assert last.endswith("Reply as @manager.")
 
 
@@ -105,7 +105,7 @@ def test_compaction_folds_old_turns_into_summary(
     state = chat.store.load()
     assert state.summary == "folded"
     assert [turn.text for turn in state.turns] == ["@po two", "po reply"]
-    assert "@human: @po one" in backend.calls[-1].prompt
+    assert '<turn speaker="human">\n@po one\n</turn>' in backend.calls[-1].prompt
 
 
 def test_no_compaction_under_budget(roster: Roster, backend: FakeBackend, tmp_path: Path) -> None:
@@ -169,7 +169,9 @@ def test_zero_handoffs_records_note(roster: Roster, backend: FakeBackend, tmp_pa
     assert chat.store.load().turns[-1].speaker == "orchestrator"
 
 
-def test_backend_failure_records_nothing(roster: Roster, tmp_path: Path) -> None:
+def test_unexpected_error_keeps_human_turn_and_releases_lock(
+    roster: Roster, tmp_path: Path
+) -> None:
     class Boom:
         def complete(self, system: str, prompt: str, model: str | None) -> str:
             raise RuntimeError("down")
@@ -177,7 +179,8 @@ def test_backend_failure_records_nothing(roster: Roster, tmp_path: Path) -> None
     chat = GroupChat(roster, Boom(), Store(tmp_path / "chat"))
     with pytest.raises(RuntimeError):
         chat.say("@po hi")
-    assert not chat.store.path.exists()
+    assert chat.store.load().turns == [Turn("human", "@po hi")]
+    assert not chat.store.lock_path.exists()
 
 
 def test_message_is_stripped(roster: Roster, backend: FakeBackend, tmp_path: Path) -> None:
@@ -192,15 +195,184 @@ def test_message_is_stripped(roster: Roster, backend: FakeBackend, tmp_path: Pat
         ("  HANDOFF: @po  ", "po"),
         ("HANDOFF:@po", "po"),
         ("HANDOFF: @po\nmore text", "po"),
-        ("HANDOFF: @po @liaison", None),
+        ("HANDOFF: @po @liaison", "po"),
     ],
 )
 def test_handoff_of_spacing(text: str, expected: str | None) -> None:
     assert handoff_of(text, NAMES, "manager") == expected
 
 
-@pytest.mark.xfail(
-    strict=True, reason="BUG: HANDOFF after leading @mentions is ignored; protocol allows it"
-)
 def test_handoff_after_leading_mentions() -> None:
     assert handoff_of("@po HANDOFF: @liaison", NAMES, "manager") == "liaison"
+
+
+def test_say_holds_the_lock_during_model_calls(roster: Roster, tmp_path: Path) -> None:
+    store = Store(tmp_path / "chat")
+
+    class Spy(FakeBackend):
+        def complete(self, system: str, prompt: str, model: str | None) -> str:
+            assert store.lock_path.exists()
+            return super().complete(system, prompt, model)
+
+    GroupChat(roster, Spy(), store).say("@po hi")
+    assert not store.lock_path.exists()
+
+
+def test_held_lock_refuses_and_records_nothing(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    chat = make(roster, backend, tmp_path)
+    chat.store.directory.mkdir()
+    chat.store.lock_path.write_text("")
+    with pytest.raises(StateError, match="another group-chat"):
+        chat.say("@po hi")
+    assert backend.calls == []
+    assert not chat.store.path.exists()
+
+
+def test_lock_released_after_address_error(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    chat = make(roster, backend, tmp_path)
+    with pytest.raises(AddressError):
+        chat.say("nobody")
+    assert not chat.store.lock_path.exists()
+
+
+def test_human_turn_saved_before_first_model_call(roster: Roster, tmp_path: Path) -> None:
+    store = Store(tmp_path / "chat")
+
+    class Spy(FakeBackend):
+        def complete(self, system: str, prompt: str, model: str | None) -> str:
+            assert store.load().turns[-1] == Turn("human", "@po hi")
+            assert store.load().last_addressed == ("po",)
+            return super().complete(system, prompt, model)
+
+    GroupChat(roster, Spy(), store).say("@po hi")
+
+
+def test_each_reply_is_saved_before_the_next_call(roster: Roster, tmp_path: Path) -> None:
+    store = Store(tmp_path / "chat")
+    seen: list[int] = []
+
+    class Spy(FakeBackend):
+        def complete(self, system: str, prompt: str, model: str | None) -> str:
+            seen.append(len(store.load().turns))
+            return super().complete(system, prompt, model)
+
+    GroupChat(roster, Spy(), store).say("@all hi")
+    assert seen == [1, 2, 3]
+
+
+def test_partial_reply_keeps_earlier_replies(roster: Roster, tmp_path: Path) -> None:
+    backend = FailingBackend(fail_roles={"po"})
+    chat = GroupChat(roster, backend, Store(tmp_path / "chat"))
+    with pytest.raises(PartialReplyError, match="overloaded") as exc:
+        chat.say("@all status?")
+    note = Turn("orchestrator", "@po could not answer: overloaded")
+    assert exc.value.replies == [Turn("manager", "manager reply"), note]
+    assert chat.store.load().turns == [Turn("human", "@all status?"), *exc.value.replies]
+    assert chat.store.load().last_addressed == NAMES
+    assert not chat.store.lock_path.exists()
+
+
+def test_partial_reply_skips_later_roles(roster: Roster, tmp_path: Path) -> None:
+    backend = FailingBackend(fail_roles={"manager"})
+    chat = GroupChat(roster, backend, Store(tmp_path / "chat"))
+    with pytest.raises(PartialReplyError):
+        chat.say("@all status?")
+    assert len(backend.calls) == 1
+
+
+def test_failure_note_does_not_touch_the_log(roster: Roster, tmp_path: Path) -> None:
+    chat = GroupChat(roster, FailingBackend(fail_roles={"po"}), Store(tmp_path / "chat"))
+    with pytest.raises(PartialReplyError):
+        chat.say("@po hi")
+    assert chat.store.load().log.decisions == []
+
+
+def test_summary_failure_keeps_turns_and_notes_it(roster: Roster, tmp_path: Path) -> None:
+    backend = FailingBackend(fail_summary=True)
+    chat = GroupChat(
+        roster, backend, Store(tmp_path / "chat"), Limits(recent_tokens=1, keep_turns=2)
+    )
+    chat.say("@po one")
+    replies = chat.say("@po two")
+    note = Turn("orchestrator", "summary skipped, turns kept verbatim: overloaded")
+    assert replies == [Turn("po", "po reply"), note]
+    state = chat.store.load()
+    assert state.summary == ""
+    assert [t.text for t in state.turns[:2]] == ["@po one", "po reply"]
+
+
+def test_compaction_retries_after_summary_failure(roster: Roster, tmp_path: Path) -> None:
+    backend = FailingBackend(fail_summary=True)
+    chat = GroupChat(
+        roster, backend, Store(tmp_path / "chat"), Limits(recent_tokens=1, keep_turns=2)
+    )
+    chat.say("@po one")
+    chat.say("@po two")
+    backend.fail_summary = False
+    chat.say("@po three")
+    state = chat.store.load()
+    assert state.summary == "SUMMARY"
+    assert len(state.turns) == 2
+
+
+def test_handoff_to_queued_role_is_skipped(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    backend.replies = {"manager": ["HANDOFF: @po"]}
+    replies = make(roster, backend, tmp_path).say("@all status?")
+    assert [turn.speaker for turn in replies] == list(NAMES)
+
+
+def test_handoff_to_queued_role_does_not_use_a_hop(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    backend.replies = {"manager": ["HANDOFF: @po"], "liaison": ["HANDOFF: @manager"]}
+    replies = make(roster, backend, tmp_path, max_handoffs=1).say("@all status?")
+    assert [turn.speaker for turn in replies] == [*NAMES, "manager"]
+
+
+def test_handoff_to_role_that_already_spoke_is_allowed(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    backend.replies = {"po": ["HANDOFF: @manager"]}
+    replies = make(roster, backend, tmp_path).say("@manager @po hi")
+    assert [turn.speaker for turn in replies] == ["manager", "po", "manager"]
+
+
+def test_last_addressed_is_human_targets_not_handoff(
+    roster: Roster, backend: FakeBackend, tmp_path: Path
+) -> None:
+    backend.replies = {"po": ["HANDOFF: @liaison"]}
+    chat = make(roster, backend, tmp_path)
+    chat.say("@po @manager hi")
+    assert chat.store.load().last_addressed == ("po", "manager")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "HANDOFF: @PO",
+        "HANDOFF: @Po",
+        "- HANDOFF: @po",
+        "* HANDOFF: @po",
+        "**HANDOFF:** @po",
+        "- **HANDOFF:** @po",
+        "@human HANDOFF: @po",
+        "  @Human, **HANDOFF:** @po",
+    ],
+)
+def test_handoff_prefixes_and_case(text: str) -> None:
+    assert handoff_of(text, NAMES, "manager") == "po"
+
+
+@pytest.mark.parametrize("text", ["handoff: @po", "> HANDOFF: @po", "x HANDOFF: @po"])
+def test_handoff_not_at_line_start(text: str) -> None:
+    assert handoff_of(text, NAMES, "manager") is None
+
+
+def test_handoff_to_self_in_other_case_is_ignored() -> None:
+    assert handoff_of("HANDOFF: @MANAGER", NAMES, "manager") is None
