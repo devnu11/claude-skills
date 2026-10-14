@@ -18,7 +18,7 @@ from . import junit, system
 REGISTRY = ".team/pending-tests.json"
 WHOLE = range(1, sys.maxsize)
 Changed = Mapping[str, tuple[range, ...]]
-NEW_FILE = re.compile(r"^\+\+\+ b/(?P<path>.+)$")
+NEW_FILE = re.compile(r"^\+\+\+ (?:b/(?P<path>.+)|.*)$")
 HUNK = re.compile(r"^@@ -\S+ \+(?P<start>\d+)(?:,(?P<count>\d+))? @@")
 NOT_AN_OBJECT = "{file} must hold an object of story ids to lists of test ids"
 
@@ -101,7 +101,7 @@ def changed_lines(diff: str, untracked: Sequence[str]) -> Changed:
     path = ""
     for line in diff.splitlines():
         if named := NEW_FILE.match(line):
-            path = named["path"]
+            path = named["path"] or ""  # +++ /dev/null: a deleted file owns no hunks
         elif (hunk := HUNK.match(line)) and path:
             found.setdefault(path, []).append(_hunk_range(hunk))
     return {**{p: tuple(r) for p, r in found.items()}, **{p: (WHOLE,) for p in untracked}}

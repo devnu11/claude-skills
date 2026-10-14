@@ -76,7 +76,8 @@ class Git:
 
     def diff_lines(self, base: str) -> str:
         """The working tree's diff against ``base`` with no context lines."""
-        return self.run("diff", "-U0", "--no-color", "--no-ext-diff", base)
+        fixed = ("-c", "core.quotePath=false", "diff", "--src-prefix=a/", "--dst-prefix=b/")
+        return self.run(*fixed, "-U0", "--no-color", "--no-ext-diff", base)
 
     def content_digest(self, base: str) -> str:
         """Hash of the working tree's content relative to ``base``, committed or not."""
