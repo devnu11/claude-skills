@@ -114,7 +114,9 @@ def test_the_overlay_may_use_fill_opacity_only_as_an_attribute() -> None:
     assert 'fill-opacity=".16"' in PAGE
 
 
-@pytest.mark.parametrize("setting", ["--group-w: 216px", "--gap-min: 24px", "--role-gap: 20px"])
+@pytest.mark.parametrize(
+    "setting", ["--group-max: 236px", "--group-min: 216px", "--gap-min: 24px", "--role-gap: 20px"]
+)
 def test_each_layout_setting_is_declared_once(setting: str) -> None:
     assert PAGE.count(setting) == 1
     name = setting.split(":")[0]
@@ -123,15 +125,21 @@ def test_each_layout_setting_is_declared_once(setting: str) -> None:
 
 def test_the_settings_sit_together_on_fc() -> None:
     body = dict(css_rules()).get(".fc", "")
-    for name in ("--group-w", "--gap-min", "--role-gap"):
+    for name in ("--group-max", "--group-min", "--gap-min", "--role-gap"):
         assert name in body
 
 
-def test_a_group_has_a_fixed_width_and_a_gap_stretches() -> None:
+def test_a_group_shrinks_between_its_bounds_and_a_gap_stretches() -> None:
     bodies = [b for _, b in flow_rules()]
-    assert any("flex: 0 0 var(--group-w)" in b for b in bodies)
-    gap = next(b for b in bodies if "flex: 1 1 var(--gap-min)" in b)
-    assert "min-width: var(--gap-min)" in gap
+    group = next(b for b in bodies if "flex: 0 1 var(--group-max)" in b)
+    assert "min-width: var(--group-min)" in group
+    assert any("flex: 1 0 var(--gap-min)" in b for b in bodies)
+    assert "--group-w" not in PAGE
+
+
+def test_the_group_bounds_are_declared_on_fc() -> None:
+    assert re.search(r"--group-max:\s*236px\s*;", dict(css_rules())[".fc"])
+    assert re.search(r"--group-min:\s*216px\s*;", dict(css_rules())[".fc"])
 
 
 def test_the_flow_scrolls_sideways_below_the_fit_width() -> None:
@@ -182,7 +190,8 @@ def test_the_settings_key_and_storage() -> None:
 
 TOKENS = {
     "--run1": "#2e9d5b", "--run2": "#8b5cf6", "--run3": "#e0901f", "--pass": "#2e9d5b",
-    "--warn": "#c9b22c", "--fail": "var(--critical)", "--flow-forward": "var(--s2)",
+    "--warn": "#c9b22c", "--skip": "#8c939d", "--fail": "var(--critical)",
+    "--flow-forward": "var(--s2)",
     "--flow-model": "var(--s1)", "--flow-tools": "var(--s4)",
 }  # fmt: skip
 
@@ -264,3 +273,13 @@ def test_every_ink_has_4_5_contrast_on_boxes_and_groups(block: int) -> None:
 
 def test_the_contrast_helper_knows_black_on_white() -> None:
     assert round(contrast("#000000", "#ffffff")) == 21
+
+
+# ----- FC26 (round 2): the Skip grey -----
+
+
+def test_skip_is_used_only_for_its_swatch_and_bar_segment() -> None:
+    bodies = {sel: body for sel, body in css_rules() if "var(--skip)" in body}
+    assert any(".fc-sw.skip" in sel for sel in bodies)
+    assert any(".fc-testbar .skip" in sel for sel in bodies)
+    assert all(re.search(r"background|border", body) for body in bodies.values())

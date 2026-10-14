@@ -194,6 +194,7 @@ class FakeSystem:
         self.procs: dict[int, FakeProcess] = {}
         self.next_pid = FIRST_CHILD_PID
         self.ticks = 0
+        self.scratches = 0
         self.env: dict[str, str] = {}
         self.listening: set[tuple[str, int]] = set()
         self.holds: dict[int, tuple[str, int]] = {}
@@ -368,6 +369,13 @@ class FakeSystem:
     def _under(self, key: str) -> list[str]:
         prefix = key.rstrip("/") + "/"
         return [n for n in [*self.files, *self.dirs] if n == key or n.startswith(prefix)]
+
+    def scratch_file(self, prefix: str) -> Path:
+        """A new empty file in the fake temp directory (the caller removes it)."""
+        self.scratches += 1
+        path = Path(f"/tmp/{prefix}{self.scratches}.json")
+        self.write_text(path, "")
+        return path
 
     def remove_tree(self, path: Path) -> None:
         """Delete a directory and everything in it."""

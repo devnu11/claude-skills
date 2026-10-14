@@ -6,6 +6,7 @@ node-harness tests (e2e).
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 from collections.abc import Iterator
@@ -136,90 +137,155 @@ def test_a_meter_split_carries_the_rate(fake: FakeSystem) -> None:
     assert live.time_split(None) == {}
 
 
-# ----- R5: test_tally -----
+# ----- R5: test_tally (the plugin's records) -----
 
 
-def fold(*lines: str) -> test_tally.Tally:
+def rec(session: str = "a", passed: int = 0, warned: int = 0, skipped: int = 0,
+        failed: int = 0, total: int | None = 10) -> str:  # fmt: skip
+    """One plugin record as the tally file holds it."""
+    return json.dumps({"session": session, "total": total, "passed": passed, "warned": warned,
+                       "skipped": skipped, "failed": failed})  # fmt: skip
+
+
+def raw(**over: Any) -> str:
+    """A record with fields replaced by (possibly invalid) values; ``None`` drops the field."""
+    fields: dict[str, Any] = {
+        "session": "a",
+        "passed": 1,
+        "warned": 0,
+        "skipped": 0,
+        "failed": 0,
+        "total": 5,
+    }
+    fields.update(over)
+    return json.dumps({k: v for k, v in fields.items() if v is not None})
+
+
+def fold(*texts: str) -> test_tally.Tally:
     tally = test_tally.EMPTY
-    for line in lines:
-        tally = test_tally.read(tally, line)
+    for text in texts:
+        tally = test_tally.read(tally, text)
     return tally
 
 
-def test_a_collected_line_sets_the_total() -> None:
-    assert fold("collected 506 items").total == 506
-    assert fold("collected 1 item").total == 1
+def test_the_counts_are_the_four_categories() -> None:
+    assert test_tally.COUNTS == ("passed", "warned", "skipped", "failed")
 
 
-def test_an_xdist_line_sets_the_total() -> None:
-    assert fold("8 workers [506 items]").total == 506
-    assert fold("1 worker [3 items]").total == 3
+def test_a_record_sets_the_counts_the_total_and_one_point() -> None:
+    tally = fold(rec(passed=3, warned=1, skipped=1, failed=0, total=10))
+    assert (tally.passed, tally.warned, tally.skipped, tally.failed) == (3, 1, 1, 0)
+    assert tally.total == 10 and tally.session == "a"
+    assert tally.ran() == 5 and tally.counted() and tally.pct() == 50
+    assert tally.points == (50,) and tally.fail_at is None
 
 
-def test_a_progress_line_counts_outcomes() -> None:
-    tally = fold("..F.s  [ 12%]")
-    assert (tally.passed, tally.failed, tally.warned) == (3, 1, 1)
-    assert tally.pct == 12 and tally.points == (12,) and tally.fail_at == 0
-    assert tally.ran() == 5 and tally.counted()
+def test_the_same_record_again_adds_no_point() -> None:
+    text = rec(passed=5)
+    assert fold(text, text).points == (50,)
 
 
-def test_every_outcome_letter_maps() -> None:
-    assert test_tally.OUTCOMES == {
-        ".": "passed", "F": "failed", "E": "failed", "s": "warned", "x": "warned", "X": "warned",
-    }  # fmt: skip
-    tally = fold(".FEsxX [100%]")
-    assert (tally.passed, tally.failed, tally.warned) == (1, 2, 3)
-
-
-def test_progress_lines_add_up_and_the_first_failure_is_kept() -> None:
-    tally = fold("collected 10 items", "..  [ 20%]", ".F  [ 40%]", "F.  [ 60%]")
-    assert tally.points == (20, 40, 60)
+def test_a_later_record_adds_a_point_and_the_first_failure_is_kept() -> None:
+    tally = fold(rec(passed=5), rec(passed=5, failed=1), rec(passed=5, failed=2, total=10))
+    assert tally.points == (50, 60, 70)
     assert tally.fail_at == 1
-    assert (tally.passed, tally.failed) == (4, 2)
+    assert tally.failed == 2
+
+
+def test_a_failure_in_the_first_record_marks_the_first_point() -> None:
+    assert fold(rec(passed=1, failed=1)).fail_at == 0
+
+
+def test_a_failure_before_any_point_leaves_fail_at_none() -> None:
+    tally = fold(rec(failed=1, total=None))
+    assert tally.failed == 1 and tally.points == () and tally.fail_at is None
 
 
 def test_no_failure_leaves_fail_at_none() -> None:
-    assert fold("..  [ 20%]").fail_at is None
+    assert fold(rec(passed=2)).fail_at is None
 
 
-def test_a_file_prefix_counts() -> None:
-    tally = fold("tests/test_a.py ..x [ 40%]")
-    assert (tally.passed, tally.warned, tally.pct) == (2, 1, 40)
+def test_without_a_total_there_is_no_point_and_no_percentage() -> None:
+    tally = fold(rec(passed=4, total=None))
+    assert tally.total is None and tally.pct() is None and tally.points == ()
 
 
-def test_other_lines_change_nothing() -> None:
-    before = fold("..  [ 20%]")
-    assert test_tally.read(before, "ruff: 3 errors") is before
-    assert test_tally.read(before, "") is before
-    assert test_tally.read(before, "tests/test_a.py::test_x PASSED  [ 50%]") is before
+def test_the_percentage_caps_at_100() -> None:
+    assert test_tally.Tally(passed=12, total=10).pct() == 100
+
+
+def test_a_new_session_starts_afresh() -> None:
+    old = fold(rec("a", passed=5, failed=1))
+    assert old.fail_at == 0
+    new = test_tally.read(old, rec("b", passed=1, total=4))
+    assert new.session == "b" and new.passed == 1 and new.failed == 0 and new.total == 4
+    assert new.points == (25,) and new.fail_at is None
+
+
+def test_the_same_session_carries_on_after_a_new_one_never_came() -> None:
+    assert fold(rec("a", passed=1), rec("a", passed=2)).points == (10, 20)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "collected 506 items",
+        "..F.s  [ 12%]",
+        "",
+        "not json {",
+        "[1, 2]",
+        '"text"',
+        raw(failed=None),
+        raw(session="a", passed=True, total=5),
+        raw(session="a", passed=-1, total=5),
+        raw(session="a", passed=1.5, total=5),
+        rec(total=0),
+        rec(session=""),
+        raw(session=7, passed=1, total=5),
+        raw(session="a", passed=1, total="5"),
+        raw(session="a", passed=1, total=True),
+    ],
+)  # fmt: skip
+def test_what_is_not_a_record_gives_none_and_changes_nothing(text: str) -> None:
+    assert test_tally.record_of(text) is None
+    before = fold(rec(passed=2))
+    assert test_tally.read(before, text) is before
+
+
+def test_a_record_with_no_total_is_a_record() -> None:
+    record = test_tally.record_of(rec(passed=1, total=None))
+    assert record is not None and record["total"] is None and record["session"] == "a"
 
 
 def test_the_empty_tally_is_not_counted() -> None:
     assert test_tally.Tally() == test_tally.EMPTY
     assert not test_tally.EMPTY.counted() and test_tally.EMPTY.ran() == 0
+    assert test_tally.EMPTY.pct() is None
 
 
-def test_as_dict_estimates_the_total_from_the_percentage() -> None:
-    tally = fold("..F.  [ 40%]")
+def test_as_dict_has_the_heartbeat_keys_in_order() -> None:
+    tally = fold(rec(passed=3, warned=1, skipped=2, failed=4, total=20))
+    assert list(tally.as_dict()) == [
+        "passed", "warned", "skipped", "failed", "total", "points", "fail_at",
+    ]  # fmt: skip
     assert tally.as_dict() == {
-        "passed": 3, "warned": 0, "failed": 1, "total": 10, "points": [40], "fail_at": 0,
+        "passed": 3, "warned": 1, "skipped": 2, "failed": 4, "total": 20,
+        "points": [50], "fail_at": 0,
     }  # fmt: skip
 
 
-def test_as_dict_prefers_the_known_total() -> None:
-    assert fold("collected 506 items", "..  [ 40%]").as_dict()["total"] == 506
+def test_the_old_progress_machinery_is_gone() -> None:
+    for name in ("OUTCOMES", "TOTALS", "PROGRESS", "MAX_POINTS"):
+        assert not hasattr(test_tally, name)
+    assert "pct" not in test_tally.EMPTY.as_dict()
 
 
-def test_as_dict_has_no_total_without_a_percentage() -> None:
-    assert test_tally.Tally(passed=3).as_dict()["total"] is None
-
-
-def test_the_121st_point_replaces_the_last() -> None:
+def test_points_have_no_cap() -> None:
     tally = test_tally.EMPTY
-    for i in range(test_tally.MAX_POINTS + 1):
-        tally = test_tally.read(tally, f". [{min(i, 99):>3}%]")
-    assert len(tally.points) == test_tally.MAX_POINTS == 120
-    assert tally.points[-1] == 99
+    for i in range(1, 101):
+        tally = test_tally.read(tally, rec(passed=i, failed=1, total=100))
+    assert len(tally.points) == 100 and tally.points[-1] == 100
+    assert tally.fail_at == 0
 
 
 # ----- R6: stages.current, Run.hear -----
@@ -279,23 +345,29 @@ def test_open_row_ends_with_tests_none() -> None:
     ]  # fmt: skip
 
 
-def test_a_progress_line_fills_the_row_and_refreshes_the_board(fake: FakeSystem) -> None:
+def test_a_record_fills_the_row_and_refreshes_the_board(fake: FakeSystem) -> None:
     row, board = make_row(), RefreshBoard()
     hear = stage_log.Tallier(row, board)
-    hear("collected 10 items")
+    hear("not a record")
     assert row["tests"] is None and board.refreshed == 0
-    hear("..F.  [ 40%]")
+    hear(rec(passed=3, failed=1, total=10))
     assert row["tests"]["passed"] == 3 and row["tests"]["failed"] == 1
-    assert row["tests"]["total"] == 10
+    assert row["tests"]["total"] == 10 and row["tests"]["skipped"] == 0
     assert board.refreshed == 1
+
+
+def test_a_record_of_nothing_leaves_none(fake: FakeSystem) -> None:
+    row, board = make_row(), RefreshBoard()
+    stage_log.Tallier(row, board)(rec(total=10))
+    assert row["tests"] is None and board.refreshed == 0
 
 
 def test_a_new_dict_is_set_each_time(fake: FakeSystem) -> None:
     row = make_row()
     hear = stage_log.Tallier(row, RefreshBoard())
-    hear("..  [ 20%]")
+    hear(rec(passed=2))
     first = row["tests"]
-    hear("...  [ 50%]")
+    hear(rec(passed=5))
     assert row["tests"] is not first and first["passed"] == 2 and row["tests"]["passed"] == 5
 
 
@@ -303,13 +375,23 @@ def test_refreshes_are_spaced_by_two_seconds(fake: FakeSystem) -> None:
     assert stage_log.TALLY_REFRESH_S == 2.0
     row, board = make_row(), RefreshBoard()
     hear = stage_log.Tallier(row, board)
-    hear(".  [ 10%]")
+    hear(rec(passed=1))
     fake.clock += 1.0
-    hear(".  [ 20%]")
+    hear(rec(passed=2))
     assert board.refreshed == 1 and row["tests"]["passed"] == 2
     fake.clock += 1.0
-    hear(".  [ 30%]")
+    hear(rec(passed=3))
     assert board.refreshed == 2
+
+
+def test_a_second_session_replaces_the_first_in_the_row(fake: FakeSystem) -> None:
+    row = make_row()
+    hear = stage_log.Tallier(row, RefreshBoard())
+    hear(rec("a", passed=9, failed=1))
+    hear(rec("b", passed=1, total=4))
+    assert (
+        row["tests"]["passed"] == 1 and row["tests"]["failed"] == 0 and row["tests"]["total"] == 4
+    )
 
 
 def test_a_lint_line_leaves_tests_none(fake: FakeSystem) -> None:
@@ -334,8 +416,7 @@ def test_an_open_stage_listens_and_the_event_is_unchanged(scratch: Path, fake: F
     board = RefreshBoard()
     log = stage_log.StageLog(EventLog(scratch / "ev.jsonl"), Clock(), board=board)
     with log.open(NAME.GATE_TESTS_COVERAGE) as run:
-        run.hear("collected 4 items")
-        run.hear("..  [ 50%]")
+        run.hear(rec(passed=2, total=4))
         (row,) = board.rows
         assert row["tests"]["passed"] == 2 and row["tests"]["total"] == 4
     (event,) = [e for e in log.log.events() if e.kind == "runner-stage"]
@@ -348,37 +429,23 @@ def test_an_open_stage_listens_and_the_event_is_unchanged(scratch: Path, fake: F
 # ----- R8: Pump and CommandShell -----
 
 
-def a_run() -> stages.Run:
-    return stages.Run(stages.STAGES[NAME.GATE_GREEN], PLACE)
-
-
-def test_a_pump_keeps_every_line_and_tells_the_run() -> None:
-    run = a_run()
-    heard: list[str] = []
-    run.listeners.append(heard.append)
-    pump = Pump(iter(["one\n", "two\n"]), run)
+def test_a_pump_keeps_every_line_in_order() -> None:
+    pump = Pump(iter(["one\n", "two\n"]))
     pump.start()
     assert pump.join(2.0) is True
     assert pump.text() == "one\ntwo\n"
-    assert heard == ["one\n", "two\n"]
 
 
-def test_a_pump_without_a_run_just_collects() -> None:
-    pump = Pump(iter(["a\n"]), None)
-    pump.start()
-    assert pump.join(2.0) and pump.text() == "a\n"
-
-
-def test_a_listener_that_raises_does_not_change_the_text() -> None:
-    run = a_run()
-
-    def boom(line: str) -> None:
-        raise RuntimeError(line)
-
-    run.listeners.append(boom)
-    pump = Pump(iter(["a\n", "b\n"]), run)
-    pump.start()
-    assert pump.join(2.0) and pump.text() == "a\nb\n"
+def test_a_pump_has_no_run_and_never_tells_the_stage() -> None:
+    assert [f.name for f in dataclasses.fields(Pump)][:2] == ["lines", "seen"]
+    assert not hasattr(Pump, "_tell")
+    with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE) as run:
+        heard: list[str] = []
+        run.listeners.append(heard.append)
+        pump = Pump(iter(["a\n"]))
+        pump.start()
+        assert pump.join(2.0)
+    assert heard == []
 
 
 @pytest.mark.parametrize("error", [ValueError("closed"), OSError("pipe")])
@@ -387,7 +454,7 @@ def test_a_pipe_closed_under_the_thread_ends_the_output(error: Exception) -> Non
         yield "kept\n"
         raise error
 
-    pump = Pump(lines(), None)
+    pump = Pump(lines())
     pump.start()
     assert pump.join(2.0) and pump.text() == "kept\n"
 
@@ -399,7 +466,7 @@ def test_a_pump_that_never_ends_reports_false() -> None:
         yield "a\n"
         release.wait(5)  # a hard bound so a mistake cannot hang the suite
 
-    pump = Pump(lines(), None)
+    pump = Pump(lines())
     pump.start()
     try:
         assert pump.join(0.05) is False
@@ -413,29 +480,9 @@ def test_the_result_is_what_communicate_gave(fake: FakeSystem) -> None:
     assert CommandShell(FAKE_REPO).run("echo a; echo b; echo c") == (3, "a\nb\nc\n")
 
 
-def test_the_open_stage_hears_each_line_in_order(fake: FakeSystem) -> None:
-    fake.reply(("pytest",), Done(0, "one\ntwo\nthree\n"))
-    heard: list[str] = []
-    with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE) as run:
-        run.listeners.append(heard.append)
-        assert CommandShell(FAKE_REPO).run("pytest") == (0, "one\ntwo\nthree\n")
-    assert heard == ["one\n", "two\n", "three\n"]
-
-
 def test_a_command_outside_a_stage_still_runs(fake: FakeSystem) -> None:
     fake.reply(("ls",), Done(0, "x\n"))
     assert CommandShell(FAKE_REPO).run("ls") == (0, "x\n")
-
-
-def test_a_listener_that_raises_does_not_change_a_command(fake: FakeSystem) -> None:
-    fake.reply(("pytest",), Done(1, "a\n"))
-
-    def boom(line: str) -> None:
-        raise RuntimeError(line)
-
-    with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE) as run:
-        run.listeners.append(boom)
-        assert CommandShell(FAKE_REPO).run("pytest") == (1, "a\n")
 
 
 def test_a_timeout_still_kills_and_names_the_hung_test(fake: FakeSystem) -> None:
