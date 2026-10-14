@@ -223,9 +223,13 @@ def flow_text() -> dict[str, tuple[int, str]]:
 
 def test_the_text_table_has_every_kind() -> None:
     assert set(flow_text()) == {
-        "name", "meta", "live", "tool", "toolRun", "caption", "title", "pill", "legend", "settings",
+        "name", "meta", "live", "tool", "toolRun", "toolDesc", "caption", "title", "pill", "legend", "settings",
     }  # fmt: skip
     assert flow_text()["name"][0] == 12
+
+
+def test_the_tool_description_text_is_12_px_ink_2() -> None:
+    assert flow_text()["toolDesc"] == (12, "--ink-2")
 
 
 def test_every_text_is_at_least_10_px() -> None:
