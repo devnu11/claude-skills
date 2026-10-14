@@ -216,7 +216,11 @@ def test_a_check_pointed_at_a_step_with_no_gate_passes(
     rig: Callable[..., Rig], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """SC9a: no gate at the step means the check passes and runs no command."""
-    monkeypatch.setitem(stop_checks.SPECS, StopCheck.SUITE, stop_checks.Spec(stages.Name.STOP_SUITE, "review"))
+    monkeypatch.setitem(
+        stop_checks.SPECS,
+        StopCheck.SUITE,
+        stop_checks.Spec(stages.Name.STOP_SUITE, "review"),
+    )
     r = rig(step="review", suite=[OWN_FAIL])
     assert r.stop() == {}
     assert r.script.count(COVERAGE) == 0
