@@ -13,6 +13,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+LABEL_MAX = 24  # A stage label's most characters (s127)
 RUNNER_ROLE = "runner"
 NOT_UP = 1
 STAGE_NAME = re.compile(r"[a-z0-9-]+\.[a-z0-9_+-]+")
@@ -66,9 +67,10 @@ class Name(StrEnum):
 
 @dataclass(frozen=True)
 class Stage:
-    """One row: a stage's name, description, when it runs and what it attaches to."""
+    """One row: a stage's name, short label, description, when it runs and what it attaches to."""
 
     name: Name
+    label: str
     description: str
     when: When
     attach: Attach
@@ -77,6 +79,7 @@ class Stage:
         """The row as the ``tools`` command prints it."""
         return {
             "name": str(self.name),
+            "label": self.label,
             "description": self.description,
             "when": str(self.when),
             "attach": str(self.attach),
@@ -86,76 +89,77 @@ class Stage:
 B, A, D = When.BEFORE, When.AFTER, When.DURING
 STEP, STORY, BOUND = Attach.STEP, Attach.STORY, Attach.BOUNDARY
 
-_ROWS: tuple[tuple[Name, When, Attach, str], ...] = (
+_ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     (
-        Name.ENV_PREPARE, B, STEP,
+        Name.ENV_PREPARE, B, STEP, "env prepare",
         "Prepare the acceptance environment for the Customer Proxy: "
         "sandbox, prepare command or service start",
     ),
     (
-        Name.PRESENTATION_LAYOUT, B, STEP,
+        Name.PRESENTATION_LAYOUT, B, STEP, "presentation layout",
         "Lay out the story's presentation and its git workspace before the integration tester",
     ),
-    (Name.QUALITY_LINT, B, STEP, "Lint the whole repo before the quality step"),
-    (Name.QUALITY_STATIC, B, STEP, "Static analysis of the whole repo before the quality step"),
-    (Name.QUALITY_COVERAGE, B, STEP, "The full suite with coverage, for the quality step's report"),
-    (Name.CHECKOUT_GUARD, B, STEP, "Check the branch and HEAD are the team's before the next step"),
-    (Name.CHECKOUT_VERIFY, A, STEP, "Check the branch and HEAD did not move during the step"),
-    (Name.GATE_TESTS_RED, A, STEP, "Tests gate: the full suite must fail, so the story's new tests are red before any code"),  # noqa: E501
+    (Name.QUALITY_LINT, B, STEP, "ruff check", "Lint the whole repo before the quality step"),
+    (Name.QUALITY_STATIC, B, STEP, "ruff format", "Static analysis of the whole repo before the quality step"),  # noqa: E501
+    (Name.QUALITY_COVERAGE, B, STEP, "coverage report", "The full suite with coverage, for the quality step's report"),  # noqa: E501
+    (Name.CHECKOUT_GUARD, B, STEP, "checkout guard", "Check the branch and HEAD are the team's before the next step"),  # noqa: E501
+    (Name.CHECKOUT_VERIFY, A, STEP, "checkout verify", "Check the branch and HEAD did not move during the step"),  # noqa: E501
+    (Name.GATE_TESTS_RED, A, STEP, "pytest: new tests red", "Tests gate: the full suite must fail, so the story's new tests are red before any code"),  # noqa: E501
     (
-        Name.GATE_TESTS_REWORK, A, STEP,
+        Name.GATE_TESTS_REWORK, A, STEP, "pytest: rework",
         "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",
     ),
     (
-        Name.GATE_TESTS_COVERAGE, A, STEP,
+        Name.GATE_TESTS_COVERAGE, A, STEP, "pytest + coverage",
         "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",  # noqa: E501,
     ),
     (
-        Name.GATE_SUITE_RUNS, A, STEP,
+        Name.GATE_SUITE_RUNS, A, STEP, "pytest: repeat runs",
         "The full suite again, the story's suite_runs times in a row, after its suite step's gate passes",  # noqa: E501
     ),
-    (Name.GATE_DISPUTE, A, STEP, "The full suite, to show a disputed test's output"),
+    (Name.GATE_DISPUTE, A, STEP, "pytest: disputed test", "The full suite, to show a disputed test's output"),  # noqa: E501
     (
-        Name.GATE_ROUTE_LINT, A, STEP,
+        Name.GATE_ROUTE_LINT, A, STEP, "ruff check + format",
         "Lint and static analysis of the whole repo, to route a failed gate's items to their owners",  # noqa: E501
     ),
     (
-        Name.PRESENTATION_TRIAL, A, STEP,
+        Name.PRESENTATION_TRIAL, A, STEP, "presentation trial",
         "The e2e gate: the presentation is complete and its service starts and answers",
     ),
     (
-        Name.GATE_GREEN, A, STORY,
+        Name.GATE_GREEN, A, STORY, "pytest: must pass",
         "The full suite must pass before the PO passes a story stuck at tests",
     ),
     (
-        Name.BOUNDARY_SYNC, B, BOUND,
+        Name.BOUNDARY_SYNC, B, BOUND, "boundary sync",
         "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",  # noqa: E501
     ),
-    (Name.BOUNDARY_CHECK, A, BOUND, "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch"),  # noqa: E501
-    (Name.BOUNDARY_REVIEW, A, BOUND, "Build and check the per-sprint review branches"),
+    (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch"),  # noqa: E501
+    (Name.BOUNDARY_REVIEW, A, BOUND, "build review branches", "Build and check the per-sprint review branches"),  # noqa: E501
     (
-        Name.BOUNDARY_PUSH, A, BOUND,
+        Name.BOUNDARY_PUSH, A, BOUND, "review PR + push",
         "Push the review branches and open or update their pull requests",
     ),
     (
-        Name.BOUNDARY_REBASE, A, BOUND,
+        Name.BOUNDARY_REBASE, A, BOUND, "rebase onto target",
         "Rebase the team branch onto the target (sprint end only)",
     ),
     (
-        Name.BOUNDARY_RESTACK, A, BOUND,
+        Name.BOUNDARY_RESTACK, A, BOUND, "restack review PRs",
         "Bring every review PR up to date, bottom up: rebase, same tree, push, retarget",
     ),
     (
-        Name.BOUNDARY_CI_WAIT, A, BOUND,
+        Name.BOUNDARY_CI_WAIT, A, BOUND, "CI wait",
         "Wait for the pull requests' CI checks and read failing logs",
     ),
-    (Name.RUN_TESTS, D, STEP, "Only the tests a developer named, run for that developer"),
-    (Name.RUN_NEW_TESTS, D, STEP, "Only the story's new test files, run for a developer"),
+    (Name.RUN_TESTS, D, STEP, "pytest: named tests", "Only the tests a developer named, run for that developer"),  # noqa: E501
+    (Name.RUN_NEW_TESTS, D, STEP, "pytest: new test files", "Only the story's new test files, run for a developer"),  # noqa: E501
 )  # fmt: skip
 
 STAGES: dict[Name, Stage] = {
-    name: Stage(name, text, when, attach) for name, when, attach, text in _ROWS
+    name: Stage(name, label, text, when, attach) for name, when, attach, label, text in _ROWS
 }
+LABELS: frozenset[str] = frozenset(s.label for s in STAGES.values())
 NAMESPACES: frozenset[str] = frozenset(n.split(".")[0] for n in Name) | {PO_NAMESPACE}
 QUALITY: dict[str, Name] = {
     "lint": Name.QUALITY_LINT,

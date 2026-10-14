@@ -174,6 +174,11 @@ class Tool:
     name: str
     description: str = ""
     command: str = ""
+    label: str = ""
+
+    def chart_label(self) -> str:
+        """The label the Flow chart shows: the row's ``label``, else its name (s127 LB3)."""
+        return self.label.strip() or self.name
 
 
 @dataclass
@@ -415,12 +420,24 @@ TOOL_RULES: tuple[Rule, ...] = (
     (lambda t: not stages.reserved(t.name), "clashes with a built-in name; pick another"),
     (lambda t: bool(t.description.strip()), "needs a description"),
     (lambda t: bool(t.command.strip()), "needs a command"),
+    (
+        lambda t: len(t.label.strip()) <= stages.LABEL_MAX,
+        f"label must be at most {stages.LABEL_MAX} characters",
+    ),
 )
 REPEATED_TOOL = "[[tool]] name {name!r} is repeated"
+REPEATED_LABEL = "[[tool]] label {label!r} is repeated"
 
 
 def _tool(raw: dict[str, Any]) -> Tool:
-    return Tool(*(str(raw.get(key, "")) for key in ("name", "description", "command")))
+    return Tool(*(str(raw.get(key, "")) for key in ("name", "description", "command", "label")))
+
+
+def _label_problems(tools: list[Tool]) -> list[str]:
+    """A message for each chart label used twice, or used by a built-in stage (s127 LB3)."""
+    labels = [t.chart_label() for t in tools]
+    taken = sorted({x for x in labels if labels.count(x) > 1 or x in stages.LABELS})
+    return [REPEATED_LABEL.format(label=x) for x in taken]
 
 
 def tool_problems(tools: list[Tool]) -> list[str]:
@@ -428,7 +445,8 @@ def tool_problems(tools: list[Tool]) -> list[str]:
     names = [t.name for t in tools]
     repeated = sorted({n for n in names if names.count(n) > 1})
     problems = [f"[[tool]] {t.name!r} {m}" for t in tools for m in broken(TOOL_RULES, t)]
-    return problems + [REPEATED_TOOL.format(name=n) for n in repeated]
+    named = [REPEATED_TOOL.format(name=n) for n in repeated]
+    return problems + named + _label_problems(tools)
 
 
 def _roles(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:

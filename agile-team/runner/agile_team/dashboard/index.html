@@ -161,21 +161,23 @@ section[hidden] { display: none; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .seg + .seg { margin-left: 8px; }
 #flow { position: relative; overflow-x: auto; }
-.fc { --group-max: 236px; --group-min: 216px; --gap-min: 24px; --role-gap: 20px; }
+.fc { --group-max: 236px; --group-min: 216px; --cell-w: calc(var(--group-min) - 20px); --gap-min: 24px; --role-gap: 20px; }
 .fc-chart { min-width: min-content; padding-bottom: 4px; }
 .fc-box.dim { background: var(--surface-2); color: var(--ink-2); }
 .fc-box.dim [class*="fc-t-"] { color: var(--ink-2); }
-.fc-top { display: flex; align-items: center; gap: 8px; }
+.fc-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.fc-people { justify-self: end; display: flex; align-items: center; gap: 8px; margin-right: 8px; }
 .fc-pill { border: 1px solid var(--axis); background: var(--surface); border-radius: 999px; padding: 4px 14px; }
 .fc-group { flex: 0 1 var(--group-max); min-width: var(--group-min); border: 2px solid var(--axis); border-radius: 10px; background: var(--surface-2); padding: 6px 8px 10px; }
 .fc-group.run1 { border-color: var(--run1); }
 .fc-group.run2 { border-color: var(--run2); }
 .fc-group.run3 { border-color: var(--run3); }
 .fc-title { font-weight: 600; margin-bottom: 6px; }
-.fc-lead { flex: 0 1 auto; display: flex; align-items: stretch; gap: 8px; }
+.fc-lead { width: max-content; justify-self: center; display: flex; align-items: stretch; gap: 8px; }
 .fc-lead .fc-title { writing-mode: vertical-rl; margin: 0; text-align: center; }
 .fc-leadgrid { display: grid; grid-auto-flow: column; grid-template-rows: auto auto auto; column-gap: 12px; }
-.fc-cell { min-width: 200px; }
+.fc-cell { width: var(--cell-w); }
+.fc-box > .fc-t-name, .fc-box > .fc-t-meta { text-align: center; }
 .fc-above { align-self: end; }
 .fc-below { align-self: start; }
 .fc-drops { height: 46px; }
@@ -212,7 +214,9 @@ section[hidden] { display: none; }
 .fc-tool.run1 { border-color: var(--run1); }
 .fc-tool.run2 { border-color: var(--run2); }
 .fc-tool.run3 { border-color: var(--run3); }
-.fc-tooldesc { padding: 0 4px 2px; font-style: normal; }
+.fc-t-tool { display: flex; justify-content: center; white-space: nowrap; }
+.fc-toollabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.f-toolstats { flex: none; }
 .fc-toolhead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .fc-testbar { display: flex; height: 6px; margin: 3px 0; background: var(--grid); }
 .fc-testbar .pass { background: var(--pass); }
@@ -577,6 +581,7 @@ function normalize(snap) {
   out.generated_at ??= Date.now() / 1000;
   out.step_roles = out.step_roles && typeof out.step_roles === "object" && !Array.isArray(out.step_roles) ? out.step_roles : {};
   out.stage_descriptions = out.stage_descriptions && typeof out.stage_descriptions === "object" && !Array.isArray(out.stage_descriptions) ? out.stage_descriptions : {};
+  out.stage_labels = out.stage_labels && typeof out.stage_labels === "object" && !Array.isArray(out.stage_labels) ? out.stage_labels : {};
   out.heartbeat ??= null;
   out.opinions = { items: [], asked_at: null, review: null, ...(out.opinions && typeof out.opinions === "object" ? out.opinions : {}) };
   out.opinions.items = list(out.opinions.items);
@@ -1143,7 +1148,7 @@ const FLOW_SHOW_KEY = "agile-team-flow-show";
 const FLOW_TEXT = {
   name: { px: 12, ink: "--ink" },      meta: { px: 10, ink: "--ink-2" },
   live: { px: 10, ink: "--ink" },      tool: { px: 10, ink: "--ink-2" },
-  toolRun: { px: 10, ink: "--ink" },   toolDesc: { px: 12, ink: "--ink-2" },   caption: { px: 10, ink: "--ink-2" },
+  toolRun: { px: 10, ink: "--ink" },   caption: { px: 10, ink: "--ink-2" },
   title: { px: 12, ink: "--ink-2" },   pill: { px: 12, ink: "--ink" },
   legend: { px: 11, ink: "--ink-2" },  settings: { px: 11, ink: "--ink" },
 };
@@ -1235,11 +1240,14 @@ function shareParts({ model, tools }) {
 /** The role's rate series and whether it is the running role's (FC10). */
 function rateSeries(view, role) {
   const step = liveStep(view);
-  if (step?.role === role) return { values: step.rate ?? [], running: true };
+  if (step?.role === role) return { values: step.rate ?? [], running: true, recorded: true };
   const kind = role === PO ? "po-turn" : "step-end", inside = inScope(view);
   const last = view.events.findLast((e) => e.kind === kind && e.role === role && inside(e));
-  return { values: last?.data.rate ?? [], running: false };
+  return { values: last?.data.rate ?? [], running: false, recorded: Array.isArray(last?.data.rate) };
 }
+
+/** What the idle sparkline row says under two points (s127 RT2). */
+const NO_SPARK = { recorded: "too short for a sparkline", missing: "no rate yet" };
 
 /** A 96×20 area-and-line sparkline in `ink`, or "" under two points (FC10). */
 function sparkSvg(values, ink) {
@@ -1384,9 +1392,9 @@ function shareHtml(m, role) {
 
 /** The sparkline row: tokens/min while running, the last step's rate otherwise (FC10). */
 function sparkHtml(m, role) {
-  const { values, running } = rateSeries(m.view, role);
+  const { values, running, recorded } = rateSeries(m.view, role);
   const svg = sparkSvg(values, running ? `var(--${m.run.cls})` : "var(--ink-2)");
-  if (!running) return `<div class="f-spark fc-t-caption">last step${svg ? " " + svg : " · no rate yet"}</div>`;
+  if (!running) return `<div class="f-spark fc-t-caption">last step${svg ? " " + svg : ` · ${NO_SPARK[recorded ? "recorded" : "missing"]}`}</div>`;
   const mine = m.view.turns.filter((t) => t.role === role);
   return `<div class="f-spark fc-t-caption"><b>${fmt.tok(Math.round(tokensPerMin(mine, m.now)))}</b> tokens/min ${svg}</div>`;
 }
@@ -1421,26 +1429,32 @@ function roleBox(m, role) {
 /** The stage's one-line description from the snapshot, or "" (FC30). */
 const stageText = (view, stage) => (typeof view.stage_descriptions?.[stage] === "string" ? view.stage_descriptions[stage] : "");
 
-/** The description line of a tool box, or "" when the stage has none (FC30). */
-const toolDescHtml = (m, stage) => (stageText(m.view, stage) ? `<div class="fc-tooldesc fc-t-toolDesc">${esc(stageText(m.view, stage))}</div>` : "");
+/** The stage's short label from the snapshot, else its name (s127 TL1). */
+const stageLabel = (view, stage) => (typeof view.stage_labels?.[stage] === "string" && view.stage_labels[stage] ? view.stage_labels[stage] : stage);
 
-/** ` title="…"` carrying the newest command, or "" (FC30). */
-const detailTitle = (tool) => (tool.detail ? ` title="${esc(tool.detail)}"` : "");
+/** A tool box's tooltip: name — description, then $ command on its own line (s127 TL3). */
+function toolTitle(view, tool) {
+  const text = stageText(view, tool.stage), head = text ? `${tool.stage} — ${text}` : tool.stage;
+  return tool.detail ? `${head}\n$ ${tool.detail}` : head;
+}
 
-/** An idle runner tool: name, run count and time (FC17). */
+/** ` title="…"` of a tool box, always written (s127 TL3). */
+const toolTitleAttr = (view, tool) => ` title="${esc(toolTitle(view, tool))}"`;
+
+/** An idle runner tool: one line, label · runs · time (s127 TL1). */
 function idleTool(m, tool) {
   const stats = ` · ↻ ${tool.runs}` + (tool.runs ? ` · ${fmt.dur1(tool.seconds)}` : "");
-  return `<div class="fc-tool f-tools"${detailTitle(tool)}><div class="fc-t-tool"><span>${esc(tool.stage)}</span><span class="f-toolstats">${stats}</span></div>${toolDescHtml(m, tool.stage)}</div>`;
+  return `<div class="fc-tool f-tools"${toolTitleAttr(m.view, tool)}><div class="fc-t-tool"><span class="fc-toollabel">${esc(stageLabel(m.view, tool.stage))}</span><span class="f-toolstats">${stats}</span></div></div>`;
 }
 
 /** The running tool: run colour, elapsed time and, for a test run, the live counts (FC18). */
 function runningTool(m, tool) {
   const row = tool.open, look = runLook(toolRunNumber(m.view, row)), t = row.tests;
-  const head = `<div class="fc-toolhead fc-t-toolRun"><span>▶ ${esc(row.stage)} · ${look.label}</span><span>${fmt.dur1(stageAwake(m.view, row))}</span></div>`;
+  const head = `<div class="fc-toolhead fc-t-toolRun"><span class="fc-toollabel">▶ ${esc(stageLabel(m.view, row.stage))} · ${look.label}</span><span>${fmt.dur1(stageAwake(m.view, row))}</span></div>`;
   const pct = t ? completePct(t) : null;
   const done = pct === null ? "" : `<div class="fc-toolhead fc-t-toolRun"><span>${pct}% complete</span>${statusSpark(t.points, t.fail_at)}</div>`;
   const tests = !t ? "" : `${testBar(t)}<div class="fc-t-toolRun">${captionHtml(t)}</div>${done}`;
-  return `<div class="fc-tool running ${look.cls}"${detailTitle(tool)}>${head}${toolDescHtml(m, row.stage)}${tests}</div>`;
+  return `<div class="fc-tool running ${look.cls}"${toolTitleAttr(m.view, tool)}>${head}${tests}</div>`;
 }
 
 /** A runner tool box, idle or running (FC17, FC18). */
@@ -1486,7 +1500,7 @@ function flowLegendHtml() {
 function flowHtml(m) {
   const [lead, ...stages] = m.groups;
   const pill = (t) => `<span class="fc-pill fc-t-pill">${t}</span>`, two = `<span class="fc-two fc-t-pill" aria-hidden="true">↔</span>`;
-  const top = `<div class="fc-top">${pill("You")}${two}${pill("Liaison")}${two}${flowGroupHtml(m, lead)}</div>`;
+  const top = `<div class="fc-top"><div class="fc-people">${pill("You")}${two}${pill("Liaison")}${two}</div>${flowGroupHtml(m, lead)}</div>`;
   const cols = stages.map((e, i) => (i ? gapHtml(e.group) : "") + flowGroupHtml(m, e)).join("");
   return `${top}<div class="fc-drops"></div><div class="fc-cols">${cols}</div>${flowLegendHtml()}`;
 }

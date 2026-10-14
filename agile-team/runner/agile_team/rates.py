@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 RATE_POINTS = 24
+WINDOW_S = 10
+PER_MINUTE = 60 // WINDOW_S  # a window's tokens times this is tokens per minute
 
 
 def squeeze(values: list[float], cap: int) -> list[float]:
@@ -18,19 +20,19 @@ def squeeze(values: list[float], cap: int) -> list[float]:
 
 @dataclass
 class Rate:
-    """Tokens bucketed by the minute since ``start``."""
+    """Tokens bucketed by 10-second window since ``start``, read as tokens per minute (s127 RT1)."""
 
     start: float
-    minutes: dict[int, int] = field(default_factory=dict)
+    windows: dict[int, int] = field(default_factory=dict)
 
     def add(self, at: float, tokens: int) -> None:
-        """Count ``tokens`` in the minute of ``at`` (before ``start`` is minute 0)."""
-        minute = max(0, int((at - self.start) // 60))
-        self.minutes[minute] = self.minutes.get(minute, 0) + tokens
+        """Count ``tokens`` in the window of ``at`` (before ``start`` is window 0)."""
+        window = max(0, int((at - self.start) // WINDOW_S))
+        self.windows[window] = self.windows.get(window, 0) + tokens
 
     def series(self) -> list[float]:
-        """Tokens per minute from minute 0 to the last one, squeezed to RATE_POINTS."""
-        if not self.minutes:
+        """Tokens per minute for each window from 0 to the last, squeezed to RATE_POINTS."""
+        if not self.windows:
             return []
-        every = [float(self.minutes.get(m, 0)) for m in range(max(self.minutes) + 1)]
+        every = [float(PER_MINUTE * self.windows.get(w, 0)) for w in range(max(self.windows) + 1)]
         return [round(v, 1) for v in squeeze(every, RATE_POINTS)]

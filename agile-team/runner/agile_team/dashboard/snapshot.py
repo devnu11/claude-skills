@@ -149,6 +149,12 @@ def _stage_descriptions(files: RunFiles) -> dict[str, str]:
     return {**built_in, **{tool.name: tool.description for tool in files.config.tools}}
 
 
+def _stage_labels(files: RunFiles) -> dict[str, str]:
+    """Each runner stage's and repo tool's short label, by name (s127 LB4)."""
+    built_in = {str(name): stage.label for name, stage in stages.STAGES.items()}
+    return {**built_in, **{tool.name: tool.chart_label() for tool in files.config.tools}}
+
+
 def _priority(files: RunFiles) -> Priority:
     return Priority(files.state.order, files.state.pulled)
 
@@ -571,6 +577,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "pipeline": _pipeline,
     "step_roles": _step_roles,
     "stage_descriptions": _stage_descriptions,
+    "stage_labels": _stage_labels,
     "roles": _roles,
     "stories": _stories,
     "requirements": _requirements,

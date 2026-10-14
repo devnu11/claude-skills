@@ -89,6 +89,33 @@
   "runner-tool.run_tests": "Only the tests a developer named, run for that developer",
   "runner-tool.run_new_tests": "Only the story's new test files, run for a developer"
  },
+ "stage_labels": {
+  "env.prepare": "env prepare",
+  "presentation.layout": "presentation layout",
+  "quality.lint": "ruff check",
+  "quality.static": "ruff format",
+  "quality.coverage": "coverage report",
+  "checkout.guard": "checkout guard",
+  "checkout.verify": "checkout verify",
+  "gate.tests-red": "pytest: new tests red",
+  "gate.tests-rework": "pytest: rework",
+  "gate.tests+coverage": "pytest + coverage",
+  "gate.suite-runs": "pytest: repeat runs",
+  "gate.dispute-output": "pytest: disputed test",
+  "gate.route-lint": "ruff check + format",
+  "presentation.trial": "presentation trial",
+  "gate.green": "pytest: must pass",
+  "boundary.sync": "boundary sync",
+  "boundary.check": "boundary check",
+  "boundary.review": "build review branches",
+  "boundary.push": "review PR + push",
+  "boundary.rebase": "rebase onto target",
+  "boundary.restack": "restack review PRs",
+  "boundary.ci-wait": "CI wait",
+  "runner-tool.run_tests": "pytest: named tests",
+  "runner-tool.run_new_tests": "pytest: new test files",
+  "deploy.preview": "deploy.preview"
+ },
  "roles": [
   {
    "name": "product-owner",
@@ -809,9 +836,7 @@
     "turns": 18,
     "commit": "0becd7b",
     "rate": [
-     310.0,
-     420.0,
-     380.0
+     840.0
     ]
    }
   },
