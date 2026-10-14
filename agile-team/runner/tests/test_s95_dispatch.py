@@ -53,6 +53,11 @@ def gate_events(rt) -> list:
     return [e for e in rt.events.events() if e.kind == "gate"]
 
 
+def described(prompt: str) -> str:
+    """The prompt without the trace section's 'untraced' lines, which list every AC."""
+    return "\n".join(x for x in prompt.splitlines() if not x.endswith(": untraced"))
+
+
 def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_runtime) -> None:
     rt, orders = build(make_runtime)
     story = rt.state.stories["s1"]
@@ -61,14 +66,14 @@ def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_run
     assert orders[0].presentation == rt.config.run_dir / "presentation/s1/cli"
     prompt = rt.query_fn.calls[0]["prompt"]
     assert "acceptance environment cli" in prompt and "- AC1:" in prompt and "- AC3:" in prompt
-    assert "- AC2:" not in prompt
+    assert "- AC2:" not in described(prompt)
     assert first["gate"]["verdict"] == "next" and first["gate"]["now_at"] == "acceptance"
     assert (story.step, story.rounds) == ("acceptance", 0)
     step(rt)
     assert [o.environment.name for o in orders] == ["cli", "api"]
     assert orders[1].presentation == rt.config.run_dir / "presentation/s1/api"
     second = rt.query_fn.calls[1]["prompt"]
-    assert "acceptance environment api" in second and "- AC2:" in second and "- AC1:" not in second
+    assert "acceptance environment api" in second and "- AC2:" in second and "- AC1:" not in described(second)
     assert story.status is StoryStatus.DONE
 
 

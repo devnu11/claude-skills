@@ -226,7 +226,7 @@ def test_duplicate_id_counts_a_file_with_other_problems() -> None:
 
 def test_duplicate_id_names_every_other_file_in_order() -> None:
     files = [(path(n), text(id="REQ-001")) for n in (1, 2, 10)]
-    got = checked(*files)
+    got = checked(*files, stories={"s1": story("s1", "AC1")})
     assert got.files[0].problems == (
         f"{path(1)}: id 'REQ-001' is also used by {path(2)}, {path(10)}",
     )

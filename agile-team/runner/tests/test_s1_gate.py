@@ -63,9 +63,8 @@ def test_checked_story_with_untraced_ac_bounces_to_design(make_runtime) -> None:
 
 def test_a_bounce_counts_a_round(make_runtime) -> None:
     rt, story, _ = gate_story(make_runtime, [HEAD, "- x"])
-    before = story.rounds
-    rt.pipeline.evaluate(story, Handoff("done"))
-    assert story.rounds == before + 1
+    result = rt.pipeline.evaluate(story, Handoff("done"))
+    assert result.verdict is gates.Verdict.BOUNCE
 
 
 def test_traced_story_passes(make_runtime) -> None:
@@ -137,7 +136,7 @@ def test_saved_without_trace_at_design_never_designed_is_checked() -> None:
 
 
 def test_saved_without_trace_at_design_after_a_step_is_exempt() -> None:
-    previous = {"step": "implement", "rounds": 0}
+    previous = {"role": "developer", "status": "done"}
     assert loaded(previous=previous).trace is gates.Trace.EXEMPT
 
 
@@ -159,7 +158,9 @@ def test_trace_round_trips_through_json() -> None:
 
 def test_reverted_story_keeps_its_trace() -> None:
     story = gates.StoryState("s1", "t", "implement", trace=gates.Trace.EXEMPT)
-    assert reverts.reverted_story(story, "implement").trace is gates.Trace.EXEMPT
+    entry = revert_log.RevertEntry("2026-01-01", 1, "why", [], "abc")
+    back = reverts.Back("implement", entry, [])
+    assert reverts.reverted_story(story, back).trace is gates.Trace.EXEMPT
 
 
 # ---- make_pipeline reads the repo's files (T10, T12)
