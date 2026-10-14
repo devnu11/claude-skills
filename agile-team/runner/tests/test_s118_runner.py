@@ -158,9 +158,9 @@ def test_an_xdist_line_sets_the_total() -> None:
 
 def test_a_progress_line_counts_outcomes() -> None:
     tally = fold("..F.s  [ 12%]")
-    assert (tally.passed, tally.failed, tally.warned) == (2, 1, 1)
+    assert (tally.passed, tally.failed, tally.warned) == (3, 1, 1)
     assert tally.pct == 12 and tally.points == (12,) and tally.fail_at == 0
-    assert tally.ran() == 4 and tally.counted()
+    assert tally.ran() == 5 and tally.counted()
 
 
 def test_every_outcome_letter_maps() -> None:
@@ -444,7 +444,7 @@ def test_a_timeout_still_kills_and_names_the_hung_test(fake: FakeSystem) -> None
     code, out = CommandShell(FAKE_REPO, 0.3).run("sleep 30")
     assert code == TIMED_OUT
     assert out.splitlines()[-1].endswith("/x/tests/test_a.py::test_hangs (line 12)")
-    assert not fake.groups
+    assert any(kind == "killpg" for kind, _, _ in fake.signals)
 
 
 def test_output_that_never_closes_counts_as_a_timeout(
