@@ -137,11 +137,52 @@ class Addition:
     reason: str
 
 
+STORY_ARGS: dict[str, tuple[str, ...]] = {"open_story": ("id",)}
+DEFAULT_STORY_ARGS = ("story", "stories")
+
+
+def _as_ids(value: Any) -> list[str]:
+    """The non-empty strings in ``value``: a string is one id, a list many, else none."""
+    items = [value] if isinstance(value, str) else value if isinstance(value, list) else []
+    return [i for i in items if isinstance(i, str) and i]
+
+
+def named_stories(name: str, args: dict[str, Any]) -> list[str]:
+    """The story ids a call of tool ``name`` with ``args`` names (s113 PT2)."""
+    keys = STORY_ARGS.get(name, DEFAULT_STORY_ARGS)
+    return [i for key in keys for i in _as_ids(args.get(key))]
+
+
+@dataclass
+class Touched:
+    """The story ids one PO turn's tool calls named, first named first (s113 PT1)."""
+
+    ids: list[str] = field(default_factory=list)
+
+    def note(self, name: str, args: dict[str, Any]) -> None:
+        """Add the stories this call names that are not noted yet."""
+        self.ids.extend(dict.fromkeys(i for i in named_stories(name, args) if i not in self.ids))
+
+
 @dataclass
 class Tools:
     """Tool implementations bound to one runtime; plain async methods for testing."""
 
     runtime: Runtime
+    touched: Touched = field(default_factory=lambda: Touched())
+
+    def __post_init__(self) -> None:
+        """Hook for subclasses to observe a freshly built set of tools."""
+
+    def noted(self, name: str) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+        """Tool ``name``'s method, noting the stories each call names first (PT3)."""
+        method = getattr(self, METHODS.get(name, name))
+
+        async def call(args: dict[str, Any]) -> dict[str, Any]:
+            self.touched.note(name, args)
+            return await method(args)
+
+        return call
 
     async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
@@ -771,7 +812,7 @@ METHODS = {"budget_status": "budget"}
 def mcp_server(tools: Tools) -> Any:
     """SDK MCP server exposing ``tools`` to the PO."""
     defs = [
-        tool(name, desc, schema)(getattr(tools, METHODS.get(name, name)))
+        tool(name, desc, schema)(tools.noted(name))
         for name, (desc, schema) in SCHEMAS.items()
     ]
     return create_sdk_mcp_server(SERVER, tools=defs)
@@ -814,16 +855,22 @@ class PoTurn:
     resume: str | None
 
 
-def po_plan(runtime: Runtime, turn: PoTurn) -> Plan:
-    """The PO's step: its MCP tools, its scope, and resume when asked."""
+def plan_for(tools: Tools, turn: PoTurn) -> Plan:
+    """The PO's step on ``tools``: its MCP tools, its scope, and resume when asked."""
+    runtime = tools.runtime
     role = runtime.resolve(PO)
     plan = Plan(role, runtime.scope_for(role), prompt=turn.prompt)
     plan.launch = Launch(
-        mcp_servers={SERVER: mcp_server(Tools(runtime))},
+        mcp_servers={SERVER: mcp_server(tools)},
         extra_allowed=tool_names(),
         resume=turn.resume,
     )
     return runtime.finish(plan)
+
+
+def po_plan(runtime: Runtime, turn: PoTurn) -> Plan:
+    """The PO's step with fresh tools (kept for callers that need no stories)."""
+    return plan_for(Tools(runtime), turn)
 
 
 async def run_po(runtime: Runtime, start: Start) -> StepResult:
@@ -956,8 +1003,9 @@ class PoRun:
     async def _turn(self, turn: PoTurn) -> StepResult:
         if self.runtime.halted_by or self.runtime.checkout_moved():
             return StepResult("", 0.0)
-        plan = po_plan(self.runtime, turn)
-        raw = await self._collect(plan)
+        tools = Tools(self.runtime)
+        plan = plan_for(tools, turn)
+        raw = await self._query(plan, tools.touched)
         result = self.runtime.priced(plan, self._own_cost(turn, raw))
         self._settle()
         self._record(plan.role.model, result)
@@ -997,11 +1045,21 @@ class PoRun:
             raise
         finally:
             pulse.close(plan.meter)
-            self._turn_event(plan.meter)
 
-    def _turn_event(self, meter: live.Meter) -> None:
-        """One ``po-turn`` event per PO query, with its time split (TC14)."""
-        data = {**meter.time_split(), **self.runtime.pulse.clocks()}
+    async def _query(self, plan: Plan, touched: Touched) -> StepResult:
+        """Run the PO's query; emit its ``po-turn`` event whatever happens (PT4)."""
+        try:
+            return await self._collect(plan)
+        finally:
+            self._turn_event(plan.meter, touched)
+
+    def _turn_event(self, meter: live.Meter, touched: Touched) -> None:
+        """One ``po-turn`` event per PO query: its time split and the stories it named."""
+        data = {
+            **meter.time_split(),
+            **self.runtime.pulse.clocks(),
+            "stories": list(touched.ids),
+        }
         self.runtime.events.emit(Event(EventKind.PO_TURN, PO, None, data))
 
     def _set_status(self, status: RunStatus) -> None:

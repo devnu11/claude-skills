@@ -1189,12 +1189,27 @@ function stepSplit(view, role) {
   return out;
 }
 
-/** Model and tool seconds of the PO turns in scope (SB2). */
-function turnSplit(view) {
-  const mine = view.events.filter((e) => e.kind === "po-turn").filter(inScope(view));
-  const parts = mine.map((e) => poSplit(e.data));
-  return { model: sum(parts, (p) => p.model), tools: sum(parts, (p) => p.tools) };
+/** The story ids a `po-turn` touched; [] for an event from before s113 (PB1). */
+const turnStories = (e) => (Array.isArray(e.data?.stories) ? e.data.stories : []);
+
+/** The `po-turn` events the scope counts; in Story scope those that touched the focus story (PB2). */
+function scopeTurns(view) {
+  const turns = view.events.filter((e) => e.kind === "po-turn");
+  if (ui.scope === "story") return turns.filter((e) => turnStories(e).includes(focusStory(view)));
+  return turns.filter(inScope(view));
 }
+
+/** Model, tool and waiting seconds of the PO turns in scope, their count, and whether one is shared (SB2, PB3). */
+function turnSplit(view) {
+  const mine = scopeTurns(view), parts = mine.map((e) => poSplit(e.data));
+  return {
+    model: sum(parts, (p) => p.model), tools: sum(parts, (p) => p.tools), waiting: sum(parts, (p) => p.waiting),
+    turns: mine.length, shared: mine.some((e) => turnStories(e).length >= 2),
+  };
+}
+
+/** The PO's awake seconds in scope, or null in Story scope with no turn on the story (PB4). */
+const poSeconds = (po) => (ui.scope === "story" && po.turns === 0 ? null : po.model + po.tools);
 
 // ----- who is drawn where (FC1, FC2)
 
@@ -1230,7 +1245,7 @@ function roleNumbers(view, ctx, role) {
     model: familyOf(info.model) + local,
     tokens: blank ? null : t?.tokens ?? 0,
     cost: blank ? null : t?.cost ?? 0,
-    seconds: blank ? null : role === PO ? po.model + po.tools : t?.seconds ?? 0,
+    seconds: role === PO ? poSeconds(po) : t?.seconds ?? 0,
     bounced: ctx.stats[role]?.bounced ?? 0,
     idle: role !== PO && !t && !openStep(view, role),
   };
@@ -1247,8 +1262,9 @@ function shareParts({ model, tools }) {
 function rateSeries(view, role) {
   const step = liveStep(view);
   if (step?.role === role) return { values: step.rate ?? [], running: true, recorded: true };
-  const kind = role === PO ? "po-turn" : "step-end", inside = inScope(view);
-  const last = view.events.findLast((e) => e.kind === kind && e.role === role && inside(e));
+  const inside = inScope(view);
+  const last = role === PO ? scopeTurns(view).at(-1)
+    : view.events.findLast((e) => e.kind === "step-end" && e.role === role && inside(e));
   return { values: last?.data.rate ?? [], running: false, recorded: Array.isArray(last?.data.rate) };
 }
 
@@ -1441,6 +1457,14 @@ function liveBlock(m) {
 /** A number span, `—` when the number is unknown. */
 const numSpan = (cls, v, f) => `<span class="${cls}">${v == null ? "—" : f(v)}</span>`;
 
+/** The PO's "waiting on roles" line; "" in Story scope with no turn on the story (PB5). */
+function poWaitHtml(m) {
+  const po = turnSplit(m.view);
+  if (poSeconds(po) == null) return "";
+  const shared = ui.scope === "story" && po.shared ? " · shared turns" : "";
+  return `<div class="f-time f-wait fc-t-meta">waiting on roles ${fmt.dur1(po.waiting)}${shared}</div>`;
+}
+
 /** One role's box (AC3, AC4). */
 function roleBox(m, role) {
   const n = roleNumbers(m.view, m.ctx, role), running = m.step?.role === role;
@@ -1449,7 +1473,8 @@ function roleBox(m, role) {
   const cls = ["fc-box", dimmed(m, role) ? "dim" : "", running ? m.run.cls : ""].filter(Boolean).join(" ");
   const bounced = n.bounced ? `<div class="f-bounces fc-t-meta">↩ ${n.bounced} bounced</div>` : "";
   return `<div class="${cls}" data-role="${esc(role)}"><b class="fc-t-name">${esc(role)}</b>` +
-    `<div class="fc-meta fc-t-meta"><span class="fc-model">${esc(n.model)}</span>${nums}</div>${bounced}` +
+    `<div class="fc-meta fc-t-meta"><span class="fc-model">${esc(n.model)}</span>${nums}</div>` +
+    `${role === PO ? poWaitHtml(m) : ""}${bounced}` +
     `${shareHtml(m, role)}${sparkHtml(m, role)}${running ? liveBlock(m) : ""}</div>`;
 }
 
