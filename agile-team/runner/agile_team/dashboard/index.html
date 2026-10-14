@@ -46,29 +46,34 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 
 /* header */
 header { border-bottom: 1px solid var(--border); background: var(--surface); }
-.head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 14px 0 10px; }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) 380px auto; gap: 16px; align-items: start; padding: 8px 0 6px; }
+.head-left { min-width: 0; }
 .brand { font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
-.brand small { font-weight: 400; color: var(--muted); margin-left: 6px; }
-.task { flex: 1 1 320px; color: var(--ink-2); min-width: 0; }
-.live-panel { width: 440px; max-width: 100%; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--grid); border-radius: 8px; padding: 6px 10px; cursor: pointer; line-height: 1.4; }
-.live-panel.running { border-left-color: var(--accent); }
+.brand small { font-weight: 400; font-size: 12px; color: var(--ink-2); margin-left: 6px; }
+.task { font-size: 12px; color: var(--ink-2); margin-top: 2px; max-width: 560px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.pill.flag { color: var(--ink-2); border-color: var(--serious); }
+.budget { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); white-space: nowrap; }
+.budget small { font-size: 12px; color: var(--ink-2); }
+.budget-bar { position: relative; display: inline-block; width: 120px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.budget-fill { position: absolute; inset: 0 auto 0 0; background: var(--s1); }
+.budget-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--surface); }
+@media (max-width: 900px) { .head { grid-template-columns: minmax(0, 1fr) auto; } .live-panel { grid-column: 1 / -1; grid-row: 2; width: auto; } }
+.live-panel { width: 380px; max-width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; font-size: 12px; line-height: 1.4; cursor: pointer; }
+.live-panel.h-green { border-color: var(--good); }
+.live-panel.h-amber { border-color: var(--warning); }
+.live-panel.h-red { border-color: var(--critical); }
 .live-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.lp-head { font-size: 13px; font-weight: 600; color: var(--ink); }
-.lp-meta { font-size: 12px; color: var(--ink-2); }
-.lp-msg { font-size: 12.5px; color: var(--ink-2); }
-.lp-msg .md { max-height: calc(6 * 1.4em); overflow: hidden; }
-.lp-msg .md > * { margin: 0; }
-.lp-more { font-size: 12.5px; color: var(--ink-2); }
+.lp-top { display: flex; justify-content: space-between; gap: 8px; }
+.lp-who { min-width: 0; font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-when { flex: none; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.lp-line { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-line.tool { font-style: italic; }
+.lp-msg { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.lp-msg[hidden] { display: none; }
+.lp-msg .md > *, .lp-msg .md li { margin: 0; }
+.lp-msg .md ul, .lp-msg .md ol { padding-left: 16px; }
 .md-notice { font-size: 12.5px; color: var(--ink-2); border: 1px solid var(--warning); border-radius: 999px; padding: 1px 8px; }
-.head-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.meter { min-width: 220px; }
-.meter-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
-.meter-top b { color: var(--ink); font-weight: 600; }
-.meter-bar { position: relative; height: 6px; background: var(--surface-2); border-radius: 3px; margin-top: 4px; }
-.meter-fill { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 3px; }
-.meter-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--surface); }
-.status-bar { padding-bottom: 12px; }
-.status-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* pills */
 .pill {
@@ -88,11 +93,6 @@ header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .tone-accent { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
 .tone-accent .dot { background: var(--accent); }
 .live .dot { animation: blink 2s infinite; }
-.pill.smart { cursor: pointer; font-family: inherit; border-width: 2px; }
-.pill.smart.h-green { background: color-mix(in srgb, var(--good) 14%, var(--surface)); border-color: var(--good); }
-.pill.smart.h-amber { background: color-mix(in srgb, var(--warning) 20%, var(--surface)); border-color: var(--warning); }
-.pill.smart.h-red { background: color-mix(in srgb, var(--critical) 16%, var(--surface)); border-color: var(--critical); }
-.live-details { font-size: 12.5px; color: var(--ink-2); padding: 0 0 10px; line-height: 1.5; }
 .flow-scope { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .flow-scope .seg { margin-bottom: 0; }
 @keyframes blink { 50% { opacity: .35; } }
@@ -276,22 +276,18 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 <header>
   <div class="wrap">
     <div class="head">
-      <div class="brand">agile-team<small id="sprint-label"></small></div>
-      <div class="task" id="task"></div>
-      <div class="head-right">
-        <div class="live-panel" id="live-panel" role="button" tabindex="0" data-live-panel>
-          <div class="lp-head" id="lp-head"></div>
-          <div class="lp-meta" id="lp-meta"></div>
-          <div class="lp-msg" id="lp-msg"></div>
-        </div>
-        <button class="ctl" id="theme" title="Theme">◐</button>
+      <div class="head-left">
+        <div class="brand">agile-team<small id="sprint-label"></small></div>
+        <div class="task" id="task"></div>
+        <div class="status-row" id="status-row"></div>
       </div>
+      <div class="live-panel h-idle" id="live-panel" role="button" tabindex="0" data-live-panel data-live-tip>
+        <div class="lp-top"><b class="lp-who" id="lp-who"></b><span class="lp-when" id="lp-when"></span></div>
+        <div class="lp-line" id="lp-line"></div>
+        <div class="lp-msg" id="lp-msg" hidden></div>
+      </div>
+      <button class="ctl" id="theme" title="Theme">◐</button>
     </div>
-    <div class="status-bar">
-      <div class="meter" id="meter"></div>
-      <div class="status-row" id="status-row"></div>
-    </div>
-    <div class="live-details" id="live-details" hidden></div>
     <nav role="tablist" id="tabs"></nav>
   </div>
 </header>
@@ -399,6 +395,7 @@ const sum = (xs, f = (x) => x) => xs.reduce((a, x) => a + f(x), 0);
 const sumTok = (t) => t ? t.input + t.output + t.cache_read + t.cache_creation : 0;
 const fmt = {
   usd: (n) => "$" + n.toFixed(2),
+  dollars: (n) => "$" + Math.round(n).toLocaleString("en-US"),
   tok: (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n),
   pct: (n) => Math.round(n) + "%",
   time: (at) => new Date(at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
@@ -679,35 +676,26 @@ function restarted(events, act) {
   return last?.data?.status === "interrupted";
 }
 
-/** The pill's text (P3). */
-function pillText(view, now) {
-  const step = liveStep(view), act = activeStep(view.events);
-  if (!step) {
-    if (act && !view.heartbeat) return `▶ ${who(act)} · ${fmt.ago(act.at, now)}`;
-    return "● " + (view.health.reason || view.run.status);
-  }
-  const rate = fmt.tok(Math.round(tokensPerMin(view.turns, now))), spark = sparkline(view.turns, now);
-  const again = act && act.role === step.role && act.story === step.story && restarted(view.events, act);
-  return `● ${who(step)} · ${rate}/min ${spark} · ${fmt.age(now - (step.last_turn_at ?? step.started_at))}${again ? " · ↻ restarted" : ""}`;
-}
-
-/** The lines shown on hover or tap (P5). */
-function pillDetails(view, now) {
+/** The rate and sparkline line, then the step's own lines (P5). */
+function stepDetails(view, now) {
   const step = liveStep(view), note = view.health.model_note;
-  const lines = !step ? [] : [
+  if (!step) return [];
+  const rate = fmt.tok(Math.round(tokensPerMin(view.turns, now))), spark = sparkline(view.turns, now);
+  return [
+    `${rate}/min ${spark} · last turn ${fmt.age(now - (step.last_turn_at ?? step.started_at))} ago`,
     `step ${step.step ?? "—"} · turn ${step.turn}`,
     `model ${step.model ?? "—"}${note ? " — " + note : ""}`,
     `${fmt.tok(sumTok(step.tokens))} tokens · ${approxUsd(step.cost_usd)}`,
     step.tool ? `tool ${step.tool.name} for ${fmt.age(now - step.tool.started_at)}` : "no tool running",
     `last turn ${step.last_turn_at == null ? "—" : fmt.time(step.last_turn_at)}`,
   ];
-  if (["amber", "red"].includes(healthLevel(view))) lines.push(`health: ${view.health.reason}`);
-  return lines;
 }
 
-/** The smart pill: the whole pill takes the health colour (P2). */
-function smartPill(view, now) {
-  return `<button class="pill smart h-${healthLevel(view)}" data-live-details>${esc(pillText(view, now))}</button>`;
+/** The lines shown on hover (P5). */
+function pillDetails(view, now) {
+  const lines = stepDetails(view, now);
+  if (["amber", "red"].includes(healthLevel(view))) lines.push(`health: ${view.health.reason}`);
+  return lines;
 }
 
 /** The story the flow chart is about (F2). */
@@ -777,29 +765,96 @@ function flowContext(view) {
 
 // ----- live panel -------------------------------------------------------------
 
-const CLIP_LINES = 6, CLIP_CHARS = 600;
+const CLIP_LINES = 4, CLIP_CHARS = 400, CLAMP_LINES = 3;
 
-/** The awake clock text for the role's open step, or "" (LP2). */
-function awakeText(view, role) {
-  const open = openStep(view, role);
-  return open ? ` · ⏱ ${fmt.span(awakeSoFar(view, open))} awake${sleepNote(open)}` : "";
+/** The first non-blank line of `text`, trimmed, or "". */
+function firstLine(text) {
+  return String(text ?? "").split("\n").find((l) => l.trim())?.trim() ?? "";
+}
+
+/** `round n` for a story past its first run, else `first run`. */
+function roundLabel(view, story) {
+  const n = view.stories.find((s) => s.id === story)?.rounds ?? 0;
+  return n > 0 ? `round ${n}` : "first run";
+}
+
+/** The run label: `↻ restarted`, `round n` or `first run` (LP3). */
+function runLabel(view, run) {
+  const act = activeStep(view.events);
+  const again = act && act.role === run.role && act.story === run.story && restarted(view.events, act);
+  return again ? "↻ restarted" : roundLabel(view, run.story);
+}
+
+/** The role's newest open call, else the step's tool, else "no tool running" (LP4). */
+function toolLine(view, step) {
+  const now = clockNow(view), call = (view.heartbeat.calls ?? []).findLast((c) => c.role === step.role);
+  if (call) return `${call.label || call.tool} · ${fmt.age(now - call.at)}`;
+  return step.tool ? `${step.tool.name} · ${fmt.age(now - step.tool.started_at)}` : "no tool running";
+}
+
+/** The awake seconds of an open stage row (LP5). */
+function stageAwake(view, row) {
+  const slept = Math.max(0, finiteS(view.heartbeat.slept) - finiteS(row.started_slept));
+  return Math.max(0, clockNow(view) - row.started_at - slept);
+}
+
+/** The newest event, with its timeline row, for which `wanted(e, t)` holds (LP6). */
+function newestRow(view, wanted) {
+  const ctx = timelineContext(view);
+  for (let i = view.events.length - 1; i >= 0; i--) {
+    const e = view.events[i], t = rowOf(e, ctx);
+    if (t && wanted(e, t)) return { e, t };
+  }
+  return null;
+}
+
+/** The newest runner event's `what · first line of body`, or "" (LP5). */
+function runnerResult(view) {
+  const found = newestRow(view, (e) => e.role === "runner");
+  return found ? [found.t.what, firstLine(found.t.body)].filter(Boolean).join(" · ") : "";
+}
+
+/** The panel state for a running role (LP2). */
+function runningPanel(view, run) {
+  const who = [short(run.role), run.story, run.step].filter(Boolean).join(" · ");
+  return { kind: "step", who, when: `${fmt.age(run.seconds)} · ${runLabel(view, run)}`, line: run.line, story: run.story ?? "" };
 }
 
 /** The panel state for a running step, else null. */
 function stepPanel(view) {
   const step = liveStep(view);
   if (!step) return null;
-  const what = step.step ? ` · ${step.step}` : "";
-  return { kind: "step", head: `▶ ${who(step)}${what}${awakeText(view, step.role)}`, story: step.story ?? "" };
+  const open = openStep(view, step.role);
+  const seconds = open ? awakeSoFar(view, open) : clockNow(view) - step.started_at;
+  return runningPanel(view, { role: step.role, story: step.story, step: step.step, seconds, line: toolLine(view, step) });
+}
+
+/** The panel state for an open step in the events when no heartbeat exists, else null. */
+function eventPanel(view) {
+  const act = view.heartbeat ? null : activeStep(view.events);
+  if (!act) return null;
+  const step = view.stories.find((s) => s.id === act.story)?.step;
+  return runningPanel(view, { role: act.role, story: act.story, step, seconds: clockNow(view) - act.at, line: "" });
 }
 
 /** The panel state for open runner stages, else null. */
 function stagePanel(view) {
-  const open = openStages(view);
-  return open.length ? { kind: "stage", head: `⚙ runner: ${open.map((s) => s.stage).join(", ")}`, story: "" } : null;
+  const row = openStages(view).at(-1);
+  if (!row) return null;
+  return {
+    kind: "stage", who: `⚙ runner · ${row.story || "sprint " + view.run.sprint}`,
+    when: `${row.stage} · ${fmt.age(stageAwake(view, row))}`, line: runnerResult(view), story: row.story ?? "",
+  };
 }
 
-/** Why nothing runs: open questions first, else the health reason or run status (LP3). */
+/** The panel state for a runner chore, else null. */
+function chorePanel(view) {
+  const chore = beating(view) ? view.heartbeat.chore : null;
+  if (!chore) return null;
+  return { kind: "stage", who: "⚙ runner", when: fmt.age(clockNow(view) - chore.since), line: chore.what, story: "" };
+}
+
+/** Why nothing runs: open questions first, else the health reason or run status (LP5). */
 function idleWhy(view) {
   const open = openQuestions(view);
   return open.length ? `waiting on ${open.map((q) => q.id).join(", ")}` : view.health.reason || view.run.status;
@@ -807,10 +862,10 @@ function idleWhy(view) {
 
 /** The panel state when nothing runs. */
 function idlePanel(view) {
-  return { kind: "idle", head: `● Nothing running: ${idleWhy(view)}`, story: "" };
+  return { kind: "idle", who: "● Nothing running", when: "", line: idleWhy(view), story: "" };
 }
 
-const PANEL_STATES = [stepPanel, stagePanel, idlePanel];
+const PANEL_STATES = [stepPanel, eventPanel, stagePanel, chorePanel, idlePanel];
 
 /** The first panel state that applies (LP2). */
 function panelState(view) {
@@ -822,60 +877,51 @@ function rowOf(e, ctx) {
   try { return TIMELINE[e.kind]?.(e, ctx) ?? null; } catch { return null; }
 }
 
-/** The newest event with a non-blank timeline body, on `story` when given (LP4). */
+/** The newest event with a non-blank timeline body, on `story` when given (LP6). */
 function latestMessage(view, story) {
-  const ctx = timelineContext(view);
-  for (const e of [...view.events].reverse()) {
-    if (story && e.story !== story) continue;
-    const t = rowOf(e, ctx);
-    if (t && String(t.body ?? "").trim()) return { e, t };
-  }
-  return null;
+  return newestRow(view, (e, t) => (!story || e.story === story) && String(t.body ?? "").trim());
 }
 
-/** The first six non-blank lines of `text`, at most 600 characters (LP5). */
+/** `text` up to its fourth non-blank line, at most 400 characters (LP6). */
 function clip(text) {
   const lines = String(text ?? "").split("\n");
   let seen = 0, end = lines.length;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim() && ++seen === CLIP_LINES) { end = i + 1; break; }
   }
-  const kept = lines.slice(0, end).join("\n");
-  return { text: kept.slice(0, CLIP_CHARS), cut: end < lines.length && lines.slice(end).some((l) => l.trim()) || kept.length > CLIP_CHARS };
+  return lines.slice(0, end).join("\n").slice(0, CLIP_CHARS);
 }
 
-/** The panel's plain meta line for a message (LP6). */
-function panelMeta({ e, t }) {
-  const to = t.to ? ` → ${short(t.to)}` : "";
-  return `${fmt.time(e.at)} · ${short(t.from)}${to} · ${t.what}${e.story ? " · " + e.story : ""}`;
-}
-
-/** The panel's message part: Markdown of the clipped body plus a "…" when cut. */
+/** The panel's message part: Markdown of the clipped body. */
 function panelMessageHtml(msg) {
-  if (!msg) return "No activity yet.";
-  const c = clip(msg.t.body);
-  return bodyHtml(msg.e.kind, c.text) + (c.cut ? `<div class="lp-more">…</div>` : "");
+  return msg ? bodyHtml(msg.e.kind, clip(msg.t.body)) : "";
 }
 
-/** The aria-label and title for the panel. */
+/** The aria-label for the panel. */
 const panelLabel = (story) => (story ? `Open the Activity tab for ${story}` : "Open the Activity tab");
+
+/** Sets the panel's text lines (LP7). */
+function fillPanelText(state) {
+  $("#lp-who").textContent = state.who;
+  $("#lp-when").textContent = state.when;
+  $("#lp-line").textContent = state.line;
+  $("#lp-line").classList.toggle("tool", state.kind === "step");
+}
 
 /** Fills the header's live panel (LP7). */
 function renderLivePanel(view) {
-  const state = panelState(view), msg = latestMessage(view, state.story);
-  const box = $("#live-panel"), story = state.story || msg?.e.story || "";
-  $("#lp-head").textContent = state.head;
-  $("#lp-meta").textContent = msg ? panelMeta(msg) : "";
-  $("#lp-msg").innerHTML = panelMessageHtml(msg);
-  box.dataset.story = story;
-  box.title = panelLabel(story);
-  box.setAttribute("aria-label", panelLabel(story));
-  box.classList.toggle("running", state.kind === "step");
+  const state = panelState(view), box = $("#live-panel"), show = state.kind === "step";
+  fillPanelText(state);
+  $("#lp-msg").hidden = !show;
+  $("#lp-msg").innerHTML = show ? panelMessageHtml(latestMessage(view, state.story)) : "";
+  box.dataset.story = state.story;
+  box.setAttribute("aria-label", panelLabel(state.story));
+  box.className = "live-panel h-" + healthLevel(view);
 }
 
-/** Rewrites only the panel's head line so the clock moves (LP7). */
-function renderPanelHead(view) {
-  $("#lp-head").textContent = panelState(view).head;
+/** Rewrites only the panel's text lines so the clocks move (LP7). */
+function renderPanelText(view) {
+  fillPanelText(panelState(view));
 }
 
 /** Opens the Activity tab filtered to `story` when it exists (LP8). */
@@ -886,52 +932,78 @@ function openActivity(story) {
 
 // ----- header -----------------------------------------------------------------
 
+/** The goal on one line, its full text on hover (HD2). */
+function renderGoal(view) {
+  $("#task").textContent = view.run.task;
+  $("#task").title = view.run.task;
+}
+
 function renderHeader(view) {
   $("#sprint-label").textContent = view.run.sprint ? ` · sprint ${view.run.sprint}` : " · backlog";
-  $("#task").textContent = view.run.task;
-  renderMeter(view);
+  renderGoal(view);
   safely(renderLivePanel, view);
   renderStatusRow(view);
   renderTabs(view);
 }
 
-function renderMeter(view) {
+/** The connection word: `mock data` in a replay, else the live state. */
+const connWord = () => (MOCK ? "mock data" : data.conn);
+
+/** One pill: connection word and run status (HS1). */
+function statePill(view) {
+  const word = connWord(), live = word === "live";
+  const html = pill(`${word} · ${view.run.status}`, live ? STATUS_TONE[view.run.status] ?? "" : "warning");
+  return live ? `<span class="live">${html}</span>` : html;
+}
+
+/** One flag when the manager is due, its reasons on hover (HS2). */
+function managerFlag(view) {
+  const due = view.run.manager_due ?? [];
+  return due.length ? `<span class="pill flag" title="${esc("manager due: " + due.join("; "))}">⚑ manager due</span>` : "";
+}
+
+/** The open-question pill, or "" (HS4). */
+function questionsPill(view) {
+  const open = openQuestions(view).length;
+  return open ? pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning") : "";
+}
+
+/** The budget-check percents below 100, or [] with no step (HS3). */
+function checkPcts(every) {
+  const out = [];
+  if (!(every > 0)) return out;
+  for (let p = every; p < 100; p += every) out.push(p);
+  return out;
+}
+
+/** The budget's hover text: exact amounts and what the ticks mean (HS3). */
+function budgetTitle(view, spent) {
+  const budget = view.run.budget_usd, pct = budget ? Math.min(100, (100 * spent) / budget) : 0;
+  const ticks = checkPcts(view.run.manager_every_pct).map((p) => p + "%").join(", ");
+  const note = ticks ? ` Ticks mark the manager's budget checks at ${ticks}.` : "";
+  return `${fmt.usd(spent)} of ${fmt.usd(budget)} spent (${fmt.pct(pct)}).${note}`;
+}
+
+/** The inline budget: amounts, percent, bar and check ticks (HS3). */
+function budgetPill(view) {
   const spent = sum(view.ledger, (l) => l.cost_usd), budget = view.run.budget_usd;
   const pct = budget ? Math.min(100, (100 * spent) / budget) : 0;
-  const ticks = [];
-  for (let p = view.run.manager_every_pct; p < 100; p += view.run.manager_every_pct) {
-    ticks.push(`<span class="meter-tick" style="left:${p}%"></span>`);
-  }
-  $("#meter").innerHTML = `
-    <div class="meter-top"><span><b>${fmt.usd(spent)}</b> of ${fmt.usd(budget)}</span><span>${fmt.pct(pct)}</span></div>
-    <div class="meter-bar" title="Ticks mark Manager budget checkpoints">
-      <span class="meter-fill" style="width:${pct}%"></span>${ticks.join("")}</div>`;
+  const ticks = checkPcts(view.run.manager_every_pct).map((p) => `<i class="budget-tick" style="left:${p}%"></i>`);
+  return `<span class="budget" title="${esc(budgetTitle(view, spent))}">${fmt.dollars(spent)} <small>of ${fmt.dollars(budget)} · ${fmt.pct(pct)}</small>` +
+    `<span class="budget-bar"><span class="budget-fill" style="width:${pct}%"></span>${ticks.join("")}</span></span>`;
 }
 
-/** The status row's pills as HTML strings, left to right (P1, S3). */
-function statusPills(view, now) {
-  const act = activeStep(view.events);
-  const parts = [connectionPill(), pill(view.run.status, STATUS_TONE[view.run.status] ?? "")];
-  if (act || liveStep(view) || healthLevel(view) !== "idle") parts.push(smartPill(view, now));
-  const open = openQuestions(view).length;
-  if (open) parts.push(pill(`? ${open} question${open > 1 ? "s" : ""} waiting on you`, "warning"));
+/** The status row's pills as HTML strings, left to right (HS4). */
+function statusPills(view) {
+  const parts = [statePill(view), managerFlag(view), budgetPill(view), questionsPill(view)];
   if (markdownState === MD.FAILED) parts.push(`<span class="md-notice" role="status">${MD_NOTICE}</span>`);
-  for (const why of view.run.manager_due ?? []) parts.push(pill(`⚑ manager due: ${why}`, "serious"));
   if (MOCK) parts.push(mockControls());
-  return parts;
+  return parts.filter(Boolean);
 }
 
-/** Draws the status row and the live details under it. */
+/** Draws the status row. */
 function renderStatusRow(view) {
-  $("#status-row").innerHTML = statusPills(view, clockNow(view)).join("");
-  renderLiveDetails(view);
-}
-
-/** The tap-to-open details under the status row. */
-function renderLiveDetails(view) {
-  const box = $("#live-details");
-  box.hidden = !ui.details;
-  box.innerHTML = pillDetails(view, clockNow(view)).map(esc).join("<br>");
+  $("#status-row").innerHTML = statusPills(view).join("");
 }
 
 function renderTabs(view) {
@@ -1174,9 +1246,7 @@ function stageStatsText(stats) {
 function stageRunningLine(view, node) {
   const row = stageOpen(view, node);
   if (!row) return "";
-  const slept = Math.max(0, finiteS(view.heartbeat.slept) - finiteS(row.started_slept));
-  const awake = Math.max(0, clockNow(view) - row.started_at - slept);
-  return "<br/>" + mmdText("⏱ running " + fmt.age(awake));
+  return "<br/>" + mmdText("⏱ running " + fmt.age(stageAwake(view, row)));
 }
 
 /** The node's label (SN5). */
@@ -2489,7 +2559,6 @@ const WAIT_BREAKDOWN = ["question", "hold", "other", "idle"];
 
 const tlCut = (text, n) => (text.length > n ? text.slice(0, n - 1) + "…" : text);
 const tlFixed = (t) => t.toFixed(1);
-const firstLine = (text) => String(text ?? "").split("\n")[0];
 
 // -- model (pure: no DOM, no clock) --
 
@@ -3359,7 +3428,7 @@ function keepTimelineScroll(fn) {
 
 const ui = {
   tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens",
-  scope: "story", focus: "", details: false,
+  scope: "story", focus: "",
   expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
   drafts: {}, to: {}, sending: new Set(), threadNote: {},
   tl: {}, showDone: false, tlOpen: new Set(), miscOpen: new Set(), miscCalls: {},
@@ -3419,7 +3488,6 @@ document.addEventListener("click", (ev) => {
   if (unit) { ui.unit = unit.dataset.unit; render(); }
   const scope = ev.target.closest("[data-scope]");
   if (scope) setScope(scope.dataset.scope);
-  if (ev.target.closest("[data-live-details]")) { ui.details = !ui.details; renderLiveDetails(data.view); }
   askNotifyOnce();
   const copy = ev.target.closest("[data-copy]");
   if (copy) navigator.clipboard?.writeText(copy.dataset.copy);
@@ -3428,15 +3496,15 @@ document.addEventListener("click", (ev) => {
 });
 $("#flow-focus").addEventListener("change", (ev) => { ui.focus = ev.target.value; render(); });
 document.addEventListener("mouseover", (ev) => {
-  if (data.view && ev.target.closest("[data-live-details]")) {
-    showTip(ev, pillDetails(data.view, clockNow(data.view)).map(esc).join("<br>"));
-  }
+  if (!data.view || !ev.target.closest("[data-live-tip]")) return;
+  const lines = pillDetails(data.view, clockNow(data.view));
+  if (lines.length) showTip(ev, lines.map(esc).join("<br>"));
 });
-document.addEventListener("mouseout", (ev) => { if (ev.target.closest("[data-live-details]")) hideTip(); });
+document.addEventListener("mouseout", (ev) => { if (ev.target.closest("[data-live-tip]")) hideTip(); });
 $("#tl-filter").addEventListener("change", (ev) => { ui.story = ev.target.value; render(); });
 $("#theme").addEventListener("click", cycleTheme);
 $("#live-panel").addEventListener("keydown", (ev) => {
-  if (ev.key !== "Enter" && ev.key !== " ") return;
+  if ((ev.key !== "Enter" && ev.key !== " ") || ev.target.closest("a")) return;
   ev.preventDefault();
   openActivity(ev.currentTarget.dataset.story ?? "");
 });
@@ -3494,11 +3562,6 @@ function askNotifyOnce() {
   Notification.requestPermission();
 }
 
-function connectionPill() {
-  if (MOCK) return pill("mock data", "warning");
-  return data.conn === "live" ? `<span class="live">${pill("live", "good")}</span>` : pill(data.conn, "warning");
-}
-
 function onStreamMessage(ev) {
   let snap;
   try { snap = JSON.parse(ev.data); } catch { return; }
@@ -3516,8 +3579,7 @@ function adopt(snap) {
 /** Once a second, move the ages and re-judge the alert; the flow chart redraws when its source changes. */
 function tick() {
   if (!data.view || MOCK) return;
-  safely(renderStatusRow, data.view);
-  safely(renderPanelHead, data.view);
+  safely(renderPanelText, data.view);
   safely(applyAlert, data.view);
   if (ui.tab === "flow") safely(renderFlow, data.view);
 }
