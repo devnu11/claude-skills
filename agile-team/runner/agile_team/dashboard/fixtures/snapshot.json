@@ -87,7 +87,12 @@
   "boundary.restack": "Bring every review PR up to date, bottom up: rebase, same tree, push, retarget",
   "boundary.ci-wait": "Wait for the pull requests' CI checks and read failing logs",
   "runner-tool.run_tests": "Only the tests a developer named, run for that developer",
-  "runner-tool.run_new_tests": "Only the story's new test files, run for a developer"
+  "runner-tool.run_new_tests": "Only the story's new test files, run for a developer",
+  "stop.handoff": "Stop check: the step's handoff block parses",
+  "stop.lint": "Stop check: fix the step's changed files with the toolchain's fixers, then lint them",
+  "stop.suite": "Stop check: the implement gate's suite and coverage, before the developer may stop",
+  "stop.red": "Stop check: the tests gate, before the unit-tester may stop",
+  "stop.presentation": "Stop check: the story's presentation is complete, before the integration-tester may stop"
  },
  "stage_labels": {
   "env.prepare": "env prepare",
@@ -114,7 +119,12 @@
   "boundary.ci-wait": "CI wait",
   "runner-tool.run_tests": "pytest: named tests",
   "runner-tool.run_new_tests": "pytest: new test files",
-  "deploy.preview": "deploy.preview"
+  "deploy.preview": "deploy.preview",
+  "stop.handoff": "stop: handoff parses",
+  "stop.lint": "stop: lint fix + check",
+  "stop.suite": "stop: suite + coverage",
+  "stop.red": "stop: new tests red",
+  "stop.presentation": "stop: presentation"
  },
  "roles": [
   {
