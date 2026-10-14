@@ -141,7 +141,7 @@ def test_no_total_means_no_percent_complete(total: str) -> None:
     """FC18: `completePct` is null without a positive total, and the running box drops the `% complete` row and sparkline."""
     out = _run(f"""
     const t = {{ passed: 3, warned: 0, failed: 0, total: {total}, points: [], fail_at: null }};
-    out.pct = completePct(t);
+    out.pct = completePct(t); out.bar = testBar(t);
     view.heartbeat.stages[0].tests = {{ ...t, points: [10, 20, 30] }};
     ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ {GATE}"));
     out.real = completePct({{ passed: 3, warned: 0, failed: 0, total: 6, points: [], fail_at: null }});
@@ -149,3 +149,14 @@ def test_no_total_means_no_percent_complete(total: str) -> None:
     assert out["pct"] is None and out["real"] == 50
     assert "% complete" not in out["box"] and "fc-status" not in out["box"]
     assert "3 Pass" in out["box"]
+    assert out["bar"] == "" and "fc-testbar" not in out["box"]
+
+
+def test_the_bar_is_scaled_by_the_total_not_by_the_tests_that_ran() -> None:
+    """FC18: with `total: 6` and 3 passed, the bar exists and Pass is 50.00% wide (not 100% of those that ran)."""
+    out = _run(f"""
+    view.heartbeat.stages[0].tests = {{ passed: 3, warned: 0, failed: 0, total: 6, points: [], fail_at: null }};
+    ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ {GATE}"));
+    """)
+    assert "fc-testbar" in out["box"]
+    assert "width:50.00%" in out["box"]
