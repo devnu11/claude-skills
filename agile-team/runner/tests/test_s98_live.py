@@ -26,7 +26,7 @@ RUN_DIR = Path("/fake/run")
 TOOLS_FILE = RUN_DIR / tc.TOOLS
 WHO = live.Who("developer", "s1", "implement", "sonnet", Billing.REPORTED)
 PO = live.Who("product-owner", None, None, "opus", Billing.REPORTED)
-SPLIT_KEYS = {"opened_at", "tool_s", "model_s", "waiting_s"}
+SPLIT_KEYS = {"opened_at", "tool_s", "model_s", "waiting_s", "rate"}
 
 
 def pulse_of(fake: FakeSystem) -> live.Pulse:

@@ -66,10 +66,8 @@ def test_the_timeline_svg_is_drawn_at_scale_one() -> None:
     assert ".tl svg { display: block; max-width: none; }" in text
 
 
-def test_the_flow_chart_stays_natural_size_and_idle_text_is_not_muted() -> None:
+def test_the_flow_chart_scrolls_at_real_size_and_has_no_mermaid() -> None:
     text = page()
-    assert "useMaxWidth: false" in text
-    body = text.split("function idleClassDef()")[1].split("`;")[0]
-    assert 'color:${cssVar("--ink-2")}' in body
-    assert "--muted" not in body
+    assert "mermaid" not in text.lower()  # s118: the chart is HTML, not Mermaid
+    assert "useMaxWidth" not in text
     assert re.search(r"#flow\s*\{[^}]*overflow-x:\s*auto", text)

@@ -27,6 +27,7 @@ ROW_KEYS = [
     "started_at",
     "started_mono",
     "started_slept",
+    "tests",
 ]
 
 
@@ -238,7 +239,7 @@ def test_the_runtime_passes_its_pulse_as_the_board(make_runtime: Any) -> None:
 def test_the_fixture_heartbeat_keys_equal_the_pulses(fake: FakeSystem) -> None:
     fixture = json.loads(FIXTURE_TEXT)
     assert list(fixture["heartbeat"]) == list(pulse_of(fake).heartbeat())
-    assert fixture["heartbeat"]["stages"] == []
+    assert [r["stage"] for r in fixture["heartbeat"]["stages"]] == ["gate.tests+coverage"]
 
 
 def stage_events() -> list[dict[str, Any]]:

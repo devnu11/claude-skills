@@ -239,7 +239,7 @@ def test_heartbeat_shape_and_atomic_write(scratch: Path, fake: FakeSystem) -> No
     assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
     assert list(beat["step"]) == [
         "role", "story", "step", "started_at", "turn", "model", "configured_model",
-        "last_turn_at", "quiet_since", "tool", "tokens", "cost_usd",
+        "last_turn_at", "quiet_since", "tool", "tokens", "cost_usd", "rate",
     ]  # fmt: skip
     step = beat["step"]
     assert (step["role"], step["story"], step["step"], step["turn"]) == (

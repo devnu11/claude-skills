@@ -25,6 +25,7 @@ KEYS = [
     "generated_at",
     "run",
     "pipeline",
+    "step_roles",
     "roles",
     "stories",
     "requirements",
