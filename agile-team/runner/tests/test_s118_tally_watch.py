@@ -6,17 +6,24 @@ import os
 from pathlib import Path
 
 import pytest
-from agile_team import stages, tally_watch
+from agile_team import stages, system, tally_watch
 from agile_team.commands import CommandShell
 
 from .fake_system import FAKE_REPO, Done, FakeSystem
 
 NAME = stages.Name
 PLACE = stages.Place("s1", "implement")
-TALLY = Path("/tmp/tally.json")
+TALLY = FAKE_REPO / "tally.json"
+PLUGIN_NAMES = sorted(n for n in os.listdir(tally_watch.PLUGIN_DIR) if n != "__pycache__")
 IMPORT_ERROR = (
     'ImportError while loading\nError importing plugin "agile_team_tally": No module named x'
 )
+
+
+@pytest.fixture(autouse=True)
+def temp_dir(fake: FakeSystem) -> None:
+    """The scratch file lives in the temp dir, which the fake does not have by default."""
+    fake.dirs.add("/tmp")
 
 
 def a_run() -> stages.Run:
@@ -35,8 +42,7 @@ def test_the_constants() -> None:
 
 
 def test_the_plugin_directory_holds_only_the_plugin() -> None:
-    names = [n for n in tally_watch.PLUGIN_DIR.iterdir() if n.name != "__pycache__"]
-    assert [n.name for n in names] == ["agile_team_tally.py"]
+    assert PLUGIN_NAMES == ["agile_team_tally.py"]
 
 
 def test_plugin_env_adds_the_directory_the_plugin_and_the_file() -> None:
@@ -201,18 +207,20 @@ def test_a_command_in_a_stage_gets_the_plugin_environment(fake: FakeSystem) -> N
     assert env["AGILE_TEAM_TALLY"] not in fake.files  # removed afterwards
 
 
-def test_a_record_written_by_the_command_reaches_the_stage(fake: FakeSystem) -> None:
+def test_a_record_written_by_the_command_reaches_the_stage(
+    fake: FakeSystem, monkeypatch: pytest.MonkeyPatch
+) -> None:
     fake.reply(("pytest",), Done(0, "ok\n"))
     heard: list[str] = []
     with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE) as run:
         run.listeners.append(heard.append)
-        original = fake.spawn_piped
+        original = system.spawn_piped
 
         def spawn(command: object) -> object:
             fake.write_text(Path(command.env["AGILE_TEAM_TALLY"]), "record")  # type: ignore[attr-defined]
             return original(command)
 
-        fake.spawn_piped = spawn  # type: ignore[method-assign]
+        monkeypatch.setattr(system, "spawn_piped", spawn)  # install bound the fake's method
         CommandShell(FAKE_REPO).run("pytest")
     assert heard == ["record"]
 

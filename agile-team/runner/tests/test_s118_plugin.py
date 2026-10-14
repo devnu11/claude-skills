@@ -21,6 +21,9 @@ import agile_team
 import pytest
 
 PLUGIN_FILE = Path(agile_team.__file__).parent / "pytest_plugin" / "agile_team_tally.py"
+# Read at collection, before the OS guard is on.
+PLUGIN_SOURCE = PLUGIN_FILE.read_text()
+PLUGIN_NAMES = sorted(n for n in os.listdir(PLUGIN_FILE.parent) if n != "__pycache__")
 PLUGIN_NAME = "agile_team_tally"
 
 
@@ -114,13 +117,11 @@ def test_the_constants(mod: ModuleType) -> None:
 
 
 def test_the_plugin_imports_nothing_from_agile_team() -> None:
-    source = PLUGIN_FILE.read_text()
-    assert not re.search(r"^\s*(from|import)\s+agile_team\b", source, re.M)
+    assert not re.search(r"^\s*(from|import)\s+agile_team\b", PLUGIN_SOURCE, re.M)
 
 
 def test_the_directory_holds_only_the_plugin() -> None:
-    names = sorted(p.name for p in PLUGIN_FILE.parent.iterdir() if p.name != "__pycache__")
-    assert names == ["agile_team_tally.py"]
+    assert PLUGIN_NAMES == ["agile_team_tally.py"]
 
 
 # ----- P1: pytest_configure and unlisted -----
