@@ -43,6 +43,7 @@ def test_sprint_scope_groups_every_story() -> None:
     """AC1: Sprint scope draws sprint-1 and each story as a group."""
     out = _run("""
     const story = view.stories.find((s) => s.id === "s3");
+    data.skew = view.generated_at - Date.now() / 1000;  // pin "now": the fixture's running step must not stretch with the real clock
     ui.tl.s3 = { scope: "sprint", span: null, end: null };
     out.html = timelineHtml(view, story);
     """)
