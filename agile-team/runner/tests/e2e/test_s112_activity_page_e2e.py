@@ -429,11 +429,11 @@ def test_status_row_order_is_state_flag_budget_questions_notice() -> None:
 
 
 def test_goal_is_the_task_text_and_its_hover_title() -> None:
-    """HD2: #task text and title equal view.run.task."""
+    """HD2/s119 AC1: #task text and title equal goalText(view)."""
     out = _run("""
     const els = {"#task": {textContent: "", title: ""}, "#sprint-label": {textContent: ""}};
     globalThis.document.querySelector = (q) => els[q];
-    renderGoal(view); out.task = els["#task"]; out.expected = view.run.task;
+    renderGoal(view); out.task = els["#task"]; out.expected = goalText(view);
     """)
     assert out["task"]["textContent"] == out["expected"] == out["task"]["title"] and out["expected"]
 
@@ -499,21 +499,14 @@ def test_tool_line_prefers_the_open_call_then_the_step_tool_then_none() -> None:
     assert out["none"] == "no tool running"
 
 
-def test_runner_result_reads_the_newest_runner_event_or_nothing() -> None:
-    """LP5: `sprint 10 end · sync: pass · …` for a boundary event; "" without one; stageAwake excludes sleep."""
-    out = _run(
-        _events("""
-    v.events = [{id: "r", at: 1791473000, kind: "boundary", role: "runner", story: null,
-      data: {outcome: "pass", sprint: 10, edge: "end", stage: "sync", reason: "all green\\nmore"}}];
-    out.result = runnerResult(v);
-    v.events = [ev("a", "s3", 1, "step-start", {brief: "b"})]; out.none = runnerResult(v);
+def test_stage_awake_excludes_sleep() -> None:
+    """LP5 (s119 AC2 removed runnerResult): stageAwake excludes sleep."""
+    out = _run("""
+    const v = view;
     const row = {started_at: clockNow(v) - 100, started_slept: 0};
     v.heartbeat.slept = 30; out.awake = Math.round(stageAwake(v, row));
     """)
-    )
-    assert out["result"].startswith("sprint 10 end · sync: pass"), out["result"]
-    assert "all green" in out["result"] and "more" not in out["result"]
-    assert out["none"] == "" and out["awake"] == 70
+    assert out["awake"] == 70
 
 
 def test_pill_details_first_line_has_the_rate_and_last_turn() -> None:
