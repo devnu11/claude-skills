@@ -1828,9 +1828,13 @@ const TIMELINE = {
     from: PO, to: e.data.sprint != null ? `sprint ${e.data.sprint}` : "sprint", what: "sprint start",
     body: [e.data.goal, e.data.stories?.length ? `Stories: ${e.data.stories.join(", ")}` : ""].filter(Boolean).join("\n"),
   }),
+  "sprint-add": (e) => ({
+    from: PO, to: `sprint ${e.data.sprint}`, what: "stories added",
+    body: [e.data.reason, `Stories: ${(e.data.stories ?? []).join(", ")}`].join("\n"),
+  }),
 };
 
-const ACT_TO = { "": "liaison", reorder: "runner", "product-owner": "PO" };
+const ACT_TO ={ "": "liaison", reorder: "runner", "product-owner": "PO" };
 
 TIMELINE.opinion = (e, ctx) => ({
   from: "liaison", to: "you", what: "opinion " + e.data.kind, body: ctx.opinions[e.data.opinion]?.text ?? "",

@@ -73,6 +73,15 @@ STATUS_KINDS = {"sprint-end", "done", "blocked"}
 SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
 )
+NO_OPEN_SPRINT = (
+    "no sprint is open to add to (none started, or sprint {sprint} has ended); use start_sprint"
+)
+ALREADY_IN_SPRINT = "already in sprint {sprint}: {ids}"
+ADD_NEEDS_REASON = "add_to_sprint needs a reason: say why these stories join sprint {sprint}"
+RESTART_NEEDS_REASON = (
+    "sprint {sprint} still has unfinished stories ({ids}); use add_to_sprint to add work, "
+    "or give a reason for starting a new sprint"
+)
 NO_BOUNDARY = "no sprint boundary is pending"
 CI_BUG_PULL = "CI failed on the pushed code; {story} fixes it"
 NO_CI_HOLD = "no boundary is held on failed CI; record_ci_bug applies after a ci_failed hand-over"
@@ -97,6 +106,23 @@ class Start:
 
     task: str
     mode: StartMode = StartMode.WORK
+
+
+@dataclass(frozen=True)
+class Sprint:
+    """The arguments of one start_sprint call."""
+
+    goal: str
+    ids: list[str]
+    reason: str
+
+
+@dataclass(frozen=True)
+class Addition:
+    """The arguments of one add_to_sprint call."""
+
+    ids: list[str]
+    reason: str
 
 
 @dataclass
@@ -147,10 +173,11 @@ class Tools:
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
         ids = list(dict.fromkeys(args.get("stories") or []))
-        reason = self._sprint_refusal(ids) or self.runtime.load_dependencies()
+        sprint = Sprint(args.get("goal", ""), ids, args.get("reason") or "")
+        reason = self._sprint_refusal(sprint) or self.runtime.load_dependencies()
         if reason:
             return text_result(refused(reason))
-        self._begin_sprint(args.get("goal", ""), ids)
+        self._begin_sprint(sprint)
         state = self.runtime.state
         return text_result(
             {
@@ -161,19 +188,92 @@ class Tools:
             }
         )
 
-    def _sprint_refusal(self, ids: list[str]) -> str | None:
+    async def add_to_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Add open stories to the running sprint without restarting it."""
+        ids = list(dict.fromkeys(args.get("stories") or []))
+        add = Addition(ids, args.get("reason") or "")
+        if reason := self._add_refusal(add):
+            return text_result(refused(reason))
+        return text_result(self._add(add))
+
+    def _add_refusal(self, add: Addition) -> str | None:
+        stories = self.runtime.state.stories
+        return priority.first_refusal(
+            [
+                self._boundary_refusal,
+                self._open_sprint_refusal,
+                lambda: priority.order_refusal(add.ids, stories),
+                lambda: self._in_sprint_refusal(add.ids),
+                lambda: self._unmet_refusal(add.ids),
+                lambda: self._add_reason_refusal(add.reason),
+            ]
+        )
+
+    def _add_reason_refusal(self, reason: str) -> str | None:
+        if reason.strip():
+            return None
+        return ADD_NEEDS_REASON.format(sprint=self.runtime.state.sprint)
+
+    def _open_sprint_refusal(self) -> str | None:
+        state = self.runtime.state
+        if state.sprint_open():
+            return None
+        return NO_OPEN_SPRINT.format(sprint=state.sprint)
+
+    def _in_sprint_refusal(self, ids: list[str]) -> str | None:
+        state = self.runtime.state
+        inside = set(state.sprint_ids())
+        already = [i for i in ids if i in inside]
+        if not already:
+            return None
+        return ALREADY_IN_SPRINT.format(sprint=state.sprint, ids=", ".join(already))
+
+    def _unmet_refusal(self, ids: list[str]) -> str | None:
+        state = self.runtime.state
+        members = frozenset([*state.sprint_ids(), *ids])
+        return dependencies.unmet_refusal(ids, dependencies.Scope(state.stories, members))
+
+    def _add(self, add: Addition) -> dict[str, Any]:
+        rt = self.runtime
+        state = rt.state
+        state.add_to_sprint(add.ids)
+        rt.save()
+        data = {"sprint": state.sprint, "stories": add.ids, "reason": add.reason}
+        rt.events.emit(Event(EventKind.SPRINT_ADD, PO, None, data))
+        order = rt.priority().with_first(add.ids, state.stories.values())
+        ordered = self._reorder(Reorder(Change.SPRINT, order, None, add.reason))
+        return {
+            "status": "added",
+            "sprint": state.sprint,
+            "stories": add.ids,
+            "order": ordered["order"],
+        }
+
+    def _boundary_refusal(self) -> str | None:
         pending = self.runtime.state.boundary
-        if pending:
-            return SPRINT_REFUSAL_BOUNDARY.format(
-                sprint=pending.sprint, edge=pending.edge, stage=pending.stage,
-                held=held_text(pending),
-            )  # fmt: skip
-        if not ids:
+        if not pending:
+            return None
+        return SPRINT_REFUSAL_BOUNDARY.format(
+            sprint=pending.sprint, edge=pending.edge, stage=pending.stage,
+            held=held_text(pending),
+        )  # fmt: skip
+
+    def _restart_refusal(self, reason: str) -> str | None:
+        state = self.runtime.state
+        unfinished = state.unfinished_in_sprint()
+        if not unfinished or reason.strip():
+            return None
+        return RESTART_NEEDS_REASON.format(sprint=state.sprint, ids=", ".join(unfinished))
+
+    def _sprint_refusal(self, sprint: Sprint) -> str | None:
+        if pending := self._boundary_refusal():
+            return pending
+        if not sprint.ids:
             return "no stories listed; pass the story ids this sprint commits to"
-        unknown = self.runtime.state.unknown_stories(ids)
+        unknown = self.runtime.state.unknown_stories(sprint.ids)
         if unknown:
             return priority.UNKNOWN.format(ids=", ".join(unknown))
-        return self._bug_first(ids)
+        return self._restart_refusal(sprint.reason) or self._bug_first(sprint.ids)
 
     def _bug_first(self, ids: list[str]) -> str | None:
         state = self.runtime.state
@@ -189,8 +289,9 @@ class Tools:
             return Pull((bug,), (bug,)), f"{goal}; {CI_BUG_PULL.format(story=bug)}"
         return Pull(), goal
 
-    def _begin_sprint(self, goal: str, ids: list[str]) -> None:
+    def _begin_sprint(self, sprint: Sprint) -> None:
         state = self.runtime.state
+        goal, ids = sprint.goal, sprint.ids
         pull, why = self._sprint_pull(state.upstream.ci_bug, goal)
         state.begin_sprint(ids)
         state.upstream.ci_bug = ""
@@ -199,7 +300,9 @@ class Tools:
         state.manager_due.append(f"sprint {state.sprint} start: {goal} ({', '.join(ids)})")
         state.po_renew_due.append(f"sprint {state.sprint} start")
         self.runtime.save()
-        data = {"sprint": state.sprint, "goal": goal, "stories": ids}
+        data: dict[str, Any] = {"sprint": state.sprint, "goal": goal, "stories": ids}
+        if sprint.reason.strip():
+            data["reason"] = sprint.reason
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
         order = self.runtime.priority().with_first(ids, state.stories.values())
         self._reorder(Reorder(Change.SPRINT, order, None, why, pull))
@@ -523,8 +626,20 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         " The order you list them in is their priority within each group; "
         "started stories still come first. "
         "It first reloads depends_on from every open story's file. A bad list (not ids, "
-        "self, unknown, cycle) refuses the sprint and names the stories.",
-        {"goal": str, "stories": list},
+        "self, unknown, cycle) refuses the sprint and names the stories."
+        " While the current sprint has unfinished stories, a reason is required; "
+        "to add work to it, use add_to_sprint instead.",
+        {"goal": str, "stories": list, "reason": str},
+    ),
+    "add_to_sprint": (
+        "Add open stories to the running sprint without starting a new one: the sprint keeps "
+        "its number, goal and review branch, and no boundary, manager or session renewal runs. "
+        "The listed ids go first in the order, in that order, as prioritise places them; "
+        "started stories still come first. A reason is required. Refused, with nothing "
+        "changed, for unknown, done or cancelled ids, a story already in the sprint, a "
+        "depends_on that is not done and not in the sprint (add both in one call), no open "
+        "sprint, or while a boundary is pending.",
+        {"stories": list, "reason": str},
     ),
     "prioritise": (
         "Set the order the team works in: the listed story ids first, in that order; every "

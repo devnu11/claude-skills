@@ -141,6 +141,23 @@ class RunState:
             if story.status not in FINISHED:
                 story.sprint = self.sprint if sid in ids else None
 
+    def sprint_ids(self) -> list[str]:
+        """Ids of the stories in the current sprint, done ones included."""
+        return [sid for sid, s in self.stories.items() if s.sprint == self.sprint]
+
+    def unfinished_in_sprint(self) -> list[str]:
+        """Ids in the current sprint whose status is not in FINISHED."""
+        return [i for i in self.sprint_ids() if self.stories[i].status not in FINISHED]
+
+    def sprint_open(self) -> bool:
+        """A sprint has started and its end boundary has not closed it (SA4)."""
+        return self.sprint > 0 and self.upstream.closed < self.sprint
+
+    def add_to_sprint(self, ids: list[str]) -> None:
+        """Put ``ids`` in the current sprint; nothing else changes (SA1)."""
+        for sid in ids:
+            self.stories[sid].sprint = self.sprint
+
     def interrupt(self, found: Interruption) -> None:
         """Record a cut-off step: pending for the PO, and offered on its story."""
         self.in_flight = None

@@ -71,7 +71,11 @@ another role's work.
    command N times in a row after the story's e2e gate (or implement, with no
    e2e step) and keeps the runs for the acceptance brief.
 3. `start_sprint(goal, stories=[...])`, then end your turn. The runner runs
-   the manager, then the stories.
+   the manager, then the stories. To add a story to the sprint that is
+   running, use add_to_sprint(stories, reason); the team picks it up in order
+   with no manager turn. Call start_sprint only when the sprint's stories are
+   done or the human asks for a new sprint; with unfinished stories it needs a
+   reason.
 4. The runner hands control back to you only for judgement. Your prompt
    lists each reason. Handle every line, then end your turn. In a run_role brief or a
    continue_story note, point at artifacts rather than restating them, and
@@ -158,7 +162,7 @@ another role's work.
 6. The architect names each story's developer specialisation, and the runner
    uses it. `set_developer(story, role)` overrides it for that story.
 7. After `start_sprint` or `set_role_model`, end your turn; the runner runs
-   the manager first.
+   the manager first. After `add_to_sprint`, carry on: nothing extra runs.
 8. On `halted`, the run is stopping. Make no more tool calls and end your
    turn.
 9. Keep the human informed with `notify_user` at milestones, not every step.
@@ -176,12 +180,19 @@ line to your brief.
 - `start_sprint` replaces the sprint's scope: list **every** story it commits
   to. Unfinished stories you leave out go back to the backlog; done stories
   never change. Unknown ids are refused.
-- To add a story mid-sprint, start a new sprint that lists the current
-  stories plus the new one (the manager then reviews the new scope).
+- To add a story mid-sprint, call add_to_sprint(stories, reason). The sprint
+  keeps its number, goal and review branch, no boundary or manager runs, and
+  the stories go first in the order (started stories still come first). It is
+  refused for unknown, done or cancelled ids, a story already in the sprint, a
+  depends_on that is not done and not in the sprint (add both in one call),
+  after the sprint's end boundary, and while a boundary is pending.
+- start_sprint is for a new sprint: when the sprint's stories are done, or
+  when the human asks for one. While stories are unfinished it is refused
+  without a reason.
 - After a legacy resume, check `story_status`: stories with `sprint: null`
   are in the backlog; start a sprint with the ones to continue.
 - While the runner's sprint boundary (sync, checks, review branches) is
-  pending, start_sprint is refused and the sprint's stories wait.
+  pending, start_sprint and add_to_sprint are refused and the sprint's stories wait.
 - If the human reorders the backlog on the dashboard, you are told at your
   next turn ("From the dashboard: ..."). That order binds you: a `prioritise`
   or `move_story` that changes it is refused unless you give a reason, and the

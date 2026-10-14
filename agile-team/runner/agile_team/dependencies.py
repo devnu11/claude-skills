@@ -24,7 +24,11 @@ CYCLE = "depends_on has a cycle: {cycle}"
 MISMATCH = (
     "{story}'s file has depends_on [{file}], not [{given}]; pass the same list, or fix the file"
 )
-WAITING = "waiting on {ids}"
+UNMET = (
+    "depends_on not done and not in the sprint: {pairs}; add those stories in the same "
+    "call, or add this one once they are done"
+)
+WAITING ="waiting on {ids}"
 WARNING = "{story} is above {dependency}, which it depends on"
 
 Graph = dict[str, list[str]]
@@ -174,6 +178,25 @@ def waiting_on(story: StoryState, stories: dict[str, StoryState]) -> list[str]:
     return [
         d for d in story.depends_on if d not in stories or stories[d].status is not StoryStatus.DONE
     ]
+
+
+@dataclass(frozen=True)
+class Scope:
+    """The stories, and the ids that count as being in the sprint (SA5)."""
+
+    stories: dict[str, StoryState]
+    members: frozenset[str]
+
+
+def unmet_refusal(ids: list[str], scope: Scope) -> str | None:
+    """SA5: ``UNMET`` naming each dependency of ``ids`` that is not done and not a member."""
+    pairs = [
+        f"{i} on {d}"
+        for i in ids
+        for d in waiting_on(scope.stories[i], scope.stories)
+        if d not in scope.members
+    ]
+    return UNMET.format(pairs=", ".join(pairs)) if pairs else None
 
 
 def above(story: StoryState, queue: list[str]) -> list[str]:
