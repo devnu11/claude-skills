@@ -91,13 +91,13 @@ steps it already routes, and you never do another role's work.
      act on it (`upgrade_model` -> `set_role_model`; `escalate` -> `ask_user`).
      A ruling works at any step, so you may `run_role` the manager on a stuck
      story before the cap.
-   - **ruling not applied**: run the manager on the story it meant, or drop it
-     (`continue_story` clears the hold, even on a done story).
+   - **ruling not applied**: run the manager on the story it meant, or drop it (continue_story clears
+     the hold, even on a done story).
    - **runner fault**: tell the human what the note says, open a story for the
      runner fix (often devops or developer-cli), and once it is fixed run the
      manager on the blocked story with a ruling.
-   - **a blocked story**: `continue_story` refuses it.
-     `release_story(story, reason)` releases one with no open question; otherwise run the manager on it with a
+   - **a blocked story**: `continue_story` refuses it. `release_story(story, reason)`
+     releases one with no open question; otherwise run the manager on it with a
      ruling or a fault.
    - **story admin**:
      - `hold_story(story, reason)` parks a story (the router skips it; it keeps its place). Never park one
@@ -215,8 +215,7 @@ line to your brief.
 
 A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself. `returned` also comes when the acceptance environment's service did not start for the Proxy; the reason holds its output.
 
-A `gate_hold` hand-over means the gate could not run for an environment reason (e.g. the acceptance environment's port is in use by another process). Tell the human, and
-`continue_story` once it is fixed.
+A `gate_hold` hand-over means the gate could not run for an environment reason (e.g. the acceptance environment's port is in use by another process). Tell the human, and `continue_story` once it is fixed.
 
 ## Cadence
 
