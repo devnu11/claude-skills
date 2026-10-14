@@ -36,6 +36,11 @@ LB2 = {
     "boundary.ci-wait": "CI wait",
     "runner-tool.run_tests": "pytest: named tests",
     "runner-tool.run_new_tests": "pytest: new test files",
+    "stop.handoff": "stop: handoff parses",
+    "stop.lint": "stop: lint fix + check",
+    "stop.suite": "stop: suite + coverage",
+    "stop.red": "stop: new tests red",
+    "stop.presentation": "stop: presentation",
 }
 
 

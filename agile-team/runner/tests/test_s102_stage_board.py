@@ -24,6 +24,7 @@ ROW_KEYS = [
     "description",
     "story",
     "step",
+    "attempt",
     "started_at",
     "started_mono",
     "started_slept",
@@ -255,6 +256,7 @@ def test_the_fixture_has_the_two_new_runner_stage_events() -> None:
         "when": "after",
         "attach": "step",
         "step": "e2e",
+        "attempt": None,
         "detail": None,
         "code": 0,
         "raised": None,
@@ -278,5 +280,5 @@ def test_the_new_events_sit_in_at_order() -> None:
     assert ats == sorted(ats)
 
 
-def test_the_fixture_has_five_runner_stage_runs_in_total() -> None:
-    assert len(stage_events()) == 5
+def test_the_fixture_has_eight_runner_stage_runs_in_total() -> None:
+    assert len(stage_events()) == 8

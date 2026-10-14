@@ -275,7 +275,7 @@ def make_runtime(seen: list[Any], fake: FakeSystem) -> tuple[Runtime, live.Pulse
 def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one(fake: FakeSystem) -> None:
     seen: list[Any] = []
     runtime, pulse = make_runtime(seen, fake)
-    plan = SimpleNamespace(story=SimpleNamespace(step="implement", id="s71"))
+    plan = SimpleNamespace(story=SimpleNamespace(step="implement", id="s71"), stop_hook=None)
     assert GATE_CHORE == "gate: {step} on {story}"
     with pulse.doing("settling developer-cli on s71"):
         assert runtime.gate(plan, object()) == {"outcome": "outcome"}  # type: ignore[arg-type]

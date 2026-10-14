@@ -51,6 +51,11 @@ EXPECTED = [
     "boundary.ci-wait",
     "runner-tool.run_tests",
     "runner-tool.run_new_tests",
+    "stop.handoff",
+    "stop.lint",
+    "stop.suite",
+    "stop.red",
+    "stop.presentation",
 ]
 
 
@@ -192,12 +197,12 @@ def test_event_keys_and_values(repo: Path) -> None:
     (event,) = runs(log)
     assert event.role == stages.RUNNER_ROLE == "runner" and event.story == "s1"
     assert list(event.data) == [
-        "stage", "when", "attach", "step", "detail", "code", "raised",
+        "stage", "when", "attach", "step", "attempt", "detail", "code", "raised",
         "started_at", "started_mono", "started_slept", "seconds",
     ]  # fmt: skip
     assert event.data == {
         "stage": "gate.tests+coverage", "when": "after", "attach": "step",
-        "step": "implement", "detail": "uv run pytest --cov -q", "code": 0,
+        "step": "implement", "attempt": None, "detail": "uv run pytest --cov -q", "code": 0,
         "raised": None, "started_at": 100, "started_mono": 50, "started_slept": 0.0,
         "seconds": 2.0,
     }  # fmt: skip
