@@ -1,10 +1,1 @@
-{
-  "s111": [
-    "agile-team/runner/tests/test_boundary.py::test_enum_values",
-    "agile-team/runner/tests/test_handover.py::test_table_rows_are_in_design_order",
-    "agile-team/runner/tests/test_s111_ci_class.py",
-    "agile-team/runner/tests/test_s81_boundary.py::test_continue_at_ci_failed_is_refused_and_changes_nothing",
-    "agile-team/runner/tests/test_s81_ci.py::test_checks_none_reported",
-    "agile-team/runner/tests/test_s81_ci.py::test_checks_parse_despite_a_failing_exit_code"
-  ]
-}
+{}
