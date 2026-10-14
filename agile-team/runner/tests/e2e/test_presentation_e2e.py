@@ -13,7 +13,7 @@ from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryStatus
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from ..conftest import GUIDE_TEXT, FakeQuery, handoff, present, result_message, write_story
+from ..conftest import GUIDE_TEXT, FakeQuery, handoff, result_message, write_story
 
 
 def run(rt, role: str, story: str = "s1") -> dict[str, Any]:
@@ -24,6 +24,15 @@ def open_story(rt, step: str) -> None:
     write_story(rt.config, "s1", "cli")
     rt.state.sprint = 1
     rt.state.stories["s1"] = gates.StoryState("s1", "Add todo", step, sprint=1)
+
+
+def present(config, story_id: str = "s1") -> Path:
+    """A complete presentation for the story's `cli` showing: ``<id>/cli/`` (AE1)."""
+    showing = config.run_dir / "presentation" / story_id / "cli"
+    (showing / "workspace").mkdir(parents=True, exist_ok=True)
+    (showing / "PRESENTATION.md").write_text(GUIDE_TEXT)
+    (showing / "workspace" / "todo.txt").write_text("milk\n")
+    return showing
 
 
 def gate_events(rt) -> list[Any]:
@@ -64,7 +73,7 @@ def test_e2e_gate_fails_without_a_presentation_and_passes_with_one(make_runtime)
     assert first["gate"]["verdict"] == "bounce" and "has no presentation" in first["gate"]["reason"]
     assert (story.step, story.rounds) == ("e2e", 1)
     # The runner laid out the dir (git workspace) but the tester wrote nothing into it.
-    assert (rt.config.run_dir / "presentation/s1/workspace/.git").exists()
+    assert (rt.config.run_dir / "presentation/s1/cli/workspace/.git").exists()
     q.action = lambda: present(rt.config)  # the tester builds it during the step
     second = run(rt, "integration-tester")
     assert second["gate"]["verdict"] == "pass"
@@ -79,7 +88,7 @@ def test_each_environment_gets_its_own_presentation_dir(make_runtime) -> None:
     present(rt.config, "s2")
     stale = present(rt.config, "s1")
     run(rt, "integration-tester")
-    assert (rt.config.run_dir / "presentation/s2/PRESENTATION.md").exists()
+    assert (rt.config.run_dir / "presentation/s2/cli/PRESENTATION.md").exists()
     assert (stale / "PRESENTATION.md").exists()  # G9: lay_out never wipes
 
 

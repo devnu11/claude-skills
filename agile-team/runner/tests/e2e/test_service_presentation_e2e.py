@@ -51,7 +51,8 @@ def web(configured: Path):
 
 
 def present_workspace(config, init: bool) -> Path:
-    source = presentation.lay_out(config, gates.StoryState("s1", "Dash", "e2e"))
+    presentation.lay_out(config, gates.StoryState("s1", "Dash", "e2e"))
+    source = presentation.source_dir(config, presentation.showings(config, "s1")[0])
     (source / "PRESENTATION.md").write_text("Open the dashboard.\n")
     if not init:  # seeds opted out (seed = ""), so nothing plants a config
         (source / "workspace" / "note.txt").write_text("no config here\n")
