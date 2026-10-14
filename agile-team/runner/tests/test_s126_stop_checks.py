@@ -15,6 +15,7 @@ from agile_team import gates, guard, stages, stop_checks, system
 from agile_team.boundary import StepKind
 from agile_team.dispatch import Plan, Runtime, Said, _Drain, build_options
 from agile_team.events import EventKind
+from agile_team.git_ops import Git
 from agile_team.roles import parse_handoff
 from agile_team.stop_checks import (
     EVERY_ROLE,
@@ -395,6 +396,13 @@ def test_bad_handoff_is_refused(rig: Callable[..., Rig]) -> None:
     assert r.script.calls == []
 
 
+def test_unknown_status_is_refused_not_an_escalation(rig: Callable[..., Rig]) -> None:
+    r = rig(suite=[OWN_FAIL], changed=["src/app.py"])
+    r.say("odd")
+    assert "your handoff block does not parse" in r.stop()["reason"]
+    assert r.script.calls == []
+
+
 # ----- escalation is never blocked (AC8, SC6) -----
 
 
@@ -551,10 +559,95 @@ def test_stop_stages_are_after_step_rows() -> None:
     assert stages.reserved("stop.anything")
 
 
-def test_git_content_digest_exists() -> None:
-    from agile_team.git_ops import Git
+class DigestGit(Git):
+    """A Git whose ``run`` answers from a table, so the digest logic runs with no process."""
 
-    assert callable(Git.content_digest)
+    def __init__(self, diff: str, new: str = "", blob: str = "h") -> None:
+        super().__init__(Path("/r"))
+        self.answers = {"diff": diff, "ls-files": new}
+        self.blob = blob
+
+    def run(self, *args: str) -> str:
+        if args[0] == "hash-object":
+            return "\n".join(f"{self.blob}-{p}" for p in args[2:]) + "\n"
+        return self.answers[args[0]]
+
+
+@pytest.fixture
+def on_disk(monkeypatch: pytest.MonkeyPatch) -> set[str]:
+    present: set[str] = {"a.py", "b.py", "new.py"}
+    monkeypatch.setattr(system, "is_file", lambda path: path.name in present)
+    return present
+
+
+def test_digest_is_stable_and_ignores_listing_order(on_disk: set[str]) -> None:
+    a = DigestGit("a.py\0b.py\0").content_digest("base")
+    assert a == DigestGit("b.py\0a.py\0").content_digest("base")
+    assert len(a) == 64
+
+
+def test_digest_changes_with_a_new_untracked_file(on_disk: set[str]) -> None:
+    plain = DigestGit("a.py\0").content_digest("base")
+    assert plain != DigestGit("a.py\0", "new.py\0").content_digest("base")
+
+
+def test_digest_changes_with_a_file_edit(on_disk: set[str]) -> None:
+    before = DigestGit("a.py\0", blob="old").content_digest("base")
+    assert before != DigestGit("a.py\0", blob="edited").content_digest("base")
+
+
+def test_digest_marks_a_deleted_file_and_depends_on_base(on_disk: set[str]) -> None:
+    kept = DigestGit("a.py\0").content_digest("base")
+    on_disk.clear()
+    assert DigestGit("a.py\0").content_digest("base") != kept
+    assert DigestGit("").content_digest("one") != DigestGit("").content_digest("two")
+
+
+def test_digest_of_a_clean_tree_runs_no_hash_object(on_disk: set[str]) -> None:
+    seen: list[str] = []
+    git = DigestGit("")
+    git.run = lambda *a: seen.append(a[0]) or ""  # type: ignore[method-assign]
+    git.content_digest("base")
+    assert seen == ["diff", "ls-files"]
+
+
+def _known() -> Any:
+    return cfg.Known(roles=set(), environment_kinds=set())
+
+
+def test_config_file_keys_override_the_preset(repo: Path) -> None:
+    raw = {"toolchain": {"preset": "python", "files": {"lintable": ["*.md"], "fix": "x {files}"}}}
+    files = cfg.from_raw(repo, raw).toolchain.files
+    assert files.lintable == ("*.md",)
+    assert files.fix == "x {files}"
+    assert "ruff check --quiet" in files.lint_files
+
+
+@pytest.mark.parametrize("key", ["fix", "lint_files"])
+def test_a_file_template_without_files_is_a_config_error(repo: Path, key: str) -> None:
+    config = cfg.from_raw(repo, {"toolchain": {"files": {key: "ruff check"}}})
+    rule = "toolchain.files.fix and toolchain.files.lint_files must hold {files}"
+    assert rule in cfg.validate(config, _known())
+
+
+def test_a_zero_budget_is_a_config_error(repo: Path) -> None:
+    config = cfg.from_raw(repo, {"gates": {"stop_check_budget_s": 0}})
+    assert "gates.stop_check_budget_s must be positive" in cfg.validate(config, _known())
+
+
+def test_coverage_rows_keep_misses_and_total_only() -> None:
+    table = "\n".join(
+        [
+            "Name        Stmts   Miss  Cover",
+            "a.py           10      0   100%",
+            "b.py           10      3    70%",
+            "TOTAL          20      3    85%",
+        ]
+    )
+    assert stop_checks.coverage_rows(table) == [
+        "b.py           10      3    70%",
+        "TOTAL          20      3    85%",
+    ]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
