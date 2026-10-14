@@ -817,6 +817,12 @@ command = "uv run pytest -q --no-header {tests}"   # must hold {tests}: the quot
 # Test IDs must not hold a live value (pid, clock, temp path): xdist refuses
 # to run when its workers collect different IDs.
 
+[toolchain.files]              # optional; the stop hook's lint check (s126). Unset keys come from the preset
+fix = "uv run --directory {root} ruff check --fix --exit-zero --quiet {files} && uv run --directory {root} ruff format --quiet {files}"
+lint_files = "uv run --directory {root} ruff check --quiet {files}"   # non-zero: the stop is refused
+lintable = ["*.py"]            # which changed files are linted
+# {root}: the [[toolchain.targeted]] root holding the files ("." without one); {files}: quoted, relative to it
+
 [toolchain.globs]              # {source} {tests} {e2e} {ci} in role globs
 source = ["src/**"]
 tests = ["tests/**", "!tests/e2e/**"]
@@ -830,6 +836,7 @@ repeat = 2                     # the same setback this many times in a row escal
 backstop = 4                   # this many bounces/returns in a row between two steps, any reasons, escalate too
 command_timeout_s = 300        # each gate/check command; at the limit its process group is killed and the gate bounces
 ci_timeout_s = 1800            # how long the sprint boundary waits for the review PR's CI checks (s81)
+stop_check_budget_s = 1800     # a step's total time in stop checks; after it the stop is allowed (s126)
 steps = ["design", "tests", "implement", "quality", "review",
          "design-review", "e2e", "acceptance"]   # drop steps to skip them
 
@@ -1301,6 +1308,42 @@ results in their briefs instead:
   and logs a `tests-run` event with the tests, exit codes and seconds. With
   no `[[toolchain.targeted]]` rows the tools refuse, and the developer names
   tests in Bash.
+
+### Stop checks (s126)
+
+Every role step (and gate fix step) has an SDK `Stop` hook beside its
+`PreToolUse` guard. When the agent tries to end its step, the runner checks
+the work first, inside the same conversation:
+
+| Role | Its stop checks, in order |
+|---|---|
+| every role | `handoff`: the handoff block parses (for example, no "asserts must be a string"); `lint`: the toolchain's fixers run on the step's changed, in-scope, lintable files (python: `ruff check --fix`, `ruff format`), then the file linter on them |
+| developer-* (at `implement`) | `suite`: the implement gate itself, the full suite with coverage |
+| unit-tester (at `tests`) | `red`: the tests gate itself (new tests fail; dispute and rework rules as at the gate) |
+| integration-tester (at `e2e`, with `acceptance` enabled) | `presentation`: every environment's presentation is complete (`PRESENTATION.md` exists and is not empty) |
+
+- Checks run only on a `done` handoff. Any other status (`changes_requested`
+  with or without a `dispute`, `blocked`, `failed`) ends the step at once, with
+  no checks, and is routed as before. A role may escalate on its first turn.
+- Only failures the role can fix are refused: files in its write scope, and
+  for the suite, the tests the gate would leave at this step. A failure only in
+  another role's file lets the stop through, and the gate routes it as a gate
+  fix.
+- A refusal is the failures, shortest first (failing tests as their ids, the
+  coverage rows only when coverage failed). It ends with: "fix these, or hand
+  off `changes_requested` with a `dispute` naming the test and why".
+- After 3 refusals in a step, or once `[gates] stop_check_budget_s` is spent,
+  the stop is allowed and the gate decides as before. A check whose command
+  timed out does not refuse.
+- The lint fixes are committed with the step. After a passing `suite` stop,
+  the implement gate reuses that run when the content is unchanged (its reason
+  ends "(the stop hook's run on this tree)").
+- Each refused check writes a `stop-check` event (`check`, `stage`, `attempt`,
+  `of`, `seconds`, `text`). The checks are runner stages `stop.handoff`,
+  `stop.lint`, `stop.suite`, `stop.red` and `stop.presentation`, and their
+  open row and event carry `attempt: {n, of}`. On the Flow chart they are the
+  role's after tool boxes: `label · ↻ runs · time · n refused`, and
+  `▶ label · attempt n of 3` while running.
 
 ### Runner stages (s99)
 
@@ -2558,6 +2601,9 @@ lines but no longer logged. Stage names in `runner-stage` events:
 
 ## Enforcement
 
+- Stop hook (s126): a `done` handoff ends the step only after the role's stop
+  checks pass, or after 3 refusals, or once the stop-check budget is spent.
+  See "Stop checks (s126)".
 - PreToolUse hook: Write/Edit/NotebookEdit outside the role's write globs are
   denied. The Customer Proxy's Read/Grep/Glob are limited to its sandbox
   (which holds the presentation copy), `.team/stories/`, `.team/acceptance/`

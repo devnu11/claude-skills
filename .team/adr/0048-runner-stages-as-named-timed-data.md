@@ -78,6 +78,19 @@ the stage name is not a description. Like the description, the label lives
 in Python only, and the page reads it from the snapshot. Events don't
 change.
 
+## Amended by s126 (2026-10-14)
+
+The table gains a `stop` namespace: `stop.handoff`, `stop.lint`, `stop.suite`,
+`stop.red` and `stop.presentation`, all `after`/`step`. They are a role's Stop
+hook checks (ADR-0056). They run inside the step but are drawn as the role's
+after tool boxes. A run gains an optional `stages.Attempt(n, of)`, which
+`StageLog.trying(attempt)` sets for every stage opened inside it. The
+heartbeat's open stage row and the `runner-stage` event both gain the key
+`attempt` (`{"n", "of"}`, or `null` outside a stop hook). Why: the Flow chart
+captions a running stop check `attempt n of 3`. A new event kind, `stop-check`,
+records each refused check. The page counts those events per role and stage
+for `· n refused`.
+
 ## References
 
 - Design: `agile-team/docs/design/s99.md` (RS1–RS14, stage table, test checklist)

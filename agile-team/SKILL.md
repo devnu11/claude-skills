@@ -305,6 +305,15 @@ command fails.
   gap for DevOps or the human, not a team fault. DevOps is exempt from the
   deny only so onboarding can record the coverage baseline; otherwise it
   runs only what proves its change, normally one named test (s75).
+- Each role's mechanical checks run when it tries to finish (s126): a Stop
+  hook checks that the handoff parses, fixes and lints the changed files, and
+  runs the developer's suite and coverage, the unit-tester's red check or
+  the integration-tester's presentation check. Failures the role can fix go
+  back to the same agent, at most 3 times per step (`stop-check` on the
+  timeline, `· n refused` on the Flow chart). After that the gate decides as
+  before. A handoff that is not `done` (a dispute, `blocked`) is never held
+  back. A step that runs longer than it used to may just be running its stop
+  checks, so it is not stuck.
 - The runner's own work is named stages (s99): each gate, quality check,
   checkout check, prepare, presentation and boundary stage, and runner tool
   writes one `runner-stage` event (story, step, command, exit code, awake

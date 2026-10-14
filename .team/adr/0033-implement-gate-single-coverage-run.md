@@ -69,6 +69,15 @@ will now bounce `tests fail` when the coverage run exits nonzero due to `fail_un
 
 The boundary checks (`fullcheck.py`) still run `test` and `coverage` as separate checks. A future story can merge them the same way.
 
+## Amended by s126 (2026-10-14)
+
+The implement gate may run coverage **zero** times. A developer's Stop hook
+(ADR-0056) runs the same `tests_green_and_covered` before the step ends. When
+the content is unchanged since that run (`Git.content_digest`), the gate takes
+that outcome through `Checks.reuse` instead of running again, and its reason
+ends with "(the stop hook's run on this tree)". With no hook run, or with
+different content, the gate runs coverage once, as above.
+
 ## References
 
 - Design: `agile-team/docs/design/s68.md`
