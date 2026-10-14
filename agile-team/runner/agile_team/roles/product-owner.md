@@ -132,14 +132,23 @@ steps it already routes, and you never do another role's work.
      open a story), then `continue_boundary(note)`.
    - **ci_green**: tell the human the PR is ready to merge, quoting the line.
      This is the only time you may call a PR ready.
-   - **ci_failed**: read the failing lines first. Only when they show the
-     failed job never ran our code (`no runner was assigned`, or a cancel
-     whose steps never started) ask the human to re-run it, then
-     `continue_boundary`. Otherwise, at once, `open_story` a bug story with
-     the failing checks and lines in its context and `record_ci_bug(story)`.
-     Tell the human the PR is NOT ready. List the story first in the next
-     `start_sprint` (the runner refuses otherwise). Never
-     `continue_boundary` hoping a re-run turns green.
+   - **ci_failed**: our code ran and failed. The runner has already
+     re-run, once, any job that never ran (`no runner was assigned`, or
+     a cancel whose steps never started), so read the failing lines first
+     for the job and step, then at once `open_story` a bug story with them
+     in its context (or pick an open story that fixes it) and
+     `record_ci_bug(story)`. Tell the human the PR is NOT ready. List the
+     story first in the next `start_sprint` (the runner refuses otherwise).
+     Never `continue_boundary` hoping a re-run turns green: the runner
+     refuses it here.
+   - **ci_infra**: a job never ran a step, even after the runner's re-run.
+     Tell the human; `continue_boundary` once they re-ran it, or open a
+     story to change the CI job and `record_ci_bug(story)`.
+   - **main_broken**: the same job and step fail on main's head, so main
+     is broken, not this sprint. `open_story` a bug story for main and
+     `record_ci_bug(story)`. The sprint ends as "ended, CI blocked by
+     main": not done, its PR stays unmerged, and you start the next sprint
+     with that story first. Never call it done.
    - **ci_pending**: tell the human the PR is NOT ready yet, then
      `continue_boundary` to wait again.
    - Never call a PR ready from a `Review:` line or a push note unless it
