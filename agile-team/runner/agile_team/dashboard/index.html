@@ -2272,7 +2272,7 @@ document.addEventListener("drop", (ev) => {
 // ----- board ------------------------------------------------------------------
 
 /** Whether story `s` is on the Board: in the current sprint and not cancelled (s121 BD1). */
-const onBoard = (view, s) => s.sprint === view.run.sprint && s.status !== "cancelled";
+const onBoard = (view, s) => Boolean(view.run.sprint) && s.sprint === view.run.sprint && s.status !== "cancelled";
 
 function boardColumns(view) {
   const cols = view.pipeline.map((step) => [step, step, (s) => onBoard(view, s) && s.status !== "done" && s.step === step]);
