@@ -1341,12 +1341,12 @@ const captionHtml = (t) => captionOf(t, (cls, n, label) => `<i class="fc-sw ${cl
 
 /** A 6 px bar of the Pass, Warn, Skip and Fail segments, each as wide as its share (FC18). */
 function testBar(t) {
-  const whole = t.total || testsRan(t) || 1;
-  const seg = ([cls, n]) => `<span class="${cls}" style="width:${((100 * n) / whole).toFixed(2)}%"></span>`;
+  if (!(t.total > 0)) return "";
+  const seg = ([cls, n]) => `<span class="${cls}" style="width:${((100 * n) / t.total).toFixed(2)}%"></span>`;
   return `<div class="fc-testbar">${testParts(t).map(seg).join("")}</div>`;
 }
 
-/** Percent of the suite reported: ran over total, else the last point. */
+/** Percent of the suite reported: ran over total; null without a total (FC18). */
 function completePct(t) {
   return t.total > 0 ? Math.min(100, Math.round((100 * testsRan(t)) / t.total)) : null;
 }
