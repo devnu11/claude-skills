@@ -43,6 +43,10 @@ PIPELINE_STEPS = (
     "acceptance",
 )
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
+TEST_COMMANDS = ("test", "coverage")
+PLACEHOLDER = re.compile(r"\{report(?::(?P<root>[^{}]*))?\}")
+REPORT_ONLY_IN_TESTS = "toolchain.{name}: {{report}} only works in the test and coverage commands"
+REPORT_NEEDS_OPTION = "toolchain.{name} uses {{report}}, but [toolchain.report] option is not set"
 DASHBOARD_TOKEN = "[dashboard] token must be a string"
 DASHBOARD_COLLAPSE = "[dashboard] collapse_under_s must be a number of seconds, 0 or more"
 GLOB_KEYS = ("source", "tests", "e2e", "ci")
@@ -93,6 +97,20 @@ class FileCommands:
         return {FileCommand.FIX: self.fix, FileCommand.LINT: self.lint_files}[kind]
 
 
+@dataclass(frozen=True)
+class ReportOptions:
+    """How the test commands write a JUnit report and skip pending ids (s125 P1)."""
+
+    option: str = ""  # {file}
+    deselect: str = ""  # {id}
+    ignore: str = ""  # {id}
+
+    @property
+    def on(self) -> bool:
+        """True when the toolchain writes a report."""
+        return bool(self.option)
+
+
 @dataclass
 class Toolchain:
     """Per-repo commands and the globs that role scopes resolve against."""
@@ -103,6 +121,7 @@ class Toolchain:
     globs: dict[str, list[str]] = field(default_factory=dict)
     targeted: list[Targeted] = field(default_factory=list)
     files: FileCommands = field(default_factory=FileCommands)
+    report: ReportOptions = field(default_factory=ReportOptions)
 
     def file_runs(self, kind: FileCommand, files: list[str]) -> list[str]:
         """One command per targeted root holding some of ``files``, in first-seen order."""
@@ -340,9 +359,33 @@ def _files(raw: dict[str, Any]) -> FileCommands:
     return FileCommands(**{k: v for k, v in merged.items() if k in known})
 
 
+def _report(raw: dict[str, Any]) -> ReportOptions:
+    """The report options: the named preset's, then the config's own keys over them."""
+    preset = load_presets().get(raw.get("preset", ""), {}).get("report", {})
+    merged = {**preset, **raw.get("report", {})}
+    return _section(ReportOptions, merged)
+
+
+def _report_problem(name: str, command: str, report: ReportOptions) -> str | None:
+    if not PLACEHOLDER.search(command):
+        return None
+    if name not in TEST_COMMANDS:
+        return REPORT_ONLY_IN_TESTS.format(name=name)
+    return None if report.on else REPORT_NEEDS_OPTION.format(name=name)
+
+
+def _check_report(commands: dict[str, str], report: ReportOptions) -> None:
+    for name, command in commands.items():
+        if problem := _report_problem(name, command, report):
+            raise ConfigError(problem)
+
+
 def _toolchain(raw: dict[str, Any]) -> Toolchain:
     commands = {k: raw[k] for k in TOOLCHAIN_COMMANDS if k in raw}
+    report = _report(raw)
+    _check_report(commands, report)
     return Toolchain(
+        report=report,
         preset=raw.get("preset", ""),
         commands=commands,
         pragma=raw.get("pragma", ""),

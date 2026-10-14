@@ -14,7 +14,7 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-ink: #006300;
-  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
   --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 @media (prefers-color-scheme: dark) {
@@ -26,7 +26,7 @@
     --accent: #3987e5;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --good-ink: #0ca30c;
-    --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
+    --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
     --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
   }
 }
@@ -38,7 +38,7 @@
   --accent: #3987e5;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --good-ink: #0ca30c;
-  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
   --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 * { box-sizing: border-box; }
@@ -203,6 +203,7 @@ section[hidden] { display: none; }
 .fc-sw.warn { background: var(--warn); }
 .fc-sw.skip { background: var(--skip); }
 .fc-sw.fail { background: var(--fail); }
+.fc-sw.pending { background: var(--pending); }
 .fc-sw.box { width: 12px; height: 8px; background: transparent; border: 2px solid var(--axis); border-radius: 2px; }
 .fc-sw.dot { width: 9px; height: 9px; border-radius: 50%; }
 .f-spark { display: flex; align-items: center; gap: 4px; }
@@ -1354,10 +1355,11 @@ const testParts = (t) => TEST_PARTS.map(([cls, key, label]) => [cls, t[key] ?? 0
 /** Tests reported so far: the four counts summed. */
 const testsRan = (t) => testParts(t).reduce((sum, [, n]) => sum + n, 0);
 
-/** The caption, `part(cls, n, label)` for each category joined by ` + `, then ` / N Total`. */
+/** The caption, `part(cls, n, label)` for each category joined by ` + `, then ` / N Total` and ` · N Pending` when above 0 (s125). */
 function captionOf(t, part) {
   const total = t.total != null ? ` / ${t.total} Total` : "";
-  return testParts(t).map(([cls, n, label]) => part(cls, n, label)).join(" + ") + total;
+  const pending = t.pending > 0 ? ` · ${part("pending", t.pending, "Pending")}` : "";
+  return testParts(t).map(([cls, n, label]) => part(cls, n, label)).join(" + ") + total + pending;
 }
 
 /** `273 Pass + 32 Warn + 4 Skip + 9 Fail / 506 Total`, zero categories left out (FC18). */

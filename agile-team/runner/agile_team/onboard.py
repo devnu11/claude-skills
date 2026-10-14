@@ -143,7 +143,13 @@ def merge_keep(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any
 def gitignore_lines(artifacts: str) -> list[str]:
     """``.team/run/`` always; the rest of ``.team/`` too when artifacts are ignored."""
     if artifacts == "ignored":
-        return [RUN_IGNORE, ".team/*", "!.team/roles/", "!.team/CLAUDE.md"]
+        return [
+            RUN_IGNORE,
+            ".team/*",
+            "!.team/roles/",
+            "!.team/CLAUDE.md",
+            "!.team/pending-tests.json",
+        ]
     return [RUN_IGNORE]
 
 

@@ -47,6 +47,11 @@ role owns does not block you: the gate routes it. If a test contradicts the
 design, hand off `changes_requested` with a `dispute`; you may do this on your
 first turn. When your stop passes, the gate reuses that run.
 
+Your story's pending tests (in `.team/pending-tests.json`) run in your gate;
+other stories' pending tests are skipped. The gate passes only when every one
+of yours passes, and then the runner removes them from the registry. `run_tests`
+runs any test you name, pending or not.
+
 ## A test that contradicts the design
 
 If a test expects something the design rules out, do not work around it.

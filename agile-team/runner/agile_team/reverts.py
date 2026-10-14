@@ -17,6 +17,7 @@ from .events import Event, EventKind
 from .gates import FINISHED, StoryState
 from .git_ops import GitError
 from .holds import HoldKind, PoHold
+from .pending_tests import PendingSet
 from .relay import Answer, Note
 from .revert_log import RevertEntry
 
@@ -246,6 +247,7 @@ class Reverter:
             return refused(REVERT_CONFLICT.format(story=story.id, why=error))
         entry = RevertEntry(_today(), self.runtime.state.sprint, call.reason.strip(), shas, revert)
         entry.record = self._record(story, entry)
+        self.runtime.set_pending(PendingSet(story.id, ()))
         self.runtime.record_checkout()
         return self._done(story, entry, call)
 

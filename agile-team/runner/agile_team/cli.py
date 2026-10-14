@@ -26,6 +26,7 @@ from . import (
     keys,
     onboard,
     opinions,
+    pending_tests,
     presentation,
     recovery,
     revert_log,
@@ -34,6 +35,7 @@ from . import (
     story_spec,
     suite_runs,
     system,
+    test_reports,
     threads,
     watch,
 )
@@ -307,6 +309,16 @@ ROLE_ACTIONS: dict[str, Callable[[argparse.Namespace], int]] = {
 # ----- start ---------------------------------------------------------------
 
 
+def reporting_of(config: config_mod.Config) -> test_reports.Reporting:
+    """How the repo's test runs write reports and read the pending-tests registry."""
+    return test_reports.Reporting(
+        config.toolchain.report,
+        config.run_dir / test_reports.FOLDER,
+        functools.partial(pending_tests.read, config.repo),
+        test_reports.changed_for(Git(config.repo)),
+    )
+
+
 def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
     """The configured steps and round cap, with command gates run in the repo."""
     baseline = gates.load_baseline(config.repo).get("coverage")
@@ -329,6 +341,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         story_spec=spec,
         environments=functools.partial(story_spec.environment_names, config),
         design_file=functools.partial(revert_log.design_file, config.team.docs_dir),
+        reporting=reporting_of(config),
     )
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)
@@ -592,6 +605,15 @@ def cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pending_tests(args: argparse.Namespace) -> int:
+    """Print the skip options of every pending test id under ``--root`` (s125 P19)."""
+    config = _load_config(repo_of(args))
+    registry = pending_tests.read(config.repo)
+    ids = tuple(i for story_ids in registry.entries.values() for i in story_ids)
+    print(test_reports.skip_line(config.toolchain.report, test_reports.Under(args.root, ids)))
+    return 0
+
+
 def cmd_stop(args: argparse.Namespace) -> int:
     """Ask the runner to stop after its step; ``--now`` also signals it."""
     pid = _request_stop(repo_of(args)) / state_mod.PID_FILE
@@ -692,6 +714,9 @@ WATCH_ARGS: tuple[Arg, ...] = (
     (("--timeout",), {"dest": "timeout_s", "type": float, "default": None,
                       "help": "print a heartbeat line after this many seconds"}),
 )  # fmt: skip
+PENDING_ARGS: tuple[Arg, ...] = (
+    (("--root",), {"default": "", "help": "repo-relative directory pytest runs in"}),
+)  # fmt: skip
 COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
@@ -723,6 +748,8 @@ COMMANDS = (
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
     Command("accept-checkout", "keep the current branch and HEAD after a checkout halt",
             cmd_accept_checkout),
+    Command("pending-tests", "print the skip options for the pending test ids", cmd_pending_tests,
+            PENDING_ARGS),
     Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)",
             cmd_dashboard, DASHBOARD_ARGS),
 )  # fmt: skip

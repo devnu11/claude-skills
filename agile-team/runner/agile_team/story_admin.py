@@ -15,6 +15,7 @@ from .dispatch import Runtime, refused
 from .events import Event, EventKind
 from .gates import FINISHED, StoryState, StoryStatus
 from .holds import HoldKind, PoHold
+from .pending_tests import PendingSet
 from .relay import Answer, Note
 from .state import RunState
 
@@ -327,6 +328,7 @@ class Clerk:
         question = rt.relay.post(note).id if note else None
         reason = case.reason.strip()
         row.effect(story, Change(reason, question))
+        self._release_pending(story)
         rt.save()
         data = {"tool": str(case.act), "reason": reason, "question": question}
         self._emit(PO_ROLE, story, data | {"before": before, "after": facts(story)})
@@ -343,6 +345,7 @@ class Clerk:
         assert asked is not None
         before, decided = facts(story), decision(settled.answer.text)
         OUTCOMES[decided](self.runtime.state, settled)
+        self._release_pending(story)
         data = {
             "tool": "answer",
             "reason": asked.reason,
@@ -351,6 +354,11 @@ class Clerk:
             "decision": str(decided),
         }
         self._emit(None, story, data | {"before": before, "after": facts(story)})
+
+    def _release_pending(self, story: StoryState) -> None:
+        """A cancelled story's pending tests leave the registry (P14)."""
+        if story.status is StoryStatus.CANCELLED:
+            self.runtime.set_pending(PendingSet(story.id, ()))
 
     def _emit(self, role: str | None, story: StoryState, data: dict[str, Any]) -> None:
         self.runtime.events.emit(Event(EventKind.STORY_ADMIN, role, story.id, data))

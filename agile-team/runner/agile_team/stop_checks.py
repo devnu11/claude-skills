@@ -24,7 +24,7 @@ from .commands import TIMED_OUT
 from .config import FileCommand
 from .events import EventKind
 from .gates import REUSED, Outcome, Pipeline, Verdict
-from .owners import Item, Owners, Source, Split
+from .owners import Item, Owners, Split
 from .results import result_tail
 from .roles import Handoff, HandoffError, parse_handoff
 
@@ -117,7 +117,7 @@ def refusal_text(failures: list[Failure], attempt: stages.Attempt) -> str:
 
 def own_items(outcome: Outcome, owners: Owners, listing: str) -> Split:
     """The suite's test findings split between this step's role and others (SC11)."""
-    found = owners_mod.findings(outcome.output, Source.TEST)
+    found = gates.test_findings(outcome)
     return owners_mod.split(owners_mod.placed(found, listing), owners)
 
 
@@ -185,7 +185,7 @@ class StopChecks:
 
     def _hooked(self, stage: stages.Name) -> Pipeline:
         """A copy of the pipeline whose gates open ``stage`` in place of their own."""
-        p = self.runtime.pipeline
+        p = self.runtime.served(self.plan)
         return replace(p, checks=replace(p.checks, stages=lambda _name: self._open(stage)))
 
     def _open(self, stage: stages.Name) -> Any:

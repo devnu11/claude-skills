@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import git_check, system
+from . import git_check, pending_tests, system
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
@@ -40,6 +40,8 @@ READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
 PATH_KEYS = {**WRITE_TOOLS, **READ_TOOLS}
 ALWAYS_IGNORED = [".team/run/**"]
 PROTECTED = [".git", ".git/**"]
+RUNNER_FILES = (pending_tests.REGISTRY,)
+RUNNER_ONLY = "{role} may not write {rel}; only the runner writes it"
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"
 # A backslash-newline continues the line only when preceded by an odd run of backslashes.
@@ -137,6 +139,8 @@ def _check_write(scope: Scope, raw: str) -> str | None:
         return f"{scope.role} may not write outside the repo ({raw})"
     if matches(rel, PROTECTED):
         return f"{scope.role} may not write inside .git"
+    if matches(rel, RUNNER_FILES):
+        return RUNNER_ONLY.format(role=scope.role, rel=rel)
     if not matches(rel, scope.write):
         return f"{scope.role} may not write {rel}; allowed: {', '.join(scope.write) or 'nothing'}"
     return None
@@ -342,13 +346,17 @@ class Audit:
     out_of_scope: list[str]
 
 
+def _in_scope(path: str, scope: Scope) -> bool:
+    return matches(path, scope.write) and not matches(path, RUNNER_FILES)
+
+
 def audit_step(git: Git, scope: Scope) -> Audit:
     """Split the tree's changes into in-scope and out-of-scope paths."""
     changed = [p for p in git.changed_paths() if not matches(p, ALWAYS_IGNORED)]
     return Audit(
         role=scope.role,
-        in_scope=[p for p in changed if matches(p, scope.write)],
-        out_of_scope=[p for p in changed if not matches(p, scope.write)],
+        in_scope=[p for p in changed if _in_scope(p, scope)],
+        out_of_scope=[p for p in changed if not _in_scope(p, scope)],
     )
 
 

@@ -6,10 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from . import gates
+from . import gates, junit, pending_tests, test_reports
 from .boundary import CHECK_FAILED
 from .commands import TIMED_OUT, CommandRunner
-from .config import Config
+from .config import TEST_COMMANDS, Config
+from .pending_tests import Registry
 
 TIMED_OUT_WHY = "timed out"
 
@@ -36,6 +37,7 @@ class FullCheck:
     name: str
     command: str
     judge: Judge = Judge.EXIT
+    built: test_reports.Built | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,7 @@ class CheckResult:
     code: int
     why: str
     tail: str
+    pending: str = ""
 
     @property
     def passed(self) -> bool:
@@ -76,7 +79,10 @@ class CheckReport:
 
     def summary(self) -> list[dict[str, object]]:
         """``name``, ``passed`` and ``why`` for each check."""
-        return [{"name": r.check.name, "passed": r.passed, "why": r.why} for r in self.results]
+        return [
+            {"name": r.check.name, "passed": r.passed, "why": r.why, "pending": r.pending}
+            for r in self.results
+        ]
 
 
 def _failed_text(result: CheckResult) -> str:
@@ -105,18 +111,44 @@ JUDGES: dict[Judge, Callable[[int, str, Judging], str]] = {
 }
 
 
-def full_checks(config: Config) -> list[FullCheck]:
+def _toolchain_check(config: Config, ask: test_reports.Ask) -> Callable[[str, Judge], FullCheck]:
+    commands = config.toolchain.commands
+
+    def make(name: str, judge: Judge) -> FullCheck:
+        reported = ask.reporting.options.on and name in TEST_COMMANDS
+        built = test_reports.build(commands[name], ask) if reported else None
+        return FullCheck(name, commands[name], judge, built)
+
+    return make
+
+
+def full_checks(config: Config, registry: Registry) -> list[FullCheck]:
     """Toolchain checks that are set, then each environment's e2e command."""
     commands = config.toolchain.commands
-    chosen = [FullCheck(n, commands[n], j) for n, j in TOOLCHAIN_CHECKS if commands.get(n)]
+    reporting = test_reports.Reporting(
+        config.toolchain.report, config.run_dir / test_reports.FOLDER
+    )
+    make = _toolchain_check(config, test_reports.Ask(reporting, registry.others("")))
+    chosen = [make(n, j) for n, j in TOOLCHAIN_CHECKS if commands.get(n)]
     e2e = [FullCheck(f"e2e:{d.name}", d.e2e) for d in config.environments if d.e2e]
     return [*chosen, *e2e]
 
 
 def _run_one(check: FullCheck, judging: Judging) -> CheckResult:
-    code, output = judging.run(check.command)
+    if check.built is None:
+        code, output = judging.run(check.command)
+        return _result(check, (code, output), judging)
+    run = test_reports.run(check.built, judging.run)
+    counts = pending_tests.counts_text(run.skipped, run.report or junit.Report())
+    return _result(check, (run.code, run.out), judging, counts)
+
+
+def _result(
+    check: FullCheck, ran: tuple[int, str], judging: Judging, pending: str = ""
+) -> CheckResult:
+    code, output = ran
     why = TIMED_OUT_WHY if code == TIMED_OUT else JUDGES[check.judge](code, output, judging)
-    return CheckResult(check, code, why, gates.tail(output))
+    return CheckResult(check, code, why, gates.tail(output), pending)
 
 
 def run_checks(checks: list[FullCheck], judging: Judging) -> CheckReport:

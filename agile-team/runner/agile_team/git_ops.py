@@ -69,10 +69,19 @@ class Git:
     def head(self) -> str:
         return self.run("rev-parse", "HEAD").strip()
 
+    def untracked(self) -> list[str]:
+        """Untracked, not ignored files."""
+        out = self.run("ls-files", "-z", "--others", "--exclude-standard")
+        return [p for p in out.split("\0") if p]
+
+    def diff_lines(self, base: str) -> str:
+        """The working tree's diff against ``base`` with no context lines."""
+        return self.run("diff", "-U0", "--no-color", "--no-ext-diff", base)
+
     def content_digest(self, base: str) -> str:
         """Hash of the working tree's content relative to ``base``, committed or not."""
         diff = self.run("diff", "--name-only", "-z", base).split("\0")
-        new = self.run("ls-files", "-z", "--others", "--exclude-standard").split("\0")
+        new = self.untracked()
         paths = sorted({p for p in (*diff, *new) if p})
         blobs = self._blobs([p for p in paths if system.is_file(self.repo / p)])
         lines = [f"{p} {blobs.get(p, '-')}" for p in paths]

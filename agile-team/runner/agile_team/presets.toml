@@ -4,6 +4,7 @@
 # environment_kind  likely acceptance environment kind; [<name>.web] markers in package.json upgrade it to "web"
 # commands  test / coverage / lint / static; coverage must print a total percentage
 # files     fix / lint_files templates ({root}, {files}) and lintable globs, for the stop hook's lint check (s126)
+# report    JUnit option ({file}) and skip templates ({id}) for pending tests (s125)
 # globs     source / tests / e2e / ci, repo-relative, gitignore-style
 
 [python]
@@ -23,6 +24,11 @@ static = "uv run ruff format --check ."
 fix = "uv run --directory {root} ruff check --fix --exit-zero --quiet {files} && uv run --directory {root} ruff format --quiet {files}"
 lint_files = "uv run --directory {root} ruff check --quiet {files}"
 lintable = ["*.py"]
+
+[python.report]
+option = "--junitxml={file} -o junit_family=xunit1"
+deselect = "--deselect={id}"
+ignore = "--ignore={id}"
 
 [python.globs]
 source = ["src/**", "*.py", "!tests/**"]

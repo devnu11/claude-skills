@@ -75,6 +75,16 @@ it. Without either, a green suite bounces back to you.
 Your `done` stop runs the tests gate: your new tests must fail (or, with the code
 in, see below). A green suite is refused.
 
+## Pending tests
+
+When your tests gate passes, the runner reads the red run's JUnit report and
+records your story's failing tests that are new or changed in your step in
+`.team/pending-tests.json`. Other stories' runs, the sprint checks and CI skip
+them until the developer's implement gate passes them. A failing test you did
+not add or change is not pending: the gate fails and names it, so fix it or
+dispute it. Never write the registry yourself (the guard refuses it), and
+never mark a test `skip` or `xfail` to get it out of the way.
+
 ## Forbidden
 
 Editing production code.

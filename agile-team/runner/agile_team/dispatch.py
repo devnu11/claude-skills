@@ -38,6 +38,7 @@ from . import (
     keys,
     live,
     loops,
+    pending_tests,
     presentation,
     recovery,
     revert_log,
@@ -64,6 +65,7 @@ from .gates import (
     UNGATED_ROLES,
     Outcome,
     Pipeline,
+    Serving,
     StoryState,
     StoryStatus,
     Verdict,
@@ -84,6 +86,7 @@ from .insights import (
 from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
 from .owners import Fix, FixRecord, Owners, Writer
+from .pending_tests import PendingSet
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
@@ -113,6 +116,8 @@ REWORK_BRIEF = (
 )
 GATE_CHORE = "gate: {step} on {story}"
 QUALITY_CHORE = "quality checks for {story}"
+PENDING_SUBJECT = "chore({story}): pending tests"
+PENDING_WHERE = {"implement": "implement gate"}
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
@@ -185,6 +190,7 @@ class Plan:
     commit: str | None = None
     said: Said = field(default_factory=Said)
     stop_hook: stop_checks.StopChecks | None = None
+    base: str = ""
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -464,6 +470,8 @@ class Runtime:
         role = self.resolve(request.role)
         story = self.state.stories.get(request.story_id or "")
         plan = Plan(role, self.scope_for(role), story, request.brief, kind=request.kind)
+        if story:
+            plan.base = self.git.head()
         try:
             self._set_up(plan, request.kind)
             return self._told_revert(self.finish(plan))
@@ -523,7 +531,8 @@ class Runtime:
             return
         with self.pulse.doing(QUALITY_CHORE.format(story=plan.story.id)):
             for name in self._quality_due(plan.story):
-                self._keep(plan.story, self.pipeline.checks.ran(name), "before quality")
+                checks = self.pipeline.serving(Serving(plan.story.id)).checks
+                self._keep(plan.story, checks.ran(name), "before quality")
 
     def _quality_due(self, story: StoryState) -> list[str]:
         """The configured ROUTED_COMMANDS, plus coverage when its kept run is not at HEAD (Q2)."""
@@ -1087,7 +1096,33 @@ class Runtime:
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Evaluate the story's current step gate and advance the story."""
         self.verify_checkout()
-        return self._advance_and_log(plan, self._evaluate(plan, handoff))
+        outcome = self._evaluate(plan, handoff)
+        self._apply_pending(plan, outcome)
+        return self._advance_and_log(plan, outcome)
+
+    def _apply_pending(self, plan: Plan, outcome: Outcome) -> None:
+        """A passing gate's pending change is committed before the story advances (P13)."""
+        if outcome.verdict is Verdict.PASS and outcome.pending is not None:
+            step = plan.story.step
+            self.set_pending(outcome.pending, PENDING_WHERE.get(step, f"{step} step"))
+
+    def set_pending(self, change: PendingSet, where: str = "") -> str | None:
+        """Apply ``change`` to the registry in its own commit; its sha, or None when unchanged."""
+        repo = self.config.repo
+        registry = pending_tests.read(repo)
+        changed = registry.with_ids(change)
+        if changed.text() == registry.text():
+            return None
+        pending_tests.write(repo, changed)
+        subject = PENDING_SUBJECT.format(story=change.story) + (f" ({where})" if where else "")
+        sha = self.git.commit([pending_tests.REGISTRY], subject)
+        self.record_checkout()
+        return sha
+
+    def served(self, plan: Plan) -> Pipeline:
+        """The pipeline whose test runs are made for ``plan``'s story (P16)."""
+        story = plan.story
+        return self.pipeline.serving(Serving(story.id, plan.base) if story else Serving())
 
     def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
         chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
@@ -1096,7 +1131,8 @@ class Runtime:
 
     def _gating(self, plan: Plan) -> Pipeline:
         """The pipeline gating ``plan``; reuses the Stop hook's suite run if any."""
-        return plan.stop_hook.reusing(self.pipeline) if plan.stop_hook else self.pipeline
+        served = self.served(plan)
+        return plan.stop_hook.reusing(served) if plan.stop_hook else served
 
     def owners(self, story: StoryState) -> Owners:
         """Who may write what, in pipeline order, for this story (R2)."""

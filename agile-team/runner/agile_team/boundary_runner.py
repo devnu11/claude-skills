@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops, revert_log, rewrite, stages
+from . import halt, handover, loops, pending_tests, revert_log, rewrite, stages
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -339,7 +339,7 @@ class BoundaryRunner:
     def _run_checks(self, path: Path) -> CheckReport:
         required = self.runtime.pipeline.checks.required_coverage()
         judging = Judging(self.runtime.shell(path), required)
-        return run_checks(full_checks(self.runtime.config), judging)
+        return run_checks(full_checks(self.runtime.config, pending_tests.read(path)), judging)
 
     def _check(self, b: Boundary) -> None:
         head = self.runtime.git.head()
