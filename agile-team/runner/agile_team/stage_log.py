@@ -74,16 +74,16 @@ TALLY_REFRESH_S = 2.0
 
 @dataclass(eq=False)
 class Tallier:
-    """A stage listener: folds test output into the open row and refreshes the board."""
+    """A stage listener: folds the tally plugin's records into the open row."""
 
     row: dict[str, Any]
     board: StageBoard
     tally: test_tally.Tally = test_tally.EMPTY
     shown_at: float = -inf
 
-    def __call__(self, line: str) -> None:
-        """Fold ``line``; show the counts, at most every TALLY_REFRESH_S."""
-        self.tally = test_tally.read(self.tally, line)
+    def __call__(self, text: str) -> None:
+        """Fold the record in ``text``; show the counts, at most every TALLY_REFRESH_S."""
+        self.tally = test_tally.read(self.tally, text)
         if not self.tally.counted():
             return
         self.row["tests"] = self.tally.as_dict()

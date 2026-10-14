@@ -15,6 +15,7 @@ import socket
 import stat as stat_bits
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -64,6 +65,7 @@ __all__ = [
     "resolve",
     "run",
     "run_shell",
+    "scratch_file",
     "sleep",
     "spawn_logged",
     "spawn_piped",
@@ -164,6 +166,13 @@ def hard_link(link: Path, target: Path) -> None:
 def make_dirs(path: Path) -> None:
     """Create a directory and its parents."""
     path.mkdir(parents=True, exist_ok=True)
+
+
+def scratch_file(prefix: str) -> Path:
+    """A new empty file in the system temp directory; the caller removes it."""
+    handle, name = tempfile.mkstemp(prefix=prefix, suffix=".json")
+    os.close(handle)
+    return Path(name)
 
 
 def remove(path: Path) -> None:

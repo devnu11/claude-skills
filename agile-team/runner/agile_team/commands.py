@@ -13,7 +13,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import stages, system
+from . import stages, system, tally_watch
 from .process_groups import signal_child_group
 
 CommandRunner = Callable[[str], tuple[int, str]]
@@ -68,10 +68,9 @@ def kill_group(proc: system.Process) -> None:
 
 @dataclass(eq=False)
 class Pump:
-    """Reads a command's output line by line on a thread, telling the open stage (s118 R8)."""
+    """Reads a command's output line by line on a thread (s118 R8)."""
 
     lines: Iterable[str]
-    run: stages.Run | None
     seen: list[str] = field(default_factory=list)
     thread: threading.Thread = field(init=False)
 
@@ -90,16 +89,10 @@ class Pump:
         return "".join(self.seen)
 
     def _read(self) -> None:
-        # A closed pipe or a bad listener must never break a gate.
+        # A pipe closed under the thread must never break a gate.
         with suppress(ValueError, OSError):
             for line in self.lines:
                 self.seen.append(line)
-                self._tell(line)
-
-    def _tell(self, line: str) -> None:
-        with suppress(Exception):
-            if self.run:
-                self.run.hear(line)
 
 
 @dataclass(frozen=True)
@@ -111,13 +104,24 @@ class CommandShell:
 
     def run(self, command: str) -> tuple[int, str]:
         """Run ``command``; on timeout kill its group and return ``TIMED_OUT``."""
-        code, out = self._run(command)
+        code, out = self._watched(command)
         stages.note(command, code)
         return code, out
 
-    def _run(self, command: str) -> tuple[int, str]:
-        with system.spawn_piped(system.ShellCommand(command, self.repo)) as proc:
-            pump = Pump(proc.stdout, stages.current())  # captured here: contextvars skip threads
+    def _watched(self, command: str) -> tuple[int, str]:
+        """Run with the tally plugin when a stage is open."""
+        run = stages.current()  # on the caller's thread: contextvars skip threads
+        if run is None:
+            return self._run(system.ShellCommand(command, self.repo))
+        with tally_watch.watching(run) as env:
+            code, out = self._run(system.ShellCommand(command, self.repo, env))
+        if code != 0 and tally_watch.plugin_failed(out):
+            return self._run(system.ShellCommand(command, self.repo))
+        return code, out
+
+    def _run(self, shell: system.ShellCommand) -> tuple[int, str]:
+        with system.spawn_piped(shell) as proc:
+            pump = Pump(proc.stdout)
             pump.start()
             try:
                 ended = self._finish(proc, pump)
@@ -128,7 +132,7 @@ class CommandShell:
                 return proc.returncode, pump.text()
             kill_group(proc)
             pump.join(DRAIN_S)
-            return TIMED_OUT, self.report_timeout(command, pump.text())
+            return TIMED_OUT, self.report_timeout(shell.text, pump.text())
 
     def _finish(self, proc: system.Process, pump: Pump) -> bool:
         """Wait for the exit and the end of output within one ``limit_s``."""

@@ -1,99 +1,100 @@
-"""Live pass/warn/fail counts read from pytest's progress lines (s118 R5)."""
+"""Live test counts folded from the pytest tally plugin's records (s118 R5)."""
 
 from __future__ import annotations
 
-import re
+import json
 from dataclasses import dataclass, replace
 from typing import Any
 
-OUTCOMES = {
-    ".": "passed",
-    "F": "failed",
-    "E": "failed",
-    "s": "warned",
-    "x": "warned",
-    "X": "warned",
-}
-TOTALS = (
-    re.compile(r"\bcollected (\d+) items?\b"),
-    re.compile(r"\b\d+ workers? \[(\d+) items?\]"),
-)
-PROGRESS = re.compile(r"^(?:\S+ )?([.FEsxX]+)\s*\[\s*(\d{1,3})%\]\s*$")
-MAX_POINTS = 120
+COUNTS = ("passed", "warned", "skipped", "failed")
 
 
 @dataclass(frozen=True)
 class Tally:
-    """The counts so far, the percentage points seen and where the first failure came."""
+    """One pytest session's counts, the percentage points seen and where the first failure came."""
 
+    session: str = ""
     passed: int = 0
     warned: int = 0
+    skipped: int = 0
     failed: int = 0
     total: int | None = None
-    pct: int = 0
     points: tuple[int, ...] = ()
     fail_at: int | None = None
 
     def ran(self) -> int:
-        """Tests reported so far."""
-        return self.passed + self.warned + self.failed
+        """Tests reported so far (each is in exactly one count)."""
+        return self.passed + self.warned + self.skipped + self.failed
 
     def counted(self) -> bool:
         """True once any test has reported."""
         return self.ran() > 0
 
+    def pct(self) -> int | None:
+        """Reports received over the collected total, in whole percent; None without a total."""
+        if self.total is None or self.total <= 0:
+            return None
+        return min(100, round(100 * self.ran() / self.total))
+
     def as_dict(self) -> dict[str, Any]:
-        """The heartbeat form; the total is estimated from the percentage when unknown."""
+        """The heartbeat form."""
         return {
             "passed": self.passed,
             "warned": self.warned,
+            "skipped": self.skipped,
             "failed": self.failed,
-            "total": self._total(),
+            "total": self.total,
             "points": list(self.points),
             "fail_at": self.fail_at,
         }
-
-    def _total(self) -> int | None:
-        if self.total is not None:
-            return self.total
-        return round(self.ran() * 100 / self.pct) if self.pct > 0 else None
 
 
 EMPTY = Tally()
 
 
-def _total_of(line: str) -> int | None:
-    found = (m for m in (p.search(line) for p in TOTALS) if m)
-    match = next(found, None)
-    return int(match.group(1)) if match else None
+def _is_count(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _points(tally: Tally, pct: int) -> tuple[int, ...]:
-    held = tally.points if len(tally.points) < MAX_POINTS else tally.points[:-1]
-    return (*held, pct)
+def _is_total(value: object) -> bool:
+    return value is None or (_is_count(value) and value > 0)
 
 
-def _progress(tally: Tally, chars: str, pct: int) -> Tally:
-    counts = {"passed": 0, "warned": 0, "failed": 0}
-    for char in chars:
-        counts[OUTCOMES[char]] += 1
-    first_fail = tally.fail_at is None and counts["failed"] > 0
-    points = _points(tally, pct)
-    return replace(
-        tally,
-        passed=tally.passed + counts["passed"],
-        warned=tally.warned + counts["warned"],
-        failed=tally.failed + counts["failed"],
-        pct=pct,
-        points=points,
-        fail_at=len(points) - 1 if first_fail else tally.fail_at,
-    )
+def _is_record(data: object) -> bool:
+    if not isinstance(data, dict):
+        return False
+    session = data.get("session")
+    counts = all(_is_count(data.get(key)) for key in COUNTS)
+    return isinstance(session, str) and bool(session) and counts and _is_total(data.get("total"))
 
 
-def read(tally: Tally, line: str) -> Tally:
-    """Fold one output line into ``tally``; any other line changes nothing."""
-    total = _total_of(line)
-    if total is not None:
-        return replace(tally, total=total)
-    match = PROGRESS.match(line.strip())
-    return _progress(tally, match.group(1), int(match.group(2))) if match else tally
+def record_of(text: str) -> dict[str, Any] | None:
+    """The JSON object in ``text`` when it is a plugin record, else None."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data if _is_record(data) else None
+
+
+def _with_point(tally: Tally) -> Tally:
+    pct = tally.pct()
+    if pct is None or (tally.points and tally.points[-1] == pct):
+        return tally
+    return replace(tally, points=(*tally.points, pct))
+
+
+def _with_fail_at(tally: Tally) -> Tally:
+    if tally.fail_at is not None or tally.failed == 0 or not tally.points:
+        return tally
+    return replace(tally, fail_at=len(tally.points) - 1)
+
+
+def read(tally: Tally, text: str) -> Tally:
+    """Fold one record into ``tally``; anything else changes nothing."""
+    record = record_of(text)
+    if record is None:
+        return tally
+    base = tally if record["session"] == tally.session else Tally(session=record["session"])
+    counts = {key: record[key] for key in (*COUNTS, "total")}
+    return _with_fail_at(_with_point(replace(base, **counts)))

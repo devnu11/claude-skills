@@ -14,7 +14,7 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-ink: #006300;
-  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
   --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 @media (prefers-color-scheme: dark) {
@@ -26,7 +26,7 @@
     --accent: #3987e5;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --good-ink: #0ca30c;
-    --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+    --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
     --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
   }
 }
@@ -38,7 +38,7 @@
   --accent: #3987e5;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --good-ink: #0ca30c;
-  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --fail: var(--critical);
   --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 * { box-sizing: border-box; }
@@ -161,13 +161,13 @@ section[hidden] { display: none; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .seg + .seg { margin-left: 8px; }
 #flow { position: relative; overflow-x: auto; }
-.fc { --group-w: 216px; --gap-min: 24px; --role-gap: 20px; }
+.fc { --group-max: 236px; --group-min: 216px; --gap-min: 24px; --role-gap: 20px; }
 .fc-chart { min-width: min-content; padding-bottom: 4px; }
 .fc-box.dim { background: var(--surface-2); color: var(--ink-2); }
 .fc-box.dim [class*="fc-t-"] { color: var(--ink-2); }
 .fc-top { display: flex; align-items: center; gap: 8px; }
 .fc-pill { border: 1px solid var(--axis); background: var(--surface); border-radius: 999px; padding: 4px 14px; }
-.fc-group { flex: 0 0 var(--group-w); border: 2px solid var(--axis); border-radius: 10px; background: var(--surface-2); padding: 6px 8px 10px; }
+.fc-group { flex: 0 1 var(--group-max); min-width: var(--group-min); border: 2px solid var(--axis); border-radius: 10px; background: var(--surface-2); padding: 6px 8px 10px; }
 .fc-group.run1 { border-color: var(--run1); }
 .fc-group.run2 { border-color: var(--run2); }
 .fc-group.run3 { border-color: var(--run3); }
@@ -180,7 +180,7 @@ section[hidden] { display: none; }
 .fc-below { align-self: start; }
 .fc-drops { height: 46px; }
 .fc-cols { display: flex; align-items: flex-start; }
-.fc-gap { flex: 1 1 var(--gap-min); min-width: var(--gap-min); }
+.fc-gap { flex: 1 0 var(--gap-min); min-width: var(--gap-min); }
 .fc-arrow { display: block; width: 100%; height: 2px; margin-top: var(--arrow-y, 60px); background: var(--ink-2); position: relative; }
 .fc-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 8px solid var(--ink-2); border-right: 0; }
 .fc-unit { display: flex; flex-direction: column; gap: 0; }
@@ -199,6 +199,7 @@ section[hidden] { display: none; }
 .fc-sw.t { background: var(--flow-tools); }
 .fc-sw.pass { background: var(--pass); }
 .fc-sw.warn { background: var(--warn); }
+.fc-sw.skip { background: var(--skip); }
 .fc-sw.fail { background: var(--fail); }
 .fc-sw.box { width: 12px; height: 8px; background: transparent; border: 2px solid var(--axis); border-radius: 2px; }
 .fc-sw.dot { width: 9px; height: 9px; border-radius: 50%; }
@@ -215,6 +216,7 @@ section[hidden] { display: none; }
 .fc-testbar { display: flex; height: 6px; margin: 3px 0; background: var(--grid); }
 .fc-testbar .pass { background: var(--pass); }
 .fc-testbar .warn { background: var(--warn); }
+.fc-testbar .skip { background: var(--skip); }
 .fc-testbar .fail { background: var(--fail); }
 .fc-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; }
 .fc-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: visible; }
@@ -1313,32 +1315,37 @@ function roleTools(view) {
   return out;
 }
 
-/** The non-zero test categories as `[class, count, label]`. */
-const testParts = (t) => [["pass", t.passed, "Pass"], ["warn", t.warned, "Warn"], ["fail", t.failed, "Fail"]].filter(([, n]) => n > 0);
+/** `[css class, tests key, label]` for each test category, in display order (FC18). */
+const TEST_PARTS = [["pass", "passed", "Pass"], ["warn", "warned", "Warn"], ["skip", "skipped", "Skip"], ["fail", "failed", "Fail"]];
 
-/** `273 Pass + 32 Warn + 9 Fail / 506 Total`, zero categories left out (FC18). */
-function testsCaption(t) {
+/** The non-zero test categories as `[class, count, label]`; a row without `skipped` counts 0. */
+const testParts = (t) => TEST_PARTS.map(([cls, key, label]) => [cls, t[key] ?? 0, label]).filter(([, n]) => n > 0);
+
+/** Tests reported so far: the four counts summed. */
+const testsRan = (t) => testParts(t).reduce((sum, [, n]) => sum + n, 0);
+
+/** The caption, `part(cls, n, label)` for each category joined by ` + `, then ` / N Total`. */
+function captionOf(t, part) {
   const total = t.total != null ? ` / ${t.total} Total` : "";
-  return testParts(t).map(([, n, label]) => `${n} ${label}`).join(" + ") + total;
+  return testParts(t).map(([cls, n, label]) => part(cls, n, label)).join(" + ") + total;
 }
+
+/** `273 Pass + 32 Warn + 4 Skip + 9 Fail / 506 Total`, zero categories left out (FC18). */
+const testsCaption = (t) => captionOf(t, (cls, n, label) => `${n} ${label}`);
 
 /** The caption with a coloured swatch before each count. */
-function captionHtml(t) {
-  const total = t.total != null ? ` / ${t.total} Total` : "";
-  return testParts(t).map(([cls, n, label]) => `<i class="fc-sw ${cls}"></i>${n} ${label}`).join(" + ") + total;
-}
+const captionHtml = (t) => captionOf(t, (cls, n, label) => `<i class="fc-sw ${cls}"></i>${n} ${label}`);
 
-/** A 6 px bar of the Pass, Warn and Fail segments, each as wide as its share (FC18). */
+/** A 6 px bar of the Pass, Warn, Skip and Fail segments, each as wide as its share (FC18). */
 function testBar(t) {
-  const whole = t.total || t.passed + t.warned + t.failed || 1;
+  const whole = t.total || testsRan(t) || 1;
   const seg = ([cls, n]) => `<span class="${cls}" style="width:${((100 * n) / whole).toFixed(2)}%"></span>`;
   return `<div class="fc-testbar">${testParts(t).map(seg).join("")}</div>`;
 }
 
 /** Percent of the suite reported: ran over total, else the last point. */
 function completePct(t) {
-  const ran = t.passed + t.warned + t.failed;
-  return t.total ? Math.min(100, Math.round((100 * ran) / t.total)) : t.points.at(-1) ?? 0;
+  return t.total ? Math.min(100, Math.round((100 * testsRan(t)) / t.total)) : t.points.at(-1) ?? 0;
 }
 
 /** An 80×18 progress sparkline, green up to `failAt` and red from there (FC19). */
