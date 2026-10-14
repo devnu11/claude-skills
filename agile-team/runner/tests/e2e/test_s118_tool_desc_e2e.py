@@ -1,4 +1,4 @@
-"""s118 AC13 end to end: the tool box's description line, the command tooltip and `% complete` (FC30, FC18)."""
+"""s118/s127 end to end: the tool box's tooltip (name, description, command) and `% complete` (FC30, FC18)."""
 # ruff: noqa: E501
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ def test_a_built_in_tool_shows_its_description_line() -> None:
     idle(); view.events.push(closed("g1", 1791470000, "{GATE}", null));
     out.box = boxes().find((b) => b.includes("{GATE}"));
     """)
-    assert f'<div class="fc-tooldesc fc-t-toolDesc">{DESC}</div>' in out["box"]
-    assert "title=" not in out["box"].split(">", 1)[0]
+    assert f'title="{GATE} — {DESC}"' in out["box"].split(">", 1)[0]
+    assert "fc-tooldesc" not in out["box"]
 
 
 def test_a_repo_tool_shows_its_own_description_line() -> None:
@@ -54,7 +54,7 @@ def test_a_repo_tool_shows_its_own_description_line() -> None:
     view.events.push(closed("d1", 1791470000, "deploy.preview", null));
     out.box = boxes().find((b) => b.includes("deploy.preview"));
     """)
-    assert f'fc-t-toolDesc">{PREVIEW}</div>' in out["box"]
+    assert f'title="deploy.preview — {PREVIEW}"' in out["box"].split(">", 1)[0]
 
 
 def test_a_stage_without_a_description_has_no_line() -> None:
@@ -89,12 +89,12 @@ def test_tooltip_is_the_newest_command_and_is_escaped() -> None:
     out.older = _gateTitle();
     function _gateTitle() {{ return boxes().find((b) => b.includes("{GATE}")).split(">", 1)[0]; }}
     """)
-    assert 'title="pytest &quot;a&quot; &lt;b&gt;"' in out["newest"]
-    assert 'title="old cmd"' in out["older"]
+    assert f'{GATE} — {DESC}\n$ pytest &quot;a&quot; &lt;b&gt;"' in out["newest"]
+    assert f'{GATE} — {DESC}\n$ old cmd"' in out["older"]
 
 
-def test_no_detail_means_no_title_and_an_out_of_scope_detail_still_sets_it() -> None:
-    """AC13: no `title` without a detail; a detail from another story still sets it in story scope."""
+def test_no_detail_means_no_command_line_and_an_out_of_scope_detail_still_sets_it() -> None:
+    """s127 AC2: no `$ command` line without a detail; a detail from another story still sets it in story scope."""
     out = _run(f"""
     idle(); view.events.push(closed("g1", 1791470000, "{GATE}", null));
     out.none = boxes().find((b) => b.includes("{GATE}")).split(">", 1)[0];
@@ -103,31 +103,28 @@ def test_no_detail_means_no_title_and_an_out_of_scope_detail_still_sets_it() -> 
     ui.scope = "story"; ui.focus = "s3";
     out.scoped = boxes().find((b) => b.includes("{GATE}")).split(">", 1)[0];
     """)
-    assert "title=" not in out["none"]
-    assert 'title="other story cmd"' in out["scoped"]
+    assert out["none"].endswith(f'title="{GATE} — {DESC}"') and "$ " not in out["none"]
+    assert "\n$ other story cmd" in out["scoped"]
 
 
-def test_running_box_has_the_description_after_its_head_and_the_same_title() -> None:
-    """AC13: the running box shows head, then description line, then the title from the newest finished run."""
+def test_running_box_has_the_label_head_and_the_same_title() -> None:
+    """s127 AC2: the running box shows `▶ label`, no description line, and the title from the newest finished run."""
     out = _run(f"""
     ui.scope = "run"; view.events.push(closed("g1", 1791470000, "{GATE}", "uv run pytest"));
-    out.box = boxes().find((b) => b.includes("▶ {GATE}"));
+    out.box = boxes().find((b) => b.includes("▶ pytest + coverage"));
     """)
     box = out["box"]
-    assert box.split(">", 1)[0].endswith('title="uv run pytest"')
-    assert re.search(
-        r"▶ gate\.tests\+coverage[^<]*</span><span>[^<]*</span></div><div class=\"fc-tooldesc fc-t-toolDesc\">"
-        + re.escape(DESC),
-        box,
-    )
+    assert box.split(">", 1)[0].endswith('\n$ uv run pytest"')
+    assert f'title="{GATE} — {DESC}' in box
+    assert "fc-tooldesc" not in box
 
 
 def test_hide_tools_hides_the_idle_line_but_not_the_running_one() -> None:
     """AC13: the idle box has `f-tools` (hidden by `hide-tools`); the running box has none."""
     out = _run(f"""
-    ui.scope = "run"; out.running = boxes().find((b) => b.includes("▶ {GATE}"));
+    ui.scope = "run"; out.running = boxes().find((b) => b.includes("▶ pytest + coverage"));
     idle(); view.events.push(closed("g1", 1791470000, "{GATE}", null));
-    out.idle = boxes().find((b) => b.includes("{GATE}"));
+    out.idle = boxes().find((b) => b.includes("pytest + coverage"));
     """)
     assert (
         re.match(r'<div class="fc-tool running[^"]*"', out["running"])
@@ -143,7 +140,7 @@ def test_no_total_means_no_percent_complete(total: str) -> None:
     const t = {{ passed: 3, warned: 0, failed: 0, total: {total}, points: [], fail_at: null }};
     out.pct = completePct(t); out.bar = testBar(t);
     view.heartbeat.stages[0].tests = {{ ...t, points: [10, 20, 30] }};
-    ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ {GATE}"));
+    ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ pytest + coverage"));
     out.real = completePct({{ passed: 3, warned: 0, failed: 0, total: 6, points: [], fail_at: null }});
     """)
     assert out["pct"] is None and out["real"] == 50
@@ -154,9 +151,9 @@ def test_no_total_means_no_percent_complete(total: str) -> None:
 
 def test_the_bar_is_scaled_by_the_total_not_by_the_tests_that_ran() -> None:
     """FC18: with `total: 6` and 3 passed, the bar exists and Pass is 50.00% wide (not 100% of those that ran)."""
-    out = _run(f"""
-    view.heartbeat.stages[0].tests = {{ passed: 3, warned: 0, failed: 0, total: 6, points: [], fail_at: null }};
-    ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ {GATE}"));
+    out = _run("""
+    view.heartbeat.stages[0].tests = { passed: 3, warned: 0, failed: 0, total: 6, points: [], fail_at: null };
+    ui.scope = "run"; out.box = boxes().find((b) => b.includes("▶ pytest + coverage"));
     """)
     assert "fc-testbar" in out["box"]
     assert "width:50.00%" in out["box"]

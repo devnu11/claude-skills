@@ -51,7 +51,7 @@ def test_tools_lists_built_in_and_repo_rows(tmp_path: Path, capsys: pytest.Captu
     assert names == [str(n) for n in stages.STAGES]
     assert "gate.tests+coverage" in names and "boundary.ci-wait" in names
     assert out["repo"] == [
-        {"name": "deploy.preview", "description": "Preview", "command": "echo hi"}
+        {"name": "deploy.preview", "description": "Preview", "command": "echo hi", "label": ""}
     ]
 
 

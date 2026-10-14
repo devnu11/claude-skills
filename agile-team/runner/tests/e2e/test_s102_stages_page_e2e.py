@@ -52,7 +52,7 @@ def test_tool_boxes_are_idle_with_runs_and_time() -> None:
     ui.scope = "run"; out.run = flowHtml(flowModel(view));
     ui.scope = "story"; ui.focus = "s3"; out.story = flowHtml(flowModel(view));
     """)
-    tool = '<span>presentation.trial</span><span class="f-toolstats">'
+    tool = '<span class="fc-toollabel">presentation trial</span><span class="f-toolstats">'
     assert tool + " · ↻ 1 · 30s</span>" in out["run"]
     assert 'class="fc-tool f-tools"' in out["run"] and 'class="fc-t-tool"' in out["run"]
     assert tool + " · ↻ 0</span>" in out["story"]
@@ -106,7 +106,7 @@ def test_a_running_stage_becomes_a_solid_running_tool_with_a_test_caption() -> N
         re.S,
     )
     assert running
-    assert "▶ gate.tests+coverage" in out["html"]
+    assert "▶ pytest + coverage" in out["html"]
     assert out["caption"] == "273 Pass + 32 Warn + 9 Fail / 506 Total"
     assert "273 Pass" in out["html"] and "complete" in out["html"]
     tool = out["html"][out["html"].index('<div class="fc-tool running') :].split(">", 1)[0]
