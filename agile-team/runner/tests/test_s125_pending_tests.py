@@ -248,7 +248,7 @@ def test_failures_route_from_the_report_not_the_text(fake: FakeSystem) -> None:
     xml = report(case("tests/test_old.py", "tests.test_old", "test_broken", 0, FAIL))
     outcome = checks(Writer([xml], code=1, out="garbage"), {}, CHANGED).tests_red()
     found = gates.test_findings(outcome)
-    assert [(f.path, f.items) for f in found] == [
+    assert [(f.path, f.lines) for f in found] == [
         (f"{ROOT}/tests/test_old.py", (f"FAILED {OLD_FAIL} - boom",))
     ]
 

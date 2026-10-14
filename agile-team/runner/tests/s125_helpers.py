@@ -33,7 +33,7 @@ def report(*cases: str) -> str:
     return f'<testsuites><testsuite name="pytest">{"".join(cases)}</testsuite></testsuites>'
 
 
-FAIL = '<failure message="boom\nsecond line">trace</failure>'
+FAIL = '<failure message="boom&#10;second line">trace</failure>'
 
 
 class Writer:

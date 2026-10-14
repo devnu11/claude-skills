@@ -19,11 +19,20 @@ GOOD_COVERAGE = "TOTAL 100 0 100%"
 GREEN = {"pytest --cov": (0, GOOD_COVERAGE)}
 
 
+class PrefixRunner(FakeRunner):
+    """A FakeRunner keyed on the start of a command: python commands carry the report option."""
+
+    def __call__(self, command: str) -> tuple[int, str]:
+        self.calls.append(command)
+        hits = [k for k in self.results if command.startswith(k)]
+        return self.results[max(hits, key=len)] if hits else (0, "")
+
+
 class Env:
     """A runtime, its fake checks and PR service, and the BoundaryRunner under test."""
 
     def __init__(self, make_runtime, results=None):
-        self.runner = FakeRunner(results or GREEN)
+        self.runner = PrefixRunner(results or GREEN)
         self.runner_for = lambda path: self.runner
         self.prs = FakePrs()
         self.rt = make_runtime(prs=self.prs, shell=lambda path: self.runner_for(path))
@@ -163,7 +172,7 @@ def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> N
     b = env.rt.state.boundary
     assert b.failure.case is bd.FixCase.TEAM_CHECK and b.failure.stage is Stage.CHECK
     assert report["boundary"]["outcome"] == "fail"
-    assert report["boundary"]["checks"][0] == {"name": "lint", "passed": False, "why": "exit 1"}
+    assert report["boundary"]["checks"][0] == {"name": "lint", "passed": False, "why": "exit 1", "pending": ""}
     due = env.br.due()
     assert (due.kind, due.role) == (StepKind.TEAM_FIX, "devops")
     assert due.brief.startswith(bd.FIX_HEADING.format(sprint=1, edge="start", stage="check"))

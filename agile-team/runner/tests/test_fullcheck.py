@@ -6,6 +6,8 @@ from agile_team import boundary, fullcheck, gates
 from agile_team import config as cfg
 from agile_team.fullcheck import CheckReport, FullCheck, Judge, Judging, full_checks, run_checks
 
+from agile_team.pending_tests import Registry
+
 from .conftest import FakeRunner
 
 
@@ -25,7 +27,7 @@ def test_order_is_toolchain_then_e2e_and_unset_are_left_out(scratch: Path) -> No
             {"name": "web", "kind": "package", "e2e": "run-web"},
         ],
     )
-    assert full_checks(c) == [
+    assert full_checks(c, Registry()) == [
         FullCheck("lint", "l", Judge.EXIT),
         FullCheck("test", "t", Judge.EXIT),
         FullCheck("coverage", "cov", Judge.COVERAGE),
@@ -36,7 +38,7 @@ def test_order_is_toolchain_then_e2e_and_unset_are_left_out(scratch: Path) -> No
 
 def test_static_sits_between_lint_and_test(scratch: Path) -> None:
     c = config_with(scratch, {"test": "t", "static": "s", "lint": "l"})
-    assert [f.name for f in full_checks(c)] == ["lint", "static", "test"]
+    assert [f.name for f in full_checks(c, Registry())] == ["lint", "static", "test"]
 
 
 def test_toolchain_table_order() -> None:
@@ -54,8 +56,8 @@ def test_every_check_runs_even_after_a_failure() -> None:
     assert runner.calls == ["a", "b"]
     assert not report.passed
     assert report.summary() == [
-        {"name": "a", "passed": False, "why": "exit 1"},
-        {"name": "b", "passed": True, "why": ""},
+        {"name": "a", "passed": False, "why": "exit 1", "pending": ""},
+        {"name": "b", "passed": True, "why": "", "pending": ""},
     ]
 
 
