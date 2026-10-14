@@ -107,7 +107,7 @@ def test_a_reading_view_has_the_rate_after_cost() -> None:
     reading.take(usage(60, "a"), 1010.0)
     reading.take(usage(120, "b"), 1075.0)
     view = reading.view()
-    assert view["rate"] == [60.0, 120.0]
+    assert view["rate"] == [0.0, 360.0, 0.0, 0.0, 0.0, 0.0, 0.0, 720.0]
     keys = list(view)
     assert keys.index("rate") == keys.index("cost_usd") + 1
 
@@ -115,7 +115,7 @@ def test_a_reading_view_has_the_rate_after_cost() -> None:
 def test_the_time_split_carries_the_rate() -> None:
     reading = live.Reading(WHO, 1000.0)
     reading.take(usage(30, "a"), 1005.0)
-    assert reading.time_split()["rate"] == [30.0]
+    assert reading.time_split()["rate"] == [180.0]
     assert {"opened_at", "tool_s", "model_s", "waiting_s"} <= set(reading.time_split())
 
 
@@ -125,7 +125,7 @@ def test_an_interrupted_step_end_carries_the_rate(fake: FakeSystem) -> None:
     meter.take(usage(50, "a"))
     pulse.close(meter)
     event = meter.interrupted(live.Stop(Cause.ERROR))
-    assert event.data["rate"] == [50.0]
+    assert event.data["rate"] == [300.0]
 
 
 def test_a_meter_split_carries_the_rate(fake: FakeSystem) -> None:
@@ -133,7 +133,7 @@ def test_a_meter_split_carries_the_rate(fake: FakeSystem) -> None:
     meter = pulse.open(live.Who("product-owner", None, None, "opus", Billing.REPORTED))
     meter.take(usage(10, "a"))
     pulse.close(meter)
-    assert live.time_split(meter)["rate"] == [10.0]
+    assert live.time_split(meter)["rate"] == [60.0]
     assert live.time_split(None) == {}
 
 
