@@ -1421,8 +1421,12 @@ stories' gates, the sprint checks and CI stay green.
 - **The registry.** `.team/pending-tests.json` is `{"<story>": ["<id>", …]}`.
   Only the runner writes it: an agent's write is refused (`may not write …;
   only the runner writes it`), and a Bash edit is quarantined. Each change is
-  its own commit, `chore(<story>): pending tests`, made right after the gate
-  that caused it. A registry that does not parse holds the gate.
+  its own commit, made by the runner right after the gate that caused it and
+  before the next step starts: `chore(<story>): pending tests (tests step)`
+  after a tests gate, `chore(<story>): pending tests (implement gate)` after
+  an implement gate. A cancel or a revert drops the entry in a commit with no
+  suffix, `chore(<story>): pending tests`. A registry that does not parse
+  holds the gate.
 - **Tests gate.** From the red run's report, the story's pending ids are the
   failed ids that are new or changed in the step's diff (the lines from a
   test's line up to the next test's line meet a changed hunk, or a file id's
