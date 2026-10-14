@@ -383,7 +383,8 @@ first time you click on the page. Browsers allow notifications only on
   page reconnects by itself. If the server is still running, check any
   `REQ-*.md` file you edited by hand: `covers` must be a YAML list
   (`covers: [...]`), not a single value. A wrongly typed field stops the page from loading
-  until it is fixed.
+  until it is fixed. `agile-team requirements check` names every broken
+  requirement file and what is wrong with it.
 - Requirements are empty: this repo has no `<docs>/requirements/REQ-*.md`
   files yet.
 - A change to `.agile-team.toml` (for example the budget, the round cap or

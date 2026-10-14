@@ -315,6 +315,16 @@ command fails.
   story is held and the PO opens one. A design that needs tooling that can't
   exist goes back to the architect. The runner writes the list into the
   story file under `## Tooling`.
+- **Requirements are files** (s1): `<docs>/requirements/REQ-NNN.md`, with
+  frontmatter `id`, `title`, `status` (`active` or `retired`) and `covers`
+  (`["sN/ACk", …]`), and the requirement in plain words as the body. The
+  architect writes them at design. A story opened from s1 on can't pass
+  `design` until each of its ACs is covered by an active requirement; the
+  bounce lists every untraced AC and every broken requirement file that
+  names the story. Older stories aren't checked. The code reviewer and the
+  Customer Proxy cite REQ and AC ids. `agile-team requirements check` prints
+  the problems and the AC coverage as JSON (exit 1 on problems), and the
+  dashboard's Requirements tab shows the same files.
 - Only the runner runs the full suite and coverage. Roles get the results in
   their briefs (`## Runner results`), a full `pytest` or `--cov` run from a
   role's Bash is denied, and developers ask the runner for named tests

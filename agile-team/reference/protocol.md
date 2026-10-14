@@ -17,6 +17,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `init --preset P --environment K [--url U] [--docs-dir D] [--artifacts committed\|ignored] [--key-file F] [--budget USD] [--cadence sprint\|until-blocker]` | Phase A: write `.agile-team.toml`, `.gitignore` lines, `.team/CLAUDE.md`, a stub per role in `.team/roles/`; commit `chore(team): onboard agile team`. |
 | `init … --reconfigure` | Re-run phase A; keeps every value already in the config and never overwrites the charter. A section under its old name is rewritten as `[[environment]]` (see "Acceptance environments"). |
 | `config check` | Validate config, every role's resolution and glob placeholders. Prints each warning as `warning: <text>` first (warnings never change the exit code), then the problems. Exit 1 on problems, else 0. |
+| `requirements check` | Parse and check every `<docs>/requirements/REQ-*.md` (s1). Print one JSON object: `problems` (one `{file}: {problem}` line each: a broken file, a `covers` ref to an unknown story or AC, a duplicate id), `coverage` (every story file that reads clean, in id order: each AC id → the active requirements covering it, `[]` when none) and `unreadable` (other story files → their problems). Exit 1 when `problems` is non-empty, else 0. Untraced ACs are not problems. See "Requirements". |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
@@ -1269,7 +1270,9 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 
 ## Pipeline and gates
 
-design (architect) → ops-review (devops; always runs, see "Ops review") →
+design (architect; gate on `done`: every AC of a story designed from s1 on is
+covered by an active requirement, see "Requirements"; a reverted story's
+design has its After revert section) → ops-review (devops; always runs, see "Ops review") →
 tests (unit-tester; gate: test command **fails**, and
 with a JUnit report only through the step's new or changed tests, which
 become pending: see "Pending tests"; or see "Back at tests with the code in") →
@@ -2396,6 +2399,74 @@ problems.
 
 **Every environment is tried** (s95). A story whose ACs name two environments
 is presented and tried in both; see "Acceptance per environment".
+
+## Requirements
+
+The product's requirements are files, `<docs>/requirements/REQ-NNN.md` (s1,
+ADR-0060). The architect writes them at design: a new file, or a new
+`covers` entry on an existing one. It retires a requirement
+(`status: retired`) rather than deleting it.
+
+```markdown
+---
+id: REQ-001
+title: Requirements are structured files
+status: active            # active | retired
+covers: ["s1/AC1", "s1/AC7"]
+---
+
+The requirement in plain words.
+```
+
+**Checks, per file, in order.** 1, 3 and 4 stop the file's read; a bad
+`covers` skips the item checks; everything else is reported. Each problem is
+`{file}: {problem}` with a repo-relative file.
+
+| # | Check | Problem text |
+|---|---|---|
+| 1 | the file reads | `cannot be read` |
+| 2 | its name is `REQ-` and three or more digits, `.md` | `the file name must be REQ-NNN.md (REQ- and three or more digits)` |
+| 3 | it starts with frontmatter | `no YAML frontmatter; start the file with --- and the keys id, title, status and covers` |
+| 4 | the frontmatter parses to a mapping | `frontmatter does not parse: <error>` |
+| 5 | `id` is the file name | `id is 'REQ-1', not 'REQ-001' (the file name)` |
+| 6 | `title` is a non-empty string | `title must be a non-empty string` |
+| 7 | `status` is `active` or `retired` | `status is 'draft'; use active or retired` |
+| 8 | `covers` is a list (may be empty) | `covers must be a list of "sN/ACk" strings` |
+| 9 | each item is `sN/<ac id>` | `covers item 2: 's1-AC1' is not "sN/ACk"` |
+| 10 | no item is listed twice | `covers item 3: 's1/AC1' is listed twice` |
+| 11 | the body is not blank | `the body is empty; state the requirement in plain words` |
+| 12 | no other file claims the id | `id 'REQ-001' is also used by <other files>` |
+| 13 | each ref's story has a story file | `covers item 1: 's9/AC1': no story file for s9` |
+| 14 | that story file reads clean | `covers item 1: 's9/AC1': the story file of s9 has problems (<first problem>)` |
+| 15 | the story has that AC | `covers item 1: 's9/AC7': s9 has no AC AC7; its ACs are AC1, AC2` |
+
+**Coverage.** An AC is covered by every requirement that has no problem, is
+`active` and lists it. Retired or broken requirements cover nothing. One AC
+may have several requirements, and one requirement may cover many stories.
+
+**The design gate.** Every story opened from s1 on is `trace: checked` in
+`state.json`. A story saved before s1 loads as `checked` only if it sits at
+`design` and has never been through a design step; otherwise it is `exempt`
+and never traced. Nothing changes the value; a revert keeps it. On a `done`
+handoff at `design`, a checked story bounces back to `design` (a round) with
+every reason listed under one head line
+(`s7's ACs must be traced to active requirements in <dir>/ before design passes:`):
+each problem of a requirement file whose text mentions `s7/`, the story file's
+own problems, and each AC with no covering requirement
+(`s7/AC2 is covered by no active requirement; …`). A reverted story's missing
+After revert section is listed in the same bounce. A broken file that doesn't
+mention the story does not block it; `requirements check` reports it.
+
+**Briefs.** On a checked story, the architect's brief has a
+`## Requirements` section: each AC with its covering requirements (or
+`untraced`), the active requirements with what they cover, and the next free
+id. The code reviewer's and the Customer Proxy's briefs have the coverage
+part; they cite the AC and requirement ids in their findings.
+
+**Dashboard.** The Requirements tab lists the files (it reads them
+leniently, so a broken file still shows). An exempt story's untraced AC reads
+`designed before s1` and is not a gap. Changes to requirements over time
+(`requirement-changed`) are s2.
 
 ## Story dependencies
 
