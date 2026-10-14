@@ -1,0 +1,18 @@
+[
+ {
+  "id": "r1",
+  "story": "s6",
+  "position": 1,
+  "at": 1791472960.0,
+  "status": "applied",
+  "reason": ""
+ },
+ {
+  "id": "r2",
+  "story": "s5",
+  "position": 2,
+  "at": 1791472961.0,
+  "status": "refused",
+  "reason": "the order changed since the dashboard showed it; reload"
+ }
+]

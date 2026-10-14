@@ -1,0 +1,392 @@
+[
+ {
+  "id": "s2",
+  "title": "Choose which columns to export",
+  "sprint": 1,
+  "environment": "cli",
+  "step": "review",
+  "status": "active",
+  "rounds": 1,
+  "trace": "checked",
+  "reverts": 1,
+  "opened_at": 1791450479.4,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "--columns a,b,c exports only those columns"
+   },
+   {
+    "id": "AC2",
+    "text": "Output order follows --columns"
+   },
+   {
+    "id": "AC3",
+    "text": "An unknown column name fails with a clear message"
+   }
+  ],
+  "repeated": null,
+  "position": 1,
+  "tier": "in progress",
+  "hold": null,
+  "po_hold": null,
+  "wait": null,
+  "disputes": 0,
+  "developer": "developer",
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [
+   "s5"
+  ],
+  "waiting_on": [
+   "s5"
+  ],
+  "dependency_warnings": [
+   "s2 is above s5, which it depends on"
+  ],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": "pass"
+   },
+   {
+    "name": "web",
+    "verdict": "fail"
+   },
+   {
+    "name": "manual",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s5",
+  "title": "Export through the HTTP API",
+  "sprint": null,
+  "environment": "cli",
+  "step": "design",
+  "status": "active",
+  "rounds": 0,
+  "trace": "checked",
+  "reverts": 0,
+  "opened_at": 1791451059.1,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "GET /reports/{id}.csv returns the export"
+   }
+  ],
+  "repeated": null,
+  "position": 2,
+  "tier": "in progress",
+  "hold": null,
+  "po_hold": null,
+  "wait": null,
+  "disputes": 0,
+  "developer": null,
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s3",
+  "title": "Stream large exports without loading them into memory",
+  "sprint": 1,
+  "environment": "cli",
+  "step": "implement",
+  "status": "needs_manager",
+  "rounds": 3,
+  "trace": "checked",
+  "reverts": 0,
+  "opened_at": 1791450678.3,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "A 2M-row report exports with memory under 256 MB"
+   },
+   {
+    "id": "AC2",
+    "text": "--progress shows rows written so far"
+   }
+  ],
+  "repeated": null,
+  "position": 3,
+  "tier": "held",
+  "hold": null,
+  "po_hold": null,
+  "wait": {
+   "reason": "round cap",
+   "on": [
+    "m3: s3 keeps failing the memory bound because sorting needs the whole result. May the export spill to a temp file (up to 1 GB) when --sort is used?",
+    "round 3: the manager must rule"
+   ],
+   "title": "round cap"
+  },
+  "disputes": 0,
+  "developer": "developer",
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s4",
+  "title": "Excel-friendly encoding",
+  "sprint": 1,
+  "environment": "cli",
+  "step": "design",
+  "status": "active",
+  "rounds": 0,
+  "trace": "checked",
+  "reverts": 0,
+  "opened_at": 1791450809.7,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "Accented names display correctly in Excel on Windows"
+   },
+   {
+    "id": "AC2",
+    "text": "Scripts that read the CSV are not broken by the change"
+   }
+  ],
+  "repeated": null,
+  "position": 4,
+  "tier": "held",
+  "hold": "questions",
+  "po_hold": null,
+  "wait": {
+   "reason": "questions",
+   "on": [
+    "m4: s4: should exports write a UTF-8 BOM by default (Excel opens them correctly) or only with a new --excel flag (cleaner for scripts)?",
+    "architect: Asked which export encoding Excel on Windows expects"
+   ],
+   "title": "questions"
+  },
+  "disputes": 0,
+  "developer": null,
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "held",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s7",
+  "title": "Serve the report dashboard",
+  "sprint": null,
+  "environment": "web",
+  "step": "acceptance",
+  "status": "needs_manager",
+  "rounds": 0,
+  "trace": "checked",
+  "reverts": 0,
+  "repeated": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+  "opened_at": 1791471900.0,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "The dashboard answers on its port"
+   }
+  ],
+  "position": 5,
+  "tier": "held",
+  "hold": null,
+  "po_hold": null,
+  "wait": {
+   "reason": "manager",
+   "on": [
+    "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:"
+   ],
+   "title": "manager"
+  },
+  "disputes": 0,
+  "developer": "developer",
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "web",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s6",
+  "title": "Scheduled exports",
+  "sprint": null,
+  "environment": "cli",
+  "step": "design",
+  "status": "active",
+  "rounds": 0,
+  "trace": "checked",
+  "reverts": 0,
+  "opened_at": 1791451121.6,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "A schedule can attach a CSV export to its email"
+   }
+  ],
+  "repeated": null,
+  "position": 6,
+  "tier": "not started",
+  "hold": null,
+  "po_hold": {
+   "kind": "PO hold",
+   "reason": "waiting for the scheduler design to settle",
+   "question": null
+  },
+  "wait": {
+   "reason": "PO hold",
+   "on": [
+    "waiting for the scheduler design to settle"
+   ],
+   "title": "PO hold: waiting for the scheduler design to settle"
+  },
+  "disputes": 0,
+  "developer": null,
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [
+   "s1"
+  ],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s1",
+  "title": "Export a report as CSV",
+  "sprint": 1,
+  "environment": "cli",
+  "step": "acceptance",
+  "status": "done",
+  "rounds": 0,
+  "trace": "checked",
+  "reverts": 0,
+  "opened_at": 1791450406.7,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "Running `report run --format csv` writes CSV to stdout"
+   },
+   {
+    "id": "AC2",
+    "text": "Values with commas, quotes or newlines survive a round trip"
+   },
+   {
+    "id": "AC3",
+    "text": "Columns appear in a predictable order"
+   }
+  ],
+  "repeated": null,
+  "position": null,
+  "tier": null,
+  "hold": null,
+  "po_hold": null,
+  "wait": null,
+  "disputes": 0,
+  "developer": "developer",
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ },
+ {
+  "id": "s8",
+  "title": "Export to XML",
+  "sprint": null,
+  "environment": "cli",
+  "step": "design",
+  "status": "cancelled",
+  "rounds": 0,
+  "trace": "exempt",
+  "reverts": 0,
+  "opened_at": null,
+  "acceptance": [
+   {
+    "id": "AC1",
+    "text": "An export can be written as XML"
+   }
+  ],
+  "repeated": null,
+  "position": null,
+  "tier": null,
+  "hold": null,
+  "po_hold": null,
+  "wait": null,
+  "disputes": 0,
+  "developer": null,
+  "commits": [],
+  "files": [
+   "story"
+  ],
+  "label": "cancelled",
+  "depends_on": [],
+  "waiting_on": [],
+  "dependency_warnings": [],
+  "environments": [
+   {
+    "name": "cli",
+    "verdict": ""
+   }
+  ]
+ }
+]

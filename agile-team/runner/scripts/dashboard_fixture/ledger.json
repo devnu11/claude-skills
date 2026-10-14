@@ -1,0 +1,366 @@
+[
+ {
+  "at": 1791450285.1,
+  "role": "product-owner",
+  "model": "opus",
+  "story": null,
+  "cost_usd": 0.2319,
+  "tokens": {
+   "input": 3796,
+   "output": 4447,
+   "cache_read": 91196,
+   "cache_creation": 8985
+  },
+  "turns": 36
+ },
+ {
+  "at": 1791452188.1,
+  "role": "manager",
+  "model": "sonnet",
+  "story": null,
+  "cost_usd": 0.1256,
+  "tokens": {
+   "input": 9412,
+   "output": 1840,
+   "cache_read": 121975,
+   "cache_creation": 8843
+  },
+  "turns": 18
+ },
+ {
+  "at": 1791452620.3,
+  "role": "architect",
+  "model": "opus",
+  "story": "s1",
+  "cost_usd": 0.6848,
+  "tokens": {
+   "input": 17895,
+   "output": 9280,
+   "cache_read": 236872,
+   "cache_creation": 39188
+  },
+  "turns": 10
+ },
+ {
+  "at": 1791453754.2,
+  "role": "unit-tester",
+  "model": "sonnet",
+  "story": "s1",
+  "cost_usd": 0.2068,
+  "tokens": {
+   "input": 9809,
+   "output": 4230,
+   "cache_read": 114440,
+   "cache_creation": 21212
+  },
+  "turns": 33
+ },
+ {
+  "at": 1791454539.2,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s1",
+  "cost_usd": 0.3327,
+  "tokens": {
+   "input": 9954,
+   "output": 11578,
+   "cache_read": 102919,
+   "cache_creation": 26208
+  },
+  "turns": 35
+ },
+ {
+  "at": 1791455320.9,
+  "role": "quality-czar",
+  "model": "qwen3-coder",
+  "story": "s1",
+  "cost_usd": 0.0,
+  "tokens": {
+   "input": 3805,
+   "output": 4315,
+   "cache_read": 63094,
+   "cache_creation": 13814
+  },
+  "turns": 35
+ },
+ {
+  "at": 1791456149.6,
+  "role": "code-reviewer",
+  "model": "opus",
+  "story": "s1",
+  "cost_usd": 0.7405,
+  "tokens": {
+   "input": 18606,
+   "output": 12630,
+   "cache_read": 167849,
+   "cache_creation": 39640
+  },
+  "turns": 35
+ },
+ {
+  "at": 1791456696.3,
+  "role": "architect",
+  "model": "opus",
+  "story": "s1",
+  "cost_usd": 0.6308,
+  "tokens": {
+   "input": 11938,
+   "output": 10667,
+   "cache_read": 98199,
+   "cache_creation": 40859
+  },
+  "turns": 23
+ },
+ {
+  "at": 1791457572.1,
+  "role": "integration-tester",
+  "model": "sonnet",
+  "story": "s1",
+  "cost_usd": 0.2449,
+  "tokens": {
+   "input": 10882,
+   "output": 6378,
+   "cache_read": 88580,
+   "cache_creation": 23991
+  },
+  "turns": 26
+ },
+ {
+  "at": 1791458273.1,
+  "role": "customer-proxy",
+  "model": "sonnet",
+  "story": "s1",
+  "cost_usd": 0.219,
+  "tokens": {
+   "input": 6161,
+   "output": 5560,
+   "cache_read": 95705,
+   "cache_creation": 23585
+  },
+  "turns": 35
+ },
+ {
+  "at": 1791458885.1,
+  "role": "product-owner",
+  "model": "opus",
+  "story": null,
+  "cost_usd": 0.1952,
+  "tokens": {
+   "input": 3912,
+   "output": 2332,
+   "cache_read": 132192,
+   "cache_creation": 8205
+  },
+  "turns": 15
+ },
+ {
+  "at": 1791459117.1,
+  "role": "architect",
+  "model": "opus",
+  "story": "s3",
+  "cost_usd": 0.6744,
+  "tokens": {
+   "input": 15216,
+   "output": 7061,
+   "cache_read": 238575,
+   "cache_creation": 48405
+  },
+  "turns": 36
+ },
+ {
+  "at": 1791460618.8,
+  "role": "unit-tester",
+  "model": "sonnet",
+  "story": "s3",
+  "cost_usd": 0.2101,
+  "tokens": {
+   "input": 12619,
+   "output": 5888,
+   "cache_read": 94933,
+   "cache_creation": 14782
+  },
+  "turns": 10
+ },
+ {
+  "at": 1791461087.9,
+  "role": "architect",
+  "model": "opus",
+  "story": "s2",
+  "cost_usd": 0.3714,
+  "tokens": {
+   "input": 10592,
+   "output": 4785,
+   "cache_read": 175215,
+   "cache_creation": 17787
+  },
+  "turns": 4
+ },
+ {
+  "at": 1791461278.0,
+  "role": "product-owner",
+  "model": "opus",
+  "story": null,
+  "cost_usd": 0.3029,
+  "tokens": {
+   "input": 3280,
+   "output": 6308,
+   "cache_read": 125969,
+   "cache_creation": 10525
+  },
+  "turns": 20
+ },
+ {
+  "at": 1791462078.2,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s3",
+  "cost_usd": 0.363,
+  "tokens": {
+   "input": 16431,
+   "output": 4268,
+   "cache_read": 216659,
+   "cache_creation": 49245
+  },
+  "turns": 34
+ },
+ {
+  "at": 1791462803.8,
+  "role": "unit-tester",
+  "model": "sonnet",
+  "story": "s2",
+  "cost_usd": 0.1994,
+  "tokens": {
+   "input": 11143,
+   "output": 4132,
+   "cache_read": 136887,
+   "cache_creation": 16777
+  },
+  "turns": 17
+ },
+ {
+  "at": 1791463825.0,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s3",
+  "cost_usd": 0.4394,
+  "tokens": {
+   "input": 26111,
+   "output": 11339,
+   "cache_read": 163465,
+   "cache_creation": 37859
+  },
+  "turns": 9
+ },
+ {
+  "at": 1791464976.5,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s2",
+  "cost_usd": 0.3168,
+  "tokens": {
+   "input": 13825,
+   "output": 5450,
+   "cache_read": 231638,
+   "cache_creation": 33091
+  },
+  "turns": 18
+ },
+ {
+  "at": 1791466264.0,
+  "role": "quality-czar",
+  "model": "qwen3-coder",
+  "story": "s2",
+  "cost_usd": 0.0,
+  "tokens": {
+   "input": 11866,
+   "output": 6000,
+   "cache_read": 143582,
+   "cache_creation": 11854
+  },
+  "turns": 37
+ },
+ {
+  "at": 1791466594.3,
+  "role": "code-reviewer",
+  "model": "opus",
+  "story": "s2",
+  "cost_usd": 0.6472,
+  "tokens": {
+   "input": 12147,
+   "output": 5850,
+   "cache_read": 273906,
+   "cache_creation": 48521
+  },
+  "turns": 32
+ },
+ {
+  "at": 1791467982.9,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s3",
+  "cost_usd": 0.2516,
+  "tokens": {
+   "input": 14021,
+   "output": 5425,
+   "cache_read": 143516,
+   "cache_creation": 22688
+  },
+  "turns": 17
+ },
+ {
+  "at": 1791469009.0,
+  "role": "architect",
+  "model": "opus",
+  "story": "s4",
+  "cost_usd": 0.689,
+  "tokens": {
+   "input": 20365,
+   "output": 11796,
+   "cache_read": 103737,
+   "cache_creation": 38459
+  },
+  "turns": 28
+ },
+ {
+  "at": 1791469505.4,
+  "role": "product-owner",
+  "model": "opus",
+  "story": null,
+  "cost_usd": 0.3123,
+  "tokens": {
+   "input": 9994,
+   "output": 1977,
+   "cache_read": 172463,
+   "cache_creation": 20271
+  },
+  "turns": 33
+ },
+ {
+  "at": 1791470270.8,
+  "role": "developer-cli",
+  "model": "sonnet",
+  "story": "s2",
+  "cost_usd": 0.2528,
+  "tokens": {
+   "input": 21945,
+   "output": 4870,
+   "cache_read": 115570,
+   "cache_creation": 21139
+  },
+  "turns": 33
+ },
+ {
+  "at": 1791471226.3,
+  "role": "quality-czar",
+  "model": "qwen3-coder",
+  "story": "s2",
+  "cost_usd": 0.0,
+  "tokens": {
+   "input": 8217,
+   "output": 6656,
+   "cache_read": 61827,
+   "cache_creation": 17320
+  },
+  "turns": 5
+ }
+]

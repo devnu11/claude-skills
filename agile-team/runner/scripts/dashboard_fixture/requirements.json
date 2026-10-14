@@ -1,0 +1,109 @@
+[
+ {
+  "id": "REQ-001",
+  "title": "CSV output follows RFC 4180",
+  "status": "active",
+  "covers": [
+   "s1/AC1",
+   "s1/AC2"
+  ],
+  "text": "Fields are comma-separated, quoted when they contain a comma, quote or newline; quotes are doubled; lines end with CRLF.",
+  "history": [
+   {
+    "at": 1791452877.4,
+    "change": "added",
+    "reason": "New: CSV output format",
+    "role": "architect",
+    "story": "s1",
+    "sha": "1a4f44f"
+   }
+  ]
+ },
+ {
+  "id": "REQ-002",
+  "title": "Column selection and order",
+  "status": "active",
+  "covers": [
+   "s1/AC3",
+   "s2/AC1",
+   "s2/AC2",
+   "s2/AC3"
+  ],
+  "text": "Columns appear in the order given by --columns, or schema order when omitted. An unknown column name is a usage error (exit 2).",
+  "history": [
+   {
+    "at": 1791452988.8,
+    "change": "added",
+    "reason": "New: column order",
+    "role": "architect",
+    "story": "s1",
+    "sha": "86ce03f"
+   },
+   {
+    "at": 1791461185.3,
+    "change": "changed",
+    "reason": "Order must follow --columns, not schema order; finance relies on a fixed layout.",
+    "role": "architect",
+    "story": "s2",
+    "sha": "23a5ef8"
+   }
+  ]
+ },
+ {
+  "id": "REQ-003",
+  "title": "Bounded memory while exporting",
+  "status": "active",
+  "covers": [
+   "s3/AC1"
+  ],
+  "text": "Peak RSS stays under 256 MB for any report size.",
+  "history": [
+   {
+    "at": 1791459391.7,
+    "change": "added",
+    "reason": "New: memory bound",
+    "role": "architect",
+    "story": "s3",
+    "sha": "bfdefc1"
+   }
+  ]
+ },
+ {
+  "id": "REQ-004",
+  "title": "Progress on stderr",
+  "status": "active",
+  "covers": [
+   "s3/AC2"
+  ],
+  "text": "With --progress, a row counter is written to stderr at most once per second.",
+  "history": [
+   {
+    "at": 1791459688.7,
+    "change": "added",
+    "reason": "New: progress",
+    "role": "architect",
+    "story": "s3",
+    "sha": "ef02090"
+   }
+  ]
+ },
+ {
+  "id": "REQ-005",
+  "title": "Excel opens UTF-8 exports correctly",
+  "status": "active",
+  "covers": [
+   "s4/AC1"
+  ],
+  "text": "Non-ASCII characters display correctly when the file is opened in Excel on Windows. (BOM default pending the human's answer.)",
+  "history": [
+   {
+    "at": 1791469319.3,
+    "change": "added",
+    "reason": "New: BOM for Excel",
+    "role": "architect",
+    "story": "s4",
+    "sha": "6f0e228"
+   }
+  ]
+ }
+]

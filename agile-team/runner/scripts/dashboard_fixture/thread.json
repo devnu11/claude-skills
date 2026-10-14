@@ -1,0 +1,42 @@
+[
+ {
+  "id": "t1",
+  "story": "s5",
+  "author": "human",
+  "to": "product-owner",
+  "text": "Should s5 cover Excel quoting?",
+  "at": 1791471000.0
+ },
+ {
+  "id": "m5",
+  "story": "s5",
+  "author": "product-owner",
+  "to": "human",
+  "text": "Yes: CSV only for now.",
+  "at": 1791471500.0
+ },
+ {
+  "id": "lp1",
+  "story": "s5",
+  "author": "human",
+  "to": "liaison",
+  "text": "Can you ask the PO about s5's scope?",
+  "at": 1791471800.0
+ },
+ {
+  "id": "lr1",
+  "story": "s5",
+  "author": "liaison",
+  "to": "human",
+  "text": "Asked; the PO says CSV only.",
+  "at": 1791472100.0
+ },
+ {
+  "id": "t2",
+  "story": "s5",
+  "author": "human",
+  "to": "product-owner",
+  "text": "The human applied the liaison's opinion o3 on s5 from the dashboard: scope.\n\nCover CSV only.",
+  "at": 1791472420.0
+ }
+]

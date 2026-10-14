@@ -1,0 +1,26 @@
+{
+ "status": "running",
+ "sprint": 1,
+ "cadence": "sprint",
+ "task": "Add CSV export to the reporting CLI so finance can open reports in Excel.",
+ "budget_usd": 20.0,
+ "manager_every_pct": 25,
+ "round_cap": 3,
+ "manager_due": [
+  "story s3 hit the round cap"
+ ],
+ "order": [
+  "s3",
+  "s2",
+  "s4",
+  "s7",
+  "s5",
+  "s6"
+ ],
+ "order_version": "3f9a1c07be52",
+ "backlog": [
+  "s5",
+  "s6"
+ ],
+ "requirements_dir": "docs/requirements"
+}

@@ -1,0 +1,2067 @@
+[
+ {
+  "id": "e1",
+  "at": 1791450026.2,
+  "kind": "message",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "message": "m1"
+  }
+ },
+ {
+  "id": "e2",
+  "at": 1791450263.9,
+  "kind": "answer",
+  "role": null,
+  "story": null,
+  "data": {
+   "message": "m1"
+  }
+ },
+ {
+  "id": "e3",
+  "at": 1791450406.7,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s1",
+  "data": {
+   "title": "Export a report as CSV",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e4",
+  "at": 1791450479.4,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s2",
+  "data": {
+   "title": "Choose which columns to export",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e5",
+  "at": 1791450678.3,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s3",
+  "data": {
+   "title": "Stream large exports without loading them into memory",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e6",
+  "at": 1791450809.7,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s4",
+  "data": {
+   "title": "Excel-friendly encoding",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e7",
+  "at": 1791451059.1,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s5",
+  "data": {
+   "title": "Export through the HTTP API",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e8",
+  "at": 1791451121.6,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s6",
+  "data": {
+   "title": "Scheduled exports",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e9",
+  "at": 1791451376.5,
+  "kind": "sprint-start",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "sprint": 1,
+   "goal": "CSV export from the CLI, safe for big reports and Excel",
+   "stories": [
+    "s1",
+    "s2",
+    "s3",
+    "s4"
+   ]
+  }
+ },
+ {
+  "id": "rs3",
+  "at": 1791451460.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "stage": "boundary.sync",
+   "when": "before",
+   "attach": "boundary",
+   "step": null,
+   "attempt": null,
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791451400.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 60.0
+  }
+ },
+ {
+  "id": "e10",
+  "at": 1791451776.5,
+  "kind": "step-start",
+  "role": "manager",
+  "story": null,
+  "data": {
+   "brief": "Sprint 1 start: 4 stories, $20 budget."
+  }
+ },
+ {
+  "id": "e11",
+  "at": 1791452188.1,
+  "kind": "step-end",
+  "role": "manager",
+  "story": null,
+  "data": {
+   "status": "done",
+   "summary": "Scope fits the budget if s3 stays CLI-only. Approved.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 9412,
+    "output": 1840,
+    "cache_read": 121975,
+    "cache_creation": 8843
+   },
+   "cost_usd": 0.1256,
+   "turns": 18,
+   "commit": "0becd7b",
+   "rate": [
+    840.0
+   ]
+  }
+ },
+ {
+  "id": "e12",
+  "at": 1791452225.9,
+  "kind": "message",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "message": "m2"
+  }
+ },
+ {
+  "id": "e13",
+  "at": 1791452316.6,
+  "kind": "step-start",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "brief": "Design CSV output for `report run --format csv`.",
+   "mono": 452316.6,
+   "slept": 0.0
+  }
+ },
+ {
+  "id": "e14",
+  "at": 1791452620.3,
+  "kind": "step-end",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "Added REQ-001 (RFC 4180 output) and REQ-002 (schema column order). Needs developer-cli.",
+   "next_role": "unit-tester",
+   "open_questions": [],
+   "tokens": {
+    "input": 17895,
+    "output": 9280,
+    "cache_read": 236872,
+    "cache_creation": 39188
+   },
+   "cost_usd": 0.6848,
+   "turns": 10,
+   "commit": "94e3bf9",
+   "requirements_added": [
+    "REQ-001",
+    "REQ-002"
+   ],
+   "mono": 452500.3,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e15",
+  "at": 1791452877.4,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "id": "REQ-001",
+   "change": "added",
+   "reason": "New: CSV output format"
+  }
+ },
+ {
+  "id": "e16",
+  "at": 1791452988.8,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "id": "REQ-002",
+   "change": "added",
+   "reason": "New: column order"
+  }
+ },
+ {
+  "id": "e17",
+  "at": 1791453065.8,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "design",
+   "verdict": "pass",
+   "now_at": "tests",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "all ACs traced"
+  }
+ },
+ {
+  "id": "e18",
+  "at": 1791453376.4,
+  "kind": "step-start",
+  "role": "unit-tester",
+  "story": "s1",
+  "data": {
+   "brief": "Red tests for CSV writer per REQ-001/002.",
+   "mono": 453256.4,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e19",
+  "at": 1791453754.2,
+  "kind": "step-end",
+  "role": "unit-tester",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "12 failing tests in tests/test_csv_export.py.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 9809,
+    "output": 4230,
+    "cache_read": 114440,
+    "cache_creation": 21212
+   },
+   "cost_usd": 0.2068,
+   "turns": 33,
+   "commit": "95e761d",
+   "mono": 453634.2,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e20",
+  "at": 1791454145.1,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "tests",
+   "verdict": "pass",
+   "now_at": "implement",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "tests fail as expected"
+  }
+ },
+ {
+  "id": "e21",
+  "at": 1791454322.5,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s1",
+  "data": {
+   "brief": "Implement CSV writer.",
+   "mono": 454202.5,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e22",
+  "at": 1791454539.2,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "Added export/csv.py and --format csv.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 9954,
+    "output": 11578,
+    "cache_read": 102919,
+    "cache_creation": 26208
+   },
+   "cost_usd": 0.3327,
+   "turns": 35,
+   "commit": "e00902c",
+   "mono": 454419.2,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e23",
+  "at": 1791454709.7,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "implement",
+   "verdict": "pass",
+   "now_at": "quality",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "coverage 96.4%"
+  }
+ },
+ {
+  "id": "e24",
+  "at": 1791454920.3,
+  "kind": "step-start",
+  "role": "quality-czar",
+  "story": "s1",
+  "data": {
+   "brief": "Lint and static checks.",
+   "mono": 454800.3,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e25",
+  "at": 1791455320.9,
+  "kind": "step-end",
+  "role": "quality-czar",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "Clean; renamed one helper.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 3805,
+    "output": 4315,
+    "cache_read": 63094,
+    "cache_creation": 13814
+   },
+   "cost_usd": 0.0,
+   "turns": 35,
+   "commit": "6bf46c6",
+   "mono": 455200.9,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e26",
+  "at": 1791455375.8,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "quality",
+   "verdict": "pass",
+   "now_at": "review",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e27",
+  "at": 1791455669.7,
+  "kind": "step-start",
+  "role": "code-reviewer",
+  "story": "s1",
+  "data": {
+   "brief": "Review against REQ-001/002.",
+   "mono": 455549.7,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e28",
+  "at": 1791456149.6,
+  "kind": "step-end",
+  "role": "code-reviewer",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "LGTM. Quoting matches REQ-001.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 18606,
+    "output": 12630,
+    "cache_read": 167849,
+    "cache_creation": 39640
+   },
+   "cost_usd": 0.7405,
+   "turns": 35,
+   "commit": "9474031",
+   "mono": 456029.6,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e29",
+  "at": 1791456492.4,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "review",
+   "verdict": "pass",
+   "now_at": "design-review",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e30",
+  "at": 1791456558.6,
+  "kind": "step-start",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "brief": "Design review.",
+   "mono": 456438.6,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e31",
+  "at": 1791456696.3,
+  "kind": "step-end",
+  "role": "architect",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "Code matches the design.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 11938,
+    "output": 10667,
+    "cache_read": 98199,
+    "cache_creation": 40859
+   },
+   "cost_usd": 0.6308,
+   "turns": 23,
+   "commit": "a5aa3c8",
+   "mono": 456576.3,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e32",
+  "at": 1791456955.9,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "design-review",
+   "verdict": "pass",
+   "now_at": "e2e",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e33",
+  "at": 1791457254.8,
+  "kind": "step-start",
+  "role": "integration-tester",
+  "story": "s1",
+  "data": {
+   "brief": "E2E on a 1k-row report.",
+   "mono": 457134.8,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e34",
+  "at": 1791457572.1,
+  "kind": "step-end",
+  "role": "integration-tester",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "3 e2e tests pass.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 10882,
+    "output": 6378,
+    "cache_read": 88580,
+    "cache_creation": 23991
+   },
+   "cost_usd": 0.2449,
+   "turns": 26,
+   "commit": "2b0537e",
+   "mono": 457452.1,
+   "slept": 120.0,
+   "rate": [
+    410.0,
+    380.0
+   ]
+  }
+ },
+ {
+  "id": "rs4",
+  "at": 1791457830.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s1",
+  "data": {
+   "stage": "presentation.trial",
+   "when": "after",
+   "attach": "step",
+   "step": "e2e",
+   "attempt": null,
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791457800.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 30.0
+  }
+ },
+ {
+  "id": "e35",
+  "at": 1791457844.2,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "e2e",
+   "verdict": "pass",
+   "now_at": "acceptance",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "rs5",
+  "at": 1791458045.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s1",
+  "data": {
+   "stage": "env.prepare",
+   "when": "before",
+   "attach": "step",
+   "step": "acceptance",
+   "attempt": null,
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791458000.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 45.0
+  }
+ },
+ {
+  "id": "e36",
+  "at": 1791458071.8,
+  "kind": "step-start",
+  "role": "customer-proxy",
+  "story": "s1",
+  "data": {
+   "brief": "Accept s1 as a finance user.",
+   "mono": 457951.8,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e37",
+  "at": 1791458273.1,
+  "kind": "step-end",
+  "role": "customer-proxy",
+  "story": "s1",
+  "data": {
+   "status": "done",
+   "summary": "Exported a report and opened it; AC1-AC3 met.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 6161,
+    "output": 5560,
+    "cache_read": 95705,
+    "cache_creation": 23585
+   },
+   "cost_usd": 0.219,
+   "turns": 35,
+   "commit": "14a0f9e",
+   "mono": 458153.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e38",
+  "at": 1791458376.3,
+  "kind": "gate",
+  "role": null,
+  "story": "s1",
+  "data": {
+   "step": "acceptance",
+   "verdict": "pass",
+   "now_at": "acceptance",
+   "rounds": 0,
+   "story_status": "done",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e39",
+  "at": 1791458569.0,
+  "kind": "po-session",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "path": "compact",
+   "reasons": [
+    "s1 done"
+   ],
+   "pre_tokens": 182000
+  }
+ },
+ {
+  "id": "e42",
+  "at": 1791459025.0,
+  "kind": "step-start",
+  "role": "architect",
+  "story": "s3",
+  "data": {
+   "brief": "Design streaming export for `report run --stream`.\n\n- **Memory bound:** stay under 50 MB for 1M rows.\n- Keep the `--format csv` flags.\n- Name the temp-file rule in the design.",
+   "mono": 458905.0,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e43",
+  "at": 1791459117.1,
+  "kind": "step-end",
+  "role": "architect",
+  "story": "s3",
+  "data": {
+   "status": "done",
+   "summary": "Added REQ-003 (bounded memory) and REQ-004 (progress on stderr).",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 15216,
+    "output": 7061,
+    "cache_read": 238575,
+    "cache_creation": 48405
+   },
+   "cost_usd": 0.6744,
+   "turns": 36,
+   "commit": "f341e07",
+   "requirements_added": [
+    "REQ-003",
+    "REQ-004"
+   ],
+   "mono": 458997.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e44",
+  "at": 1791459391.7,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s3",
+  "data": {
+   "id": "REQ-003",
+   "change": "added",
+   "reason": "New: memory bound"
+  }
+ },
+ {
+  "id": "e45",
+  "at": 1791459688.7,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s3",
+  "data": {
+   "id": "REQ-004",
+   "change": "added",
+   "reason": "New: progress"
+  }
+ },
+ {
+  "id": "e46",
+  "at": 1791459749.2,
+  "kind": "gate",
+  "role": null,
+  "story": "s3",
+  "data": {
+   "step": "design",
+   "verdict": "pass",
+   "now_at": "tests",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "all ACs traced"
+  }
+ },
+ {
+  "id": "e47",
+  "at": 1791460131.0,
+  "kind": "step-start",
+  "role": "unit-tester",
+  "story": "s3",
+  "data": {
+   "brief": "Red tests for streaming.",
+   "mono": 460011.0,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e48",
+  "at": 1791460618.8,
+  "kind": "step-end",
+  "role": "unit-tester",
+  "story": "s3",
+  "data": {
+   "status": "done",
+   "summary": "Memory-bound test with 2M rows.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 12619,
+    "output": 5888,
+    "cache_read": 94933,
+    "cache_creation": 14782
+   },
+   "cost_usd": 0.2101,
+   "turns": 10,
+   "commit": "7b45145",
+   "mono": 460498.8,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e49",
+  "at": 1791460899.9,
+  "kind": "gate",
+  "role": null,
+  "story": "s3",
+  "data": {
+   "step": "tests",
+   "verdict": "pass",
+   "now_at": "implement",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e50",
+  "at": 1791460963.5,
+  "kind": "step-start",
+  "role": "architect",
+  "story": "s2",
+  "data": {
+   "brief": "Design --columns.",
+   "mono": 460843.5,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e51",
+  "at": 1791461087.9,
+  "kind": "step-end",
+  "role": "architect",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Changed REQ-002: column order follows --columns. s1 is affected.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 10592,
+    "output": 4785,
+    "cache_read": 175215,
+    "cache_creation": 17787
+   },
+   "cost_usd": 0.3714,
+   "turns": 4,
+   "commit": "9118bb1",
+   "requirement_changes": {
+    "REQ-002": "Order must follow --columns, not schema order; finance relies on a fixed layout."
+   },
+   "mono": 460967.9,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e52",
+  "at": 1791461185.3,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s2",
+  "data": {
+   "id": "REQ-002",
+   "change": "changed",
+   "reason": "Order must follow --columns, not schema order; finance relies on a fixed layout.",
+   "affected_done_stories": [
+    "s1"
+   ]
+  }
+ },
+ {
+  "id": "e53",
+  "at": 1791461263.9,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "design",
+   "verdict": "pass",
+   "now_at": "tests",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "all ACs traced"
+  }
+ },
+ {
+  "id": "e54",
+  "at": 1791461681.1,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "brief": "Implement streaming writer.",
+   "mono": 461561.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e55",
+  "at": 1791462078.2,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "status": "done",
+   "summary": "Generator-based writer.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 16431,
+    "output": 4268,
+    "cache_read": 216659,
+    "cache_creation": 49245
+   },
+   "cost_usd": 0.363,
+   "turns": 34,
+   "commit": "7bdc968",
+   "mono": 461958.2,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "rs1",
+  "at": 1791462200.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s3",
+  "data": {
+   "stage": "gate.tests+coverage",
+   "when": "after",
+   "attach": "step",
+   "step": "implement",
+   "attempt": null,
+   "detail": "uv run --directory agile-team/runner pytest --cov",
+   "code": 1,
+   "raised": null,
+   "started_at": 1791462100.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 100.0
+  }
+ },
+ {
+  "id": "e56",
+  "at": 1791462236.7,
+  "kind": "gate",
+  "role": null,
+  "story": "s3",
+  "data": {
+   "step": "implement",
+   "verdict": "bounce",
+   "now_at": "implement",
+   "rounds": 1,
+   "story_status": "active",
+   "reason": "coverage 88.1% is below 95%"
+  }
+ },
+ {
+  "id": "rs2",
+  "at": 1791462310.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s2",
+  "data": {
+   "stage": "checkout.guard",
+   "when": "before",
+   "attach": "step",
+   "step": "unit-tester",
+   "attempt": null,
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791462300.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 10.0
+  }
+ },
+ {
+  "id": "e57",
+  "at": 1791462331.5,
+  "kind": "step-start",
+  "role": "unit-tester",
+  "story": "s2",
+  "data": {
+   "brief": "Red tests for --columns.",
+   "mono": 462211.5,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e58",
+  "at": 1791462803.8,
+  "kind": "step-end",
+  "role": "unit-tester",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "8 failing tests.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 11143,
+    "output": 4132,
+    "cache_read": 136887,
+    "cache_creation": 16777
+   },
+   "cost_usd": 0.1994,
+   "turns": 17,
+   "commit": "f373ca5",
+   "mono": 462683.8,
+   "slept": 120.0,
+   "rate": [
+    500.0,
+    610.0,
+    430.0
+   ]
+  }
+ },
+ {
+  "id": "e59",
+  "at": 1791463205.6,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "tests",
+   "verdict": "pass",
+   "now_at": "implement",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e60",
+  "at": 1791463383.1,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "brief": "Coverage below 95%: cover the progress path.",
+   "mono": 463263.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e61",
+  "at": 1791463825.0,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "status": "done",
+   "summary": "Added progress tests.",
+   "next_role": null,
+   "open_questions": [
+    "Is pandas acceptable as a dependency for chunked reads?"
+   ],
+   "tokens": {
+    "input": 26111,
+    "output": 11339,
+    "cache_read": 163465,
+    "cache_creation": 37859
+   },
+   "cost_usd": 0.4394,
+   "turns": 9,
+   "commit": "b239f3c",
+   "mono": 463705.0,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e62",
+  "at": 1791464186.3,
+  "kind": "gate",
+  "role": null,
+  "story": "s3",
+  "data": {
+   "step": "implement",
+   "verdict": "bounce",
+   "now_at": "implement",
+   "rounds": 2,
+   "story_status": "active",
+   "reason": "tests fail:\nFAILED tests/test_stream.py::test_memory_bound - 412MB > 256MB"
+  }
+ },
+ {
+  "id": "e63",
+  "at": 1791464423.3,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s2",
+  "data": {
+   "brief": "Implement --columns.",
+   "mono": 464303.3,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e64",
+  "at": 1791464976.5,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Columns filter + ordering.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 13825,
+    "output": 5450,
+    "cache_read": 231638,
+    "cache_creation": 33091
+   },
+   "cost_usd": 0.3168,
+   "turns": 18,
+   "commit": "9cfc865",
+   "mono": 464856.5,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e65",
+  "at": 1791465324.8,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "implement",
+   "verdict": "pass",
+   "now_at": "quality",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "coverage 95.8%"
+  }
+ },
+ {
+  "id": "e66",
+  "at": 1791465739.1,
+  "kind": "step-start",
+  "role": "quality-czar",
+  "story": "s2",
+  "data": {
+   "brief": "Lint.",
+   "mono": 465619.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e67",
+  "at": 1791466264.0,
+  "kind": "step-end",
+  "role": "quality-czar",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Clean.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 11866,
+    "output": 6000,
+    "cache_read": 143582,
+    "cache_creation": 11854
+   },
+   "cost_usd": 0.0,
+   "turns": 37,
+   "commit": "7e26f36",
+   "mono": 466144.0,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e68",
+  "at": 1791466439.1,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "quality",
+   "verdict": "pass",
+   "now_at": "review",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "e69",
+  "at": 1791466490.1,
+  "kind": "step-start",
+  "role": "code-reviewer",
+  "story": "s2",
+  "data": {
+   "brief": "Review --columns.",
+   "mono": 466370.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e70",
+  "at": 1791466594.3,
+  "kind": "step-end",
+  "role": "code-reviewer",
+  "story": "s2",
+  "data": {
+   "status": "changes_requested",
+   "summary": "Unknown column names are silently dropped; REQ-002 says error.",
+   "next_role": "developer-cli",
+   "open_questions": [],
+   "tokens": {
+    "input": 12147,
+    "output": 5850,
+    "cache_read": 273906,
+    "cache_creation": 48521
+   },
+   "cost_usd": 0.6472,
+   "turns": 32,
+   "commit": "cefe2a1",
+   "mono": 466474.3,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e71",
+  "at": 1791466990.4,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "review",
+   "verdict": "bounce",
+   "now_at": "implement",
+   "rounds": 1,
+   "story_status": "active",
+   "reason": "Unknown columns silently dropped"
+  }
+ },
+ {
+  "id": "e72",
+  "at": 1791467405.9,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "brief": "Memory test fails at 412MB.",
+   "mono": 467285.9,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e73",
+  "at": 1791467982.9,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "status": "done",
+   "summary": "Switched to row iterator; still buffering in sort.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 14021,
+    "output": 5425,
+    "cache_read": 143516,
+    "cache_creation": 22688
+   },
+   "cost_usd": 0.2516,
+   "turns": 17,
+   "commit": "7b8f2ab",
+   "mono": 467862.9,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e74",
+  "at": 1791468260.1,
+  "kind": "gate",
+  "role": null,
+  "story": "s3",
+  "data": {
+   "step": "implement",
+   "verdict": "bounce",
+   "now_at": "implement",
+   "rounds": 3,
+   "story_status": "needs_manager",
+   "reason": "tests fail: 301MB > 256MB"
+  }
+ },
+ {
+  "id": "e75",
+  "at": 1791468315.1,
+  "kind": "message",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "message": "m3"
+  }
+ },
+ {
+  "id": "e76",
+  "at": 1791468674.4,
+  "kind": "step-start",
+  "role": "architect",
+  "story": "s4",
+  "data": {
+   "brief": "Design Excel-friendly encoding.",
+   "mono": 468554.4,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e77",
+  "at": 1791469009.0,
+  "kind": "step-end",
+  "role": "architect",
+  "story": "s4",
+  "data": {
+   "status": "blocked",
+   "summary": "Need a product decision on BOM default.",
+   "next_role": null,
+   "open_questions": [
+    "Should a UTF-8 BOM be written by default, or only with --excel?"
+   ],
+   "tokens": {
+    "input": 20365,
+    "output": 11796,
+    "cache_read": 103737,
+    "cache_creation": 38459
+   },
+   "cost_usd": 0.689,
+   "turns": 28,
+   "commit": "c845007",
+   "requirements_added": [
+    "REQ-005"
+   ],
+   "mono": 468889.0,
+   "slept": 120.0,
+   "rate": [
+    120.0,
+    260.0,
+    140.0,
+    90.0
+   ]
+  }
+ },
+ {
+  "id": "e78",
+  "at": 1791469319.3,
+  "kind": "requirement-changed",
+  "role": "architect",
+  "story": "s4",
+  "data": {
+   "id": "REQ-005",
+   "change": "added",
+   "reason": "New: BOM for Excel"
+  }
+ },
+ {
+  "id": "e79",
+  "at": 1791469435.1,
+  "kind": "gate",
+  "role": null,
+  "story": "s4",
+  "data": {
+   "step": "design",
+   "verdict": "hold",
+   "now_at": "design",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "role reported blocked"
+  }
+ },
+ {
+  "id": "e80",
+  "at": 1791469489.5,
+  "kind": "message",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "message": "m4"
+  }
+ },
+ {
+  "id": "e81",
+  "at": 1791469697.9,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s2",
+  "data": {
+   "brief": "Error on unknown columns per REQ-002.",
+   "mono": 469577.9,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e82",
+  "at": 1791470270.8,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Raises UsageError.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 21945,
+    "output": 4870,
+    "cache_read": 115570,
+    "cache_creation": 21139
+   },
+   "cost_usd": 0.2528,
+   "turns": 33,
+   "commit": "ce76e9f",
+   "mono": 470150.8,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e83",
+  "at": 1791470560.0,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "implement",
+   "verdict": "pass",
+   "now_at": "quality",
+   "rounds": 1,
+   "story_status": "active",
+   "reason": "coverage 96.0%"
+  }
+ },
+ {
+  "id": "e84",
+  "at": 1791470832.4,
+  "kind": "step-start",
+  "role": "quality-czar",
+  "story": "s2",
+  "data": {
+   "brief": "Lint.",
+   "mono": 470712.4,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "thread-t1",
+  "at": 1791471000.0,
+  "kind": "thread",
+  "role": null,
+  "story": "s5",
+  "data": {
+   "entry": "t1",
+   "author": "human",
+   "to": "product-owner"
+  }
+ },
+ {
+  "id": "e85",
+  "at": 1791471226.3,
+  "kind": "step-end",
+  "role": "quality-czar",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Clean.",
+   "next_role": null,
+   "open_questions": [],
+   "tokens": {
+    "input": 8217,
+    "output": 6656,
+    "cache_read": 61827,
+    "cache_creation": 17320
+   },
+   "cost_usd": 0.0,
+   "turns": 5,
+   "commit": "03a56cc",
+   "mono": 471106.3,
+   "slept": 120.0,
+   "rate": [
+    200.0,
+    150.0,
+    260.0
+   ]
+  }
+ },
+ {
+  "id": "thread-m5",
+  "at": 1791471500.0,
+  "kind": "thread",
+  "role": "product-owner",
+  "story": "s5",
+  "data": {
+   "entry": "m5",
+   "author": "product-owner",
+   "to": "human"
+  }
+ },
+ {
+  "id": "e86",
+  "at": 1791471570.0,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "quality",
+   "verdict": "pass",
+   "now_at": "review",
+   "rounds": 1,
+   "story_status": "active",
+   "reason": ""
+  }
+ },
+ {
+  "id": "thread-lp1",
+  "at": 1791471800.0,
+  "kind": "thread",
+  "role": null,
+  "story": "s5",
+  "data": {
+   "entry": "lp1",
+   "author": "human",
+   "to": "liaison"
+  }
+ },
+ {
+  "id": "e87",
+  "at": 1791471886.1,
+  "kind": "step-start",
+  "role": "code-reviewer",
+  "story": "s2",
+  "data": {
+   "brief": "Re-review --columns after the fix.",
+   "mono": 471766.1,
+   "slept": 120.0
+  }
+ },
+ {
+  "id": "e88",
+  "at": 1791471900.0,
+  "kind": "story-opened",
+  "role": "product-owner",
+  "story": "s7",
+  "data": {
+   "title": "Serve the report dashboard",
+   "step": "design"
+  }
+ },
+ {
+  "id": "e89",
+  "at": 1791471960.0,
+  "kind": "gate",
+  "role": "customer-proxy",
+  "story": "s7",
+  "data": {
+   "step": "acceptance",
+   "verdict": "return",
+   "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "now_at": "e2e",
+   "story_status": "active",
+   "rounds": 0,
+   "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+   "author": "runner",
+   "count": 1,
+   "history": [],
+   "bounces": 1
+  }
+ },
+ {
+  "id": "e90",
+  "at": 1791472080.0,
+  "kind": "fault",
+  "role": "manager",
+  "story": "s7",
+  "data": {
+   "fault": "runner",
+   "kind": "runner",
+   "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "now_at": "acceptance"
+  }
+ },
+ {
+  "id": "thread-lr1",
+  "at": 1791472100.0,
+  "kind": "thread",
+  "role": null,
+  "story": "s5",
+  "data": {
+   "entry": "lr1",
+   "author": "liaison",
+   "to": "human"
+  }
+ },
+ {
+  "id": "e91",
+  "at": 1791472140.0,
+  "kind": "gate",
+  "role": "customer-proxy",
+  "story": "s7",
+  "data": {
+   "step": "acceptance",
+   "verdict": "return",
+   "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "now_at": "e2e",
+   "story_status": "active",
+   "rounds": 0,
+   "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+   "author": "runner",
+   "count": 1,
+   "history": [],
+   "bounces": 1
+  }
+ },
+ {
+  "id": "e92",
+  "at": 1791472200.0,
+  "kind": "escalation",
+  "role": "customer-proxy",
+  "story": "s7",
+  "data": {
+   "step": "acceptance",
+   "verdict": "escalate",
+   "reason": "story s7 presentation is not up: acceptance environment 'web' did not start: the start command exited with code 1 before http://127.0.0.1:8799/api/snapshot answered. Last output:\nOSError: [Errno 48] Address already in use",
+   "now_at": "acceptance",
+   "story_status": "needs_manager",
+   "rounds": 0,
+   "key": "acceptance>e2e story <id> presentation is not up: acceptance environment 'web' did not start: the start command exited with code <n> before <url> answered. last output: oserror: [errno <n>] address already in use",
+   "author": "runner",
+   "count": 2,
+   "history": [
+    "e91"
+   ],
+   "bounces": 2,
+   "rule": "repeat"
+  }
+ },
+ {
+  "id": "e93",
+  "at": 1791472210.0,
+  "kind": "boundary",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "sync",
+   "outcome": "pass",
+   "note": "sprint 10 is on the review stack",
+   "target": "origin/main",
+   "team_branch": "agile-team"
+  }
+ },
+ {
+  "id": "e94",
+  "at": 1791472220.0,
+  "kind": "boundary",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "check",
+   "outcome": "fail",
+   "reason": "test failed (exit 1): uv run pytest\nFAILED tests/test_export.py::test_csv",
+   "key": "end>check test failed",
+   "count": 1,
+   "history": [],
+   "checks": [
+    {
+     "name": "test",
+     "passed": false,
+     "why": "exit 1"
+    }
+   ]
+  }
+ },
+ {
+  "id": "e95",
+  "at": 1791472230.0,
+  "kind": "boundary",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "check",
+   "outcome": "pass",
+   "checks": [
+    {
+     "name": "test",
+     "passed": true,
+     "why": ""
+    }
+   ]
+  }
+ },
+ {
+  "id": "e96",
+  "at": 1791472240.0,
+  "kind": "boundary",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "review",
+   "outcome": "built",
+   "branches": [
+    "team/sprint-9",
+    "team/sprint-10"
+   ]
+  }
+ },
+ {
+  "id": "e97",
+  "at": 1791472250.0,
+  "kind": "boundary",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "edge": "end",
+   "sprint": 10,
+   "stage": "push",
+   "outcome": "held",
+   "hold": "push_permission",
+   "branches": [
+    "team/sprint-9",
+    "team/sprint-10"
+   ]
+  }
+ },
+ {
+  "id": "e98",
+  "at": 1791472260.0,
+  "kind": "priority",
+  "role": "product-owner",
+  "story": "s3",
+  "data": {
+   "change": "move",
+   "order": [
+    "s3",
+    "s2",
+    "s4",
+    "s7",
+    "s5",
+    "s6"
+   ],
+   "moves": [
+    {
+     "story": "s3",
+     "from": 2,
+     "to": 1
+    },
+    {
+     "story": "s2",
+     "from": 1,
+     "to": 2
+    }
+   ],
+   "reason": "s3 blocks the export; fix its memory bound first",
+   "pulled": [
+    "s5"
+   ],
+   "source": "product-owner",
+   "warnings": [
+    "s2 is above s5, which it depends on"
+   ]
+  }
+ },
+ {
+  "id": "e87b",
+  "at": 1791472300.0,
+  "kind": "step-end",
+  "role": "code-reviewer",
+  "story": "s2",
+  "data": {
+   "status": "done",
+   "summary": "Re-review clean.",
+   "turns": 3,
+   "next_role": null,
+   "open_questions": [],
+   "mono": 472180.0,
+   "slept": 120.0,
+   "rate": [
+    300.0,
+    280.0,
+    320.0
+   ]
+  }
+ },
+ {
+  "id": "opinion-o1",
+  "at": 1791472300.0,
+  "kind": "opinion",
+  "role": null,
+  "story": "s6",
+  "data": {
+   "opinion": "o1",
+   "kind": "move-up"
+  }
+ },
+ {
+  "id": "opinion-o2",
+  "at": 1791472350.0,
+  "kind": "opinion",
+  "role": null,
+  "story": "s6",
+  "data": {
+   "opinion": "o2",
+   "kind": "move-down"
+  }
+ },
+ {
+  "id": "opinion-o3",
+  "at": 1791472360.0,
+  "kind": "opinion",
+  "role": null,
+  "story": "s5",
+  "data": {
+   "opinion": "o3",
+   "kind": "scope"
+  }
+ },
+ {
+  "id": "opinion-act-a1",
+  "at": 1791472420.0,
+  "kind": "opinion-act",
+  "role": null,
+  "story": "s5",
+  "data": {
+   "opinion": "o3",
+   "act": "apply",
+   "route": "product-owner",
+   "ref": "t2"
+  }
+ },
+ {
+  "id": "e99",
+  "at": 1791472640.0,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "brief": "Memory test fails at 412MB.",
+   "mono": 472520.0,
+   "slept": 120.0,
+   "step": "implement"
+  }
+ },
+ {
+  "id": "e100",
+  "at": 1791472830.0,
+  "kind": "step-end",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "status": "interrupted",
+   "reason": "exit 143 (SIGTERM)",
+   "cause": "sigterm",
+   "halt": "stopped by stop --now",
+   "turns": 7,
+   "tokens": {
+    "input": 18,
+    "output": 4210,
+    "cache_read": 402000,
+    "cache_creation": 9100
+   },
+   "estimate_usd": 0.0812,
+   "model": "claude-sonnet-4-5-20250929",
+   "opened_at": 1791472640.0,
+   "tool_s": 161.2,
+   "model_s": 28.8,
+   "waiting_s": 0.0,
+   "rate": [
+    880.0,
+    940.0,
+    700.0,
+    520.0
+   ]
+  }
+ },
+ {
+  "id": "e101",
+  "at": 1791472960.0,
+  "kind": "step-start",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "brief": "Memory test fails at 412MB.",
+   "step": "implement"
+  }
+ },
+ {
+  "id": "e101s1",
+  "at": 1791472961.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s3",
+  "data": {
+   "stage": "stop.lint",
+   "when": "after",
+   "attach": "step",
+   "step": "implement",
+   "attempt": {
+    "n": 1,
+    "of": 3
+   },
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791472958.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 3.0
+  }
+ },
+ {
+  "id": "e101s2",
+  "at": 1791472962.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s3",
+  "data": {
+   "stage": "stop.suite",
+   "when": "after",
+   "attach": "step",
+   "step": "implement",
+   "attempt": {
+    "n": 1,
+    "of": 3
+   },
+   "detail": null,
+   "code": 1,
+   "raised": null,
+   "started_at": 1791472749.6,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 212.4
+  }
+ },
+ {
+  "id": "e101c",
+  "at": 1791472962.5,
+  "kind": "stop-check",
+  "role": "developer-cli",
+  "story": "s3",
+  "data": {
+   "check": "suite",
+   "stage": "stop.suite",
+   "attempt": 1,
+   "of": 3,
+   "seconds": 212.4,
+   "text": "1 failing test(s) are yours to fix (run them with run_tests):\nFAILED tests/test_memory.py::test_limit - assert 412 < 400"
+  }
+ },
+ {
+  "id": "e101s3",
+  "at": 1791472964.0,
+  "kind": "runner-stage",
+  "role": "runner",
+  "story": "s3",
+  "data": {
+   "stage": "stop.suite",
+   "when": "after",
+   "attach": "step",
+   "step": "implement",
+   "attempt": {
+    "n": 2,
+    "of": 3
+   },
+   "detail": null,
+   "code": 0,
+   "raised": null,
+   "started_at": 1791472766.0,
+   "started_mono": null,
+   "started_slept": 0.0,
+   "seconds": 198.0
+  }
+ },
+ {
+  "id": "e102",
+  "at": 1791472965.0,
+  "kind": "priority",
+  "role": null,
+  "story": "s6",
+  "data": {
+   "change": "move",
+   "order": [
+    "s3",
+    "s2",
+    "s4",
+    "s7",
+    "s5",
+    "s6"
+   ],
+   "moves": [
+    {
+     "story": "s6",
+     "from": 6,
+     "to": 5
+    },
+    {
+     "story": "s5",
+     "from": 5,
+     "to": 6
+    }
+   ],
+   "reason": "moved on the dashboard (r1)",
+   "pulled": [
+    "s5"
+   ],
+   "source": "human (dashboard)",
+   "warnings": []
+  }
+ },
+ {
+  "id": "e103",
+  "at": 1791473100.0,
+  "kind": "po-turn",
+  "role": "product-owner",
+  "story": null,
+  "data": {
+   "opened_at": 1791472760.0,
+   "tool_s": 312.5,
+   "model_s": 9.5,
+   "waiting_s": 312.5,
+   "mono": 5400.0,
+   "slept": 0.0,
+   "rate": [
+    150.0,
+    240.0,
+    90.0
+   ]
+  }
+ },
+ {
+  "id": "e104",
+  "at": 1791473200.0,
+  "kind": "story-admin",
+  "role": "product-owner",
+  "story": "s6",
+  "data": {
+   "tool": "hold_story",
+   "reason": "waiting for the scheduler design to settle",
+   "question": null,
+   "before": {
+    "status": "active",
+    "step": "design",
+    "sprint": null,
+    "hold": null,
+    "po_hold": null
+   },
+   "after": {
+    "status": "active",
+    "step": "design",
+    "sprint": null,
+    "hold": null,
+    "po_hold": {
+     "kind": "PO hold",
+     "reason": "waiting for the scheduler design to settle",
+     "question": null
+    }
+   }
+  }
+ },
+ {
+  "id": "e105",
+  "at": 1791473300.0,
+  "kind": "gate",
+  "role": null,
+  "story": "s2",
+  "data": {
+   "step": "acceptance",
+   "verdict": "next",
+   "now_at": "acceptance",
+   "rounds": 0,
+   "story_status": "active",
+   "reason": "acceptance environment cli: pass; next: web",
+   "environment": "cli",
+   "mark": "pass",
+   "failed_acs": []
+  }
+ }
+]

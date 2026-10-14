@@ -1,0 +1,29 @@
+{
+ "design": [
+  "architect"
+ ],
+ "ops-review": [
+  "devops"
+ ],
+ "tests": [
+  "unit-tester"
+ ],
+ "implement": [
+  "developer-cli"
+ ],
+ "quality": [
+  "quality-czar"
+ ],
+ "review": [
+  "code-reviewer"
+ ],
+ "design-review": [
+  "architect"
+ ],
+ "e2e": [
+  "integration-tester"
+ ],
+ "acceptance": [
+  "customer-proxy"
+ ]
+}

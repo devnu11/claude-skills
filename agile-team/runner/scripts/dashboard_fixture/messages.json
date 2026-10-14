@@ -1,0 +1,48 @@
+[
+ {
+  "id": "m1",
+  "kind": "question",
+  "text": "Kickoff: should CSV export cover only `report run`, or also `report schedule`? And is Excel on Windows a target consumer?",
+  "stories": [],
+  "at": 1791450026.2
+ },
+ {
+  "id": "m2",
+  "kind": "update",
+  "text": "Sprint 1 started: s1-s4. s5 and s6 stay in the backlog.",
+  "stories": [
+   "s1",
+   "s2",
+   "s3",
+   "s4"
+  ],
+  "at": 1791452225.9
+ },
+ {
+  "id": "m3",
+  "kind": "question",
+  "text": "s3 keeps failing the memory bound because sorting needs the whole result.\n\n- **Option A:** spill to a temp file (up to 1 GB) when `--sort` is used.\n- **Option B:** refuse `--sort` with `--stream`.\n\nWhich one?",
+  "stories": [
+   "s3"
+  ],
+  "at": 1791468315.1
+ },
+ {
+  "id": "m4",
+  "kind": "question",
+  "text": "s4: should exports write a UTF-8 BOM by default (Excel opens them correctly) or only with a new --excel flag (cleaner for scripts)?",
+  "stories": [
+   "s4"
+  ],
+  "at": 1791469489.5
+ },
+ {
+  "id": "m5",
+  "kind": "reply",
+  "text": "Yes: CSV only for now.",
+  "stories": [
+   "s5"
+  ],
+  "at": 1791471500.0
+ }
+]

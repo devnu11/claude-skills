@@ -1,0 +1,46 @@
+{
+ "items": [
+  {
+   "id": "o1",
+   "story": "s6",
+   "kind": "move-up",
+   "text": "s6 unblocks s7; do it first.",
+   "at": 1791472300.0,
+   "latest": false,
+   "route": "",
+   "act": null
+  },
+  {
+   "id": "o2",
+   "story": "s6",
+   "kind": "move-down",
+   "text": "s6 can wait for s5.",
+   "at": 1791472350.0,
+   "latest": true,
+   "route": "reorder",
+   "act": null
+  },
+  {
+   "id": "o3",
+   "story": "s5",
+   "kind": "scope",
+   "text": "Cover CSV only.",
+   "at": 1791472360.0,
+   "latest": true,
+   "route": "",
+   "act": {
+    "id": "a1",
+    "act": "apply",
+    "route": "product-owner",
+    "ref": "t2",
+    "at": 1791472420.0
+   }
+  }
+ ],
+ "asked_at": 1791472280.0,
+ "review": {
+  "id": "v1",
+  "text": "Two stories to change: s6 moves down, s5 narrows to CSV.",
+  "at": 1791472370.0
+ }
+}

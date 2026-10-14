@@ -1,0 +1,37 @@
+{
+ "remote": "origin",
+ "branch": "main",
+ "team_branch": "agile-team",
+ "push": "yes",
+ "report": "Sprint 9 is up for review: #12 (ready, team/sprint-9) https://github.com/o/r/pull/12.",
+ "boundary": {
+  "edge": "end",
+  "sprint": 10,
+  "stage": "push",
+  "hold": "push_permission",
+  "failure": null,
+  "rounds": 0
+ },
+ "stack": [
+  {
+   "sprint": 9,
+   "branch": "team/sprint-9",
+   "base": "main",
+   "pr": 12,
+   "url": "https://github.com/o/r/pull/12",
+   "mode": "ready",
+   "check": "pass",
+   "head": "3f9c2ab41d7e"
+  },
+  {
+   "sprint": 10,
+   "branch": "team/sprint-10",
+   "base": "team/sprint-9",
+   "pr": null,
+   "url": "",
+   "mode": "none",
+   "check": "pass",
+   "head": "8be05c61a9f2"
+  }
+ ]
+}
