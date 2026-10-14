@@ -318,6 +318,13 @@ class FakeSystem:
         self._store(key, text.encode())
         self._record("write_text", key)
 
+    def write_bytes(self, path: Path, data: bytes) -> None:
+        """Create or overwrite a file with raw bytes."""
+        self._write_check()
+        key = self._key(path)
+        self._store(key, data)
+        self._record("write_bytes", key)
+
     def append_text(self, path: Path, text: str) -> None:
         """Append to a file, creating it."""
         self._write_check()
