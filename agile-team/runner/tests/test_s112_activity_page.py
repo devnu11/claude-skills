@@ -98,7 +98,8 @@ def test_the_goal_is_one_line_with_a_hover_title() -> None:
 
 
 def test_the_header_functions_exist_and_the_old_ones_do_not() -> None:
-    for name in ("statePill", "managerFlag", "budgetPill", "questionsPill", "checkPcts", "budgetTitle"):
+    new = ("statePill", "managerFlag", "budgetPill", "questionsPill", "checkPcts", "budgetTitle")
+    for name in new:
         assert f"function {name}(" in PAGE, name
     for name in ("connectionPill", "smartPill", "pillText", "renderMeter", "renderLiveDetails"):
         assert f"function {name}(" not in PAGE, name
@@ -110,11 +111,16 @@ def test_the_budget_bar_is_120_px() -> None:
 
 
 def test_the_panel_states_and_helpers_exist() -> None:
-    assert "PANEL_STATES = [stepPanel, eventPanel, stagePanel, chorePanel, idlePanel]" in PAGE
-    names = ("latestMessage", "clip", "idleWhy", "renderLivePanel", "renderPanelText", "fillPanelText")
-    for name in names + ("runLabel", "toolLine", "stageAwake", "runnerResult", "firstLine", "newestRow"):
+    states = "PANEL_STATES = [stepPanel, eventPanel, stagePanel, chorePanel, idlePanel]"
+    assert states in PAGE
+    names = (
+        *("latestMessage", "clip", "idleWhy", "renderLivePanel", "renderPanelText"),
+        *("fillPanelText", "runLabel", "toolLine", "stageAwake", "runnerResult"),
+        *("firstLine", "newestRow"),
+    )
+    for name in names:
         assert f"function {name}(" in PAGE, name
-    for gone in ("renderPanelHead", "awakeText", "panelMeta", "lp-more", "lp-meta", "lp-head\""):
+    for gone in ("renderPanelHead", "awakeText", "panelMeta", "lp-more", "lp-meta", 'lp-head"'):
         assert gone not in PAGE, gone
     assert "CLIP_LINES = 4" in PAGE and "CLIP_CHARS = 400" in PAGE and "CLAMP_LINES = 3" in PAGE
     assert "● Nothing running" in PAGE
