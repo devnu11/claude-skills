@@ -113,6 +113,12 @@ rule, update in the same story:
   Colours come from the CSS
   tokens in `:root`. Every panel survives a missing or empty snapshot
   section (it shows an `.empty` line).
+- Page tests come in two kinds. A static check reads `index.html` as text
+  (selectors, tables, tokens, contrast from the `:root` blocks) and is a unit
+  test under `tests/`. A behaviour test runs the page's functions in node
+  through `tests/dashboard_node.py`; that starts a process, so it is an e2e
+  test under `tests/e2e/`, written by the integration-tester. A design's
+  test checklist says which kind each item is and who writes it.
 
 ## Quality bar
 
