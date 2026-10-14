@@ -72,7 +72,7 @@ def test_the_tool_label_does_not_wrap() -> None:
 
 def test_bad_stage_labels_normalize_to_an_empty_object() -> None:
     line = next(ln for ln in PAGE.splitlines() if "out.stage_labels =" in ln)
-    assert "typeof out.stage_labels === \"object\"" in line
+    assert 'typeof out.stage_labels === "object"' in line
     assert "!Array.isArray(out.stage_labels)" in line
     assert line.rstrip().endswith(": {};")
 
