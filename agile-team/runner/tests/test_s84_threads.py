@@ -252,7 +252,8 @@ def reply(story_repo: Path, source: str) -> int:
 
 def test_reply_is_a_registered_command_after_tell() -> None:
     names = [c.name for c in cli.COMMANDS]
-    assert names.index("reply") == names.index("tell") + 1
+    assert names.index("reply") == names.index("share") + 1
+    assert names.index("share") == names.index("tell") + 1
 
 
 def test_reply_from_a_file(story_repo: Path, scratch: Path, capsys, fake: FakeSystem) -> None:
