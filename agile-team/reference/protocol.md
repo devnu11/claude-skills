@@ -21,11 +21,12 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard") and `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet) and `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
+| `share SOURCE --story ID` | The liaison shares a file (a mock, a spec) with the team for story `ID` (s120). Queues `.team/run/liaison/shares/f<N>.json` (the name, the bytes and their SHA-256) and prints `queued f<N>: <docs>/design/<ID>-<name> (sha256 <12 hex>); the runner commits it between steps`. Writes nothing else. Works in any run state, and a stopped run applies it on the next `start`. Checked in order, first refusal wins and nothing is written (exit 1): a bad id or no `.team/stories/<ID>.md` (`no story 's9'…`), a name that is not letters, digits, `.`, `_`, `-` (≤ 100, no stdin), an unreadable file, an empty file, a file over 5 MiB. See "Shared files". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
 | `opinion STORY KIND SOURCE` | The liaison records its opinion on story `STORY` (s85). `KIND` is `keep`, `move-up`, `move-down`, `fold`, `close`, `scope` or `ask`; `SOURCE` is a file, or `-` for stdin. Appends `{"story", "kind", "text", "at"}` to `.team/run/liaison/opinions.jsonl` and prints `recorded o<N>: <kind> on <story>`. Checked in order, first refusal wins and nothing is written (exit 1): an unknown story (`no story 's9'`; a done story is allowed), an unknown kind (`no opinion kind 'x'; use one of: keep, move-up, …`), an empty or over-long text (as `reply`). Works in any run state. See "Liaison opinions". |
 | `reviewed SOURCE` | The liaison records that it reviewed the backlog, with a short summary from a file or `-` (stdin). Appends `{"text", "at"}` to `.team/run/liaison/reviews.jsonl` and prints `recorded backlog review v<N>`. Exit 1 on an empty or over-long text. See "Liaison opinions". |
@@ -2411,6 +2412,45 @@ problems.
 
 **Every environment is tried** (s95). A story whose ACs name two environments
 is presented and tried in both; see "Acceptance per environment".
+
+### Shared files (s120)
+
+The liaison shares a mock or spec with `agile-team share <file> --story <id>`
+(see "CLI"). The command only queues `.team/run/liaison/shares/f<N>.json`.
+Each router tick, right after the dashboard reorders and never while a sprint
+boundary is open, the runner applies pending shares in number order:
+
+1. it copies the bytes to `<docs>/design/<id>-<name>`;
+2. it writes or replaces the entry in the story file's frontmatter (the
+   runner is its only writer):
+   ```yaml
+   shared:
+     - path: "agile-team/docs/design/s118-mock.html"
+       sha256: "<64 lowercase hex>"
+   ```
+3. it commits exactly those two paths as `chore(<id>): share <name> (f<N>)`,
+   records the new HEAD for the checkout guard, emits a `share` event
+   (`request`, `path`, `sha256`, `commit`, `outcome`) and queues a `tell`
+   note to the PO.
+
+Re-sharing identical bytes is `unchanged`: no commit. If the story file is
+gone, or its frontmatter can't be rewritten without touching other keys,
+the share is `refused: <why>`. Each outcome shows under `status`'s
+`shares`.
+
+**Who reads them.** Every role reads `<docs>/design/`. The Customer Proxy
+gets read access to exactly its story's shared paths, in its scope and its OS
+sandbox. The architect's and the Proxy's briefs have a `## Shared files`
+section listing each path with its hash. A story with shared files passes the
+design gate only when `<docs>/design/<id>.md` names every shared path.
+
+**Acceptance checks the hash.** Before the per-environment verdict, the
+`acceptance` gate hashes each shared file (SHA-256 of the raw bytes). A
+changed or missing file bounces the story to `design`, with one line per
+file (`<path>: sha256 <found> (shared <recorded>)` or
+`<path>: missing (shared <recorded>)`). A malformed `shared:` list holds the
+story with the story-file hold text. Only a new `share` changes a recorded
+hash.
 
 ## Requirements
 

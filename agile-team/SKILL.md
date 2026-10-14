@@ -162,6 +162,20 @@ command fails.
    waits on answers), with no stop. A stopped or halted run hands it over on
    the next `$AT start --resume`. `$AT status` lists undelivered ids under
    `queued_messages`.
+   **Share a file** (a mock or spec the human gave you) with
+   `$AT share <file> --story <id>`, never by copying it yourself. No role
+   can read `.team/run/liaison/`. The command queues the file and prints
+   where it will land: `<docs>/design/<id>-<file name>`. Between steps, the
+   runner copies it there and records its path and SHA-256 under `shared:`
+   in the story file, all in one `chore(<id>): share …` commit, and it tells
+   the PO. Like `tell`, it works in any run state; a stopped run applies it
+   on the next start. `$AT status` lists `queued_shares` and each share's
+   outcome under `shares`. Every role can read the file, and the design must
+   name it. Acceptance fails if anyone changed it, so when the human sends a
+   new version, share it again under the same name. File names are letters,
+   digits, `.`, `_` and `-`, up to 5 MiB, and stdin can't be shared. Keep
+   the liaison's own notes in `.team/run/liaison/LIAISON.md`, started from
+   [`reference/liaison-template.md`](reference/liaison-template.md).
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
