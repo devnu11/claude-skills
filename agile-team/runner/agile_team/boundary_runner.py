@@ -195,7 +195,7 @@ class BoundaryRunner:
         return {"role": BOUNDARY_ROLE, "status": "boundary", "boundary": data}
 
     def after_fix(self, report: dict[str, Any]) -> None:
-        """A devops fix is back: record a conflict resolution, count the round, hold if it handed over, rerun the stage."""
+        """A devops fix is back: record any resolution, count the round, hold on handover, rerun."""
         b = self.runtime.state.boundary
         if b is None or report.get("status") == "halted":
             return
