@@ -50,8 +50,9 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
 ## What you see
 
 - **Header:** three short rows above the tabs. First the brand and sprint
-  number; then the task on one line (cut with `…` if long; hover for all
-  of it); then the state row. The state row holds one state pill (the
+  number; then the current sprint's goal on one line (cut with `…` if
+  long; hover for all of it; the task when no sprint has started); then
+  the state row. The state row holds one state pill (the
   connection and the run's status, for example `live · running`), a small
   `⚑ manager due` flag when a Manager check is due (hover for why), and the
   budget: `$608 of $1,500 · 41%` with a small bar whose ticks mark the
@@ -72,8 +73,8 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
     story, with its Markdown formatting, ending in `…` when longer. The
     full text is on the Activity tab.
   - While the runner works between steps: `⚙ runner · sprint 40` with the
-    stage and its time on the right (`boundary.sync · 45 s`), and the
-    runner's latest result under it (`sprint 40 start · sync: pass · …`).
+    stage and its time on the right (`boundary.check · 45 s`), and what
+    that stage does under it (`Run the full checks on the team branch`).
   - When nothing runs: `● Nothing running` and why, for example
     `waiting on m121`.
 

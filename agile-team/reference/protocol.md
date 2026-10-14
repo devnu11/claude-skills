@@ -692,8 +692,9 @@ implement`, the awake time and the run (`first run`, `round N`, or
 `↻ restarted` for a step that follows an interrupted one for the same role
 and story), the newest open tool call, and up to 3 lines of the latest
 message on the story. While the runner works between steps it shows the
-open stage (the heartbeat's `stages`) or chore and the runner's latest
-result. With nothing running it reads `● Nothing running` and why: the
+open stage (the heartbeat's `stages`; each open row carries the stage's
+`description` since s119, and that is the panel's second line) or chore.
+With nothing running it reads `● Nothing running` and why: the
 open question ids, else the health reason (for example the halt and its
 reset time), else the run status. With no heartbeat (an old runner, or a
 replay) an open `step-start` still shows as running. The state pill

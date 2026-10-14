@@ -41,6 +41,17 @@ Repo tools (`[[tool]]` entries in `.agile-team.toml`) are defined as data (owned
 - **Duplicate events:** Closing a stage writes exactly one event, inside finally blocks (RS4).
 - **Cost of logging:** Event emission suppresses OSError like turns.jsonl (RS10); lost events don't halt the run.
 
+## Amended by s119 (2026-10-13)
+
+The heartbeat's open stage row (`stage_log.open_row`, shown in
+`heartbeat.stages`) gains `description`, the stage's description from
+`STAGES`, right after `attach`. Why: the dashboard's live panel must say
+what the running stage does, and the description table lives only in
+Python; copying it into the page would duplicate it. The closing
+`runner-stage` event is unchanged (11 data keys), and the heartbeat version
+stays 2 because the key is additive. A row from an older runner has no
+`description`; the page shows an empty line for it.
+
 ## References
 
 - Design: `agile-team/docs/design/s99.md` (RS1–RS14, stage table, test checklist)
