@@ -410,20 +410,21 @@ def test_stopped_pill_is_plain_and_fallback_pill_has_a_space(dash, step) -> None
     driver = f"""
     const view = {json.dumps(served)};
     const now = view.now ?? Date.now() / 1000;
-    const text = pillText(view, now);
-    const row = statusPills(view, now).join("");
+    const idle = panelState(view);
+    const row = statusPills(view).join("");
     const bare = JSON.parse(JSON.stringify(view));
     bare.heartbeat = null;
     bare.turns = [];
     bare.events = [
       {{id: "x", kind: "step-start", role: "developer", story: "s9", at: now - 5, data: {{}}}}];
-    console.log(JSON.stringify({{text, row, fallback: pillText(bare, now)}}));
+    console.log(JSON.stringify({{idle, row, fallback: panelState(bare).who}}));
     """
     out = dashboard_node.run_page(driver)
-    assert "stopped" in out["text"] and "⚠" not in out["row"]
+    assert out["idle"]["kind"] == "idle" and out["idle"]["line"] == "stopped"
+    assert "⚠" not in out["row"]
     assert "h-amber" not in out["row"] and "h-red" not in out["row"]
-    assert 'class="pill tone-"><span class="dot"></span>stopped' in out["row"]
-    assert out["fallback"].startswith("▶ developer")
+    assert "· stopped" in out["row"]
+    assert out["fallback"].startswith("developer · s9")
 
 
 def test_cli_prints_local_link_then_other_machines(configured: Path, tmp_path: Path) -> None:

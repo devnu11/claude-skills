@@ -140,43 +140,39 @@ def test_failed_markdown_load_shows_the_notice_and_ready_does_not() -> None:
 def test_panel_state_step_stage_and_idle() -> None:
     """LP2: a beating step, an open stage alone, and nothing running."""
     out = _run("""
-    const open = openStep(view, view.heartbeat.step.role);
-    out.hasOpen = !!open;
-    open.clock = "beat"; out.step = panelState(view);
-    open.clock = "wall"; out.wall = panelState(view).head;
+    out.step = panelState(view);
     const staged = structuredClone(view);
     staged.heartbeat.step = null;
     staged.heartbeat.stages = [{stage: "gate.tests", started_at: clockNow(staged) - 5, started_slept: 0}];
     out.stage = panelState(staged);
     const idle = structuredClone(view); idle.heartbeat.beat = "stopped";
     out.idle = panelState(idle);
-    const nostep = structuredClone(view); nostep.steps = [];
-    out.noOpen = panelState(nostep).head;
     """)
-    assert out["hasOpen"]
     step = out["step"]
     assert step["kind"] == "step" and step["story"] == "s3"
-    assert re.match(r"▶ developer-cli on s3 · implement · ⏱ .+ awake$", step["head"]), step["head"]
-    assert out["wall"].endswith("awake (may include sleep)")
-    assert "⏱" not in out["noOpen"] and out["noOpen"].startswith("▶ ")
-    assert out["stage"] == {"kind": "stage", "head": "⚙ runner: gate.tests", "story": ""}
+    assert step["who"] == "developer-cli · s3 · implement", step["who"]
+    assert re.search(r" · (first run|round \d+|↻ restarted)$", step["when"]), step["when"]
+    stage = out["stage"]
+    assert stage["kind"] == "stage" and stage["who"].startswith("⚙ runner · ")
+    assert stage["when"].startswith("gate.tests") and stage["story"] == ""
     assert out["idle"]["kind"] == "idle" and out["idle"]["story"] == ""
+    assert out["idle"]["who"] == "● Nothing running"
 
 
 def test_idle_says_why() -> None:
-    """LP3: open question ids, else the health reason, else the run status."""
+    """LP5: open question ids, else the health reason, else the run status."""
     out = _run("""
     const idle = structuredClone(view); idle.heartbeat.beat = "stopped";
     out.open = openQuestions(idle).map((q) => q.id);
-    out.waiting = idlePanel(idle).head;
+    out.waiting = idlePanel(idle).line;
     idle.messages = idle.messages.filter((m) => m.kind !== "question");
-    idle.health.reason = "runner stopped"; out.reason = idlePanel(idle).head;
-    idle.health.reason = ""; out.status = idlePanel(idle).head; out.runStatus = idle.run.status;
+    idle.health.reason = "runner stopped"; out.reason = idlePanel(idle).line;
+    idle.health.reason = ""; out.status = idlePanel(idle).line; out.runStatus = idle.run.status;
     """)
     assert out["open"], "fixture has open questions"
-    assert out["waiting"] == f"● Nothing running: waiting on {', '.join(out['open'])}"
-    assert out["reason"] == "● Nothing running: runner stopped"
-    assert out["status"] == f"● Nothing running: {out['runStatus']}"
+    assert out["waiting"] == f"waiting on {', '.join(out['open'])}"
+    assert out["reason"] == "runner stopped"
+    assert out["status"] == out["runStatus"]
 
 
 def _events(extra: str) -> str:
@@ -209,28 +205,20 @@ def test_latest_message_prefers_the_story_then_the_newest_and_skips_blanks() -> 
     assert out["none"] is None and out["empty"] is None
 
 
-def test_clip_keeps_six_non_blank_lines_and_six_hundred_characters() -> None:
-    """LP5: 8 lines keep 6 and cut; 4 lines are whole; blank lines don't count; 600 characters cut."""
+def test_clip_keeps_four_non_blank_lines_and_four_hundred_characters() -> None:
+    """LP6: 8 lines keep 4; 3 lines are whole; blank lines don't count; 400 characters cut."""
     out = _run("""
     const lines = (n) => Array.from({length: n}, (_, i) => "l" + (i + 1)).join("\\n");
-    out.eight = clip(lines(8)); out.four = clip(lines(4)); out.six = clip(lines(6));
-    out.blanks = clip("l1\\n\\nl2\\n\\n\\nl3\\nl4\\nl5\\n\\nl6\\n\\n");
-    out.blanksCut = clip("l1\\n\\nl2\\nl3\\nl4\\nl5\\n\\nl6\\nl7");
-    out.long = clip("x".repeat(700)); out.exact = clip("x".repeat(600)); out.empty = clip(null);
-    out.moreCut = panelMessageHtml({e: {kind: "message"}, t: {body: lines(8)}});
-    out.moreWhole = panelMessageHtml({e: {kind: "message"}, t: {body: lines(4)}});
+    out.eight = clip(lines(8)); out.three = clip(lines(3));
+    out.blanks = clip("l1\\n\\nl2\\n\\n\\nl3\\nl4\\nl5");
+    out.long = clip("x".repeat(500)); out.empty = clip(null);
     out.none = panelMessageHtml(null);
     """)
-    assert out["eight"] == {"text": "l1\nl2\nl3\nl4\nl5\nl6", "cut": True}
-    assert out["four"] == {"text": "l1\nl2\nl3\nl4", "cut": False}
-    assert out["six"]["cut"] is False and out["six"]["text"].endswith("l6")
-    assert out["blanks"] == {"text": "l1\n\nl2\n\n\nl3\nl4\nl5\n\nl6", "cut": False}
-    assert out["blanksCut"] == {"text": "l1\n\nl2\nl3\nl4\nl5\n\nl6", "cut": True}
-    assert len(out["long"]["text"]) == 600 and out["long"]["cut"] is True
-    assert len(out["exact"]["text"]) == 600 and out["exact"]["cut"] is False
-    assert out["empty"] == {"text": "", "cut": False}
-    assert "lp-more" in out["moreCut"] and "lp-more" not in out["moreWhole"]
-    assert out["none"] == "No activity yet."
+    assert out["eight"] == "l1\nl2\nl3\nl4"
+    assert out["three"] == "l1\nl2\nl3"
+    assert out["blanks"] == "l1\n\nl2\n\n\nl3\nl4"
+    assert len(out["long"]) == 400 and out["empty"] == ""
+    assert out["none"] == ""
 
 
 def test_panel_message_renders_through_md_except_plain_kinds() -> None:
@@ -242,15 +230,6 @@ def test_panel_message_renders_through_md_except_plain_kinds() -> None:
     """)
     assert out["md"] == '<div class="md"><p>MD:- **a**</p></div>'
     assert "MD:" not in out["plain"] and "&lt;f&gt;" in out["plain"]
-
-
-def test_panel_meta_line_is_plain() -> None:
-    """LP6: time, from → to, what and story on one plain line."""
-    out = _run("""
-    const msg = latestMessage(view, "s3");
-    out.meta = panelMeta(msg); out.what = msg.t.what;
-    """)
-    assert out["what"] in out["meta"] and " · s3" in out["meta"] and "<" not in out["meta"]
 
 
 def test_open_activity_filters_to_a_known_story_only() -> None:
@@ -268,28 +247,32 @@ def test_open_activity_filters_to_a_known_story_only() -> None:
 
 
 def test_live_panel_fills_its_parts() -> None:
-    """LP7: head, meta, message, story, label and the running class."""
+    """LP7: who, when, line, message, story, label and the health class; ticks keep the message."""
     out = _run("""
     const els = {};
-    const el = () => ({textContent: "", innerHTML: "", dataset: {}, attrs: {}, cls: {},
+    const el = () => ({textContent: "", innerHTML: "", hidden: false, className: "", dataset: {}, attrs: {},
       setAttribute(k, v) { this.attrs[k] = v; }, classList: {toggle: (c, on) => { els.cls = [c, on]; }}});
-    for (const q of ["#live-panel", "#lp-head", "#lp-meta", "#lp-msg"]) els[q] = el();
+    for (const q of ["#live-panel", "#lp-who", "#lp-when", "#lp-line", "#lp-msg"]) els[q] = el();
     globalThis.document.querySelector = (q) => els[q];
     renderLivePanel(view);
-    out.head = els["#lp-head"].textContent; out.story = els["#live-panel"].dataset.story;
-    out.title = els["#live-panel"].title; out.label = els["#live-panel"].attrs["aria-label"];
-    out.cls = els.cls; out.msg = els["#lp-msg"].innerHTML; out.meta = els["#lp-meta"].textContent;
+    out.who = els["#lp-who"].textContent; out.story = els["#live-panel"].dataset.story;
+    out.label = els["#live-panel"].attrs["aria-label"]; out.className = els["#live-panel"].className;
+    out.cls = els.cls; out.msg = els["#lp-msg"].innerHTML; out.hidden = els["#lp-msg"].hidden;
+    els["#lp-msg"].innerHTML = "kept"; els["#lp-when"].textContent = "";
+    renderPanelText(view);
+    out.keptMsg = els["#lp-msg"].innerHTML; out.when = els["#lp-when"].textContent;
     const idle = structuredClone(view); idle.heartbeat.beat = "stopped"; idle.events = [];
     renderLivePanel(idle);
-    out.idleCls = els.cls; out.idleMsg = els["#lp-msg"].innerHTML; out.idleTitle = els["#live-panel"].title;
-    renderPanelHead(view);
-    out.tick = els["#lp-head"].textContent;
+    out.idleCls = els.cls; out.idleMsg = els["#lp-msg"].innerHTML; out.idleHidden = els["#lp-msg"].hidden;
+    out.idleLabel = els["#live-panel"].attrs["aria-label"];
     """)
-    assert out["head"].startswith("▶ developer-cli on s3") and out["tick"].startswith("▶ ")
-    assert out["story"] == "s3" and out["title"] == out["label"] == "Open the Activity tab for s3"
-    assert out["cls"] == ["running", True] and out["msg"] and out["meta"]
-    assert out["idleCls"] == ["running", False] and out["idleMsg"] == "No activity yet."
-    assert out["idleTitle"] == "Open the Activity tab"
+    assert out["who"].startswith("developer-cli · s3") and out["story"] == "s3"
+    assert out["label"] == "Open the Activity tab for s3"
+    assert re.fullmatch(r"live-panel h-\w+", out["className"])
+    assert out["cls"] == ["tool", True] and out["msg"] and out["hidden"] is False
+    assert out["keptMsg"] == "kept" and out["when"]
+    assert out["idleCls"] == ["tool", False] and out["idleMsg"] == "" and out["idleHidden"] is True
+    assert out["idleLabel"] == "Open the Activity tab"
 
 
 # ---------------------------------------------------------------- layout and AC4b
@@ -316,19 +299,19 @@ def test_activity_is_its_own_tab_and_meter_sits_in_the_status_bar() -> None:
     activity = CSS[CSS.index('id="tab-activity"') :]
     assert 'id="timeline"' not in flow and 'id="tl-filter"' not in flow
     assert 'id="timeline"' in activity[:600] and 'id="tl-filter"' in activity[:600]
-    right = CSS[CSS.index('class="head-right"') : CSS.index('class="status-bar"')]
-    assert 'id="live-panel"' in right and 'id="meter"' not in right
-    bar = CSS[CSS.index('class="status-bar"') :]
-    assert bar.index('id="meter"') < bar.index('id="status-row"')
+    head = CSS[CSS.index('class="head"') : CSS.index('id="tabs"')]
+    assert head.index('id="status-row"') < head.index('id="live-panel"') < head.index('id="theme"')
+    for gone in ('id="meter"', "head-right", "status-bar", "live-details"):
+        assert gone not in CSS, gone
 
 
 # ---------------------------------------------------------------- AC5 readable
 
 RD1 = {
-    ".lp-head": "--ink",
-    ".lp-meta": "--ink-2",
-    ".lp-msg": "--ink-2",
-    ".lp-more": "--ink-2",
+    ".lp-who": "--ink",
+    ".lp-when": "--ink-2",
+    ".lp-line": "--ink-2",
+    ".lp-msg": "--ink",
     ".md-notice": "--ink-2",
 }
 
@@ -343,7 +326,7 @@ def test_new_text_is_twelve_px_and_has_contrast_in_every_theme(selector: str) ->
     rule = _rule(selector)
     size = float(re.search(r"font-size:\s*([\d.]+)px", rule).group(1))  # type: ignore[union-attr]
     colour = re.search(r"color:\s*var\((--[\w-]+)\)", rule).group(1)  # type: ignore[union-attr]
-    assert size >= 12 and colour == RD1[selector] and "--muted" not in rule
+    assert 12 <= size <= 15 and colour == RD1[selector] and "--muted" not in rule
     for name, v in _theme_vars().items():
         assert _contrast(v[colour], v["--surface"]) >= 4.5, (selector, name)
 
