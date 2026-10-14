@@ -2442,7 +2442,13 @@ write source, tests and e2e tests, and the runner commits it and checks or
 rebuilds again. A conflict is resolved in the review worktree, in exactly
 the conflicting files, and recorded with `git rerere`, so later rebuilds
 reuse it. A fix step that hands over (blocked, questions…) holds the
-boundary. Each failure is a setback keyed `<edge>><stage> <normalised
+boundary `fix_handover`. Its triggers go to the PO like any step's, and
+`continue_boundary` reruns the stage. A fix that raises no trigger leaves
+the boundary unheld, and the stage reruns. A stored `boundary.hold` that is
+not a known hold is dropped when `state.json` loads, so `watch`, `status`
+and a resume still work. The dropped value is kept in `load_faults` until
+`start` reports it as one `fault` event (`"fault": "state"`, naming the
+field and the value). Each failure is a setback keyed `<edge>><stage> <normalised
 output>` (see "Repeated setbacks"). The same failure again, or
 `round_cap` fix steps, **escalates**: the boundary is held, `manager_due`
 gets `sprint N <edge> boundary failed K times at <stage>; see
