@@ -12,11 +12,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from . import stages, system
 from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, PrMode
 from .ci import Check, UpstreamError, checks_of, job_of
+from .ci_triage import Job, bucket_of_run, job_from
 from .commands import TIMED_OUT
 from .config import UpstreamSettings
 from .git_ops import Git, GitError
@@ -45,6 +46,8 @@ SYNC_LOST = (
 GH_TIMEOUT = 120
 GH_TIMED_OUT = "gh timed out after {limit:.0f}s"
 CHECK_FIELDS = "name,state,bucket,link,workflow"
+NO_JOB = "no Actions job to re-run at {link}"
+NO_REQUIRED = "no required checks reported"
 
 __all__ = ["UpstreamError"]
 
@@ -138,6 +141,15 @@ class Prs(Protocol):
     def checks(self, number: int) -> list[Check]:
         """The PR's checks now ([] when none are reported)."""
 
+    def job(self, link: str) -> Job | None:
+        """The Actions job behind a check link; None when the link names no job."""
+
+    def main_checks(self, branch: str) -> list[Check]:
+        """The latest check runs on ``branch``'s head commit."""
+
+    def rerun(self, link: str) -> None:
+        """Re-run the Actions job at ``link``: a new attempt on the same commit."""
+
     def failed_log(self, link: str) -> str:
         """The failed steps' log of the Actions job at ``link``; "" when there is none."""
 
@@ -195,6 +207,15 @@ class NoPrs:
     def checks(self, number: int) -> list[Check]:
         raise UpstreamError(self.why)
 
+    def job(self, link: str) -> Job | None:
+        raise UpstreamError(self.why)
+
+    def main_checks(self, branch: str) -> list[Check]:
+        raise UpstreamError(self.why)
+
+    def rerun(self, link: str) -> None:
+        raise UpstreamError(self.why)
+
     def failed_log(self, link: str) -> str:
         raise UpstreamError(self.why)
 
@@ -244,8 +265,30 @@ class GhPrs:
 
     def checks(self, number: int) -> list[Check]:
         """The PR's checks now; gh's exit code says only pass or fail, so it is ignored."""
-        argv = ["gh", "pr", "checks", str(number), "--json", CHECK_FIELDS]
-        return checks_of(self.run(argv)[1])
+        argv = ["gh", "pr", "checks", str(number), "--required", "--json", CHECK_FIELDS]
+        out = self.run(argv)[1]
+        if NO_REQUIRED in out.lower():
+            out = self.run([a for a in argv if a != "--required"])[1]
+        return checks_of(out)
+
+    def job(self, link: str) -> Job | None:
+        """The Actions job behind a check link; None when the link names no job."""
+        job = job_of(link)
+        if job is None:
+            return None
+        return job_from(json.loads(self._gh("api", f"repos/{{owner}}/{{repo}}/actions/jobs/{job}")))
+
+    def main_checks(self, branch: str) -> list[Check]:
+        """The latest check runs on ``branch``'s head commit."""
+        out = self._gh("api", f"repos/{{owner}}/{{repo}}/commits/{branch}/check-runs?per_page=100")
+        return [_run_check(r) for r in json.loads(out)["check_runs"]]
+
+    def rerun(self, link: str) -> None:
+        """Re-run the Actions job at ``link``: a new attempt on the same commit."""
+        job = job_of(link)
+        if job is None:
+            raise UpstreamError(NO_JOB.format(link=link))
+        self._gh("run", "rerun", "--job", job)
 
     def failed_log(self, link: str) -> str:
         """The failed steps' log for the check's Actions job; "" when unavailable."""
@@ -260,6 +303,10 @@ class GhPrs:
         if code != 0:
             raise UpstreamError(out.strip())
         return out
+
+
+def _run_check(raw: dict[str, Any]) -> Check:
+    return Check(raw["name"], bucket_of_run(raw), "", raw.get("details_url") or "")
 
 
 def _pr_of(raw: dict[str, object]) -> Pr:

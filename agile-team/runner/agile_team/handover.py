@@ -48,6 +48,8 @@ class Trigger(StrEnum):
     BOUNDARY_ESCALATED = "boundary_escalated"
     CI_GREEN = "ci_green"
     CI_FAILED = "ci_failed"
+    CI_INFRA = "ci_infra"
+    MAIN_BROKEN = "main_broken"
     CI_PENDING = "ci_pending"
 
 
@@ -218,10 +220,28 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.CI_FAILED,
         _held("ci_failed"),
-        "{story}: sprint {sprint}'s CI failed on {prs}; the PR is NOT ready. Failing checks:\n"
-        "{checks}\nOpen a bug story for it now (open_story), record it with "
-        "record_ci_bug(story), tell the human the PR is NOT ready, and list the story first "
-        "when you start the next sprint",
+        "{story}: sprint {sprint}'s CI failed where our code ran, on {prs}; the PR is NOT ready. "
+        "Failing checks:\n{checks}\ncontinue_boundary is refused here: a re-run is not a fix. Open "
+        "a bug story for it now (open_story), or pick an open story that fixes it, record it "
+        "with record_ci_bug(story), tell the human the PR is NOT ready, and list the story "
+        "first when you start the next sprint",
+    ),
+    Rule(
+        Trigger.CI_INFRA,
+        _held("ci_infra"),
+        "{story}: sprint {sprint}'s CI job never ran a step on {prs}, and the runner's "
+        "one re-run did not run either; the PR is NOT ready:\n{checks}\nTell the human (GitHub "
+        "may have no runner for it). continue_boundary reads the checks again once they re-ran "
+        "it; or open a story to change the CI job and record_ci_bug(story)",
+    ),
+    Rule(
+        Trigger.MAIN_BROKEN,
+        _held("main_broken"),
+        "{story}: sprint {sprint}'s CI failed on {prs}, and the same job and step fail on "
+        "{target}'s head: main is broken, not this sprint:\n{checks}\nOpen a bug story for main "
+        'now (open_story) and record_ci_bug(story). The sprint then ends as "ended, CI blocked '
+        'by main": NOT done, the PR stays unmerged, and you start the next sprint with that '
+        "story first. Tell the human",
     ),
     Rule(
         Trigger.CI_PENDING,

@@ -2365,12 +2365,13 @@ function boardStories(view) {
 
 const STACK_TONE = { ready: "good", draft: "", none: "warning", closed: "critical" };
 const CHECK_TONE = { pass: "good", fail: "critical", unchecked: "" };
+const CI_TONE = { green: "good", failed: "critical", main: "warning", rerun: "accent", running: "", none: "warning" };
 
-/** One row of the review stack: sprint, branch, PR link, mode and check pills. */
+/** One row of the review stack: sprint, branch, PR link, mode, check and CI pills. */
 function stackRow(e) {
   const pr = e.pr ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">#${esc(e.pr)}</a>` : "no PR";
   return `<div class="lane"><span class="who">sprint ${esc(e.sprint)}</span><code>${esc(e.branch)}</code>
-    <span>${pr}</span>${pill(e.mode, STACK_TONE[e.mode] ?? "")}${pill(e.check, CHECK_TONE[e.check] ?? "")}</div>`;
+    <span>${pr}</span>${pill(e.mode, STACK_TONE[e.mode] ?? "")}${pill(e.check, CHECK_TONE[e.check] ?? "")}${e.ci ? pill(e.ci.text, CI_TONE[e.ci.state] ?? "") : ""}</div>`;
 }
 
 /** The boundary line: `Sprint N <edge>: <stage>` and a held or running pill. */

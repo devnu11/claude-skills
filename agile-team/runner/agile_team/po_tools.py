@@ -31,6 +31,7 @@ from . import (
 )
 from .boundary import (
     CI_BUG_FIRST,
+    CI_BUG_HOLDS,
     Boundary,
     BoundaryHold,
     BoundaryOutcome,
@@ -40,6 +41,7 @@ from .boundary import (
 )
 from .boundary_runner import BoundaryRunner, boundary_event
 from .checkout import CheckoutChanged
+from .ci import CI_OURS_REFUSAL, ours_text
 from .dispatch import (
     PO,
     Launch,
@@ -96,7 +98,10 @@ RESTART_NEEDS_REASON = (
 )
 NO_BOUNDARY = "no sprint boundary is pending"
 CI_BUG_PULL = "CI failed on the pushed code; {story} fixes it"
-NO_CI_HOLD = "no boundary is held on failed CI; record_ci_bug applies after a ci_failed hand-over"
+NO_CI_HOLD = (
+    "no boundary is held on failed CI; record_ci_bug applies after a ci_failed, ci_infra "
+    "or main_broken hand-over"
+)
 UNKNOWN_BUG = "unknown story {story!r}; open it with open_story first"
 DONE_BUG = "story {story} is done; open a new story for the failing CI"
 NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it"
@@ -435,12 +440,18 @@ class Tools:
         b = self.runtime.state.boundary
         if b is None or b.hold is None:
             return text_result(refused(self._not_held(b)))
+        if b.hold is BoundaryHold.CI_FAILED:
+            return text_result(refused(self._ours_refusal(b)))
         if b.hold in AFTER_REVIEW:
             b.streak, b.rounds, b.escalated = [], 0, None
         b.hold, b.failure, b.note = None, None, args.get("note", "")
         boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
         self.runtime.save()
         return text_result({"status": "continued", "stage": b.stage})
+
+    def _ours_refusal(self, b: Boundary) -> str:
+        results = [e.ci for e in self.runtime.state.upstream.stack if e.ci]
+        return CI_OURS_REFUSAL.format(sprint=b.sprint, failures=ours_text(results))
 
     async def record_ci_bug(self, args: dict[str, Any]) -> dict[str, Any]:
         """Record the bug story for a PR whose CI failed; the boundary then finishes."""
@@ -453,7 +464,7 @@ class Tools:
 
     def _bug_refusal(self, story: str) -> str | None:
         b = self.runtime.state.boundary
-        if b is None or b.hold is not BoundaryHold.CI_FAILED:
+        if b is None or b.hold not in CI_BUG_HOLDS:
             return NO_CI_HOLD
         found = self.runtime.state.stories.get(story)
         if found is None:
@@ -781,13 +792,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "continue_boundary": (
         "Release a held sprint boundary (sync, checks, review branches, push) so the runner "
         "retries its stage; your note reaches the next devops fix; at the CI stage it waits "
-        "for the checks again.",
+        "for the checks again. Refused at ci_failed: a failure where our code ran needs a fix, "
+        "not a re-run.",
         {"note": str},
     ),
     "record_ci_bug": (
-        "After a ci_failed hand-over: record the bug story you opened for the failing CI (it "
-        "must exist and not be done). The boundary then finishes; list the story first in the "
-        "next start_sprint.",
+        "After a ci_failed, ci_infra or main_broken hand-over: record the bug story you opened "
+        "for the failing CI (it must exist and not be done). The boundary then finishes; list "
+        "the story first in the next start_sprint.",
         {"story": str},
     ),
     "set_push_permission": (

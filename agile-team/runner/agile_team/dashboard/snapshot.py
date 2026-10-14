@@ -31,6 +31,7 @@ from .. import (
 from .. import config as config_mod
 from .. import roles as roles_mod
 from .. import state as state_mod
+from ..ci import card_of
 from ..config import Config, ConfigError, config_path
 from ..events import EVENTS
 from ..gates import FINISHED, STEP_ROLES
@@ -500,6 +501,7 @@ def _stack_entry(entry: Any) -> dict[str, Any]:
         "mode": str(entry.mode),
         "check": str(entry.check),
         "head": entry.head,
+        "ci": card_of(entry.ci).row() if entry.ci else None,
     }
 
 

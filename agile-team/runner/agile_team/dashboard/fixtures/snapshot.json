@@ -3790,7 +3790,11 @@
     "url": "https://github.com/o/r/pull/12",
     "mode": "ready",
     "check": "pass",
-    "head": "3f9c2ab41d7e"
+    "head": "3f9c2ab41d7e",
+    "ci": {
+     "state": "green",
+     "text": "CI green"
+    }
    },
    {
     "sprint": 10,
@@ -3800,7 +3804,11 @@
     "url": "",
     "mode": "none",
     "check": "pass",
-    "head": "8be05c61a9f2"
+    "head": "8be05c61a9f2",
+    "ci": {
+     "state": "main",
+     "text": "CI blocked by main: ci / test (macos-latest)"
+    }
    }
   ]
  },

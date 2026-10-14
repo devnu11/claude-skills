@@ -121,6 +121,8 @@ class BoundaryHold(StrEnum):
     PUSH_PERMISSION = "push_permission"
     PUSH_REJECTED = "push_rejected"
     CI_FAILED = "ci_failed"
+    CI_INFRA = "ci_infra"
+    MAIN_BROKEN = "main_broken"
     CI_PENDING = "ci_pending"
     ERROR = "error"
     FIX_HANDOVER = "fix_handover"
@@ -136,6 +138,7 @@ class BoundaryOutcome(StrEnum):
     CONFLICT = "conflict"
     PASS = "pass"
     FAIL = "fail"
+    RERUN = "rerun"
     ESCALATE = "escalate"
     BUILT = "built"
     HELD = "held"
@@ -192,8 +195,14 @@ PR_KIND = {
 
 STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI)
 END_ONLY = frozenset(STAGES[2:])
+CI_BUG_HOLDS = frozenset({BoundaryHold.CI_FAILED, BoundaryHold.CI_INFRA, BoundaryHold.MAIN_BROKEN})
 STALL_HINTS = {
     BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)",
+    BoundaryHold.CI_INFRA: (
+        "tell the human the job never ran; continue_boundary once it re-ran, "
+        "or record_ci_bug(story)"
+    ),
+    BoundaryHold.MAIN_BROKEN: "open a bug story for main and record it with record_ci_bug(story)",
     BoundaryHold.FIX_HANDOVER: (
         "answer the devops fix's handover, then continue_boundary(note) to rerun the stage"
     ),
@@ -286,6 +295,7 @@ class StackEntry:
     ci: CiResult | None = None
     commits: int = 0
     reverted: list[str] = field(default_factory=list)
+    reran: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.check, self.mode = CheckState(self.check), PrMode(self.mode)

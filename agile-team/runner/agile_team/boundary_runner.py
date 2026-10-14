@@ -49,20 +49,28 @@ from .boundary import (
     setback,
 )
 from .ci import (
+    CI_MAIN_REPORT,
     CI_NONE_REPORT,
     CI_RED_REPORT,
+    CI_STALE,
     CI_TIMEOUT,
     NO_CHECKS_WHY,
     NO_OPEN_PR_WHY,
+    Check,
+    CheckKind,
     CiResult,
     CiVerdict,
     CiWatch,
     UpstreamError,
     check_lines,
     green_report,
+    kind_or_bucket,
+    label,
     overall,
     prs_text,
+    rerun_due,
 )
+from .ci_triage import rerun_key
 from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
 from .relay import Note
@@ -129,7 +137,7 @@ class BoundaryRunner:
 
     def __post_init__(self) -> None:
         rt = self.runtime
-        self.watch = CiWatch(rt.prs, rt.config.gates.ci_timeout_s)
+        self.watch = CiWatch(rt.prs, rt.config.gates.ci_timeout_s, rt.config.upstream.branch)
         worktree = rt.config.run_dir / REVIEW_DIR
         self.rebuilder = Rebuilder(rt.git, worktree, self.remote.target)
         self.restacker = Restacker(rt.prs, self.rebuilder)
@@ -590,8 +598,31 @@ class BoundaryRunner:
     def _ci_red(self, b: Boundary, results: list[CiResult]) -> None:
         self._hold(b, BoundaryHold.CI_FAILED, Out.HELD, ci=CiVerdict.RED, **_ci_fields(results))
 
+    def _ci_infra(self, b: Boundary, results: list[CiResult]) -> None:
+        due = rerun_due(self._watched())
+        if not due:
+            return self._hold(
+                b, BoundaryHold.CI_INFRA, Out.HELD, ci=CiVerdict.INFRA, **_ci_fields(results)
+            )
+        self._rerun(b, due)
+
+    def _rerun(self, b: Boundary, due: list[tuple[StackEntry, Check]]) -> None:
+        """Use each job's one re-run at this head, then look for the new attempt."""
+        for entry, check in due:
+            entry.reran.append(rerun_key(entry.head, label(check)))
+            check.kind = CheckKind.RERUN
+        self.runtime.save()
+        self._emit(b, Out.RERUN, jobs=[label(c) for _, c in due])
+        for entry, check in due:
+            self.watch.rerun(entry.pr or 0, check)
+
+    def _ci_main(self, b: Boundary, results: list[CiResult]) -> None:
+        fields = {"ci": CiVerdict.MAIN, "target": self.watch.target, **_ci_fields(results)}
+        self._hold(b, BoundaryHold.MAIN_BROKEN, Out.HELD, **fields)
+
     def _ci_pending(self, b: Boundary, results: list[CiResult]) -> None:
-        reason = CI_TIMEOUT.format(limit=self.watch.limit_s)
+        stale = any(kind_or_bucket(c) is CheckKind.STALE for r in results for c in r.checks)
+        reason = CI_STALE if stale else CI_TIMEOUT.format(limit=self.watch.limit_s)
         fields = {"ci": CiVerdict.PENDING, "reason": reason, **_ci_fields(results)}
         self._hold(b, BoundaryHold.CI_PENDING, Out.HELD, **fields)
 
@@ -606,9 +637,16 @@ class BoundaryRunner:
         """Close a boundary held on failed CI with its bug story recorded."""
         b = self.runtime.state.boundary
         self.mine.ci_bug = story
-        red = [e.ci for e in self.stack if e.ci and e.ci.verdict is CiVerdict.RED]
-        text = CI_RED_REPORT.format(sprint=b.sprint, story=story, prs=prs_text(red))  # type: ignore[union-attr,arg-type]
-        self._finish(b, text, ci=CiVerdict.RED, story=story, note=text)  # type: ignore[arg-type]
+        verdict, report = SETTLED[b.hold]  # type: ignore[index,union-attr]
+        hit = [e.ci for e in self.stack if e.ci and e.ci.verdict is verdict]
+        fields = {
+            "sprint": b.sprint,
+            "story": story,
+            "target": self.watch.target,
+            "prs": prs_text(hit),
+        }  # type: ignore[arg-type,union-attr]
+        text = report.format(**fields)
+        self._finish(b, text, ci=verdict, story=story, note=text)  # type: ignore[arg-type]
         self.runtime.save()
 
     def _push_entry(self, entry: StackEntry, below: StackEntry | None) -> str | None:
@@ -683,8 +721,15 @@ def _ci_fields(results: list[CiResult]) -> dict[str, Any]:
 CI_OUTCOMES = {
     CiVerdict.GREEN: BoundaryRunner._ci_green,
     CiVerdict.RED: BoundaryRunner._ci_red,
+    CiVerdict.INFRA: BoundaryRunner._ci_infra,
+    CiVerdict.MAIN: BoundaryRunner._ci_main,
     CiVerdict.PENDING: BoundaryRunner._ci_pending,
     CiVerdict.NONE: BoundaryRunner._ci_none,
+}
+SETTLED = {
+    BoundaryHold.CI_FAILED: (CiVerdict.RED, CI_RED_REPORT),
+    BoundaryHold.CI_INFRA: (CiVerdict.INFRA, CI_RED_REPORT),
+    BoundaryHold.MAIN_BROKEN: (CiVerdict.MAIN, CI_MAIN_REPORT),
 }
 STAGE_RUNNERS = {
     Stage.SYNC: BoundaryRunner._sync,

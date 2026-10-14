@@ -13,6 +13,18 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from . import system
+from .ci_triage import (
+    BUCKET_KIND,
+    FAILING,
+    PASSING,
+    Bucket,
+    CheckKind,
+    Seen,
+    failing_step,
+    kind_of,
+    ran,
+    rerun_key,
+)
 
 if TYPE_CHECKING:
     from .boundary import StackEntry
@@ -44,21 +56,24 @@ CI_NONE_REPORT = (
 CI_TIMEOUT = "CI checks still running after {limit:.0f}s"
 NO_CHECKS_WHY = "no CI checks reported"
 NO_OPEN_PR_WHY = "no open pull request to watch"
-CHECK_LINE = "- {label}: {bucket} {link}"
+CHECK_LINE = "- {label}: {bucket}{detail} {link}"
+CI_MAIN_REPORT = (
+    "Sprint {sprint} ended, CI blocked by main: the same job and step fail on {target}'s head, "
+    "story {story} opened for it. {prs} is NOT ready; do not merge it. The team carries on, "
+    "and the PR is checked again at the next sprint end."
+)
+CI_STALE = "a check ran on another commit than the pushed head; it does not count"
+CI_OURS_REFUSAL = (
+    "sprint {sprint}'s CI failed where our code ran: {failures}. A re-run is not a fix and "
+    '"flaky" is not a reason: open a bug story (open_story) and record_ci_bug(story), or '
+    "route the fix to an open story with record_ci_bug(story)"
+)
+NO_STEP_NAMED = "step not named"
+__all__ = ["FAILING", "PASSING", "Bucket"]
 
 
 class UpstreamError(Exception):
     """The remote or the PR service refused or failed."""
-
-
-class Bucket(StrEnum):
-    """``gh``'s bucket for one check."""
-
-    PASS = "pass"
-    FAIL = "fail"
-    PENDING = "pending"
-    SKIPPING = "skipping"
-    CANCEL = "cancel"
 
 
 class CiVerdict(StrEnum):
@@ -67,19 +82,29 @@ class CiVerdict(StrEnum):
     GREEN = "green"
     RED = "red"
     PENDING = "pending"
+    INFRA = "infra"
+    MAIN = "main"
     NONE = "none"
 
 
-BUCKET_VERDICT = {
-    Bucket.PASS: CiVerdict.GREEN,
-    Bucket.FAIL: CiVerdict.RED,
-    Bucket.CANCEL: CiVerdict.RED,
-    Bucket.PENDING: CiVerdict.PENDING,
+KIND_VERDICT = {
+    CheckKind.OURS: CiVerdict.RED,
+    CheckKind.INFRA: CiVerdict.INFRA,
+    CheckKind.MAIN: CiVerdict.MAIN,
+    CheckKind.PENDING: CiVerdict.PENDING,
+    CheckKind.STALE: CiVerdict.PENDING,
+    CheckKind.RERUN: CiVerdict.PENDING,
+    CheckKind.GREEN: CiVerdict.GREEN,
 }
-CHECK_ORDER = (CiVerdict.RED, CiVerdict.PENDING, CiVerdict.GREEN)
-PR_ORDER = (CiVerdict.RED, CiVerdict.PENDING, CiVerdict.NONE, CiVerdict.GREEN)
-FAILING = frozenset({Bucket.FAIL, Bucket.CANCEL})
-PASSING = frozenset({Bucket.PASS, Bucket.SKIPPING})
+CHECK_ORDER = (CiVerdict.RED, CiVerdict.INFRA, CiVerdict.MAIN, CiVerdict.PENDING, CiVerdict.GREEN)
+PR_ORDER = (
+    CiVerdict.RED,
+    CiVerdict.INFRA,
+    CiVerdict.MAIN,
+    CiVerdict.PENDING,
+    CiVerdict.NONE,
+    CiVerdict.GREEN,
+)
 
 
 @dataclass
@@ -91,9 +116,13 @@ class Check:
     workflow: str = ""
     link: str = ""
     lines: list[str] = field(default_factory=list)
+    kind: CheckKind | None = None
+    step: str = ""
+    head: str = ""
 
     def __post_init__(self) -> None:
         self.bucket = Bucket(self.bucket)
+        self.kind = CheckKind(self.kind) if self.kind else None
 
 
 @dataclass
@@ -147,11 +176,15 @@ def first_of(order: tuple[CiVerdict, ...], found: Iterable[CiVerdict]) -> CiVerd
     return next((v for v in order if v in present), CiVerdict.NONE)
 
 
+def kind_or_bucket(check: Check) -> CheckKind:
+    """The check's kind; an untriaged check is read from its bucket."""
+    return check.kind or BUCKET_KIND[check.bucket]
+
+
 def verdict_of(checks: list[Check]) -> CiVerdict:
     """One PR's verdict from its checks (skipped checks count for nothing)."""
-    return first_of(
-        CHECK_ORDER, (BUCKET_VERDICT[c.bucket] for c in checks if c.bucket in BUCKET_VERDICT)
-    )
+    kinds = (kind_or_bucket(c) for c in checks)
+    return first_of(CHECK_ORDER, (KIND_VERDICT[k] for k in kinds if k in KIND_VERDICT))
 
 
 def overall(results: list[CiResult]) -> CiVerdict:
@@ -175,12 +208,24 @@ def prs_text(results: list[CiResult]) -> str:
     return "; ".join(f"#{r.pr} {r.url}" for r in results)
 
 
-def _label(check: Check) -> str:
+def label(check: Check) -> str:
+    """The check's workflow and name."""
     return f"{check.workflow} / {check.name}" if check.workflow else check.name
 
 
+def detail(check: Check) -> str:
+    """What the line says beyond the bucket: the failing step, or why it does not count."""
+    if check.step:
+        return f" at step {check.step}"
+    return DETAILS.get(check.kind, "") if check.kind else ""
+
+
+DETAILS = {CheckKind.INFRA: " (no step ran)", CheckKind.STALE: " (ran on another commit)"}
+
+
 def _check_text(check: Check) -> str:
-    head = CHECK_LINE.format(label=_label(check), bucket=check.bucket, link=check.link).rstrip()
+    fields = {"label": label(check), "bucket": check.bucket, "detail": detail(check)}
+    head = CHECK_LINE.format(**fields, link=check.link).rstrip()
     return "\n".join([head, *(f"    {line}" for line in check.lines)])
 
 
@@ -188,6 +233,81 @@ def check_lines(results: list[CiResult]) -> str:
     """One entry per check that did not pass, with its failing lines below."""
     shown = [c for r in results for c in r.checks if c.bucket not in PASSING]
     return "\n".join(_check_text(c) for c in shown)
+
+
+def _of_kind(results: list[CiResult], kind: CheckKind) -> list[Check]:
+    return [c for r in results for c in r.checks if kind_or_bucket(c) is kind]
+
+
+def ours_text(results: list[CiResult]) -> str:
+    """The checks that failed where our code ran, as ``<label>, step <step>``."""
+    ours = _of_kind(results, CheckKind.OURS)
+    return "; ".join(f"{label(c)}, step {c.step or NO_STEP_NAMED}" for c in ours)
+
+
+def mark_main(checks: list[Check], failures: frozenset[tuple[str, str]]) -> list[Check]:
+    """Our failing checks that also fail on main (same name and step) become ``main``."""
+
+    def broken(c: Check) -> bool:
+        return kind_or_bucket(c) is CheckKind.OURS and bool(c.step) and (c.name, c.step) in failures
+
+    return [replace(c, kind=CheckKind.MAIN) if broken(c) else c for c in checks]
+
+
+def rerun_due(entries: list[StackEntry]) -> list[tuple[StackEntry, Check]]:
+    """The infra checks whose one re-run at this head is not used yet."""
+    return [
+        (e, c)
+        for e in entries
+        if e.ci
+        for c in _of_kind([e.ci], CheckKind.INFRA)
+        if rerun_key(e.head, label(c)) not in e.reran
+    ]
+
+
+class CardState(StrEnum):
+    """The state of a sprint card's CI pill."""
+
+    GREEN = "green"
+    FAILED = "failed"
+    MAIN = "main"
+    RERUN = "rerun"
+    RUNNING = "running"
+    NONE = "none"
+
+
+@dataclass(frozen=True)
+class Card:
+    """The CI pill of a stack entry."""
+
+    state: CardState
+    text: str
+
+    def row(self) -> dict[str, str]:
+        """The snapshot's ``{"state", "text"}``."""
+        return {"state": str(self.state), "text": self.text}
+
+
+CARD_ROWS = (
+    (CheckKind.OURS, CardState.FAILED, "CI failed: {job}, {step}"),
+    (CheckKind.INFRA, CardState.FAILED, "CI failed: {job}, no step ran"),
+    (CheckKind.MAIN, CardState.MAIN, "CI blocked by main: {job}"),
+    (CheckKind.RERUN, CardState.RERUN, "re-running {job}"),
+    (CheckKind.PENDING, CardState.RUNNING, "CI running"),
+    (CheckKind.STALE, CardState.RUNNING, "CI running"),
+    (CheckKind.GREEN, CardState.GREEN, "CI green"),
+)
+NO_CARD = Card(CardState.NONE, "no CI result")
+
+
+def card_of(result: CiResult) -> Card:
+    """The pill for one CI read: the first row whose kind a check has."""
+    for kind, state, text in CARD_ROWS:
+        found = _of_kind([result], kind)
+        if found:
+            job, step = label(found[0]), found[0].step or NO_STEP_NAMED
+            return Card(state, text.format(job=job, step=step))
+    return NO_CARD
 
 
 def green_report(sprint: int, results: list[CiResult]) -> str:
@@ -203,16 +323,53 @@ class CiWatch:
 
     prs: Prs
     limit_s: float
+    target: str = ""
 
     def results(self, entries: list[StackEntry]) -> list[CiResult]:
         """One CiResult per entry, all under one deadline from now."""
         deadline = system.monotonic() + self.limit_s
         return [self._result(e, deadline) for e in entries]
 
+    def rerun(self, number: int, check: Check) -> None:
+        """Re-run the check's job, then look until the PR shows its new attempt."""
+        self.prs.rerun(check.link)
+        for _ in range(CI_LOOKS):
+            if self._moved(number, check):
+                return
+            system.sleep(CI_POLL_S)
+
+    def _moved(self, number: int, check: Check) -> bool:
+        """True when the PR has a check with this label and another link."""
+        return any(
+            label(c) == label(check) and c.link != check.link for c in self.prs.checks(number)
+        )
+
     def _result(self, entry: StackEntry, deadline: float) -> CiResult:
-        """Settled checks for the entry's PR, with failing lines, and their verdict."""
-        checks = [self._with_lines(c) for c in self._settled(entry.pr or 0, deadline)]
+        """Settled checks for the entry's PR, triaged against its head, and their verdict."""
+        settled = self._settled(entry.pr or 0, deadline)
+        checks = self._against_main([self._triaged(c, entry.head) for c in settled])
         return CiResult(entry.pr or 0, entry.url, entry.head, verdict_of(checks), checks)
+
+    def _triaged(self, check: Check, head: str) -> Check:
+        """The check with its failing lines, its job's commit, its kind and failing step."""
+        job = self.prs.job(check.link) if job_of(check.link) else None
+        kind = kind_of(Seen(check.bucket, job), head)
+        step = failing_step(job) if kind in (CheckKind.OURS, CheckKind.INFRA) else ""
+        return replace(self._with_lines(check), kind=kind, step=step, head=job.head if job else "")
+
+    def _against_main(self, checks: list[Check]) -> list[Check]:
+        """Checks that fail on main too become ``main``; main is read only when needed."""
+        if not self.target or not _of_kind(
+            [CiResult(0, "", "", CiVerdict.NONE, checks)], CheckKind.OURS
+        ):
+            return checks
+        return mark_main(checks, self._main_failures())
+
+    def _main_failures(self) -> frozenset[tuple[str, str]]:
+        """``(check name, failing step)`` of each failing job on the target's head."""
+        failing = [c for c in self.prs.main_checks(self.target) if c.bucket in FAILING]
+        jobs = [(c.name, self.prs.job(c.link)) for c in failing if job_of(c.link)]
+        return frozenset((n, failing_step(j)) for n, j in jobs if j and ran(j))
 
     def _settled(self, number: int, deadline: float) -> list[Check]:
         """Watch, read, and look again while nothing is settled."""
