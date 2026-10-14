@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import io
+import signal
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-from group_chat.backend import BackendError
-from group_chat.cli import Io, main, non_negative, run
+from claude_agent_sdk import CLINotFoundError
+from group_chat.backend import BackendError, ClaudeBackend
+from group_chat.cli import Io, exit_on_sigterm, main, non_negative, run
+from group_chat.state import Store
 
 from .conftest import FailingBackend, FakeBackend
 
@@ -150,7 +154,7 @@ def test_held_lock_exits_2(roster_file: Path, chat_io: Io, backend: FakeBackend)
     chat_dir.mkdir()
     (chat_dir / "lock").write_text("")
     assert run(args(roster_file, "say", "@po hi"), chat_io) == 2
-    assert "another group-chat" in err(chat_io)
+    assert "held by another process" in err(chat_io)
     assert backend.calls == []
 
 
@@ -185,7 +189,7 @@ def test_log_on_corrupt_state_names_the_file(roster_file: Path, chat_io: Io) -> 
     chat_dir.mkdir()
     (chat_dir / "state.json").write_text("[]")
     assert run(args(roster_file, "show"), chat_io) == 2
-    assert "state.json is unreadable or malformed" in err(chat_io)
+    assert "state.json is malformed: state must be a table" in err(chat_io)
 
 
 def test_chat_continues_after_partial_failure_and_lock(roster_file: Path) -> None:
@@ -203,4 +207,40 @@ def test_chat_warns_on_held_lock(roster_file: Path, backend: FakeBackend) -> Non
     (chat_dir / "lock").write_text("")
     chat_io = Io(io.StringIO("@po a\n@po b\n"), io.StringIO(), io.StringIO(), lambda: backend)
     assert run(args(roster_file, "chat"), chat_io) == 0
-    assert err(chat_io).count("another group-chat") == 2
+    assert err(chat_io).count("held by another process") == 2
+
+
+@pytest.mark.parametrize(("signum", "code"), [(signal.SIGTERM, 128 + 15), (2, 130)])
+def test_exit_on_sigterm_raises_system_exit(signum: int, code: int) -> None:
+    with pytest.raises(SystemExit) as exc:
+        exit_on_sigterm(signum, None)
+    assert exc.value.code == code
+
+
+def test_main_installs_sigterm_handler(roster_file: Path) -> None:
+    previous = signal.getsignal(signal.SIGTERM)
+    try:
+        main(args(roster_file, "log"))
+        assert signal.getsignal(signal.SIGTERM) is exit_on_sigterm
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def test_sigterm_handler_releases_lock(roster_file: Path) -> None:
+    store = Store(roster_file.parent / "chat")
+    with pytest.raises(SystemExit), store.locked():
+        exit_on_sigterm(signal.SIGTERM, None)
+    assert not store.lock_path.exists()
+
+
+def test_sdk_error_exits_1_end_to_end(roster_file: Path) -> None:
+    async def query_fn(**_kwargs: object) -> AsyncIterator[object]:
+        raise CLINotFoundError("Claude Code not found")
+        yield  # pragma: no cover
+
+    chat_io = Io(io.StringIO(), io.StringIO(), io.StringIO(), lambda: ClaudeBackend(query_fn))
+    assert run(args(roster_file, "say", "@po hi"), chat_io) == 1
+    assert out(chat_io) == (
+        "@orchestrator: @po could not answer: CLINotFoundError: Claude Code not found\n\n"
+    )
+    assert "model call failed: CLINotFoundError" in err(chat_io)

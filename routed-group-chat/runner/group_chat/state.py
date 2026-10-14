@@ -2,9 +2,10 @@
 
 One ``state.json`` per chat directory. Writes go to a unique temp file that is
 fsynced and then renamed over ``state.json``, so a crash mid-write leaves the
-previous state intact. ``Store.locked`` holds ``<dir>/lock`` (created with
-``O_EXCL``, which works the same on Windows) for a whole message, so two
-``say`` calls cannot interleave; the second is refused, not queued.
+previous state intact. ``load`` checks the file's shape against the same kind
+of field table as the roster. ``Store.locked`` holds ``<dir>/lock`` (see
+``lock``) for a whole message, so two ``say`` calls cannot interleave; the
+second is refused, not queued.
 """
 
 from __future__ import annotations
@@ -19,7 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import decision_log
 from .decision_log import DecisionLog
+from .lock import LockError, LockFile
+from .schema import check, check_items
 
 STATE_FILE = "state.json"
 LOCK_FILE = "lock"
@@ -27,6 +31,24 @@ HUMAN = "human"
 ORCHESTRATOR = "orchestrator"
 # An opening or closing turn tag, any case, as a reply might forge it.
 TAG_RE = re.compile(r"<(/?turn)", re.IGNORECASE)
+STATE_FIELDS: dict[str, type] = {"turns": list, "summary": str, "last_addressed": list, "log": dict}
+TURN_FIELDS: dict[str, type] = {"speaker": str, "text": str}
+
+
+def escape_tags(text: str) -> str:
+    """``text`` with any turn tag defused, so it cannot open or close a turn."""
+    return TAG_RE.sub(r"&lt;\1", text)
+
+
+def validate(data: Any) -> None:
+    """Raise ``StateError`` unless ``data`` has the shape ``ChatState.to_dict`` writes."""
+    check(data, STATE_FIELDS, "state", StateError)
+    turns = data.get("turns", [])
+    check_items(turns, dict, "state.turns", StateError)
+    for turn in turns:
+        check(turn, TURN_FIELDS, "state.turns entry", StateError, required=TURN_FIELDS)
+    check_items(data.get("last_addressed", []), str, "state.last_addressed", StateError)
+    decision_log.validate(data.get("log", {}), StateError)
 
 
 class StateError(RuntimeError):
@@ -46,8 +68,7 @@ class Turn:
 
     def block(self) -> str:
         """A delimited block for models; a turn cannot fake another turn's tags."""
-        text = TAG_RE.sub(r"&lt;\1", self.text)
-        return f'<turn speaker="{self.speaker}">\n{text}\n</turn>'
+        return f'<turn speaker="{self.speaker}">\n{escape_tags(self.text)}\n</turn>'
 
 
 @dataclass
@@ -110,9 +131,14 @@ class Store:
         if not self.path.exists():
             return ChatState()
         try:
-            return ChatState.from_dict(json.loads(self.path.read_text()))
-        except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-            raise StateError(f"{self.path} is unreadable or malformed: {exc}") from exc
+            data = json.loads(self.path.read_text())
+        except (OSError, ValueError) as exc:
+            raise StateError(f"{self.path} is unreadable: {exc}") from exc
+        try:
+            validate(data)
+        except StateError as exc:
+            raise StateError(f"{self.path} is malformed: {exc}") from exc
+        return ChatState.from_dict(data)
 
     def save(self, state: ChatState) -> None:
         """Write ``state`` atomically and durably."""
@@ -130,16 +156,10 @@ class Store:
 
     @contextmanager
     def locked(self) -> Iterator[None]:
-        """Hold the chat's lock; ``StateError`` if another process holds it."""
+        """Hold the chat's lock; ``StateError`` if a live process holds it."""
         self.directory.mkdir(parents=True, exist_ok=True)
         try:
-            os.close(os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-        except FileExistsError as exc:
-            raise StateError(
-                f"{self.lock_path} exists: another group-chat is using this chat "
-                "(delete the file if none is running)"
-            ) from exc
-        try:
-            yield
-        finally:
-            self.lock_path.unlink(missing_ok=True)
+            with LockFile(self.lock_path).held():
+                yield
+        except LockError as exc:
+            raise StateError(str(exc)) from exc

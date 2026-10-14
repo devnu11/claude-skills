@@ -10,6 +10,9 @@ from typing import Any
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
+    ClaudeSDKError,
+    CLINotFoundError,
+    ProcessError,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -139,3 +142,39 @@ def test_sdk_command_has_no_tools_and_strict_mcp(tmp_path: Path) -> None:
     assert "--strict-mcp-config" in command
     assert "--setting-sources=" in command
     assert command[command.index("--max-turns") + 1] == "1"
+
+
+def raising(exc: Exception) -> ClaudeBackend:
+    async def query_fn(**_kwargs: Any) -> AsyncIterator[Any]:
+        raise exc
+        yield  # pragma: no cover
+
+    return ClaudeBackend(query_fn)
+
+
+@pytest.mark.parametrize(
+    ("exc", "message"),
+    [
+        (ProcessError("boom", exit_code=1), r"^ProcessError: boom \(exit code: 1\)"),
+        (CLINotFoundError("no claude"), "^CLINotFoundError: no claude"),
+        (ClaudeSDKError("x"), "^ClaudeSDKError: x$"),
+    ],
+)
+def test_sdk_errors_become_backend_errors(exc: Exception, message: str) -> None:
+    with pytest.raises(BackendError, match=message) as info:
+        raising(exc).complete("sys", "hi", None)
+    assert info.value.__cause__ is exc
+
+
+def test_sdk_error_mid_stream_becomes_backend_error() -> None:
+    async def query_fn(**_kwargs: Any) -> AsyncIterator[Any]:
+        yield assistant("partial")
+        raise ProcessError("died", exit_code=137)
+
+    with pytest.raises(BackendError, match="ProcessError: died"):
+        ClaudeBackend(query_fn).complete("sys", "hi", None)
+
+
+def test_other_errors_are_not_wrapped() -> None:
+    with pytest.raises(ValueError, match="bug"):
+        raising(ValueError("bug")).complete("sys", "hi", None)

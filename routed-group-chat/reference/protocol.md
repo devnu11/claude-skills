@@ -40,19 +40,20 @@ not. Sticky routing follows the human's last targets, not handoffs.
 ## Markers
 
 A marker starts a line of any message (human or role), optionally after
-leading @mentions, a `-`/`*` bullet or `**` bold. Markers are upper case. Lines
-inside ```` ``` ```` fenced blocks never count, and a marker with blank text is
-ignored.
+leading @mentions, a `-`/`*` bullet or `**` bold; a closing `**` is dropped from
+the text. Markers are upper case. Lines inside fenced code (```` ``` ```` or
+`~~~`; an unclosed fence runs to the end of the message) never count, and a
+marker whose text is blank or only `*` is ignored.
 
 | Line | Effect |
 |---|---|
 | `DECISION: <text>` | pins decision `D<n>` |
 | `QUESTION: <text>` | opens question `Q<n>` |
-| `RESOLVED: Q<n>[, Q<m>]` | closes every listed question; unknown ids do nothing |
+| `RESOLVED: Q<n>[, Q<m>]` | closes the comma-separated ids at the start of its text (`RESOLVED: Q1 now that Q3 is moot` closes only Q1); unknown ids do nothing |
 | `HANDOFF: @<name>` | (role replies) next turn goes to `<name>` |
 
-A handoff to the speaker, an unknown name or a role already waiting in this
-message's queue is ignored. Past `--max-handoffs` (default 2) per human
+A handoff to the speaker, an unknown name, a role already waiting in this
+message's queue, or one inside fenced code is ignored. Past `--max-handoffs` (default 2) per human
 message, the runner records an `@orchestrator` note instead.
 
 Any member can write markers, so a role can pin a decision or close a
@@ -65,7 +66,8 @@ question. The log shows who wrote each entry; correct it in the chat
 2. The pinned decision log, in full.
 3. The rolling summary of older turns.
 4. The recent turns, each in a `<turn speaker="...">` block. Turn tags inside
-   a message are escaped, so a reply cannot pose as another speaker.
+   any text (turns, log, summary), in any case, are escaped, so a reply cannot
+   pose as another speaker.
 5. The cue `Reply as @<name>.`
 
 Each turn is one model call through the Agent SDK on the Claude Code login,
@@ -84,16 +86,23 @@ so, the turns stay verbatim and the next message tries again.
 
 `<dir>/state.json` holds the turns, summary, last addressee and decision log.
 It is saved after the human's message and after every reply, each time through
-a temp file that is fsynced and renamed into place. A malformed `state.json`
-exits 2 with its path.
+a temp file that is fsynced and renamed into place.
+
+A malformed `state.json` (bad JSON, unknown keys, wrong types) exits 2 with
+its path; it is checked against field tables, as the roster is.
 
 A message holds `<dir>/lock` from start to finish; a second `say` on the same
-chat exits 2 instead of interleaving. If a crash leaves the lock behind, delete
-it.
+chat exits 2 instead of interleaving. The lock records the holder's pid, host
+and a token, and is removed only by its holder. SIGTERM and Ctrl-C release it.
+A lock left by a process that died (kill -9) is taken over automatically when
+it is from this host and its pid is gone; on Windows the pid cannot be probed
+safely, so delete a stale lock by hand.
 
-If a model call fails, the replies that arrived are kept and printed, an
-`@orchestrator` note records which role could not answer, the rest of that
-message's queue is skipped, and the command exits 1.
+If a model call fails (an error result, no text, or the `claude` CLI failing
+or missing), the replies that arrived are kept and printed, an `@orchestrator`
+note records which role could not answer, the rest of that message's queue is
+skipped, and the command exits 1. Sending the message again records the human
+turn a second time.
 
 ## Commands and exit codes
 

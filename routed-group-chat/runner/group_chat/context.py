@@ -1,8 +1,9 @@
 """What a role sees on its turn: its prompt, the chat rules, the pinned log,
 the summary of older turns and the recent turns verbatim.
 
-Turns are wrapped in ``<turn speaker="...">`` blocks so text inside one turn
-cannot pass itself off as another speaker's turn.
+Turns are wrapped in ``<turn speaker="...">`` blocks, and turn tags inside any
+text (turns, log, summary) are escaped, so no text can pass itself off as
+another speaker's turn.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from .roster import Role, Roster
-from .state import ChatState, Turn
+from .state import ChatState, Turn, escape_tags
 
 RULES = """\
 You are @{name} ({title}) in the group chat "{team}". Members: {members}, and the human.
@@ -38,8 +39,8 @@ def transcript(turns: Sequence[Turn]) -> str:
 def user_prompt(role: Role, state: ChatState) -> str:
     """Pinned log, summary and transcript, then the cue for this role."""
     sections = [
-        ("PINNED: DECISIONS AND OPEN QUESTIONS", state.log.render()),
-        ("SUMMARY OF EARLIER DISCUSSION", state.summary or "(none)"),
+        ("PINNED: DECISIONS AND OPEN QUESTIONS", escape_tags(state.log.render())),
+        ("SUMMARY OF EARLIER DISCUSSION", escape_tags(state.summary) or "(none)"),
         ("RECENT TURNS", transcript(state.turns) or "(none)"),
     ]
     body = "\n\n".join(f"--- {title} ---\n{text}" for title, text in sections)

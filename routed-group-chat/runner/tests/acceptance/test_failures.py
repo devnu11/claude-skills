@@ -6,10 +6,14 @@ Rules quoted from the ``cli``, ``chat`` and ``state`` module docs; the model is 
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 
 import pytest
+from claude_agent_sdk import ProcessError
+from group_chat.backend import ClaudeBackend
 
 from ..conftest import Cli, FailingBackend, FakeBackend
+from ..lockutil import dead_pid, live_pid, write_owner
 
 pytestmark = pytest.mark.acceptance
 
@@ -30,7 +34,7 @@ def test_held_lock_exits_2_and_records_nothing(cli: Cli, backend: FakeBackend) -
     result = cli.say("@po hi")
     # Then it is refused and nothing is recorded or called
     assert result.code == 2
-    assert "lock exists: another group-chat is using this chat" in result.err
+    assert "lock is held by another process; delete it if" in result.err
     assert not cli.state_file.exists()
     assert backend.calls == []
 
@@ -89,7 +93,7 @@ def test_corrupt_state_exits_2(cli: Cli) -> None:
     for command in (["log"], ["show"], ["say", "@po hi"]):
         result = cli.run(*command)
         assert result.code == 2
-        assert "state.json is unreadable or malformed" in result.err
+        assert "state.json is unreadable: " in result.err
 
 
 def test_chat_keeps_going_after_failures(cli: Cli) -> None:
@@ -99,3 +103,51 @@ def test_chat_keeps_going_after_failures(cli: Cli) -> None:
     assert result.code == 0
     assert result.err.count("group-chat:") == 3
     assert result.out.endswith("@manager: manager reply\n\n")
+
+
+def test_lock_of_dead_process_is_taken_over(cli: Cli) -> None:
+    """lock: "A lock left behind by a killed process is stale when its host is this host
+    and its pid is gone; it is then taken over"."""
+    # Given a lock file left by a process that no longer runs on this host
+    cli.directory.mkdir(parents=True)
+    write_owner(cli.directory / "lock", dead_pid())
+    # When the human says something
+    result = cli.say("@po hi")
+    # Then the message goes through and the lock is released
+    assert result.code == 0
+    assert result.out == "@po: po reply\n\n"
+    assert not (cli.directory / "lock").exists()
+
+
+def test_lock_of_live_process_exits_2(cli: Cli, backend: FakeBackend) -> None:
+    """lock: busy message "<path> is held by pid N on HOST; delete it if that process is
+    not running"."""
+    cli.directory.mkdir(parents=True)
+    write_owner(cli.directory / "lock", live_pid(), host="this-box", token="theirs")
+    result = cli.say("@po hi")
+    assert result.code == 2
+    assert f"lock is held by pid {live_pid()} on this-box; delete it if" in result.err
+    assert (cli.directory / "lock").exists()
+    assert backend.calls == []
+
+
+def test_lock_from_other_host_is_never_taken_over(cli: Cli) -> None:
+    """lock: a foreign-host holder is never stale, even with a pid that is not running here."""
+    cli.directory.mkdir(parents=True)
+    write_owner(cli.directory / "lock", dead_pid(), host="other-host")
+    result = cli.say("@po hi")
+    assert result.code == 2
+    assert "on other-host" in result.err
+
+
+def test_sdk_failure_exits_1(cli: Cli) -> None:
+    """backend: an SDK error while querying becomes a failed model call (exit 1)."""
+
+    async def query_fn(**_kwargs: object) -> AsyncIterator[object]:
+        raise ProcessError("claude exited", exit_code=2)
+        yield  # pragma: no cover
+
+    result = Cli(cli.roster, cli.directory, ClaudeBackend(query_fn)).say("@po hi")
+    assert result.code == 1
+    assert "@orchestrator: @po could not answer: ProcessError: claude exited" in result.out
+    assert "group-chat: model call failed: ProcessError" in result.err

@@ -12,10 +12,12 @@ first), 2 a usage problem (bad roster, bad address, bad or locked state).
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from types import FrameType
 from typing import TextIO
 
 from .addressing import AddressError
@@ -144,6 +146,12 @@ def run(argv: list[str], io: Io) -> int:
         return EXIT_USAGE
 
 
+def exit_on_sigterm(signum: int, _frame: FrameType | None) -> None:
+    """Turn SIGTERM into ``SystemExit`` so ``finally`` blocks (the chat lock) run."""
+    raise SystemExit(128 + signum)
+
+
 def main(argv: list[str] | None = None) -> int:
     """The console entry point."""
+    signal.signal(signal.SIGTERM, exit_on_sigterm)
     return run(sys.argv[1:] if argv is None else argv, Io(sys.stdin, sys.stdout, sys.stderr))

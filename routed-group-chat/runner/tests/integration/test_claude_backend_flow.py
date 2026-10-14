@@ -15,6 +15,7 @@ import pytest
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    CLINotFoundError,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -87,3 +88,21 @@ def test_sdk_error_keeps_human_turn_and_notes_failure(make_chat: MakeChat) -> No
         Turn("human", "@po hi"),
         Turn("orchestrator", "@po could not answer: overloaded"),
     ]
+
+
+def test_sdk_exception_becomes_partial_reply_with_note(make_chat: MakeChat) -> None:
+    sdk = FakeSdk({"manager": "Fine."})
+
+    async def query(*, prompt: str, options: ClaudeAgentOptions) -> AsyncIterator[Any]:
+        if prompt.endswith("Reply as @po."):
+            raise CLINotFoundError("Claude Code not found")
+        async for message in sdk.query(prompt=prompt, options=options):
+            yield message
+
+    chat = make_chat(ClaudeBackend(query))
+    with pytest.raises(PartialReplyError) as exc:
+        chat.say("@manager @po plan?")
+    assert isinstance(exc.value, BackendError)
+    note = Turn("orchestrator", "@po could not answer: CLINotFoundError: Claude Code not found")
+    assert exc.value.replies == [Turn("manager", "Fine."), note]
+    assert chat.store.load().turns[-2:] == exc.value.replies
