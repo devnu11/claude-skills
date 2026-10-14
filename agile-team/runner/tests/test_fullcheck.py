@@ -5,7 +5,6 @@ from pathlib import Path
 from agile_team import boundary, fullcheck, gates
 from agile_team import config as cfg
 from agile_team.fullcheck import CheckReport, FullCheck, Judge, Judging, full_checks, run_checks
-
 from agile_team.pending_tests import Registry
 
 from .conftest import FakeRunner

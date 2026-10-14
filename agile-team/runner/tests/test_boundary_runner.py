@@ -172,7 +172,12 @@ def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> N
     b = env.rt.state.boundary
     assert b.failure.case is bd.FixCase.TEAM_CHECK and b.failure.stage is Stage.CHECK
     assert report["boundary"]["outcome"] == "fail"
-    assert report["boundary"]["checks"][0] == {"name": "lint", "passed": False, "why": "exit 1", "pending": ""}
+    assert report["boundary"]["checks"][0] == {
+        "name": "lint",
+        "passed": False,
+        "why": "exit 1",
+        "pending": "",
+    }
     due = env.br.due()
     assert (due.kind, due.role) == (StepKind.TEAM_FIX, "devops")
     assert due.brief.startswith(bd.FIX_HEADING.format(sprint=1, edge="start", stage="check"))
