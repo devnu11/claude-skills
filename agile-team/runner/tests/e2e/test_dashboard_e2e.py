@@ -139,8 +139,8 @@ def test_only_outside_urls_are_pinned_libraries(dash) -> None:
     _, url, _ = dash
     urls = set(re.findall(r"https?://[^\s\"'`)<>]+", _index(url)))
     urls -= {"http://www.w3.org/2000/svg"}
+    assert "mermaid" not in _index(url).lower()
     patterns = [
-        r"https://cdn\.jsdelivr\.net/npm/mermaid@11\.4\.1/\S+",
         r"https://cdn\.jsdelivr\.net/npm/markdown-it@14\.1\.0/\S+",
     ]
     assert len(urls) == len(patterns)
@@ -148,11 +148,13 @@ def test_only_outside_urls_are_pinned_libraries(dash) -> None:
         assert len([u for u in urls if re.fullmatch(pattern, u)]) == 1
 
 
-def test_event_edge_covers_flow_kinds(dash) -> None:
+def test_flow_dots_cover_the_flow_kinds(dash) -> None:
+    """FC22/FC23: the page declares both dot looks and the verdicts that send work back."""
     _, url, _ = dash
-    block = re.search(r"const EVENT_EDGE = \{(.*?)\n\};", _index(url), re.S).group(1)
-    keys = set(re.findall(r'^\s*"?([\w-]+)"?:', block, re.M))
-    assert {"step-start", "step-end", "message", "answer"} <= keys
+    page = _index(url)
+    look = re.search(r"const DOT_LOOKS = \{(.*?)\};", page, re.S).group(1)
+    assert {"forward", "back"} <= set(re.findall(r"(\w+): \{", look))
+    assert "function dotFor(" in page and 'BACK_VERDICTS = ["bounce", "return", "route"]' in page
 
 
 def _budget(url: str) -> float:

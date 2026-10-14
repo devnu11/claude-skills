@@ -111,8 +111,9 @@ def test_flow_box_shows_family_and_local_keeps_provider() -> None:
     v.roles.find((r) => r.name === "unit-tester").model = "claude-sonnet-5-5";
     const dev = v.roles.find((r) => r.name === "architect");
     dev.model = "qwen3-coder"; dev.provider = "ollama";
-    ui.scope = "run"; out.src = flowSource(v);
+    ui.scope = "run"; out.src = flowHtml(flowModel(v));
     """)
     src = out["src"]
     assert "claude-sonnet-5-5" not in src
-    assert "sonnet" in src and "qwen3-coder · ollama" in src
+    assert '<span class="fc-model">sonnet</span>' in src
+    assert '<span class="fc-model">qwen3-coder · ollama</span>' in src

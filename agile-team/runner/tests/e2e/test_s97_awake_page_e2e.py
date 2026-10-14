@@ -22,20 +22,20 @@ def _run(body: str) -> dict:
     return dashboard_node.run_page(driver)
 
 
-def _running(clock: str, slept: float) -> str:
+def _running(slept: float) -> str:
     return f"""
     data.skew = {NOW} - Date.now() / 1000;
-    view.steps = [{{role: "developer", story: "s1", model: "m", sprint: 1, at: {NOW - 600}, ended_at: null, seconds: null, status: null, clock: "{clock}", slept: {slept}}}];
-    out.line = runningLine(view, "developer");
+    view.steps = [{{role: "developer", story: "s1", model: "m", sprint: 1, at: {NOW - 600}, ended_at: null, seconds: null, status: null, clock: "awake", slept: {slept}}}];
+    out.awake = awakeSoFar(view, openStep(view, "developer"));
+    out.text = fmt.dur1(out.awake);
     """
 
 
 def test_running_line_takes_out_sleep_or_marks_wall() -> None:
-    """AC2 (AW10): awake step drops its slept seconds; wall step is marked."""
-    awake = _run(_running("awake", 120))["line"]
-    assert "running 8 min" in awake and "may include sleep" not in awake
-    wall = _run(_running("wall", 0))["line"]
-    assert "running 10 min (may include sleep)" in wall
+    """AC2 (AW10, FC11): the live block's awake time is the step's age minus its slept seconds."""
+    awake = _run(_running(120))
+    assert awake["awake"] == 480 and awake["text"] == "8.0m"
+    assert _run(_running(0))["text"] == "10.0m"
 
 
 def test_time_by_counts_wall_and_tooltip_marks_it() -> None:

@@ -1,4 +1,4 @@
-"""s102 end to end: runner stages on the Flow chart, the share line, the Time chart and readability, under node."""
+"""s102/s118 end to end: runner tools on the Flow chart, the share bar, the Time chart and readability, under node."""
 # ruff: noqa: E501
 
 from __future__ import annotations
@@ -14,14 +14,6 @@ from .. import dashboard_node
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
-NODES = {
-    "st_env": ("Customer", "Prepare env"),
-    "st_gate": ("Build", "Implement gate"),
-    "st_e2e": ("Verify", "E2E gate"),
-    "st_boundary": ("Steering", "Boundary"),
-}
-FORBIDDEN = ["opacity", "filter", "transform", "mix-blend-mode", "font-size"]
-
 
 def _run(body: str, view: dict | None = None) -> dict:
     """Run `body` in the page with `view` (default: the fixture) bound; it fills `out`."""
@@ -30,162 +22,131 @@ def _run(body: str, view: dict | None = None) -> dict:
     return dashboard_node.run_page(driver)
 
 
-def _node_line(source: str, node_id: str) -> str:
-    return next(ln for ln in source.splitlines() if ln.startswith(node_id + "{{"))
-
-
-def _label(source: str, node_id: str) -> str:
-    return _node_line(source, node_id)
-
-
-def _block(source: str, group: str) -> list[str]:
-    lines = source.splitlines()
-    start = lines.index(f'subgraph grp{group}["{group}"]')
-    return lines[start : lines.index("end", start)]
-
-
-# ---------------------------------------------------------------- Flow chart
-
-
-def test_stage_nodes_sit_in_their_groups_as_hexagons() -> None:
-    """AC1, SN1-SN4: four hexagons in their subgraphs; dotted edges to their roles."""
-    src = _run('ui.scope = "run"; out.src = flowSource(view);')["src"]
-    for node_id, (group, label) in NODES.items():
-        block = _block(src, group)
-        assert any(ln.startswith(f'{node_id}{{{{"{label}<br/>') for ln in block), node_id
-        assert sum(ln.startswith(node_id + "{{") for ln in src.splitlines()) == 1
-    ids = dict(re.findall(r'^(r\d+)\["([\w-]+)<br/>', src, re.M))
-    by_name = {v: k for k, v in ids.items()}
-    dotted = [ln for ln in src.splitlines() if "-.->" in ln]
-    assert dotted == [
-        f"st_env -.-> {by_name['customer-proxy']}",
-        f"{by_name['developer-cli']} -.-> st_gate",
-        f"{by_name['integration-tester']} -.-> st_e2e",
-        "po -.-> st_boundary",
-    ]
-    assert "developer-db" not in by_name  # unused roles draw no anchor edge
-
-
-def test_stage_edges_keep_the_labelled_link_styles() -> None:
-    """SN4: stage edges come last, each styled weight 1.0; labelled indices unchanged."""
-    out = _run("""
+def _tools(extra: str = "") -> str:
+    """JS that fills `out.tools` with `{role: {before: [stage], after: [stage]}}` from the fixture."""
+    return f"""
     ui.scope = "run";
-    const full = flowSource(view);
-    const bare = structuredClone(view);
-    bare.events = bare.events.filter((e) => e.kind !== "runner-stage");
-    out.full = full; out.bare = flowSource(bare);
+    {extra}
+    const rt = roleTools(view);
+    out.tools = Object.fromEntries(Object.entries(rt).map(([r, t]) => [r, {{ before: t.before.map((x) => x.stage), after: t.after.map((x) => x.stage) }}]));
+    """
+
+
+# ---------------------------------------------------------------- Flow chart (FC16-FC18)
+
+
+def test_stage_tools_sit_under_their_roles() -> None:
+    """FC16/FC17: after a step -> its role; before -> the role that starts next; boundary -> PO; checkout.* nowhere."""
+    tools = _run(_tools())["tools"]
+    assert tools["developer-cli"]["after"] == ["gate.tests+coverage"]
+    assert "env.prepare" in tools["customer-proxy"]["before"]
+    assert tools["product-owner"]["before"] == ["boundary.sync"]
+    assert tools["integration-tester"]["after"] == ["presentation.trial"]
+    assert not any("checkout." in st for t in tools.values() for st in t["before"] + t["after"])
+    assert "developer-db" not in tools  # unused roles draw no tool
+
+
+def test_tool_boxes_are_idle_with_runs_and_time() -> None:
+    """FC17: an idle box reads `name · ↻ N · time`; a tool in no scope run reads `↻ 0`."""
+    out = _run("""
+    ui.scope = "run"; out.run = flowHtml(flowModel(view));
+    ui.scope = "story"; ui.focus = "s3"; out.story = flowHtml(flowModel(view));
     """)
-    style = lambda s: [ln for ln in s.splitlines() if ln.startswith("linkStyle")]  # noqa: E731
-    full, bare = style(out["full"]), style(out["bare"])
-    assert full[: len(bare)] == bare
-    assert [ln.split(" ", 2)[2].split(",")[0] for ln in full[len(bare) :]] == [
-        "stroke-width:1.0px"
-    ] * 4
-    assert len(full) == len(bare) + 4
+    tool = '<span>presentation.trial</span><span class="f-toolstats">'
+    assert tool + " · ↻ 1 · 30s</span>" in out["run"]
+    assert 'class="fc-tool f-tools fc-t-tool"' in out["run"]
+    assert tool + " · ↻ 0</span>" in out["story"]
 
 
-def test_no_events_draw_no_stage_node_and_an_open_row_alone_draws_one() -> None:
-    """SN2: drawn when an event or an open row names the stage."""
+def test_no_events_draw_no_tool_and_an_open_row_alone_draws_one() -> None:
+    """FC16/FC17: tools are drawn when an event or an open row names the stage."""
     out = _run("""
     ui.scope = "run";
     view.events = view.events.filter((e) => e.kind !== "runner-stage");
     view.heartbeat.stages = [];
-    out.none = flowSource(view);
-    view.heartbeat.stages = [{stage: "boundary.push", started_at: clockNow(view) - 5, started_slept: 0}];
-    out.open = flowSource(view);
+    out.none = roleTools(view);
+    view.heartbeat.stages = [{stage: "boundary.push", when: "after", attach: "boundary", started_at: clockNow(view) - 5, started_slept: 0}];
+    out.open = roleTools(view);
     """)
-    assert "st_" not in out["none"]
-    assert [n for n in NODES if f"\n{n}{{{{" in out["open"]] == ["st_boundary"]
+    assert out["none"] == {}
+    assert list(out["open"]) == ["product-owner"]
+    assert out["open"]["product-owner"]["after"][0]["open"]["stage"] == "boundary.push"
 
 
-def test_stage_node_numbers_in_run_story_and_sprint_scope() -> None:
-    """SN5, SN6: last, total and runs per scope; idle nodes get the idle class."""
+def test_tool_run_numbers_in_run_story_and_sprint_scope() -> None:
+    """FC15/FC17: runs and seconds per scope; the run number counts earlier runs of the stage on the story."""
     out = _run("""
-    ui.scope = "run"; out.run = flowSource(view);
-    ui.scope = "story"; ui.focus = "s3"; out.story = flowSource(view);
-    ui.scope = "sprint"; ui.focus = "s1"; out.sprint = flowSource(view);
+    ui.scope = "run"; out.run = roleTools(view)["developer-cli"].after[0];
+    ui.scope = "story"; ui.focus = "s3"; out.story = roleTools(view)["developer-cli"].after[0];
+    ui.scope = "sprint"; ui.focus = "s1"; out.sprint = roleTools(view)["product-owner"].before[0];
     const rs = view.events.find((e) => e.id === "rs1");
+    out.first = toolRunNumber(view, { stage: rs.data.stage, story: "s3" });
     view.events.push({...rs, id: "rs9", at: rs.at + 5, data: {...rs.data, seconds: 20}});
-    ui.scope = "run"; out.two = flowSource(view);
+    ui.scope = "run"; out.two = roleTools(view)["developer-cli"].after[0];
+    out.second = toolRunNumber(view, { stage: rs.data.stage, story: "s3" });
     """)
-    run = out["run"]
-    assert "last 1 min · total 1 min · 1 run" in _node_line(run, "st_gate")
-    assert "last 60 s · total 60 s · 1 run" in _node_line(run, "st_boundary")
-    assert "last 45 s · total 45 s · 1 run" in _node_line(run, "st_env")
-    assert "last 30 s · total 30 s · 1 run" in _node_line(run, "st_e2e")
-    story = out["story"]
-    assert "1 run" in _node_line(story, "st_gate")
-    for idle in ("st_env", "st_e2e", "st_boundary"):
-        assert _node_line(story, idle).endswith('runner · idle"}}'), idle
-        assert f"class {idle} idle" in story
-    assert "class st_gate idle" not in story
-    assert "last 60 s · total 60 s · 1 run" in _node_line(out["sprint"], "st_boundary")
-    assert "last 20 s · total 2 min · 2 runs" in _node_line(out["two"], "st_gate")
+    assert (out["run"]["runs"], out["run"]["seconds"]) == (1, 100)
+    assert (out["story"]["runs"], out["story"]["seconds"]) == (1, 100)
+    assert (out["sprint"]["runs"], out["sprint"]["seconds"]) == (1, 60)
+    assert (out["two"]["runs"], out["two"]["seconds"]) == (2, 120)
+    assert (out["first"], out["second"]) == (2, 3)
 
 
-def test_a_running_stage_lights_up_and_becomes_the_active_node() -> None:
-    """SN7, SN8: the running line, the active halo and class; nothing when idle or in a replay."""
+def test_a_running_stage_becomes_a_solid_running_tool_with_a_test_caption() -> None:
+    """FC18: the running tool has the run class, elapsed time, the counts caption and no `f-tools` class."""
     out = _run("""
     ui.scope = "run";
-    const act = activeStep(view.events);
-    view.events.push({id: "x1", at: act.at + 1, kind: "step-end", role: act.role, story: act.story, data: {}});
-    view.heartbeat.step = null; view.heartbeat.calls = [];
-    view.heartbeat.stages = [{stage: "gate.tests+coverage", started_at: clockNow(view) - 41, started_slept: 0}];
-    out.on = flowSource(view); out.active = activeNodeId(view);
-    view.health.level = "idle";
-    out.idle = flowSource(view); out.idleActive = activeNodeId(view);
-    view.health.level = "green";
-    view.heartbeat = null;
-    out.replay = flowSource(view);
+    const html = flowHtml(flowModel(view));
+    out.html = html; out.caption = testsCaption(view.heartbeat.stages[0].tests);
+    out.idle = (() => { view.health.level = "idle"; return flowHtml(flowModel(view)); })();
     """)
-    assert "⏱ running 41 s" in _node_line(out["on"], "st_gate")
-    assert out["active"] == "st_gate"
-    assert "class st_gate active" in out["on"]
-    assert "running" not in _node_line(out["idle"], "st_gate").split("runner")[1]
-    assert out["idleActive"] == "po"
-    assert "class st_gate active" not in out["idle"]
-    assert "⏱ running" not in _node_line(out["replay"], "st_gate")
-    assert "class st_gate active" not in out["replay"]
+    running = re.search(
+        r'<div class="fc-tool running (run\d)"[^>]*>(.*?)</div></div>|<div class="fc-tool running (run\d)"[^>]*>.*',
+        out["html"],
+        re.S,
+    )
+    assert running
+    assert "▶ gate.tests+coverage" in out["html"]
+    assert out["caption"] == "273 Pass + 32 Warn + 9 Fail / 506 Total"
+    assert "273 Pass" in out["html"] and "complete" in out["html"]
+    tool = out["html"][out["html"].index('<div class="fc-tool running') :].split(">", 1)[0]
+    assert "f-tools" not in tool
+    assert "fc-tool running" not in out["idle"]
 
 
 def test_stage_names_are_built_in_stage_names() -> None:
-    """SN1: every name in STAGE_NODES is one of stages.STAGES."""
-    out = _run("out.names = STAGE_NODES.flatMap((n) => n.stages);")
+    """FC16/FC17: every stage a tool box names in the fixture is one of stages.STAGES (or a runner-tool)."""
+    out = _run(
+        'ui.scope = "run"; out.names = Object.values(roleTools(view)).flatMap((t) => [...t.before, ...t.after].map((x) => x.stage));'
+    )
     builtin = {n.value for n in stages.STAGES}
     assert out["names"] and set(out["names"]) <= builtin
 
 
-# ---------------------------------------------------------------- share line
+# ---------------------------------------------------------------- share bar (FC9)
 
 
 def test_agent_boxes_show_model_against_tool_share() -> None:
-    """SB1, SB3: developer-cli reads 15% model, 85% tools; an empty split draws no line."""
+    """FC9: developer-cli reads 15% model, 85% tools; an empty split reads `no model/tool timing yet`."""
     out = _run("""
-    ui.scope = "run"; out.src = flowSource(view);
-    out.none = shareLine({model: 0, tools: 0});
+    ui.scope = "run"; const m = flowModel(view);
+    out.dev = roleBox(m, "developer-cli"); out.empty = roleBox(m, "manager");
+    out.none = shareParts({model: 0, tools: 0}); out.split = shareParts({model: 3, tools: 1});
     """)
-    src = out["src"]
-    ids = dict(re.findall(r'^(r\d+)\["([\w-]+)<br/>', src, re.M))
-    dev = next(
-        ln
-        for ln in src.splitlines()
-        if ln.startswith(next(k for k, v in ids.items() if v == "developer-cli") + "[")
-    )
-    assert "model 15% ██░░░░░░░░ tools 85%" in dev
-    no_split = [ln for ln in src.splitlines() if re.match(r"r\d+\[", ln) and "model " not in ln]
-    assert no_split  # roles without a split have no line
-    assert out["none"] == ""
+    assert "model 15%" in out["dev"] and "tools 85%" in out["dev"]
+    assert "no model/tool timing yet" in out["empty"]
+    assert out["none"] is None and out["split"] == {"model": 75, "tools": 25}
 
 
 def test_po_share_in_run_scope_only() -> None:
-    """SB2: the po label has the share line in Run scope and none in Story scope."""
+    """FC8/FC9: the PO box has its share bar in Run scope, and `—` for tokens, cost and time in Story scope."""
     out = _run("""
-    ui.scope = "run"; out.run = flowSource(view);
-    ui.scope = "story"; ui.focus = "s3"; out.story = flowSource(view);
+    ui.scope = "run"; out.run = roleBox(flowModel(view), "product-owner");
+    ui.scope = "story"; ui.focus = "s3"; out.story = roleBox(flowModel(view), "product-owner");
     """)
-    po = lambda s: next(ln for ln in s.splitlines() if ln.startswith("po["))  # noqa: E731
-    assert "model 100% ██████████ tools 0%" in po(out["run"])
-    assert "model " not in po(out["story"])
+    assert "model 100%" in out["run"] and "tools 0%" in out["run"]
+    assert out["story"].count('<span class="f-tokens">—</span>') == 1
+    assert 'f-cost">—' in out["story"] and 'f-time">—' in out["story"]
 
 
 # ---------------------------------------------------------------- Time chart
@@ -289,27 +250,16 @@ def _blend(fg: str, bg: str, alpha: float) -> str:
 
 
 def test_flow_chart_stays_natural_size_and_node_colours_are_readable() -> None:
-    """RD1: font and scale, no compositing in classDefs, contrast in every theme."""
+    """FC4/FC27: no scaling or compositing in the chart, #flow scrolls sideways, contrast in every theme."""
     out = _run("""
-    ui.scope = "story"; ui.focus = "s3";
-    const act = activeStep(view.events);
-    view.events.push({id: "x1", at: act.at + 1, kind: "step-end", role: act.role, story: act.story, data: {}});
-    view.heartbeat.step = null; view.heartbeat.calls = [];
-    view.heartbeat.stages = [{stage: "gate.tests+coverage", started_at: clockNow(view) - 41, started_slept: 0}];
-    out.src = flowSource(view);
-    out.px = FLOW_FONT_PX; out.use = mermaidConfig({}).flowchart.useMaxWidth;
+    ui.scope = "story"; ui.focus = "s3"; out.html = flowHtml(flowModel(view)); out.text = FLOW_TEXT;
     """)
-    assert out["px"] >= 12 and out["use"] is False
-    defs = [ln for ln in out["src"].splitlines() if ln.startswith("classDef")]
-    assert any(ln.startswith("classDef idle") for ln in defs)
-    for line in defs:
-        assert not any(word in line for word in FORBIDDEN), line
-    assert "class st_gate active" in out["src"] and re.search(r"class st_\w+ idle", out["src"])
+    assert not re.search(r"(?<![-\w])(opacity|filter|transform|mix-blend-mode)\s*:", out["html"])
+    assert all(t["px"] >= 10 for t in out["text"].values())
     assert re.search(r"#flow\s*\{[^}]*overflow-x:\s*auto", CSS)
     for name, v in _theme_vars().items():
         assert _contrast(v["--ink"], v["--surface"]) >= 4.5, name
         assert _contrast(v["--ink-2"], v["--surface-2"]) >= 4.5, name
-        assert _contrast(v["--ink"], _blend(v["--accent"], v["--surface"], 0x2E / 255)) >= 4.5, name
 
 
 @pytest.mark.parametrize("unit", ["tokens", "usd", "time"])
