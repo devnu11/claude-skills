@@ -262,20 +262,22 @@ def make_runtime(seen: list[Any], fake: FakeSystem) -> tuple[Runtime, live.Pulse
     runtime = object.__new__(Runtime)
     runtime.pulse = pulse
 
-    def evaluate(story: Any, handoff: Any) -> str:
+    def evaluate(story: Any, handoff: Any) -> Any:
         seen.append(pulse.heartbeat()["chore"]["what"])
-        return "outcome"
+        return SimpleNamespace(verdict="fail", pending=None)
 
-    runtime.pipeline = SimpleNamespace(evaluate=evaluate)  # type: ignore[assignment]
+    pipeline = SimpleNamespace(evaluate=evaluate)
+    pipeline.serving = lambda serving: pipeline  # type: ignore[attr-defined]
+    runtime.pipeline = pipeline  # type: ignore[assignment]
     runtime.verify_checkout = lambda: None  # type: ignore[method-assign]
-    runtime._advance_and_log = lambda plan, outcome: {"outcome": outcome}  # type: ignore[method-assign]
+    runtime._advance_and_log = lambda plan, outcome: {"outcome": "outcome"}  # type: ignore[method-assign]
     return runtime, pulse
 
 
 def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one(fake: FakeSystem) -> None:
     seen: list[Any] = []
     runtime, pulse = make_runtime(seen, fake)
-    plan = SimpleNamespace(story=SimpleNamespace(step="implement", id="s71"), stop_hook=None)
+    plan = SimpleNamespace(story=SimpleNamespace(step="implement", id="s71"), stop_hook=None, base="abc")
     assert GATE_CHORE == "gate: {step} on {story}"
     with pulse.doing("settling developer-cli on s71"):
         assert runtime.gate(plan, object()) == {"outcome": "outcome"}  # type: ignore[arg-type]
