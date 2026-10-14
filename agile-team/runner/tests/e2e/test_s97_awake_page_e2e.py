@@ -38,6 +38,25 @@ def test_running_line_takes_out_sleep_or_marks_wall() -> None:
     assert _run(_running(0))["text"] == "10.0m"
 
 
+def _live_line(clock: str, slept: int) -> str:
+    """Driver: the Flow live block of an open developer step with this clock."""
+    return f"""
+    data.skew = {NOW} - Date.now() / 1000;
+    view.steps = [{{role: "developer", story: "s1", model: "m", sprint: 1, at: {NOW - 600}, ended_at: null, seconds: null, status: null, clock: "{clock}", slept: {slept}}}];
+    const m = flowModel(view);
+    m.step = {{role: "developer", story: "s1", step: "implement", started_at: {NOW - 600}}};
+    m.now = {NOW};
+    out.line = liveBlock(m);
+    """
+
+
+def test_live_line_marks_wall_clock_only() -> None:
+    """FC11: a wall-clock open step's live line ends `(may include sleep)`; an awake one does not."""
+    assert "10.0m (may include sleep)" in _run(_live_line("wall", 0))["line"]
+    awake = _run(_live_line("awake", 120))["line"]
+    assert "8.0m" in awake and "may include sleep" not in awake
+
+
 def test_time_by_counts_wall_and_tooltip_marks_it() -> None:
     """AW11: timeBy counts wall steps; only those groups carry the tooltip note."""
     out = _run("""

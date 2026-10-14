@@ -42,17 +42,8 @@ def body_of(path: Path) -> str:
     return path.read_text().split("\n---\n", 1)[-1]
 
 
-def _declared(path: Path) -> bool:
-    """True when every story the prose names is also in `depends_on` (a note, not the data)."""
-    named = {m.lower() for m in re.findall(r"(?i)\bdepends\s+on\s+(s\d+)", body_of(path))}
-    meta = split_frontmatter(path.stem, path.read_text())[0] or {}
-    return named <= set(dependencies.listed(meta.get("depends_on", [])) or [])
-
-
 def test_only_history_stories_keep_a_prose_dependency() -> None:
-    holding = {
-        p.stem for p in STORIES.glob("s*.md") if PROSE.search(body_of(p)) and not _declared(p)
-    }
+    holding = {p.stem for p in STORIES.glob("s*.md") if PROSE.search(body_of(p))}
     assert holding <= HISTORY, sorted(holding - HISTORY)
 
 

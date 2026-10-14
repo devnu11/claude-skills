@@ -63,6 +63,31 @@ def test_hidden_then_shown_draws_once_with_natural_size() -> None:
     assert out["changed"] and out["laidAfter"] == 2
 
 
+def test_one_layout_per_chart_write_none_on_unchanged_render() -> None:
+    """FC21 (s104 contract): renderFlowTab lays out once when the HTML changed, never when it did not."""
+    out = _run("""
+    const chart = { innerHTML: "" };
+    globalThis.document.querySelector = (q) => (q === "#flow .fc-chart" ? chart : new Proxy({}, { get: () => () => {}, set: () => true }));
+    let laid = 0; layoutFlow = () => { laid++; }; applyFlowShow = () => {}; renderFlowScope = () => {};
+    ui.scope = "run";
+    renderFlowTab(view); out.first = laid;
+    renderFlowTab(view); out.second = laid;
+    """)
+    assert out["first"] == 1 and out["second"] == 1
+
+
+def test_dot_for_is_null_without_a_known_event() -> None:
+    """FC22: dotFor gives null for an event not in the view and for a null event."""
+    out = _run("""
+    const e = view.events.findLast((x) => x.kind === "step-start" && x.story);
+    out.ghost = dotFor(view, { ...e, id: "no-such-event" });
+    out.nil = dotFor(view, null);
+    out.known = e ? "ok" : "none";
+    """)
+    assert out["known"] == "ok"
+    assert out["ghost"] is None and out["nil"] is None
+
+
 def test_text_size_is_at_least_sixteen_at_scale_one() -> None:
     """FC27/FC28: every Flow text kind is >= 10 px and every text element in the chart carries an `fc-t-` class."""
     out = _run(f"""
