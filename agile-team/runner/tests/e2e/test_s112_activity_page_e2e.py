@@ -22,6 +22,13 @@ FAKE_MD = (
 
 # One sample event per TIMELINE kind, each with a body holding **b**.
 SAMPLES = {
+    "story-reverted": {
+        "count": 1,
+        "reason": BODY,
+        "commits": ["abcdef1234567890"],
+        "revert": "1234567890abcdef",
+        "step": "implement",
+    },
     "story-admin": {
         "tool": "hold_story",
         "reason": BODY,
