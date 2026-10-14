@@ -118,13 +118,13 @@ def test_failed_markdown_load_shows_the_notice_and_ready_does_not() -> None:
         """
     globalThis.render = () => {};
     const view2 = structuredClone(view);
-    out.before = statusPills(view2, 0).join("");
+    out.before = statusPills(view2).join("");
     await loadMarkdown();
-    out.state = markdownState; out.failed = statusPills(view2, 0).join("");
+    out.state = markdownState; out.failed = statusPills(view2).join("");
     useMarkdown("""
         + FAKE_MD
         + """);
-    out.ready = statusPills(view2, 0).join(""); out.readyState = markdownState; out.MD = MD;
+    out.ready = statusPills(view2).join(""); out.readyState = markdownState; out.MD = MD;
     """
     )
     notice = "Markdown unavailable: showing plain text"
@@ -278,8 +278,8 @@ def test_live_panel_fills_its_parts() -> None:
 # ---------------------------------------------------------------- layout and AC4b
 
 
-def test_activity_is_its_own_tab_and_meter_sits_in_the_status_bar() -> None:
-    """AC1, AC4b, AT1-AT3, BM1, LP1: tab order, the markup homes, no grid-flow."""
+def test_activity_is_its_own_tab_and_the_status_row_sits_in_the_header() -> None:
+    """AC1, AC4b, AT1-AT3, LP1: tab order, the markup homes, no grid-flow."""
     out = _run("""
     out.tabs = TABS.map(([t]) => t); out.render = RENDER.activity === renderTimeline;
     out.flowSrc = renderFlowTab.toString();
@@ -308,11 +308,16 @@ def test_activity_is_its_own_tab_and_meter_sits_in_the_status_bar() -> None:
 # ---------------------------------------------------------------- AC5 readable
 
 RD1 = {
-    ".lp-who": "--ink",
-    ".lp-when": "--ink-2",
-    ".lp-line": "--ink-2",
-    ".lp-msg": "--ink",
-    ".md-notice": "--ink-2",
+    ".brand small": (12, "--ink-2", "--surface"),
+    ".task": (12, "--ink-2", "--surface"),
+    ".budget": (12, "--ink", "--surface"),
+    ".budget small": (12, "--ink-2", "--surface"),
+    ".pill.flag": (12, "--ink-2", "--surface-2"),
+    ".lp-who": (12, "--ink", "--surface"),
+    ".lp-when": (12, "--ink-2", "--surface"),
+    ".lp-line": (12, "--ink-2", "--surface"),
+    ".lp-msg": (12, "--ink", "--surface"),
+    ".md-notice": (12.5, "--ink-2", "--surface"),
 }
 
 
@@ -320,15 +325,24 @@ def _rule(selector: str) -> str:
     return re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", CSS).group(1)  # type: ignore[union-attr]
 
 
+def _font_size(selector: str) -> float:
+    """The rule's font-size; `.pill.flag` inherits `.pill`'s."""
+    rule = _rule(selector)
+    found = re.search(r"font-size:\s*([\d.]+)px", rule) or re.search(
+        r"font-size:\s*([\d.]+)px", _rule(".pill")
+    )
+    return float(found.group(1))  # type: ignore[union-attr]
+
+
 @pytest.mark.parametrize("selector", sorted(RD1))
 def test_new_text_is_twelve_px_and_has_contrast_in_every_theme(selector: str) -> None:
-    """AC5, RD1: font-size >= 12 px, --ink/--ink-2 only, contrast >= 4.5 on --surface in light and dark."""
+    """AC5, RD1: the design's size, --ink/--ink-2 colour, contrast >= 4.5 on its background, both themes."""
+    size, colour, on = RD1[selector]
     rule = _rule(selector)
-    size = float(re.search(r"font-size:\s*([\d.]+)px", rule).group(1))  # type: ignore[union-attr]
-    colour = re.search(r"color:\s*var\((--[\w-]+)\)", rule).group(1)  # type: ignore[union-attr]
-    assert 12 <= size <= 15 and colour == RD1[selector] and "--muted" not in rule
+    assert _font_size(selector) == size and 12 <= size <= 15
+    assert re.search(rf"(?<![-\w])color:\s*var\({colour}\)", rule) and "--muted" not in rule
     for name, v in _theme_vars().items():
-        assert _contrast(v[colour], v["--surface"]) >= 4.5, (selector, name)
+        assert _contrast(v[colour], v[on]) >= 4.5, (selector, name)
 
 
 def test_code_in_markdown_stays_twelve_px() -> None:
@@ -336,3 +350,177 @@ def test_code_in_markdown_stays_twelve_px() -> None:
     assert "font-size: max(12px, .92em)" in re.search(r"\.md code\s*\{([^}]*)\}", CSS).group(1)  # type: ignore[union-attr]
     for name, v in _theme_vars().items():
         assert _contrast(v["--ink-2"], v["--surface-2"]) >= 4.5, name
+
+
+# ------------------------------------------------------------ header status row
+
+STATE_JS = """
+data.conn = "live"; out.live = statePill(view);
+data.conn = "connecting"; out.conn = statePill(view);
+"""
+
+
+def test_state_pill_is_live_or_connecting_with_the_run_status() -> None:
+    """HS1: `live · running` accent inside .live; `connecting · running` warning; one pill, no smart pill."""
+    out = _run(
+        STATE_JS
+        + """
+    out.row = statusPills(view); out.status = view.run.status;
+    """
+    )
+    assert f"live · {out['status']}" in out["live"] and out["live"].startswith(
+        '<span class="live">'
+    )
+    assert "tone-accent" in out["live"] or "tone-" in out["live"]
+    assert f"connecting · {out['status']}" in out["conn"] and "tone-warning" in out["conn"]
+    assert 'class="live"' not in out["conn"]
+    assert sum("· " + out["status"] in p for p in out["row"]) == 1
+    assert "pill smart" not in "".join(out["row"])
+
+
+def test_running_live_state_pill_uses_the_accent_tone() -> None:
+    """HS1: a running, live run is tone-accent."""
+    out = _run('data.conn = "live"; view.run.status = "running"; out.p = statePill(view);')
+    assert "tone-accent" in out["p"] and "live · running" in out["p"]
+
+
+def test_manager_flag_is_one_pill_with_every_reason_escaped_on_hover() -> None:
+    """HS2: two reasons give one flag; none gives nothing."""
+    out = _run("""
+    view.run.manager_due = ["a <b>", "second"]; out.two = managerFlag(view);
+    view.run.manager_due = []; out.none = managerFlag(view);
+    """)
+    assert out["two"].count("⚑ manager due") == 1 and out["two"].count("pill flag") == 1
+    assert 'title="manager due: a &lt;b&gt;; second"' in out["two"]
+    assert out["none"] == ""
+
+
+def test_budget_pill_shows_dollars_percent_ticks_and_exact_title() -> None:
+    """HS3: $608 of $1,500 · 41% with ticks at 25/50/75 and the exact amounts on hover."""
+    out = _run("""
+    view.run.budget_usd = 1500; view.run.manager_every_pct = 25;
+    view.ledger = [{cost_usd: 600}, {cost_usd: 8.05}];
+    out.pill = budgetPill(view);
+    out.zero = checkPcts(0); out.neg = checkPcts(-5); out.undef = checkPcts(undefined);
+    out.sixty = checkPcts(60); out.dollars = fmt.dollars(1500);
+    """)
+    pill = out["pill"]
+    assert "$608 <small>of $1,500 · 41%</small>" in pill
+    assert re.findall(r'class="budget-tick" style="left:(\d+)%"', pill) == ["25", "50", "75"]
+    assert "$608.05 of $1500.00" in pill and "25%, 50%, 75%" in pill
+    assert out["zero"] == [] and out["neg"] == [] and out["undef"] == [] and out["sixty"] == [60]
+    assert out["dollars"] == "$1,500"
+
+
+def test_status_row_order_is_state_flag_budget_questions_notice() -> None:
+    """HS4: the pills come in that order; the notice is last."""
+    out = _run(
+        """
+    markdownState = MD.FAILED;
+    view.run.manager_due = ["x"];
+    out.row = statusPills(view);
+    """
+    )
+    kinds = ["· " + "", "manager due", 'class="budget"', "waiting on you", "md-notice"]
+    row = out["row"]
+    assert len(row) == 5, row
+    for part, kind in zip(row, kinds, strict=True):
+        assert kind in part, (kind, part)
+
+
+def test_goal_is_the_task_text_and_its_hover_title() -> None:
+    """HD2: #task text and title equal view.run.task."""
+    out = _run("""
+    const els = {"#task": {textContent: "", title: ""}, "#sprint-label": {textContent: ""}};
+    globalThis.document.querySelector = (q) => els[q];
+    renderGoal(view); out.task = els["#task"]; out.expected = view.run.task;
+    """)
+    assert out["task"]["textContent"] == out["expected"] == out["task"]["title"] and out["expected"]
+
+
+# ------------------------------------------------------------------ live panel
+
+HEARTBEAT_GONE = "view.heartbeat = null;"
+
+
+def test_event_panel_without_heartbeat_has_an_empty_line_and_chore_panel_names_the_chore() -> None:
+    """LP2: an open step in the events gives line ''; a chore alone gives who '⚙ runner' and line chore.what."""
+    out = _run(
+        _events(
+            """
+    v.heartbeat = null; v.events = [ev("a", "s3", 1791473000, "step-start", {brief: "b"})];
+    out.event = eventPanel(v);
+    const c = structuredClone(view);
+    c.heartbeat.step = null; c.heartbeat.stages = []; c.heartbeat.chore = {what: "syncing", since: clockNow(c) - 9};
+    out.chore = panelState(c);
+    """
+        )
+    )
+    assert out["event"]["kind"] == "step" and out["event"]["line"] == ""
+    assert out["event"]["who"].startswith("developer-cli · s3")
+    chore = out["chore"]
+    assert chore["who"] == "⚙ runner" and chore["line"] == "syncing" and chore["story"] == ""
+    assert chore["when"]
+
+
+def test_run_label_is_round_n_restarted_or_first_run() -> None:
+    """LP3: exact labels."""
+    out = _run(
+        _events("""
+    const run = {role: "developer-cli", story: "s3"};
+    v.stories.find((s) => s.id === "s3").rounds = 0; v.events = [];
+    out.first = runLabel(v, run);
+    v.stories.find((s) => s.id === "s3").rounds = 2; out.round = runLabel(v, run);
+    v.events = [
+      ev("a", "s3", 1791473000, "step-start", {brief: "b"}),
+      ev("b", "s3", 1791473001, "step-end", {status: "interrupted"}),
+      ev("c", "s3", 1791473002, "step-start", {brief: "b"}),
+    ];
+    out.again = runLabel(v, run);
+    out.other = runLabel(v, {role: "developer-cli", story: "s9"});
+    """)
+    )
+    assert out["first"] == "first run" and out["round"] == "round 2"
+    assert out["again"] == "↻ restarted"
+    assert out["other"] in ("first run", "round 2")
+
+
+def test_tool_line_prefers_the_open_call_then_the_step_tool_then_none() -> None:
+    """LP4: label and age; tool name; `no tool running`."""
+    out = _run("""
+    const step = view.heartbeat.step;
+    out.call = toolLine(view, step);
+    const noCall = structuredClone(view); noCall.heartbeat.calls = [];
+    out.tool = toolLine(noCall, noCall.heartbeat.step);
+    noCall.heartbeat.step.tool = null; out.none = toolLine(noCall, noCall.heartbeat.step);
+    """)
+    assert out["call"].startswith("Dev: run the unit tests again · ")
+    assert out["tool"].startswith("Bash · ")
+    assert out["none"] == "no tool running"
+
+
+def test_runner_result_reads_the_newest_runner_event_or_nothing() -> None:
+    """LP5: `sprint 10 end · sync: pass · …` for a boundary event; "" without one; stageAwake excludes sleep."""
+    out = _run(
+        _events("""
+    v.events = [{id: "r", at: 1791473000, kind: "boundary", role: "runner", story: null,
+      data: {outcome: "pass", sprint: 10, edge: "end", stage: "sync", reason: "all green\\nmore"}}];
+    out.result = runnerResult(v);
+    v.events = [ev("a", "s3", 1, "step-start", {brief: "b"})]; out.none = runnerResult(v);
+    const row = {started_at: clockNow(v) - 100, started_slept: 0};
+    v.heartbeat.slept = 30; out.awake = Math.round(stageAwake(v, row));
+    """)
+    )
+    assert out["result"].startswith("sprint 10 end · sync: pass"), out["result"]
+    assert "all green" in out["result"] and "more" not in out["result"]
+    assert out["none"] == "" and out["awake"] == 70
+
+
+def test_pill_details_first_line_has_the_rate_and_last_turn() -> None:
+    """LP7: a step's hover starts with `/min` and `last turn`."""
+    out = _run(
+        "out.lines = pillDetails(view, clockNow(view)); out.none = pillDetails({...view, heartbeat: {...view.heartbeat, step: null}}, clockNow(view));"
+    )
+    first = out["lines"][0]
+    assert "/min" in first and "last turn" in first
+    assert out["none"] == [] or all("/min" not in x for x in out["none"])
