@@ -1107,21 +1107,17 @@ class Runtime:
 
     def _record_tooling(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """R1: write the Tooling section into the story file and commit only that file."""
-        file = story_spec.file_of(self.config, plan.story.id)  # type: ignore[union-attr]
+        story = plan.story.id  # type: ignore[union-attr]
+        file = story_spec.file_of(self.config, story)
         path = self.config.repo / file
         old = system.read_text(path)
         new = ops_review.with_section(old, handoff.tooling)
-        sha = self._commit_text(path, old, new, plan)
+        sha = None
+        if new != old:
+            system.write_text(path, new)
+            sha = self.git.commit([file], ops_review.RECORD_SUBJECT.format(story=story))
         self.record_checkout()
         return {"tooling": {"file": file, "commit": sha}}
-
-    def _commit_text(self, path: Path, old: str, new: str, plan: Plan) -> str | None:
-        """Write ``new`` over ``path`` and commit it; ``None`` when nothing changed."""
-        if new == old:
-            return None
-        system.write_text(path, new)
-        subject = ops_review.RECORD_SUBJECT.format(story=plan.story.id)  # type: ignore[union-attr]
-        return self.git.commit([path.relative_to(self.config.repo).as_posix()], subject)
 
     def _attach_ops_review(self, plan: Plan) -> None:
         """B1: the ops-review section, only for a story at ops-review."""
