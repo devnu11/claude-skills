@@ -90,8 +90,8 @@ def _ask(log: DecisionLog, speaker: str, text: str) -> None:
     log.next_question += 1
 
 
-def _resolve(log: DecisionLog, speaker: str, text: str) -> None:
-    wanted = text.split()[0].upper()
+def _resolve(log: DecisionLog, _speaker: str, text: str) -> None:
+    wanted = text.split(maxsplit=1)[0].upper()
     log.questions = [entry for entry in log.questions if entry.id != wanted]
 
 
