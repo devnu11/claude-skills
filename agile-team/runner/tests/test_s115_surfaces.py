@@ -47,6 +47,7 @@ def test_a_config_listing_it_elsewhere_gets_it_once_after_design(config, scratch
 
 def test_make_pipeline_runs_the_built_pipeline(configured: Path) -> None:
     conf = cfg.load(configured)
-    system.write_text(conf.repo / cfg.CONFIG_NAME, tomli_w.dumps({"gates": {"steps": ["design", "tests"]}}))
+    text = tomli_w.dumps({"gates": {"steps": ["design", "tests"]}})
+    system.write_text(conf.repo / cfg.CONFIG_NAME, text)
     steps = cli.make_pipeline(cfg.load(configured)).steps
     assert list(steps) == ["design", "ops-review", "tests"]
