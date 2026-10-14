@@ -161,7 +161,7 @@ def _title_lines(doc: _Doc) -> list[str]:
 
 def _status_lines(doc: _Doc) -> list[str]:
     found = doc.meta.get("status")
-    ok = found in {s.value for s in Status}
+    ok = found in [s.value for s in Status]  # a list, so unhashable YAML values compare
     return [] if ok else [doc.line(Problem.BAD_STATUS, found=found)]
 
 
@@ -341,9 +341,12 @@ def check(found: Found) -> Checked:
     return Checked(found.folder, tuple(cross.add(p) for p in parsed), found.stories)
 
 
+def _ordered(checked: Checked) -> list[StoryAcs]:
+    return sorted(checked.stories.values(), key=lambda s: natural(s.story))
+
+
 def _readable(checked: Checked) -> list[StoryAcs]:
-    ordered = sorted(checked.stories.values(), key=lambda s: natural(s.story))
-    return [s for s in ordered if not s.problems]
+    return [s for s in _ordered(checked) if not s.problems]
 
 
 def coverage(checked: Checked) -> dict[str, dict[str, list[str]]]:
@@ -356,8 +359,7 @@ def coverage(checked: Checked) -> dict[str, dict[str, list[str]]]:
 
 def report(checked: Checked) -> dict[str, Any]:
     """The ``requirements check`` output (T7)."""
-    ordered = sorted(checked.stories.values(), key=lambda s: natural(s.story))
-    unreadable = {s.story: list(s.problems) for s in ordered if s.problems}
+    unreadable = {s.story: list(s.problems) for s in _ordered(checked) if s.problems}
     return {
         "problems": checked.problems(),
         "coverage": coverage(checked),
