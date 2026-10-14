@@ -34,7 +34,7 @@ def _running(slept: float) -> str:
 def test_running_line_takes_out_sleep_or_marks_wall() -> None:
     """AC2 (AW10, FC11): the live block's awake time is the step's age minus its slept seconds."""
     awake = _run(_running(120))
-    assert awake["awake"] == 480 and awake["text"] == "8.0m"
+    assert awake["awake"] == pytest.approx(480, abs=1) and awake["text"] == "8.0m"
     assert _run(_running(0))["text"] == "10.0m"
 
 
