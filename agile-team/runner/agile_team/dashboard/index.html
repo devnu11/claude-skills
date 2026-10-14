@@ -172,10 +172,10 @@ section[hidden] { display: none; }
 select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
 .timeline { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow-y: auto; }
 #tab-activity .timeline { max-height: none; }
-.timeline li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
-.timeline li.new { animation: flash 1.6s ease-out; }
+.timeline > li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
+.timeline > li.new { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } }
-.timeline time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.timeline > li > time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
 .lane { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12.5px; }
 .who { font-weight: 600; }
 .arrow { color: var(--muted); }
@@ -269,7 +269,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .hist { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--grid); font-size: 12.5px; }
 .hist li { margin: 4px 0; }
 .hist .when { color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .live .dot, .timeline li.new { animation: none; } .node.live-halo { animation: none; filter: drop-shadow(0 0 5px var(--accent)); } }
+@media (prefers-reduced-motion: reduce) { .live .dot, .timeline > li.new { animation: none; } .node.live-halo { animation: none; filter: drop-shadow(0 0 5px var(--accent)); } }
 </style>
 </head>
 <body>
@@ -822,10 +822,9 @@ function newestRow(view, wanted) {
   return null;
 }
 
-/** The newest runner event's `what · first line of body`, or "" (LP5). */
-function runnerResult(view) {
-  const found = newestRow(view, (e) => e.role === "runner");
-  return found ? [found.t.what, firstLine(found.t.body)].filter(Boolean).join(" · ") : "";
+/** The open stage's description, "" from an older runner (ST2). */
+function stageLine(row) {
+  return String(row.description ?? "").trim();
 }
 
 /** The panel state for a running role (LP2). */
@@ -857,7 +856,7 @@ function stagePanel(view) {
   if (!row) return null;
   return {
     kind: "stage", who: `⚙ runner · ${row.story || "sprint " + view.run.sprint}`,
-    when: `${row.stage} · ${fmt.age(stageAwake(view, row))}`, line: runnerResult(view), story: row.story ?? "",
+    when: `${row.stage} · ${fmt.age(stageAwake(view, row))}`, line: stageLine(row), story: row.story ?? "",
   };
 }
 
@@ -946,10 +945,21 @@ function openActivity(story) {
 
 // ----- header -----------------------------------------------------------------
 
-/** The goal on one line, its full text on hover (HD2). */
+/** The newest sprint-start event's goal, or "" (G1). */
+function sprintGoal(view) {
+  const start = [...view.events].reverse().find((e) => e.kind === "sprint-start");
+  return String(start?.data?.goal ?? "").trim();
+}
+
+/** The sprint goal, else the run's task, else "" (G2). */
+function goalText(view) {
+  return sprintGoal(view) || view.run.task || "";
+}
+
+/** The goal on one line, its full text on hover (HD2, G3). */
 function renderGoal(view) {
-  $("#task").textContent = view.run.task;
-  $("#task").title = view.run.task;
+  $("#task").textContent = goalText(view);
+  $("#task").title = goalText(view);
 }
 
 function renderHeader(view) {

@@ -51,6 +51,7 @@ def open_row(run: stages.Run, start: Mark) -> dict[str, Any]:
         "stage": str(run.stage.name),
         "when": str(run.stage.when),
         "attach": str(run.stage.attach),
+        "description": run.stage.description,
         "story": run.place.story,
         "step": run.place.step,
         "started_at": start.at,
