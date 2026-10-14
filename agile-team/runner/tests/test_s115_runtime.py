@@ -4,7 +4,9 @@ import functools
 from types import SimpleNamespace
 
 from agile_team import story_spec, system
+from agile_team.boundary import StepKind
 from agile_team.config import STORIES_DIR
+from agile_team.dispatch import StepRequest
 
 from .conftest import FakeQuery, handoff, write_story
 from .test_dispatch import open_story, run
@@ -46,10 +48,11 @@ def test_devops_on_another_step_gets_no_section(make_runtime) -> None:
 
 def test_a_gate_fix_step_gets_no_section(make_runtime) -> None:
     rt, _q = start(make_runtime, step="ops-review")
-    plan = SimpleNamespace(story=rt.state.stories["s1"], prompt="brief")
-    plan.story.step = "tests"
-    rt._attach_ops_review(plan)
-    assert plan.prompt == "brief"
+    kind = StepKind.GATE_FIX
+    plan = rt.plan(StepRequest("devops", "go", "s1", kind))
+    assert "## Ops review" not in plan.prompt
+    plan = rt.plan(StepRequest("devops", "go", "s1", StepKind.ROLE))
+    assert "## Ops review" in plan.prompt
 
 
 def test_the_commit_holds_only_the_story_file_with_its_subject(make_runtime, fake) -> None:
