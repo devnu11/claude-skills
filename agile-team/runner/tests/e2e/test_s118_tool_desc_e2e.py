@@ -37,7 +37,7 @@ def _gate_box(boxes: list[str]) -> str:
     return next(b for b in boxes if GATE in b)
 
 
-def test_a_built_in_tool_shows_its_description_line() -> None:
+def test_a_built_in_tool_shows_its_description_in_the_title() -> None:
     """AC13: the idle `gate.tests+coverage` box carries its description line."""
     out = _run(f"""
     idle(); view.events.push(closed("g1", 1791470000, "{GATE}", null));
@@ -47,7 +47,7 @@ def test_a_built_in_tool_shows_its_description_line() -> None:
     assert "fc-tooldesc" not in out["box"]
 
 
-def test_a_repo_tool_shows_its_own_description_line() -> None:
+def test_a_repo_tool_shows_its_own_description_in_the_title() -> None:
     """AC13: a `deploy.preview` run gets the text the snapshot gives that stage."""
     out = _run(f"""
     idle(); view.stage_descriptions["deploy.preview"] = "{PREVIEW}";
@@ -57,8 +57,8 @@ def test_a_repo_tool_shows_its_own_description_line() -> None:
     assert f'title="deploy.preview — {PREVIEW}"' in out["box"].split(">", 1)[0]
 
 
-def test_a_stage_without_a_description_has_no_line() -> None:
-    """AC13: no entry in `stage_descriptions` (or a non-string) means no description line."""
+def test_a_stage_without_a_description_has_a_title_of_the_name_alone() -> None:
+    """s127 AC5: no entry in `stage_descriptions` (or a non-string) gives a title that is the stage name, with no ` — `."""
     out = _run(f"""
     idle(); delete view.stage_descriptions["{GATE}"];
     view.events.push(closed("g1", 1791470000, "{GATE}", null));
@@ -66,7 +66,11 @@ def test_a_stage_without_a_description_has_no_line() -> None:
     view.stage_descriptions["{GATE}"] = 7;
     out.nonstring = boxes().find((b) => b.includes("{GATE}"));
     """)
-    assert "fc-tooldesc" not in out["missing"] and "fc-tooldesc" not in out["nonstring"]
+    for key in ("missing", "nonstring"):
+        assert (
+            out[key].split(">", 1)[0].endswith(f'title="{GATE}"')
+            and " — " not in out[key].split(">", 1)[0]
+        )
 
 
 @pytest.mark.parametrize("bad", ["null", "[]", '"text"', "undefined"])
