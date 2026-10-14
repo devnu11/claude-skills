@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,6 +15,7 @@ from claude_agent_sdk import (
     TextBlock,
     ThinkingBlock,
 )
+from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 from group_chat.backend import BackendError, ClaudeBackend, options_for, text_of
 
 pytestmark = pytest.mark.unit
@@ -115,3 +118,24 @@ def test_query_gets_options_for_role() -> None:
     backend.complete("the system", "p", "opus")
     options = seen[0]["options"]
     assert (options.system_prompt, options.model) == ("the system", "opus")
+
+
+def test_options_isolate_tools_mcp_and_settings() -> None:
+    options = options_for("sys", None)
+    assert options.tools == []
+    assert options.strict_mcp_config is True
+    assert options.env == {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
+
+
+def test_options_env_is_a_fresh_copy() -> None:
+    options_for("sys", None).env["X"] = "1"
+    assert "X" not in options_for("sys", None).env
+
+
+def test_sdk_command_has_no_tools_and_strict_mcp(tmp_path: Path) -> None:
+    options = replace(options_for("sys", "haiku"), cli_path=tmp_path / "claude")
+    command = SubprocessCLITransport(prompt="x", options=options)._build_command()
+    assert command[command.index("--tools") + 1] == ""
+    assert "--strict-mcp-config" in command
+    assert "--setting-sources=" in command
+    assert command[command.index("--max-turns") + 1] == "1"

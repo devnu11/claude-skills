@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from group_chat.backend import Backend
+from group_chat.backend import Backend, BackendError
 from group_chat.cli import Io, run
 from group_chat.roster import Role, Roster
 from group_chat.state import STATE_FILE
@@ -123,3 +123,18 @@ class Cli:
 @pytest.fixture
 def cli(roster_file: Path, backend: FakeBackend) -> Cli:
     return Cli(roster_file, roster_file.parent / "chat", backend)
+
+
+@dataclass
+class FailingBackend(FakeBackend):
+    """A ``FakeBackend`` that raises ``BackendError`` for chosen roles or the summary."""
+
+    fail_roles: set[str] = field(default_factory=set)
+    fail_summary: bool = False
+
+    def complete(self, system: str, prompt: str, model: str | None) -> str:
+        cue = CUE_RE.search(prompt)
+        if (cue and cue.group(1) in self.fail_roles) or (cue is None and self.fail_summary):
+            self.calls.append(Call(system, prompt, model))
+            raise BackendError("overloaded")
+        return super().complete(system, prompt, model)

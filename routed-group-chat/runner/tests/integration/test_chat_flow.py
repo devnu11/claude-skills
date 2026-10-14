@@ -59,7 +59,7 @@ def test_role_b_sees_role_a_reply_and_pinned_log(make_chat: MakeChat, backend: F
     backend.replies = {"po": ["Cut search.\nDECISION: cut search from v1"]}
     make_chat(backend).say("@po @manager what do we cut?")
     manager_prompt = backend.calls[1].prompt
-    assert "@po: Cut search." in manager_prompt
+    assert '<turn speaker="po">\nCut search.\n' in manager_prompt
     assert "- [D1] cut search from v1 (by po)" in manager_prompt
     assert manager_prompt.endswith("Reply as @manager.")
 
@@ -68,7 +68,7 @@ def test_second_run_sees_first_run_thread(make_chat: MakeChat, backend: FakeBack
     backend.replies = {"liaison": ["team blocked on CI"]}
     make_chat(backend).say("@liaison status?")
     make_chat(backend).say("@manager react")
-    assert "@liaison: team blocked on CI" in backend.calls[-1].prompt
+    assert '<turn speaker="liaison">\nteam blocked on CI\n</turn>' in backend.calls[-1].prompt
 
 
 def test_refused_message_leaves_existing_state(make_chat: MakeChat, backend: FakeBackend) -> None:

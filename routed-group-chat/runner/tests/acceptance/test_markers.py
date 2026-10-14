@@ -98,9 +98,63 @@ def test_max_handoffs_flag(cli: Cli, backend: FakeBackend) -> None:
     assert result.out.strip().splitlines()[-1].startswith("@orchestrator: handoff to @po dropped")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: HANDOFF after leading @mentions is not honoured")
 def test_handoff_after_leading_mentions(cli: Cli, backend: FakeBackend) -> None:
     """A marker starts its line, optionally after leading @mentions."""
     backend.replies = {"manager": ["@human over to PO.\n@po HANDOFF: @po"]}
     result = cli.say("@manager scope?")
     assert "@po: po reply" in result.out
+
+
+@pytest.mark.parametrize("line", ["- DECISION: cut search", "- **DECISION:** cut search"])
+def test_bulleted_and_bold_markers_count(cli: Cli, line: str) -> None:
+    """decision_log: a marker may follow a `-`/`*` bullet or `**` bold."""
+    cli.say(f"@po notes\n{line}")
+    assert "- [D1] cut search (by human)" in cli.run("log").out
+
+
+def test_fenced_markers_are_ignored(cli: Cli, backend: FakeBackend) -> None:
+    """decision_log: "Lines inside ``` fenced code blocks never count"."""
+    backend.replies = {"po": ["Format:\n```\nDECISION: <text>\nQUESTION: <text>\n```"]}
+    cli.say("@po how do I pin things?")
+    assert cli.run("log").out == "## Decisions\n- none\n## Open questions\n- none\n"
+
+
+def test_one_resolved_line_closes_several_questions(cli: Cli, backend: FakeBackend) -> None:
+    """decision_log: `RESOLVED: Q<n>[, Q<m>]` closes those questions."""
+    cli.say("@manager QUESTION: who owns QA?\nQUESTION: budget?\nQUESTION: date?")
+    backend.replies = {"manager": ["Settled.\nRESOLVED: q1, Q3."]}
+    cli.say("@manager answers?")
+    log = cli.run("log").out
+    assert "## Open questions\n- [Q2] budget? (by human)\n" in log
+    assert "[Q1]" not in log
+    assert "[Q3]" not in log
+
+
+def test_blank_marker_is_ignored(cli: Cli) -> None:
+    """decision_log: "a marker with blank text is ignored"."""
+    cli.say("@po DECISION:   ")
+    assert "## Decisions\n- none" in cli.run("log").out
+
+
+def test_handoff_to_queued_role_is_skipped(cli: Cli, backend: FakeBackend) -> None:
+    """chat: "A handoff ... to a role already waiting in this message's queue is ignored"."""
+    # Given everyone is addressed and the manager hands to the PO who is already queued
+    backend.replies = {"manager": ["HANDOFF: @po"]}
+    # When the human broadcasts
+    result = cli.say("@all status?")
+    # Then each role answers once and no hop or note is recorded
+    assert result.out == "@manager: HANDOFF: @po\n\n@po: po reply\n\n@liaison: liaison reply\n\n"
+
+
+def test_handoff_name_is_case_insensitive(cli: Cli, backend: FakeBackend) -> None:
+    """chat: HANDOFF is case-insensitive on the name."""
+    backend.replies = {"manager": ["- **HANDOFF:** @PO"]}
+    assert cli.say("@manager scope?").out.endswith("@po: po reply\n\n")
+
+
+def test_negative_max_handoffs_is_refused(cli: Cli, backend: FakeBackend) -> None:
+    """cli: `--max-handoffs` must be >= 0."""
+    with pytest.raises(SystemExit) as exc:
+        cli.say("@po hi", flags=["--max-handoffs", "-1"])
+    assert exc.value.code == 2
+    assert backend.calls == []

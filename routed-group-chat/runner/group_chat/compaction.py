@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from .context import transcript
 from .state import Turn
 
 CHARS_PER_TOKEN = 4
@@ -22,7 +23,8 @@ def estimate_tokens(text: str) -> int:
 
 
 def turns_tokens(turns: Sequence[Turn]) -> int:
-    return sum(estimate_tokens(turn.render()) for turn in turns)
+    """Estimated tokens of ``turns`` as a role sees them."""
+    return sum(estimate_tokens(turn.block()) for turn in turns)
 
 
 def split(turns: Sequence[Turn], budget: int, keep: int) -> tuple[list[Turn], list[Turn]]:
@@ -35,5 +37,6 @@ def split(turns: Sequence[Turn], budget: int, keep: int) -> tuple[list[Turn], li
 
 
 def summary_prompt(summary: str, evicted: Sequence[Turn]) -> str:
-    turns = "\n\n".join(turn.render() for turn in evicted)
-    return f"--- EARLIER SUMMARY ---\n{summary or '(none)'}\n\n--- TURNS TO FOLD IN ---\n{turns}"
+    """The summarizer's input: the earlier summary, then the turns to fold in."""
+    earlier = summary or "(none)"
+    return f"--- EARLIER SUMMARY ---\n{earlier}\n\n--- TURNS TO FOLD IN ---\n{transcript(evicted)}"

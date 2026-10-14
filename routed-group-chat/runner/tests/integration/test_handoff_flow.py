@@ -47,7 +47,8 @@ def test_cap_is_per_human_message(make_chat: MakeChat, backend: FakeBackend) -> 
 def test_handed_role_sees_handoff_reply(make_chat: MakeChat, backend: FakeBackend) -> None:
     backend.replies = {"manager": ["Scope is yours.\nHANDOFF: @po"]}
     make_chat(backend).say("@manager scope?")
-    assert "@manager: Scope is yours.\nHANDOFF: @po" in backend.calls[-1].prompt
+    expected = '<turn speaker="manager">\nScope is yours.\nHANDOFF: @po\n</turn>'
+    assert expected in backend.calls[-1].prompt
     assert backend.calls[-1].prompt.endswith("Reply as @po.")
 
 
@@ -63,4 +64,19 @@ def test_orchestrator_note_survives_reload_and_is_seen(
     backend.replies = {"manager": ["HANDOFF: @po"]}
     make_chat(backend, max_handoffs=0).say("@manager x")
     make_chat(backend).say("@po y")
-    assert "@orchestrator: handoff to @po dropped" in backend.calls[-1].prompt
+    assert '<turn speaker="orchestrator">\nhandoff to @po dropped' in backend.calls[-1].prompt
+
+
+def test_handoff_to_queued_role_skipped_under_all(
+    make_chat: MakeChat, backend: FakeBackend
+) -> None:
+    backend.replies = {"manager": ["HANDOFF: @liaison"], "po": ["**HANDOFF:** @Liaison"]}
+    chat = make_chat(backend)
+    replies = chat.say("@all status?")
+    assert speakers(replies) == ["manager", "po", "liaison"]
+    assert chat.store.load().last_addressed == ("manager", "po", "liaison")
+
+
+def test_bulleted_handoff_routes(make_chat: MakeChat, backend: FakeBackend) -> None:
+    backend.replies = {"manager": ["Done.\n- **HANDOFF:** @PO"]}
+    assert speakers(make_chat(backend).say("@manager go")) == ["manager", "po"]

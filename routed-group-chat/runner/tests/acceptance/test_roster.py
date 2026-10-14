@@ -98,7 +98,6 @@ def test_example_roster_titles_and_team(leadership: Cli, backend: FakeBackend) -
     assert EXAMPLE_ROSTER.exists()
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: log/show never load --roster, so a bad one passes")
 @pytest.mark.parametrize("command", ["log", "show"])
 def test_bad_roster_is_rejected_by_log_and_show(
     tmp_path: Path, backend: FakeBackend, command: str

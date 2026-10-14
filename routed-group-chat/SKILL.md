@@ -28,14 +28,17 @@ to this file. Read it before writing a roster.
    ```
    Show the printed replies verbatim, one per role. Do not add your own reply
    unless the human addresses you.
-3. **Addressing errors** exit 2 with the valid names. Show them; do not guess
-   a recipient.
+3. **Exit 2** (bad address, roster or state, or the chat is busy): show the
+   message; do not guess a recipient. **Exit 1** (a model call failed): show
+   the replies that did arrive and the error; the thread keeps them.
 4. **On request:** `log` prints pinned decisions and open questions; `show`
-   prints the summary and recent turns.
+   prints the summary and recent turns. `chat` reads one message per stdin
+   line for a human typing directly.
 
 ## Rules
 
 - Routing is the human's: never add or change an @mention in their message.
 - A role hands the floor on with `HANDOFF: @name`; the runner caps hops per
   message (`--max-handoffs`, default 2).
+- Roles run with no tools, connectors or settings: they talk, they don't act.
 - The chat directory is the record. Do not edit `state.json` by hand.
