@@ -74,7 +74,8 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
     full text is on the Activity tab.
   - While the runner works between steps: `⚙ runner · sprint 40` with the
     stage and its time on the right (`boundary.check · 45 s`), and what
-    that stage does under it (`Run the full checks on the team branch`).
+    that stage does under it (`Lint, static analysis, the full suite,
+    coverage and each environment's e2e, on the team branch`).
   - When nothing runs: `● Nothing running` and why, for example
     `waiting on m121`.
 
@@ -130,11 +131,16 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   - **Working now:** the role at work is outlined green on its first run of
     a step, violet on the first re-run and amber after that, and so is its
     group. Its box shows its tokens per minute now and a live line: story,
-    step, time so far, which run it is and its latest tool call.
+    step, time so far, which run it is and its latest tool call. A time
+    measured by the wall clock reads `(may include sleep)` after it.
   - **Runner tools:** the runner's own checks sit in small dashed boxes
     touching the role they serve, above it when they run before its step
-    and below it when after, with `↻` runs and time. The one running now is
-    solid, with its time. While pytest runs you see a bar of Pass (green),
+    and below it when after, with `↻` runs and time. A second line says
+    what the tool checks and on what, for example `Implement gate: the
+    full suite with coverage, once; every test must pass and coverage must
+    meet the threshold`. Your own `[[tool]]` rows use their description.
+    Hover over a box to see the command its latest run used. The one
+    running now is solid, with its time. While pytest runs you see a bar of Pass (green),
     Warn (yellow: tests that raised a warning), Skip (grey: skipped and
     expected failures) and Fail (red) so far, a caption such as
     `273 Pass + 32 Warn + 4 Skip + 9 Fail / 506 Total` with empty

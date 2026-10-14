@@ -715,9 +715,9 @@ row). Below, four boxed groups run left to right: Design (architect), Test
 (devops, unit-tester), Dev (developer-api, -cli, -gui, developer) and Check
 (quality-czar, code-reviewer, integration-tester, customer-proxy). Any
 other role goes to the group of its pipeline step (snapshot `step_roles`),
-or to Leadership. Groups have one fixed width; the arrows between them
-stretch with the window, each level with the first role box of the group
-it points into. One two-way path runs from Leadership down to each group.
+or to Leadership. Groups are 236 px wide when there is room and shrink to
+216 px; the arrows between them stretch with the window (at least 24 px),
+each level with the first role box of the group it points into. One two-way path runs from Leadership down to each group.
 
 The chart has a **Story / Sprint / Run** toggle, remembered per browser. It
 defaults to Story: the active step's story, or another story picked in the
@@ -740,8 +740,11 @@ sparkline in that colour, and a live line: story, step, awake time, run
 label and the latest tool call. Runner stages that prepare or gate a
 role's step sit in small dashed boxes touching it, above when they run
 before the step and below when after (`name · ↻ runs · time`); the
-checkout checks and during-step tools are left out. A running stage is
-solid, outlined in its own run colour, with its elapsed time. When it runs
+checkout checks and during-step tools are left out. Under that line, idle
+or running, each box gives the stage's description, looked up in the
+snapshot's `stage_descriptions` (`stages.STAGES`, then the repo's
+`[[tool]]` rows), and its tooltip is the newest run's command (`detail`).
+A running stage is solid, outlined in its own run colour, with its elapsed time. When it runs
 pytest, the open stage row's `tests` (`passed`, `warned`, `skipped`,
 `failed`, `total`, `points`, `fail_at`) gives the counts so far out of the
 collected total. Pass is a passed test, Warn a test that recorded a

@@ -3,7 +3,7 @@
 **Date:** 2026-10-13 (s118 design)
 **Status:** Accepted
 **Supersedes:** ADR-0003. **Amends:** ADR-0047.
-**Design:** `agile-team/docs/design/s118.md` (FC1–FC29, R1–R4)
+**Design:** `agile-team/docs/design/s118.md` (FC1–FC30, R1–R4, R11, R12)
 
 ## Context
 
@@ -48,3 +48,22 @@ which cancelled any moving dot. The human approved a hand-laid HTML mock
 - ADR-0047 still holds for dimming by colour (FL1, FL2), `idle` text (FL4)
   and used roles (FL7, FL8). Its FL5 (Mermaid natural size) and FL6 (Mermaid
   measuring) are replaced by FC4 and FC21.
+
+## Amended by s118 round 3 (2026-10-13)
+
+- **Group width.** The human's decision t74 replaces the one fixed width
+  (`--group-w`) with two bounds, one setting each: groups are
+  `--group-max` (236 px) when there is room and shrink to `--group-min`
+  (216 px), and the gaps keep at least `--gap-min` (24 px). The four groups
+  then fit the Flow card at a 1024 px window. Still nothing is scaled, and
+  a window narrower than the minimum row scrolls sideways.
+- **Tool descriptions (AC12).** The snapshot gains a top-level key
+  `stage_descriptions`, `{name: description}`: every built-in stage from
+  `stages.STAGES`, then each repo `[[tool]]` row. The page looks a tool
+  box's second line up there by stage name, so `runner-stage` events stay
+  as they are and the table stays in one place, in Python. A tool box's
+  tooltip is its newest run's command (`data.detail`), not the description.
+  The descriptions are written for a human: they say what is checked and
+  on what (design s118 R12).
+- **Consequence.** The `tools` command and the live panel show the
+  rewritten descriptions too, since all of them read `stages.STAGES`.
