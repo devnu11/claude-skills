@@ -1,0 +1,1035 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow chart mock</title>
+<style>
+  :root { --bg:#fbfaf7; --card:#fff; --ink:#1d1d1b; --ink-2:#5b5a55; --line:#dedbd2; --accent:#c2410c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#191917; --card:#22221f; --ink:#ecebe6; --ink-2:#a9a79f; --line:#3a3934; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:1440px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:var(--ink-2); margin:0 0 16px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:6px; cursor:pointer; }
+  .tabs button[aria-selected=true] { border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:16px; }
+  .note { color:var(--ink-2); margin:0 0 8px; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; color:var(--ink-2); }
+  .view { overflow:auto; border:1px dashed var(--line); border-radius:6px; padding:8px; min-height:200px; }
+  .view.fit svg { max-width:100% !important; height:auto; }
+  .view:not(.fit) svg { max-width:none !important; }
+  textarea { width:100%; box-sizing:border-box; min-height:260px; font:13px/1.4 ui-monospace, monospace; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:8px; }
+  .err { color:#b91c1c; white-space:pre-wrap; }
+
+  .g-flow { display:flex; flex-direction:column; align-items:center; gap:0; font-size:12px; }
+  .g-band { border:1px solid var(--line); border-radius:8px; padding:6px 10px 10px; background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); max-width:100%; }
+  .g-band.dashed { border-style:dashed; opacity:.75; }
+  .g-band h4 { margin:0 0 6px; font-size:12px; text-align:center; color:var(--ink-2); font-weight:600; }
+  .g-row { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .g-card { border:1px solid var(--line); border-radius:6px; background:var(--card); padding:6px 10px; text-align:center; line-height:1.5; min-width:170px; }
+  .g-card b { display:block; }
+  .g-card.active { border:2px solid var(--accent); box-shadow:0 0 10px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .g-card.idle { opacity:.6; }
+  .g-tools { color:var(--ink-2); font-style:italic; }
+  .g-tools.top { border-bottom:1px dashed var(--line); padding-bottom:3px; margin-bottom:3px; }
+  .g-tools.bottom { border-top:1px dashed var(--line); padding-top:3px; margin-top:3px; }
+  .g-arrow { position:relative; width:2px; height:26px; background:var(--ink-2); margin:2px 0 8px; }
+  .g-arrow::after { content:""; position:absolute; left:-4px; bottom:-6px; border:5px solid transparent; border-top-color:var(--ink-2); }
+  .g-arrow.live::before { content:""; position:absolute; left:-4px; width:10px; height:10px; border-radius:50%; background:var(--accent); animation:g-move 1.4s linear infinite; }
+  @keyframes g-move { from { top:-4px; } to { top:22px; } }
+  .g-pill { border:1px solid var(--line); border-radius:999px; padding:3px 12px; background:var(--card); }
+
+  .h { --m:#4f7cc8; --t:#d08a2c; --bad:#c2410c; font-size:10px; line-height:1.4; display:flex; flex-direction:column; align-items:center; gap:0; }
+  .h-lead { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:4px 8px 8px; background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); }
+  .h-lead > .h-title { writing-mode:vertical-rl; transform:rotate(180deg); color:var(--ink-2); font-weight:600; align-self:center; }
+  .h-unit { display:flex; flex-direction:column; gap:2px; width:180px; }
+  .h-box { border:1px solid var(--line); border-radius:6px; background:var(--card); padding:5px 7px; text-align:center; }
+  .h-box b { display:block; font-size:12px; }
+  .h-box .h-meta { color:var(--ink-2); }
+  .h-box.active { border:2px solid var(--accent); box-shadow:0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .h-box.idle { opacity:.55; }
+  .h-tool { border:1px dashed var(--line); border-radius:4px; padding:2px 6px; color:var(--ink-2); font-style:italic; text-align:center; }
+  .h-share { display:flex; height:5px; border-radius:3px; overflow:hidden; margin:4px 0 2px; background:var(--line); gap:1px; }
+  .h-share .m { background:var(--m); } .h-share .t { background:var(--t); }
+  .h-share-l { display:flex; justify-content:space-between; color:var(--ink-2); }
+  .h-share-l i { font-style:normal; } .h-share-l i::before { content:""; display:inline-block; width:6px; height:6px; border-radius:2px; margin-right:3px; vertical-align:middle; }
+  .h-share-l .lm::before { background:var(--m); } .h-share-l .lt::before { background:var(--t); }
+  .h-drop { position:relative; height:34px; width:100%; }
+  .h-bus { position:absolute; top:16px; height:2px; background:var(--ink-2); opacity:.5; }
+  .h-stem { position:absolute; width:2px; background:var(--ink-2); opacity:.5; }
+  .h-grid { display:grid; column-gap:0; row-gap:0; align-items:start; }
+  .h-col-title { text-align:center; color:var(--ink-2); font-weight:600; padding-bottom:3px; }
+  .h-cell { padding:0 0 2px; display:flex; justify-content:center; } .h-cell > * { width:100%; box-sizing:border-box; }
+  .h-gap-row { height:8px; }
+  .h-arrow { position:relative; width:22px; height:2px; background:var(--ink-2); align-self:center; justify-self:center; }
+  .h-arrow::after { content:""; position:absolute; right:-6px; top:-4px; border:5px solid transparent; border-left-color:var(--ink-2); }
+  .h-arrow.live::before { content:""; position:absolute; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--accent); animation:h-right 1.3s linear infinite; }
+  @keyframes h-right { from { left:-4px; } to { left:22px; } }
+  .h-dot-down { position:absolute; width:10px; height:10px; border-radius:50%; background:var(--bad); animation:h-down 1.6s linear infinite; }
+  @keyframes h-down { from { top:-2px; } to { top:30px; } }
+  .h-legend { display:flex; gap:14px; color:var(--ink-2); margin-top:10px; flex-wrap:wrap; justify-content:center; }
+
+  .h-arrow.back::before { content:""; position:absolute; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--bad); animation:h-left 1.3s linear infinite; }
+  @keyframes h-left { from { left:22px; } to { left:-4px; } }
+  .h-gap { height:14px; }
+  .h-top { display:flex; align-items:center; gap:0; }
+  .h-arrow.both::before { content:""; position:absolute; left:-6px; top:-4px; border:5px solid transparent; border-right-color:var(--ink-2); }
+  .h-lead-grid { display:grid; grid-auto-flow:column; grid-template-rows:auto auto auto; column-gap:6px; row-gap:2px; align-items:end; }
+  .h-lead-grid > .h-box-row { align-self:start; }
+  .h-lead-grid > .h-below { align-self:start; }
+
+  .j-group { align-self:stretch; border:1px solid var(--line); border-radius:8px; background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); z-index:0; }
+  .j-group.running { border-color:var(--accent); }
+  .j-grid > :not(.j-group) { z-index:1; position:relative; }
+  .j-grid .h-cell { padding:0 8px 2px; }
+  .j-grid .h-col-title { padding-top:4px; }
+  .h-tool.now { border-style:solid; border-color:var(--accent); color:var(--ink); font-style:normal;
+    background:repeating-linear-gradient(-45deg, transparent 0 6px, color-mix(in srgb, var(--accent) 18%, transparent) 6px 12px);
+    background-size:200% 100%; animation:j-stripe 2s linear infinite; }
+  @keyframes j-stripe { from { background-position:0 0; } to { background-position:-34px 0; } }
+  .h-live { margin-top:4px; padding-top:3px; border-top:1px solid var(--line); text-align:left; color:var(--ink); }
+  .h-live .pulse { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); margin-right:4px; animation:blink 1.2s infinite; vertical-align:middle; }
+  @keyframes blink { 50% { opacity:.25; } }
+
+  .k { width:100%; }
+  .k .h-top { justify-content:center; }
+  .k-grid { display:grid; width:100%; align-items:start; }
+  .k-grid > :not(.k-group) { z-index:1; position:relative; }
+  .k-group { align-self:stretch; border:1px solid var(--line); border-radius:8px; background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); }
+  .k-grid .h-cell { padding:0 10px 2px; }
+  .k-grid .h-col-title { padding-top:4px; font-size:11px; }
+  .k { --run1:#2e9d5b; --run2:#3b7ddd; --run3:#e0901f; --fail:#d23c3c; --warn:#c9b22c; }
+  .h-box.run1 { border:2px solid var(--run1); box-shadow:0 0 9px color-mix(in srgb, var(--run1) 60%, transparent); }
+  .h-box.run2 { border:2px solid var(--run2); box-shadow:0 0 9px color-mix(in srgb, var(--run2) 60%, transparent); }
+  .h-box.run3 { border:2px solid var(--run3); box-shadow:0 0 9px color-mix(in srgb, var(--run3) 60%, transparent); }
+  .k-group.run1 { border-color:var(--run1); } .k-group.run2 { border-color:var(--run2); } .k-group.run3 { border-color:var(--run3); }
+  .h-live.run1 .pulse { background:var(--run1); } .h-live.run2 .pulse { background:var(--run2); } .h-live.run3 .pulse { background:var(--run3); }
+  .h-tool.k-now { border-style:solid; border-color:var(--accent); color:var(--ink); font-style:normal;
+    background:repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--accent) 22%, transparent) 6px 12px);
+    animation:k-stripe 1.5s linear infinite; }
+  @keyframes k-stripe { from { background-position:0 0; } to { background-position:17px 0; } }
+  .k-arrow { position:relative; width:30px; height:2px; background:var(--ink-2); align-self:center; justify-self:center; }
+  .k-arrow::before { content:""; position:absolute; right:-6px; top:-4px; border:5px solid transparent; border-left-color:var(--ink-2); z-index:0; }
+  .k-arrow.live::after { content:""; position:absolute; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--accent); z-index:2; animation:h-right 1.3s linear infinite; }
+  .k-drops { height:46px; }
+  .k-svg { position:absolute; inset:0; pointer-events:none; overflow:visible; z-index:3; }
+  .k-svg path.drop { fill:none; stroke:var(--ink-2); stroke-width:1.5; opacity:.7; }
+  .k-svg .head { fill:var(--ink-2); opacity:.9; }
+  .k-svg circle { fill:#d23c3c; }
+  .k-picker { display:flex; gap:6px; justify-content:center; margin-bottom:8px; color:var(--ink-2); }
+  .k-picker button { font:inherit; font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); cursor:pointer; }
+
+  .l { --run2:#8b5cf6; }
+  .l .h-col-title, .l .h-lead > .h-title { font-size:12px; }
+  .l-cols { display:flex; justify-content:center; align-items:stretch; }
+  .l-group { width:236px; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:4px 10px 10px;
+    background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); display:flex; flex-direction:column; gap:14px; }
+  .l-group.run1 { border-color:var(--run1); } .l-group.run2 { border-color:var(--run2); } .l-group.run3 { border-color:var(--run3); }
+  .l-unit { display:flex; flex-direction:column; gap:2px; }
+  .l-gap { width:48px; display:flex; align-items:flex-start; justify-content:center; }
+  .l-gap .k-arrow { align-self:flex-start; margin-top:var(--arrow-y, 60px); }
+  .l-grid { display:grid; align-items:start; justify-content:center; }
+  .l-grid > .l-bg { align-self:stretch; border:1px solid var(--line); border-radius:8px; background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); }
+  .l-grid > .l-bg.run1 { border-color:var(--run1); } .l-grid > .l-bg.run2 { border-color:var(--run2); } .l-grid > .l-bg.run3 { border-color:var(--run3); }
+  .l-grid > :not(.l-bg) { position:relative; z-index:1; }
+  .l-grid .h-cell { padding:0 10px 2px; }
+
+  .m .l-gap { width:96px; }
+  .m .k-arrow { width:72px; }
+  .m .l-group { gap:26px; }
+  .m .l-unit + .l-unit { border-top:1px dashed color-mix(in srgb, var(--line) 70%, transparent); padding-top:24px; margin-top:-2px; }
+  .m-rate { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:3px; }
+  .m-rate b { font-size:11px; display:inline; }
+  .m-spark { width:96px; height:22px; }
+  .m-spark path.line { fill:none; stroke-width:1.5; }
+  .m-spark path.area { opacity:.18; }
+
+  /* ---- variant N ---- */
+  .n { --role-gap:20px; --group-w:236px; }
+  .n-cols { display:flex; width:100%; align-items:stretch; }
+  .n-group { flex:0 0 var(--group-w); box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:4px 10px 10px;
+    background:color-mix(in srgb, var(--card) 85%, var(--ink) 15%); display:flex; flex-direction:column; }
+  .n-group.run1 { border-color:var(--run1); } .n-group.run2 { border-color:var(--run2); } .n-group.run3 { border-color:var(--run3); }
+  .n-group .h-col-title { font-size:12px; padding-bottom:6px; }
+  .n-unit { display:flex; flex-direction:column; gap:2px; }
+  .n-unit + .n-unit { border-top:1px solid color-mix(in srgb, var(--ink) 28%, transparent); margin-top:var(--role-gap); padding-top:var(--role-gap); }
+  .n-gap { flex:1 1 40px; min-width:40px; display:flex; align-items:flex-start; padding:0 8px; }
+  .n-gap .k-arrow { width:100%; align-self:flex-start; margin-top:var(--arrow-y, 60px); }
+  .n-meta span + span::before { content:" · "; }
+  .n-share-none { height:5px; border-radius:3px; margin:4px 0 2px; background:repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px); }
+  .n-share-none + .h-share-l { justify-content:center; }
+  .n-spark { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:3px; color:var(--ink-2); }
+  .n-spark b { color:var(--ink); font-size:11px; display:inline; }
+  .n-spark svg { width:96px; height:20px; }
+  .n-tool-run { border:1px solid var(--accent); border-radius:4px; padding:3px 6px; color:var(--ink); }
+  .n-tool-run.fail { border-color:var(--run3); }
+  .n-prog { height:6px; border-radius:3px; background:var(--line); overflow:hidden; margin:3px 0; }
+  .n-prog span { display:block; height:100%; background:var(--accent); }
+  .n-tool-run.fail .n-prog span { background:var(--run3); }
+  .n-tool-run .row { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .n-tool-run svg { width:80px; height:18px; }
+  .n-gear { position:relative; display:flex; justify-content:flex-end; width:100%; margin-bottom:6px; gap:6px; }
+  .n-gear > button { font:inherit; font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); cursor:pointer; }
+  .n-settings { position:absolute; right:0; top:26px; z-index:5; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:11px; width:260px; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  .n-settings h5 { margin:0 0 6px; font-size:11px; color:var(--ink-2); font-weight:600; }
+  .n-settings label { display:block; margin:3px 0; }
+  .n-settings .fixed { color:var(--ink-2); margin-bottom:8px; }
+  .n.hide-tokens .f-tokens, .n.hide-cost .f-cost, .n.hide-time .f-time, .n.hide-bounces .f-bounces,
+  .n.hide-share .f-share, .n.hide-spark .f-spark, .n.hide-tools .f-tools, .n.hide-toolstats .f-toolstats,
+  .n.hide-legend .h-legend { display:none !important; }
+
+  .n .h-tool { padding:0; }
+  .n-tool-run.it1 { border-color:var(--run1); } .n-tool-run.it2 { border-color:var(--run2); } .n-tool-run.it3 { border-color:var(--run3); }
+  .n-pass { display:flex; height:6px; border-radius:3px; overflow:hidden; background:var(--line); margin:3px 0 1px; gap:1px; }
+  .n-pass .ok { background:var(--run1); } .n-pass .bad { background:var(--fail); } .n-pass .warn { background:var(--warn); }
+  .n-tool-run .cap { display:flex; justify-content:space-between; color:var(--ink-2); }
+  .n-tool-run .cap .ok::before, .n-tool-run .cap .bad::before { content:""; display:inline-block; width:6px; height:6px; border-radius:2px; margin-right:3px; vertical-align:middle; }
+  .n-tool-run .cap .ok::before { background:var(--run1); } .n-tool-run .cap .bad::before { background:var(--fail); } .n-tool-run .cap .warn::before { content:""; display:inline-block; width:6px; height:6px; border-radius:2px; margin-right:3px; vertical-align:middle; background:var(--warn); }
+  .n-tool-run .cap { justify-content:flex-start; gap:4px; flex-wrap:wrap; }
+
+  .n-tool-run .cap { flex-wrap:nowrap; gap:3px; white-space:nowrap; }
+  .n-tool-run .cap span::before { display:none !important; }
+  .n-tool-run .cap .ok b { color:var(--run1); } .n-tool-run .cap .warn b { color:var(--warn); } .n-tool-run .cap .bad b { color:var(--fail); }
+  .n-tool-run .cap b { display:inline; font-size:10px; }
+
+  .n .k-arrow.live::after { animation:n-right 1.6s linear infinite; }
+  @keyframes n-right { from { left:-4px; } to { left:calc(100% - 4px); } }
+  details summary { cursor:pointer; color:var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Flow chart mock</h1>
+  <p class="sub">This run's real roles and counts (briefs, handoffs, step hours). Mermaid 11.4.1, the dashboard's version. Edit any source and press Render. "Fit to width" shows what the dashboard does today.</p>
+  <div class="tabs" id="tabs"></div>
+  <div id="panes"></div>
+</main>
+
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.7/dist/mermaid-layout-elk.esm.min.mjs";
+mermaid.registerLayoutLoaders(elkLayouts);
+
+const CLASSES = `
+classDef active stroke:#c2410c,stroke-width:3px
+classDef idle fill:#efeee9,stroke:#cfcdc4,color:#5b5a55
+classDef stage fill:#f3f1ea,stroke:#9b998f,stroke-dasharray:3 3,color:#3a3934`;
+
+const ROLE = {
+  you: `you(["You (via liaison)"])`,
+  po: `po["<b>Product Owner</b><br/>opus · 54 turns"]`,
+  mgr: `mgr["<b>manager</b><br/>opus · 0.7h<br/>139 briefs · 138 back"]`,
+  cp: `cp["<b>customer-proxy</b><br/>sonnet · 1.0h<br/>103 briefs · 101 back"]`,
+  arch: `arch["<b>architect</b><br/>opus · 11.6h<br/>165 briefs · 162 back"]`,
+  ut: `ut["<b>unit-tester</b><br/>sonnet · 5.7h<br/>243 briefs · 241 back"]`,
+  dcli: `dcli["<b>developer-cli</b><br/>sonnet · 8.2h<br/>199 briefs · 194 back<br/>⏱ running 4m"]`,
+  dgui: `dgui["<b>developer-gui</b><br/>sonnet · 1.0h<br/>65 briefs · 65 back"]`,
+  dapi: `dapi["<b>developer-api</b><br/>sonnet · 1.0h<br/>14 briefs · 14 back"]`,
+  dev: `dev["<b>developer</b><br/>sonnet · 0.4h<br/>13 briefs · 13 back"]`,
+  qc: `qc["<b>quality-czar</b><br/>sonnet · 5.0h<br/>136 briefs · 136 back"]`,
+  cr: `cr["<b>code-reviewer</b><br/>opus · 3.5h<br/>109 briefs · 109 back"]`,
+  it: `it["<b>integration-tester</b><br/>sonnet · 5.7h<br/>158 briefs · 156 back"]`,
+  scr: `scr["<b>scribe</b><br/>haiku · 2.8h<br/>69 briefs · 69 back"]`,
+  ops: `ops["<b>devops</b><br/>sonnet · 0.7h<br/>14 briefs · 14 back"]`,
+  stEnv: `stEnv{{"Prepare env<br/>runner · 103 runs"}}`,
+  stGate: `stGate{{"Implement gate<br/>runner · 291 runs"}}`,
+  stE2e: `stE2e{{"E2E gate<br/>runner · 156 runs"}}`,
+  stBnd: `stBnd{{"Boundary<br/>runner · 37 runs"}}`,
+};
+const R = (...ids) => ids.map((id) => "    " + ROLE[id]).join("\n");
+
+
+// ----- variant D: the human's notes (16:55) -----
+const BOX = {
+  po: ["Product Owner", "sonnet · 97M · $1,086 · 54 turns", "model 66% ███████░░░ tools 34%"],
+  mgr: ["manager", "sonnet · 10M · $12 · 0.7h", "↩ 1 bounced", "model 99% ██████████ tools 1%"],
+  cp: ["customer-proxy", "sonnet · 28M · $17 · 1.0h", "↩ 30 bounced", "model 67% ███████░░░ tools 33%"],
+  arch: ["architect", "opus · 235M · $210 · 11.6h", "↩ 3 bounced", "model 100% ██████████ tools 0%"],
+  ut: ["unit-tester", "sonnet · 161M · $76 · 5.7h", "↩ 18 bounced", "model 96% ██████████ tools 4%"],
+  it: ["integration-tester", "sonnet · 62M · $33 · 5.7h", "↩ 8 bounced", "model 82% ████████░░ tools 18%"],
+  ops: ["devops", "opus · 5M · $5 · 0.7h", "↩ 1 bounced", "model 52% █████░░░░░ tools 48%"],
+  dcli: ["developer-cli", "sonnet · 83M · $44 · 8.2h", "↩ 72 bounced", "model 77% ████████░░ tools 23%", "⏱ running 4m"],
+  dgui: ["developer-gui", "sonnet · 21M · $13 · 1.0h", "↩ 19 bounced", "model 91% █████████░ tools 9%"],
+  dapi: ["developer-api", "sonnet · 9M · $5 · 1.0h", "↩ 4 bounced"],
+  dev: ["developer", "sonnet · 4M · $2 · 0.4h", "↩ 5 bounced", "model 99% ██████████ tools 1%"],
+  qc: ["quality-czar", "haiku · 47M · $13 · 5.0h", "↩ 26 bounced", "model 100% ██████████ tools 0%"],
+  cr: ["code-reviewer", "opus · 65M · $72 · 3.5h", "↩ 49 bounced", "model 99% ██████████ tools 1%"],
+  scr: ["scribe", "haiku · 63M · $19 · 2.8h", "model 99% ██████████ tools 1%"],
+};
+// Runner tools per role: [before, after]; real run counts and time, summed over the run.
+const DEV_AFTER = [["pytest + coverage", "46 runs · 62m"], ["ruff check · format", "46 runs · 0m"], ["dispute re-run", "8 runs · 10m"]];
+const TOOLS = {
+  po: [[["boundary sync", "6 runs · 0m"]], [["boundary check", "8 runs · 23m"], ["review PR + push", "8 runs · 16m"], ["CI wait", "3 runs · 15m"]]],
+  cp: [[["env prepare", "11 runs · 0m"]], []],
+  ut: [[], [["pytest: new tests red", "9 runs · 11m"], ["pytest: rework", "14 runs · 17m"]]],
+  it: [[["presentation layout", "18 runs · 0m"]], [["presentation trial", "18 runs · 0m"]]],
+  dcli: [[], DEV_AFTER], dgui: [[], DEV_AFTER], dapi: [[], DEV_AFTER], dev: [[], DEV_AFTER],
+  qc: [[["ruff check", "17 runs · 0m"], ["ruff format", "17 runs · 0m"]], []],
+};
+const GROUPS_D = [
+  ["Steering", ["po", "mgr"]],
+  ["Design", ["arch"]],
+  ["Build", ["dcli", "dgui", "dapi", "dev"]],
+  ["Tests & tooling (code-driven)", ["ut", "it", "ops"]],
+  ["Review", ["qc", "cr"]],
+  ["Customer", ["cp"]],
+  ["Support", ["scr"]],
+];
+const box = (id) => `${id}["<b>${BOX[id][0]}</b><br/>${BOX[id].slice(1).join("<br/>")}"]`;
+const toolText = (tools) => tools.map(([name, stats]) => `${name} <i>${stats}</i>`).join("<br/>");
+const toolNode = (id, side, tools) => `${id}_${side}("${toolText(tools)}"):::tool`;
+/** A role's nodes top to bottom: its before-tools, the role, its after-tools. */
+function roleParts(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  return [before.length && [toolNode(id, "b", before), `${id}_b`], [box(id), id], after.length && [toolNode(id, "a", after), `${id}_a`]].filter(Boolean);
+}
+function groupD([title, ids], n) {
+  const parts = ids.flatMap(roleParts);
+  const chain = parts.length > 1 ? [`    ${parts.map(([, i]) => i).join(" ~~~ ")}`] : [];
+  return [`subgraph g${n}["${title}"]`, "    direction TB", ...parts.map(([node]) => "    " + node), ...chain, "end"];
+}
+// Tier 1 under Steering: Design, Build, Tests & tooling. Tier 2: Review, Customer, Support (held down by ~~~).
+const TIER2 = [[1, 4], [2, 5], [3, 6]];
+function variantD() {
+  const front = ["---", "config:", "  flowchart:", "    nodeSpacing: 16", "    rankSpacing: 6", "    padding: 6", "---"];
+  const lines = [...front, "flowchart TB", `you(["You (via liaison)"])`, ...GROUPS_D.flatMap(groupD)];
+  lines.push("you <--> g0", ...GROUPS_D.slice(1).map((_, i) => `g0 --> g${i + 1}`), ...TIER2.map(([a, b]) => `g${a} ~~~ g${b}`));
+  lines.push(CLASSES, "classDef tool fill:none,stroke:#9b998f,stroke-dasharray:3 3,text-align:left", "class dcli active");
+  return lines.join("\n");
+}
+
+// ----- variant E: the logical flow, bands top to bottom, tools inside each box (17:00) -----
+const RULE = "┈┈┈┈┈┈┈┈┈┈┈┈";
+const toolLines = (tools) => tools.map(([name, stats]) => `<i>${name} · ${stats}</i>`);
+function boxE(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  const top = before.length ? [...toolLines(before), RULE] : [];
+  const bottom = after.length ? [RULE, ...toolLines(after)] : [];
+  return `${id}["${[...top, `<b>${BOX[id][0]}</b>`, ...BOX[id].slice(1), ...bottom].join("<br/>")}"]`;
+}
+const BANDS = [
+  ["band_steer", "Steering", ["po", "mgr"]],
+  ["band_design", "Design", ["arch"]],
+  ["band_test", "Test", ["ut"]],
+  ["band_dev", "Dev", ["dcli", "dgui", "dapi", "dev", "ops"]],
+  ["band_check", "Check", ["qc", "cr", "it"]],
+  ["band_accept", "PO", []],
+  ["band_cust", "Customer", ["cp"]],
+  ["band_scribe", "Scribe (in question)", ["scr"]],
+];
+function bandE([key, title, ids]) {
+  if (!ids.length) return [`${key}(["<b>PO</b> accepts and hands to the customer"])`];
+  return [`subgraph ${key}[" "]`, `  subgraph ${key}_in["${title}"]`, "    direction LR", ...ids.map((id) => "    " + boxE(id)), "  end", "end",
+    `style ${key} fill:none,stroke:none`];
+}
+function variantE(layout = "dagre") {
+  const front = ["---", "config:", `  layout: ${layout}`, "  flowchart:", "    nodeSpacing: 16", "    rankSpacing: 24", "    padding: 6", "---"];
+  const keys = BANDS.map(([k]) => k);
+  const flow = keys.slice(1).map((k, i) => `${keys[i]} --> ${k}`);
+  return [...front, "flowchart TB", `you(["You (via liaison)"])`, ...BANDS.flatMap(bandE), "you <--> band_steer", ...flow,
+    CLASSES, "class dcli active", "class ops,scr idle", "style band_scribe_in stroke-dasharray:4 4"].join("\n");
+}
+
+// ----- variant G: the logical flow as HTML/CSS cards (no Mermaid) -----
+const htmlTools = (tools, side) => tools.length ? `<div class="g-tools ${side}">${tools.map(([n, st]) => `${n} · ${st}`).join("<br>")}</div>` : "";
+function cardG(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  const cls = id === "dcli" ? "active" : ["ops", "scr"].includes(id) ? "idle" : "";
+  return `<div class="g-card ${cls}">${htmlTools(before, "top")}<b>${BOX[id][0]}</b>${BOX[id].slice(1).join("<br>")}${htmlTools(after, "bottom")}</div>`;
+}
+function bandG([key, title, ids]) {
+  if (!ids.length) return `<div class="g-pill"><b>PO</b> accepts and hands to the customer</div>`;
+  return `<div class="g-band ${key === "band_scribe" ? "dashed" : ""}"><h4>${title}</h4><div class="g-row">${ids.map(cardG).join("")}</div></div>`;
+}
+function variantG() {
+  const arrow = (i) => `<div class="g-arrow ${i === 3 ? "live" : ""}"></div>`;
+  const parts = BANDS.map(bandG).flatMap((b, i) => (i ? [arrow(i), b] : [b]));
+  return `<div class="g-flow"><div class="g-pill">You (via liaison)</div><div class="g-arrow"></div>${parts.join("")}</div>`;
+}
+
+// ----- variant H: leadership on top, stages left to right, roles stacked, tools snug (17:20) -----
+const shareOf = (id) => { const m = BOX[id].join(" ").match(/model (\d+)%/); return m ? +m[1] : null; };
+const metaOf = (id) => BOX[id].slice(1).filter((l) => !l.startsWith("model "));
+function shareBar(id) {
+  const m = shareOf(id);
+  if (m === null) return "";
+  return `<div class="h-share"><span class="m" style="width:${m}%"></span><span class="t" style="width:${100 - m}%"></span></div>
+    <div class="h-share-l"><i class="lm">model ${m}%</i><i class="lt">tools ${100 - m}%</i></div>`;
+}
+const hTools = (tools) => tools.map(([n, st]) => `${n} · ${st}`).join("<br>");
+function hBox(id) {
+  const cls = id === "dcli" ? "active" : "";
+  return `<div class="h-box ${cls}"><b>${BOX[id][0]}</b><div class="h-meta">${metaOf(id).join("<br>")}</div>${shareBar(id)}</div>`;
+}
+function hUnit(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  const above = before.length ? `<div class="h-tool">${hTools(before)}</div>` : "";
+  const below = after.length ? `<div class="h-tool">${hTools(after)}</div>` : "";
+  return [above, hBox(id), below];
+}
+const LEAD = ["po", "mgr", "ops"];
+const COL_W = 180, ARROW_W = 34;
+const STAGES_H = [["Design", ["arch"]], ["Test", ["ut"]], ["Dev", ["dcli", "dgui", "dapi", "dev"]], ["Check", ["qc", "cr", "it"]], ["Accept", ["cp"]]];
+function hGrid() {
+  const depth = Math.max(...STAGES_H.map(([, ids]) => ids.length));
+  const cols = STAGES_H.flatMap((_, i) => (i ? [`${ARROW_W}px`, `${COL_W}px`] : [`${COL_W}px`])).join(" ");
+  const cells = [];
+  STAGES_H.forEach(([title, ids], c) => {
+    const col = c * 2 + 1;
+    cells.push(`<div class="h-col-title" style="grid-column:${col};grid-row:1">${title}</div>`);
+    ids.forEach((id, k) => hUnit(id).forEach((html, r) => {
+      if (html) cells.push(`<div class="h-cell" style="grid-column:${col};grid-row:${2 + k * 4 + r}">${html}</div>`);
+    }));
+    if (c) cells.push(`<div class="h-arrow ${c === 2 ? "live" : ""}" style="grid-column:${col - 1};grid-row:3"></div>`);
+  });
+  const rows = ["auto", ...Array.from({ length: depth }, () => ["auto", "auto", "auto", "8px"]).flat()].join(" ");
+  return `<div class="h-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">${cells.join("")}</div>`;
+}
+function hDrop() {
+  // PO down to every stage column; the red dot drops into Dev (a bounce or a gate fix).
+  const centres = STAGES_H.map((_, i) => COL_W / 2 + i * (COL_W + ARROW_W));
+  const width = STAGES_H.length * COL_W + (STAGES_H.length - 1) * ARROW_W, mid = width / 2, dev = centres[2];
+  const stems = centres.map((x) => `<div class="h-stem" style="left:${x}px;top:16px;height:18px"></div>`).join("");
+  return `<div class="h-drop" style="width:${width}px"><div class="h-stem" style="left:${mid}px;top:0;height:16px"></div>
+    <div class="h-bus" style="left:${centres[0]}px;width:${centres.at(-1) - centres[0]}px"></div>${stems}<div class="h-dot-down" style="left:${dev - 4}px"></div></div>`;
+}
+function variantH() {
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span>${LEAD.map((id) => `<div class="h-unit">${hUnit(id).join("")}</div>`).join("")}</div>`;
+  const legend = `<div class="h-legend"><span>→ work moves left to right (orange dot)</span><span>↓ PO sends work back down when something goes wrong (red dot)</span><span>dashed = runner tool, above the role: runs before its step; below: after</span></div>`;
+  return `<div class="h"><div class="g-pill">You (via liaison)</div><div class="g-arrow"></div>${lead}${hDrop()}${hGrid()}${legend}</div>`;
+}
+
+// ----- variant I: no PO lines, DevOps in Design, proxy in Check (17:40) -----
+const LEAD_I = ["po", "mgr"];
+const STAGES_I = [["Design", ["arch"]], ["Test", ["ops", "ut"]], ["Dev", ["dcli", "dgui", "dapi", "dev"]], ["Check", ["qc", "cr", "it", "cp"]]];
+function iGrid() {
+  const depth = Math.max(...STAGES_I.map(([, ids]) => ids.length));
+  const cols = STAGES_I.flatMap((_, i) => (i ? [`${ARROW_W}px`, `${COL_W}px`] : [`${COL_W}px`])).join(" ");
+  const cells = [];
+  STAGES_I.forEach(([title, ids], c) => {
+    const col = c * 2 + 1;
+    cells.push(`<div class="h-col-title" style="grid-column:${col};grid-row:1">${title}</div>`);
+    ids.forEach((id, k) => hUnit(id).forEach((html, r) => {
+      if (html) cells.push(`<div class="h-cell" style="grid-column:${col};grid-row:${2 + k * 4 + r}">${html}</div>`);
+    }));
+    if (c) cells.push(`<div class="h-arrow ${c === 2 ? "live" : c === 3 ? "back" : ""}" style="grid-column:${col - 1};grid-row:3"></div>`);
+  });
+  const rows = ["auto", ...Array.from({ length: depth }, () => ["auto", "auto", "auto", "8px"]).flat()].join(" ");
+  return `<div class="h-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">${cells.join("")}</div>`;
+}
+function variantI() {
+  const cells = LEAD_I.flatMap((id) => hUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const legend = `<div class="h-legend"><span>orange dot: work moves forward (Test → Dev)</span><span>red dot: work sent back (Check → Dev)</span><span>dashed = runner tool; above the role: runs before its step; below: after</span><span>the PO and the runner move every handoff; they aren't drawn as lines</span></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  return `<div class="h"><div class="h-top">${people}${lead}</div><div class="h-gap"></div>${iGrid()}${legend}</div>`;
+}
+
+// ----- variant J: group boxes, PO-down arrow, running state (18:05) -----
+// While developer-cli runs: its box glows, a live line shows what it's doing now, and the
+// runner tool it's waiting on (pytest + coverage) is solid and striped with its elapsed time.
+const RUNNING = { id: "dcli", tool: 0, toolElapsed: "1m 12s",
+  live: "Dev: run the s112 dashboard tests · 38s", step: "s112 · implement · 4m 10s" };
+function jBox(id) {
+  const cls = id === RUNNING.id ? "active" : "";
+  const live = id === RUNNING.id
+    ? `<div class="h-live"><span class="pulse"></span>${RUNNING.step}<br><i>${RUNNING.live}</i></div>` : "";
+  const meta = metaOf(id).filter((l) => !l.startsWith("⏱"));
+  return `<div class="h-box ${cls}"><b>${BOX[id][0]}</b><div class="h-meta">${meta.join("<br>")}</div>${shareBar(id)}${live}</div>`;
+}
+function jUnit(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  const tool = (t, i, side) => {
+    const now = side === "a" && id === RUNNING.id && i === RUNNING.tool;
+    return `<div class="h-tool ${now ? "now" : ""}">${now ? `▶ ${t[0]} · running ${RUNNING.toolElapsed}` : `${t[0]} · ${t[1]}`}</div>`;
+  };
+  const above = before.length ? `<div class="h-tool">${hTools(before)}</div>` : "";
+  const below = after.length ? `<div style="display:flex;flex-direction:column;gap:2px">${after.map((t, i) => tool(t, i, "a")).join("")}</div>` : "";
+  return [above, jBox(id), below];
+}
+const STAGES_J = [["Design", ["arch"]], ["Test", ["ops", "ut"]], ["Dev", ["dcli", "dgui", "dapi", "dev"]], ["Check", ["qc", "cr", "it", "cp"]]];
+const J_COL = COL_W + 16, J_ARROW = 40;
+function jGrid() {
+  const depth = Math.max(...STAGES_J.map(([, ids]) => ids.length));
+  const cols = STAGES_J.flatMap((_, i) => (i ? [`${J_ARROW}px`, `${J_COL}px`] : [`${J_COL}px`])).join(" ");
+  const last = 2 + depth * 4;
+  const cells = [];
+  STAGES_J.forEach(([title, ids], c) => {
+    const col = c * 2 + 1, running = ids.includes(RUNNING.id);
+    cells.push(`<div class="j-group ${running ? "running" : ""}" style="grid-column:${col};grid-row:1 / ${last}"></div>`);
+    cells.push(`<div class="h-col-title" style="grid-column:${col};grid-row:1">${title}</div>`);
+    ids.forEach((id, k) => jUnit(id).forEach((html, r) => {
+      if (html) cells.push(`<div class="h-cell" style="grid-column:${col};grid-row:${2 + k * 4 + r}">${html}</div>`);
+    }));
+    if (c) cells.push(`<div class="h-arrow ${c === 2 ? "live" : ""}" style="grid-column:${col - 1};grid-row:3;align-self:center;justify-self:center"></div>`);
+  });
+  const rows = ["auto", ...Array.from({ length: depth }, () => ["auto", "auto", "auto", "8px"]).flat()].join(" ");
+  return `<div class="h-grid j-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">${cells.join("")}</div>`;
+}
+function jDrop() {
+  const centres = STAGES_J.map((_, i) => J_COL / 2 + i * (J_COL + J_ARROW));
+  const width = STAGES_J.length * J_COL + (STAGES_J.length - 1) * J_ARROW, dev = centres[2];
+  const stems = centres.map((x) => `<div class="h-stem" style="left:${x}px;top:16px;height:18px"></div>`).join("");
+  return `<div class="h-drop" style="width:${width}px"><div class="h-stem" style="left:${width / 2}px;top:0;height:16px"></div>
+    <div class="h-bus" style="left:${centres[0]}px;width:${centres.at(-1) - centres[0]}px"></div>${stems}<div class="h-dot-down" style="left:${dev - 4}px"></div></div>`;
+}
+function variantJ() {
+  const cells = LEAD_I.flatMap((id) => jUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  const legend = `<div class="h-legend"><span>orange dot → work moves to the next group</span><span>red dot ↓ the PO sends work into a group (a bounce, a gate fix, a ruling)</span><span>dashed = runner tool; above the role: before its step; below: after</span><span>solid striped tool = running now</span></div>`;
+  return `<div class="h"><div class="h-top">${people}${lead}</div>${jDrop()}${jGrid()}${legend}</div>`;
+}
+
+// ----- variant K: full width, run colours, tool demo elsewhere, SVG PO arrows (18:20) -----
+const K = { round: 1, toolRole: "it", toolSide: "b", tool: 0, toolElapsed: "0m 41s" };
+const RUN_LABEL = { 1: "first run", 2: "first re-run", 3: "re-run 2+" };
+function kBox(id) {
+  const running = id === RUNNING.id, cls = running ? `run${K.round}` : "";
+  const live = running ? `<div class="h-live run${K.round}"><span class="pulse"></span>${RUNNING.step} · ${RUN_LABEL[K.round]}<br><i>${RUNNING.live}</i></div>` : "";
+  const meta = metaOf(id).filter((l) => !l.startsWith("⏱"));
+  return `<div class="h-box ${cls}"><b>${BOX[id][0]}</b><div class="h-meta">${meta.join("<br>")}</div>${shareBar(id)}${live}</div>`;
+}
+function kTools(id, side, tools) {
+  return `<div style="display:flex;flex-direction:column;gap:2px">${tools.map((t, i) => {
+    const now = id === K.toolRole && side === K.toolSide && i === K.tool;
+    return `<div class="h-tool ${now ? "k-now" : ""}">${now ? `▶ ${t[0]} · running ${K.toolElapsed}` : `${t[0]} · ${t[1]}`}</div>`;
+  }).join("")}</div>`;
+}
+function kUnit(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  return [before.length ? kTools(id, "b", before) : "", kBox(id), after.length ? kTools(id, "a", after) : ""];
+}
+function kGrid() {
+  const depth = Math.max(...STAGES_J.map(([, ids]) => ids.length));
+  const cols = STAGES_J.flatMap((_, i) => (i ? ["48px", "minmax(200px, 1fr)"] : ["minmax(200px, 1fr)"])).join(" ");
+  const last = 2 + depth * 4, cells = [];
+  STAGES_J.forEach(([title, ids], c) => {
+    const col = c * 2 + 1, running = ids.includes(RUNNING.id) ? `run${K.round}` : "";
+    cells.push(`<div class="k-group ${running}" data-group="${title}" style="grid-column:${col};grid-row:1 / ${last}"></div>`);
+    cells.push(`<div class="h-col-title" style="grid-column:${col};grid-row:1">${title}</div>`);
+    ids.forEach((id, k) => kUnit(id).forEach((html, r) => {
+      if (html) cells.push(`<div class="h-cell" style="grid-column:${col};grid-row:${2 + k * 4 + r}">${html}</div>`);
+    }));
+    if (c) cells.push(`<div class="k-arrow ${c === 2 ? "live" : ""}" style="grid-column:${col - 1};grid-row:3"></div>`);
+  });
+  const rows = ["auto", ...Array.from({ length: depth }, () => ["auto", "auto", "auto", "8px"]).flat()].join(" ");
+  return `<div class="k-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">${cells.join("")}</div>`;
+}
+function variantK() {
+  const cells = LEAD_I.flatMap((id) => kUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  const picker = `<div class="k-picker">demo, developer-cli is on its: <button data-round="1">first run</button><button data-round="2">first re-run</button><button data-round="3">re-run 2+</button></div>`;
+  const legend = `<div class="h-legend"><span style="color:var(--run1)">■ first run</span><span style="color:var(--run2)">■ first re-run</span><span style="color:var(--run3)">■ re-run 2+</span><span>orange dot → work moves to the next group</span><span>red dot: the PO sends work into a group</span><span>dashed = runner tool (above: before the step; below: after); solid striped = running now (demo on integration-tester; only one thing runs at a time)</span></div>`;
+  return `<div class="h k">${picker}<div class="h-top">${people}${lead}</div><div class="k-drops"></div>${kGrid()}${legend}</div>`;
+}
+/** Draw the PO's two-way arrows over the page: one path per group, the red dot along the whole path to Dev. */
+function afterK(view) {
+  view.style.position = "relative";
+  view.querySelector(".k-svg")?.remove();
+  const box = view.getBoundingClientRect(), at = (el) => el.getBoundingClientRect();
+  const lead = at(view.querySelector(".h-lead")), drops = at(view.querySelector(".k-drops"));
+  const x0 = lead.left + lead.width / 2 - box.left, y0 = lead.bottom - box.top, busY = drops.top + drops.height / 2 - box.top;
+  const groups = [...view.querySelectorAll(".k-group")].map((g) => ({ name: g.dataset.group, r: at(g) }));
+  const path = ({ r }) => `M ${x0} ${y0 + 6} V ${busY} H ${r.left + r.width / 2 - box.left} V ${r.top - box.top - 6}`;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const marker = `<defs><marker id="k-head" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker></defs>`;
+  const lines = groups.map((g) => `<path class="drop" d="${path(g)}" marker-end="url(#k-head)" marker-start="url(#k-head)"/>`).join("");
+  const dev = groups.find((g) => g.name === "Dev");
+  const dot = `<circle r="5"><animateMotion dur="2.2s" repeatCount="indefinite" path="${path(dev)}"/></circle>`;
+  view.insertAdjacentHTML("beforeend", `<svg class="k-svg" xmlns="${svgNS}" width="${box.width}" height="${box.height}">${marker}${lines}${dot}</svg>`);
+  view.querySelectorAll(".k-picker button").forEach((b) => (b.onclick = () => { K.round = +b.dataset.round; redrawK(view); }));
+}
+function redrawK(view) { view.innerHTML = variantK(); afterK(view); }
+
+// ----- variant L: fixed widths, violet re-run, optional row alignment, gaps between roles (18:35) -----
+const L = { align: false };
+const STAGES_L = [["Design", ["arch"]], ["Test", ["ops", "ut"]], ["Dev", ["dapi", "dcli", "dgui", "dev"]], ["Check", ["qc", "cr", "it", "cp"]]];
+const lUnit = (id) => `<div class="l-unit">${kUnit(id).filter(Boolean).join("")}</div>`;
+const runOf = (ids) => (ids.includes(RUNNING.id) ? `run${K.round}` : "");
+function lFlex() {
+  const parts = STAGES_L.map(([title, ids], c) => {
+    const arrow = c ? `<div class="l-gap"><div class="k-arrow ${c === 2 ? "live" : ""}"></div></div>` : "";
+    return `${arrow}<div class="l-group ${runOf(ids)}" data-group="${title}"><div class="h-col-title">${title}</div>${ids.map(lUnit).join("")}</div>`;
+  });
+  return `<div class="l-cols">${parts.join("")}</div>`;
+}
+function lGrid() {
+  const depth = Math.max(...STAGES_L.map(([, ids]) => ids.length));
+  const cols = STAGES_L.flatMap((_, i) => (i ? ["48px", "236px"] : ["236px"])).join(" ");
+  const last = 2 + depth * 4, cells = [];
+  STAGES_L.forEach(([title, ids], c) => {
+    const col = c * 2 + 1;
+    cells.push(`<div class="l-bg ${runOf(ids)}" data-group="${title}" style="grid-column:${col};grid-row:1 / ${last}"></div>`);
+    cells.push(`<div class="h-col-title" style="grid-column:${col};grid-row:1">${title}</div>`);
+    ids.forEach((id, k) => kUnit(id).forEach((html, r) => {
+      if (html) cells.push(`<div class="h-cell" style="grid-column:${col};grid-row:${2 + k * 4 + r}">${html}</div>`);
+    }));
+    if (c) cells.push(`<div class="k-arrow ${c === 2 ? "live" : ""}" style="grid-column:${col - 1};grid-row:3"></div>`);
+  });
+  const rows = ["auto", ...Array.from({ length: depth }, () => ["auto", "auto", "auto", "14px"]).flat()].join(" ");
+  return `<div class="l-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">${cells.join("")}</div>`;
+}
+function variantL() {
+  const cells = LEAD_I.flatMap((id) => kUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  const picker = `<div class="k-picker">developer-cli is on its: <button data-round="1">first run</button><button data-round="2">first re-run</button><button data-round="3">re-run 2+</button>
+    &nbsp; rows: <button data-align="0">not aligned</button><button data-align="1">aligned across groups</button></div>`;
+  const legend = `<div class="h-legend"><span style="color:var(--run1)">■ first run</span><span style="color:var(--run2)">■ first re-run</span><span style="color:var(--run3)">■ re-run 2+</span><span>orange dot → work moves to the next group</span><span>red dot: the PO sends work into a group</span><span>dashed = runner tool (above: before the step; below: after); solid striped = running now (demo on integration-tester)</span></div>`;
+  return `<div class="h k l">${picker}<div class="h-top">${people}${lead}</div><div class="k-drops"></div>${L.align ? lGrid() : lFlex()}${legend}</div>`;
+}
+function afterL(view) {
+  view.querySelectorAll(".k-group").forEach((g) => g.classList.remove("k-group"));
+  // afterK finds groups by .k-group: tag this layout's group boxes for it.
+  view.querySelectorAll("[data-group]").forEach((g) => g.classList.add("k-group"));
+  if (!L.align) alignArrows(view);
+  afterK(view);
+  view.querySelectorAll(".k-picker button").forEach((b) => (b.onclick = () => {
+    if (b.dataset.round) K.round = +b.dataset.round;
+    if (b.dataset.align) L.align = b.dataset.align === "1";
+    view.innerHTML = variantL(); afterL(view);
+  }));
+}
+/** In the flex layout, put each arrow level with the first role box of the group after it. */
+function alignArrows(view) {
+  view.querySelectorAll(".l-gap").forEach((gap) => {
+    const box = gap.nextElementSibling.querySelector(".h-box");
+    gap.style.setProperty("--arrow-y", `${box.offsetTop + box.offsetHeight / 2 - gap.offsetTop}px`);
+  });
+}
+
+// ----- variant M: unaligned, wider gaps, token rate + sparkline on the running role (18:55) -----
+// Tokens per minute over the step so far, one point a minute (made-up demo series).
+const SPARK = [3.1, 5.8, 9.4, 7.2, 12.6, 14.1, 8.3, 4.0, 6.9, 11.8, 15.2, 13.4];
+const RUN_COLOR = { 1: "var(--run1)", 2: "var(--run2)", 3: "var(--run3)" };
+function sparkline(values) {
+  const w = 96, h = 22, max = Math.max(...values), step = w / (values.length - 1);
+  const pts = values.map((v, i) => [i * step, h - 2 - (v / max) * (h - 4)]);
+  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const c = RUN_COLOR[K.round];
+  return `<svg class="m-spark" viewBox="0 0 ${w} ${h}"><path class="area" fill="${c}" d="${line} L${w},${h} L0,${h} Z"/><path class="line" stroke="${c}" d="${line}"/></svg>`;
+}
+function mBox(id) {
+  if (id !== RUNNING.id) return kBox(id);
+  const rate = `<div class="m-rate"><span><b>${SPARK.at(-1).toFixed(1)}k</b> tokens/min</span>${sparkline(SPARK)}</div>`;
+  return kBox(id).replace(/<div class="h-live/, `${rate}<div class="h-live`);
+}
+function mUnit(id) {
+  const [before, after] = TOOLS[id] ?? [[], []];
+  return [before.length ? kTools(id, "b", before) : "", mBox(id), after.length ? kTools(id, "a", after) : ""];
+}
+function mFlex() {
+  const unit = (id) => `<div class="l-unit">${mUnit(id).filter(Boolean).join("")}</div>`;
+  const parts = STAGES_L.map(([title, ids], c) => {
+    const arrow = c ? `<div class="l-gap"><div class="k-arrow ${c === 2 ? "live" : ""}"></div></div>` : "";
+    return `${arrow}<div class="l-group ${runOf(ids)}" data-group="${title}"><div class="h-col-title">${title}</div>${ids.map(unit).join("")}</div>`;
+  });
+  return `<div class="l-cols">${parts.join("")}</div>`;
+}
+function variantM() {
+  const cells = LEAD_I.flatMap((id) => mUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  const picker = `<div class="k-picker">developer-cli is on its: <button data-round="1">first run</button><button data-round="2">first re-run</button><button data-round="3">re-run 2+</button></div>`;
+  const legend = `<div class="h-legend"><span style="color:var(--run1)">■ first run</span><span style="color:var(--run2)">■ first re-run</span><span style="color:var(--run3)">■ re-run 2+</span><span>orange dot → work moves to the next group</span><span>red dot: the PO sends work into a group</span><span>dashed = runner tool (above: before the step; below: after); solid striped = running now (demo on integration-tester)</span><span>running role: tokens/min now, and a sparkline of tokens/min over the step</span></div>`;
+  return `<div class="h k l m">${picker}<div class="h-top">${people}${lead}</div><div class="k-drops"></div>${mFlex()}${legend}</div>`;
+}
+function afterM(view) {
+  view.querySelectorAll("[data-group]").forEach((g) => g.classList.add("k-group"));
+  alignArrows(view);
+  afterK(view);
+  view.querySelectorAll(".k-picker button").forEach((b) => (b.onclick = () => { K.round = +b.dataset.round; view.innerHTML = variantM(); afterM(view); }));
+}
+
+// ----- variant N: settings filter, sparklines everywhere, tool progress (19:05) -----
+const ROLE_N = {
+  po: ["Product Owner", "sonnet", "97M", "$1,086", 0, 0, 66], mgr: ["manager", "sonnet", "10M", "$12", 0.7 * 60, 1, 99],
+  arch: ["architect", "opus", "235M", "$210", 11.6 * 60, 3, 100], ops: ["devops", "opus", "5M", "$5", 0.7 * 60, 1, 52],
+  ut: ["unit-tester", "sonnet", "161M", "$76", 5.7 * 60, 18, 96], dapi: ["developer-api", "sonnet", "9M", "$5", 1.0 * 60, 4, null],
+  dcli: ["developer-cli", "sonnet", "83M", "$44", 8.2 * 60, 72, 77], dgui: ["developer-gui", "sonnet", "21M", "$13", 1.0 * 60, 19, 91],
+  dev: ["developer", "sonnet", "4M", "$2", 0.4 * 60, 5, 99], qc: ["quality-czar", "haiku", "47M", "$13", 5.0 * 60, 26, 100],
+  cr: ["code-reviewer", "opus", "65M", "$72", 3.5 * 60, 49, 99], it: ["integration-tester", "sonnet", "62M", "$33", 5.7 * 60, 8, 82],
+  cp: ["customer-proxy", "sonnet", "28M", "$17", 1.0 * 60, 30, 67],
+};
+// [name, runs, minutes]; real totals for this run.
+const DEV_AFTER_N = [["pytest + coverage", 61, 81.1], ["ruff check · format", 61, 0.1], ["dispute re-run", 10, 12.5]];
+const TOOLS_N = {
+  po: [[["boundary sync", 8, 0.1]], [["boundary check", 10, 27.6], ["review PR + push", 8, 16.5], ["CI wait", 3, 15.2]]],
+  cp: [[["env prepare", 15, 0.1]], []],
+  ut: [[], [["pytest: new tests red", 11, 12.8], ["pytest: rework", 19, 22.8]]],
+  it: [[["presentation layout", 25, 0.02]], [["presentation trial", 25, 0.1]]],
+  dapi: [[], DEV_AFTER_N], dcli: [[], DEV_AFTER_N], dgui: [[], DEV_AFTER_N], dev: [[], DEV_AFTER_N],
+  qc: [[["ruff check", 25, 0.01], ["ruff format", 25, 0.01]], []],
+};
+const N = { fail: true, iter: 1, open: false, show: { tokens: 1, cost: 1, time: 1, bounces: 1, share: 1, spark: 1, tools: 1, toolstats: 1, legend: 1 } };
+const N_FEATURES = [["tokens", "tokens"], ["cost", "cost"], ["time", "awake time"], ["bounces", "bounce count"], ["share", "model / tool bar"],
+  ["spark", "tokens/min sparkline"], ["tools", "runner tools"], ["toolstats", "tool run counts and time"], ["legend", "legend"]];
+const N_KEY = "flow-mock-settings";
+function loadN() { try { Object.assign(N.show, JSON.parse(localStorage.getItem(N_KEY) || "{}")); } catch {} }
+function saveN() { try { localStorage.setItem(N_KEY, JSON.stringify(N.show)); } catch {} }
+
+/** One decimal: seconds under a minute, minutes under an hour, then hours. */
+function fmtMin(min) {
+  if (min < 1) return `${Math.max(1, Math.round(min * 60))}s`;
+  return min < 60 ? `${min.toFixed(1)}m` : `${(min / 60).toFixed(1)}h`;
+}
+function seeded(name, n = 14) {
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return Array.from({ length: n }, (_, i) => { h = (h * 1103515245 + 12345) >>> 0; return 2 + (h % 1000) / 80 + Math.sin(i / 2) * 3; });
+}
+function sparkPath(values, w, h, top = null) {
+  const max = top ?? Math.max(...values), step = w / (values.length - 1);
+  return values.map((v, i) => `${i ? "L" : "M"}${(i * step).toFixed(1)},${(h - 2 - (v / max) * (h - 4)).toFixed(1)}`).join(" ");
+}
+function sparkSvg(values, color, w = 96, h = 20) {
+  const line = sparkPath(values, w, h);
+  return `<svg viewBox="0 0 ${w} ${h}"><path d="${line} L${w},${h} L0,${h} Z" fill="${color}" opacity=".16"/><path d="${line}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+}
+function nShare(pct) {
+  if (pct === null) return `<div class="f-share"><div class="n-share-none"></div><div class="h-share-l"><i>no model/tool timing yet (steps before A6a)</i></div></div>`;
+  return `<div class="f-share"><div class="h-share"><span class="m" style="width:${pct}%"></span><span class="t" style="width:${100 - pct}%"></span></div>
+    <div class="h-share-l"><i class="lm">model ${pct}%</i><i class="lt">tools ${100 - pct}%</i></div></div>`;
+}
+function nBox(id) {
+  const [name, model, tokens, cost, minutes, bounced, share] = ROLE_N[id], running = id === RUNNING.id;
+  const meta = `<div class="h-meta n-meta"><span>${model}</span><span class="f-tokens">${tokens}</span><span class="f-cost">${cost}</span>${minutes ? `<span class="f-time">${fmtMin(minutes)}</span>` : `<span class="f-time">54 turns</span>`}</div>`;
+  const bounces = bounced ? `<div class="h-meta f-bounces">↩ ${bounced} bounced</div>` : "";
+  const series = seeded(name), color = running ? RUN_COLOR[K.round] : "var(--ink-2)";
+  const rate = running ? `<span><b>${series.at(-1).toFixed(1)}k</b> tokens/min</span>` : `<span>last step</span>`;
+  const spark = `<div class="n-spark f-spark">${rate}${sparkSvg(series, color)}</div>`;
+  const live = running ? `<div class="h-live run${K.round}"><span class="pulse"></span>${RUNNING.step} · ${RUN_LABEL[K.round]}<br><i>${RUNNING.live}</i></div>` : "";
+  return `<div class="h-box ${running ? `run${K.round}` : ""}"><b>${name}</b>${meta}${bounces}${nShare(share)}${spark}${live}</div>`;
+}
+// Demo: developer-gui's pytest + coverage is running, 62% through; "fail seen" turns it red.
+const PROGRESS = [0, 4, 9, 15, 22, 28, 35, 41, 47, 52, 58, 62];
+// Demo results so far: tests run in order; the first failure came at 41% (PROGRESS index 7).
+const FAIL_AT = 7;
+function statusSpark(values, failAt, w = 80, h = 18) {
+  const max = 100, step = w / (values.length - 1), pt = (v, i) => `${(i * step).toFixed(1)},${(h - 2 - (v / max) * (h - 4)).toFixed(1)}`;
+  const ok = values.slice(0, failAt === null ? values.length : failAt + 1).map((v, i) => `${i ? "L" : "M"}${pt(v, i)}`).join(" ");
+  const bad = failAt === null ? "" : values.slice(failAt).map((v, i) => `${i ? "L" : "M"}${pt(v, i + failAt)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}"><path d="${ok}" fill="none" stroke="var(--run1)" stroke-width="1.5"/>${bad ? `<path d="${bad}" fill="none" stroke="var(--fail)" stroke-width="1.5"/>` : ""}</svg>`;
+}
+function nTool(id, [name, runs, min], running) {
+  if (!running) return `<div class="h-tool">${name}<span class="f-toolstats"> · ↻ ${runs} · ${fmtMin(min)}</span></div>`;
+  const total = 506, ran = Math.round(total * PROGRESS.at(-1) / 100);
+  const fail = N.fail ? 9 : 0, warn = 32, pass = ran - fail - warn;
+  const pct = (n) => `${(100 * n / total).toFixed(1)}%`;
+  const parts = [["ok", pass, "Pass"], ["warn", warn, "Warn"], ["bad", fail, "Fail"]].filter(([, n]) => n > 0);
+  const bar = `<div class="n-pass">${parts.map(([c, n]) => `<span class="${c}" style="width:${pct(n)}"></span>`).join("")}</div>`;
+  const cap = `<div class="cap">${parts.map(([c, n, label]) => `<span class="${c}"><b>${n}</b> ${label}</span>`).join("<span>+</span>")}<span>/ ${total} Total</span></div>`;
+  return `<div class="n-tool-run it${N.iter}"><div class="row"><span>▶ ${name} · ${RUN_LABEL[N.iter]}</span><span>1.4m</span></div>
+    ${bar}${cap}<div class="row"><i>${PROGRESS.at(-1)}% complete</i>${statusSpark(PROGRESS, N.fail ? FAIL_AT : null)}</div></div>`;
+}
+function nTools(id, side, tools) {
+  return `<div class="f-tools" style="display:flex;flex-direction:column;gap:2px">${tools.map((t, i) => nTool(id, t, id === "dgui" && side === "a" && i === 0)).join("")}</div>`;
+}
+function nUnit(id) {
+  const [before, after] = TOOLS_N[id] ?? [[], []];
+  return [before.length ? nTools(id, "b", before) : "", nBox(id), after.length ? nTools(id, "a", after) : ""];
+}
+function nCols() {
+  const unit = (id) => `<div class="n-unit">${nUnit(id).filter(Boolean).join("")}</div>`;
+  return `<div class="n-cols">${STAGES_L.map(([title, ids], c) => {
+    const arrow = c ? `<div class="n-gap"><div class="k-arrow ${c === 2 ? "live" : ""}"></div></div>` : "";
+    return `${arrow}<div class="n-group ${runOf(ids)}" data-group="${title}"><div class="h-col-title">${title}</div>${ids.map(unit).join("")}</div>`;
+  }).join("")}</div>`;
+}
+function nSettings() {
+  if (!N.open) return "";
+  const boxes = N_FEATURES.map(([k, label]) => `<label><input type="checkbox" data-f="${k}" ${N.show[k] ? "checked" : ""}> ${label}</label>`).join("");
+  return `<div class="n-settings"><h5>Always shown</h5><div class="fixed">role name · model · the running step (story, step, time, latest call) · the running tool (progress)</div><h5>Show</h5>${boxes}</div>`;
+}
+function variantN() {
+  const cells = LEAD_I.flatMap((id) => nUnit(id).map((html, r) =>
+    `<div class="h-unit ${["", "h-box-row", "h-below"][r]}" style="grid-row:${r + 1}">${html}</div>`));
+  const lead = `<div class="h-lead"><span class="h-title">Leadership</span><div class="h-lead-grid">${cells.join("")}</div></div>`;
+  const people = `<div class="g-pill">You</div><div class="h-arrow both" style="margin:0 10px"></div><div class="g-pill">Liaison</div><div class="h-arrow both" style="margin:0 10px"></div>`;
+  const hidden = Object.entries(N.show).filter(([, v]) => !v).map(([k]) => `hide-${k}`).join(" ");
+  const gear = `<div class="n-gear"><button data-act="round">developer-cli: ${RUN_LABEL[K.round]}</button><button data-act="iter">demo tool: ${RUN_LABEL[N.iter]}</button><button data-act="fail">demo tool: ${N.fail ? "a test failed" : "all passing"}</button><button data-act="gear">⚙ Show…</button>${nSettings()}</div>`;
+  const legend = `<div class="h-legend"><span style="color:var(--run1)">■ first run</span><span style="color:var(--run2)">■ first re-run</span><span style="color:var(--run3)">■ re-run 2+ (amber)</span><span>↻ runs</span><span>sparkline: tokens/min over the role's latest step (coloured while running)</span><span>running tool: outline in its run colour; the bar is Pass (green), Warn (yellow) and Fail (red) so far, out of the whole suite (0 counts hidden); the % complete line is green until the first failure, red from there</span></div>`;
+  return `<div class="h k l n ${hidden}">${gear}<div class="h-top">${people}${lead}</div><div class="k-drops"></div>${nCols()}${legend}</div>`;
+}
+function alignArrowsN(view) {
+  view.querySelectorAll(".n-gap").forEach((gap) => {
+    const box = gap.nextElementSibling.querySelector(".h-box");
+    gap.style.setProperty("--arrow-y", `${box.offsetTop + box.offsetHeight / 2 - gap.offsetTop}px`);
+  });
+}
+function afterN(view) {
+  view.querySelectorAll("[data-group]").forEach((g) => g.classList.add("k-group"));
+  alignArrowsN(view);
+  afterK(view);
+  const redraw = () => { view.innerHTML = variantN(); afterN(view); };
+  view.querySelectorAll(".n-gear > button").forEach((b) => (b.onclick = () => {
+    if (b.dataset.act === "gear") N.open = !N.open;
+    if (b.dataset.act === "fail") N.fail = !N.fail;
+    if (b.dataset.act === "iter") N.iter = (N.iter % 3) + 1;
+    if (b.dataset.act === "round") K.round = (K.round % 3) + 1;
+    redraw();
+  }));
+  view.querySelectorAll(".n-settings input").forEach((c) => (c.onchange = () => { N.show[c.dataset.f] = c.checked ? 1 : 0; saveN(); redraw(); }));
+}
+loadN();
+
+const VARIANTS = [
+  {
+    id: "n", label: "N. Settings, sparklines, tool progress", html: true, after: afterN,
+    note: "Your notes (19:05): arrows stretch with the window; a visible divider between roles; the gap between roles is ONE setting, --role-gap (20px), in the .n rule at the top of the variant-N CSS; developer-api's bar shows 'no timing yet' (its steps predate A6a); a tokens/min sparkline on every role (grey for its latest step, run colour while running); ⚙ Show… lets you turn each feature off (saved in this browser), while name, model, the running step and the running tool always show; the running tool (demo on developer-gui's pytest + coverage) has a progress bar and a % complete sparkline that turns red once a test fails (toggle it); ↻ replaces 'runs'; times have one decimal (s, m, h).",
+    src: variantN(),
+  },
+  {
+    id: "m", label: "M. Spaced out, token rate", html: true, after: afterM,
+    note: "Your notes (18:55): rows stay unaligned outside Leadership (fits one screen); longer arrows between groups (72 px), so the groups spread out; a bigger gap between roles, with a faint divider, so each role's tools clearly belong to it; the running role shows its current tokens/min and a sparkline of tokens/min over the step, in its run colour (the series is made up for the demo).",
+    src: variantM(),
+  },
+  {
+    id: "l", label: "L. Fixed width, gaps, toggle", html: true, after: afterL,
+    note: "Your notes (18:35): back to fixed-width groups (236 px, a little wider than J), centred; first re-run is violet; group titles 12 px; a 14 px gap after each role's tools, so a role's after-tools can't be read as the next role's before-tools; developer-api first in Dev. Rows are NOT aligned across groups by default: use the 'rows' buttons to compare with the aligned version.",
+    src: variantL(),
+  },
+  {
+    id: "k", label: "K. Full width, run colours", html: true, after: afterK,
+    note: "Your notes (18:20): the groups spread across the full width and the cards are wider; the running role's colour says which run it is (green first run, blue first re-run, red after that; use the demo buttons); the striped running tool moves left to right and is shown on integration-tester, not on the running role; the forward dot is drawn over the arrowhead; the PO's arrows are two-way, with heads at both ends, and the red dot travels the whole path from the PO into the group.",
+    src: variantK(),
+  },
+  {
+    id: "j", label: "J. Groups boxed, running state", html: true,
+    note: "Your notes (18:05): each group is boxed like Leadership, so the arrows join groups; the PO-down arrow is back (red dot: the PO sends work into a group); no dot runs backwards; role titles 12 px. Running state, shown on developer-cli: its group's box is outlined, its box glows, a live line under its numbers shows the story, step and elapsed time and the latest tool call ('Dev: …' label, A6a), and the runner tool it's in right now is solid and striped with its running time.",
+    src: variantJ(),
+  },
+  {
+    id: "i", label: "I. No PO lines (HTML, 10px)", html: true,
+    note: "Your notes (17:40): the PO and the runner are the wind and water, so they get no lines; leadership is just PO and manager. DevOps comes first in Test, right after the architect (its ops-review turn at every design), then the unit-tester. The customer proxy is the last role in Check. Dots move along the stage arrows only: orange forward, red backward when work is sent back.",
+    src: variantI(),
+  },
+  {
+    id: "lr", label: "H. Leadership + stages (HTML, 10px)", html: true,
+    note: "Your notes (17:20): 10 px; leadership across the top (PO, manager, DevOps on demand); the other roles stacked in stage columns that flow left to right; role boxes line up across columns, with tools in snug dashed boxes above (before) or below (after); a two-colour model/tool bar. Orange dot: work moving left to right (Test → Dev). Red dot: the PO sending work down into a stage when something goes wrong. The customer proxy is in its own Accept column for now (question open). The Scribe is gone (A19).",
+    src: variantH(),
+  },
+  {
+    id: "html", label: "G. Logical flow (HTML)", html: true,
+    note: "The logical flow drawn as HTML/CSS cards, not Mermaid: horizontal bands, tools inside each card (above the dashed rule = before, below = after), 12 px. The moving dot runs on the Test → Dev arrow: work has moved into Dev, where developer-cli is running. Not editable here: it's built from the same data as E.",
+    src: variantG(),
+  },
+  {
+    id: "elk", label: "F. Logical flow (ELK)",
+    note: "Variant E drawn with Mermaid's ELK layout engine (@mermaid-js/layout-elk 0.1.7) instead of dagre, to see whether it honours the horizontal bands.",
+    src: variantE("elk"),
+  },
+  {
+    id: "flow", label: "E. Logical flow",
+    note: "Your notes (17:00): the PO's check-in between every stage is left out; the chart shows the logical flow PO → Design → Test → Dev → Check → PO → Customer → Scribe, one band per stage, top to bottom. Steering is horizontal. Each runner tool is inside its role's box: above the dotted rule = runs before the step, below = runs after. DevOps (on demand) sits in Dev, dimmed; the Scribe is dimmed and dashed while its future is open.",
+    src: variantE(),
+  },
+  {
+    id: "revised", label: "D. Revised (your notes)",
+    note: "Your notes: vertical stacks; no edge labels; the same box text as the live dashboard (model · tokens · cost · time, bounces, model/tool share, running); 12 px like the legend; groups regrouped (Tests & tooling is code-driven); each runner tool sits beside every role it gates: above the role = runs before its step, below = runs after. Counts are the run's real totals.",
+    src: variantD(),
+  },
+  {
+    id: "today", label: "A. Today (star)",
+    note: "Roughly what the dashboard draws now: every role has its own brief and handoff edges to the Steering box, so dagre puts every role in one row. Try 'Fit to width' to see why it reads as empty boxes.",
+    src: `flowchart TB
+${ROLE.you}
+subgraph grpCustomer["Customer"]
+${R("cp", "stEnv")}
+end
+subgraph grpSteering["Steering"]
+    direction LR
+${R("po", "mgr", "stBnd")}
+end
+subgraph grpDesign["Design"]
+${R("arch")}
+end
+subgraph grpBuild["Build"]
+${R("ut", "dcli", "dgui", "dapi", "dev", "stGate")}
+end
+subgraph grpVerify["Verify"]
+${R("qc", "cr", "it", "stE2e")}
+end
+subgraph grpSupport["Support"]
+${R("scr", "ops")}
+end
+you <-->|"12 answers · 31 messages"| grpSteering
+cp <-->|"101 handoffs · 103 briefs"| grpSteering
+grpSteering -->|"165 briefs"| arch
+arch -->|"162 handoffs"| grpSteering
+grpSteering -->|"243 briefs"| ut
+ut -->|"241 handoffs"| grpSteering
+grpSteering -->|"199 briefs"| dcli
+dcli -->|"194 handoffs"| grpSteering
+grpSteering -->|"65 briefs"| dgui
+dgui -->|"65 handoffs"| grpSteering
+grpSteering -->|"14 briefs"| dapi
+dapi -->|"14 handoffs"| grpSteering
+grpSteering -->|"13 briefs"| dev
+dev -->|"13 handoffs"| grpSteering
+grpSteering -->|"136 briefs"| qc
+qc -->|"136 handoffs"| grpSteering
+grpSteering -->|"109 briefs"| cr
+cr -->|"109 handoffs"| grpSteering
+grpSteering -->|"158 briefs"| it
+it -->|"156 handoffs"| grpSteering
+grpSteering -->|"69 briefs"| scr
+scr -->|"69 handoffs"| grpSteering
+grpSteering -->|"14 briefs"| ops
+ops -->|"14 handoffs"| grpSteering
+stEnv -.-> cp
+ut -.-> stGate
+dcli -.-> stGate
+dgui -.-> stGate
+dapi -.-> stGate
+dev -.-> stGate
+it -.-> stE2e
+po -.-> stBnd
+${CLASSES}
+class dcli active
+class stEnv,stGate,stE2e,stBnd stage`,
+  },
+  {
+    id: "columns", label: "B. Group columns",
+    note: "Proposal: one edge per group, labelled with the group's totals; roles stacked inside each group (invisible ~~~ links force the stacking); per-role counts in the boxes. Stage hexagons sit at the bottom of their group.",
+    src: `flowchart TB
+${ROLE.you}
+${ROLE.cp}
+subgraph grpSteering["Steering"]
+    direction LR
+${R("po", "mgr", "stBnd")}
+end
+subgraph grpDesign["Design"]
+    direction TB
+${R("arch")}
+end
+subgraph grpBuild["Build"]
+    direction TB
+${R("ut", "dcli", "dgui", "dapi", "dev", "stGate")}
+    ut ~~~ dcli ~~~ dgui ~~~ dapi ~~~ dev ~~~ stGate
+end
+subgraph grpVerify["Verify"]
+    direction TB
+${R("qc", "cr", "it", "stE2e")}
+    qc ~~~ cr ~~~ it ~~~ stE2e
+end
+subgraph grpSupport["Support"]
+    direction TB
+${R("scr", "ops")}
+    scr ~~~ ops
+end
+you <-->|"12 answers · 31 messages"| grpSteering
+cp <-->|"101 back · 103 briefs"| grpSteering
+grpSteering -->|"165 briefs · 162 back"| grpDesign
+grpSteering -->|"534 briefs · 527 back"| grpBuild
+grpSteering -->|"403 briefs · 401 back"| grpVerify
+grpSteering -->|"83 briefs · 83 back"| grpSupport
+${CLASSES}
+class dcli active
+class stGate,stE2e,stBnd stage`,
+  },
+  {
+    id: "pipeline", label: "C. Pipeline left to right",
+    note: "Variant: the groups in pipeline order left to right (Design → Build → Verify), with Steering above and one edge per group. The order of the columns says which phase comes next.",
+    src: `flowchart TB
+${ROLE.you}
+subgraph grpSteering["Steering"]
+    direction LR
+${R("po", "mgr", "stBnd")}
+end
+${ROLE.cp}
+subgraph pipe[" "]
+    direction LR
+    subgraph grpDesign["1 · Design"]
+        direction TB
+    ${R("arch")}
+    end
+    subgraph grpBuild["2 · Build"]
+        direction TB
+    ${R("ut", "dcli", "dgui", "dapi", "dev", "stGate")}
+        ut ~~~ dcli ~~~ dgui ~~~ dapi ~~~ dev ~~~ stGate
+    end
+    subgraph grpVerify["3 · Verify"]
+        direction TB
+    ${R("qc", "cr", "it", "stE2e")}
+        qc ~~~ cr ~~~ it ~~~ stE2e
+    end
+    subgraph grpSupport["Support"]
+        direction TB
+    ${R("scr", "ops")}
+        scr ~~~ ops
+    end
+    grpDesign ~~~ grpBuild ~~~ grpVerify ~~~ grpSupport
+end
+you <-->|"12 answers · 31 messages"| grpSteering
+grpSteering <-->|"103 briefs · 101 back"| cp
+grpSteering -->|"1185 briefs · 1173 back"| pipe
+${CLASSES}
+class dcli active
+class stGate,stE2e,stBnd stage
+style pipe fill:none,stroke:none`,
+  },
+];
+
+mermaid.initialize({
+  startOnLoad: false, securityLevel: "strict", theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default",
+  flowchart: { useMaxWidth: false, htmlLabels: true }, themeVariables: { fontSize: "12px" },
+});
+
+let seq = 0;
+async function draw(pane) {
+  const view = pane.querySelector(".view"), err = pane.querySelector(".err");
+  err.textContent = "";
+  if (pane.dataset.html) { view.innerHTML = pane.querySelector("textarea").value; AFTER[pane.dataset.id]?.(view); return; }
+  try {
+    const { svg } = await mermaid.render("m" + seq++, pane.querySelector("textarea").value);
+    view.innerHTML = svg;
+    const box = view.querySelector("svg").getBoundingClientRect();
+    pane.querySelector(".size").textContent = `drawn at ${Math.round(box.width)} × ${Math.round(box.height)} px`;
+  } catch (e) { err.textContent = String(e.message || e); }
+}
+
+const AFTER = {};
+function build() {
+  const tabs = document.getElementById("tabs"), panes = document.getElementById("panes");
+  for (const v of VARIANTS) {
+    const b = document.createElement("button");
+    b.textContent = v.label; b.dataset.id = v.id; tabs.append(b);
+    const pane = document.createElement("section");
+    pane.className = "card"; pane.dataset.id = v.id; pane.hidden = true; if (v.html) pane.dataset.html = "1"; if (v.after) AFTER[v.id] = v.after;
+    pane.innerHTML = `<p class="note"></p>
+      <div class="bar"><label><input type="checkbox" class="fit"> Fit to width (today's behaviour)</label><span class="size"></span></div>
+      <div class="view"></div><p class="err"></p>
+      <details open><summary>Mermaid source (editable)</summary><textarea spellcheck="false"></textarea>
+      <div class="bar"><button class="go">Render</button><button class="reset">Reset</button></div></details>`;
+    pane.querySelector(".note").textContent = v.note;
+    pane.querySelector("textarea").value = v.src;
+    pane.querySelector(".go").onclick = () => draw(pane);
+    pane.querySelector(".reset").onclick = () => { pane.querySelector("textarea").value = v.src; draw(pane); };
+    pane.querySelector(".fit").onchange = (e) => pane.querySelector(".view").classList.toggle("fit", e.target.checked);
+    panes.append(pane);
+    b.onclick = () => select(v.id);
+  }
+}
+
+function select(id) {
+  for (const b of document.querySelectorAll("#tabs button")) b.setAttribute("aria-selected", b.dataset.id === id);
+  for (const p of document.querySelectorAll("#panes section")) {
+    p.hidden = p.dataset.id !== id;
+    if (!p.hidden && !p.querySelector(".view").innerHTML) draw(p);
+  }
+}
+
+function main() { addEventListener("resize", () => document.querySelectorAll("#panes section").forEach((p) => !p.hidden && AFTER[p.dataset.id]?.(p.querySelector(".view")))); build(); select(location.hash.slice(1) || "n"); }
+main();
+</script>
+</body>
+</html>
