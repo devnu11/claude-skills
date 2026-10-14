@@ -373,6 +373,7 @@ class FakeSystem:
     def scratch_file(self, prefix: str) -> Path:
         """A new empty file in the fake temp directory (the caller removes it)."""
         self.scratches += 1
+        self._add_dirs("/tmp")
         path = Path(f"/tmp/{prefix}{self.scratches}.json")
         self.write_text(path, "")
         return path
