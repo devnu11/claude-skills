@@ -1389,11 +1389,14 @@ function sparkHtml(m, role) {
   return `<div class="f-spark fc-t-caption"><b>${fmt.tok(Math.round(tokensPerMin(mine, m.now)))}</b> tokens/min ${svg}</div>`;
 }
 
+/** " (may include sleep)" after the time of a step timed by wall clock (FC11, AW10). */
+const sleepNote = (step) => (step.clock === "wall" ? " (may include sleep)" : "");
+
 /** The live block of the running role: story, step, awake time, run label, latest tool (FC11). */
 function liveBlock(m) {
   const s = m.step, open = openStep(m.view, s.role);
   const awake = open ? awakeSoFar(m.view, open) : m.now - s.started_at;
-  const line = [s.story ?? "—", s.step ?? "—", fmt.dur1(awake), m.run.label].map(esc).join(" · ");
+  const line = [s.story ?? "—", s.step ?? "—", fmt.dur1(awake) + sleepNote(open ?? { clock: "wall" }), m.run.label].map(esc).join(" · ");
   return `<div class="fc-live"><div class="fc-t-live"><i class="fc-livedot" style="background:var(--${m.run.cls})"></i>${line}</div>` +
     `<div class="fc-t-live">${esc(toolLine(m.view, s))}</div></div>`;
 }
@@ -1632,10 +1635,12 @@ function litPath(key, look) {
 
 /** Which dot a fresh step-start earns: sent back on the PO path, forward on the arrow, else none (FC22). */
 function dotFor(view, e) {
-  if (e.kind !== "step-start" || !e.story) return null;
+  if (e?.kind !== "step-start" || !e.story) return null;
   const group = flowGroup(view, e.role);
   if (group.name === LEAD) return null;
-  const before = view.events.slice(0, view.events.findIndex((x) => x.id === e.id)).filter((x) => x.story === e.story);
+  const at = view.events.findIndex((x) => x.id === e.id);
+  if (at < 0) return null;
+  const before = view.events.slice(0, at).filter((x) => x.story === e.story);
   const turn = before.findLast((x) => x.kind === "gate" || x.kind === "step-start");
   if (turn?.kind === "gate" && BACK_VERDICTS.includes(turn.data.verdict)) return { key: "po:" + group.name, look: "back" };
   const prev = before.findLast((x) => x.kind === "step-end" && flowGroup(view, x.role).name !== LEAD);
@@ -1691,7 +1696,6 @@ function renderFlowTab(view) {
   safely(renderFlowScope, view);
   live.queue.push(...view.events.filter((e) => data.fresh.has(e.id)));
   safely(renderFlow, view);
-  safely(layoutFlow, view);
 }
 
 // ----- timeline ---------------------------------------------------------------
