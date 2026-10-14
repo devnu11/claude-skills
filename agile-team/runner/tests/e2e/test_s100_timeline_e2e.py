@@ -26,6 +26,7 @@ def test_expanded_story_shows_rows_totals_and_bars() -> None:
     """AC1-AC3: a timeline with role rows, bars, wait strips and the five totals."""
     out = _run("""
     const story = view.stories.find((s) => s.id === "s3");
+    data.skew = view.generated_at - Date.now() / 1000;  // pin "now": the fixture's running step must not stretch with the real clock
     out.html = timelineHtml(view, story);
     out.model = timelineModel({ view, now: tlNow(view) }, story, "story");
     out.rows = out.model.groups[0].rows.map((r) => r.name ?? r.label ?? r.row);
