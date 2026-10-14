@@ -38,7 +38,7 @@ def _tools(extra: str = "") -> str:
 def test_stage_tools_sit_under_their_roles() -> None:
     """FC16/FC17: after a step -> its role; before -> the role that starts next; boundary -> PO; checkout.* nowhere."""
     tools = _run(_tools())["tools"]
-    assert tools["developer-cli"]["after"] == ["gate.tests+coverage"]
+    assert tools["developer-cli"]["after"] == ["gate.tests+coverage", "stop.lint", "stop.suite"]
     assert "env.prepare" in tools["customer-proxy"]["before"]
     assert tools["product-owner"]["before"] == ["boundary.sync"]
     assert tools["integration-tester"]["after"] == ["presentation.trial"]
@@ -163,7 +163,7 @@ def test_time_totals_by_role() -> None:
     for (const s of view.steps) if (s.ended_at && s.role !== "product-owner") out.work[s.role] += s.seconds ?? 0;
     """)
     t = out["before"]
-    assert (t["runner"]["runs"], t["runner"]["parts"]["runner"]) == (5, 245)
+    assert (t["runner"]["runs"], t["runner"]["parts"]["runner"]) == (8, pytest.approx(658.4))
     po = t["product-owner"]
     assert po["turns"] == 1 and po["parts"]["model"] == 9.5 and po["parts"]["tools"] == 0
     assert po["parts"]["waiting"] == 312.5 and po["seconds"] == 322
@@ -175,7 +175,7 @@ def test_time_totals_by_role() -> None:
 def test_time_totals_by_story() -> None:
     """TM4: s3 has runner time beside its work; the boundary and the PO turn are under (no story)."""
     t = _run('out.t = timeTotals(view, "story");')["t"]
-    assert t["s3"]["parts"]["runner"] == 100 and t["s3"]["parts"]["work"] > 0
+    assert t["s3"]["parts"]["runner"] == pytest.approx(513.4) and t["s3"]["parts"]["work"] > 0
     nostory = t["(no story)"]
     assert nostory["parts"]["runner"] == 60 and nostory["turns"] == 1
 
