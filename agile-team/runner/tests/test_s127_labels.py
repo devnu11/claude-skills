@@ -59,7 +59,7 @@ def test_the_label_limit_is_24() -> None:
 def test_every_built_in_label_is_valid_and_unique() -> None:
     assert label_problems(built_in()) == []
     assert len(stages.LABELS) == len(stages.STAGES)
-    assert stages.LABELS == frozenset(built_in().values())
+    assert frozenset(built_in().values()) == stages.LABELS
 
 
 def test_the_checker_catches_a_missing_a_long_and_a_repeated_label() -> None:
