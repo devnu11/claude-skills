@@ -1,4 +1,4 @@
-"""s112: static checks of the Activity tab, live panel and fixture (AT, MD, LP, BM, RD, FX).
+"""s112: static checks of the Activity tab, live panel and fixture (AT, MD, HD, HS, LP, RD, FX).
 
 Behaviour checks need node, so they live in the e2e suite.
 """
@@ -12,10 +12,14 @@ from agile_team import system
 PKG = resources.files("agile_team.dashboard")
 PAGE = system.read_text(PKG.joinpath("index.html"))
 RD1 = {
-    ".lp-head": ("13px", "--ink"),
-    ".lp-meta": ("12px", "--ink-2"),
-    ".lp-msg": ("12.5px", "--ink-2"),
-    ".lp-more": ("12.5px", "--ink-2"),
+    ".brand small": ("12px", "--ink-2"),
+    ".task": ("12px", "--ink-2"),
+    ".budget": ("12px", "--ink"),
+    ".budget small": ("12px", "--ink-2"),
+    ".lp-who": ("12px", "--ink"),
+    ".lp-when": ("12px", "--ink-2"),
+    ".lp-line": ("12px", "--ink-2"),
+    ".lp-msg": ("12px", "--ink"),
     ".md-notice": ("12.5px", "--ink-2"),
 }
 
@@ -70,19 +74,65 @@ def test_a_failed_markdown_load_shows_a_notice() -> None:
     assert 'class="md-notice" role="status"' in PAGE
 
 
-def test_the_live_panel_is_in_the_header_and_the_meter_in_the_status_bar() -> None:
-    right = PAGE.split('class="head-right"')[1].split('class="status-bar"')[0]
-    assert 'id="live-panel"' in right and 'id="meter"' not in right
-    bar = PAGE.split('class="status-bar"')[1]
-    assert bar.index('id="meter"') < bar.index('id="status-row"')
+def _head() -> str:
+    return PAGE.split('<div class="head">')[1].split('<nav role="tablist"')[0]
+
+
+def test_the_header_is_left_block_then_panel_then_theme_button() -> None:
+    head = _head()
+    left = head.split('class="live-panel')[0]
+    assert left.index('id="sprint-label"') < left.index('id="task"') < left.index('id="status-row"')
+    assert head.index('id="live-panel"') < head.index('id="theme"')
+    assert head.split('id="theme"')[1].split("</button>")[1].strip().startswith("</div>")
+
+
+def test_the_old_header_parts_are_gone() -> None:
+    for gone in ('id="meter"', "head-right", "status-bar", "live-details", "ui.details"):
+        assert gone not in PAGE, gone
+
+
+def test_the_goal_is_one_line_with_a_hover_title() -> None:
+    assert "white-space: nowrap" in rule(".task")
+    assert "text-overflow: ellipsis" in rule(".task")
+    assert "view.run.task" in PAGE and ".title" in PAGE
+
+
+def test_the_header_functions_exist_and_the_old_ones_do_not() -> None:
+    for name in ("statePill", "managerFlag", "budgetPill", "questionsPill", "checkPcts", "budgetTitle"):
+        assert f"function {name}(" in PAGE, name
+    for name in ("connectionPill", "smartPill", "pillText", "renderMeter", "renderLiveDetails"):
+        assert f"function {name}(" not in PAGE, name
+    assert "pill smart" not in PAGE
+
+
+def test_the_budget_bar_is_120_px() -> None:
+    assert "width: 120px" in rule(".budget-bar")
 
 
 def test_the_panel_states_and_helpers_exist() -> None:
-    assert "PANEL_STATES = [stepPanel, stagePanel, idlePanel]" in PAGE
-    for name in ("latestMessage", "clip", "idleWhy", "renderLivePanel", "renderPanelHead"):
-        assert f"function {name}(" in PAGE
-    assert "CLIP_LINES = 6" in PAGE and "CLIP_CHARS = 600" in PAGE
-    assert "● Nothing running: " in PAGE and "No activity yet." in PAGE
+    assert "PANEL_STATES = [stepPanel, eventPanel, stagePanel, chorePanel, idlePanel]" in PAGE
+    names = ("latestMessage", "clip", "idleWhy", "renderLivePanel", "renderPanelText", "fillPanelText")
+    for name in names + ("runLabel", "toolLine", "stageAwake", "runnerResult", "firstLine", "newestRow"):
+        assert f"function {name}(" in PAGE, name
+    for gone in ("renderPanelHead", "awakeText", "panelMeta", "lp-more", "lp-meta", "lp-head\""):
+        assert gone not in PAGE, gone
+    assert "CLIP_LINES = 4" in PAGE and "CLIP_CHARS = 400" in PAGE and "CLAMP_LINES = 3" in PAGE
+    assert "● Nothing running" in PAGE
+
+
+def test_the_panel_is_380_px_and_clamps_the_message() -> None:
+    assert "width: 380px" in rule(".live-panel")
+    assert "-webkit-line-clamp: 3" in rule(".lp-msg")
+    assert "display: none" in rule(".lp-msg[hidden]")
+
+
+def test_tick_moves_the_panel_text_only() -> None:
+    tick = PAGE.split("function tick(")[1].split("\n}")[0]
+    assert "renderPanelText" in tick and "renderStatusRow" not in tick
+
+
+def test_the_panel_keydown_leaves_links_alone() -> None:
+    assert 'closest("a")' in PAGE
 
 
 def test_clicking_the_panel_opens_activity() -> None:
