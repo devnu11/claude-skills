@@ -107,7 +107,7 @@ def test_a_running_stage_becomes_a_solid_running_tool_with_a_test_caption() -> N
     )
     assert running
     assert "▶ pytest + coverage" in out["html"]
-    assert out["caption"] == "273 Pass + 32 Warn + 9 Fail / 506 Total"
+    assert out["caption"] == "273 Pass + 32 Warn + 9 Fail / 506 Total · 3 Pending"
     assert "273 Pass" in out["html"] and "complete" in out["html"]
     tool = out["html"][out["html"].index('<div class="fc-tool running') :].split(">", 1)[0]
     assert "f-tools" not in tool
