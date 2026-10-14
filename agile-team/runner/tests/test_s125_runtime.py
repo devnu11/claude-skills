@@ -38,7 +38,7 @@ def gate_with(
 
     def advance(plan: object, got: Outcome) -> dict:
         seen.append(subjects(fake))
-        return {}
+        return {"step": step, "verdict": got.verdict}
 
     rt._advance_and_log = advance
     plan = SimpleNamespace(story=gates.StoryState("s1", "t", step, sprint=1))

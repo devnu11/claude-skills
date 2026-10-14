@@ -270,7 +270,7 @@ def make_runtime(seen: list[Any], fake: FakeSystem) -> tuple[Runtime, live.Pulse
     pipeline.serving = lambda serving: pipeline  # type: ignore[attr-defined]
     runtime.pipeline = pipeline  # type: ignore[assignment]
     runtime.verify_checkout = lambda: None  # type: ignore[method-assign]
-    runtime._advance_and_log = lambda plan, outcome: {"outcome": "outcome"}  # type: ignore[method-assign]
+    runtime._advance_and_log = lambda plan, outcome: {"outcome": "outcome", "step": "implement"}  # type: ignore[method-assign]
     return runtime, pulse
 
 
@@ -281,7 +281,7 @@ def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one(fake: FakeSyste
     plan = SimpleNamespace(story=story, stop_hook=None, base="abc")
     assert GATE_CHORE == "gate: {step} on {story}"
     with pulse.doing("settling developer-cli on s71"):
-        assert runtime.gate(plan, object()) == {"outcome": "outcome"}  # type: ignore[arg-type]
+        assert runtime.gate(plan, object()) == {"outcome": "outcome", "step": "implement"}  # type: ignore[arg-type]
         assert pulse.heartbeat()["chore"]["what"] == "settling developer-cli on s71"
     assert seen == ["gate: implement on s71"]
     runtime.gate(plan, object())  # type: ignore[arg-type]

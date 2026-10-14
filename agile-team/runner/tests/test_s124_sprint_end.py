@@ -243,7 +243,7 @@ def test_step_is_kept_when_before_tests(make_runtime) -> None:
 
 def test_back_at_the_step_before_tests(make_runtime) -> None:
     rt, t = setup(make_runtime)
-    steps = rt.pipeline.steps
+    steps = [s for s in rt.pipeline.steps if s not in gates.CHECKPOINT_STEPS]
     assert revert(t)["step"] == steps[steps.index("tests") - 1]
 
 

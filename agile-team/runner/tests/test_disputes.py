@@ -404,14 +404,14 @@ def test_a_bounce_that_stays_at_tests_does_not_confirm() -> None:
 def test_passing_a_step_other_than_tests_leaves_the_dispute_alone() -> None:
     s, p = story("design", dispute=open_dispute(stage="confirmed")), pipeline()
     p.advance(s, gates.Outcome(Verdict.PASS))
-    assert (s.step, s.dispute.stage) == ("tests", DisputeStage.CONFIRMED)
+    assert (s.step, s.dispute.stage) == ("ops-review", DisputeStage.CONFIRMED)
 
 
 def test_the_architect_ruling_returns_to_tests_still_confirmed() -> None:
     s, p = story("design", dispute=open_dispute(stage="confirmed")), pipeline()
     out = p.evaluate(s, Handoff("done"))
     p.advance(s, out)
-    assert s.step == "tests" and s.dispute.stage is DisputeStage.CONFIRMED
+    assert s.step == "ops-review" and s.dispute.stage is DisputeStage.CONFIRMED
 
 
 # ----- T8/T10: rulings --------------------------------------------------------
@@ -591,6 +591,8 @@ def test_the_dispute_reaches_the_tester_then_the_architect_then_goes_away(make_r
     assert rt.state.stories["s1"].step == "design"
     rt.query_fn.text = handoff("done", summary="rule stands")
     run(rt, "architect")
+    assert rt.state.stories["s1"].step == "ops-review"
+    rt.state.stories["s1"].step = "tests"  # the ops gate is covered by its own tests
     confirmed_line = raised_line.replace("(raised)", "(confirmed)")
     assert confirmed_line in rt.query_fn.calls[2]["prompt"]
     run(rt, "unit-tester")

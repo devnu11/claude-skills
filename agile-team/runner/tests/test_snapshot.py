@@ -321,7 +321,7 @@ def test_empty_run_files(config: cfg.Config, scratch: Path) -> None:
     assert snap["run"]["sprint"] == 0
     assert snap["run"]["task"] == ""
     assert snap["run"]["manager_due"] == []
-    assert snap["pipeline"] == ["design", "tests", "implement"]
+    assert snap["pipeline"] == ["design", "ops-review", "tests", "implement"]
     assert snap["roles"]
 
 
@@ -786,7 +786,7 @@ def test_build_rereads_budget_and_round_cap(config: cfg.Config, scratch: Path) -
 def test_build_rereads_pipeline(config: cfg.Config, scratch: Path) -> None:
     book = book_for(config, scratch)
     rewrite_config(config, ["design", "implement"], 20.0, 3)
-    assert snapshot.build(config, book)["pipeline"] == ["design", "implement"]
+    assert snapshot.build(config, book)["pipeline"] == ["design", "ops-review", "implement"]
 
 
 @pytest.mark.parametrize("content", [None, "budget_usd = ", "[team\n"])

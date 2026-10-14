@@ -102,7 +102,8 @@ def test_story_commits_feat_then_fixup(make_runtime, configured: Path, fake: Fak
     rt = make_runtime(q, runner)
     open_story(rt)
     first = run(rt, "architect", story="s1")
-    assert first["gate"]["now_at"] == "tests"
+    assert first["gate"]["now_at"] == "ops-review"
+    rt.state.stories["s1"].step = "tests"  # ops-review has its own tests
     q.action = write(configured, "tests/test_todo.py")
     second = run(rt, "unit-tester", story="s1")
     assert second["gate"]["verdict"] is Verdict.PASS and second["gate"]["now_at"] == "implement"

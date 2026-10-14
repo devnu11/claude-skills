@@ -79,7 +79,7 @@ def test_implement_pass_counts() -> None:
 def test_other_steps_bounces_and_returns_do_not_count() -> None:
     st = story("design")
     settle(st, done())
-    assert (st.implemented, st.step) == (0, "tests")
+    assert (st.implemented, st.step) == (0, "ops-review")
     st = story("implement")
     settle(st, Handoff("changes_requested", summary="x", next_role="architect"))
     assert st.implemented == 0
