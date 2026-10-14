@@ -10,6 +10,7 @@ import pytest
 from agile_team import po_tools
 from agile_team.events import Event, EventKind
 from agile_team.po_tools import SCHEMAS, Start, StartMode, Tools, named_stories
+from claude_agent_sdk import ResultError
 
 from .conftest import result_message
 from .test_halt import limit_error
@@ -125,6 +126,12 @@ class TurnTools(Tools):
     def __post_init__(self) -> None:
         TurnTools.made.append(self)
 
+    async def ask_user(self, args: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True}
+
+    async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True}
+
 
 class CallingPo:
     """A fake PO query that calls tools by name, then ends or raises ``then``."""
@@ -196,6 +203,7 @@ def test_a_raising_query_still_emits_its_stories(make_runtime: Any) -> None:
     po = CallingPo([("continue_story", {"story": "s7"})], then=limit_error())
     rt = make_runtime(po)
     rt.state.po_session = "po-sess"
-    run_po(rt)
+    with pytest.raises(ResultError):
+        run_po(rt)
     turns = po_turns(rt)
     assert turns and turns[0].data["stories"] == ["s7"]
