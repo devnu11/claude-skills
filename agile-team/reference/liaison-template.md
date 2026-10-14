@@ -5,6 +5,11 @@ a repo, then keep it current. It holds run state only. How to work as the
 liaison is in `agile-team/SKILL.md` (and `reference/self-hosting.md` when the
 team works on agile-team itself).
 
+Nothing builds a liaison kit from this file: the runner never reads or copies
+it. The liaison copies it by hand, once per repo. The commands fill in
+their own entries below (`messages/` for `tell`, `shares/` for `share`,
+`watch.json` for `watch`); the rest is yours.
+
 Read this first after a compaction or in a new session.
 
 | Path | What it is |

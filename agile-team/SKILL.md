@@ -163,7 +163,8 @@ command fails.
    the next `$AT start --resume`. `$AT status` lists undelivered ids under
    `queued_messages`.
    **Share a file** (a mock or spec the human gave you) with
-   `$AT share <file> --story <id>`, never by copying it yourself. No role
+   `agile-team share` (`$AT share <file> --story <id>`), never by copying it
+   yourself. No role
    can read `.team/run/liaison/`. The command queues the file and prints
    where it will land: `<docs>/design/<id>-<file name>`. Between steps, the
    runner copies it there and records its path and SHA-256 under `shared:`
