@@ -15,6 +15,8 @@ WHY = (
 )
 PAGE = Path(__file__).parent.parent / "agile_team/dashboard/index.html"
 FIXTURE = Path(__file__).parent.parent / "agile_team/dashboard/fixtures/snapshot.json"
+SCRIBE_WORD = re.compile(r"\bscribe\b", re.IGNORECASE)
+ROLE_SECTIONS = ("events", "ledger", "steps")
 
 
 def builtin_names() -> list[str]:
@@ -25,6 +27,12 @@ def builtin_names() -> list[str]:
 
 def stub_text() -> str:
     return roles.STUB.format(name="scribe", layer="repo", description="x")
+
+
+def fixture_role_names(snapshot: dict) -> set[str | None]:
+    """Every role name the dashboard fixture mentions: roles, events, ledger, steps."""
+    named = {r["name"] for r in snapshot["roles"]}
+    return named | {e.get("role") for key in ROLE_SECTIONS for e in snapshot[key]}
 
 
 # ----- SC1: no briefs in prompts -------------------------------------------------------
@@ -214,8 +222,18 @@ def test_architect_writes_adrs(repo: Path) -> None:
 @pytest.mark.parametrize("name", sorted(roles.load_dir(roles.BUILTIN_DIR)))
 def test_no_builtin_role_mentions_the_scribe_or_briefs_dir(name: str) -> None:
     text = roles.load_dir(roles.BUILTIN_DIR)[name]
-    assert not re.search(r"(?i)scribe", text)
+    assert not SCRIBE_WORD.search(text)
     assert ".team/briefs" not in text
+
+
+@pytest.mark.parametrize("text", ["scribe", "the Scribe", "the Scribe's ADRs", "SCRIBE"])
+def test_scribe_word_matches_the_word(text: str) -> None:
+    assert SCRIBE_WORD.search(text)
+
+
+@pytest.mark.parametrize("text", ["describe", "prescribe", "Describes the step", "scribes"])
+def test_scribe_word_skips_other_words(text: str) -> None:
+    assert SCRIBE_WORD.search(text) is None
 
 
 def test_shared_no_longer_says_your_brief_below() -> None:
@@ -235,5 +253,34 @@ def test_dashboard_ring_has_no_scribe() -> None:
 
 
 def test_fixture_has_no_scribe_role() -> None:
-    snapshot = json.loads(system.read_text(FIXTURE))
-    assert "scribe" not in [r["name"] for r in snapshot["roles"]]
+    names = fixture_role_names(json.loads(system.read_text(FIXTURE)))
+    assert "architect" in names
+    assert "scribe" not in names
+
+
+def test_fixture_role_names_reads_every_section() -> None:
+    snapshot = {
+        "roles": [{"name": "a"}],
+        "events": [{"role": "b"}, {"kind": "x"}],
+        "ledger": [{"role": "c"}],
+        "steps": [{"role": "scribe"}],
+    }
+    assert fixture_role_names(snapshot) == {"a", "b", None, "c", "scribe"}
+
+
+# ----- s117: product-owner.md wording --------------------------------------------------
+
+
+def po_body() -> str:
+    return RoleBook.for_repo(Path("/none"), {}).resolve("product-owner").body
+
+
+def test_po_mission_has_the_missing_and() -> None:
+    assert "sends a story back with\nthe gate's reason, and runs the manager" in po_body()
+
+
+def test_po_item_5_is_a_capitalised_wrapped_sentence() -> None:
+    body = po_body()
+    assert "\n   `continue_story` it or `run_role` a step on it yourself. Calling\n" in body
+    assert "   `continue_story` also clears" in body
+    assert all(len(line) <= 78 for line in body.splitlines() if "continue_story" in line)
