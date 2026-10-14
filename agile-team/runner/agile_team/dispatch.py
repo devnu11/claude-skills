@@ -27,6 +27,7 @@ from claude_agent_sdk import (
 )
 
 from . import (
+    acceptance,
     boundary,
     checkout,
     dependencies,
@@ -463,7 +464,7 @@ class Runtime:
         plan.launch.env = env
 
     def _presentation_workspace(self, plan: Plan) -> Path:
-        return presentation.workspace_of(self.config, plan.story.id)  # type: ignore[union-attr]  # story-bound role
+        return presentation.story_root(self.config, plan.story.id)  # type: ignore[union-attr]  # story-bound role
 
     def _proxy_workspace(self, plan: Plan) -> Path:
         return presentation.copied_workspace(plan.prepared.root)  # type: ignore[union-attr]  # proxy has a sandbox
@@ -510,6 +511,8 @@ class Runtime:
     def _lay_out_presentation(self, plan: Plan) -> None:
         with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
             presentation.lay_out(self.config, plan.story)  # type: ignore[arg-type]  # story-bound role
+        section = presentation.layout_section(self.config, plan.story.id)  # type: ignore[union-attr]
+        plan.prompt += f"\n\n{section}".rstrip()
 
     def _attach_environment(self, plan: Plan) -> None:
         environment = self._environment_for(plan)
@@ -522,13 +525,16 @@ class Runtime:
         self._fit_role_to_environment(plan)
 
     def _environment_for(self, plan: Plan) -> Environment | None:
-        """The story's first environment (SF9); the first configured without a story."""
+        """The story's due environment (AE7); the first configured without a story."""
         if plan.story is None:
             return self.config.environment(None)
-        return story_spec.first_environment(self.config, plan.story.id)
+        names = tuple(story_spec.environment_names(self.config, plan.story.id))
+        due = acceptance.Round(names, tuple(plan.story.tried)).due()
+        return self.config.environment(due) if due else None
 
     def _order(self, environment: Environment, story: StoryState | None) -> sandbox.Order:
-        return sandbox.Order(environment, presentation.presented_source(self.config, story))
+        showing = presentation.Showing(story.id, environment) if story else None
+        return sandbox.Order(environment, presentation.presented_source(self.config, showing))
 
     def _fit_role_to_environment(self, plan: Plan) -> None:
         prepared = plan.prepared
@@ -536,7 +542,14 @@ class Runtime:
         plan.role.tools = allowed or list(prepared.kind.tools)
         plan.prompt += f"\n\n## How the customer reaches the product\n\n{prepared.guidance()}"
         plan.prompt += f"\n\n{presentation.prompt_section(prepared.presentation)}".rstrip()
+        plan.prompt += self._criteria_section(plan)
         plan.launch = self._sandbox_launch(prepared)
+
+    def _criteria_section(self, plan: Plan) -> str:
+        spec = story_spec.read(self.config, plan.story.id).spec if plan.story else None
+        if spec is None:
+            return ""
+        return f"\n\n{acceptance.brief_section(spec, plan.prepared.environment.name)}"  # type: ignore[union-attr]  # proxy has a sandbox
 
     def _sandbox_launch(self, prepared: sandbox.Prepared) -> Launch:
         servers = prepared.mcp_servers()
@@ -1072,6 +1085,8 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
+        if outcome.tried:
+            result |= _tried_fields(outcome.tried)
         if outcome.fixes:
             result["fixes"] = [
                 {"role": f.role, "files": [i.shown for i in f.items]} for f in outcome.fixes
@@ -1232,6 +1247,14 @@ def _dispute_lines(story: StoryState) -> list[str]:
         return []
     head = f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"
     return [head, DISPUTE_OUTPUT.format(output=d.output)] if d.output else [head]
+
+
+def _tried_fields(tried: acceptance.Tried) -> dict[str, Any]:
+    return {
+        "environment": tried.environment,
+        "mark": tried.mark,
+        "failed_acs": list(tried.failed),
+    }
 
 
 def _setback(plan: Plan, outcome: Outcome) -> Setback | None:

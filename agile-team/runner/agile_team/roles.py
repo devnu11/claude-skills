@@ -174,6 +174,7 @@ class Handoff:
     fault: str | None = None
     ruling_reason: str = ""
     asserts: str = ""
+    failed_acs: list[str] = field(default_factory=list)
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -458,6 +459,11 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
         "dispute needs status changes_requested",
     ),
     (lambda d: isinstance(d.get("asserts", ""), str), "asserts must be a string"),
+    (lambda d: _ac_ids(d.get("failed_acs", [])), "failed_acs must be a list of AC ids"),
+    (
+        lambda d: not d.get("failed_acs") or d.get("status") == "changes_requested",
+        "failed_acs needs status changes_requested",
+    ),
     (lambda d: d.get("tests") in (None, *TEST_CLAIMS), f"tests must be one of {TEST_CLAIMS}"),
     (
         lambda d: d.get("fault") is None or _text(d.get("fault")),
@@ -468,6 +474,10 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
 
 def _claim(value: str | None) -> TestClaim | None:
     return None if value is None else TestClaim(value)
+
+
+def _ac_ids(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(v, str) and v.strip() for v in value)
 
 
 def _dispute_form(value: Any) -> bool:
@@ -511,14 +521,19 @@ def _handoff_from(data: Any) -> Handoff:
         fault=data.get("fault"),
         ruling_reason=data.get("ruling_reason") or str(data.get("summary", "")),
         asserts=data.get("asserts", ""),
+        failed_acs=list(data.get("failed_acs", [])),
     )
 
 
 def handoff_report(handoff: Handoff) -> dict[str, Any]:
-    return {
+    """The handoff fields the gate event reports."""
+    report: dict[str, Any] = {
         "status": handoff.status,
         "summary": handoff.summary,
         "open_questions": handoff.open_questions,
         "next_role": handoff.next_role,
         "friction": handoff.friction,
     }
+    if handoff.failed_acs:
+        report["failed_acs"] = handoff.failed_acs
+    return report

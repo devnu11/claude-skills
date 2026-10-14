@@ -326,6 +326,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         read=read,
         suite_runs=suite,
         story_spec=spec,
+        environments=functools.partial(story_spec.environment_names, config),
     )
     g = config.gates
     return gates.Pipeline(list(g.steps), g.round_cap, checks, g.repeat, g.backstop)

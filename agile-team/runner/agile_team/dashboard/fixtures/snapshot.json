@@ -142,6 +142,20 @@
    ],
    "dependency_warnings": [
     "s2 is above s5, which it depends on"
+   ],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": "pass"
+    },
+    {
+     "name": "web",
+     "verdict": "fail"
+    },
+    {
+     "name": "manual",
+     "verdict": ""
+    }
    ]
   },
   {
@@ -174,7 +188,13 @@
    "label": "",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s3",
@@ -217,7 +237,13 @@
    "label": "",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s4",
@@ -260,7 +286,13 @@
    "label": "held",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s7",
@@ -298,7 +330,13 @@
    "label": "",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "web",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s6",
@@ -342,7 +380,13 @@
     "s1"
    ],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s1",
@@ -382,7 +426,13 @@
    "label": "",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   },
   {
    "id": "s8",
@@ -414,7 +464,13 @@
    "label": "cancelled",
    "depends_on": [],
    "waiting_on": [],
-   "dependency_warnings": []
+   "dependency_warnings": [],
+   "environments": [
+    {
+     "name": "cli",
+     "verdict": ""
+    }
+   ]
   }
  ],
  "requirements": [
@@ -2457,6 +2513,24 @@
       "question": null
      }
     }
+   }
+  },
+  {
+   "id": "e99",
+   "at": 1791453070.0,
+   "kind": "gate",
+   "role": null,
+   "story": "s2",
+   "data": {
+    "step": "acceptance",
+    "verdict": "next",
+    "now_at": "acceptance",
+    "rounds": 0,
+    "story_status": "active",
+    "reason": "acceptance environment cli: pass; next: web",
+    "environment": "cli",
+    "mark": "pass",
+    "failed_acs": []
    }
   }
  ],

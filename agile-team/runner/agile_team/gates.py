@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import fingerprint, loops, stages, story_spec, suite_runs, system
+from . import acceptance, fingerprint, loops, stages, story_spec, suite_runs, system
 from . import owners as owners_mod
 from .commands import TIMED_OUT, CommandRunner
 from .holds import PoHold
@@ -101,6 +101,8 @@ class Verdict(StrEnum):
     ``ESCALATE`` stays put, counts no round and waits for the Manager's ruling.
     ``ROUTE`` stays at the step, counts no round, queues gate fix steps for the
     items' owners (s92).
+    ``NEXT`` stays at the step, counts no round and hands nothing over; the step runs
+    again for the next acceptance environment (s95).
     """
 
     PASS = "pass"
@@ -110,6 +112,7 @@ class Verdict(StrEnum):
     DISPUTE = "dispute"
     ESCALATE = "escalate"
     ROUTE = "route"
+    NEXT = "next"
 
 
 class DisputeStage(StrEnum):
@@ -218,6 +221,7 @@ class StoryState:
     files: list[str] = field(default_factory=list)
     fixes: list[Fix] = field(default_factory=list)
     fixed: list[FixRecord] = field(default_factory=list)
+    tried: list[acceptance.Tried] = field(default_factory=list)
 
 
 @dataclass
@@ -234,6 +238,7 @@ class Outcome:
     extra_ran: tuple[Ran, ...] = ()
     fixes: list[Fix] = field(default_factory=list)
     output: str = field(default="", repr=False)
+    tried: acceptance.Tried | None = None
 
 
 def role_fits_step(role: str, step: str) -> bool:
@@ -366,6 +371,10 @@ def _always_live(_story: StoryState) -> Outcome:
     return Outcome(Verdict.PASS, READY)
 
 
+def _no_environments(_story: str) -> list[str]:
+    return []
+
+
 def _no_suite_runs(_story: str) -> suite_runs.Wanted:
     return suite_runs.Wanted()
 
@@ -392,6 +401,7 @@ class Checks:
     stages: stages.Opener = stages.unlogged
     suite_runs: Callable[[str], suite_runs.Wanted] = _no_suite_runs
     story_spec: Callable[[str], story_spec.Read] = _clean_spec
+    environments: Callable[[str], list[str]] = _no_environments
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -609,7 +619,7 @@ class Pipeline:
         if self._raises_dispute(story, handoff):
             return self._raise(handoff)
         gate = self._gate_for(story, handoff)
-        return _retry_here(gate(), story.step) if gate else self._handoff_outcome(handoff)
+        return _retry_here(gate(), story.step) if gate else self._verdict(story, handoff)
 
     def _gate_for(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         gate = self._step_gate(story, handoff)
@@ -665,6 +675,45 @@ class Pipeline:
         if handoff.status != "done":
             return None
         return lambda: self.checks.tests_reworked(handoff.tests)
+
+    def _verdict(self, story: StoryState, handoff: Handoff) -> Outcome:
+        if story.step == "acceptance" and self.checks.environments(story.id):
+            return self._tried(story, handoff)
+        return self._handoff_outcome(handoff)
+
+    def _tried(self, story: StoryState, handoff: Handoff) -> Outcome:
+        """One Proxy step's verdict for the due environment (s95)."""
+        round_ = acceptance.Round(tuple(self.checks.environments(story.id)), tuple(story.tried))
+        environment = round_.due() or ""
+        text = self.checks.read(acceptance.report_file(story.id))
+        if not acceptance.has_section(text, environment):
+            reason = acceptance.NO_SECTION.format(
+                file=acceptance.report_file(story.id), environment=environment
+            )
+            return Outcome(Verdict.BOUNCE, reason, "acceptance", author=Author.ROLE)
+        new = acceptance.tried_of(environment, handoff)
+        round_ = round_.with_try(new)
+        story.tried = list(round_.tried)
+        return self._round_outcome(round_, new)
+
+    def _round_outcome(self, round_: acceptance.Round, new: acceptance.Tried) -> Outcome:
+        outcomes = {
+            acceptance.Decision.NEXT: lambda: Outcome(
+                Verdict.NEXT, round_.next_text(new), author=Author.ROLE
+            ),
+            acceptance.Decision.PASS: lambda: Outcome(Verdict.PASS, round_.passed_text()),
+            acceptance.Decision.FAIL: lambda: Outcome(
+                Verdict.BOUNCE,
+                round_.failed_text(),
+                self._earliest(round_.failures()),
+                author=Author.ROLE,
+            ),
+        }
+        return replace(outcomes[round_.decision()](), tried=new)
+
+    def _earliest(self, tries: list[acceptance.Tried]) -> str:
+        targets = [self.step_for_role(t.next_role) or "implement" for t in tries]
+        return min(targets, key=self.steps.index)
 
     def _handoff_outcome(self, handoff: Handoff) -> Outcome:
         """Pass on ``done``; otherwise bounce to the step of the role it names."""
@@ -814,6 +863,8 @@ class Pipeline:
             story.status = StoryStatus.DONE
         else:
             story.step = self.steps[i + 1]
+        if story.step == "acceptance":
+            story.tried = []
 
     def _bounce(self, story: StoryState, target: str | None) -> None:
         if story.dispute and story.step == "tests" and target != "tests":

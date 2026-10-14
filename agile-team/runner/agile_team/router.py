@@ -49,6 +49,7 @@ BACKSTOP_HEADING = (
     "the last output are in the runner context under repeated_setback."
 )
 HEADINGS = {Rule.REPEAT: REPEAT_HEADING, Rule.BACKSTOP: BACKSTOP_HEADING}
+QUIET_VERDICTS = frozenset({"next"})
 SENT_BACK_LINES = {
     "bounce": "- Sent back to this step: {reason}",
     "return": "- Sent back to this step: {reason}",
@@ -132,7 +133,7 @@ def _path_lines(config: Config, story_id: str) -> list[str]:
 
 def _history_lines(story: StoryState) -> list[str]:
     lines, prev = [], story.previous
-    if prev:
+    if prev and prev.verdict not in QUIET_VERDICTS:
         said = f": {prev.summary}" if prev.summary else ""
         lines.append(f"- Previous step: {prev.role} reported {prev.status}{said}")
     if prev and prev.verdict in SENT_BACK_LINES:

@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from .. import (
+    acceptance,
     backlog,
     dependencies,
     health,
@@ -289,12 +290,18 @@ def _wait(files: RunFiles, story: Any) -> dict[str, Any] | None:
     return {"reason": str(found.reason), "on": found.on, "title": found.title}
 
 
+def _environment_keys(files: RunFiles, story: Any) -> dict[str, Any]:
+    names = tuple(story_spec.environment_names(files.config, story.id))
+    marks = acceptance.Round(names, tuple(story.tried)).marks()
+    return {"environment": ", ".join(names), "environments": marks}
+
+
 def _story(files: RunFiles, story: Any) -> dict:
     return {
         "id": story.id,
         "title": story.title,
         "sprint": story.sprint,
-        "environment": ", ".join(story_spec.environment_names(files.config, story.id)),
+        **_environment_keys(files, story),
         "step": story.step,
         "status": str(story.status),
         "rounds": story.rounds,

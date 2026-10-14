@@ -368,7 +368,7 @@ const RING_ORDER = [
 const WAIT_TONE = { questions: "warning", "needs the human": "critical", manager: "serious", "round cap": "serious", held: "warning", "PO hold": "warning", "cancel requested": "serious" };
 const STATUS_TONE = {
   done: "good", changes_requested: "serious", blocked: "warning", failed: "critical",
-  pass: "good", bounce: "serious", hold: "warning", return: "warning", route: "warning",
+  pass: "good", bounce: "serious", hold: "warning", return: "warning", route: "warning", next: "",
   running: "accent", interrupted: "critical", stopped: "", idle: "", "sprint-end": "good", active: "",
   needs_manager: "serious", escalate: "serious", "checkout-changed": "critical",
 };
@@ -422,6 +422,20 @@ const fmt = {
 const finished = (s) => s.ended_at != null;
 const pill = (text, tone = "", dot = true) =>
   `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
+const ENV_MARKS = {
+  pass: { tone: "good", mark: " ✓", title: "passed" },
+  fail: { tone: "critical", mark: " ✗", title: "failed" },
+  "": { tone: "", mark: "", title: "not tried yet" },
+};
+/** One pill per acceptance environment, marked pass or fail (s95); the old text without them. */
+function envPills(story) {
+  if (!story.environments) return story.environment ? " · " + esc(story.environment) : "";
+  return story.environments.map((e) => {
+    const m = ENV_MARKS[e.verdict] ?? ENV_MARKS[""];
+    const title = esc(`acceptance environment ${e.name}: ${m.title}`);
+    return ` <span class="pill tone-${m.tone}" title="${title}">${esc(e.name + m.mark)}</span>`;
+  }).join("");
+}
 const storyChip = (id) => id ? `<span class="story-chip">${esc(id)}</span>` : "";
 const short = (role) => role === PO ? "PO" : role;
 
@@ -1500,6 +1514,8 @@ const TIMELINE = {
   gate: (e) => ({
     from: "gate", to: null, what: e.data.verdict === "route"
       ? `${e.data.step} → fix by ${(e.data.fixes ?? []).map((f) => f.role).join(", ")}`
+      : e.data.verdict === "next"
+      ? `${e.data.step} · ${e.data.environment} ${e.data.mark} → next environment`
       : `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
     tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
@@ -1683,7 +1699,7 @@ function backlogRow(story, place, count, view) {
   return `<div class="brow" data-expand="${esc(story.id)}" aria-expanded="${open}" ${drag}>
     <span class="bpos">${story.position != null ? "#" + story.position : ""}</span><b>${esc(story.id)}</b>
     <span class="btitle">${esc(story.title)}</span>
-    <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${story.environment ? " · " + esc(story.environment) : ""}</span>
+    <span class="bmeta">${esc(story.step)} · ${esc(story.status)}${envPills(story)}</span>
     ${storyLabel(story)}${opinionBadge(story, view)}${story.hold ? `<span class="bhold">${esc(story.hold)}</span>` : ""}${depsLine(story)}${depWarnings(story)}
     ${movable ? `<span class="bhandles">${moveHandles(story, place, count, view)}</span>` : ""}</div>`;
 }
@@ -2076,7 +2092,7 @@ function storyCard(view, s, act) {
     s.wait ? pill(`⏸ ${s.wait.title}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
-    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${s.environment ? " · " + esc(s.environment) : ""}
+    <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${envPills(s)}
       <a class="tl-link" href="#backlog" data-timeline="${esc(s.id)}">${tlSpan("control", "timeline")}</a></div>
     <div class="title">${esc(s.title)}</div>
     ${s.wait ? waitLine(s.wait) : ""}
@@ -2536,6 +2552,7 @@ const OUTCOMES = {
   return: { outcome: "bounced", fill: "--serious" }, dispute: { outcome: "disputed", fill: "--warning" },
   hold: { outcome: "held", fill: "--axis" },         escalate: { outcome: "escalated", fill: "--critical" },
   route: { outcome: "routed", fill: "--s1" },
+  next: { outcome: "tried; next environment", fill: "--s2" },
 };
 const STEP_STATES = { running: { outcome: "running", fill: "--accent" },
                       killed: { outcome: "killed", fill: "--grid" }, ended: { outcome: "ended", fill: "--axis" } };

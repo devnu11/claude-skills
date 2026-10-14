@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from . import system
+from . import acceptance, system
 from .boundary import Boundary, Failure, StackEntry, UpstreamState
 from .ci import CiResult
 from .config import OLD_ENVIRONMENT_NAME, PIPELINE_STEPS
@@ -194,6 +194,7 @@ def _story(data: dict[str, Any]) -> StoryState:
     extra |= {
         "fixes": [load_fix(f) for f in data.get("fixes", [])],
         "fixed": [FixRecord(**r) for r in data.get("fixed", [])],
+        "tried": [acceptance.load_tried(t) for t in data.get("tried", [])],
     }
     return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
 

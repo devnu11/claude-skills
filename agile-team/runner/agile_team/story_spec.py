@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 from . import system
-from .config import Config, Environment
+from .config import Config
 from .roles import RoleError, split_frontmatter
 
 
@@ -239,9 +239,3 @@ def environment_names(config: Config, story: str) -> list[str]:
     """The story's environments in config order; empty when the file has problems."""
     spec = read(config, story).spec
     return spec.environments([e.name for e in config.environments]) if spec else []
-
-
-def first_environment(config: Config, story: str) -> Environment | None:
-    """The first of the story's environments in config order (SF9), or None."""
-    names = environment_names(config, story)
-    return config.environment(names[0]) if names else None
