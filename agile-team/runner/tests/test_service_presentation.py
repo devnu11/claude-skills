@@ -654,7 +654,9 @@ def test_complete_files_then_the_liveness_outcome_decides() -> None:
     assert p.checks.presented(story_of()) is live and calls == ["s4"]
 
 
-def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round(config: cfg.Config) -> None:
+def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round(
+    config: cfg.Config,
+) -> None:
     reason = "story s4 presentation is not up: acceptance environment 'dashboard' did not start: x"
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, reason))
     s = story_of("e2e")
