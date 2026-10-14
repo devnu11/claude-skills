@@ -12,8 +12,10 @@ preset = "python"
 # Two runners share one toolchain (s37): agile-team/runner, then unattended/runner.
 # `&&` keeps the coverage gate sound: both pyprojects set fail_under = 95, so a
 # runner below it stops the chain and its TOTAL is the last one the gate reads.
-test = "uv run --directory agile-team/runner pytest -n auto -q && uv run --directory unattended/runner pytest -q"
-coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q &&uv run --directory unattended/runner pytest --cov --cov-report=term -q"
+# Each link has its own {report:<root>} (s125), so each writes its own report
+# with ids made repo-relative and skips only the pending ids under its root.
+test = "uv run --directory agile-team/runner pytest -n auto -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner}"
+coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner}"
 lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check ."
 static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check ."
 pragma = "# pragma: no cover"
@@ -63,7 +65,7 @@ steps = [
     "acceptance",
 ]
 
-[[delivery]]
+[[environment]]
 name = "cli"
 kind = "package"
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}/agile-team/runner"
@@ -71,7 +73,7 @@ bin = [
     "venv/bin",
 ]
 
-[[delivery]]
+[[environment]]
 name = "unattended"
 kind = "package"
 prepare = "uv venv {sandbox}/venv-unattended && uv pip install --python {sandbox}/venv-unattended {repo}/unattended/runner"
@@ -79,7 +81,7 @@ bin = [
     "venv-unattended/bin",
 ]
 
-[[delivery]]
+[[environment]]
 name = "dashboard"
 kind = "web"
 prepare = "uv run --directory {repo}/agile-team/runner agile-team --repo {sandbox}/presentation/workspace dashboard --host {host} --port {port} --no-open"

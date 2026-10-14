@@ -3,9 +3,9 @@ name: unattended runner
 on:
   push:
     branches: [main]
-    paths: ["unattended/**", ".github/workflows/unattended.yml"]
+    paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
   pull_request:
-    paths: ["unattended/**", ".github/workflows/unattended.yml"]
+    paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
 
 defaults:
   run:
@@ -28,4 +28,8 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      - run: uv run --locked pytest --cov
+      # Skip the tests that are pending in .team/pending-tests.json (s125):
+      # written red by the tests step, they go green with their story.
+      - run: |
+          skips="$(uv run --locked --directory ../../agile-team/runner agile-team --repo ../.. pending-tests --root unattended/runner)"
+          PYTEST_ADDOPTS="$skips" uv run --locked pytest --cov
