@@ -422,6 +422,7 @@ def test_story_without_file_or_event(config: cfg.Config, scratch: Path) -> None:
         "depends_on": [],
         "waiting_on": [],
         "dependency_warnings": [],
+        "trace": "checked",
     }
     assert "commit" not in story
 

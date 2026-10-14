@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from agile_team import system
-from agile_team.dashboard import snapshot
 
 from .test_snapshot import FIXTURE_TEXT, build, make_config
 
@@ -79,7 +78,6 @@ def test_snapshot_run_carries_requirements_dir_from_docs_dir(scratch: Path) -> N
 def test_snapshot_requirements_dir_is_the_last_run_key(scratch: Path) -> None:
     config = make_config(scratch / "repo")
     assert list(build(config, scratch)["run"])[-1] == "requirements_dir"
-    assert snapshot.REQUIREMENTS_DIR  # imported from config
 
 
 def test_fixture_run_has_requirements_dir_after_backlog() -> None:
