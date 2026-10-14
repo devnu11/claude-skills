@@ -307,6 +307,14 @@ command fails.
   --continue`), runs `agile-team accept-checkout` if the run halts on the
   moved checkout, and then the question is answered. The runner rewrites
   the recorded hashes itself; never edit `state.json` for them.
+- **DevOps reviews every design** (s115). The runner always runs
+  `ops-review` right after `design`, even when `[gates] steps` leaves it
+  out. DevOps says, for each AC, how it is checked automatically: already
+  (`automatic`), added in that step to CI or the toolchain config (`added`),
+  or `missing`, with a story that adds it. When no such story exists, the
+  story is held and the PO opens one. A design that needs tooling that can't
+  exist goes back to the architect. The runner writes the list into the
+  story file under `## Tooling`.
 - Only the runner runs the full suite and coverage. Roles get the results in
   their briefs (`## Runner results`), a full `pytest` or `--cov` run from a
   role's Bash is denied, and developers ask the runner for named tests

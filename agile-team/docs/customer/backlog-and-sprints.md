@@ -1,7 +1,7 @@
 # Backlog and sprints
 
 The team keeps every story it has written in a **backlog**. A story only
-moves through the pipeline (design → tests → implement → … → acceptance) once
+moves through the pipeline (design → ops review → tests → implement → … → acceptance) once
 the Product Owner commits it to a **sprint**. The runner enforces this, so
 the board always shows what is planned and what is in progress.
 

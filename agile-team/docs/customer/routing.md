@@ -1,7 +1,11 @@
 # Who moves the work: the runner, and the Product Owner for judgement
 
-Every story goes through the same pipeline: design → tests → implement →
-quality → review → design review → e2e → acceptance. The **runner** moves
+Every story goes through the same pipeline: design → ops review → tests →
+implement → quality → review → design review → e2e → acceptance. Ops review
+always runs: DevOps says how each acceptance criterion will be checked
+automatically, adds missing CI or toolchain config itself, and names a story
+for anything it can't add; the list lands in the story file under
+`## Tooling`. The **runner** moves
 each story along that pipeline by itself. It starts the right role for each
 step and gives it a standard brief: the story file, the design, the review
 file, what the previous step reported, and why the story came back, if it

@@ -849,8 +849,8 @@ backstop = 4                   # this many bounces/returns in a row between two 
 command_timeout_s = 300        # each gate/check command; at the limit its process group is killed and the gate bounces
 ci_timeout_s = 1800            # how long the sprint boundary waits for the review PR's CI checks (s81)
 stop_check_budget_s = 1800     # a step's total time in stop checks; after it the stop is allowed (s126)
-steps = ["design", "tests", "implement", "quality", "review",
-         "design-review", "e2e", "acceptance"]   # drop steps to skip them
+steps = ["design", "ops-review", "tests", "implement", "quality", "review",
+         "design-review", "e2e", "acceptance"]   # drop steps to skip them; ops-review always runs, after design (s115)
 
 [health]                       # optional; the live meter's thresholds in seconds (see Live meter and health)
 beat_s = 20                    # heartbeat.json rewrite interval; must be below stale_s
@@ -1269,7 +1269,8 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 
 ## Pipeline and gates
 
-design (architect) → tests (unit-tester; gate: test command **fails**, and
+design (architect) → ops-review (devops; always runs, see "Ops review") →
+tests (unit-tester; gate: test command **fails**, and
 with a JUnit report only through the step's new or changed tests, which
 become pending: see "Pending tests"; or see "Back at tests with the code in") →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
@@ -1296,6 +1297,47 @@ start the Proxy. The runner moves the story back to `e2e` **without** a round
 same happens when a `web` environment's service does not come up for the Proxy
 (the reason holds its output). The runner then runs the integration-tester
 itself.
+
+### Ops review
+
+`ops-review` (s115, ADR-0059) is a built-in step: the runner puts it right
+after `design` (or first, when `design` is not enabled) whether or not
+`[gates] steps` lists it, and it cannot be configured away. Stories already
+past `design` when it arrives are not sent back. It is a checkpoint: a story
+reaches it only by passing design. No bounce, Manager fault, acceptance
+failure or revert sends a story to it, so a `changes_requested` naming
+devops from a later step is still `unroutable` (the PO briefs devops).
+
+DevOps's brief has an `## Ops review` section: the story's ACs with their
+acceptance environments, the `[toolchain]` commands, the `[[environment]]`
+names and kinds, the `[[tool]]` names and the `ci` globs. For each AC it
+answers: can this be checked automatically with what the repo has today?
+It hands off one `tooling` row per AC:
+
+```json
+"tooling": [
+  {"ac": "AC1", "verdict": "automatic", "how": "tests/test_x.py::test_y"},
+  {"ac": "AC2", "verdict": "added", "how": "the e2e-web CI job"},
+  {"ac": "AC3", "verdict": "missing", "needs": "a browser harness", "story": "s130"}
+]
+```
+
+`automatic` and `added` need `how`; `missing` needs `needs`; an `added` row
+needs `changed_files` (DevOps adds what is missing in its own files, CI and
+the `[toolchain]`, `[[environment]]` and `[[tool]]` config, in the same
+step). A malformed list is a handoff error. The ops gate:
+
+| Handoff | Result |
+|---|---|
+| `done`, a row per AC, every `missing` row names an existing story | pass to `tests`; the runner writes the rows into the story file under `## Tooling` (one `chore(<id>): record the tooling review in the story file` commit) |
+| `done`, an AC without a row, an unknown or repeated AC, or a story id with no story file | bounce back to `ops-review` (a round) |
+| `done`, a `missing` row with no story | gate hold: the PO opens a story for each need, then `continue_story` with a note naming them; DevOps runs again and fills in the ids |
+| `changes_requested` | bounce to `design` with DevOps's summary as the reason, whatever `next_role` says: the design assumes tooling that can't exist |
+
+The `## Tooling` section reads `- AC1: automatic today: …`,
+`- AC2: added now: …`, `- AC3: missing: … (story s130)`. A later pass
+replaces it. Later steps and the Customer Proxy read it in the story file;
+`step-end` events carry the rows as `tooling`.
 
 ### Runner results and runner tools
 
