@@ -52,7 +52,7 @@ def test_step_registered() -> None:
     assert gates.STEP_ROLES["ops-review"] == "devops"
     names = list(config_mod.PIPELINE_STEPS)
     assert names.index("ops-review") == names.index("design") + 1
-    assert gates.CHECKPOINT_STEPS == frozenset({"ops-review"})
+    assert frozenset({"ops-review"}) == gates.CHECKPOINT_STEPS
     assert "ops-review" not in gates.ROUTABLE_STEPS
 
 
