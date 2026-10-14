@@ -73,7 +73,8 @@ def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_run
     assert [o.environment.name for o in orders] == ["cli", "api"]
     assert orders[1].presentation == rt.config.run_dir / "presentation/s1/api"
     second = rt.query_fn.calls[1]["prompt"]
-    assert "acceptance environment api" in second and "- AC2:" in second and "- AC1:" not in described(second)
+    assert "acceptance environment api" in second and "- AC2:" in second
+    assert "- AC1:" not in described(second)
     assert story.status is StoryStatus.DONE
 
 
