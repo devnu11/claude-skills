@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 RUNNER_ROLE = "runner"
@@ -202,6 +202,12 @@ class Run:
     detail: str = ""
     code: int | None = None
     raised: str | None = None
+    listeners: list[Callable[[str], None]] = field(default_factory=list)
+
+    def hear(self, line: str) -> None:
+        """Tell every listener one line of the stage's command output."""
+        for listener in self.listeners:
+            listener(line)
 
     def note(self, command: str, code: int) -> None:
         """Keep the first failing command, else the latest one."""
@@ -226,6 +232,11 @@ def entered(run: Run) -> Iterator[Run]:
         raise
     finally:
         _OPEN.reset(token)
+
+
+def current() -> Run | None:
+    """The innermost open stage run, or None."""
+    return _OPEN.get()
 
 
 def opened(name: Name, place: Place) -> AbstractContextManager[Run]:

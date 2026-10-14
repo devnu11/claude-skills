@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
+from math import inf
 from typing import TYPE_CHECKING, Any, Protocol
 
-from . import stages
+from . import stages, system, test_tally
 from .dashboard.step_times import Mark, Platform
 from .events import Event, EventKind, EventLog
 from .tool_calls import awake_gap, shown
@@ -33,6 +34,10 @@ class StageBoard(Protocol):
         """List ``row`` for the duration of the ``with`` block."""
         ...
 
+    def refresh(self) -> None:
+        """Write the listing again now."""
+        ...
+
 
 class Hidden:
     """A board that lists nothing (HB4)."""
@@ -40,6 +45,9 @@ class Hidden:
     def showing(self, row: dict[str, Any]) -> AbstractContextManager[None]:
         """No listing; a ``nullcontext``."""
         return nullcontext()
+
+    def refresh(self) -> None:
+        """Nothing is listed, so nothing to write."""
 
 
 HIDDEN = Hidden()
@@ -57,7 +65,32 @@ def open_row(run: stages.Run, start: Mark) -> dict[str, Any]:
         "started_at": start.at,
         "started_mono": start.mono,
         "started_slept": start.slept,
+        "tests": None,
     }
+
+
+TALLY_REFRESH_S = 2.0
+
+
+@dataclass(eq=False)
+class Tallier:
+    """A stage listener: folds test output into the open row and refreshes the board."""
+
+    row: dict[str, Any]
+    board: StageBoard
+    tally: test_tally.Tally = test_tally.EMPTY
+    shown_at: float = -inf
+
+    def __call__(self, line: str) -> None:
+        """Fold ``line``; show the counts, at most every TALLY_REFRESH_S."""
+        self.tally = test_tally.read(self.tally, line)
+        if not self.tally.counted():
+            return
+        self.row["tests"] = self.tally.as_dict()
+        now = system.monotonic()
+        if now - self.shown_at >= TALLY_REFRESH_S:
+            self.shown_at = now
+            self.board.refresh()
 
 
 def place_of(story: StoryState | None) -> stages.Place:
@@ -115,8 +148,10 @@ class StageLog:
         """Run a stage by name; one event is written when it closes."""
         start = self.clock.mark()
         run = stages.Run(stages.STAGES[name], self.place)
+        row = open_row(run, start)
+        run.listeners.append(Tallier(row, self.board))
         try:
-            with stages.entered(run), self.board.showing(open_row(run, start)):
+            with stages.entered(run), self.board.showing(row):
                 yield run
         finally:
             self._emit(run, start)

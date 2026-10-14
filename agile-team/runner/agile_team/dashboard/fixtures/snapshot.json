@@ -35,6 +35,32 @@
   "e2e",
   "acceptance"
  ],
+ "step_roles": {
+  "design": [
+   "architect"
+  ],
+  "tests": [
+   "unit-tester"
+  ],
+  "implement": [
+   "developer-cli"
+  ],
+  "quality": [
+   "quality-czar"
+  ],
+  "review": [
+   "code-reviewer"
+  ],
+  "design-review": [
+   "architect"
+  ],
+  "e2e": [
+   "integration-tester"
+  ],
+  "acceptance": [
+   "customer-proxy"
+  ]
+ },
  "roles": [
   {
    "name": "product-owner",
@@ -753,7 +779,12 @@
     },
     "cost_usd": 0.1256,
     "turns": 18,
-    "commit": "0becd7b"
+    "commit": "0becd7b",
+    "rate": [
+     310.0,
+     420.0,
+     380.0
+    ]
    }
   },
   {
@@ -1133,7 +1164,11 @@
     "turns": 26,
     "commit": "2b0537e",
     "mono": 457452.1,
-    "slept": 120.0
+    "slept": 120.0,
+    "rate": [
+     410.0,
+     380.0
+    ]
    }
   },
   {
@@ -1579,7 +1614,12 @@
     "turns": 17,
     "commit": "f373ca5",
     "mono": 462683.8,
-    "slept": 120.0
+    "slept": 120.0,
+    "rate": [
+     500.0,
+     610.0,
+     430.0
+    ]
    }
   },
   {
@@ -1902,7 +1942,13 @@
      "REQ-005"
     ],
     "mono": 468889.0,
-    "slept": 120.0
+    "slept": 120.0,
+    "rate": [
+     120.0,
+     260.0,
+     140.0,
+     90.0
+    ]
    }
   },
   {
@@ -2038,7 +2084,12 @@
     "turns": 5,
     "commit": "03a56cc",
     "mono": 471106.3,
-    "slept": 120.0
+    "slept": 120.0,
+    "rate": [
+     200.0,
+     150.0,
+     260.0
+    ]
    }
   },
   {
@@ -2337,7 +2388,12 @@
     "next_role": null,
     "open_questions": [],
     "mono": 472180.0,
-    "slept": 120.0
+    "slept": 120.0,
+    "rate": [
+     300.0,
+     280.0,
+     320.0
+    ]
    }
   },
   {
@@ -2395,7 +2451,8 @@
    "data": {
     "brief": "Memory test fails at 412MB.",
     "mono": 472520.0,
-    "slept": 120.0
+    "slept": 120.0,
+    "step": "implement"
    }
   },
   {
@@ -2421,7 +2478,13 @@
     "opened_at": 1791472640.0,
     "tool_s": 161.2,
     "model_s": 28.8,
-    "waiting_s": 0.0
+    "waiting_s": 0.0,
+    "rate": [
+     880.0,
+     940.0,
+     700.0,
+     520.0
+    ]
    }
   },
   {
@@ -2431,7 +2494,8 @@
    "role": "developer-cli",
    "story": "s3",
    "data": {
-    "brief": "Memory test fails at 412MB."
+    "brief": "Memory test fails at 412MB.",
+    "step": "implement"
    }
   },
   {
@@ -2482,7 +2546,12 @@
     "model_s": 9.5,
     "waiting_s": 312.5,
     "mono": 5400.0,
-    "slept": 0.0
+    "slept": 0.0,
+    "rate": [
+     150.0,
+     240.0,
+     90.0
+    ]
    }
   },
   {
@@ -4297,7 +4366,14 @@
     "cache_read": 2066577,
     "cache_creation": 43906
    },
-   "cost_usd": 1.0767
+   "cost_usd": 1.0767,
+   "rate": [
+    640.0,
+    910.0,
+    1020.0,
+    860.0,
+    780.0
+   ]
   },
   "calls": [
    {
@@ -4315,7 +4391,36 @@
     "status": "open"
    }
   ],
-  "stages": []
+  "stages": [
+   {
+    "stage": "gate.tests+coverage",
+    "when": "after",
+    "attach": "step",
+    "description": "Run the tests and coverage after a step",
+    "story": "s3",
+    "step": "implement",
+    "started_at": 1791473100.0,
+    "started_mono": 522943.0,
+    "started_slept": 0.0,
+    "tests": {
+     "passed": 273,
+     "warned": 32,
+     "failed": 9,
+     "total": 506,
+     "points": [
+      8,
+      17,
+      26,
+      35,
+      44,
+      52,
+      58,
+      62
+     ],
+     "fail_at": 4
+    }
+   }
+  ]
  },
  "health": {
   "level": "green",

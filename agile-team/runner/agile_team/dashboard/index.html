@@ -14,6 +14,8 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-ink: #006300;
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+  --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -24,6 +26,8 @@
     --accent: #3987e5;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
     --good-ink: #0ca30c;
+    --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+    --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
   }
 }
 :root[data-theme="dark"] {
@@ -34,6 +38,8 @@
   --accent: #3987e5;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
   --good-ink: #0ca30c;
+  --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --fail: var(--critical);
+  --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
 }
 * { box-sizing: border-box; }
 body {
@@ -93,7 +99,8 @@ header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .tone-accent { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
 .tone-accent .dot { background: var(--accent); }
 .live .dot { animation: blink 2s infinite; }
-.flow-scope { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.flow-scope { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#flow-show-btn { margin-left: auto; }
 .flow-scope .seg { margin-bottom: 0; }
 @keyframes blink { 50% { opacity: .35; } }
 .ctl { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
@@ -135,8 +142,6 @@ section[hidden] { display: none; }
 .stack { display: grid; gap: 16px; }
 @media (max-width: 1000px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 
-/* flow */
-#flow { overflow-x: auto; }
 #mix { overflow-x: auto; }
 .tl { background: var(--surface); }
 .tl [data-tl-plot] { overflow-x: auto; }
@@ -149,20 +154,82 @@ section[hidden] { display: none; }
 .tl-bar { display: flex; flex-wrap: wrap; gap: 8px; }
 .tl-totals { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0; }
 .tl .seg button[aria-current="true"] { background: var(--surface-2); font-weight: 700; }
-.flow svg { max-width: none; display: block; margin: 0 auto; }
-.flow pre { overflow-x: auto; font-size: 12px; }
 .seg { display: inline-flex; gap: 0; margin-bottom: 8px; }
 .seg button { border: 1px solid var(--border); background: var(--surface); padding: 2px 10px; cursor: pointer; font-size: 12px; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .seg + .seg { margin-left: 8px; }
-.node.live-halo { animation: halo 1.6s ease-in-out infinite; }
-@keyframes halo { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 7px var(--accent)); } }
-.flow-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
-.flow-dot.back { fill: var(--s1); }
-.flow-dot.human { fill: var(--s2); }
-.edge-hit { filter: drop-shadow(0 0 4px var(--accent)); }
+#flow { position: relative; overflow-x: auto; }
+.fc { --group-w: 216px; --gap-min: 24px; --role-gap: 20px; }
+.fc-chart { min-width: min-content; padding-bottom: 4px; }
+.fc-box.dim { background: var(--surface-2); color: var(--ink-2); }
+.fc-box.dim [class*="fc-t-"] { color: var(--ink-2); }
+.fc-top { display: flex; align-items: center; gap: 8px; }
+.fc-pill { border: 1px solid var(--axis); background: var(--surface); border-radius: 999px; padding: 4px 14px; }
+.fc-group { flex: 0 0 var(--group-w); border: 2px solid var(--axis); border-radius: 10px; background: var(--surface-2); padding: 6px 8px 10px; }
+.fc-group.run1 { border-color: var(--run1); }
+.fc-group.run2 { border-color: var(--run2); }
+.fc-group.run3 { border-color: var(--run3); }
+.fc-title { font-weight: 600; margin-bottom: 6px; }
+.fc-lead { flex: 0 1 auto; display: flex; align-items: stretch; gap: 8px; }
+.fc-lead .fc-title { writing-mode: vertical-rl; margin: 0; text-align: center; }
+.fc-leadgrid { display: grid; grid-auto-flow: column; grid-template-rows: auto auto auto; column-gap: 12px; }
+.fc-cell { min-width: 200px; }
+.fc-above { align-self: end; }
+.fc-below { align-self: start; }
+.fc-drops { height: 46px; }
+.fc-cols { display: flex; align-items: flex-start; }
+.fc-gap { flex: 1 1 var(--gap-min); min-width: var(--gap-min); }
+.fc-arrow { display: block; width: 100%; height: 2px; margin-top: var(--arrow-y, 60px); background: var(--ink-2); position: relative; }
+.fc-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 8px solid var(--ink-2); border-right: 0; }
+.fc-unit { display: flex; flex-direction: column; gap: 0; }
+.fc-unit + .fc-unit { border-top: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); margin-top: var(--role-gap); padding-top: var(--role-gap); }
+.fc-box { background: var(--surface); border: 2px solid var(--grid); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+.fc-box.run1 { border-color: var(--run1); box-shadow: 0 0 9px color-mix(in srgb, var(--run1) 60%, transparent); }
+.fc-box.run2 { border-color: var(--run2); box-shadow: 0 0 9px color-mix(in srgb, var(--run2) 60%, transparent); }
+.fc-box.run3 { border-color: var(--run3); box-shadow: 0 0 9px color-mix(in srgb, var(--run3) 60%, transparent); }
+.fc-meta span + span::before { content: " · "; }
+.fc-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--grid); }
+.fc-bar .m { background: var(--flow-model); }
+.fc-bar .t { background: var(--flow-tools); }
+.fc-bar.dashed { background: repeating-linear-gradient(90deg, var(--axis) 0 4px, transparent 4px 7px); }
+.fc-sw { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 1px; vertical-align: middle; }
+.fc-sw.m { background: var(--flow-model); }
+.fc-sw.t { background: var(--flow-tools); }
+.fc-sw.pass { background: var(--pass); }
+.fc-sw.warn { background: var(--warn); }
+.fc-sw.fail { background: var(--fail); }
+.fc-sw.box { width: 12px; height: 8px; background: transparent; border: 2px solid var(--axis); border-radius: 2px; }
+.fc-sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.f-spark { display: flex; align-items: center; gap: 4px; }
+.fc-spark, .fc-status { display: block; }
+.fc-live { border-top: 1px solid var(--grid); margin-top: 3px; padding-top: 3px; }
+.fc-livedot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.fc-tool { border: 1px dashed var(--axis); border-radius: 4px; padding: 0; margin: 0; font-style: italic; background: var(--surface); }
+.fc-tool.running { border-style: solid; border-width: 2px; font-style: normal; padding: 2px 4px; }
+.fc-tool.run1 { border-color: var(--run1); }
+.fc-tool.run2 { border-color: var(--run2); }
+.fc-tool.run3 { border-color: var(--run3); }
+.fc-toolhead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.fc-testbar { display: flex; height: 6px; margin: 3px 0; background: var(--grid); }
+.fc-testbar .pass { background: var(--pass); }
+.fc-testbar .warn { background: var(--warn); }
+.fc-testbar .fail { background: var(--fail); }
+.fc-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; }
+.fc-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: visible; }
+.fc-overlay path { fill: none; }
+.fc-overlay .fc-po { stroke: var(--ink-2); stroke-width: 1.5; }
+.fc-overlay .fc-track { stroke: transparent; stroke-width: 3; }
+.fc-overlay path.fc-lit { stroke-width: 3; }
+.fc-overlay path.fc-lit.forward { stroke: var(--flow-forward); }
+.fc-overlay path.fc-lit.back { stroke: var(--fail); }
+#flow-show { position: absolute; right: 0; top: 100%; z-index: 5; display: grid; gap: 4px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+#flow-show[hidden] { display: none; }
+#flow-show p { margin: 0 0 4px; }
+.hide-tokens .f-tokens, .hide-cost .f-cost, .hide-time .f-time, .hide-bounces .f-bounces, .hide-share .f-share,
+.hide-spark .f-spark, .hide-tools .f-tools, .hide-toolstats .f-toolstats, .hide-legend .f-legend { display: none !important; }
+
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
 .legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
 .legend .sw { width: 10px; height: 10px; border-radius: 2px; }
@@ -269,8 +336,9 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
 .hist { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--grid); font-size: 12.5px; }
 .hist li { margin: 4px 0; }
 .hist .when { color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .live .dot, .timeline > li.new { animation: none; } .node.live-halo { animation: none; filter: drop-shadow(0 0 5px var(--accent)); } }
+@media (prefers-reduced-motion: reduce) { .live .dot, .timeline > li.new { animation: none; } }
 </style>
+<style id="fc-text"></style>
 </head>
 <body>
 <header>
@@ -295,15 +363,11 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
   <section id="tab-flow">
     <div class="card flow">
       <h2>Information flow</h2>
-      <p class="sub">Briefs from the Product Owner, handoffs back, and questions to you. Line weight is message count.</p>
-      <div class="flow-scope"><div class="seg" id="flow-scope" role="group" aria-label="Flow scope"></div><select id="flow-focus" aria-label="Story in focus" hidden></select></div>
-      <div id="flow"></div>
-      <div class="legend">
-        <span><i style="background:var(--ink-2);opacity:.6"></i>brief (PO → role)</span>
-        <span><i style="background:var(--s1)"></i>handoff (role → PO)</span>
-        <span><i style="background:var(--s2)"></i>question / answer (PO ↔ you)</span>
-        <span><i class="sw" style="background:var(--accent);border-radius:50%"></i>live message (moving dot); glowing box = running now</span>
-      </div>
+      <p class="sub">Who is working where. The Product Owner sends each step to a group; work moves left to right.</p>
+      <div class="flow-scope"><div class="seg" id="flow-scope" role="group" aria-label="Flow scope"></div><select id="flow-focus" aria-label="Story in focus" hidden></select>
+        <button class="ctl" id="flow-show-btn" aria-expanded="false" aria-controls="flow-show">⚙ Show…</button>
+        <div id="flow-show" hidden></div></div>
+      <div id="flow" class="fc"><div class="fc-chart"></div></div>
     </div>
   </section>
   <section id="tab-activity" hidden>
@@ -410,6 +474,13 @@ const fmt = {
     const min = Math.floor(seconds / 60);
     return min < 90 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
   },
+  /** `6s`, `42.0m` or `1.4h`: one decimal; `0s` for a negative or unusable value (FC25). */
+  dur1(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return "0s";
+    if (Math.round(seconds) < 60) return Math.round(seconds) + "s";
+    const m = (seconds / 60).toFixed(1);
+    return Number(m) < 60 ? m + "m" : (seconds / 3600).toFixed(1) + "h";
+  },
   /** `0 min`, `<1 min`, `N min` or `H h M min`; minutes floored (ST9). */
   span(seconds) {
     if (seconds <= 0) return "0 min";
@@ -502,6 +573,7 @@ function normalize(snap) {
   for (const key of LIST_KEYS) out[key] = list(out[key]);
   out.run = { ...RUN_DEFAULTS, ...(out.run && typeof out.run === "object" ? out.run : {}) };
   out.generated_at ??= Date.now() / 1000;
+  out.step_roles = out.step_roles && typeof out.step_roles === "object" && !Array.isArray(out.step_roles) ? out.step_roles : {};
   out.heartbeat ??= null;
   out.opinions = { items: [], asked_at: null, review: null, ...(out.opinions && typeof out.opinions === "object" ? out.opinions : {}) };
   out.opinions.items = list(out.opinions.items);
@@ -1043,285 +1115,49 @@ function renderTabs(view) {
   }).join("");
 }
 
-// ----- flow (Mermaid) ---------------------------------------------------------
+// ----- flow (HTML, s118) --------------------------------------------------------
 
-const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+/** The chart's groups in order: Leadership on top, then the stages left to right (FC1). */
+const FLOW_GROUPS = [
+  { name: "Leadership", roles: ["product-owner", "manager"], steps: [] },
+  { name: "Design", roles: ["architect"], steps: ["design", "design-review"] },
+  { name: "Test", roles: ["devops", "unit-tester"], steps: ["tests"] },
+  { name: "Dev", roles: ["developer-api", "developer-cli", "developer-gui", "developer"], steps: ["implement"] },
+  { name: "Check", roles: ["quality-czar", "code-reviewer", "integration-tester", "customer-proxy"],
+    steps: ["quality", "review", "e2e", "acceptance"] },
+];
+const LEAD = "Leadership";
+/** Stages that run around every step; the chart leaves them out (FC12). */
+const FLOW_SKIP_STAGES = ["checkout.guard", "checkout.verify"];
+/** Gate verdicts that send work back: the red dot (FC20). */
+const BACK_VERDICTS = ["bounce", "return", "route"];
+/** What the ⚙ Show… panel can hide: [key, label] (FC22). */
+const FLOW_SHOW = [["tokens", "tokens"], ["cost", "cost"], ["time", "awake time"],
+  ["bounces", "bounce count"], ["share", "model / tool bar"], ["spark", "tokens/min sparkline"],
+  ["tools", "runner tools"], ["toolstats", "tool run counts and time"], ["legend", "legend"]];
+const FLOW_SHOW_KEY = "agile-team-flow-show";
+/** Every Flow text kind: its size and ink (FC25). */
+const FLOW_TEXT = {
+  name: { px: 12, ink: "--ink" },      meta: { px: 10, ink: "--ink-2" },
+  live: { px: 10, ink: "--ink" },      tool: { px: 10, ink: "--ink-2" },
+  toolRun: { px: 10, ink: "--ink" },   caption: { px: 10, ink: "--ink-2" },
+  title: { px: 12, ink: "--ink-2" },   pill: { px: 12, ink: "--ink" },
+  legend: { px: 11, ink: "--ink-2" },  settings: { px: 11, ink: "--ink" },
+};
+/** How each moving dot looks and how long it takes (FC19, FC20). */
+const DOT_LOOKS = { forward: { ms: 900, fill: "--flow-forward" }, back: { ms: 1600, fill: "--fail" } };
+const SPARK_W = 96, SPARK_H = 20, STATUS_W = 80, STATUS_H = 18;
+const SVG_NS = "http://www.w3.org/2000/svg";
+const RUNNER = "runner";
 
-const FLOW_FONT_PX = 16;
-const MERMAID_OPTIONS = { startOnLoad: false, securityLevel: "strict", theme: "base", flowchart: { useMaxWidth: false } };
-
-/** Mermaid's initialise options for the theme colours `vars` (FL5). */
-function mermaidConfig(vars) {
-  return { ...MERMAID_OPTIONS, themeVariables: vars };
-}
-
-function ringRoles(view) {
-  return view.roles.filter((r) => r.used !== false).map((r) => r.name).filter((n) => n !== PO).sort((a, b) => roleRank(a) - roleRank(b));
-}
-
-const weight = (n, max) => n ? 1.2 + 4 * Math.sqrt(n / Math.max(1, max)) : 1;
-
-/** Make a label safe inside a quoted Mermaid string. */
-const mmdText = (s) => String(s ?? "").replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
-
-const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-/** The extra label lines of the running role's node (F6). */
-function liveLines(view, ctx, name) {
-  const step = ctx.step;
-  if (!step || step.role !== name) return "";
-  const mine = view.turns.filter((t) => t.role === name), now = clockNow(view);
-  const rate = `${fmt.tok(Math.round(tokensPerMin(mine, now)))}/min ${sparkline(mine, now)}`;
-  const turn = `turn ${step.turn}${step.tool ? " · " + step.tool.name : ""}`;
-  const spent = `step ${approxUsd(step.cost_usd)} · ${fmt.tok(sumTok(step.tokens))}`;
-  return [rate, turn, spent].map((l) => "<br/>" + mmdText(l)).join("");
-}
+/** A finite seconds value, else 0. */
+const finiteS = (v) => (Number.isFinite(v) ? v : 0);
 
 /** The newest open step of role `name`, or undefined. */
 const openStep = (view, name) => view.steps.findLast((s) => s.role === name && !finished(s));
 
 /** Awake seconds of an open step so far: the clock since its start less the sleep the snapshot saw (AW10). */
 const awakeSoFar = (view, step) => clockNow(view) - step.at - (step.slept ?? 0);
-
-/** " (may include sleep)" for a step timed by wall clock, else "" (AW10, AW11). */
-const sleepNote = (step) => (step.clock === "wall" ? " (may include sleep)" : "");
-
-/** `<br/>⏱ running 12 min` for a role whose step is open, else "" (AC2, ST11). */
-function runningLine(view, name) {
-  const step = openStep(view, name);
-  return step ? "<br/>" + mmdText("⏱ running " + fmt.span(awakeSoFar(view, step)) + sleepNote(step)) : "";
-}
-
-/** A role's stats for the scope, or "idle" when it has none (FL4). */
-function statsText(view, ctx, name) {
-  const t = ctx.totals[name];
-  if (!t && !openStep(view, name)) return "idle";
-  return `${fmt.tok(t?.tokens ?? 0)} · ${fmt.usd(t?.cost ?? 0)} · ${fmt.span(t?.seconds ?? 0)}`;
-}
-
-function nodeLabel(view, name, ctx) {
-  const info = roleInfo(view, name), s = ctx.stats[name], t = ctx.totals[name];
-  const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
-  const bounced = s?.bounced ? `<br/>↩ ${s.bounced} bounced` : "";
-  return `${mmdText(name)}<br/>${mmdText(familyOf(info.model) + local)} · ${statsText(view, ctx, name)}${bounced}${shareLine(stepSplit(view, name))}${runningLine(view, name)}${liveLines(view, ctx, name)}`;
-}
-
-const STEER = "grpSteering";
-/** Pipeline phase of each pipeline role (prefix match); unlisted roles fall to Support. */
-const PHASE_ROLES = {
-  Design: ["architect"], Build: ["unit-tester", "developer"],
-  Verify: ["quality-czar", "code-reviewer", "integration-tester"],
-};
-/** Roles that sit beside the PO rather than in the pipeline team. */
-const SIDE_ROLES = { "customer-proxy": "Customer", manager: "Steering" };
-const GROUP_ORDER = ["Customer", "Steering", "Design", "Build", "Verify", "Support"];
-
-/** Whether `name` is `prefix` or `prefix-…`. */
-const matchesRole = (name, prefix) => name === prefix || name.startsWith(prefix + "-");
-
-/** The flow group a role belongs to. */
-function groupOf(name) {
-  if (SIDE_ROLES[name]) return SIDE_ROLES[name];
-  const hit = Object.entries(PHASE_ROLES).find(([, roles]) => roles.some((p) => matchesRole(name, p)));
-  return hit ? hit[0] : "Support";
-}
-
-/** Where the PO's edges attach: the Steering box, or the PO itself for the manager inside it. */
-const poEnd = (name) => (groupOf(name) === "Steering" ? "po" : STEER);
-
-/** One labelled edge; null when its count is zero. */
-const flowEdge = (from, to, n, word, color) =>
-  n > 0 ? { from, to, n, label: `${n} ${word}`, color, arrow: "-->" } : null;
-
-/**
- * One two-way edge between a top-row node and the Steering box. Mermaid ranks nodes by edge
- * direction and breaks opposite pairs arbitrarily, so a single `<-->` keeps the node above the PO.
- */
-function twoWayEdge(from, sent, got) {
-  const parts = [sent, got].filter((p) => p.n > 0);
-  const n = parts.reduce((sum, p) => sum + p.n, 0);
-  const label = parts.map((p) => `${p.n} ${p.word}`).join(" · ");
-  return n ? { from, to: STEER, n, label, color: parts[0].color, arrow: "<-->" } : null;
-}
-
-/** The labelled edges: top-row nodes (you, customer proxy) first, then the pipeline roles. */
-function flowEdgeList(view, stats, ids) {
-  const edges = [];
-  for (const [name, id] of ids) {
-    const s = stats[name], briefs = s?.briefs ?? 0, handoffs = s?.handoffs ?? 0;
-    if (groupOf(name) === "Customer") {
-      edges.unshift(twoWayEdge(id, { n: handoffs, word: "handoffs", color: cssVar("--s1") }, { n: briefs, word: "briefs", color: cssVar("--s1") }));
-      continue;
-    }
-    edges.push(flowEdge(poEnd(name), id, briefs, "briefs", cssVar("--ink-2")), flowEdge(id, poEnd(name), handoffs, "handoffs", cssVar("--s1")));
-  }
-  const human = (n, word) => ({ n, word, color: cssVar("--s2") });
-  edges.unshift(twoWayEdge("you", human(view.answers.length, "answers"), human(view.messages.length, "messages")));
-  return edges.filter(Boolean);
-}
-
-/** Node declarations wrapped in one subgraph per group; empty groups are skipped. */
-function flowGroupLines(view, ctx, ids) {
-  const po = ctx.totals[PO], poStats = ui.scope === "story" ? "—" : `${fmt.tok(po?.tokens ?? 0)} · ${fmt.usd(po?.cost ?? 0)}`;
-  const poShare = ui.scope === "story" ? "" : shareLine(turnSplit(view));
-  const groups = { Steering: [`po["Product Owner<br/>${mmdText(familyOf(roleInfo(view, PO).model))} · ${poStats}${poShare}"]`] };
-  for (const [n, id] of ids) (groups[groupOf(n)] ??= []).push(`${id}["${nodeLabel(view, n, ctx)}"]`);
-  addStageNodes(view, groups);
-  return GROUP_ORDER.filter((t) => groups[t]).flatMap((t) => [
-    `subgraph grp${t}["${t}"]`, ...(t === "Steering" ? ["direction LR"] : []), ...groups[t], "end",
-  ]);
-}
-
-/** Mermaid node id of a role (`po` for the Product Owner); undefined when it has no node. */
-function roleNodeId(view, role) {
-  if (role === PO) return "po";
-  const i = ringRoles(view).indexOf(role);
-  return i < 0 ? undefined : "r" + i;
-}
-
-/** Node id of the running role, or of the PO when no step is open. */
-function activeNodeId(view) {
-  const act = activeStep(view.events);
-  return act ? roleNodeId(view, act.role) : liveStageNodeId(view) ?? "po";
-}
-
-/** The dimmed class: colour only, never opacity (FL1, FL2). */
-function idleClassDef() {
-  return `classDef idle fill:${cssVar("--surface-2")},stroke:${cssVar("--grid")},color:${cssVar("--ink-2")}`;
-}
-
-/** The Mermaid text for the information-flow chart (pure apart from CSS colours). */
-function flowSource(view) {
-  const ctx = flowContext(view), stats = ctx.stats, names = ringRoles(view);
-  const ids = names.map((n, i) => [n, "r" + i]);
-  const lines = ["flowchart TB", `you(["You (via liaison)"])`, ...flowGroupLines(view, ctx, ids)];
-  lines.push(...edgeLines([...flowEdgeList(view, stats, ids), ...stageEdges(view, ids)]));
-  lines.push(`classDef active stroke:${cssVar("--accent")},stroke-width:3px`, idleClassDef());
-  lines.push(...liveClassLines(ctx), ...flowClassLines(view, ctx, ids), ...stageClassLines(view, activeNodeId(view)));
-  return lines.join("\n");
-}
-
-/** A colour with a faint alpha, for a tinted node fill; "" when the colour is not plain hex. */
-const tintFill = (color) => (/^#[0-9a-f]{6}$/i.test(color) ? `,fill:${color}2e` : "");
-
-/** `classDef live_<level>` lines (3px stroke in the health colour, F6). */
-function liveClassLines() {
-  const colours = { green: "--good", amber: "--warning", red: "--critical" };
-  return Object.entries(colours).map(([level, name]) =>
-    `classDef live_${level} stroke:${cssVar(name)},stroke-width:3px${tintFill(cssVar(name))}`);
-}
-
-/** Which class each node gets: the live one, the active one, the dimmed ones (F5, F6). */
-function flowClassLines(view, ctx, ids) {
-  const lines = [], live_ = ctx.liveRole && roleNodeId(view, ctx.liveRole);
-  const level = ["green", "amber", "red"].includes(ctx.level) ? ctx.level : "";
-  const active = live_ && level ? live_ : activeNodeId(view);
-  if (active) lines.push(`class ${active} ${live_ && level ? "live_" + level : "active"}`);
-  const dim = ui.scope === "story" ? (n) => !touchedFocus(view, n) : (n) => !ctx.stats[n];
-  for (const [n, id] of ids) if (dim(n) && id !== active) lines.push(`class ${id} idle`);
-  return lines;
-}
-
-
-// ----- runner stages and the model/tool share on the flow chart (s102) -----
-
-const RUNNER = "runner";
-const SHARE_CELLS = 10;
-const STAGE_NODES = [
-  { id: "st_env", label: "Prepare env", group: "Customer", anchor: "customer-proxy", side: "before",
-    stages: ["env.prepare"] },
-  { id: "st_gate", label: "Implement gate", group: "Build", anchor: "developer", side: "after",
-    stages: ["gate.tests+coverage", "gate.route-lint", "gate.dispute-output", "gate.suite-runs"] },
-  { id: "st_e2e", label: "E2E gate", group: "Verify", anchor: "integration-tester", side: "after",
-    stages: ["presentation.trial"] },
-  { id: "st_boundary", label: "Boundary", group: "Steering", anchor: PO, side: "after",
-    stages: ["boundary.sync", "boundary.check", "boundary.review", "boundary.push", "boundary.rebase", "boundary.restack", "boundary.ci-wait"] },
-];
-
-/** The `runner-stage` events of the node's stages, in event order. */
-const stageRuns = (view, node) =>
-  view.events.filter((e) => e.kind === "runner-stage" && node.stages.includes(e.data.stage));
-
-/** The first open stage row of the node's stages, or undefined (SN7). */
-const stageOpen = (view, node) => openStages(view).find((r) => node.stages.includes(r.stage));
-
-/** Whether the node is drawn: a run happened or one is open (SN2). */
-const stageDrawn = (view, node) => stageRuns(view, node).length > 0 || !!stageOpen(view, node);
-
-/** The nodes to draw, in table order. */
-const drawnStageNodes = (view) => STAGE_NODES.filter((n) => stageDrawn(view, n));
-
-/** A finite seconds value, else 0. */
-const finiteS = (v) => (Number.isFinite(v) ? v : 0);
-
-/** `{runs, last, total}` of the node's runs inside the scope (SN5). */
-function stageStats(view, node) {
-  const mine = stageRuns(view, node).filter(inScope(view));
-  return { runs: mine.length, last: finiteS(mine.at(-1)?.data.seconds), total: sum(mine, (e) => finiteS(e.data.seconds)) };
-}
-
-/** "last … · total … · n runs", or "idle" (SN5). */
-function stageStatsText(stats) {
-  if (!stats.runs) return "idle";
-  return `last ${fmt.age(stats.last)} · total ${fmt.age(stats.total)} · ${stats.runs} ${stats.runs === 1 ? "run" : "runs"}`;
-}
-
-/** `<br/>⏱ running …` while the node's stage is open (SN7). */
-function stageRunningLine(view, node) {
-  const row = stageOpen(view, node);
-  if (!row) return "";
-  return "<br/>" + mmdText("⏱ running " + fmt.age(stageAwake(view, row)));
-}
-
-/** The node's label (SN5). */
-function stageLabel(view, node) {
-  const stats = mmdText("runner · " + stageStatsText(stageStats(view, node)));
-  return `${mmdText(node.label)}<br/>${stats}${stageRunningLine(view, node)}`;
-}
-
-/** The node's Mermaid line: a hexagon (SN3). */
-const stageNodeLine = (view, node) => `${node.id}{{"${stageLabel(view, node)}"}}`;
-
-/** Add each drawn stage node to its group, after the roles (SN3). */
-function addStageNodes(view, groups) {
-  for (const node of drawnStageNodes(view)) (groups[node.group] ??= []).push(stageNodeLine(view, node));
-}
-
-/** Node ids of the drawn roles the node joins (SN4). */
-function anchorIds(view, ids, node) {
-  if (node.anchor === PO) return ["po"];
-  return ids.filter(([n]) => matchesRole(n, node.anchor)).map(([, id]) => id);
-}
-
-/** The dotted edges, one per drawn anchor of each drawn node (SN4). */
-function stageEdges(view, ids) {
-  const color = cssVar("--ink-2");
-  return drawnStageNodes(view).flatMap((node) => anchorIds(view, ids, node).map((a) => {
-    const [from, to] = node.side === "before" ? [node.id, a] : [a, node.id];
-    return { from, to, n: 0, label: "", color, arrow: "-.->" };
-  }));
-}
-
-/** One edge line; unlabelled edges have no `|…|`. */
-const edgeLine = (e) => e.label ? `${e.from} ${e.arrow}|"${e.label}"| ${e.to}` : `${e.from} ${e.arrow} ${e.to}`;
-
-/** Every edge line, then every linkStyle line. */
-function edgeLines(edges) {
-  const max = Math.max(1, ...edges.map((e) => e.n));
-  return [...edges.map(edgeLine),
-    ...edges.map((e, k) => `linkStyle ${k} stroke-width:${weight(e.n, max).toFixed(1)}px,stroke:${e.color}`)];
-}
-
-/** Id of the first running stage node, or undefined (SN8). */
-const liveStageNodeId = (view) => STAGE_NODES.find((n) => stageOpen(view, n))?.id;
-
-/** `class` lines for the stage nodes: running lights up, the rest of the idle ones dim (SN6, SN7). */
-function stageClassLines(view, active) {
-  return drawnStageNodes(view).filter((n) => n.id !== active).flatMap((n) => {
-    if (stageOpen(view, n)) return [`class ${n.id} active`];
-    return stageStats(view, n).runs ? [] : [`class ${n.id} idle`];
-  });
-}
 
 /** `{model, tools, waiting}` of a PO turn's data (TM3). */
 function poSplit(d) {
@@ -1346,122 +1182,490 @@ function turnSplit(view) {
   return { model: sum(parts, (p) => p.model), tools: sum(parts, (p) => p.tools) };
 }
 
-/** `<br/>model p% ███░░ tools q%`, or "" with no split (SB3). */
-function shareLine({ model, tools }) {
-  const all = model + tools;
-  if (!(all > 0)) return "";
-  const cells = Math.round((SHARE_CELLS * model) / all), p = Math.round((100 * model) / all);
-  return `<br/>model ${p}% ${"█".repeat(cells)}${"░".repeat(SHARE_CELLS - cells)} tools ${100 - p}%`;
+// ----- who is drawn where (FC1, FC2)
+
+/** The `FLOW_GROUPS` entry of a role: listed, else its step's group, else Leadership (FC1). */
+function flowGroup(view, role) {
+  const listed = FLOW_GROUPS.find((g) => g.roles.includes(role));
+  if (listed) return listed;
+  const routed = (g) => g.steps.some((s) => (view.step_roles?.[s] ?? []).includes(role));
+  return FLOW_GROUPS.find(routed) ?? FLOW_GROUPS[0];
 }
 
-let mermaidModule = null;
-const loadMermaid = () => (mermaidModule ??= import(MERMAID_URL).then((m) => m.default));
+/** The roles the chart draws: the used ones, and the Product Owner always (FC2). */
+const drawnRoles = (view) => new Set([PO, ...view.roles.filter((r) => r.used !== false).map((r) => r.name)]);
 
-const flowMemo = { key: "", seq: 0, drawn: 0 };
-const themeVars = () => ({
-  background: cssVar("--surface"), primaryColor: cssVar("--surface"), primaryTextColor: cssVar("--ink"),
-  textColor: cssVar("--ink"), lineColor: cssVar("--axis"), primaryBorderColor: cssVar("--axis"),
-  edgeLabelBackground: cssVar("--surface"), fontSize: `${FLOW_FONT_PX}px`,
-});
-
-function flowUnavailable(source) {
-  $("#flow").innerHTML = `<p class="empty">Flowchart unavailable (mermaid could not load).</p><pre>${esc(source)}</pre>`;
+/** `[{ group, roles }]` in `FLOW_GROUPS` order; the table's order first, then unknown roles by name (FC2). */
+function flowRoles(view) {
+  const drawn = [...drawnRoles(view)];
+  return FLOW_GROUPS.map((group) => {
+    const rank = (r) => (group.roles.includes(r) ? group.roles.indexOf(r) : group.roles.length);
+    const mine = drawn.filter((r) => flowGroup(view, r) === group);
+    return { group, roles: mine.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)) };
+  });
 }
 
-async function drawFlow(source, vars, seq) {
+// ----- numbers of a role (FC8-FC15)
+
+/** Bounces from the scoped events; tokens, cost and time from the scope's totals (FC8). */
+function roleNumbers(view, ctx, role) {
+  const t = ctx.totals[role], info = roleInfo(view, role), blank = role === PO && ui.scope === "story";
+  const local = info.provider !== "anthropic" ? ` · ${info.provider}` : "";
+  const po = turnSplit(view);
+  return {
+    model: familyOf(info.model) + local,
+    tokens: blank ? null : t?.tokens ?? 0,
+    cost: blank ? null : t?.cost ?? 0,
+    seconds: blank ? null : role === PO ? po.model + po.tools : t?.seconds ?? 0,
+    bounced: ctx.stats[role]?.bounced ?? 0,
+    idle: role !== PO && !t && !openStep(view, role),
+  };
+}
+
+/** `{ model: p, tools: 100 - p }` percentages, or null with no timing (FC9). */
+function shareParts({ model, tools }) {
+  if (!(model + tools > 0)) return null;
+  const p = Math.round((100 * model) / (model + tools));
+  return { model: p, tools: 100 - p };
+}
+
+/** The role's rate series and whether it is the running role's (FC10). */
+function rateSeries(view, role) {
+  const step = liveStep(view);
+  if (step?.role === role) return { values: step.rate ?? [], running: true };
+  const kind = role === PO ? "po-turn" : "step-end", inside = inScope(view);
+  const last = view.events.findLast((e) => e.kind === kind && e.role === role && inside(e));
+  return { values: last?.data.rate ?? [], running: false };
+}
+
+/** A 96×20 area-and-line sparkline in `ink`, or "" under two points (FC10). */
+function sparkSvg(values, ink) {
+  if (values.length < 2) return "";
+  const max = Math.max(...values, 1), dx = SPARK_W / (values.length - 1);
+  const at = (v, i) => `${i ? "L" : "M"}${(i * dx).toFixed(1)} ${(SPARK_H - 1 - ((SPARK_H - 2) * v) / max).toFixed(1)}`;
+  const line = values.map(at).join(" ");
+  return `<svg class="fc-spark" width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}" aria-hidden="true">` +
+    `<path d="${line} L${SPARK_W} ${SPARK_H} L0 ${SPARK_H} Z" style="fill:${ink}" fill-opacity=".16"/>` +
+    `<path d="${line}" fill="none" style="stroke:${ink}" stroke-width="1.5"/></svg>`;
+}
+
+/** 1 + the finished earlier runs of the heartbeat step's role and story (FC13). */
+function stepRunNumber(view, step) {
+  const ev = view.events, same = (e) => e.role === step.role && e.story === step.story;
+  const sameStep = (e) => e.data.step == null || step.step == null || e.data.step === step.step;
+  const finishedRun = (i) => {
+    const next = ev.slice(i + 1).find((x) => same(x) && (x.kind === "step-end" || x.kind === "step-start"));
+    return next?.kind === "step-end" && next.data.status !== "interrupted";
+  };
+  const starts = ev.map((e, i) => [e, i]).filter(([e]) => e.kind === "step-start" && same(e) && sameStep(e));
+  return 1 + starts.filter(([, i]) => finishedRun(i)).length;
+}
+
+/** `{ cls, label }` of the nth run of a step or tool (FC14). */
+function runLook(n) {
+  return { cls: `run${Math.min(n, 3)}`, label: n === 1 ? "first run" : n === 2 ? "first re-run" : `re-run ${n - 1}` };
+}
+
+/** 1 + the earlier runs of the row's stage on its story (since the newest sprint-start without one) (FC15). */
+function toolRunNumber(view, row) {
+  const from = row.story ? -Infinity : view.events.findLast((e) => e.kind === "sprint-start")?.at ?? -Infinity;
+  const mine = (e) => e.kind === "runner-stage" && e.data.stage === row.stage && (e.story ?? null) === (row.story ?? null);
+  return 1 + view.events.filter((e) => mine(e) && e.at >= from).length;
+}
+
+// ----- runner tools (FC16-FC19)
+
+/** The role a stage run belongs to, or null when it is not drawn (FC16). */
+function stageRole(view, run) {
+  if (run.attach === "boundary" || run.attach === "story") return PO;
+  if (run.when === "during" || FLOW_SKIP_STAGES.includes(run.stage)) return null;
+  const starts = view.events.filter((e) => e.kind === "step-start" && (e.story ?? null) === (run.story ?? null)
+    && (e.data.step == null || run.step == null || e.data.step === run.step));
+  const hit = run.when === "after" ? starts.findLast((e) => e.at <= run.started_at) : starts.find((e) => e.at >= run.started_at);
+  return hit?.role ?? (view.step_roles?.[run.step] ?? []).find((r) => drawnRoles(view).has(r)) ?? null;
+}
+
+/** Every `runner-stage` event as a run, then every open row. */
+const allStageRuns = (view) => [
+  ...view.events.filter((e) => e.kind === "runner-stage").map((e) => ({ ...e.data, story: e.story, at: e.at })),
+  ...openStages(view).map((row) => ({ ...row, open: true })),
+];
+
+/** Add one run to a tool's counts (events in scope) or mark it open (FC17). */
+function addRun(tool, run, inside) {
+  if (run.open) { tool.open ??= run; return; }
+  if (!inside(run)) return;
+  tool.runs++;
+  tool.seconds += finiteS(run.seconds);
+}
+
+/** `{ role: { before: [tool], after: [tool] } }`, one tool per (role, stage), in order of first appearance (FC17). */
+function roleTools(view) {
+  const out = {}, inside = inScope(view);
+  for (const run of allStageRuns(view)) {
+    const role = stageRole(view, run);
+    if (!role) continue;
+    const list = (out[role] ??= { before: [], after: [] })[run.when === "before" ? "before" : "after"];
+    let tool = list.find((t) => t.stage === run.stage);
+    if (!tool) list.push(tool = { stage: run.stage, runs: 0, seconds: 0, open: null });
+    addRun(tool, run, inside);
+  }
+  return out;
+}
+
+/** The non-zero test categories as `[class, count, label]`. */
+const testParts = (t) => [["pass", t.passed, "Pass"], ["warn", t.warned, "Warn"], ["fail", t.failed, "Fail"]].filter(([, n]) => n > 0);
+
+/** `273 Pass + 32 Warn + 9 Fail / 506 Total`, zero categories left out (FC18). */
+function testsCaption(t) {
+  const total = t.total != null ? ` / ${t.total} Total` : "";
+  return testParts(t).map(([, n, label]) => `${n} ${label}`).join(" + ") + total;
+}
+
+/** The caption with a coloured swatch before each count. */
+function captionHtml(t) {
+  const total = t.total != null ? ` / ${t.total} Total` : "";
+  return testParts(t).map(([cls, n, label]) => `<i class="fc-sw ${cls}"></i>${n} ${label}`).join(" + ") + total;
+}
+
+/** A 6 px bar of the Pass, Warn and Fail segments, each as wide as its share (FC18). */
+function testBar(t) {
+  const whole = t.total || t.passed + t.warned + t.failed || 1;
+  const seg = ([cls, n]) => `<span class="${cls}" style="width:${((100 * n) / whole).toFixed(2)}%"></span>`;
+  return `<div class="fc-testbar">${testParts(t).map(seg).join("")}</div>`;
+}
+
+/** Percent of the suite reported: ran over total, else the last point. */
+function completePct(t) {
+  const ran = t.passed + t.warned + t.failed;
+  return t.total ? Math.min(100, Math.round((100 * ran) / t.total)) : t.points.at(-1) ?? 0;
+}
+
+/** An 80×18 progress sparkline, green up to `failAt` and red from there (FC19). */
+function statusSpark(points, failAt) {
+  if (points.length < 2) return "";
+  const dx = STATUS_W / (points.length - 1), last = points.length - 1;
+  const at = (i) => `${(i * dx).toFixed(1)} ${(STATUS_H - 1 - ((STATUS_H - 2) * points[i]) / 100).toFixed(1)}`;
+  const path = (from, to, colour) => {
+    const idx = Array.from({ length: to - from + 1 }, (_, k) => from + k);
+    return `<path d="${idx.map((i, k) => (k ? "L" : "M") + at(i)).join(" ")}" fill="none" style="stroke:var(${colour})" stroke-width="1.5"/>`;
+  };
+  const split = failAt == null ? last : failAt;
+  const red = failAt == null || failAt >= last ? "" : path(failAt, last, "--fail");
+  return `<svg class="fc-status" width="${STATUS_W}" height="${STATUS_H}" viewBox="0 0 ${STATUS_W} ${STATUS_H}" aria-hidden="true">` +
+    `${path(0, split, "--pass")}${red}</svg>`;
+}
+
+// ----- the HTML (FC3-FC11, FC17, FC18)
+
+/** Whether the role's box is drawn dimmed: colour only (FC12). */
+function dimmed(m, role) {
+  if (role === PO || m.step?.role === role) return false;
+  if (ui.scope === "story") return !touchedFocus(m.view, role);
+  return !m.ctx.totals[role] && !m.ctx.stats[role]?.bounced;
+}
+
+/** The model/tool bar and its caption, or the dashed bar with no timing (FC9). */
+function shareHtml(m, role) {
+  const parts = shareParts(role === PO ? turnSplit(m.view) : stepSplit(m.view, role));
+  if (!parts) return `<div class="f-share"><div class="fc-bar dashed"></div><div class="fc-t-caption">no model/tool timing yet</div></div>`;
+  return `<div class="f-share"><div class="fc-bar"><span class="m" style="width:${parts.model}%"></span><span class="t" style="width:${parts.tools}%"></span></div>` +
+    `<div class="fc-t-caption"><i class="fc-sw m"></i>model ${parts.model}% <i class="fc-sw t"></i>tools ${parts.tools}%</div></div>`;
+}
+
+/** The sparkline row: tokens/min while running, the last step's rate otherwise (FC10). */
+function sparkHtml(m, role) {
+  const { values, running } = rateSeries(m.view, role);
+  const svg = sparkSvg(values, running ? `var(--${m.run.cls})` : "var(--ink-2)");
+  if (!running) return `<div class="f-spark fc-t-caption">last step${svg ? " " + svg : " · no rate yet"}</div>`;
+  const mine = m.view.turns.filter((t) => t.role === role);
+  return `<div class="f-spark fc-t-caption"><b>${fmt.tok(Math.round(tokensPerMin(mine, m.now)))}</b> tokens/min ${svg}</div>`;
+}
+
+/** The live block of the running role: story, step, awake time, run label, latest tool (FC11). */
+function liveBlock(m) {
+  const s = m.step, open = openStep(m.view, s.role);
+  const awake = open ? awakeSoFar(m.view, open) : m.now - s.started_at;
+  const line = [s.story ?? "—", s.step ?? "—", fmt.dur1(awake), m.run.label].map(esc).join(" · ");
+  return `<div class="fc-live"><div class="fc-t-live"><i class="fc-livedot" style="background:var(--${m.run.cls})"></i>${line}</div>` +
+    `<div class="fc-t-live">${esc(toolLine(m.view, s))}</div></div>`;
+}
+
+/** A number span, `—` when the number is unknown. */
+const numSpan = (cls, v, f) => `<span class="${cls}">${v == null ? "—" : f(v)}</span>`;
+
+/** One role's box (AC3, AC4). */
+function roleBox(m, role) {
+  const n = roleNumbers(m.view, m.ctx, role), running = m.step?.role === role;
+  const nums = n.idle ? "<span>idle</span>"
+    : numSpan("f-tokens", n.tokens, fmt.tok) + numSpan("f-cost", n.cost, fmt.usd) + numSpan("f-time", n.seconds, fmt.dur1);
+  const cls = ["fc-box", dimmed(m, role) ? "dim" : "", running ? m.run.cls : ""].filter(Boolean).join(" ");
+  const bounced = n.bounced ? `<div class="f-bounces fc-t-meta">↩ ${n.bounced} bounced</div>` : "";
+  return `<div class="${cls}" data-role="${esc(role)}"><b class="fc-t-name">${esc(role)}</b>` +
+    `<div class="fc-meta fc-t-meta"><span class="fc-model">${esc(n.model)}</span>${nums}</div>${bounced}` +
+    `${shareHtml(m, role)}${sparkHtml(m, role)}${running ? liveBlock(m) : ""}</div>`;
+}
+
+/** An idle runner tool: name, run count and time (FC17). */
+function idleTool(tool) {
+  const stats = ` · ↻ ${tool.runs}` + (tool.runs ? ` · ${fmt.dur1(tool.seconds)}` : "");
+  return `<div class="fc-tool f-tools fc-t-tool"><span>${esc(tool.stage)}</span><span class="f-toolstats">${stats}</span></div>`;
+}
+
+/** The running tool: run colour, elapsed time and, for a test run, the live counts (FC18). */
+function runningTool(m, tool) {
+  const row = tool.open, look = runLook(toolRunNumber(m.view, row)), t = row.tests;
+  const head = `<div class="fc-toolhead fc-t-toolRun"><span>▶ ${esc(row.stage)} · ${look.label}</span><span>${fmt.dur1(stageAwake(m.view, row))}</span></div>`;
+  const tests = !t ? "" : `${testBar(t)}<div class="fc-t-toolRun">${captionHtml(t)}</div>` +
+    `<div class="fc-toolhead fc-t-toolRun"><span>${completePct(t)}% complete</span>${statusSpark(t.points, t.fail_at)}</div>`;
+  return `<div class="fc-tool running ${look.cls}" title="${esc(row.description)}">${head}${tests}</div>`;
+}
+
+/** A runner tool box, idle or running (FC17, FC18). */
+const toolBox = (m, tool) => (tool.open ? runningTool(m, tool) : idleTool(tool));
+
+/** A role's tools above, its box, its tools below. */
+function unitParts(m, role) {
+  const tools = m.tools[role] ?? { before: [], after: [] };
+  const list = (ts) => ts.map((t) => toolBox(m, t)).join("");
+  return [list(tools.before), roleBox(m, role), list(tools.after)];
+}
+
+/** One role in a stage group (FC6). */
+const unitHtml = (m, role) => `<div class="fc-unit">${unitParts(m, role).join("")}</div>`;
+
+/** One role in the Leadership grid: three cells, so the boxes share row 2 (FC3). */
+function leadCells(m, role) {
+  const [above, box, below] = unitParts(m, role);
+  return `<div class="fc-cell fc-above">${above}</div><div class="fc-cell">${box}</div><div class="fc-cell fc-below">${below}</div>`;
+}
+
+/** A boxed group with its title; the running role's group takes the run colour (FC11). */
+function flowGroupHtml(m, { group, roles }) {
+  const lead = group.name === LEAD, running = m.step && flowGroup(m.view, m.step.role) === group;
+  const body = lead ? `<div class="fc-leadgrid">${roles.map((r) => leadCells(m, r)).join("")}</div>` : roles.map((r) => unitHtml(m, r)).join("");
+  const cls = ["fc-group", lead ? "fc-lead" : "", running ? m.run.cls : ""].filter(Boolean).join(" ");
+  return `<div class="${cls}" data-group="${esc(group.name)}"><div class="fc-title fc-t-title">${esc(group.name)}</div>${body}</div>`;
+}
+
+/** The gap before a stage group, holding the arrow into it (FC4). */
+const gapHtml = (group) => `<div class="fc-gap" data-to="${esc(group.name)}"><span class="fc-arrow"></span></div>`;
+
+/** The legend (FC24: hidden by its toggle). */
+function flowLegendHtml() {
+  const run = (n, label) => `<span><i class="fc-sw box" style="border-color:var(--run${n})"></i>${label}</span>`;
+  const dot = (colour, label) => `<span><i class="fc-sw dot" style="background:var(${colour})"></i>${label}</span>`;
+  return `<div class="fc-legend f-legend fc-t-legend">${run(1, "first run")}${run(2, "first re-run")}${run(3, "re-run 2 or more")}` +
+    `<span>↻ runs</span><span>sparkline: tokens/min (grey: the last step)</span><span>solid box: the running tool</span>` +
+    `${dot("--flow-forward", "work moves to the next group")}${dot("--fail", "the PO sends work back")}</div>`;
+}
+
+/** The whole chart's inner HTML (AC2). */
+function flowHtml(m) {
+  const [lead, ...stages] = m.groups;
+  const pill = (t) => `<span class="fc-pill fc-t-pill">${t}</span>`, two = `<span class="fc-two fc-t-pill" aria-hidden="true">↔</span>`;
+  const top = `<div class="fc-top">${pill("You")}${two}${pill("Liaison")}${two}${flowGroupHtml(m, lead)}</div>`;
+  const cols = stages.map((e, i) => (i ? gapHtml(e.group) : "") + flowGroupHtml(m, e)).join("");
+  return `${top}<div class="fc-drops"></div><div class="fc-cols">${cols}</div>${flowLegendHtml()}`;
+}
+
+/** Everything the HTML needs, computed once per render. */
+function flowModel(view) {
+  const step = liveStep(view), scoped = { ...view, events: view.events.filter(inScope(view)) };
+  return {
+    view, step, now: clockNow(view), groups: flowRoles(view), tools: roleTools(view),
+    run: step ? runLook(stepRunNumber(view, step)) : null,
+    ctx: { totals: scopeTotals(view), stats: flowStats(scoped) },
+  };
+}
+
+// ----- text and settings (FC24, FC27)
+
+/** `hide-<key>` for each hidden key, sorted and space-joined (FC24). */
+const flowShowClasses = (hidden) => [...hidden].sort().map((k) => "hide-" + k).join(" ");
+
+/** One `.fc-t-<kind>` rule per text kind (FC27). */
+const flowTextCss = () => Object.entries(FLOW_TEXT)
+  .map(([kind, { px, ink }]) => `.fc-t-${kind} { font-size: ${px}px; color: var(${ink}); }`).join("\n");
+
+/** Load the hidden keys from storage; unknown keys and bad JSON are ignored (FC24). */
+function restoreFlowShow() {
+  ui.flowHidden = new Set();
   try {
-    const mermaid = await loadMermaid();
-    mermaid.initialize(mermaidConfig(vars));
-    const { svg } = await mermaid.render("flow-svg-" + seq, source);
-    if (seq === flowMemo.seq) { $("#flow").innerHTML = svg; flowMemo.drawn = seq; flushLive(); }
-  } catch {
-    mermaidModule = null;
-    if (seq === flowMemo.seq) flowUnavailable(source);
+    const saved = JSON.parse(localStorage.getItem(FLOW_SHOW_KEY) ?? "[]");
+    const known = (k) => FLOW_SHOW.some(([key]) => key === k);
+    if (Array.isArray(saved)) ui.flowHidden = new Set(saved.filter(known));
+  } catch { /* storage may be blocked or hold bad JSON */ }
+}
+
+/** Put the hide classes on the chart without rebuilding it. */
+function applyFlowShow() {
+  const chart = $("#flow .fc-chart");
+  if (chart) chart.className = ("fc-chart " + flowShowClasses(ui.flowHidden)).trim();
+}
+
+/** Show or hide one feature, keep the choice and re-lay the chart (FC24). */
+function setFlowShow(key, shown) {
+  shown ? ui.flowHidden.delete(key) : ui.flowHidden.add(key);
+  try { localStorage.setItem(FLOW_SHOW_KEY, JSON.stringify([...ui.flowHidden])); } catch { /* storage may be blocked */ }
+  applyFlowShow();
+  layoutFlow();
+}
+
+/** The ⚙ Show… popover: what is always shown, then one checkbox per feature (FC24). */
+function renderFlowShow() {
+  const row = ([key, label]) => `<label class="fc-t-settings"><input type="checkbox" data-show="${key}"${ui.flowHidden.has(key) ? "" : " checked"}> ${esc(label)}</label>`;
+  $("#flow-show").innerHTML = `<p class="fc-t-settings">Always shown: role name · model · the running step · the running tool</p>${FLOW_SHOW.map(row).join("")}`;
+}
+
+// ----- the overlay: PO paths, arrow tracks and dots (FC5, FC7, FC20-FC23)
+
+/** The overlay SVG, created once and never replaced by a redraw (FC20). */
+function ensureOverlay() {
+  const root = $("#flow");
+  let svg = root.querySelector("svg.fc-overlay");
+  if (svg) return svg;
+  svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "fc-overlay");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = `<defs><marker id="fc-head" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse">` +
+    `<path d="M0 0 L8 4 L0 8 Z" style="fill:var(--ink-2)"/></marker></defs><g class="fc-paths"></g><g class="fc-dots"></g>`;
+  root.appendChild(svg);
+  return svg;
+}
+
+/** Level each gap's arrow with the middle of the first box of the group to its right (FC5). */
+function alignArrows(root) {
+  for (const gap of root.querySelectorAll(".fc-gap")) {
+    const box = gap.nextElementSibling?.querySelector(".fc-box");
+    if (!box) continue;
+    const b = box.getBoundingClientRect(), g = gap.getBoundingClientRect();
+    gap.style.setProperty("--arrow-y", `${b.top + b.height / 2 - g.top}px`);
   }
 }
 
-/** Redraw the chart only when its source or the theme colours changed. */
-function renderFlow(view) {
-  const source = flowSource(view), vars = themeVars();
-  const key = source + JSON.stringify(vars);
-  if (key === flowMemo.key) return flushLive();
-  flowMemo.key = key;
-  drawFlow(source, vars, ++flowMemo.seq);
+/** A rectangle in the coordinates of `#flow`'s scrolled content. */
+function relRect(root, el) {
+  const r = el.getBoundingClientRect(), o = root.getBoundingClientRect();
+  return { left: r.left - o.left + root.scrollLeft, right: r.right - o.left + root.scrollLeft,
+    top: r.top - o.top + root.scrollTop, bottom: r.bottom - o.top + root.scrollTop };
 }
 
-// ----- live indication: travelling dots and the running-role halo -------------
+/** The wanted path of each key: a PO path to every stage group and an arrow track into every gap (FC7, FC21). */
+function wantedPaths(root) {
+  const out = new Map(), lead = root.querySelector(".fc-lead"), drops = root.querySelector(".fc-drops");
+  if (lead && drops) {
+    const a = relRect(root, lead), bus = relRect(root, drops), x0 = (a.left + a.right) / 2;
+    for (const g of root.querySelectorAll(".fc-cols > .fc-group")) {
+      const r = relRect(root, g);
+      out.set("po:" + g.dataset.group, { cls: "fc-po", d: `M${x0} ${a.bottom} V${(bus.top + bus.bottom) / 2} H${(r.left + r.right) / 2} V${r.top}` });
+    }
+  }
+  for (const gap of root.querySelectorAll(".fc-gap")) {
+    const r = relRect(root, gap.querySelector(".fc-arrow"));
+    out.set("arrow:" + gap.dataset.to, { cls: "fc-track", d: `M${r.left} ${(r.top + r.bottom) / 2} H${r.right}` });
+  }
+  return out;
+}
+
+/** Set the `d` of each wanted path in place; create the missing, remove the gone (FC21). */
+function syncPaths(svg, wanted) {
+  const layer = svg.querySelector("g.fc-paths");
+  for (const p of [...layer.querySelectorAll("path")]) if (!wanted.has(p.dataset.key)) p.remove();
+  for (const [key, { cls, d }] of wanted) {
+    let p = [...layer.querySelectorAll("path")].find((x) => x.dataset.key === key);
+    if (!p) {
+      p = document.createElementNS(SVG_NS, "path");
+      p.dataset.key = key;
+      p.setAttribute("class", cls);
+      if (cls === "fc-po") { p.setAttribute("marker-start", "url(#fc-head)"); p.setAttribute("marker-end", "url(#fc-head)"); }
+      layer.appendChild(p);
+    }
+    p.setAttribute("d", d);
+  }
+}
+
+/** Align the arrows, size the overlay and place every path; runs after each chart write (FC21). */
+function layoutFlow() {
+  const root = $("#flow");
+  if (!root || !root.querySelector(".fc-chart")) return;
+  alignArrows(root);
+  const svg = ensureOverlay(), chart = root.querySelector(".fc-chart");
+  svg.setAttribute("width", Math.max(root.clientWidth, chart.scrollWidth));
+  svg.setAttribute("height", Math.max(root.clientHeight, chart.scrollHeight));
+  syncPaths(svg, wantedPaths(root));
+}
+
+/** The overlay path with this key, or null. */
+const pathByKey = (key) => [...document.querySelectorAll("#flow g.fc-paths path")].find((p) => p.dataset.key === key) ?? null;
+
+/** Move a dot along the keyed path; each frame looks the path up again, so a redraw never cancels it (FC23). */
+function runDot(key, look) {
+  const { ms, fill } = DOT_LOOKS[look], dot = document.createElementNS(SVG_NS, "circle"), t0 = performance.now();
+  dot.setAttribute("r", "5");
+  dot.setAttribute("style", `fill:var(${fill})`);
+  ensureOverlay().querySelector("g.fc-dots").appendChild(dot);
+  const frame = (now) => {
+    const path = pathByKey(key);
+    if (!path) return dot.remove();
+    const f = Math.min(1, (now - t0) / ms), p = path.getPointAtLength(f * path.getTotalLength());
+    dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
+    f < 1 ? requestAnimationFrame(frame) : dot.remove();
+  };
+  requestAnimationFrame(frame);
+}
+
+/** Reduced motion: light the keyed path briefly instead of moving a dot (FC23). */
+function litPath(key, look) {
+  const path = pathByKey(key);
+  if (!path) return;
+  path.classList.add("fc-lit", look);
+  setTimeout(() => path.classList.remove("fc-lit", look), HIT_MS);
+}
+
+/** Which dot a fresh step-start earns: sent back on the PO path, forward on the arrow, else none (FC22). */
+function dotFor(view, e) {
+  if (e.kind !== "step-start" || !e.story) return null;
+  const group = flowGroup(view, e.role);
+  if (group.name === LEAD) return null;
+  const before = view.events.slice(0, view.events.findIndex((x) => x.id === e.id)).filter((x) => x.story === e.story);
+  const turn = before.findLast((x) => x.kind === "gate" || x.kind === "step-start");
+  if (turn?.kind === "gate" && BACK_VERDICTS.includes(turn.data.verdict)) return { key: "po:" + group.name, look: "back" };
+  const prev = before.findLast((x) => x.kind === "step-end" && flowGroup(view, x.role).name !== LEAD);
+  const left = FLOW_GROUPS[FLOW_GROUPS.indexOf(group) - 1];
+  return prev && left && flowGroup(view, prev.role) === left ? { key: "arrow:" + group.name, look: "forward" } : null;
+}
+
+// ----- drawing and live indication
 
 /** Latest view and the fresh events still waiting for a drawn chart. */
 const live = { view: null, queue: [] };
-const DOT_MS = 900, HIT_MS = 1200;
+const HIT_MS = 1200;
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const flowMemo = { html: "" };
 
-/** The chart's SVG, or null before it is drawn (or when Mermaid failed to load). */
-const flowSvg = () => document.querySelector("#flow svg");
-
-/** Which edge each event kind travels: [from, to, dot class] by node id; STEER is the PO's end. */
-const EVENT_EDGE = {
-  "step-start": (v, e) => [poEnd(e.role), roleNodeId(v, e.role), "brief"],
-  "step-end": (v, e) => [roleNodeId(v, e.role), poEnd(e.role), "back"],
-  message: () => [STEER, "you", "human"],
-  answer: () => ["you", STEER, "human"],
-};
-
-/** The drawn edge path between two node ids and whether it runs the other way (Mermaid 11 ids: [prefix-]L_<from>_<to>_<n>). */
-function findEdge(from, to) {
-  const paths = [...flowSvg().querySelectorAll("path.flowchart-link")];
-  const pick = (a, b) => paths.find((p) => new RegExp(`(^|-)L_${a}_${b}_\\d+$`).test(p.id));
-  const fwd = pick(from, to), back = fwd ? null : pick(to, from);
-  return fwd || back ? { path: fwd ?? back, reverse: !fwd } : null;
+/** Show one event's dot, quietly doing nothing when it earns none. */
+function playDot(e) {
+  const dot = dotFor(live.view, e);
+  if (dot) reducedMotion() ? litPath(dot.key, dot.look) : runDot(dot.key, dot.look);
 }
 
-/** Move a dot along a path over DOT_MS, then remove it. */
-function runDot({ path, reverse }, cls) {
-  const len = path.getTotalLength(), t0 = performance.now();
-  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  dot.setAttribute("r", "5");
-  dot.setAttribute("class", "flow-dot " + cls);
-  path.parentNode.appendChild(dot);
-  const step = (now) => {
-    const f = Math.min(1, (now - t0) / DOT_MS), at = (reverse ? 1 - f : f) * len;
-    const p = path.getPointAtLength(at);
-    dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
-    f < 1 ? requestAnimationFrame(step) : dot.remove();
-  };
-  requestAnimationFrame(step);
-}
-
-/** Reduced motion: light the edge up briefly instead of moving a dot. */
-function hitEdge({ path }) {
-  path.classList.add("edge-hit");
-  setTimeout(() => path.classList.remove("edge-hit"), HIT_MS);
-}
-
-/** Show one event on its edge, quietly doing nothing if the edge is not drawn. */
-function showEvent(e) {
-  const [from, to, cls] = EVENT_EDGE[e.kind]?.(live.view, e) ?? [];
-  const edge = from && to ? findEdge(from, to) : null;
-  if (edge) reducedMotion() ? hitEdge(edge) : runDot(edge, cls);
-}
-
-/** The chart node group for a node id. */
-function flowNodeEl(id) {
-  const tail = new RegExp(`(^|-)flowchart-${id}-\\d+$`);
-  return [...flowSvg().querySelectorAll("g.node")].find((g) => tail.test(g.id));
-}
-
-/** Put the halo on the running role's node and take it off every other. */
-function markActive() {
-  flowSvg().querySelectorAll("g.node.live-halo").forEach((g) => g.classList.remove("live-halo"));
-  flowNodeEl(activeNodeId(live.view) ?? "")?.classList.add("live-halo");
-}
-
-/** Apply the halo and play queued events once the current chart is drawn; skipped if it is not. */
+/** Play the last six queued events once the chart is drawn. */
 function flushLive() {
-  if (!live.view || !flowSvg() || flowMemo.drawn !== flowMemo.seq) return;
-  const events = live.queue.splice(0);
-  safely(markActive, live.view);
-  events.slice(-6).forEach((e) => safely(showEvent, e));
+  if (!live.view || !flowMemo.html) return;
+  live.queue.splice(0).slice(-6).forEach((e) => safely(playDot, e));
+}
+
+/** Write `.fc-chart` only when its HTML changed, then lay out and play dots (FC20). */
+function renderFlow(view) {
+  const html = flowHtml(flowModel(view)), chart = $("#flow .fc-chart");
+  if (html !== flowMemo.html) {
+    chart.innerHTML = html;
+    flowMemo.html = html;
+    applyFlowShow();
+    layoutFlow();
+  }
+  flushLive();
 }
 
 /** The Story / Sprint / Run buttons and the story picker (F1, F2). */
@@ -1480,6 +1684,7 @@ function renderFlowTab(view) {
   safely(renderFlowScope, view);
   live.queue.push(...view.events.filter((e) => data.fresh.has(e.id)));
   safely(renderFlow, view);
+  safely(layoutFlow, view);
 }
 
 // ----- timeline ---------------------------------------------------------------
@@ -3455,7 +3660,7 @@ function keepTimelineScroll(fn) {
 
 const ui = {
   tab: (location.hash.slice(1) || "flow"), story: "", theme: "", group: "role", unit: "tokens",
-  scope: "story", focus: "",
+  scope: "story", focus: "", flowHidden: new Set(),
   expanded: new Set(), files: {}, reorder: null, note: "", drag: "",
   drafts: {}, to: {}, sending: new Set(), threadNote: {},
   tl: {}, showDone: false, tlOpen: new Set(), miscOpen: new Set(), miscCalls: {},
@@ -3522,6 +3727,16 @@ document.addEventListener("click", (ev) => {
   if (act) mock[act.dataset.mock]();
 });
 $("#flow-focus").addEventListener("change", (ev) => { ui.focus = ev.target.value; render(); });
+$("#flow-show-btn").addEventListener("click", (ev) => {
+  const open = $("#flow-show").hidden;
+  $("#flow-show").hidden = !open;
+  ev.currentTarget.setAttribute("aria-expanded", String(open));
+});
+$("#flow-show").addEventListener("change", (ev) => {
+  const box = ev.target.closest("[data-show]");
+  if (box) setFlowShow(box.dataset.show, box.checked);
+});
+window.addEventListener?.("resize", () => safely(layoutFlow)); // optional: the node harness has no window events
 document.addEventListener("mouseover", (ev) => {
   if (!data.view || !ev.target.closest("[data-live-tip]")) return;
   const lines = pillDetails(data.view, clockNow(data.view));
@@ -3676,6 +3891,9 @@ async function bootLive() {
 async function boot() {
   restoreTheme();
   restoreScope();
+  restoreFlowShow();
+  renderFlowShow();
+  $("#fc-text").textContent = flowTextCss();
   setInterval(tick, 1000);
   loadMarkdown();
   showTab(ui.tab);

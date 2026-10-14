@@ -137,6 +137,11 @@ def _pipeline(files: RunFiles) -> list[str]:
     return list(files.config.gates.steps)
 
 
+def _step_roles(files: RunFiles) -> dict[str, list[str]]:
+    """Each pipeline step's roles, the generic developer expanded (s118 FC1)."""
+    return {step: sorted(_step_role(files, step)) for step in _pipeline(files)}
+
+
 def _priority(files: RunFiles) -> Priority:
     return Priority(files.state.order, files.state.pulled)
 
@@ -556,6 +561,7 @@ SECTIONS: dict[str, Callable[[RunFiles], Any]] = {
     "generated_at": _generated_at,
     "run": _run,
     "pipeline": _pipeline,
+    "step_roles": _step_roles,
     "roles": _roles,
     "stories": _stories,
     "requirements": _requirements,

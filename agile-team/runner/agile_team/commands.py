@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import re
 import signal
-from collections.abc import Callable
-from dataclasses import dataclass
+import threading
+from collections.abc import Callable, Iterable
+from contextlib import suppress
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import stages, system
@@ -64,12 +66,40 @@ def kill_group(proc: system.Process) -> None:
     signal_child_group(proc.pid, signal.SIGKILL)
 
 
-def drain(proc: system.Process) -> str:
-    """Collect what a killed group wrote, with a deadline."""
-    try:
-        return proc.communicate(timeout=DRAIN_S)[0] or ""
-    except system.TimeoutExpired:
-        return ""
+@dataclass(eq=False)
+class Pump:
+    """Reads a command's output line by line on a thread, telling the open stage (s118 R8)."""
+
+    lines: Iterable[str]
+    run: stages.Run | None
+    seen: list[str] = field(default_factory=list)
+    thread: threading.Thread = field(init=False)
+
+    def start(self) -> None:
+        """Begin reading on a daemon thread."""
+        self.thread = threading.Thread(target=self._read, daemon=True)
+        self.thread.start()
+
+    def join(self, limit_s: float) -> bool:
+        """Wait up to ``limit_s``; True when the output ended in time."""
+        self.thread.join(limit_s)
+        return not self.thread.is_alive()
+
+    def text(self) -> str:
+        """Everything read so far."""
+        return "".join(self.seen)
+
+    def _read(self) -> None:
+        # A closed pipe or a bad listener must never break a gate.
+        with suppress(ValueError, OSError):
+            for line in self.lines:
+                self.seen.append(line)
+                self._tell(line)
+
+    def _tell(self, line: str) -> None:
+        with suppress(Exception):
+            if self.run:
+                self.run.hear(line)
 
 
 @dataclass(frozen=True)
@@ -87,15 +117,27 @@ class CommandShell:
 
     def _run(self, command: str) -> tuple[int, str]:
         with system.spawn_piped(system.ShellCommand(command, self.repo)) as proc:
+            pump = Pump(proc.stdout, stages.current())  # captured here: contextvars skip threads
+            pump.start()
             try:
-                out, _ = proc.communicate(timeout=self.limit_s)
-            except system.TimeoutExpired:
-                kill_group(proc)
-                return TIMED_OUT, self.report_timeout(command, drain(proc))
+                ended = self._finish(proc, pump)
             except BaseException:
                 kill_group(proc)
                 raise
-            return proc.returncode, out
+            if ended:
+                return proc.returncode, pump.text()
+            kill_group(proc)
+            pump.join(DRAIN_S)
+            return TIMED_OUT, self.report_timeout(command, pump.text())
+
+    def _finish(self, proc: system.Process, pump: Pump) -> bool:
+        """Wait for the exit and the end of output within one ``limit_s``."""
+        deadline = system.monotonic() + self.limit_s
+        try:
+            proc.wait(timeout=self.limit_s)
+        except system.TimeoutExpired:
+            return False
+        return pump.join(max(0.0, deadline - system.monotonic()))
 
     def report_timeout(self, command: str, output: str) -> str:
         """Lay out the output, the timeout line, then the hung test line."""

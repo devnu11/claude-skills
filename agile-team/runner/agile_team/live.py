@@ -13,7 +13,7 @@ from typing import Any
 
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
-from . import halt, system, tool_calls
+from . import halt, rates, system, tool_calls
 from .dashboard.step_times import Mark, Platform, platform_of
 from .events import INTERRUPTED, Event, EventKind
 from .ledger import Tokens
@@ -153,9 +153,11 @@ class Reading:
     end: Mark | None = None
     quiet_since: float = field(init=False)
     calls: tool_calls.Calls = field(init=False)
+    rate: rates.Rate = field(init=False)
 
     def __post_init__(self) -> None:
         self.quiet_since = self.started_at
+        self.rate = rates.Rate(self.started_at)
         self.start = self.start or Mark(self.started_at)
         self.calls = tool_calls.Calls(self.where(), self.platform)
 
@@ -170,10 +172,10 @@ class Reading:
         self.end = mark
         self.calls.abandon(mark)
 
-    def time_split(self) -> dict[str, float]:
-        """``opened_at`` and the time split (TC12)."""
+    def time_split(self) -> dict[str, Any]:
+        """``opened_at``, the time split and the token rate (TC12, s118)."""
         split = self.calls.split(self.start or Mark(self.started_at), self.end or self.start)  # type: ignore[arg-type]
-        return {"opened_at": self.started_at, **split.as_dict()}
+        return {"opened_at": self.started_at, **split.as_dict(), "rate": self.rate.series()}
 
     def wake(self, now: float) -> None:
         """Control is back with the model: the quiet clock restarts (H7)."""
@@ -218,6 +220,7 @@ class Reading:
         extra, now = news.extra, news.now
         self.tokens += extra
         self.last_turn_at = now
+        self.rate.add(now, extra.total())
         self.wake(now)
         cost = self._price(message.model, extra)
         self.cost_usd = None if cost is None or self.cost_usd is None else self.cost_usd + cost
@@ -254,6 +257,7 @@ class Reading:
             "tool": self.tool(),
             "tokens": asdict(self.tokens),
             "cost_usd": self.cost_usd,
+            "rate": self.rate.series(),
         }
 
     def interrupted(self, stop: Stop) -> Event:
@@ -285,13 +289,13 @@ class Meter:
         event.data.update(self.time_split(), **self.pulse.clocks())
         return event
 
-    def time_split(self) -> dict[str, float]:
-        """The reading's ``opened_at`` and time split."""
+    def time_split(self) -> dict[str, Any]:
+        """The reading's ``opened_at``, time split and token rate (s118)."""
         return self.reading.time_split()
 
 
-def time_split(meter: Meter | None) -> dict[str, float]:
-    """``meter``'s split for a step event; ``{}`` without a meter."""
+def time_split(meter: Meter | None) -> dict[str, Any]:
+    """``meter``'s split and rate for a step event; ``{}`` without a meter."""
     return {} if meter is None else meter.time_split()
 
 
@@ -469,6 +473,10 @@ class Pulse:
         self._reported = True
         with suppress(OSError):
             halt.log_traceback(self.run_dir, exc)
+
+    def refresh(self) -> None:
+        """Write the heartbeat again now (s118 R7)."""
+        self.write()
 
     def write(self) -> None:
         """Write the heartbeat atomically; a failed write is retried by the next beat (H4)."""

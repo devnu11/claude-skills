@@ -674,7 +674,8 @@ class Runtime:
 
     def _take_off(self, plan: Plan, brief: str) -> None:
         """Announce the step and record it as in flight."""
-        self.emit(EventKind.STEP_START, plan, brief=brief, **self.pulse.clocks())
+        step = plan.story.step if plan.story else None
+        self.emit(EventKind.STEP_START, plan, brief=brief, step=step, **self.pulse.clocks())
         story = plan.story.id if plan.story else None
         self.state.in_flight = salvage.InFlight(plan.role.name, story, brief)
         plan.meter = self.step_meter = self.pulse.open(self.who(plan))
