@@ -112,7 +112,7 @@ class Toolchain:
             row = self.targeted_for(path)
             root, name = (row.root, row.relative(path)) if row else ("", path)
             groups.setdefault(root, []).append(name)
-        return [_filled(template, root, names) for root, names in groups.items() if template]
+        return [_filled(template, (root, names)) for root, names in groups.items() if template]
 
     def targeted_for(self, path: str) -> Targeted | None:
         """The row with the longest root that holds ``path`` (R4)."""
@@ -120,7 +120,8 @@ class Toolchain:
         return max(rows, key=lambda row: len(row.root), default=None)
 
 
-def _filled(template: str, root: str, names: list[str]) -> str:
+def _filled(template: str, group: tuple[str, list[str]]) -> str:
+    root, names = group
     quoted = " ".join(shlex.quote(n) for n in names)
     return template.replace("{root}", shlex.quote(root or ".")).replace("{files}", quoted)
 
