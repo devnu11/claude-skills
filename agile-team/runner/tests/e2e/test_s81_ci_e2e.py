@@ -12,9 +12,12 @@ STUB = """#!/bin/sh
 echo "$@" >> "$GH_ARGV"
 case "$*" in
   "pr checks 7 --watch") exit 1 ;;
-  "pr checks 7 --json "*)
+  "pr checks 7 --required --json "*)
     echo '[{"name":"tests","bucket":"fail","state":"FAILURE","workflow":"CI","link":"https://github.com/o/r/actions/runs/5/job/99"}]'
     exit 1 ;;
+  "api repos/{owner}/{repo}/actions/jobs/99")
+    echo '{"id":99,"head_sha":"abc","name":"tests","steps":[{"name":"run","conclusion":"failure"}]}'
+    exit 0 ;;
   "run view --job 99 --log-failed")
     printf 'tests\\trun\\t2026-01-01T00:00:00.0Z FAILED tests/x.py::test_y\\n'
     exit 0 ;;
@@ -42,4 +45,6 @@ def test_stub_gh_red_ci_gives_failing_lines(tmp_path, monkeypatch):
     calls = argv.read_text().splitlines()
     assert "pr checks 7 --watch" in calls
     assert "run view --job 99 --log-failed" in calls
-    assert any(c.startswith("pr checks 7 --json name,state,bucket,link,workflow") for c in calls)
+    assert any(
+        c.startswith("pr checks 7 --required --json name,state,bucket,link,workflow") for c in calls
+    )
