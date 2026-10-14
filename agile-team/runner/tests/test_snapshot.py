@@ -95,6 +95,16 @@ def write_story_file(config: cfg.Config, sid: str, meta: str, body: str = "x\n")
     system.write_text(path, f"---\n{meta}---\n{body}")
 
 
+def ci_read(entry: dict[str, Any]) -> Any:
+    """A CI read for a fixture stack row that has a ``ci`` pill (s111: row shape only)."""
+    from agile_team import ci as ci_mod
+
+    if not entry.get("ci"):
+        return None
+    check = ci_mod.Check("test", "pass", kind=ci_mod.CheckKind.GREEN)
+    return ci_mod.CiResult(entry["pr"] or 0, entry["url"] or "", entry["head"], "green", [check])
+
+
 def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
     """Put the fixture's ``upstream`` section back into the run state (s29)."""
     if not section:
@@ -117,6 +127,7 @@ def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
                 url=e["url"],
                 base=e["base"],
                 mode=e["mode"],
+                ci=ci_read(e),
             )
             for e in section["stack"]
         ],
@@ -746,6 +757,7 @@ def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, scratch:
             "mode": "ready",
             "check": "pass",
             "head": "h",
+            "ci": None,
         }
     ]
     assert section["boundary"] == {

@@ -40,6 +40,8 @@ def test_trigger_values_are_snake_case() -> None:
         "boundary_escalated",
         "ci_green",
         "ci_failed",
+        "ci_infra",
+        "main_broken",
         "ci_pending",
     ]
 
