@@ -28,7 +28,7 @@ UNMET = (
     "depends_on not done and not in the sprint: {pairs}; add those stories in the same "
     "call, or add this one once they are done"
 )
-WAITING ="waiting on {ids}"
+WAITING = "waiting on {ids}"
 WARNING = "{story} is above {dependency}, which it depends on"
 
 Graph = dict[str, list[str]]
