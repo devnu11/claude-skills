@@ -32,6 +32,7 @@ from . import (
     requirements,
     revert_log,
     sandbox,
+    shares,
     stages,
     story_spec,
     suite_runs,
@@ -62,6 +63,7 @@ from .roles import (
     user_roles_dir,
 )
 from .salvage import Cause
+from .sharing import Shares
 from .upstream import GhPrs, command_runner
 
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
@@ -350,6 +352,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         environments=functools.partial(story_spec.environment_names, config),
         design_file=functools.partial(revert_log.design_file, config.team.docs_dir),
         traced=functools.partial(requirements.trace_reasons, config),
+        shares=functools.partial(shares.check, config),
         reporting=reporting_of(config),
     )
     g = config.gates
@@ -533,6 +536,8 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
         "upstream": asdict(st.upstream),
         "checkout": asdict(st.checkout) if st.checkout else None,
         "queued_messages": [t.id for t in unread],
+        "queued_shares": [s.id for s in Shares(config.run_dir).pending(st.shares)],
+        "shares": st.shares,
     }
 
 
@@ -562,6 +567,31 @@ def cmd_tell(args: argparse.Namespace) -> int:
     told = Relay(config.run_dir).tell(text)
     print(f"queued {told.id} for the PO: {told.path.relative_to(config.repo)}")
     return 0
+
+
+def cmd_share(args: argparse.Namespace) -> int:
+    """Queue a file for the team (s120); the runner copies and commits it between steps."""
+    config = _load_config(repo_of(args))
+    share = shares.Share("", args.story, Path(args.source).name, b"")
+    if refusal := shares.story_refusal(config, share):
+        raise CliError(refusal)
+    data = _share_bytes(args.source)
+    share = replace(share, data=data)
+    queued = Shares(config.run_dir).queue(share)
+    path = shares.target_of(config.team.docs_dir, queued)
+    print(shares.QUEUED.format(id=queued.id, path=path, short=queued.sha256()[: shares.SHORT]))
+    return 0
+
+
+def _share_bytes(source: str) -> bytes:
+    try:
+        data = system.read_bytes(Path(source))
+    except OSError as exc:
+        text = shares.REFUSALS[shares.Refused.UNREADABLE]
+        raise CliError(text.format(source=source, error=exc.strerror)) from exc
+    if refusal := shares.data_refusal(data):
+        raise CliError(refusal)
+    return data
 
 
 def cmd_reply(args: argparse.Namespace) -> int:
@@ -743,6 +773,10 @@ COMMANDS = (
     Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
     Command("tell", "queue a message for the PO (a file, or - for stdin)", cmd_tell,
             ((("source",), {"help": "file holding the message, or - to read stdin"}),)),
+    Command("share", "share a file with the team for a story (hash-checked at acceptance)",
+            cmd_share,
+            ((("source",), {"help": "the file to share; its name is kept (no stdin)"}),
+             (("--story",), {"required": True, "help": "the story it is for, e.g. s118"}))),
     Command("reply", "reply on a story's dashboard thread (a file, or - for stdin)", cmd_reply,
             ((("story",), {}),
              (("source",), {"help": "file holding the reply, or - to read stdin"}))),

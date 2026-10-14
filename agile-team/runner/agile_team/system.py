@@ -73,6 +73,7 @@ __all__ = [
     "token",
     "wait_event",
     "which",
+    "write_bytes",
     "write_text",
 ]
 
@@ -140,6 +141,11 @@ def read_end(path: Path, size: int) -> tuple[bytes, int]:
         end = fh.seek(0, os.SEEK_END)
         fh.seek(max(0, end - size))
         return fh.read(), end
+
+
+def write_bytes(path: Path, data: bytes) -> None:
+    """Write a file's bytes."""
+    path.write_bytes(data)
 
 
 def write_text(path: Path, text: str) -> None:

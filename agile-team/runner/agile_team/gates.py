@@ -25,6 +25,7 @@ from . import (
     ops_review,
     pending_tests,
     revert_log,
+    shares,
     stages,
     story_spec,
     suite_runs,
@@ -224,6 +225,10 @@ def _unread(_path: str) -> str | None:
 
 def _no_trace_reasons(_story: str) -> list[str]:
     return []
+
+
+def _nothing_shared(_story: str) -> shares.Check:
+    return shares.Check(shares.Listed())
 
 
 class Trace(StrEnum):
@@ -481,6 +486,7 @@ class Checks:
     reuse: Callable[[], Outcome | None] = _nothing_kept
     design_file: Callable[[str], str] = _no_design_file
     traced: Callable[[str], list[str]] = _no_trace_reasons
+    shares: Callable[[str], shares.Check] = _nothing_shared
     reporting: test_reports.Reporting = field(default_factory=test_reports.Reporting)
     serving: Serving = Serving()
 
@@ -521,7 +527,11 @@ class Checks:
 
     def designed(self, story: StoryState) -> Outcome:
         """The design gate: After revert section (R9) and AC trace (s1 T11); every reason listed."""
-        reasons = [*self._revert_reasons(story), *self._trace_reasons(story)]
+        reasons = [
+            *self._revert_reasons(story),
+            *self._trace_reasons(story),
+            *self._shared_reasons(story),
+        ]
         if not reasons:
             return Outcome(Verdict.PASS)
         return Outcome(Verdict.BOUNCE, "\n".join(reasons), "design", author=Author.ROLE)
@@ -534,6 +544,11 @@ class Checks:
 
     def _trace_reasons(self, story: StoryState) -> list[str]:
         return self.traced(story.id) if story.trace is Trace.CHECKED else []
+
+    def _shared_reasons(self, story: StoryState) -> list[str]:
+        file = self.design_file(story.id)
+        named = self.shares(story.id).listed.unnamed(self.read(file) or "")
+        return [shares.UNNAMED.format(file=file, path=path) for path in named]
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -927,11 +942,24 @@ class Pipeline:
         return lambda: self.checks.tests_reworked(handoff.tests)
 
     def _verdict(self, story: StoryState, handoff: Handoff) -> Outcome:
+        if story.step == "acceptance" and (kept := self._shares_kept(story)):
+            return kept
         if story.step == "acceptance" and self.checks.environments(story.id):
             return self._tried(story, handoff)
         if story.step == ops_review.STEP:
             return self._reviewed(story, handoff)
         return self._handoff_outcome(handoff)
+
+    def _shares_kept(self, story: StoryState) -> Outcome | None:
+        """S12: a hold on a bad ``shared:`` list, a bounce to design on a changed file."""
+        found = self.checks.shares(story.id)
+        if found.listed.problems:
+            refusal = "\n".join(found.listed.problems)
+            return Outcome(Verdict.HOLD, story_spec.STORY_FILE_HOLD.format(refusal=refusal))
+        if not found.changed:
+            return None
+        reason = shares.CHANGED.format(story=story.id, lines="\n".join(found.changed))
+        return Outcome(Verdict.BOUNCE, reason, self.design_step(), author=Author.ROLE)
 
     def design_step(self) -> str:
         """The step a redesign goes back to: ``design`` when enabled, else the first."""
@@ -997,9 +1025,12 @@ class Pipeline:
 
     def _design_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         """The revert and trace checks for a ``done`` design (R9, s1 T10)."""
-        gated = bool(story.reverted) or story.trace is Trace.CHECKED
+        gated = bool(story.reverted) or story.trace is Trace.CHECKED or self._has_shares(story)
         applies = story.step == "design" and handoff.status == "done" and gated
         return (lambda: self.checks.designed(story)) if applies else None
+
+    def _has_shares(self, story: StoryState) -> bool:
+        return bool(self.checks.shares(story.id).listed.files)
 
     def unpresented(self, story: StoryState) -> Outcome | None:
         """A return to e2e when the Proxy would start without a presentation."""

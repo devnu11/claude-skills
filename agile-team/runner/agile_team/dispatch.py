@@ -47,6 +47,7 @@ from . import (
     runner_tools,
     salvage,
     sandbox,
+    shares,
     stages,
     stop_checks,
     story_spec,
@@ -507,12 +508,21 @@ class Runtime:
         if step:
             STEP_SETUPS[step](self, plan)
         self._attach_requirements(plan)
+        self._attach_shares(plan)
 
     def _attach_requirements(self, plan: Plan) -> None:
         """Add the ``## Requirements`` section to a checked story's brief (s1 T13)."""
         section = requirements.BRIEFS.get(plan.role.name)
         if section and plan.story is not None and plan.story.trace is Trace.CHECKED:
             plan.prompt += "\n\n" + section(requirements.load(self.config), plan.story.id)
+
+    def _attach_shares(self, plan: Plan) -> None:
+        """Add the ``## Shared files`` section to a story-bound brief (s120 S9)."""
+        if plan.story is None:
+            return
+        found = shares.listed_of(self.config, plan.story.id)
+        if section := shares.brief_section(found, plan.role.name):
+            plan.prompt += "\n\n" + section
 
     def _confine_git(self, plan: Plan) -> None:
         """Confine a GIT_CONFINED step's git to its workspace and set git's ceiling (G2)."""
@@ -595,7 +605,9 @@ class Runtime:
 
     def _order(self, environment: Environment, story: StoryState | None) -> sandbox.Order:
         showing = presentation.Showing(story.id, environment) if story else None
-        return sandbox.Order(environment, presentation.presented_source(self.config, showing))
+        shared = shares.listed_of(self.config, story.id).paths() if story else ()
+        source = presentation.presented_source(self.config, showing)
+        return sandbox.Order(environment, source, shared)
 
     def _fit_role_to_environment(self, plan: Plan) -> None:
         prepared = plan.prepared

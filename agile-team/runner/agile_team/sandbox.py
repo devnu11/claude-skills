@@ -156,6 +156,7 @@ class Prepared:
     process: system.Process | None = None
     presentation: Path | None = None
     seeds: Seeds | None = None
+    shared: tuple[str, ...] = ()
 
     def stop(self) -> str | None:
         """End the service's whole process group, wait for its port and drop the pid file.
@@ -386,6 +387,7 @@ class Order:
 
     environment: Environment
     presentation: Path | None = None
+    shared: tuple[str, ...] = ()
 
 
 PrepareFn = Callable[[Config, "Order"], Prepared]
@@ -404,6 +406,7 @@ class Preparer:
         """Replace any stale service, lay out the sandbox, copy the presentation, then start."""
         stop_stale(sandbox_root(config, order.environment))
         prepared = layout(config, order.environment)
+        prepared.shared = order.shared
         _present(prepared, order.presentation)
         launches = {Start.BACKGROUND: self._serve, Start.FOREGROUND: self._run_blocking}
         launches[prepared.kind.start](prepared, order.environment.prepare)
@@ -511,7 +514,13 @@ def proxy_read_globs(config: Config, prepared: Prepared) -> list[str]:
     """The Proxy reads only its sandbox, the stories, its reports and the customer docs."""
     docs = config.team.docs_dir.rstrip("/")
     sandbox_glob = f"{_rel(config, prepared.root)}/**"
-    return [sandbox_glob, STORIES_GLOB, f"{ACCEPTANCE_DIR}/**", f"{docs}/customer/**"]
+    return [
+        sandbox_glob,
+        STORIES_GLOB,
+        f"{ACCEPTANCE_DIR}/**",
+        f"{docs}/customer/**",
+        *prepared.shared,
+    ]
 
 
 def forbidden_roots(config: Config) -> list[str]:
@@ -582,4 +591,5 @@ def _allowed_reads(config: Config, prepared: Prepared) -> list[str]:
     repo = system.resolve(config.repo)
     customer_docs = repo / config.team.docs_dir / "customer"
     stories, acceptance = repo / ".team/stories", repo / ACCEPTANCE_DIR
-    return [str(system.resolve(prepared.root)), str(stories), str(acceptance), str(customer_docs)]
+    base = [str(system.resolve(prepared.root)), str(stories), str(acceptance), str(customer_docs)]
+    return [*base, *(str(repo / p) for p in prepared.shared)]

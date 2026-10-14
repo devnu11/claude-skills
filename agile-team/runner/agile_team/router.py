@@ -21,6 +21,7 @@ from .loops import Rule
 from .relay import WAITING_HEAD, Answer, Told
 from .reorders import Desk
 from .reverts import Reverter
+from .sharing import Sharer
 from .story_admin import Clerk
 
 POLL_S = 5.0
@@ -198,12 +199,14 @@ class Router:
     steps: int = field(default=0, init=False)
     boundaries: BoundaryRunner = field(init=False)
     desk: Desk = field(init=False)
+    sharer: Sharer = field(init=False)
     clerk: Clerk = field(init=False)
     reverter: Reverter = field(init=False)
 
     def __post_init__(self) -> None:
         self.boundaries = BoundaryRunner(self.runtime)
         self.desk = Desk(self.runtime)
+        self.sharer = Sharer(self.runtime)
         self.clerk = Clerk(self.runtime)
         self.reverter = Reverter(self.runtime)
 
@@ -220,6 +223,7 @@ class Router:
         if self.runtime.checkout_moved():
             return None
         self.desk.apply()
+        self.sharer.apply()
         self.clerk.settle()
         self.reverter.settle()
         answers, told = self._news(), self._unread()

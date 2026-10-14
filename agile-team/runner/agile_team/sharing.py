@@ -1,0 +1,188 @@
+"""Queued shares and the runner side that applies them between steps (s120).
+
+``agile-team share`` queues a request file; the router's ``Sharer`` copies the file,
+records its hash in the story file and commits both, never while a boundary is open.
+"""
+
+from __future__ import annotations
+
+import itertools
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from enum import StrEnum
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from . import shares, story_spec, system
+from .events import Event, EventKind
+from .relay import LIAISON_DIR
+from .shares import Refused, Share, SharedFile
+
+if TYPE_CHECKING:
+    from .dispatch import Runtime
+
+SHARES_DIR = "shares"
+REQUEST_NAME = re.compile(r"^f(\d+)\.json$")
+ROLE = "liaison"
+
+
+@dataclass(frozen=True)
+class Shares:
+    """The share request files under the run directory."""
+
+    run_dir: Path
+
+    @property
+    def folder(self) -> Path:
+        """Where the request files live."""
+        return self.run_dir / LIAISON_DIR / SHARES_DIR
+
+    def queue(self, share: Share) -> Share:
+        """Queue ``share`` as the next ``f<N>.json``, written whole, never overwriting."""
+        system.make_dirs(self.folder)
+        draft = self.folder / f".draft-{system.token()}"
+        queued = replace(share, at=system.now())
+        try:
+            system.write_text(draft, queued.to_json())
+            return self._publish(draft, queued)
+        finally:
+            system.remove(draft)
+
+    def all(self) -> list[Share]:
+        """Every readable request, in number order."""
+        if not system.is_dir(self.folder):
+            return []
+        read = (self._read(f"f{n}", path) for n, path in sorted(self._numbered()))
+        return [s for s in read if s]
+
+    def pending(self, settled: Mapping[str, str]) -> list[Share]:
+        """Requests whose ids are not in ``settled``."""
+        return [s for s in self.all() if s.id not in settled]
+
+    def _numbered(self) -> list[tuple[int, Path]]:
+        matched = ((REQUEST_NAME.match(p.name), p) for p in system.list_dir(self.folder))
+        return [(int(m[1]), p) for m, p in matched if m]
+
+    @staticmethod
+    def _read(rid: str, path: Path) -> Share | None:
+        try:
+            return Share.from_json(rid, system.read_text(path))
+        except OSError:
+            return None
+
+    def _publish(self, draft: Path, share: Share) -> Share:
+        taken = [n for n, _ in self._numbered()]
+        for n in itertools.count(max(taken, default=0) + 1):
+            try:
+                system.hard_link(self.folder / f"f{n}.json", draft)
+            except FileExistsError:
+                continue
+            return replace(share, id=f"f{n}")
+        raise AssertionError("unreachable")  # pragma: no cover
+
+
+class Outcome(StrEnum):
+    """How a share was settled."""
+
+    APPLIED = "applied"
+    UNCHANGED = "unchanged"
+    REFUSED = "refused"
+
+
+@dataclass(frozen=True)
+class Settled:
+    """The result of settling one share."""
+
+    outcome: Outcome
+    commit: str | None = None
+    reason: str | None = None
+
+    def state_text(self) -> str:
+        """What ``state.shares`` records."""
+        if self.outcome is Outcome.APPLIED:
+            return f"applied {(self.commit or '')[: shares.SHORT]}"
+        if self.outcome is Outcome.REFUSED:
+            return f"refused: {self.reason}"
+        return self.outcome.value
+
+
+@dataclass
+class Sharer:
+    """Applies pending shares between steps (S4)."""
+
+    runtime: Runtime
+
+    def apply(self) -> None:
+        """Settle every pending share in number order; wait while a boundary is open."""
+        if self.runtime.state.boundary is not None:
+            return
+        for share in Shares(self.runtime.config.run_dir).pending(self.runtime.state.shares):
+            self._settle(share)
+
+    def _settle(self, share: Share) -> None:
+        config = self.runtime.config
+        refusal = shares.story_refusal(config, share)
+        file = story_spec.file_of(config, share.story)
+        text = None if refusal else self._with_entry(share, file)
+        if refusal or text is None:
+            reason = refusal or self._unwritable(file)
+            return self._record(share, Settled(Outcome.REFUSED, reason=reason))
+        self._record(share, self._write(share, file, text))
+
+    def _with_entry(self, share: Share, file: str) -> str | None:
+        config = self.runtime.config
+        entry = SharedFile(shares.target_of(config.team.docs_dir, share), share.sha256())
+        return shares.with_entry(system.read_text(config.repo / file), entry)
+
+    @staticmethod
+    def _unwritable(file: str) -> str:
+        fields = {"file": file, "problem": shares.UNPARSED}
+        return shares.REFUSALS[Refused.STORY_FILE].format(**fields)
+
+    def _write(self, share: Share, file: str, text: str) -> Settled:
+        repo = self.runtime.config.repo
+        target = shares.target_of(self.runtime.config.team.docs_dir, share)
+        if self._same(repo / target, share.data) and system.read_text(repo / file) == text:
+            return Settled(Outcome.UNCHANGED)
+        system.make_dirs((repo / target).parent)
+        system.write_bytes(repo / target, share.data)
+        system.write_text(repo / file, text)
+        subject = shares.SUBJECT.format(story=share.story, name=share.name, id=share.id)
+        sha = self.runtime.git.commit([target, file], subject)
+        self.runtime.record_checkout()
+        return Settled(Outcome.APPLIED, commit=sha)
+
+    @staticmethod
+    def _same(path: Path, data: bytes) -> bool:
+        try:
+            return system.read_bytes(path) == data
+        except OSError:
+            return False
+
+    def _record(self, share: Share, settled: Settled) -> None:
+        runtime = self.runtime
+        runtime.state.shares[share.id] = settled.state_text()
+        runtime.save()
+        runtime.events.emit(Event(EventKind.SHARE, ROLE, share.story, self._data(share, settled)))
+        if settled.outcome is Outcome.APPLIED:
+            self._tell(share, settled.commit or "")
+
+    def _data(self, share: Share, settled: Settled) -> dict[str, object]:
+        path = shares.target_of(self.runtime.config.team.docs_dir, share)
+        data: dict[str, object] = {
+            "request": share.id,
+            "path": path,
+            "sha256": share.sha256(),
+            "commit": settled.commit,
+            "outcome": settled.outcome.value,
+        }
+        return data | ({"reason": settled.reason} if settled.reason else {})
+
+    def _tell(self, share: Share, commit: str) -> None:
+        path = shares.target_of(self.runtime.config.team.docs_dir, share)
+        short = share.sha256()[: shares.SHORT]
+        text = shares.TOLD.format(
+            path=path, story=share.story, short=short, commit=commit[: shares.SHORT]
+        )
+        self.runtime.relay.tell(text)

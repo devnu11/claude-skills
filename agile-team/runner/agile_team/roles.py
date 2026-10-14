@@ -69,7 +69,7 @@ FRONTMATTER_KEYS = frozenset({*OVERRIDABLE, "extends"})
 HANDOFF_STATUSES = ("done", "changes_requested", "blocked", "failed")
 RULINGS = ("rescope", "upgrade_model", "revise_design", "escalate", "advance")
 
-_FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
+FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 _HANDOFF = re.compile(r"```handoff\s*\n(.*?)\n```", re.DOTALL)
 _PLACEHOLDER = re.compile(r"\A(!?)\{(\w+)\}\Z")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -188,7 +188,7 @@ class Handoff:
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
     """YAML frontmatter as a mapping (``None`` when absent) and the body after it."""
-    match = _FRONTMATTER.match(text)
+    match = FRONTMATTER.match(text)
     if not match:
         return None, text
     meta = yaml.safe_load(match.group(1)) or {}
@@ -214,7 +214,7 @@ def _check_keys(name: str, meta: dict[str, Any]) -> None:
 
 
 def has_frontmatter(text: str) -> bool:
-    return bool(_FRONTMATTER.match(text))
+    return bool(FRONTMATTER.match(text))
 
 
 def addendum_text(text: str) -> str:
