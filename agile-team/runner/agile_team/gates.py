@@ -77,6 +77,7 @@ PASS_TESTS_NOT_STUCK = (
 PASS_TESTS_RED = "the suite is red; pass_tests needs a green suite. {reason}"
 
 TIMED_OUT_BOUNCE = "the command did not finish in time:\n{tail}"
+REUSED = "{reason} (the stop hook's run on this tree)"
 GREEN_TOO_EARLY = "tests pass before implementation; write a failing test"
 
 
@@ -387,6 +388,10 @@ def _passed() -> Outcome:
     return Outcome(Verdict.PASS)
 
 
+def _nothing_kept() -> Outcome | None:
+    return None
+
+
 @dataclass
 class Checks:
     """Command-backed gates for one repo."""
@@ -402,6 +407,7 @@ class Checks:
     suite_runs: Callable[[str], suite_runs.Wanted] = _no_suite_runs
     story_spec: Callable[[str], story_spec.Read] = _clean_spec
     environments: Callable[[str], list[str]] = _no_environments
+    reuse: Callable[[], Outcome | None] = _nothing_kept
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -517,6 +523,9 @@ class Checks:
 
     def tests_green_and_covered(self) -> Outcome:
         """One coverage run proves green and gives the total (s68 C1-C5)."""
+        kept = self.reuse()
+        if kept is not None:
+            return kept
         with self.stages(stages.Name.GATE_TESTS_COVERAGE):
             code, out = self.run(self.commands["coverage"])
         covered = _with_ran(self._covered_outcome(code, out), _ran("coverage", code, out))
@@ -622,7 +631,7 @@ class Pipeline:
         return _retry_here(gate(), story.step) if gate else self._verdict(story, handoff)
 
     def _gate_for(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
-        gate = self._step_gate(story, handoff)
+        gate = self.step_gate(story, handoff)
         return self._suite_gate(story, gate) if self._suite_due(story, handoff) else gate
 
     def _suite_due(self, story: StoryState, handoff: Handoff) -> bool:
@@ -633,7 +642,8 @@ class Pipeline:
     ) -> Callable[[], Outcome]:
         return lambda: self.checks.after_suite_runs(story.id, (gate or _passed)())
 
-    def _step_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+    def step_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+        """The gate a `done` at the story's step runs, or None."""
         if story.step == "tests" and story.dispute:
             return self._dispute_gate(story, handoff)
         if self.reworked(story):

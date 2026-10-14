@@ -68,6 +68,9 @@ only if it answers. A failed start comes back to you with the command's
 output. Stop any server you started for your own check, or the gate finds
 its port in use.
 
+Your `done` stop checks that each environment's presentation is complete
+(`PRESENTATION.md` exists and is not empty). An incomplete one is refused.
+
 ## Forbidden
 
 Editing production code or unit tests.

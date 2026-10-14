@@ -72,6 +72,9 @@ it. Without either, a green suite bounces back to you.
 - Run only your own test files, by name, with the quiet, fail-fast flags.
   A full suite or coverage run is denied; the runner does both.
 
+Your `done` stop runs the tests gate: your new tests must fail (or, with the code
+in, see below). A green suite is refused.
+
 ## Forbidden
 
 Editing production code.

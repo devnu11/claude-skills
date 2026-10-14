@@ -8,9 +8,11 @@ addenda live beside it in ``.team/roles/*.md`` and are handled by ``roles``.
 from __future__ import annotations
 
 import re
+import shlex
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +73,26 @@ class Targeted:
         return path.removeprefix(self.root.rstrip("/") + "/") if self.root else path
 
 
+class FileCommand(StrEnum):
+    """Which per-file command template to use."""
+
+    FIX = "fix"
+    LINT = "lint_files"
+
+
+@dataclass(frozen=True)
+class FileCommands:
+    """Per-file fix and lint templates (``{root}``, ``{files}``) and the globs they apply to."""
+
+    fix: str = ""
+    lint_files: str = ""
+    lintable: tuple[str, ...] = ()
+
+    def template(self, kind: FileCommand) -> str:
+        """The template for ``kind``."""
+        return {FileCommand.FIX: self.fix, FileCommand.LINT: self.lint_files}[kind]
+
+
 @dataclass
 class Toolchain:
     """Per-repo commands and the globs that role scopes resolve against."""
@@ -80,6 +102,16 @@ class Toolchain:
     pragma: str = ""
     globs: dict[str, list[str]] = field(default_factory=dict)
     targeted: list[Targeted] = field(default_factory=list)
+    files: FileCommands = field(default_factory=FileCommands)
+
+    def file_runs(self, kind: FileCommand, files: list[str]) -> list[str]:
+        """One command per targeted root holding some of ``files``, in first-seen order."""
+        template = self.files.template(kind)
+        groups: dict[str, list[str]] = {}
+        for path in files:
+            row = self.targeted_for(path)
+            groups.setdefault(row.root if row else "", []).append(row.relative(path) if row else path)
+        return [_filled(template, root, names) for root, names in groups.items() if template]
 
     def targeted_for(self, path: str) -> Targeted | None:
         """The row with the longest root that holds ``path`` (R4)."""
@@ -87,7 +119,21 @@ class Toolchain:
         return max(rows, key=lambda row: len(row.root), default=None)
 
 
+def _filled(template: str, root: str, names: list[str]) -> str:
+    quoted = " ".join(shlex.quote(n) for n in names)
+    return template.replace("{root}", shlex.quote(root or ".")).replace("{files}", quoted)
+
+
+PRESETS = Path(__file__).parent / "presets.toml"
+
+
+def load_presets() -> dict[str, dict[str, Any]]:
+    """The packaged stack preset table."""
+    return tomllib.loads(system.read_text(PRESETS))
+
+
 DEFAULT_CI_TIMEOUT_S = 1800.0
+DEFAULT_STOP_BUDGET_S = 1800.0
 
 
 @dataclass
@@ -101,6 +147,7 @@ class Gates:
     backstop: int = 4
     command_timeout_s: float = DEFAULT_TIMEOUT_S
     ci_timeout_s: float = DEFAULT_CI_TIMEOUT_S
+    stop_check_budget_s: float = DEFAULT_STOP_BUDGET_S
 
 
 @dataclass
@@ -282,6 +329,14 @@ def _team(raw: dict[str, Any]) -> Team:
     return Team(**{k: v for k, v in raw.items() if k in Team.__dataclass_fields__})
 
 
+def _files(raw: dict[str, Any]) -> FileCommands:
+    """The per-file commands: the named preset's, then the config's own keys over them."""
+    preset = load_presets().get(raw.get("preset", ""), {}).get("files", {})
+    merged = {**preset, **raw.get("files", {})}
+    merged["lintable"] = tuple(merged.get("lintable", ()))
+    return FileCommands(**{k: v for k, v in merged.items() if k in FileCommands.__dataclass_fields__})
+
+
 def _toolchain(raw: dict[str, Any]) -> Toolchain:
     commands = {k: raw[k] for k in TOOLCHAIN_COMMANDS if k in raw}
     return Toolchain(
@@ -293,6 +348,7 @@ def _toolchain(raw: dict[str, Any]) -> Toolchain:
             Targeted(str(r.get("root", "")), str(r.get("command", "")))
             for r in raw.get("targeted", [])
         ],
+        files=_files(raw),
     )
 
 
@@ -359,6 +415,10 @@ TOOLCHAIN_RULES: tuple[Rule, ...] = (
         lambda t: all("{tests}" in r.command for r in t.targeted),
         "toolchain.targeted commands must hold {tests}",
     ),
+    (
+        lambda t: all("{files}" in c for c in (t.files.fix, t.files.lint_files) if c),
+        "toolchain.files.fix and toolchain.files.lint_files must hold {files}",
+    ),
 )
 GATE_RULES: tuple[Rule, ...] = (
     (lambda g: set(g.steps) <= set(PIPELINE_STEPS), f"gates.steps must be among {PIPELINE_STEPS}"),
@@ -368,6 +428,7 @@ GATE_RULES: tuple[Rule, ...] = (
     (lambda g: g.backstop >= 2, "gates.backstop must be at least 2"),
     (lambda g: g.command_timeout_s > 0, "gates.command_timeout_s must be positive"),
     (lambda g: g.ci_timeout_s > 0, "gates.ci_timeout_s must be positive"),
+    (lambda g: g.stop_check_budget_s > 0, "gates.stop_check_budget_s must be positive"),
 )
 HEALTH_KEYS = tuple(HealthLimits.__dataclass_fields__)
 HEALTH_RULES: tuple[Rule, ...] = (

@@ -44,6 +44,7 @@ from . import (
     salvage,
     sandbox,
     stages,
+    stop_checks,
     story_spec,
     system,
 )
@@ -160,6 +161,13 @@ class Launch:
 
 
 @dataclass
+class Said:
+    """The step's latest assistant text, for the Stop hook."""
+
+    text: str = ""
+
+
+@dataclass
 class Plan:
     """One step: who runs, in what scope, on which story, with what prompt."""
 
@@ -174,6 +182,8 @@ class Plan:
     meter: live.Meter | None = None
     kind: StepKind = StepKind.ROLE
     commit: str | None = None
+    said: Said = field(default_factory=Said)
+    stop_hook: stop_checks.StopChecks | None = None
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -199,6 +209,13 @@ class StepResult:
 ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
+def _hooks(plan: Plan, pre_tool: Any) -> dict[str, list[HookMatcher]]:
+    hooks = {"PreToolUse": [HookMatcher(matcher=None, hooks=[pre_tool])]}
+    if plan.stop_hook:
+        hooks["Stop"] = [plan.stop_hook.matcher()]
+    return hooks
+
+
 def build_options(plan: Plan) -> ClaudeAgentOptions:
     """SDK options for one step: no user or project settings leak in."""
     role, launch, hook = plan.role, plan.launch, guard.pre_tool_hook(plan.scope)
@@ -209,7 +226,7 @@ def build_options(plan: Plan) -> ClaudeAgentOptions:
         tools=list(role.tools),
         allowed_tools=[*role.tools, *launch.extra_allowed],
         permission_mode="dontAsk",
-        hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]},
+        hooks=_hooks(plan, hook),
         cwd=str(plan.scope.base),
         env={**launch.env, **ISOLATION_ENV},
         strict_mcp_config=True,
@@ -228,11 +245,14 @@ class _Drain:
     result: ResultMessage | None = None
     compacted_from: int | None = None
     meter: live.Meter | None = None
+    said: Said | None = None
 
     def take(self, message: Any) -> None:
         if self.meter:
             self.meter.take(message)
         self.last_text = _text_of(message) or self.last_text
+        if self.said:
+            self.said.text = self.last_text
         if isinstance(message, ResultMessage):
             self.result = message
         elif _is_boundary(message) and self.compacted_from is None:
@@ -256,7 +276,8 @@ def _is_boundary(message: Any) -> bool:
 
 async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
     """Drain a query; keep the final text, cost, tokens, session id and compaction."""
-    drain = _Drain(meter=getattr(plan, "meter", None))  # tests pass bare plans
+    # tests pass bare plans
+    drain = _Drain(meter=getattr(plan, "meter", None), said=getattr(plan, "said", None))
     async for message in query_fn(prompt=plan.prompt, options=plan.options):
         drain.take(message)
     return drain.step_result()
@@ -454,6 +475,8 @@ class Runtime:
             self._role_set_up(plan)
         if kind in FIX_SETUPS:
             FIX_SETUPS[kind](self, plan)
+        if kind in stop_checks.STOP_HOOK_KINDS:
+            plan.stop_hook = stop_checks.StopChecks(self, plan)
         self._confine_git(plan)
 
     def _role_set_up(self, plan: Plan) -> None:
@@ -1052,7 +1075,11 @@ class Runtime:
     def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
         chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
         with self.pulse.doing(chore):
-            return self.pipeline.evaluate(plan.story, handoff)
+            return self._gating(plan).evaluate(plan.story, handoff)
+
+    def _gating(self, plan: Plan) -> Pipeline:
+        """The pipeline that gates ``plan``: it reuses the Stop hook's suite run when there is one."""
+        return plan.stop_hook.reusing(self.pipeline) if plan.stop_hook else self.pipeline
 
     def owners(self, story: StoryState) -> Owners:
         """Who may write what, in pipeline order, for this story (R2)."""

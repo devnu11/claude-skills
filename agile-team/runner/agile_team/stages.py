@@ -63,6 +63,11 @@ class Name(StrEnum):
     BOUNDARY_CI_WAIT = "boundary.ci-wait"
     RUN_TESTS = "runner-tool.run_tests"
     RUN_NEW_TESTS = "runner-tool.run_new_tests"
+    STOP_HANDOFF = "stop.handoff"
+    STOP_LINT = "stop.lint"
+    STOP_SUITE = "stop.suite"
+    STOP_RED = "stop.red"
+    STOP_PRESENTATION = "stop.presentation"
 
 
 @dataclass(frozen=True)
@@ -154,6 +159,11 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     ),
     (Name.RUN_TESTS, D, STEP, "pytest: named tests", "Only the tests a developer named, run for that developer"),  # noqa: E501
     (Name.RUN_NEW_TESTS, D, STEP, "pytest: new test files", "Only the story's new test files, run for a developer"),  # noqa: E501
+    (Name.STOP_HANDOFF, A, STEP, "stop: handoff parses", "Stop check: the step's handoff block parses"),  # noqa: E501
+    (Name.STOP_LINT, A, STEP, "stop: lint fix + check", "Stop check: fix the step's changed files with the toolchain's fixers, then lint them"),  # noqa: E501
+    (Name.STOP_SUITE, A, STEP, "stop: suite + coverage", "Stop check: the implement gate's suite and coverage, before the developer may stop"),  # noqa: E501
+    (Name.STOP_RED, A, STEP, "stop: new tests red", "Stop check: the tests gate, before the unit-tester may stop"),  # noqa: E501
+    (Name.STOP_PRESENTATION, A, STEP, "stop: presentation", "Stop check: the story's presentation is complete, before the integration-tester may stop"),  # noqa: E501
 )  # fmt: skip
 
 STAGES: dict[Name, Stage] = {
@@ -197,6 +207,18 @@ class Place:
 NOWHERE = Place()
 
 
+@dataclass(frozen=True)
+class Attempt:
+    """Which Stop-hook attempt a stage ran in: ``n`` of at most ``of``."""
+
+    n: int
+    of: int
+
+    def as_dict(self) -> dict[str, int]:
+        """The attempt as event data."""
+        return {"n": self.n, "of": self.of}
+
+
 @dataclass
 class Run:
     """One open stage: its row, place, and the command kept for the event."""
@@ -206,6 +228,7 @@ class Run:
     detail: str = ""
     code: int | None = None
     raised: str | None = None
+    attempt: Attempt | None = None
     listeners: list[Callable[[str], None]] = field(default_factory=list)
 
     def hear(self, line: str) -> None:

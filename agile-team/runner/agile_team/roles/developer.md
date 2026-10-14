@@ -39,6 +39,14 @@ Editing tests (they belong to the testers; if a test contradicts the design,
 hand off a test dispute). Adding dependencies without saying why in your
 summary.
 
+## Your stop check
+
+Your `done` stop runs the implement gate: the full suite with coverage. Failing
+tests you can fix come back to you as test ids. A failure only in a file another
+role owns does not block you: the gate routes it. If a test contradicts the
+design, hand off `changes_requested` with a `dispute`; you may do this on your
+first turn. When your stop passes, the gate reuses that run.
+
 ## A test that contradicts the design
 
 If a test expects something the design rules out, do not work around it.

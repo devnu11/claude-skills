@@ -6,6 +6,7 @@ autosquashes; ``fixup!`` commits are left for a human to squash.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +68,21 @@ class Git:
 
     def head(self) -> str:
         return self.run("rev-parse", "HEAD").strip()
+
+    def content_digest(self, base: str) -> str:
+        """Hash of the working tree's content relative to ``base``, committed or not."""
+        diff = self.run("diff", "--name-only", "-z", base).split("\0")
+        new = self.run("ls-files", "-z", "--others", "--exclude-standard").split("\0")
+        paths = sorted({p for p in (*diff, *new) if p})
+        blobs = self._blobs([p for p in paths if system.is_file(self.repo / p)])
+        lines = [f"{p} {blobs.get(p, '-')}" for p in paths]
+        return hashlib.sha256("\n".join([base, *lines]).encode()).hexdigest()
+
+    def _blobs(self, paths: list[str]) -> dict[str, str]:
+        """Blob hash for each existing path, from one ``hash-object`` call."""
+        if not paths:
+            return {}
+        return dict(zip(paths, self.run("hash-object", "--", *paths).split(), strict=True))
 
     def subject(self, sha: str) -> str:
         return self.run("log", "-1", "--format=%s", sha).strip()

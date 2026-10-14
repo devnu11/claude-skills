@@ -53,6 +53,11 @@ class Hidden:
 HIDDEN = Hidden()
 
 
+def attempt_data(run: stages.Run) -> dict[str, int] | None:
+    """The stop-hook attempt the stage ran in, as event data, or None."""
+    return run.attempt.as_dict() if run.attempt else None
+
+
 def open_row(run: stages.Run, start: Mark) -> dict[str, Any]:
     """The heartbeat's row for a stage run still open (HB2)."""
     return {
@@ -62,6 +67,7 @@ def open_row(run: stages.Run, start: Mark) -> dict[str, Any]:
         "description": run.stage.description,
         "story": run.place.story,
         "step": run.place.step,
+        "attempt": attempt_data(run),
         "started_at": start.at,
         "started_mono": start.mono,
         "started_slept": start.slept,
@@ -115,6 +121,7 @@ class Timed:
             "when": str(run.stage.when),
             "attach": str(run.stage.attach),
             "step": run.place.step,
+            "attempt": attempt_data(run),
             "detail": shown(run.detail),
             "code": 0 if done else run.code,
             "raised": run.raised,
@@ -133,6 +140,16 @@ class StageLog:
     clock: Marker
     place: stages.Place = stages.NOWHERE
     board: StageBoard = HIDDEN
+    attempt: stages.Attempt | None = None
+
+    @contextmanager
+    def trying(self, attempt: stages.Attempt) -> Iterator[None]:
+        """Mark the stages opened inside as run in stop-hook ``attempt``."""
+        before, self.attempt = self.attempt, attempt
+        try:
+            yield
+        finally:
+            self.attempt = before
 
     @contextmanager
     def within(self, place: stages.Place) -> Iterator[None]:
@@ -147,7 +164,7 @@ class StageLog:
     def open(self, name: stages.Name) -> Iterator[stages.Run]:
         """Run a stage by name; one event is written when it closes."""
         start = self.clock.mark()
-        run = stages.Run(stages.STAGES[name], self.place)
+        run = stages.Run(stages.STAGES[name], self.place, attempt=self.attempt)
         row = open_row(run, start)
         run.listeners.append(Tallier(row, self.board))
         try:

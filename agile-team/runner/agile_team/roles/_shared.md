@@ -89,6 +89,19 @@ JSON. The runner parses it; a missing or malformed block fails your step.
   only needed its path". Leave it empty when the step went smoothly. If your
   brief has "Questions from the Manager", answer them here.
 
+## Stop checks
+
+When you end your step with a `done` handoff, the runner checks your work
+before the step ends: your handoff parses; your changed source and test files
+are fixed by the toolchain's fixers (python: `ruff check --fix`, `ruff format`)
+and then linted; and your role's own checks run (below). If something you can
+fix fails, your stop is refused and you get the failures, shortest first, in
+the same conversation: fix them and hand off again. After 3 refusals the step
+ends and the gate decides. A handoff that is not `done` (`changes_requested`,
+`blocked`, `failed`) ends the step at once with no checks: if you already know
+a failing test or file is not yours to fix, escalate on your first turn
+without running anything.
+
 ## Gate fix steps
 
 A gate fix step means the implement gate failed on files you own. Fix only the

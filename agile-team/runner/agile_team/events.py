@@ -47,6 +47,7 @@ class EventKind(StrEnum):
     STEP_INTERRUPTED = "step-interrupted"
     TESTS_RUN = "tests-run"
     RUNNER_STAGE = "runner-stage"
+    STOP_CHECK = "stop-check"
 
 
 @dataclass

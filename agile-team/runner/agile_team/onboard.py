@@ -24,7 +24,9 @@ from .config import (
     DEFAULT_KEY_FILE,
     ENVIRONMENT_SECTION,
     PIPELINE_STEPS,
+    PRESETS,
     config_path,
+    load_presets,
 )
 from .git_ops import Git
 from .roles import REPO_ROLES, Layer, RoleBook
@@ -50,14 +52,6 @@ Every role reads this file. Keep it short and specific to this repo.
 
 - (paths or systems the team must leave alone)
 """
-
-PRESETS = Path(__file__).parent / "presets.toml"
-
-
-def load_presets() -> dict[str, dict[str, Any]]:
-    """The packaged stack preset table."""
-    return tomllib.loads(system.read_text(PRESETS))
-
 
 def detect(repo: Path, presets: dict[str, dict[str, Any]]) -> str | None:
     """Name of the first preset with a marker file in ``repo``."""
