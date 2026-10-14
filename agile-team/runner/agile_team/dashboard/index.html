@@ -702,9 +702,14 @@ function coverage(view) {
 
 /** How serious an uncovered criterion is, given where its story stands. */
 function gapTone(view, story) {
-  if (!story.sprint) return "";
+  if (!story.sprint || story.trace === "exempt") return "";
   const pastDesign = story.status === "done" || view.pipeline.indexOf(story.step) > 0;
   return pastDesign ? "serious" : "warning";
+}
+
+/** Whether a criterion has no requirement and its story is one the design gate traces. */
+function isGap(view, c) {
+  return !c.reqs.length && Boolean(gapTone(view, c.story));
 }
 
 const roleInfo = (view, name) =>
@@ -1114,7 +1119,7 @@ function renderStatusRow(view) {
 function renderTabs(view) {
   const counts = {
     questions: [openQuestions(view).length, true],
-    requirements: [view.requirements.length ? coverage(view).filter((c) => !c.reqs.length && c.story.sprint).length : 0, true],
+    requirements: [view.requirements.length ? coverage(view).filter((c) => isGap(view, c)).length : 0, true],
     board: [boardStories(view).length, false],
   };
   $("#tabs").innerHTML = TABS.map(([id, label]) => {
@@ -2756,7 +2761,7 @@ function renderRequirements(view) {
   if (none) { $("#reqs").innerHTML = `<p class="empty">${reqEmpty(view)}</p>`; return; }
   const cov = coverage(view), reqs = view.requirements;
   const changes = sum(reqs, (r) => r.history.filter((h) => h.change !== "added").length);
-  const gaps = cov.filter((c) => !c.reqs.length && c.story.sprint);
+  const gaps = cov.filter((c) => isGap(view, c));
   const tile = (label, value, note) => `<div class="card tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
   $("#req-tiles").innerHTML = [
     tile("Active requirements", reqs.filter((r) => r.status === "active").length, `${reqs.filter((r) => r.status === "retired").length} retired`),
@@ -2787,6 +2792,7 @@ function renderMatrix(view, cov) {
 function coverageStatus(view, c) {
   if (c.reqs.length) return pill("traced", "good");
   const tone = gapTone(view, c.story);
+  if (c.story.trace === "exempt") return `<span class="empty">designed before s1</span>`;
   if (!tone) return `<span class="empty">not designed yet</span>`;
   return pill(tone === "serious" ? "untraced past design" : "needs a requirement", tone);
 }

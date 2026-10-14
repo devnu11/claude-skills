@@ -122,6 +122,7 @@ def reverted_story(story: StoryState, back: Back) -> StoryState:
         depends_on=story.depends_on,
         reverted=[*story.reverted, back.entry],
         revert_owed=back.owed,
+        trace=story.trace,
     )
 
 

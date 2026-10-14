@@ -29,6 +29,7 @@ from . import (
     pending_tests,
     presentation,
     recovery,
+    requirements,
     revert_log,
     sandbox,
     stages,
@@ -222,6 +223,13 @@ def cmd_config_check(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def cmd_requirements(args: argparse.Namespace) -> int:
+    """``requirements check``: print the problems and AC coverage; exit 1 on problems (s1 T6-T8)."""
+    report = requirements.report(requirements.load(_load_config(repo_of(args))))
+    print_json(report)
+    return 1 if report["problems"] else 0
+
+
 def _print_lines(prefix: str, lines: list[str]) -> None:
     for line in lines:
         print(f"{prefix}: {line}")
@@ -341,6 +349,7 @@ def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
         story_spec=spec,
         environments=functools.partial(story_spec.environment_names, config),
         design_file=functools.partial(revert_log.design_file, config.team.docs_dir),
+        traced=functools.partial(requirements.trace_reasons, config),
         reporting=reporting_of(config),
     )
     g = config.gates
@@ -721,6 +730,8 @@ COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
             ((("action",), {"choices": ["check"]}),)),
+    Command("requirements", "check the requirement files; print problems and AC coverage as JSON",
+            cmd_requirements, ((("action",), {"choices": ["check"]}),)),
     Command("roles", "list role layers or scaffold instruction stubs", cmd_roles, ROLES_ARGS),
     Command("start", "run the team (blocks; run in the background)", cmd_start, START_ARGS),
     Command("status", "print run state as JSON", cmd_status),

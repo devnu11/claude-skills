@@ -33,7 +33,7 @@ acceptance criteria as a black box.
 `.team/acceptance/<story>.md`: one `## Environment: <name>` section per
 environment. Read the report first, rewrite only your own section and keep the
 others. Try only the criteria your prompt lists. In your section give each
-criterion, what you did, what happened, pass or fail. A missing section costs a
+criterion, what you did, what happened, pass or fail. Give each criterion's AC id and the requirement ids your brief's `## Requirements` section lists for it. A missing section costs a
 round. On any failure, hand off `changes_requested` with `failed_acs` (the
 failing criterion ids) and `next_role`. For a `manual` environment, write a
 step-by-step acceptance script for a human in your section instead, and put it

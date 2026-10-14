@@ -13,7 +13,7 @@ from . import acceptance, system
 from .boundary import Boundary, BoundaryHold, Failure, StackEntry, UpstreamState
 from .ci import CiResult
 from .config import OLD_ENVIRONMENT_NAME, PIPELINE_STEPS
-from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, load_dispute
+from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, Trace, load_dispute
 from .holds import PoHold
 from .ledger import SessionCost
 from .loops import Rule, Setback
@@ -215,6 +215,12 @@ def _legacy_implemented(data: dict[str, Any]) -> int:
     return int(data.get("step") in PAST_IMPLEMENT)
 
 
+def _legacy_trace(data: dict[str, Any]) -> Trace:
+    """Saved before s1: checked only when the story never went through design."""
+    fresh = data.get("step") == "design" and not data.get("previous")
+    return Trace.CHECKED if fresh else Trace.EXEMPT
+
+
 def _kept(data: dict[str, Any]) -> dict[str, Any]:
     """``data`` without the story keys the story file replaced (s94 SF6)."""
     return {k: v for k, v in data.items() if k not in STORY_DROPPED}
@@ -227,7 +233,8 @@ def _story(data: dict[str, Any]) -> StoryState:
     implemented = data.get("implemented", _legacy_implemented(data))
     setbacks = {k: [Setback(**s) for s in data.get(k, [])] for k in ("streak", "run")}
     by = data.get("escalated_by")
-    extra = {"implemented": implemented, "escalated_by": Rule(by) if by else None}
+    trace = Trace(data["trace"]) if "trace" in data else _legacy_trace(data)
+    extra = {"implemented": implemented, "escalated_by": Rule(by) if by else None, "trace": trace}
     extra |= {
         "fixes": [load_fix(f) for f in data.get("fixes", [])],
         "fixed": [FixRecord(**r) for r in data.get("fixed", [])],

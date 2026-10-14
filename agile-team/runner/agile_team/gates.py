@@ -222,6 +222,17 @@ def _unread(_path: str) -> str | None:
     return None
 
 
+def _no_trace_reasons(_story: str) -> list[str]:
+    return []
+
+
+class Trace(StrEnum):
+    """Whether the design gate traces a story's ACs to requirements (s1 T9)."""
+
+    CHECKED = "checked"
+    EXEMPT = "exempt"
+
+
 @dataclass
 class PreviousStep:
     """The last gated step on a story: who ran, what they reported and how the gate ruled."""
@@ -268,6 +279,7 @@ class StoryState:
     tried: list[acceptance.Tried] = field(default_factory=list)
     reverted: list[revert_log.RevertEntry] = field(default_factory=list)
     revert_owed: list[str] = field(default_factory=list)
+    trace: Trace = Trace.CHECKED
 
 
 @dataclass
@@ -468,6 +480,7 @@ class Checks:
     environments: Callable[[str], list[str]] = _no_environments
     reuse: Callable[[], Outcome | None] = _nothing_kept
     design_file: Callable[[str], str] = _no_design_file
+    traced: Callable[[str], list[str]] = _no_trace_reasons
     reporting: test_reports.Reporting = field(default_factory=test_reports.Reporting)
     serving: Serving = Serving()
 
@@ -505,6 +518,22 @@ class Checks:
             return Outcome(Verdict.PASS)
         reason = REDESIGN_MISSING.format(id=story.id, count=count, file=file)
         return Outcome(Verdict.BOUNCE, reason, "design", author=Author.ROLE)
+
+    def designed(self, story: StoryState) -> Outcome:
+        """The design gate: After revert section (R9) and AC trace (s1 T11); every reason listed."""
+        reasons = [*self._revert_reasons(story), *self._trace_reasons(story)]
+        if not reasons:
+            return Outcome(Verdict.PASS)
+        return Outcome(Verdict.BOUNCE, "\n".join(reasons), "design", author=Author.ROLE)
+
+    def _revert_reasons(self, story: StoryState) -> list[str]:
+        if not story.reverted:
+            return []
+        outcome = self.redesigned(story)
+        return [outcome.reason] if outcome.verdict is Verdict.BOUNCE else []
+
+    def _trace_reasons(self, story: StoryState) -> list[str]:
+        return self.traced(story.id) if story.trace is Trace.CHECKED else []
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -858,7 +887,7 @@ class Pipeline:
         return (
             self._command_gate(story.step)
             or self._done_gate(story, handoff)
-            or self._redesign_gate(story, handoff)
+            or self._design_gate(story, handoff)
         )
 
     def reworked(self, story: StoryState) -> bool:
@@ -966,10 +995,11 @@ class Pipeline:
         applies = story.step == "e2e" and handoff.status == "done" and "acceptance" in self.steps
         return (lambda: self.checks.presented(story)) if applies else None
 
-    def _redesign_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
-        """The After revert check for a ``done`` design of a reverted story."""
-        applies = story.step == "design" and handoff.status == "done" and story.reverted
-        return (lambda: self.checks.redesigned(story)) if applies else None
+    def _design_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
+        """The revert and trace checks for a ``done`` design (R9, s1 T10)."""
+        gated = bool(story.reverted) or story.trace is Trace.CHECKED
+        applies = story.step == "design" and handoff.status == "done" and gated
+        return (lambda: self.checks.designed(story)) if applies else None
 
     def unpresented(self, story: StoryState) -> Outcome | None:
         """A return to e2e when the Proxy would start without a presentation."""

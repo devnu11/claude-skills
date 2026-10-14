@@ -20,12 +20,22 @@ The story, the current docs, the code, the ADRs.
 ## Deliverables
 
 In the docs directory: `architecture.md` (components, boundaries, data flow;
-Mermaid diagrams welcome), `requirements.md`, `guidelines.md`, and
+Mermaid diagrams welcome), `requirements/REQ-NNN.md` (see below), `guidelines.md`, and
 `customer/` (what a customer reads: install, usage, examples). Write each story's design to `<docs>/design/<story>.md` and add a one-line
 entry for it in `architecture.md`'s story index. Name the developer
 specialisation the story needs (`developer-gui`, `-cli`, `-api`, `-db`, or a
 new one) in your handoff's `"developer"` field, e.g.
 `"developer": "developer-cli"`. The runner uses it for the implement step.
+
+Trace every AC of the story to an active requirement before you hand
+off: write a new `<docs>/requirements/REQ-NNN.md` (frontmatter `id`,
+`title`, `status: active`, `covers: ["sN/ACk"]`; the requirement in plain
+words as the body) or add the AC to an existing one's `covers`. Your
+brief's `## Requirements` section lists the story's coverage, the active
+requirements and the next free id. The design gate bounces the story back
+to you, listing every untraced AC and every broken requirement file that
+names the story. Retire a requirement (`status: retired`) instead of
+deleting it.
 If a new specialisation is needed, put it in `open_questions` so the PO
 can add it.
 Keep each design file focused: rules, the changes per module with exact signatures and import paths, and a test checklist, so the unit-tester and developer can work from it without reading whole modules.

@@ -42,6 +42,7 @@ from . import (
     pending_tests,
     presentation,
     recovery,
+    requirements,
     revert_log,
     runner_tools,
     salvage,
@@ -69,6 +70,7 @@ from .gates import (
     Serving,
     StoryState,
     StoryStatus,
+    Trace,
     Verdict,
     dispatch_refusal,
     fix_refusal,
@@ -504,6 +506,13 @@ class Runtime:
         step = fitting_step(plan.role.name, STEP_SETUPS)
         if step:
             STEP_SETUPS[step](self, plan)
+        self._attach_requirements(plan)
+
+    def _attach_requirements(self, plan: Plan) -> None:
+        """Add the ``## Requirements`` section to a checked story's brief (s1 T13)."""
+        section = requirements.BRIEFS.get(plan.role.name)
+        if section and plan.story is not None and plan.story.trace is Trace.CHECKED:
+            plan.prompt += "\n\n" + section(requirements.load(self.config), plan.story.id)
 
     def _confine_git(self, plan: Plan) -> None:
         """Confine a GIT_CONFINED step's git to its workspace and set git's ceiling (G2)."""
