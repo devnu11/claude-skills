@@ -22,7 +22,7 @@ def sprint_of(make_runtime, *, backlog: tuple[str, ...] = ("s2",)):
     open_stories(t, "s1", *backlog)
     call(t.start_sprint({"goal": "G", "stories": ["s1"]}))
     rt.state.boundary = None
-    rt.state.manager_due, rt.state.po_renew_due = [], False
+    rt.state.manager_due, rt.state.po_renew_due = [], []
     rt.save()
     return rt, t
 
@@ -275,7 +275,7 @@ def test_schemas_carry_the_new_arguments() -> None:
 # ----- pure helpers
 
 
-def story(sid: str, status=StoryStatus.RUNNING, sprint=None, deps=()) -> StoryState:
+def story(sid: str, status=StoryStatus.ACTIVE, sprint=None, deps=()) -> StoryState:
     s = StoryState(sid, sid, "design", status=status, sprint=sprint)
     s.depends_on = list(deps)
     return s
@@ -306,8 +306,8 @@ def test_run_state_sprint_helpers() -> None:
     st.sprint = 2
     st.stories = {
         "a": story("a", StoryStatus.DONE, 2),
-        "b": story("b", StoryStatus.RUNNING, 2),
-        "c": story("c", StoryStatus.RUNNING, 1),
+        "b": story("b", StoryStatus.ACTIVE, 2),
+        "c": story("c", StoryStatus.ACTIVE, 1),
         "d": story("d", StoryStatus.CANCELLED, 2),
     }
     assert st.sprint_ids() == ["a", "b", "d"]

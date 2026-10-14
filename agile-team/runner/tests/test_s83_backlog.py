@@ -612,7 +612,7 @@ def test_no_human_order_guards_nothing(make_runtime) -> None:
 
 def test_start_sprint_is_never_refused_by_the_humans_order(make_runtime) -> None:
     t = po(make_runtime, ["s5", "s6"])
-    out = call(t.start_sprint({"goal": "G", "stories": ["s6", "s5"]}))
+    out = call(t.start_sprint({"goal": "G", "stories": ["s6", "s5"], "reason": "new sprint"}))
     assert out.get("status") != "refused" and out["sprint"] == 2
 
 

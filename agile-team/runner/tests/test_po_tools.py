@@ -88,7 +88,7 @@ def test_start_sprint_replaces_scope(make_runtime) -> None:
     call(t.start_sprint({"goal": "one", "stories": ["s1", "s2"]}))
     rt.state.stories["s2"].status = "done"
     rt.state.boundary = None  # sprint 1's start boundary has passed
-    out = call(t.start_sprint({"goal": "two", "stories": ["s3"]}))
+    out = call(t.start_sprint({"goal": "two", "stories": ["s3"], "reason": "new goal"}))
     assert out["sprint"] == 2
     sprints = {k: v.sprint for k, v in rt.state.stories.items()}
     assert sprints == {"s1": None, "s2": 1, "s3": 2}
@@ -100,7 +100,7 @@ def test_start_sprint_carries_over_listed_story(make_runtime) -> None:
     open_stories(t, "s1")
     call(t.start_sprint({"goal": "one", "stories": ["s1"]}))
     rt.state.boundary = None  # sprint 1's start boundary has passed
-    call(t.start_sprint({"goal": "two", "stories": ["s1"]}))
+    call(t.start_sprint({"goal": "two", "stories": ["s1"], "reason": "carry on"}))
     assert rt.state.stories["s1"].sprint == 2
 
 
@@ -159,7 +159,7 @@ def test_story_status_shows_sprint(make_runtime) -> None:
 
 def test_start_sprint_schema_takes_stories_list() -> None:
     desc, schema = po_tools.SCHEMAS["start_sprint"]
-    assert schema == {"goal": str, "stories": list}
+    assert schema == {"goal": str, "stories": list, "reason": str}
     assert "backlog" in desc
 
 
