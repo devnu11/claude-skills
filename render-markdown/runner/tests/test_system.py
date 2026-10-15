@@ -69,10 +69,20 @@ def test_a_timeout_stops_the_whole_process_group(
     )
     assert system.run([sys.executable, "-c", code]).code == 124
     child = int(marker.read_text())
-    with pytest.raises(ProcessLookupError):
-        for _ in range(50):
-            os.kill(child, 0)
-            time.sleep(0.05)
+    deadline = time.monotonic() + 10
+    while is_alive(child) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not is_alive(child)
+
+
+def is_alive(pid: int) -> bool:
+    """Running, not gone and not a zombie waiting to be reaped."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    stat = Path(f"/proc/{pid}/stat")
+    return not (stat.exists() and stat.read_text().rsplit(")", 1)[1].split()[0] == "Z")
 
 
 def test_windows_stops_only_the_process() -> None:
