@@ -36,3 +36,33 @@ real clock. Nothing kept the tests off it.
 - `DURATION_NAMES` is a table in the scan test. A new duration name in tests
   has to be added there before the scan checks it.
 - No runtime code, dependency or snapshot key changes.
+
+## Amended by s129 (2026-10-14, test-step re-plan)
+
+**What changed.** The scan is split by owner, and every file goes to the role
+whose write globs cover it:
+- `tests/clock_scan.py` (new) holds the scan's tables and functions. Its
+  `Tree.UNIT` covers every file under `tests/` outside `e2e/`, and its
+  `Tree.E2E` covers every file under `tests/e2e/`. The two make `tests/`
+  exactly once.
+- `tests/test_s129_clock_scan.py` (unit-tester, tests step) scans the unit
+  tree and tests the scanner. It reads its files into a module constant at
+  import, while the OS guard is off, as `fake_system.PACKAGE_FILES` already
+  does. So it stays a unit test that touches no OS.
+- `tests/e2e/test_s129_clock_scan_e2e.py` (integration-tester, e2e step) scans
+  the e2e tree with the same functions.
+- `EXEMPT` is `clock.py`, `clock_scan.py` (patterns) and
+  `test_s129_clock_scan.py` (samples).
+- `fake.slept` (`RECORDED_SLEEPS`) is not a duration. It records the
+  arguments passed to the fake's `sleep`, so an exact compare is correct.
+- developer-cli writes nothing. Its write scope excludes all test files, and
+  the e2e conversions are the integration-tester's (`{e2e}`).
+
+**Why.** The first plan put the scan and helper tests in `tests/e2e/`, and the
+`tests/e2e/` conversions with the developer. Neither role could write them: the
+unit-tester's scope excludes `tests/e2e/**`, and the developer's excludes every
+test file. The story stalled at `tests` three times. A single scan of all of
+`tests/` would also stay red until the e2e step, after the implement gate,
+which needs every pending test green. The story changes no runtime code, so
+its tests step can't produce a red test that a developer turns green. The PO
+moves it on with `pass_tests` (design/s129.md).

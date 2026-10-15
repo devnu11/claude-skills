@@ -180,7 +180,9 @@ rule, update in the same story:
   run with `Date.now` frozen by `dashboard_node.run_page(driver, now)`
   (default: the fixture's `generated_at`; a served snapshot passes its own),
   and drivers never set `data.skew`. Compare durations with `about(x)`, never
-  with `==`. The scan in `tests/e2e/test_s129_clock_scan_e2e.py` enforces
-  both rules; to get past it, add a helper to `tests/clock.py`, never an
-  exemption.
+  with `==` (a fake's recorded sleeps, `fake.slept`, are not durations and
+  stay exact). The scan in `tests/clock_scan.py` enforces both rules, run by
+  `tests/test_s129_clock_scan.py` on the unit tree and by
+  `tests/e2e/test_s129_clock_scan_e2e.py` on the e2e tree. To get past it,
+  add a helper to `tests/clock.py`, never an exemption.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.
