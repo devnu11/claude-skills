@@ -75,8 +75,9 @@ class Scratch:
 
 
 @pytest.fixture
-def scratch(monkeypatch, tmp_path) -> Scratch:
-    return Scratch(monkeypatch, tmp_path)
+def scratch(monkeypatch, env: Env) -> Scratch:
+    """The scratch worktree is at ``run_dir / REBASE_DIR`` (R14), never a temp dir."""
+    return Scratch(monkeypatch, env.rt.config.run_dir / sr.REBASE_DIR)
 
 
 def conflicted(env: Env, scratch: Scratch) -> bd.Boundary:
@@ -96,18 +97,20 @@ def fixed(env: Env, scratch: Scratch, status: str = "done", summary: str = "reso
 # ----- AC6.1: abort, leave the team branch, hand the conflict to DevOps ---------------
 
 
-def test_s151_ac6_1_a_conflict_holds_nothing_and_prepares_the_scratch_worktree(
+def test_s151_conflict_ac6_1_a_conflict_holds_nothing_and_prepares_the_scratch_worktree(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.1 (slice 2)."""
     b = conflicted(env, scratch)
     assert b.hold is None and b.stage is Stage.REBASE
     assert ("prepare", AS_BUILT) in scratch.calls
     assert b.sync_from == AS_BUILT and env.rt.git.head() == AS_BUILT
 
 
-def test_s151_ac6_1_the_failure_names_the_commit_files_and_scratch_branch(
+def test_s151_conflict_ac6_1_the_failure_names_the_commit_files_and_scratch_branch(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.1 (slice 2)."""
     b = conflicted(env, scratch)
     f = b.failure
     assert (f.stage, f.case) == (Stage.REBASE, FixCase.REBASE_CONFLICT)
@@ -123,9 +126,10 @@ def test_s151_ac6_1_the_failure_names_the_commit_files_and_scratch_branch(
     assert "hold" not in data or not data["hold"]
 
 
-def test_s151_ac6_1_devops_is_due_with_a_brief_that_names_everything(
+def test_s151_conflict_ac6_1_devops_is_due_with_a_brief_that_names_everything(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.1 (slice 2)."""
     conflicted(env, scratch)
     due = env.br.due()
     assert (due.kind, due.role) == (StepKind.REBASE_FIX, "devops")
@@ -133,13 +137,14 @@ def test_s151_ac6_1_devops_is_due_with_a_brief_that_names_everything(
         assert text in due.brief
 
 
-def test_s151_ac6_1_nothing_asks_the_human_to_rebase_by_hand(env: Env, scratch: Scratch) -> None:
+def test_s151_conflict_ac6_1_nothing_asks_the_human_to_rebase_by_hand(env: Env, scratch: Scratch) -> None:
+    """Pins s151/AC6.1 (slice 2)."""
     conflicted(env, scratch)
     assert not [t for t in posted(env) if "by hand" in t]
     assert "by hand" not in rule_line(handover.Trigger.SYNC_CONFLICT)
 
 
-def test_s151_ac6_1_the_fix_kind_table_maps_the_case_to_the_step() -> None:
+def test_s151_conflict_ac6_1_the_fix_kind_table_maps_the_case_to_the_step() -> None:
     assert bd.FIX_KINDS[FixCase.REBASE_CONFLICT] is StepKind.REBASE_FIX
     assert bd.FIX_KINDS[FixCase.TEAM_CHECK] is StepKind.TEAM_FIX
     assert FixCase.REBASE_CONFLICT in bd.FIX_LINES
@@ -148,19 +153,19 @@ def test_s151_ac6_1_the_fix_kind_table_maps_the_case_to_the_step() -> None:
 # ----- AC6.2: the scratch worktree, its scope, its checks ------------------------------
 
 
-def test_s151_ac6_2_the_scratch_rebase_keeps_empty_commits_and_the_team_one_drops_them() -> None:
+def test_s151_conflict_ac6_2_the_scratch_rebase_keeps_empty_commits_and_the_team_one_drops_them() -> None:
     assert "--empty=keep" in upstream.SCRATCH_REBASE_ARGV
     assert "--empty=drop" not in upstream.SCRATCH_REBASE_ARGV
     assert upstream.REBASE_ARGV[-1] == "--empty=drop"
     assert upstream.SCRATCH_REBASE_ARGV[:-1] == upstream.REBASE_ARGV[:-1]
 
 
-def test_s151_ac6_2_the_worktree_and_branch_names() -> None:
+def test_s151_conflict_ac6_2_the_worktree_and_branch_names() -> None:
     assert sr.REBASE_DIR == "rebase"
     assert sr.REBASE_BRANCH.format(sprint=7) == "agile-team/rebase-sprint-7"
 
 
-def test_s151_ac6_2_the_judging_checks_run_in_the_documented_order() -> None:
+def test_s151_conflict_ac6_2_the_judging_checks_run_in_the_documented_order() -> None:
     names = [c.__name__ for c in sr.SCRATCH_CHECKS]
     assert names == [
         "_unfinished",
@@ -173,7 +178,7 @@ def test_s151_ac6_2_the_judging_checks_run_in_the_documented_order() -> None:
     ]
 
 
-def test_s151_ac6_2_the_first_reason_wins(monkeypatch) -> None:
+def test_s151_conflict_ac6_2_the_first_reason_wins(monkeypatch) -> None:
     monkeypatch.setattr(sr, "SCRATCH_CHECKS", (lambda s, old: "", lambda s, old: "second"))
     scratch = sr.ScratchRebase(None, Path("/w"), "b")
     assert scratch.refusal("old") == "second"
@@ -181,14 +186,14 @@ def test_s151_ac6_2_the_first_reason_wins(monkeypatch) -> None:
     assert scratch.refusal("old") == ""
 
 
-def test_s151_ac6_2_the_fix_step_may_write_only_the_worktree(make_runtime) -> None:
+def test_s151_conflict_ac6_2_the_fix_step_may_write_only_the_worktree(make_runtime) -> None:
     rt = make_runtime()
     plan = rt.plan(StepRequest("devops", "fix", None, StepKind.REBASE_FIX))
     rel = (rt.config.run_dir / sr.REBASE_DIR).relative_to(rt.config.repo).as_posix()
     assert plan.scope.write == [f"{rel}/**"]
 
 
-def test_s151_ac6_2_git_is_confined_to_the_worktree_without_an_editor(make_runtime) -> None:
+def test_s151_conflict_ac6_2_git_is_confined_to_the_worktree_without_an_editor(make_runtime) -> None:
     rt = make_runtime()
     plan = rt.plan(StepRequest("devops", "fix", None, StepKind.REBASE_FIX))
     assert str(plan.scope.git_workspace).endswith(f"/{sr.REBASE_DIR}")
@@ -196,9 +201,10 @@ def test_s151_ac6_2_git_is_confined_to_the_worktree_without_an_editor(make_runti
     assert "GIT_CEILING_DIRECTORIES" in plan.launch.env
 
 
-def test_s151_ac6_2_the_full_checks_run_in_the_worktree_not_the_team_checkout(
+def test_s151_conflict_ac6_2_the_full_checks_run_in_the_worktree_not_the_team_checkout(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.2 (slice 2)."""
     ran: list[Path] = []
     green = type("R", (), {"passed": True, "reason": lambda s: ""})()
     env.br._run_checks = lambda path: ran.append(path) or green
@@ -210,9 +216,10 @@ def test_s151_ac6_2_the_full_checks_run_in_the_worktree_not_the_team_checkout(
     assert env.rt.config.repo not in ran
 
 
-def test_s151_ac6_2_devops_never_merges_or_squashes_is_in_its_brief(
+def test_s151_conflict_ac6_2_devops_never_merges_or_squashes_is_in_its_brief(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.2 (slice 2)."""
     conflicted(env, scratch)
     brief = env.br.due().brief
     assert "Never merge, squash" in brief and "git rebase --continue" in brief
@@ -241,9 +248,10 @@ def resolved(env: Env, scratch: Scratch) -> Adopts:
     return adopt
 
 
-def test_s151_ac6_3_after_devops_the_rebase_stage_adopts_without_fetching(
+def test_s151_conflict_ac6_3_after_devops_the_rebase_stage_adopts_without_fetching(
     env: Env, scratch: Scratch, fake
 ) -> None:
+    """Pins s151/AC6.3 (slice 2)."""
     adopt = resolved(env, scratch)
     seen = len(fake.commands)
     env.br.step()
@@ -251,9 +259,10 @@ def test_s151_ac6_3_after_devops_the_rebase_stage_adopts_without_fetching(
     assert not [c for c in fake.commands[seen:] if "fetch" in c.argv]
 
 
-def test_s151_ac6_3_hashes_are_remapped_and_the_next_stage_is_push_rebased(
+def test_s151_conflict_ac6_3_hashes_are_remapped_and_the_next_stage_is_push_rebased(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.3 (slice 2)."""
     story = env.rt.state.stories["s1"]
     story.commit = OLD_COMMIT
     resolved(env, scratch)
@@ -264,15 +273,17 @@ def test_s151_ac6_3_hashes_are_remapped_and_the_next_stage_is_push_rebased(
     assert b.hold is None
 
 
-def test_s151_ac6_3_the_scratch_worktree_and_branch_are_dropped(env: Env, scratch: Scratch) -> None:
+def test_s151_conflict_ac6_3_the_scratch_worktree_and_branch_are_dropped(env: Env, scratch: Scratch) -> None:
+    """Pins s151/AC6.3 (slice 2)."""
     resolved(env, scratch)
     env.br.step()
     assert "drop" in scratch.names()
 
 
-def test_s151_ac6_3_a_moved_team_branch_holds_error_and_resets_nothing(
+def test_s151_conflict_ac6_3_a_moved_team_branch_holds_error_and_resets_nothing(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.3 (slice 2)."""
     resolved(env, scratch)
 
     def moved(old: str, sha: str) -> Rebase:
@@ -284,9 +295,10 @@ def test_s151_ac6_3_a_moved_team_branch_holds_error_and_resets_nothing(
     assert "moved from" in last(env)["reason"]
 
 
-def test_s151_ac6_3_after_fix_records_the_devops_report_and_clears_the_failure(
+def test_s151_conflict_ac6_3_after_fix_records_the_devops_report_and_clears_the_failure(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.3 (slice 2)."""
     b = conflicted(env, scratch)
     failure = b.failure
     fixed(env, scratch, "done", "kept both")
@@ -298,7 +310,7 @@ def test_s151_ac6_3_after_fix_records_the_devops_report_and_clears_the_failure(
     )
 
 
-def test_s151_ac6_3_the_gate_still_applies_before_an_adopt(env: Env, scratch: Scratch) -> None:
+def test_s151_conflict_ac6_3_the_gate_still_applies_before_an_adopt(env: Env, scratch: Scratch) -> None:
     resolved(env, scratch)
     env.rt.state.upstream.stack[0].ci = None
     env.br.step()
@@ -306,7 +318,7 @@ def test_s151_ac6_3_the_gate_still_applies_before_an_adopt(env: Env, scratch: Sc
     assert env.rt.git.head() == AS_BUILT
 
 
-def test_s151_ac6_3_the_pushed_green_read_survives_an_adopt(env: Env, scratch: Scratch) -> None:
+def test_s151_conflict_ac6_3_the_pushed_green_read_survives_an_adopt(env: Env, scratch: Scratch) -> None:
     resolved(env, scratch)
     env.br.step()
     e = env.rt.state.upstream.stack[0]
@@ -321,7 +333,8 @@ def hold_text(env: Env) -> str:
     return next(t for t in posted(env) if BRANCH in t and "could not settle" in t)
 
 
-def test_s151_ac6_4_a_failed_devops_step_holds_rebase_conflict(env: Env, scratch: Scratch) -> None:
+def test_s151_conflict_ac6_4_a_failed_devops_step_holds_rebase_conflict(env: Env, scratch: Scratch) -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     conflicted(env, scratch)
     fixed(env, scratch, "failed", "the two edits contradict")
     env.br.step()
@@ -335,9 +348,10 @@ def test_s151_ac6_4_a_failed_devops_step_holds_rebase_conflict(env: Env, scratch
     assert env.rt.git.head() == AS_BUILT and "drop" not in scratch.names()
 
 
-def test_s151_ac6_4_the_liaison_gets_the_conflict_notes_and_branch(
+def test_s151_conflict_ac6_4_the_liaison_gets_the_conflict_notes_and_branch(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     conflicted(env, scratch)
     fixed(env, scratch, "failed", "the two edits contradict")
     env.br.step()
@@ -346,9 +360,10 @@ def test_s151_ac6_4_the_liaison_gets_the_conflict_notes_and_branch(
         assert part in text
 
 
-def test_s151_ac6_4_a_refused_scratch_result_holds_with_the_reason(
+def test_s151_conflict_ac6_4_a_refused_scratch_result_holds_with_the_reason(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     conflicted(env, scratch)
     fixed(env, scratch)
     scratch.why = "the branch has merge commits: abc"
@@ -358,9 +373,10 @@ def test_s151_ac6_4_a_refused_scratch_result_holds_with_the_reason(
     assert ("refusal", AS_BUILT) in scratch.calls
 
 
-def test_s151_ac6_4_failing_full_checks_hold_with_the_checks_reason(
+def test_s151_conflict_ac6_4_failing_full_checks_hold_with_the_checks_reason(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     conflicted(env, scratch)
     fixed(env, scratch)
     env.br._run_checks = lambda path: type(
@@ -371,7 +387,7 @@ def test_s151_ac6_4_failing_full_checks_hold_with_the_checks_reason(
     assert bd.CHECKS_FAILED.format(path=scratch.path, reason="lint failed") == last(env)["reason"]
 
 
-def test_s151_ac6_4_the_checks_run_only_when_the_scratch_result_passes(
+def test_s151_conflict_ac6_4_the_checks_run_only_when_the_scratch_result_passes(
     env: Env, scratch: Scratch
 ) -> None:
     ran: list[Path] = []
@@ -382,16 +398,18 @@ def test_s151_ac6_4_the_checks_run_only_when_the_scratch_result_passes(
     assert ran == [] and ("refusal", AS_BUILT) not in scratch.calls
 
 
-def test_s151_ac6_4_the_po_handover_names_the_branch_and_notes() -> None:
+def test_s151_conflict_ac6_4_the_po_handover_names_the_branch_and_notes() -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     assert handover.Trigger.REBASE_CONFLICT == "rebase_conflict"
     text = rule_line(handover.Trigger.REBASE_CONFLICT)
     for placeholder in ("{branch}", "{reason}", "{notes}", "{commit}", "{subject}"):
         assert placeholder in text
 
 
-def test_s151_ac6_4_continue_boundary_clears_the_fix_and_reruns_the_rebase(
+def test_s151_conflict_ac6_4_continue_boundary_clears_the_fix_and_reruns_the_rebase(
     env: Env, scratch: Scratch
 ) -> None:
+    """Pins s151/AC6.4 (slice 2)."""
     conflicted(env, scratch)
     fixed(env, scratch, "failed", "no")
     env.br.step()
@@ -406,19 +424,20 @@ def test_s151_ac6_4_continue_boundary_clears_the_fix_and_reruns_the_rebase(
     assert env.br.due().brief.endswith("From the PO: try theirs")
 
 
-def test_s151_ac6_4_the_stall_hint_exists() -> None:
+def test_s151_conflict_ac6_4_the_stall_hint_exists() -> None:
     assert BoundaryHold.REBASE_CONFLICT in bd.STALL_HINTS
     assert "continue_boundary" in bd.STALL_HINTS[BoundaryHold.REBASE_CONFLICT]
 
 
-def test_s151_ac6_4_a_legacy_sync_conflict_hold_still_exists() -> None:
+def test_s151_conflict_ac6_4_a_legacy_sync_conflict_hold_still_exists() -> None:
     assert BoundaryHold.SYNC_CONFLICT.value == "sync_conflict"
 
 
 # ----- AC6.5 (role file, built in) -----------------------------------------------------
 
 
-def test_s151_ac6_5_the_builtin_devops_role_owns_the_sprint_end_rebase_conflict() -> None:
+def test_s151_conflict_ac6_5_the_builtin_devops_role_owns_the_sprint_end_rebase_conflict() -> None:
+    """Pins s151/AC6.5 (slice 2)."""
     path = Path(__file__).parent.parent / "agile_team" / "roles" / "devops.md"
     text = path.read_text()
     assert "sprint-end rebase" in text

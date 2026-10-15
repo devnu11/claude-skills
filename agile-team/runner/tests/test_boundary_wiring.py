@@ -243,23 +243,6 @@ def brep(hold=None, **fields) -> dict:
 
 
 BOUNDARY_ROWS = [
-    pytest.param(
-        brep(
-            "sync_conflict",
-            edge="end",
-            stage="rebase",
-            files=["a/x.py", "a/y.py", "docs/z.md"],
-            commit="abc123def456",
-            subject="fix x",
-            branch="agile-team/rebase-sprint-2",
-        ),
-        T.SYNC_CONFLICT,
-        "run: sprint 2 end: rebasing agile-team onto origin/main stopped at abc123def456 "
-        '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
-        "aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
-        "conflict now goes to a DevOps step (s151)",
-        id="sync_conflict_s151",
-    ),
     (
         brep("push_permission", branches=["team/sprint-1", "team/sprint-2"]),
         T.PUSH_PERMISSION,
@@ -280,6 +263,29 @@ BOUNDARY_ROWS = [
         "then continue_boundary",
     ),
 ]
+
+
+def test_s151_the_sync_conflict_handover_text() -> None:
+    """Pins s151/AC6.4 (slice 2): the legacy hold's text no longer asks for a hand rebase."""
+    report, trigger, line = (
+        brep(
+            "sync_conflict",
+            edge="end",
+            stage="rebase",
+            files=["a/x.py", "a/y.py", "docs/z.md"],
+            commit="abc123def456",
+            subject="fix x",
+            branch="agile-team/rebase-sprint-2",
+        ),
+        T.SYNC_CONFLICT,
+        "run: sprint 2 end: rebasing agile-team onto origin/main stopped at abc123def456 "
+        '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
+        "aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
+        "conflict now goes to a DevOps step (s151)",
+    )
+    assert handover.triggers(report) == [trigger]
+    assert handover.report_lines(report, None) == [line]
+    assert "by hand" not in line
 
 
 @pytest.mark.parametrize(("report", "trigger", "line"), BOUNDARY_ROWS)
