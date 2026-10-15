@@ -184,6 +184,7 @@ class Handoff:
     asserts: str = ""
     failed_acs: list[str] = field(default_factory=list)
     tooling: list[ToolingRow] = field(default_factory=list)
+    requirement_changes: dict[str, str] = field(default_factory=dict)
 
 
 def split_frontmatter(name: str, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -470,6 +471,10 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
     (lambda d: isinstance(d.get("friction", ""), str), "friction must be a string"),
     (lambda d: _str_map(d.get("followups", {})), "followups must map role names to questions"),
     (
+        lambda d: _str_map(d.get("requirement_changes", {})),
+        "requirement_changes must map requirement ids to reasons",
+    ),
+    (
         lambda d: d.get("developer") is None or isinstance(d.get("developer"), str),
         "developer must be a role name",
     ),
@@ -546,6 +551,7 @@ def _handoff_from(data: Any) -> Handoff:
         asserts=data.get("asserts", ""),
         failed_acs=list(data.get("failed_acs", [])),
         tooling=ops_review.rows_of(data.get("tooling", [])),
+        requirement_changes=dict(data.get("requirement_changes", {})),
     )
 
 

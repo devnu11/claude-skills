@@ -31,6 +31,7 @@ class Trigger(StrEnum):
     BAD_HANDOFF = "bad_handoff"
     QUESTIONS = "questions"
     QUARANTINE = "quarantine"
+    AFFECTED_DONE = "affected_done"
     ROUND_CAP = "round_cap"
     UNROUTABLE = "unroutable"
     HUMAN_MESSAGE = "human_message"
@@ -117,6 +118,11 @@ KNOWN_LINE = (
     "the runner tells you its id. Failing output:\n{boundary_reason}"
 )
 
+AFFECTED_DONE_LINE = (
+    "{story}: {role} changed requirements that done stories trace ({requirement_changes}): "
+    "{affected_done}. Ask the liaison with request_story for a follow-up story that checks "
+    "them against the changed requirements"
+)
 HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.REFUSED,
@@ -149,6 +155,11 @@ HANDOVERS: tuple[Rule, ...] = (
         lambda r: bool(r.get("quarantine")),
         "{story}: {role}'s out-of-scope changes are quarantined in {quarantine}; tell the "
         "owning role to reuse them (git cherry-pick -n {quarantine}) or ignore them",
+    ),
+    Rule(
+        Trigger.AFFECTED_DONE,
+        lambda r: bool(r.get("affected_done_stories")),
+        AFFECTED_DONE_LINE,
     ),
     Rule(
         Trigger.ROUND_CAP,
@@ -306,6 +317,11 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     """The text fields a line can use; ``""`` when the report lacks one."""
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
+    fields["affected_done"] = ", ".join(report.get("affected_done_stories") or [])
+    changes = report.get("requirement_changes") or []
+    fields["requirement_changes"] = "; ".join(
+        f"{c['id']} {c['change']}: {c['reason']}" for c in changes
+    )
     ruling = report.get("ruling") or {}
     fields["gate_reason"] = str(_gate(report).get("reason") or "")
     fields["ruling"] = str(ruling.get("ruling") or "")

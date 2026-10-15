@@ -28,5 +28,6 @@
  "stop.lint": "Stop check: fix the step's changed files with the toolchain's fixers, then lint them",
  "stop.suite": "Stop check: the implement gate's suite and coverage, before the developer may stop",
  "stop.red": "Stop check: the tests gate, before the unit-tester may stop",
- "stop.presentation": "Stop check: the story's presentation is complete, before the integration-tester may stop"
+ "stop.presentation": "Stop check: the story's presentation is complete, before the integration-tester may stop",
+ "stop.requirements": "Stop check: every changed or retired requirement has a reason in the handoff, before the architect may stop"
 }

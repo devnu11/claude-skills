@@ -982,6 +982,12 @@ class Pipeline:
         """The step a redesign goes back to: ``design`` when enabled, else the first."""
         return "design" if "design" in self.steps else self.first()
 
+    def is_past_design(self, story: StoryState) -> bool:
+        """True when ``story`` sits at a pipeline step after the design step."""
+        if story.step not in self.steps:
+            return False
+        return self.steps.index(story.step) > self.steps.index(self.design_step())
+
     def _reviewed(self, story: StoryState, handoff: Handoff) -> Outcome:
         """The ops-review verdict (O1, O3); not a ``step_gate``, which would retry here."""
         if handoff.status == "done":

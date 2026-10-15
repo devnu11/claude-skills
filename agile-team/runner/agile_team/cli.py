@@ -31,6 +31,7 @@ from . import (
     reconcile,
     recovery,
     repin,
+    requirement_changes,
     requirements,
     revert_log,
     sandbox,
@@ -49,7 +50,7 @@ from . import state as state_mod
 from .commands import shell_runner
 from .dashboard import server
 from .dispatch import QueryFn, Runtime, StepResult
-from .git_ops import Git
+from .git_ops import Git, GitError
 from .ledger import LEDGER, Ledger, budget_status
 from .po_tools import Start, StartMode, run_po
 from .preflight import Preflight
@@ -244,10 +245,35 @@ def cmd_config_check(args: argparse.Namespace) -> int:
 
 
 def cmd_requirements(args: argparse.Namespace) -> int:
-    """``requirements check``: print the problems and AC coverage; exit 1 on problems (s1 T6-T8)."""
-    report = requirements.report(requirements.load(_load_config(repo_of(args))))
+    """``requirements check|log``: look the action up in ``REQUIREMENT_ACTIONS``."""
+    return REQUIREMENT_ACTIONS[args.action](_load_config(repo_of(args)))
+
+
+def _check_requirements(config: config_mod.Config) -> int:
+    """Print the problems and AC coverage; exit 1 on problems (s1 T6-T8)."""
+    report = requirements.report(requirements.load(config))
     print_json(report)
     return 1 if report["problems"] else 0
+
+
+def _log_requirements(config: config_mod.Config) -> int:
+    """Print the change history from the ``Requirement-Changed`` trailers (s2 C10)."""
+    try:
+        rows = requirement_changes.log(Git(config.repo), requirements.folder_of(config))
+    except GitError as error:
+        print(f"agile-team requirements log: {error}", file=sys.stderr)
+        return 1
+    print_json(rows)
+    return 0
+
+
+REQUIREMENTS_HELP = (
+    "check the requirement files (problems and AC coverage) or print their change log, as JSON"
+)
+REQUIREMENT_ACTIONS: dict[str, Callable[[config_mod.Config], int]] = {
+    "check": _check_requirements,
+    "log": _log_requirements,
+}
 
 
 def _print_lines(prefix: str, lines: list[str]) -> None:
@@ -899,8 +925,8 @@ COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
             ((("action",), {"choices": ["check"]}),)),
-    Command("requirements", "check the requirement files; print problems and AC coverage as JSON",
-            cmd_requirements, ((("action",), {"choices": ["check"]}),)),
+    Command("requirements", REQUIREMENTS_HELP,
+            cmd_requirements, ((("action",), {"choices": list(REQUIREMENT_ACTIONS)}),)),
     Command("roles", "list role layers or scaffold instruction stubs", cmd_roles, ROLES_ARGS),
     Command("start", "run the team (blocks; run in the background)", cmd_start, START_ARGS),
     Command("status", "print run state as JSON", cmd_status),

@@ -36,6 +36,13 @@ requirements and the next free id. The design gate bounces the story back
 to you, listing every untraced AC and every broken requirement file that
 names the story. Retire a requirement (`status: retired`) instead of
 deleting it.
+When you change or retire a requirement, give the reason in your handoff:
+`"requirement_changes": {"REQ-003": "why"}`, one line each. A new
+requirement needs none, though a reason is welcome. The runner writes each
+reason into the step's commit as a `Requirement-Changed: REQ-003: <why>`
+trailer. It refuses your stop while a reason is missing, and it holds back
+an unexplained edit and bounces the step. Stories past design that trace
+a changed or retired requirement go back to design.
 If a new specialisation is needed, put it in `open_questions` so the PO
 can add it.
 Keep each design file focused: rules, the changes per module with exact signatures and import paths, and a test checklist, so the unit-tester and developer can work from it without reading whole modules.

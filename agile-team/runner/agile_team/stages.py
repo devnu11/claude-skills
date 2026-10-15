@@ -68,6 +68,7 @@ class Name(StrEnum):
     STOP_SUITE = "stop.suite"
     STOP_RED = "stop.red"
     STOP_PRESENTATION = "stop.presentation"
+    STOP_REQUIREMENTS = "stop.requirements"
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     (Name.STOP_SUITE, A, STEP, "stop: suite + coverage", "Stop check: the implement gate's suite and coverage, before the developer may stop"),  # noqa: E501
     (Name.STOP_RED, A, STEP, "stop: new tests red", "Stop check: the tests gate, before the unit-tester may stop"),  # noqa: E501
     (Name.STOP_PRESENTATION, A, STEP, "stop: presentation", "Stop check: the story's presentation is complete, before the integration-tester may stop"),  # noqa: E501
+    (Name.STOP_REQUIREMENTS, A, STEP, "stop: requirements", "Stop check: every changed or retired requirement has a reason in the handoff, before the architect may stop"),  # noqa: E501
 )  # fmt: skip
 
 STAGES: dict[Name, Stage] = {

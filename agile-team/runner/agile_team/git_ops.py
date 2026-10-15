@@ -23,6 +23,7 @@ class Authored:
 
     text: str
     author: str = ""
+    trailers: tuple[str, ...] = ()
 
 
 class GitError(Exception):
@@ -114,7 +115,9 @@ class Git:
         self.run("reset", "-q")
         self.run("add", "-A", "--", *paths)
         author = [f"--author={authored.author}"] if authored.author else []
-        self.run("commit", "--no-verify", *author, "-m", with_trailer(authored.text))
+        self.run(
+            "commit", "--no-verify", *author, "-m", with_trailer(authored.text, authored.trailers)
+        )
         return self.head()
 
     def revert(self, sha: str) -> str:
@@ -150,9 +153,10 @@ class Git:
         return f"conflicts in {paths}" if paths else output.strip()
 
 
-def with_trailer(message: str) -> str:
-    """Append the co-author trailer to ``message``."""
-    return f"{message.rstrip()}\n\n{CO_AUTHOR}\n"
+def with_trailer(message: str, trailers: Sequence[str] = ()) -> str:
+    """Append ``trailers`` and the co-author trailer to ``message`` as one trailer block."""
+    block = "\n".join([*trailers, CO_AUTHOR])
+    return f"{message.rstrip()}\n\n{block}\n"
 
 
 def parse_porcelain_z(out: str) -> list[str]:

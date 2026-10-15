@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import HookMatcher
 
-from . import gates, guard, stages, system
+from . import gates, guard, requirement_changes, requirements, stages, system
 from . import owners as owners_mod
 from .boundary import StepKind
 from .commands import TIMED_OUT
@@ -40,6 +40,7 @@ class StopCheck(StrEnum):
     SUITE = "suite"
     RED = "red"
     PRESENTATION = "presentation"
+    REQUIREMENTS = "requirements"
 
 
 @dataclass(frozen=True)
@@ -56,12 +57,14 @@ SPECS: dict[StopCheck, Spec] = {
     StopCheck.SUITE: Spec(stages.Name.STOP_SUITE, "implement"),
     StopCheck.RED: Spec(stages.Name.STOP_RED, "tests"),
     StopCheck.PRESENTATION: Spec(stages.Name.STOP_PRESENTATION, "e2e"),
+    StopCheck.REQUIREMENTS: Spec(stages.Name.STOP_REQUIREMENTS),
 }
 EVERY_ROLE: tuple[StopCheck, ...] = (StopCheck.HANDOFF, StopCheck.LINT)
 STOP_CHECKS: dict[str, tuple[StopCheck, ...]] = {
     "developer": (StopCheck.SUITE,),
     "unit-tester": (StopCheck.RED,),
     "integration-tester": (StopCheck.PRESENTATION,),
+    "architect": (StopCheck.REQUIREMENTS,),
 }
 MAX_REFUSALS = 3
 STOP_HOOK_TIMEOUT_S = 86_400.0
@@ -309,10 +312,25 @@ class StopChecks:
         with self._open(stages.Name.STOP_PRESENTATION):
             return checks.presentation(self.plan.story)
 
+    def _check_requirements(self, handoff: Handoff) -> str | None:
+        """Refuse while a changed or retired requirement has no reason (C5)."""
+        with self._open(stages.Name.STOP_REQUIREMENTS):
+            audit = guard.audit_step(self.runtime.git, self.plan.scope)
+            folder = requirements.folder_of(self.runtime.config)
+            paths = requirement_changes.candidates(audit.in_scope, folder)
+            found = requirement_changes.find_changes(self.runtime.git, paths)
+            held = requirement_changes.sort_changes(found, handoff.requirement_changes).held
+        if not held:
+            return None
+        return requirement_changes.STOP_EXPLAIN.format(
+            explain=requirement_changes.explain_text(held)
+        )
+
 
 RUNNERS: dict[StopCheck, Callable[[StopChecks, Handoff], str | None]] = {
     StopCheck.LINT: StopChecks._lint,
     StopCheck.SUITE: StopChecks._suite,
     StopCheck.RED: StopChecks._red,
     StopCheck.PRESENTATION: StopChecks._presentation,
+    StopCheck.REQUIREMENTS: StopChecks._check_requirements,
 }

@@ -42,6 +42,7 @@ from . import (
     pending_tests,
     presentation,
     recovery,
+    requirement_changes,
     requirements,
     revert_log,
     runner_tools,
@@ -80,7 +81,7 @@ from .gates import (
     ruling_refusal,
     setback_reason,
 )
-from .git_ops import Git, GitError
+from .git_ops import Authored, Git, GitError
 from .halt import Halt
 from .insights import (
     disputes_since_review,
@@ -214,6 +215,8 @@ class Plan:
     said: Said = field(default_factory=Said)
     stop_hook: stop_checks.StopChecks | None = None
     base: str = ""
+    reasons: dict[str, str] = field(default_factory=dict)
+    unexplained: str = ""
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -222,6 +225,21 @@ class Plan:
     def stop(self) -> None:
         if self.prepared:
             self.prepared.stop()
+
+
+@dataclass(frozen=True)
+class Staged:
+    """The paths a step commit takes and the trailers its message ends with (s2)."""
+
+    paths: list[str]
+    trailers: tuple[str, ...] = ()
+
+
+def _explained(parsed: Handoff | HandoffError, plan: Plan) -> Handoff | HandoffError:
+    """``parsed``, or a bad handoff when the step's requirement edits were held back (C4)."""
+    if not plan.unexplained:
+        return parsed
+    return requirement_changes.unexplained_error(parsed, plan.unexplained)
 
 
 @dataclass
@@ -981,6 +999,7 @@ class Runtime:
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
         report |= self.settle_tree(plan)
+        parsed = _explained(parsed, plan)
         self._emit_step_end(plan, parsed, result, report["commit"])
         report |= self._apply(plan, parsed)
         self._land(plan)
@@ -1013,6 +1032,7 @@ class Runtime:
             plan.summary = "malformed handoff"
             return exc
         plan.summary = handoff.summary
+        plan.reasons = handoff.requirement_changes
         return handoff
 
     def _apply(self, plan: Plan, parsed: Handoff | HandoffError) -> dict[str, Any]:
@@ -1101,25 +1121,88 @@ class Runtime:
         if budget.checkpoint_crossed(before, before + cost):
             self.state.manager_due.append(f"budget checkpoint at ${before + cost:.2f}")
 
-    def settle_tree(self, plan: Plan) -> dict[str, str | None]:
-        """Quarantine out-of-scope changes, then commit in-scope ones."""
+    def settle_tree(self, plan: Plan) -> dict[str, Any]:
+        """Quarantine out-of-scope changes, hold back unexplained edits, commit the rest."""
         self.verify_checkout()
         audit = restrict_config(guard.audit_step(self.git, plan.scope), self.git)
+        quarantined = self._quarantine(plan, audit)
+        sorting = self._sort_requirements(plan, audit)
+        held = self._hold_back(plan, sorting)
+        kept = [p for p in audit.in_scope if p not in sorting.held_files]
+        staged = Staged(kept, sorting.trailers)
+        commit = self.commit_step(plan, staged) if kept else None
+        if commit or quarantined or held:
+            self.record_checkout()
+        fields: dict[str, Any] = {"commit": commit, "quarantine": quarantined}
+        return fields | self._held_fields(held) | self._record_requirements(plan, sorting)
+
+    def _quarantine(self, plan: Plan, audit: guard.Audit) -> str | None:
         quarantined = guard.quarantine(self.git, audit) if audit.out_of_scope else None
         if quarantined:
             self.emit(EventKind.QUARANTINE, plan, sha=quarantined, paths=audit.out_of_scope)
-        commit = self.commit_step(plan, audit.in_scope) if audit.in_scope else None
-        if commit or quarantined:
-            self.record_checkout()
-        return {"commit": commit, "quarantine": quarantined}
+        return quarantined
 
-    def commit_step(self, plan: Plan, paths: list[str]) -> str:
+    def _sort_requirements(self, plan: Plan, audit: guard.Audit) -> requirement_changes.Sorting:
+        """Classify the step's requirement files and split them by their reasons (C1-C3)."""
+        folder = requirements.folder_of(self.config)
+        paths = requirement_changes.candidates(audit.in_scope, folder)
+        found = requirement_changes.find_changes(self.git, paths)
+        return requirement_changes.sort_changes(found, plan.reasons)
+
+    def _hold_back(self, plan: Plan, sorting: requirement_changes.Sorting) -> str | None:
+        """Commit and revert the unexplained edits (C4); the hold-back sha, or None."""
+        if not sorting.held:
+            return None
+        held = requirement_changes.HeldBack(plan.role.name, tuple(sorting.held_files))
+        sha = requirement_changes.hold_back(self.git, held)
+        plan.unexplained = requirement_changes.unexplained_text(sorting.held, sha)
+        return sha
+
+    @staticmethod
+    def _held_fields(held: str | None) -> dict[str, str]:
+        return {"held_back": held} if held else {}
+
+    def _record_requirements(
+        self, plan: Plan, sorting: requirement_changes.Sorting
+    ) -> dict[str, Any]:
+        """Emit the change events, auto-accept (C7, C8) and give the C9 report keys."""
+        if not sorting.landed or plan.commit is None:
+            return {}
+        for explained in sorting.landed:
+            self.emit(EventKind.REQUIREMENT_CHANGED, plan, **explained.report({"sha": plan.commit}))
+        affected = self._auto_accept(plan, sorting.landed)
+        fields = {
+            "requirement_changes": [e.report() for e in sorting.landed],
+            "redesigned_stories": list(affected.redesign),
+            "affected_done_stories": list(affected.done),
+        }
+        return {k: v for k, v in fields.items() if v}
+
+    def _auto_accept(
+        self, plan: Plan, landed: tuple[requirement_changes.Explained, ...]
+    ) -> requirement_changes.Affected:
+        """Send past-design stories that trace the changes back to design (C8)."""
+        own = plan.story.id if plan.story else None
+        scope = requirement_changes.AcceptScope(
+            tuple(requirement_changes.traced(landed, own)), self.pipeline.is_past_design
+        )
+        affected = requirement_changes.find_affected(self.state.stories, scope)
+        for sid in affected.redesign:
+            target = requirement_changes.NoteTarget(sid, own or "run", plan.commit or "")
+            self.pipeline.redesign(self.state.stories[sid])
+            self.state.stories[sid].note = requirement_changes.redesign_note(landed, target)
+        if affected.redesign:
+            self.save()
+        return affected
+
+    def commit_step(self, plan: Plan, staged: Staged) -> str:
         """First commit of a story is ``feat``; later ones are fixups of it."""
-        sha = self.git.commit(paths, commit_message(plan, self._subject(plan)))
+        message = Authored(commit_message(plan, self._subject(plan)), trailers=staged.trailers)
+        sha = self.git.commit_by(staged.paths, message)
         plan.commit = sha
         if plan.story and not plan.story.commit:
             plan.story.commit = sha
-        self._record_commit(plan, sha, paths)
+        self._record_commit(plan, sha, staged.paths)
         return sha
 
     def _record_commit(self, plan: Plan, sha: str, paths: list[str]) -> None:

@@ -54,6 +54,12 @@ steps it already routes, and you never do another role's work.
      fix that must prove it holds (a flaky test, a race), say in the
      summary that the story needs `suite_runs: N`. For any other story you
      need, ask the human with `ask_user`.
+   - **Requirement changes**: when a step report or hand-over lists
+     `affected_done_stories`, a requirement those done stories trace has
+     changed. Ask the liaison with `request_story` for a follow-up story that
+     checks them against the changed requirements. You don't write it
+     yourself. Stories still in flight went back to design on their own
+     (`redesigned_stories`), with no round counted.
    - **Each AC names its acceptance environment**, an `[[environment]]` of
      the config. To change an AC or its environment, ask the human with
      `ask_user`. The liaison sends the new ACs with `story amend`, and the
