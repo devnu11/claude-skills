@@ -108,7 +108,7 @@ def test_ac1_an_open_question_makes_the_router_wait(make_runtime) -> None:
     assert rt.state.stuck_asks == 0
 
 
-def test_ac1_a_held_boundary_or_empty_sprint_stays_the_quiet_stall(make_runtime) -> None:
+def test_ac1_an_empty_sprint_stays_the_quiet_stall(make_runtime) -> None:
     rt = make_runtime()
     rt.state.sprint = 1
     assert Router(rt)._idle().kinds == [Trigger.STALLED]
@@ -167,6 +167,7 @@ def test_ac2_ask_user_hold_story_and_notify_do_not_reset(make_runtime) -> None:
     rt = held_for_continue(make_runtime)
     run_tool(rt, "ask_user", {"text": "q?", "stories": ["s2"]})
     run_tool(rt, "hold_story", {"story": "s4", "reason": "r"})
+    run_tool(rt, "notify_user", {"text": "fyi", "kind": "update"})
     assert rt.state.stuck_asks == 2
 
 
