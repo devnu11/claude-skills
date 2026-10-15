@@ -7,14 +7,6 @@
     "agile-team/runner/tests/test_po_cost.py::test_session_cost_defaults",
     "agile-team/runner/tests/test_reconcile.py"
   ],
-  "s150": [
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_dot_has_its_own_display_and_gap",
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_helper_puts_the_tooltip_on_the_pill",
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_rule_keeps_one_line_and_cuts_with_an_ellipsis",
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_no_rule_lets_a_card_pill_wrap",
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_role_and_revert_pills_are_card_pills",
-    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_wait_pill_shows_the_reason_and_titles_the_full_title"
-  ],
   "s151": [
     "agile-team/runner/tests/test_boundary.py::test_big_pr_note_no_longer_names_the_bottom_of_the_stack",
     "agile-team/runner/tests/test_boundary.py::test_boundary_defaults_and_coercion",
