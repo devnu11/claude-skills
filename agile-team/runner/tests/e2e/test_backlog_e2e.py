@@ -12,7 +12,7 @@ from agile_team.po_tools import Tools
 from ..conftest import write_story
 from ..story_setup import Opening, opened
 
-BACKLOG_REFUSAL = "story {} is in the backlog; add it to a sprint"
+BACKLOG_REFUSAL = "story {} is in the Product Backlog; add it to a sprint"
 
 
 def call(coro) -> dict:
