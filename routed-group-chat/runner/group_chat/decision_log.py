@@ -99,6 +99,19 @@ class DecisionLog:
             data.get("next_question", 1),
         )
 
+    def _decide(self, speaker: str, text: str) -> None:
+        self.decisions.append(Entry(f"D{self.next_decision}", text, speaker))
+        self.next_decision += 1
+
+    def _ask(self, speaker: str, text: str) -> None:
+        self.questions.append(Entry(f"Q{self.next_question}", text, speaker))
+        self.next_question += 1
+
+    def _resolve(self, _speaker: str, text: str) -> None:
+        ids = RESOLVED_IDS_RE.match(text)
+        closed = {found.upper() for found in QUESTION_ID_RE.findall(ids.group())} if ids else set()
+        self.questions = [entry for entry in self.questions if entry.id not in closed]
+
 
 def check_shape(data: Any, error: type[Exception]) -> None:
     """Raise ``error`` unless ``data`` has the shape ``DecisionLog.json_data`` writes."""
@@ -136,24 +149,8 @@ def _format_entries(entries: list[Entry]) -> list[str]:
     return [f"- [{entry.id}] {entry.text} (by {entry.by})" for entry in entries] or ["- none"]
 
 
-def _decide(log: DecisionLog, speaker: str, text: str) -> None:
-    log.decisions.append(Entry(f"D{log.next_decision}", text, speaker))
-    log.next_decision += 1
-
-
-def _ask(log: DecisionLog, speaker: str, text: str) -> None:
-    log.questions.append(Entry(f"Q{log.next_question}", text, speaker))
-    log.next_question += 1
-
-
-def _resolve(log: DecisionLog, _speaker: str, text: str) -> None:
-    ids = RESOLVED_IDS_RE.match(text)
-    closed = {found.upper() for found in QUESTION_ID_RE.findall(ids.group())} if ids else set()
-    log.questions = [entry for entry in log.questions if entry.id not in closed]
-
-
 HANDLERS: dict[str, Callable[[DecisionLog, str, str], None]] = {
-    "DECISION": _decide,
-    "QUESTION": _ask,
-    "RESOLVED": _resolve,
+    "DECISION": DecisionLog._decide,
+    "QUESTION": DecisionLog._ask,
+    "RESOLVED": DecisionLog._resolve,
 }

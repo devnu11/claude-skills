@@ -48,11 +48,21 @@ class Limits:
     summary_model: str | None = None
 
 
-def find_handoff(text: str, names: tuple[str, ...], speaker: str) -> str | None:
-    """The member a reply hands the floor to, if it names a valid other member."""
-    found = [name.lower() for name in HANDOFF_RE.findall(strip_fences(text))]
-    valid = [name for name in found if name in names and name != speaker]
+def find_handoff(turn: Turn, names: tuple[str, ...]) -> str | None:
+    """The member ``turn`` hands the floor to, if it names a valid other member."""
+    found = [name.lower() for name in HANDOFF_RE.findall(strip_fences(turn.text))]
+    valid = [name for name in found if name in names and name != turn.speaker]
     return valid[-1] if valid else None
+
+
+@dataclass
+class Exchange:
+    """One human message in progress: who is still to answer, what came back, handoffs taken."""
+
+    state: ChatState
+    queue: list[str]
+    replies: list[Turn] = field(default_factory=list)
+    hops: int = 0
 
 
 @dataclass
@@ -69,39 +79,49 @@ class GroupChat:
         replies (and any orchestrator notes) in order."""
         with self.store.hold_lock():
             state = self.store.load()
-            targets = resolve(message, self.roster.names, state.last_addressed)
-            state.add(Turn(HUMAN, message.strip()))
-            state.last_addressed = targets
-            self.store.save(state)
-            replies = self._answer(state, list(targets))
+            targets = self._record_message(state, message)
+            replies = self._answer(Exchange(state, list(targets)))
             replies.extend(self._summarize_old_turns(state))
             self.store.save(state)
             return replies
 
-    def _answer(self, state: ChatState, queue: list[str]) -> list[Turn]:
-        replies: list[Turn] = []
-        hops = 0
-        while queue:
-            turn = self._collect_reply(state, queue.pop(0), replies)
-            replies.append(turn)
-            nxt = find_handoff(turn.text, self.roster.names, turn.speaker)
-            if nxt is None or nxt in queue:
-                continue
-            if hops >= self.limits.max_handoffs:
-                replies.append(state.note(f"handoff to @{nxt} dropped: limit reached"))
-                continue
-            hops += 1
-            queue.append(nxt)
-        return replies
-
-    def _collect_reply(self, state: ChatState, name: str, replies: list[Turn]) -> Turn:
-        try:
-            turn = self._ask_role(state, name)
-        except BackendError as exc:
-            note = state.note(f"@{name} could not answer: {exc}")
-            self.store.save(state)
-            raise PartialReplyError([*replies, note], exc) from exc
+    def _record_message(self, state: ChatState, message: str) -> tuple[str, ...]:
+        """Add the human's message, remember who it addresses and save; the addressees."""
+        targets = resolve(message, self.roster.names, state.last_addressed)
+        state.add(Turn(HUMAN, message.strip()))
+        state.last_addressed = targets
         self.store.save(state)
+        return targets
+
+    def _answer(self, exchange: Exchange) -> list[Turn]:
+        while exchange.queue:
+            turn = self._collect_reply(exchange)
+            exchange.replies.append(turn)
+            self._pass_floor(exchange, turn)
+        return exchange.replies
+
+    def _pass_floor(self, exchange: Exchange, turn: Turn) -> None:
+        """Queue the member ``turn`` hands off to, or note that the handoff limit dropped it."""
+        target = find_handoff(turn, self.roster.names)
+        if target is None or target in exchange.queue:
+            return
+        if exchange.hops >= self.limits.max_handoffs:
+            exchange.replies.append(
+                exchange.state.note(f"handoff to @{target} dropped: limit reached")
+            )
+            return
+        exchange.hops += 1
+        exchange.queue.append(target)
+
+    def _collect_reply(self, exchange: Exchange) -> Turn:
+        name = exchange.queue.pop(0)
+        try:
+            turn = self._ask_role(exchange.state, name)
+        except BackendError as exc:
+            note = exchange.state.note(f"@{name} could not answer: {exc}")
+            self.store.save(exchange.state)
+            raise PartialReplyError([*exchange.replies, note], exc) from exc
+        self.store.save(exchange.state)
         return turn
 
     def _ask_role(self, state: ChatState, name: str) -> Turn:
