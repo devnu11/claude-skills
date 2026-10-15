@@ -635,20 +635,20 @@ def gate_pipeline(files=None, live=None, steps=STEPS) -> tuple[gates.Pipeline, l
     return gates.Pipeline(list(steps), 3, made), calls
 
 
-def test_default_liveness_always_passes() -> None:
+def test_default_liveness_always_passes(config: cfg.Config) -> None:
     made = gates.Checks({}, 95.0, FakeRunner())
     out = made.liveness(story_of())
     assert (out.verdict, out.reason) == (Verdict.PASS, gates.READY)
     assert gates.READY == "presentation ready"
 
 
-def test_missing_files_bounce_without_starting_anything() -> None:
+def test_missing_files_bounce_without_starting_anything(config: cfg.Config) -> None:
     p, calls = gate_pipeline(files=lambda _s: MISSING)
     out = p.checks.presented(story_of())
     assert (out.verdict, out.reason) == (Verdict.BOUNCE, MISSING) and calls == []
 
 
-def test_complete_files_then_the_liveness_outcome_decides() -> None:
+def test_complete_files_then_the_liveness_outcome_decides(config: cfg.Config) -> None:
     live = gates.Outcome(Verdict.PASS, "presentation ready; u answered")
     p, calls = gate_pipeline(live=lambda _s: live)
     assert p.checks.presented(story_of()) is live and calls == ["s4"]
