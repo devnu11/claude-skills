@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 from . import system
@@ -19,6 +20,7 @@ from . import system
 PPD_DIR = Path("/etc/cups/ppd")
 CUPS_DEFAULT_HOST = "localhost:631"
 CUPS_PORT = 631
+C_LOCALE = {"LANG": "C", "LC_ALL": "C"}
 PRINTER_BACKENDS = frozenset({"ipp", "ipps"})  # backends that relay the printer's own count
 POLL_SECONDS = 2.0
 WAIT_SECONDS = 300.0
@@ -130,14 +132,20 @@ def select_printer(requested: str | None) -> str:
 
 def read_default_printer() -> str | None:
     """The CUPS default destination, from ``lpstat -d``."""
-    match = re.search(r"destination: (\S+)", system.capture(["lpstat", "-d"]) or "")
+    match = re.search(r"destination: (\S+)", read_lpstat(["-d"]))
     return match[1] if match else None
 
 
 def list_printers() -> str:
     """The printer names ``lpstat -p`` knows, comma separated, or ``none``."""
-    names = re.findall(r"^printer (\S+)", system.capture(["lpstat", "-p"]) or "", re.M)
+    names = re.findall(r"^printer (\S+)", read_lpstat(["-p"]), re.M)
     return ", ".join(names) or "none"
+
+
+def read_lpstat(args: list[str]) -> str:
+    """What ``lpstat`` prints in the C locale, the wording the parsers expect; empty on failure."""
+    done = system.run(["lpstat", *args], system.get_environment() | C_LOCALE)
+    return done.out if done.code == 0 else ""
 
 
 def prepare_payload(pdf: Path, job: Job) -> Payload:
@@ -154,23 +162,33 @@ def prepare_payload(pdf: Path, job: Job) -> Payload:
 def find_ppd(printer: str) -> Path | None:
     """The queue's PPD: the local file when readable, else a copy CUPS serves to anyone."""
     local = PPD_DIR / f"{printer}.ppd"
-    if local.is_file() and os.access(local, os.R_OK):
+    if is_readable(local):
         return local
     copy = Path(tempfile.gettempdir()) / "render-markdown" / f"{printer}.ppd"
     return copy if get_served_ppd(printer, copy) else None
+
+
+def is_readable(path: Path) -> bool:
+    """A file this user can read (Debian keeps PPDs to the ``lp`` group)."""
+    return path.is_file() and os.access(path, os.R_OK)
 
 
 def get_served_ppd(printer: str, copy: Path) -> bool:
     """Download the queue's PPD from the CUPS web server into ``copy``; False when it can't."""
     url = f"http://{get_cups_host()}/printers/{quote(printer)}.ppd"
     try:
-        with urllib.request.urlopen(url, timeout=10) as response:
+        with open_url(url) as response:
             data = response.read()
     except OSError:
         return False
     copy.parent.mkdir(parents=True, exist_ok=True)
     copy.write_bytes(data)
     return True
+
+
+def open_url(url: str) -> Any:
+    """Open ``url`` directly: a proxy from ``http_proxy`` would never reach the CUPS server."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=10)
 
 
 def get_cups_host() -> str:
@@ -250,7 +268,7 @@ def limit_outcome(outcome: Outcome, printer: str) -> Outcome:
 
 def read_backend(printer: str) -> str:
     """The queue's backend: ``ipp``, ``ipps``, ``usb``…; a dnssd URI names its service type."""
-    out = system.capture(["lpstat", "-v", printer]) or ""
+    out = read_lpstat(["-v", printer])
     uri = out.split(": ", 1)[-1].strip()
     service = re.search(r"\._(ipps?)\._tcp", uri)
     return service[1] if uri.startswith("dnssd:") and service else uri.split(":", 1)[0]

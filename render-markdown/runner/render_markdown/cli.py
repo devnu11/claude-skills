@@ -18,6 +18,7 @@ from .browser import BrowserError, open_in_browser
 from .chrome import ChromeError
 from .paper import Paper, select_paper
 from .printer import (
+    PDF_FORMAT,
     Clock,
     Job,
     Outcome,
@@ -109,6 +110,8 @@ def deny_windows_print() -> None:
 def send_and_trace(rendering: Rendering, job: Job) -> int:
     """Send the job, follow it to the end, and say whether paper came out."""
     payload = prepare_payload(rendering.pdf, job)
+    if job.send is Send.RASTER and payload.format == PDF_FORMAT:
+        print("warning: no raster filter or PPD for this printer; sending the PDF itself")
     sent = send_job(payload, job)
     print(f"sent: job {sent.job_id} as {payload.format}")
     traced = trace_job(sent, Clock())

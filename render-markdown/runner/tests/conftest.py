@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from render_markdown import chrome, system
+from render_markdown import chrome, printer, system
 from render_markdown.system import Finished
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -56,12 +56,12 @@ class FakeSystem:
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Tests never reach a real CUPS web server; one that needs it scripts ``urlopen``."""
+    """Tests never reach a real CUPS web server; one that needs it scripts ``open_url``."""
 
-    def refuse(url: str, timeout: float) -> None:
+    def refuse(url: str) -> None:
         raise OSError(f"no network in tests: {url}")
 
-    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    monkeypatch.setattr(printer, "open_url", refuse)
 
 
 @pytest.fixture
