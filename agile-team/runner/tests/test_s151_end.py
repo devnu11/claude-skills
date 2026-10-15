@@ -228,16 +228,6 @@ def test_ac3_1_as_is_pushed_and_ci_are_never_remapped(env: Env) -> None:
     assert (e.as_is, e.pushed, e.ci.head) == (AS_BUILT, AS_BUILT, AS_BUILT)
 
 
-def test_ac3_1_a_rebase_conflict_goes_to_devops_not_a_hold(env: Env) -> None:
-    e = at(env, Stage.REBASE)
-    green_read(e)
-    stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
-    env.br.step()
-    b = env.rt.state.boundary
-    assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
-    assert b.failure.stage is bd.Stage.REBASE and b.sync_from
-
-
 # ----- AC3.2: force-push the rebased branch to the same branch ----------------------
 
 

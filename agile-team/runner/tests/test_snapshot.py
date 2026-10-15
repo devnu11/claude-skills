@@ -280,6 +280,7 @@ def test_build_matches_fixture_shape(scratch: Path) -> None:
     config = write_run(scratch / "repo", fixture)
     snap = build(config, scratch)
     assert list(snap) == KEYS
+    assert set(snap["stage_labels"]) == set(fixture["stage_labels"])
     assert all("check" not in e for e in snap["upstream"]["stack"])
     # The fixture lists no commits; a started story gets one (commit_for), so expect it.
     pulled = pulled_in(fixture["events"])

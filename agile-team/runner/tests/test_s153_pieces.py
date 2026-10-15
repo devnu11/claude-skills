@@ -42,7 +42,7 @@ def load(data: dict) -> RunState:
     return RunState.from_json(json.dumps(data))
 
 
-def test_the_new_enum_members_and_values() -> None:
+def test_s153_the_new_enum_members_and_values() -> None:
     assert StepKind.REBASE_FIX.value == "rebase-fix"
     assert list(StepKind)[-1] is StepKind.REBASE_FIX
     assert FixCase.REBASE_CONFLICT.value == "rebase_conflict"
@@ -51,50 +51,50 @@ def test_the_new_enum_members_and_values() -> None:
     assert holds.index(BoundaryHold.REBASE_CONFLICT) == holds.index(BoundaryHold.SYNC_CONFLICT) + 1
 
 
-def test_the_tables_hold_the_conflict_path() -> None:
+def test_s153_the_tables_hold_the_conflict_path() -> None:
     assert bd.FIX_KINDS[FixCase.REBASE_CONFLICT] is StepKind.REBASE_FIX
     assert len(bd.FIX_LINES[FixCase.REBASE_CONFLICT]) == 2
     hint = bd.STALL_HINTS[BoundaryHold.REBASE_CONFLICT]
     assert "continue_boundary(note)" in hint
 
 
-def test_a_failure_worktree_defaults_to_empty() -> None:
+def test_s153_a_failure_worktree_defaults_to_empty() -> None:
     assert conflict().worktree == ""
 
 
-def test_failure_worktree_round_trips_through_state_json() -> None:
+def test_s153_failure_worktree_round_trips_through_state_json() -> None:
     b = bd.Boundary(Edge.END, 1, failure=conflict(worktree="/w/rebase", branch="agile-team/x"))
     assert load(stored(b)).boundary.failure.worktree == "/w/rebase"
 
 
-def test_a_stored_failure_without_worktree_loads_empty() -> None:
+def test_s153_a_stored_failure_without_worktree_loads_empty() -> None:
     data = stored(bd.Boundary(Edge.END, 1, failure=conflict(worktree="/w")))
     del data["boundary"]["failure"]["worktree"]
     assert load(data).boundary.failure.worktree == ""
 
 
-def test_a_stored_boundary_without_rebase_fix_loads_none() -> None:
+def test_s153_a_stored_boundary_without_rebase_fix_loads_none() -> None:
     data = stored(bd.Boundary(Edge.END, 1))
     data["boundary"].pop("rebase_fix", None)
     assert load(data).boundary.rebase_fix is None
     assert bd.Boundary(Edge.END, 1).rebase_fix is None
 
 
-def test_a_rebase_fix_loads_with_its_conflict_as_a_failure() -> None:
+def test_s153_a_rebase_fix_loads_with_its_conflict_as_a_failure() -> None:
     fix = bd.RebaseFix(conflict(worktree="/w"), "done", "notes")
     loaded = load(stored(bd.Boundary(Edge.END, 1, rebase_fix=fix))).boundary.rebase_fix
     assert loaded == fix and isinstance(loaded.conflict, bd.Failure)
     assert (loaded.status, loaded.notes) == ("done", "notes")
 
 
-def test_a_rebase_conflict_hold_loads_as_a_known_hold() -> None:
+def test_s153_a_rebase_conflict_hold_loads_as_a_known_hold() -> None:
     data = stored(bd.Boundary(Edge.END, 1, hold=BoundaryHold.REBASE_CONFLICT))
     state = load(data)
     assert state.boundary.hold == BoundaryHold.REBASE_CONFLICT
     assert state.load_faults == []
 
 
-def test_fix_brief_names_the_commit_files_worktree_and_branch() -> None:
+def test_s153_fix_brief_names_the_commit_files_worktree_and_branch() -> None:
     b = bd.Boundary(Edge.END, 3, failure=conflict(worktree="/w/rebase", branch="agile-team/r3"))
     brief = bd.fix_brief(b, bd.FixContext("team/s", "origin/main", "f" * 40))
     for text in ("c" * 12, '"Edit a"', "a.py, b.py", "/w/rebase", "agile-team/r3", "team/s"):
@@ -104,7 +104,7 @@ def test_fix_brief_names_the_commit_files_worktree_and_branch() -> None:
     assert brief.index("/w/rebase") < brief.index("the output")
 
 
-def test_the_texts_format_with_their_fields() -> None:
+def test_s153_the_texts_format_with_their_fields() -> None:
     assert bd.FIX_NOT_DONE.format(status="failed") == "the DevOps step ended failed"
     assert bd.CHECKS_FAILED.format(path="/w", reason="r") == "the full checks failed in /w: r"
     held = bd.REBASE_FIX_HELD.format(
@@ -115,7 +115,7 @@ def test_the_texts_format_with_their_fields() -> None:
         assert text in held
 
 
-def test_dispatch_has_the_rebase_fix_scope_table_entries() -> None:
+def test_s153_dispatch_has_the_rebase_fix_scope_table_entries() -> None:
     assert frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX}) == dispatch.FIX_KINDS_SET
     assert dispatch.REBASE_FIX_ENV == {"GIT_EDITOR": "true"}
     assert dispatch.FIX_SETUPS[StepKind.REBASE_FIX] == dispatch.Runtime._rebase_fix_scope
@@ -126,7 +126,7 @@ def env(make_runtime) -> Env:
     return Env(make_runtime)
 
 
-def test_the_rebase_fix_scope_confines_writes_and_git_to_the_worktree(env: Env) -> None:
+def test_s153_the_rebase_fix_scope_confines_writes_and_git_to_the_worktree(env: Env) -> None:
     rt = env.rt
     role = roles.RoleBook.for_repo(Path("."), {}).resolve("devops")
     plan = dispatch.Plan(role, guard.Scope("devops", rt.config.repo, ["**"], []), prompt="x")
@@ -146,6 +146,6 @@ def test_p1_a_sprint_end_conflict_still_holds_sync_conflict(env: Env) -> None:
     env.br.step()
     b = env.rt.state.boundary
     assert b.hold == BoundaryHold.SYNC_CONFLICT
-    assert b.failure is None and b.rebase_fix is None
+    assert b.failure is None and b.rebase_fix is None and b.sync_from
     due = env.br.due()
     assert due is None or due.kind is not StepKind.REBASE_FIX

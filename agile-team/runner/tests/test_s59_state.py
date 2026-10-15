@@ -73,3 +73,4 @@ def test_s151_a_rebase_fix_round_trips_with_its_conflict() -> None:
     fix = RunState.from_json(st.to_json()).boundary.rebase_fix
     assert fix == bd.RebaseFix(conflict, "done", "n")
     assert isinstance(fix.conflict, bd.Failure)
+    assert fix.conflict.case.value == "rebase_conflict" and fix.conflict.files == ["a.py"]
