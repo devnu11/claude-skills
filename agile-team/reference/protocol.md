@@ -2708,7 +2708,7 @@ The requirement in plain words.
 | 6 | `title` is a non-empty string | `title must be a non-empty string` |
 | 7 | `status` is `active` or `retired` | `status is 'draft'; use active or retired` |
 | 8 | `covers` is a list (may be empty) | `covers must be a list of "sN/ACk" strings` |
-| 9 | each item is `sN/<ac id>` | `covers item 2: 's1-AC1' is not "sN/ACk"` |
+| 9 | each item is `sN/<ac id>`; the AC id starts with a letter, then letters, digits, `_`, `-` or `.` (`s141/AC1.1`) | `covers item 2: 's1-AC1' is not "sN/ACk"` |
 | 10 | no item is listed twice | `covers item 3: 's1/AC1' is listed twice` |
 | 11 | the body is not blank | `the body is empty; state the requirement in plain words` |
 | 12 | no other file claims the id | `id 'REQ-001' is also used by <other files>` |

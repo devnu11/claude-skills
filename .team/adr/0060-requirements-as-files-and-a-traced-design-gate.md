@@ -53,3 +53,13 @@ change were never traced, and tracing ~120 old stories is not asked for.
 - No new dependency (PyYAML is already used for frontmatter).
 - The dashboard's snapshot keeps its own lenient read of the files; its
   stories gain `trace` so pre-s1 stories are not shown as gaps.
+
+## Amended by s143 (2026-10-15)
+
+The AC part of a `covers` reference may contain dots. `requirements.REF` is
+now `(s\d+)/([A-Za-z][\w.-]*)`: a story id `s` plus digits, a slash, then an
+AC id that starts with a letter and goes on with letters, digits, `_`, `-`
+or `.`. Why: s141 numbers its ACs `AC1.1` … `AC8.3`, story files never
+restricted AC ids, and the old `[\w-]*` made those ACs untraceable, so the
+design gate bounced them as `BAD_REF`. Every reference valid before stays
+valid; the `BAD_REF` text (`is not "sN/ACk"`) is unchanged.
