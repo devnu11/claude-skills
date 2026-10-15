@@ -350,7 +350,11 @@ def test_start_loads_the_lists_before_the_po_runs(
 
 
 def test_start_refused_text() -> None:
-    assert cli.START_REFUSED == "story files: {refusal}; fix depends_on in {folder}"
+    assert cli.START_REFUSED == (
+        "story files: {refusal}; story amend cannot change depends_on, so the human fixes it: "
+        "edit depends_on in the story's file in {folder}, git commit it, then agile-team start "
+        "again (agile-team accept-checkout first if start halts on the moved checkout)"
+    )
 
 
 # ----- DP3, DP5: start_sprint -----------------------------------------------------
