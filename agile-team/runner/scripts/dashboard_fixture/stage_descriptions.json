@@ -16,7 +16,7 @@
  "presentation.trial": "The e2e gate: the presentation is complete and its service starts and answers",
  "gate.green": "The full suite must pass before the PO passes a story stuck at tests",
  "boundary.sync": "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",
- "boundary.check": "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch",
+ "boundary.check": "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch",
  "boundary.review": "Build and check the per-sprint review branches",
  "boundary.push": "Push the review branches and open or update their pull requests",
  "boundary.rebase": "Rebase the team branch onto the target (sprint end only)",

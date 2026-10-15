@@ -139,7 +139,7 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
         Name.BOUNDARY_SYNC, B, BOUND, "boundary sync",
         "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",  # noqa: E501
     ),
-    (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite, coverage and each environment's e2e, on the team branch"),  # noqa: E501
+    (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch"),  # noqa: E501
     (Name.BOUNDARY_REVIEW, A, BOUND, "build review branches", "Build and check the per-sprint review branches"),  # noqa: E501
     (
         Name.BOUNDARY_PUSH, A, BOUND, "review PR + push",

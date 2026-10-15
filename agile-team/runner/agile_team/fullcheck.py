@@ -1,8 +1,11 @@
-"""The full checks a sprint boundary runs: lint, static, test, coverage, each environment's e2e."""
+"""The full checks a sprint boundary runs: lint, static, test, coverage, each environment's e2e.
+
+``test`` runs only when no ``coverage`` command is set: the coverage run proves green too (s73).
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -28,6 +31,12 @@ TOOLCHAIN_CHECKS = (
     ("test", Judge.EXIT),
     ("coverage", Judge.COVERAGE),
 )
+SUPERSEDED_BY: dict[str, str] = {"test": "coverage"}  # one coverage run proves green (s73 F1)
+
+
+def _wanted(name: str, commands: Mapping[str, str]) -> bool:
+    """Whether check ``name`` runs: its command is set and no set command supersedes it."""
+    return bool(commands.get(name)) and not commands.get(SUPERSEDED_BY.get(name, ""))
 
 
 @dataclass(frozen=True)
@@ -104,12 +113,21 @@ def _exit_why(run: test_reports.TestRun, judging: Judging) -> str:
 
 def _coverage_why(run: test_reports.TestRun, judging: Judging) -> str:
     if run.code != 0:
-        return f"exit {run.code}"
-    total = gates.parse_coverage(run.out)
+        return _failed_why(run, judging)
+    return _total_why(gates.parse_coverage(run.out), judging.required)
+
+
+def _failed_why(run: test_reports.TestRun, judging: Judging) -> str:
+    """A run stopped only by coverage reads as a shortfall (s68 C4); any other is ``exit N``."""
+    total = gates.coverage_shortfall(run.out, judging.required)
+    return f"exit {run.code}" if total is None else _total_why(total, judging.required)
+
+
+def _total_why(total: float | None, required: float) -> str:
+    """Why a coverage total fails, or empty when it meets ``required``."""
     if total is None:
         return "could not read a coverage total"
-    below = total < judging.required
-    return f"coverage {total}% is below {judging.required}%" if below else ""
+    return f"coverage {total}% is below {required}%" if total < required else ""
 
 
 JUDGES: dict[Judge, Callable[[test_reports.TestRun, Judging], str]] = {
@@ -130,13 +148,13 @@ def _toolchain_check(config: Config, ask: test_reports.Ask) -> Callable[[str, Ju
 
 
 def full_checks(config: Config, registry: Registry) -> list[FullCheck]:
-    """Toolchain checks that are set, then each environment's e2e command."""
+    """Toolchain checks that are set (``test`` only without ``coverage``), then each e2e command."""
     commands = config.toolchain.commands
     reporting = test_reports.Reporting(
         config.toolchain.report, config.run_dir / test_reports.FOLDER
     )
     make = _toolchain_check(config, test_reports.Ask(reporting, registry.others("")))
-    chosen = [make(n, j) for n, j in TOOLCHAIN_CHECKS if commands.get(n)]
+    chosen = [make(n, j) for n, j in TOOLCHAIN_CHECKS if _wanted(n, commands)]
     e2e = [FullCheck(f"e2e:{d.name}", d.e2e) for d in config.environments if d.e2e]
     return [*chosen, *e2e]
 

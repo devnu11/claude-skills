@@ -419,6 +419,13 @@ def tests_failed(output: str) -> bool:
     return any(p.search(output) for p in TEST_FAILURES)
 
 
+def coverage_shortfall(output: str, required: float) -> float | None:
+    """The total if a non-zero run fell short of ``required`` with no failed test, else None."""
+    total = parse_coverage(output)
+    short = total is not None and total < required
+    return total if short and not tests_failed(output) else None
+
+
 def parse_coverage(output: str) -> float | None:
     """Total coverage from a coverage report: the ``TOTAL`` line, else the last ``N%``."""
     totals = [ln for ln in output.splitlines() if "TOTAL" in ln.upper()]
@@ -755,9 +762,8 @@ class Checks:
 
     def _failed_run(self, out: str) -> Outcome:
         """Bounce a non-zero run: shortfall text if only the total fell short, else tests fail."""
-        pct = parse_coverage(out)
-        short = pct is not None and pct < self.required_coverage()
-        if short and not tests_failed(out):
+        pct = coverage_shortfall(out, self.required_coverage())
+        if pct is not None:
             return self._coverage_outcome(pct)
         return Outcome(Verdict.BOUNCE, TESTS_FAIL.format(tail=tail(out)))
 
