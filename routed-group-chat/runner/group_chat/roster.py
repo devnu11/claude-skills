@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .schema import check
+from .schema import TableSchema
 
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,31}")
 # ``all`` is the broadcast mention; ``human`` and ``orchestrator`` are speakers.
@@ -75,7 +75,7 @@ def load(path: Path) -> Roster:
 
 def parse(data: Mapping[str, Any], base: Path) -> Roster:
     """Validate roster data; ``base`` resolves ``prompt_file`` paths."""
-    check(data, TOP_FIELDS, "roster", RosterError)
+    TableSchema(TOP_FIELDS, "roster", RosterError).check(data)
     raw = data.get("role")
     if not raw:
         raise RosterError("roster needs at least one [[role]]")
@@ -85,7 +85,7 @@ def parse(data: Mapping[str, Any], base: Path) -> Roster:
 
 
 def _role(item: Any, base: Path) -> Role:
-    check(item, ROLE_FIELDS, "each [[role]]", RosterError)
+    TableSchema(ROLE_FIELDS, "each [[role]]", RosterError).check(item)
     name = _name(item.get("name"))
     return Role(name, item.get("title", name), _prompt(name, item, base), item.get("model"))
 

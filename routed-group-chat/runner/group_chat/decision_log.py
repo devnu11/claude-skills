@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .schema import check, check_items
+from .schema import ListSchema, TableSchema
 
 PREFIX = r"^[ \t]*(?:[-*][ \t]+)?(?:@[A-Za-z][A-Za-z0-9-]*[ \t,]*)*(?:\*\*)?"
 # ``**`` right after the colon is consumed possessively (``*+``-style atomic
@@ -100,12 +100,12 @@ class DecisionLog:
 
 def validate(data: Any, error: type[Exception]) -> None:
     """Raise ``error`` unless ``data`` has the shape ``DecisionLog.to_dict`` writes."""
-    check(data, LOG_FIELDS, "log", error)
+    TableSchema(LOG_FIELDS, "log", error).check(data)
     for key in ("decisions", "questions"):
         entries = data.get(key, [])
-        check_items(entries, dict, f"log.{key}", error)
+        ListSchema(dict, f"log.{key}", error).check(entries)
         for entry in entries:
-            check(entry, ENTRY_FIELDS, f"log.{key} entry", error, required=ENTRY_FIELDS)
+            TableSchema(ENTRY_FIELDS, f"log.{key} entry", error, ENTRY_FIELDS).check(entry)
 
 
 def strip_fences(text: str) -> str:
