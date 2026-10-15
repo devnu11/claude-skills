@@ -119,6 +119,10 @@ steps it already routes, and you never do another role's work.
    - **fault ruling not applied** (the reason says why): run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
+   - **rebase_conflict**: DevOps could not settle the sprint-end rebase; the
+     liaison has the conflict, DevOps's notes and the scratch branch.
+     `continue_boundary(note)` runs the rebase and DevOps again with your
+     note.
    - **sync conflict** (only a boundary saved before s151):
      `continue_boundary` reruns the rebase.
    - **known_failures** (sprint start): the full checks failed on the team

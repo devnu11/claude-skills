@@ -213,7 +213,7 @@ class BoundaryRunner:
         """R15: keep DevOps's answer to a rebase conflict for the rebase stage; say if it did."""
         if b.failure is None or b.failure.case is not FixCase.REBASE_CONFLICT:
             return False
-        b.rebase_fix = RebaseFix(b.failure, report["status"], report["summary"])
+        b.rebase_fix = RebaseFix(b.failure, report.get("status", ""), report.get("summary", ""))
         return True
 
     # ----- events and holds
@@ -549,10 +549,20 @@ class BoundaryRunner:
 
     def _move_to_fix(self, b: Boundary) -> None:
         scratch = self._scratch(b)
-        result = self.remote.adopt(b.sync_from, scratch.head())
+        try:
+            result = self.remote.adopt(b.sync_from, scratch.head())
+        except UpstreamError:
+            self._forget_fix(b, scratch)
+            raise
+        self._forget_fix(b, scratch)
+        self._settle_rebase(b, result)
+
+    def _forget_fix(self, b: Boundary, scratch: ScratchRebase) -> None:
+        """Drop the scratch and the fix; a moved team branch must rebase afresh (R16, R17)."""
         scratch.drop()
         b.rebase_fix = None
-        self._settle_rebase(b, result)
+        b.sync_from = ""
+        self.runtime.save()
 
     def _hold_conflict(self, b: Boundary, why: str) -> None:
         """R17: keep the worktree and branch; the liaison and the PO get the notes."""
