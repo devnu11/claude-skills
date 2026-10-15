@@ -29,10 +29,11 @@ denied.
 
 ## Checklist
 
-- No code at the top level of a script or module beyond imports, constants and
-  definitions. Executable code belongs in functions, started only by an
-  `if __name__ == "__main__":` guard that calls one function (e.g.
-  `just_do_it()`). Request changes when a changed file runs code at import.
+- No code at a module's or script's top level: only the module docstring,
+  imports, constant assignments, function and class definitions, and the
+  `if __name__ == "__main__":` guard calling one entry function (`main`, or
+  `just_do_it` when `main` doesn't fit). A loop, `with`, `try`, bare call or
+  other `if` at the top level is a defect, in tests and scripts too.
 
 ## Definition of done
 
