@@ -55,7 +55,7 @@ def scope(repo: Path, role: str = "product-owner") -> guard.Scope:
 def test_every_role_is_refused_the_story_files(repo: Path, tool) -> None:
     for role in ("product-owner", "developer"):
         found = guard.check_tool_use(
-            scope(repo, role), guard.ToolCall(tool, {"file_path": STORY_FILE})
+            scope(repo, role), guard.ToolCall(tool, {guard.WRITE_TOOLS[tool]: STORY_FILE})
         )
         assert found == f"{role} may not write {STORY_FILE}; only the runner writes it"
 

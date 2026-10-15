@@ -231,7 +231,11 @@ def test_human_order_text_names_the_stories() -> None:
 
 def test_source_values_and_roles() -> None:
     assert Source.PO == "product-owner" and Source.HUMAN == "human (dashboard)"
-    assert SOURCE_ROLES == {Source.PO: "product-owner", Source.HUMAN: None}
+    assert SOURCE_ROLES == {
+        Source.PO: "product-owner",
+        Source.HUMAN: None,
+        Source.LIAISON: "liaison",
+    }
 
 
 def test_reorder_defaults_to_the_po_and_builds_event_data() -> None:

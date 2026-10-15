@@ -476,6 +476,7 @@ def test_each_step_gets_a_standard_brief(make_runtime) -> None:
     rt = build(make_runtime, script, steps=["design", "review"])
     add_story(rt)
     write_file(rt, ".team/stories/s1.md")
+    rt.git.commit([".team/stories/s1.md"], "story s1")
     drive(rt)
     first = script.prompts["architect"][0]
     assert first.startswith(HEADING) and "- Story: .team/stories/s1.md" in first
