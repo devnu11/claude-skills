@@ -33,13 +33,13 @@ def system_prompt(role: Role, roster: Roster) -> str:
 
 def transcript(turns: Sequence[Turn]) -> str:
     """Turns as delimited blocks, oldest first."""
-    return "\n\n".join(turn.block() for turn in turns)
+    return "\n\n".join(turn.tagged for turn in turns)
 
 
 def user_prompt(role: Role, state: ChatState) -> str:
     """Pinned log, summary and transcript, then the cue for this role."""
     sections = [
-        ("PINNED: DECISIONS AND OPEN QUESTIONS", escape_tags(state.log.render())),
+        ("PINNED: DECISIONS AND OPEN QUESTIONS", escape_tags(state.log.markdown)),
         ("SUMMARY OF EARLIER DISCUSSION", escape_tags(state.summary) or "(none)"),
         ("RECENT TURNS", transcript(state.turns) or "(none)"),
     ]

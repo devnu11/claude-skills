@@ -74,7 +74,7 @@ def build(args: argparse.Namespace, io: Io) -> GroupChat:
 def print_turns(turns: Iterable[Turn], out: TextIO) -> None:
     """Each turn as ``@speaker: text`` followed by a blank line."""
     for turn in turns:
-        print(f"{turn.render()}\n", file=out)
+        print(f"{turn.line}\n", file=out)
 
 
 def send(chat: GroupChat, message: str, io: Io) -> int:
@@ -115,7 +115,7 @@ def _send_or_warn(chat: GroupChat, message: str, io: Io) -> None:
 def cmd_log(args: argparse.Namespace, io: Io) -> int:
     """``log``: the pinned decisions and open questions."""
     load(args.roster)
-    print(Store(args.dir).load().log.render(), file=io.stdout)
+    print(Store(args.dir).load().log.markdown, file=io.stdout)
     return 0
 
 

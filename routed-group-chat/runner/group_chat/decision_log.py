@@ -67,7 +67,8 @@ class DecisionLog:
             if value.strip("* \t"):
                 HANDLERS[marker](self, speaker, value)
 
-    def render(self) -> str:
+    @property
+    def markdown(self) -> str:
         """Markdown for the pinned block."""
         return "\n".join(
             [
@@ -78,7 +79,8 @@ class DecisionLog:
             ]
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    @property
+    def json_data(self) -> dict[str, Any]:
         """JSON-ready form, read back by ``from_dict``."""
         return {
             "decisions": [vars(entry) for entry in self.decisions],
@@ -89,7 +91,7 @@ class DecisionLog:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DecisionLog:
-        """The log saved by ``to_dict``; missing keys take their defaults."""
+        """The log saved by ``json_data``; missing keys take their defaults."""
         return cls(
             [Entry(**entry) for entry in data.get("decisions", [])],
             [Entry(**entry) for entry in data.get("questions", [])],
@@ -99,7 +101,7 @@ class DecisionLog:
 
 
 def validate(data: Any, error: type[Exception]) -> None:
-    """Raise ``error`` unless ``data`` has the shape ``DecisionLog.to_dict`` writes."""
+    """Raise ``error`` unless ``data`` has the shape ``DecisionLog.json_data`` writes."""
     TableSchema(LOG_FIELDS, "log", error).check(data)
     for key in ("decisions", "questions"):
         entries = data.get(key, [])

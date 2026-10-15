@@ -34,7 +34,7 @@ def test_new_owner_names_this_process() -> None:
 def test_held_writes_owner_and_releases(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
     with lock.held():
-        holder = lock.holder()
+        holder = lock.holder
         assert holder is not None
         assert holder["pid"] == os.getpid()
     assert not lock.path.exists()
@@ -80,18 +80,18 @@ def test_unreadable_holder_is_never_stale(tmp_path: Path) -> None:
 def test_non_dict_holder_is_unreadable(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
     lock.path.write_text("[1, 2]")
-    assert lock.holder() is None
+    assert lock.holder is None
 
 
 def test_missing_lock_has_no_holder(tmp_path: Path) -> None:
-    assert LockFile(tmp_path / "lock").holder() is None
+    assert LockFile(tmp_path / "lock").holder is None
 
 
 def test_dead_holder_on_this_host_is_taken_over(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock", alive=never)
     write_owner(lock.path, 4242)
     with lock.held():
-        holder = lock.holder()
+        holder = lock.holder
         assert holder is not None
         assert holder["pid"] == os.getpid()
     assert not lock.path.exists()
@@ -101,7 +101,7 @@ def test_dead_pid_with_real_pid_alive_is_taken_over(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
     write_owner(lock.path, dead_pid())
     with lock.held():
-        assert lock.holder() is not None
+        assert lock.holder is not None
     assert not lock.path.exists()
 
 

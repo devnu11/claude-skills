@@ -34,7 +34,7 @@ def test_chain_past_cap_records_note_in_thread(make_chat: MakeChat, backend: Fak
     replies = chat.say("@manager go")
     assert speakers(replies) == ["manager", "po", "liaison", "orchestrator"]
     saved = chat.store.load().turns
-    assert saved[-1].render() == "@orchestrator: handoff to @manager dropped: limit reached"
+    assert saved[-1].line == "@orchestrator: handoff to @manager dropped: limit reached"
 
 
 def test_cap_is_per_human_message(make_chat: MakeChat, backend: FakeBackend) -> None:

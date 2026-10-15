@@ -73,7 +73,7 @@ def test_split_empty() -> None:
 
 def test_turns_tokens_counts_blocks() -> None:
     turn = Turn("po", "")
-    assert turns_tokens([turn]) == estimate_tokens(turn.block())
+    assert turns_tokens([turn]) == estimate_tokens(turn.tagged)
 
 
 def test_summary_prompt_carries_earlier_summary_and_order() -> None:

@@ -24,7 +24,7 @@ def estimate_tokens(text: str) -> int:
 
 def turns_tokens(turns: Sequence[Turn]) -> int:
     """Estimated tokens of ``turns`` as a role sees them."""
-    return sum(estimate_tokens(turn.block()) for turn in turns)
+    return sum(estimate_tokens(turn.tagged) for turn in turns)
 
 
 def split(turns: Sequence[Turn], budget: int, keep: int) -> tuple[list[Turn], list[Turn]]:
