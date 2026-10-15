@@ -1,0 +1,63 @@
+"""The repo's own Claude instructions (``.claude/CLAUDE.md``) as prompt text (s142, ADR-0073)."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import system
+
+INSTRUCTIONS = Path(".claude/CLAUDE.md")
+OUTSIDE = "(left out: @{path} points outside the repo)"
+REPEATED = "(left out: @{path} is already included above)"
+# The code alternative must come first, so an "@" inside backticks is consumed as code.
+# group "code": a backtick run and its text up to the same run; group "path": an import
+_IMPORT = re.compile(r"(?P<code>(`+).*?\2)|(?<!\S)@(?P<path>\S+)", re.DOTALL)
+
+
+def repo_instructions(repo: Path) -> str:
+    """``<repo>/.claude/CLAUDE.md`` with in-repo imports inlined once; "" when missing or outside."""
+    root = system.resolve(repo)
+    path = system.resolve(repo / INSTRUCTIONS)
+    if not (system.is_file(path) and path.is_relative_to(root)):
+        return ""
+    return Inliner(root).file(path)
+
+
+@dataclass
+class Inliner:
+    """Inlines one repo's ``@path`` imports, each file at most once."""
+
+    root: Path
+    seen: set[Path] = field(default_factory=set)
+
+    def file(self, path: Path) -> str:
+        """``path``'s text (resolved, inside ``root``) with its imports replaced; marks it seen."""
+        self.seen.add(path)
+        text = system.read_text(path)
+        return _IMPORT.sub(lambda m: self._replace(m, path.parent), text)
+
+    def _replace(self, match: re.Match[str], base: Path) -> str:
+        """A code match unchanged; an import through ``_import``."""
+        if match.group("code"):
+            return match.group(0)
+        return self._import(match.group("path"), base)
+
+    def _import(self, path: str, base: Path) -> str:
+        """What replaces ``@path`` imported from directory ``base``."""
+        target = _target(path, base)
+        if target is None or not target.is_relative_to(self.root):
+            return OUTSIDE.format(path=path)
+        if not system.is_file(target):
+            return f"@{path}"
+        if target in self.seen:
+            return REPEATED.format(path=path)
+        return self.file(target).strip()
+
+
+def _target(path: str, base: Path) -> Path | None:
+    """The resolved import target, or None for a ``~`` path (never expanded)."""
+    if path.startswith("~"):
+        return None
+    return system.resolve(base / path)

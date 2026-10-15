@@ -37,7 +37,7 @@ from typing import Any
 
 import yaml
 
-from . import ops_review, system
+from . import instructions, ops_review, system
 from .ops_review import ToolingRow
 from .providers import DEFAULT as DEFAULT_PROVIDER
 
@@ -345,10 +345,11 @@ class RoleBook:
         return "\n\n".join(p for p in (base, self.addendum(SHARED)) if p)
 
     def system_prompt(self, role: ResolvedRole, scope: str) -> str:
-        """``_shared`` + role chain + addendum + charter + scope note."""
+        """``_shared`` + role chain + addendum + repo instructions + charter + scope note."""
         parts = [
             self.shared_body(),
             role.body,
+            _section("Repo instructions", instructions.repo_instructions(self.repo)),
             _section("Repo charter", _read_optional(self.repo / CHARTER)),
             _section("Your file scope", scope),
         ]
