@@ -274,23 +274,27 @@ command fails.
    far `origin/main` moved since the last sprint-end rebase, and runs the
    full checks. It changes nothing: no rebase, no push, no PR edit. A
    merge made mid-sprint waits for the next sprint end, unless it is
-   picked (below). **Picks from main** (s141): mid-sprint, main reaches
-   the team branch only by picks. When the human needs one commit that is
-   already on main to reach the team now (a test fix, a charter rule), run
-   `$AT pick <commit> --reason "<why>"`. It fetches, checks the ask, and
-   queues it, or refuses it with the reason and queues nothing: a blank
-   reason, no upstream, not a commit, not on `origin/main`, a merge or root
-   commit, or a change already on the team branch. Between steps (never
-   during a boundary) the runner checks it again and runs `git cherry-pick
-   -x` as one commit on top of the team branch. No hash is rewritten. It
-   logs a `main-pick` event, sends you an `update`, and then tells the PO
-   (`main_pick`). The PO is never asked first and can't veto it. A conflict
-   is aborted with the branch unchanged, and the update names the files.
-   `$AT status` lists `queued_picks` and each outcome under `picks`. The
-   PO can pick too (`pick_from_main`) for a need the team finds itself.
-   Picks are for single fixes, never whole sprints of work. The sprint-end
-   rebase drops the picked commit because main already has it, and the
-   review branches leave it out. At each sprint
+   picked (below). **Picks** (s141): when the human needs a change on the
+   team branch now (a commit or an `A..B` range, from main or from an open
+   PR), fetch it first (the runner never fetches), then run `$AT pick
+   <commit-or-A..B> --reason "<why>"`. It checks the ask and queues it, or
+   prints every reason and queues nothing: a blank reason, a commit not in
+   the local repo, a merge commit, or a change already on the team branch.
+   The PO gets a `pick-request` and decides: `accept_pick`, or `deny_pick`
+   with a reason, which you get as an `update` to pass on. Only the human
+   can skip the PO, with `--force`: it needs a real terminal and asks them
+   to type the first commit's sha, so you can't run it; give the human the
+   command. Between steps (never during a boundary) the runner runs `git
+   cherry-pick -x` over the commits, oldest first, one new commit each, and
+   no hash is rewritten. It logs a `pick` event and sends you an `update`.
+   A conflict in any commit aborts the whole pick, leaves the branch as it
+   was, and the update names the files. `$AT status` lists `queued_picks`,
+   `pending_picks` and each pick under `picks`. The PO can pick for itself
+   (`pick_commits`) and revert an accepted or its own pick (`revert_pick`),
+   but never a forced one. A step that undoes a pick by hand bounces. Picks
+   are for a change needed now, never whole sprints of work. The sprint end
+   doesn't change: picks and their reverts are pushed with the sprint's
+   history. At each sprint
    end, in order, it builds and checks the sprint's review branch
    (`team/sprint-<N>`, in `.team/run/review/`) and pushes it. Then it
    rebases the team branch onto `origin/main` (never a merge) and

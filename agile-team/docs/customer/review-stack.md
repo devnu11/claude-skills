@@ -10,14 +10,18 @@ still works:
   It changes nothing: no rebase, no merge, no push, no pull request. Then it
   runs the full checks on the team branch. The sprint's stories move only
   once they pass.
-- **During the sprint**: nothing happens to your pull requests, and main
-  reaches the team branch only as commits you pick. If you merge a pull
-  request mid-sprint, the runner brings it in at the next sprint end. If the
-  team needs one commit from main sooner (a test fix, a rule), run
-  `agile-team pick <commit> --reason "<why>"`. Between steps the runner
-  cherry-picks that commit onto the team branch as one new commit, and it
-  rewrites no hash. A conflict changes nothing. The sprint-end rebase drops
-  the picked commit again, because main already has it.
+- **During the sprint**: nothing happens to your pull requests, and nothing
+  is merged or rebased into the team branch. If you merge a pull request
+  mid-sprint, the runner brings it in at the next sprint end. If the team
+  needs a change sooner (a test fix, a rule, a commit from an open pull
+  request), fetch it and run `agile-team pick <commit-or-A..B> --reason
+  "<why>"`. The Product Owner accepts or denies it. To skip the Product
+  Owner, add `--force` and type the first commit's sha when asked. Between
+  steps the runner cherry-picks each commit onto the team branch as its own
+  new commit, and it rewrites no hash. A conflict in any commit changes
+  nothing. Picks and their reverts stay in the sprint's history and are
+  pushed with it. If main already has a picked change, the sprint-end rebase
+  drops the copy, as it does for any commit.
 - **Sprint end**, in this order:
   1. It builds a **review branch** for the sprint: a copy of the sprint's
      own commits on top of the latest `origin/main`, leaving out commits

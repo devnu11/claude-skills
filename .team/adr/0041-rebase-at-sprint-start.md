@@ -6,6 +6,8 @@
 
 **Amended by s141 (2026-10-15):** Mid-sprint, one commit from main can reach the team branch as a `git cherry-pick -x` made by the runner between steps (ADR-0072). It rewrites no hash. The END rebase drops the picked commit again because its patch is upstream (or it comes out empty, `--empty=drop`), so R1 to R11 are unchanged. The start sync still changes nothing; picks are the only mid-sprint path from main.
 
+**Amended by s141 again (new ACs, t107, 2026-10-15):** A pick can now be any local commit or `A..B` range, from main or from an open PR. The PO accepts or denies it, or the human forces it (ADR-0072, amended). The END rebase treats a picked commit like any team commit. Git drops it only when main already has its patch, and a pick of a commit not yet on main stays in the sprint's history and is pushed. R1 to R11 are unchanged, and nothing about the sprint end changes for picks.
+
 **Date:** 2026-10-12  
 **Status:** Accepted (amended s108)  
 **Affected:** Runner git model; sprint boundaries; state tracking; review stack (moved to sprint end)
