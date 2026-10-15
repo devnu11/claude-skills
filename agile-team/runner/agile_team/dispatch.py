@@ -1271,14 +1271,7 @@ class Runtime:
             "story_status": story.status,
             "rounds": story.rounds,
         }
-        if outcome.tried:
-            result |= _tried_fields(outcome.tried)
-        if outcome.fixes:
-            result["fixes"] = [
-                {"role": f.role, "files": [i.shown for i in f.items]} for f in outcome.fixes
-            ]
-        if outcome.verdict is not Verdict.PASS:
-            result |= results_mod.collect_event_failures((outcome.ran, *outcome.extra_ran))
+        result |= _collect_outcome_fields(outcome)
         result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
         result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
         event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
@@ -1440,6 +1433,18 @@ def _dispute_lines(story: StoryState) -> list[str]:
         return []
     head = f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"
     return [head, DISPUTE_OUTPUT.format(output=d.output)] if d.output else [head]
+
+
+def _collect_outcome_fields(outcome: Outcome) -> dict[str, Any]:
+    """A gate event's ``tried``, ``fixes`` and ``failures`` fields, where the outcome has them."""
+    fields = _tried_fields(outcome.tried) if outcome.tried else {}
+    if outcome.fixes:
+        fields["fixes"] = [
+            {"role": f.role, "files": [i.shown for i in f.items]} for f in outcome.fixes
+        ]
+    if outcome.verdict is not Verdict.PASS:
+        fields |= results_mod.collect_event_failures((outcome.ran, *outcome.extra_ran))
+    return fields
 
 
 def _tried_fields(tried: acceptance.Tried) -> dict[str, Any]:
