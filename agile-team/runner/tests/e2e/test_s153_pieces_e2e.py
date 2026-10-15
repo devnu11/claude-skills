@@ -195,7 +195,7 @@ def test_ac3_prepare_stops_the_rebase_and_leaves_the_team_checkout_alone(tmp_pat
     tree = git(world.team, "write-tree")
     scratch.prepare(old)
     assert scratch.path == tmp_path / "run" / "rebase"
-    assert scratch.refusal(old).startswith("the rebase in")
+    assert scratch.find_refusal(old).startswith("the rebase in")
     name = git(scratch.path, "rev-parse", "--git-path", "rebase-merge/head-name").strip()
     assert (scratch.path / name).read_text().strip() == f"refs/heads/{BRANCH}"
     assert world.head() == old
@@ -223,7 +223,7 @@ def test_ac3_prepare_replaces_a_leftover_worktree(tmp_path: Path) -> None:
     (scratch.path / "stray.txt").write_text("left over\n")
     scratch.prepare(old)
     assert not (scratch.path / "stray.txt").exists()
-    assert scratch.refusal(old).startswith("the rebase in")
+    assert scratch.find_refusal(old).startswith("the rebase in")
 
 
 # ----- AC4
@@ -244,7 +244,7 @@ def test_ac4_drop_removes_the_directory_the_worktree_entry_and_the_branch(
 
 def test_ac5_unfinished(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
-    got = scratch.refusal(old)
+    got = scratch.find_refusal(old)
     assert got.startswith(UNFINISHED.split("{operation}")[0].format(path=scratch.path))
     assert "rebase" in got
 
@@ -253,7 +253,7 @@ def test_ac5_off_branch(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
     resolve(scratch)
     git(scratch.path, "checkout", "-q", "--detach")
-    assert scratch.refusal(old) == OFF_BRANCH.format(path=scratch.path, branch=BRANCH)
+    assert scratch.find_refusal(old) == OFF_BRANCH.format(path=scratch.path, branch=BRANCH)
 
 
 def test_ac5_dirty(tmp_path: Path) -> None:
@@ -261,14 +261,14 @@ def test_ac5_dirty(tmp_path: Path) -> None:
     resolve(scratch)
     (scratch.path / "junk.txt").write_text("junk\n")
     want = DIRTY.format(path=scratch.path, status="?? junk.txt")
-    assert scratch.refusal(old) == want
+    assert scratch.find_refusal(old) == want
 
 
 def test_ac5_not_on_target(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
     resolve(scratch)
     git(scratch.path, "reset", "-q", "--hard", old)
-    assert scratch.refusal(old) == NOT_ON_TARGET.format(branch=BRANCH, target="origin/main")
+    assert scratch.find_refusal(old) == NOT_ON_TARGET.format(branch=BRANCH, target="origin/main")
 
 
 def test_ac5_merge_commit(tmp_path: Path) -> None:
@@ -281,7 +281,7 @@ def test_ac5_merge_commit(tmp_path: Path) -> None:
     git(scratch.path, "checkout", "-q", BRANCH)
     git(scratch.path, "merge", "-q", "--no-ff", "-m", "merge side", "side")
     merge = git(scratch.path, "rev-parse", "HEAD").strip()[:12]
-    assert scratch.refusal(old) == HAS_MERGES.format(branch=BRANCH, shas=merge)
+    assert scratch.find_refusal(old) == HAS_MERGES.format(branch=BRANCH, shas=merge)
 
 
 def test_ac5_squashed_pair(tmp_path: Path) -> None:
@@ -289,21 +289,21 @@ def test_ac5_squashed_pair(tmp_path: Path) -> None:
     resolve(scratch)
     git(scratch.path, "reset", "-q", "--soft", "HEAD~2")
     git(scratch.path, "commit", "-q", "-m", "squashed")
-    assert scratch.refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
+    assert scratch.find_refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
 
 
 def test_ac5_reworded_commit(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
     resolve(scratch)
     git(scratch.path, "commit", "-q", "--amend", "-m", "team: add t2, reworded")
-    assert scratch.refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
+    assert scratch.find_refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
 
 
 def test_ac5_dropped_commit(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
     resolve(scratch)
     git(scratch.path, "reset", "-q", "--hard", "HEAD~1")
-    assert scratch.refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
+    assert scratch.find_refusal(old) == COMMITS_CHANGED.format(branch=BRANCH)
 
 
 def test_ac5_one_sided_path(tmp_path: Path) -> None:
@@ -312,13 +312,13 @@ def test_ac5_one_sided_path(tmp_path: Path) -> None:
     (scratch.path / "extra.txt").write_text("extra\n")
     git(scratch.path, "add", "extra.txt")
     git(scratch.path, "commit", "-q", "--amend", "--no-edit")
-    assert scratch.refusal(old) == LOST_PATHS.format(branch=BRANCH, paths="extra.txt")
+    assert scratch.find_refusal(old) == LOST_PATHS.format(branch=BRANCH, paths="extra.txt")
 
 
 def test_ac5_a_valid_resolution_gives_nothing(tmp_path: Path) -> None:
     _, scratch, old = stopped(tmp_path)
     resolve(scratch)
-    assert scratch.refusal(old) == ""
+    assert scratch.find_refusal(old) == ""
 
 
 def test_ac5_a_kept_empty_commit_gives_nothing(tmp_path: Path) -> None:
@@ -330,5 +330,5 @@ def test_ac5_a_kept_empty_commit_gives_nothing(tmp_path: Path) -> None:
     env = {**os.environ, "GIT_EDITOR": "true"}
     cmd = ["git", "rebase", "--continue"]
     subprocess.run(cmd, cwd=scratch.path, env=env, check=True, capture_output=True)
-    assert scratch.refusal(old) == ""
+    assert scratch.find_refusal(old) == ""
     assert world.head() == old

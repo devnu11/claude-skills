@@ -57,8 +57,8 @@ class Scratch:
         self.path = path
         for name in ("prepare", "drop", "remove"):
             monkeypatch.setattr(sr.ScratchRebase, name, self._record(name))
-        monkeypatch.setattr(sr.ScratchRebase, "head", lambda s: self.new_head)
-        monkeypatch.setattr(sr.ScratchRebase, "refusal", self._refusal_method())
+        monkeypatch.setattr(sr.ScratchRebase, "head", property(lambda s: self.new_head))
+        monkeypatch.setattr(sr.ScratchRebase, "find_refusal", self._refusal_method())
 
     def _record(self, name):
         def method(scratch, *args):
@@ -67,11 +67,11 @@ class Scratch:
         return method
 
     def _refusal_method(self):
-        def refusal(scratch, old: str) -> str:
-            self.calls.append(("refusal", old))
+        def find_refusal(scratch, old: str) -> str:
+            self.calls.append(("find_refusal", old))
             return self.why
 
-        return refusal
+        return find_refusal
 
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]
@@ -175,22 +175,22 @@ def test_s151_devops_conflict_ac6_2_the_worktree_and_branch_names() -> None:
 def test_s151_devops_conflict_ac6_2_the_judging_checks_run_in_the_documented_order() -> None:
     names = [c.__name__ for c in sr.SCRATCH_CHECKS]
     assert names == [
-        "_unfinished",
-        "_off_branch",
-        "_dirty",
-        "_off_target",
+        "_check_unfinished",
+        "_check_off_branch",
+        "_check_dirty",
+        "_check_off_target",
         "_merges",
         "_commits_changed",
-        "_lost",
+        "_check_lost",
     ]
 
 
 def test_s151_devops_conflict_ac6_2_the_first_reason_wins(monkeypatch) -> None:
     monkeypatch.setattr(sr, "SCRATCH_CHECKS", (lambda s, old: "", lambda s, old: "second"))
     scratch = sr.ScratchRebase(None, Path("/w"), "b")
-    assert scratch.refusal("old") == "second"
+    assert scratch.find_refusal("old") == "second"
     monkeypatch.setattr(sr, "SCRATCH_CHECKS", (lambda s, old: "",))
-    assert scratch.refusal("old") == ""
+    assert scratch.find_refusal("old") == ""
 
 
 def test_s151_devops_conflict_ac6_2_the_fix_step_may_write_only_the_worktree(make_runtime) -> None:
@@ -427,7 +427,7 @@ def test_s151_devops_conflict_ac6_4_a_refused_scratch_result_holds_with_the_reas
     env.br.step()
     assert env.rt.state.boundary.hold is BoundaryHold.REBASE_CONFLICT
     assert last(env)["reason"] == "the branch has merge commits: abc"
-    assert ("refusal", AS_BUILT) in scratch.calls
+    assert ("find_refusal", AS_BUILT) in scratch.calls
 
 
 def test_s151_devops_conflict_ac6_4_failing_full_checks_hold_with_the_checks_reason(
@@ -452,7 +452,7 @@ def test_s151_devops_conflict_ac6_4_the_checks_run_only_when_the_scratch_result_
     conflicted(env, scratch)
     fixed(env, scratch, "failed", "no")
     env.br.step()
-    assert ran == [] and ("refusal", AS_BUILT) not in scratch.calls
+    assert ran == [] and ("find_refusal", AS_BUILT) not in scratch.calls
 
 
 def test_s151_devops_conflict_ac6_4_the_po_handover_names_the_branch_and_notes() -> None:
