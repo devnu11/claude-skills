@@ -36,13 +36,16 @@ nothing is rebased) and `boundary.check`. A sprint end runs, in order:
 
 | Stage | What it does |
 |---|---|
-| `boundary.sync` | Fetch the target, record the team branch, add the sprint to the review stack |
+| `boundary.sync` | Fetch the target, record the team branch, record the sprint's own branch |
 | `boundary.check` | Run the full checks |
-| `boundary.review` | Build the sprint's review branch on the target and check it |
-| `boundary.push` | Push the sprint's review branch |
-| `boundary.rebase` | Rebase the team branch onto the target (sprint end only) |
-| `boundary.restack` | Bring every review PR up to date, bottom up: rebase, same tree, push, retarget |
-| `boundary.ci-wait` | Wait for CI on every PR in the stack and read failing logs |
+| `boundary.push` | Push the team branch as it is to the sprint's branch and open or reuse its PR |
+| `boundary.ci-wait` | Wait for that push's CI and read failing logs; green is the gate for the rebase |
+| `boundary.rebase` | Rebase the team branch onto the target, only after green CI |
+| `boundary.push-rebased` | Force-push the rebased branch to the same sprint branch; the PR keeps both pushes |
+| `boundary.ci-rebased` | Wait for the rebased branch's CI and record it; red is reported, never held |
+
+Runs logged before s151 may also show `boundary.review` and
+`boundary.restack`, stages that no longer exist.
 
 See [review-stack.md](review-stack.md) for what each one means for your
 pull requests.

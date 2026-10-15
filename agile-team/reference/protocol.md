@@ -21,7 +21,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"), `queued_picks` (ids of pick requests the runner has not received yet, e.g. `["p1"]`), `pending_picks` (ids of pick requests waiting on the PO's `accept_pick` or `deny_pick`) and `picks` (each received pick id → `{status, sprint, shas, why, revert}`, `status` one of `pending`, `accepted`, `denied`, `applied`, `refused`, `conflict`, `failed`, `reverted`; see "Picks (mid-sprint)"). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the sprint's PR; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"), `queued_picks` (ids of pick requests the runner has not received yet, e.g. `["p1"]`), `pending_picks` (ids of pick requests waiting on the PO's `accept_pick` or `deny_pick`) and `picks` (each received pick id → `{status, sprint, shas, why, revert}`, `status` one of `pending`, `accepted`, `denied`, `applied`, `refused`, `conflict`, `failed`, `reverted`; see "Picks (mid-sprint)"). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
@@ -64,8 +64,8 @@ liaison to write a story; only the `request_story` tool writes it (see
 "Stories from the liaison"). A `question` blocks only the stories it lists. While a
 question is open and nothing else can move, the runner keeps running and
 waits for the answer. The runner itself posts an `update` at each sprint
-end that pushed review branches (or built them without pushing; see
-"Sprint boundaries"). A
+end push, red CI and finish (or when it checked the branch without
+pushing; see "Sprint boundaries"). A
 `manual` acceptance environment's acceptance script arrives as a `question`;
 the answer is the human's test result. A `document` environment posts
 nothing. The runner itself posts `blocked`, `failed` or
@@ -542,10 +542,10 @@ when it started), `messages`,
 "story", "author", "to", "text", "at"}` with `author`/`to` one of
 `human`, `product-owner`, `liaison`; the Activity tab shows it, filtered by
 its story chip) and `upstream` (remote, branch, team branch, push permission, the
-last end report, the pending boundary and the review stack: each sprint's
-branch, base, PR number and URL, `mode` `none`/`draft`/`ready`/`closed`,
-`check` `unchecked`/`pass`/`fail`; the Board tab shows it as the **Review
-stack** card, and the Activity tab shows `boundary` events), `turns` (the
+last end report, the pending boundary and the stack, which holds the
+sprint's PR (s151): its branch, base, PR number and URL, `mode`
+`none`/`draft`/`ready`/`closed`, `as_is` and its CI card; the Board tab
+shows it as the **Sprint PR** card, and the Activity tab shows `boundary` events), `turns` (the
 `turns.jsonl` lines of the last 10 minutes, at most 500), `heartbeat`
 (`heartbeat.json` as written, or `null`) and `health` (`{"level", "reason",
 "model_note"}`; see "Live meter and health"). The contract is
@@ -894,7 +894,7 @@ token = "presentation"         # fixed write token when `dashboard` has no --tok
 [upstream]                     # optional; these are the defaults (see Sprint boundaries)
 remote = "origin"              # "" turns sync and pull requests off
 branch = "main"                # merged in at sprint start; what the bottom PR targets
-prefix = "team/sprint-"        # review branch names: <prefix><sprint>
+prefix = "team/sprint-"        # sprint branch names: <prefix><sprint>
 
 [[environment]]                # one or more acceptance environments
 name = "cli"
@@ -2030,8 +2030,8 @@ PO's session with one prompt (the kickoff, the resume note or a hand-over)
 and lasts until the PO ends its turn. A router pass runs steps with no PO
 involved, in this order:
 
-0. the pending sprint **boundary** (sync, full checks, review branches,
-   push; see "Sprint boundaries"), one stage per step, or its DevOps fix
+0. the pending sprint **boundary** (sync, full checks, push, CI, rebase;
+   see "Sprint boundaries"), one stage per step, or its DevOps fix
    step. A held boundary is skipped. While a boundary is pending, no sprint
    story moves;
 1. the `manager`, story-less, while `manager_due` is not empty;
@@ -2079,8 +2079,8 @@ The pass ends at the first step whose report matches a row of the
 | `off_pipeline_fault` | the Manager put a setback on a role with no pipeline step; brief it, then `continue_story` |
 | `fault_not_applied` | the Manager's `fault` was not applied (missing, unknown role, no story or a done story); the reason is in the line |
 | `sync_conflict` | rebasing the team branch onto upstream at sprint end (the `rebase` stage) conflicts (the stopping commit and its files, grouped by directory with a count; the rebase was aborted and the branch is unchanged) |
-| `push_permission` | the review branches are built and checked, and the human has not yet said whether the team may push |
-| `push_rejected` | a review branch push was refused (its remote branch moved), at the `push` or `restack` stage; the stage stays and `continue_boundary` reruns it |
+| `push_permission` | the team branch is checked at a sprint end, and the human has not yet said whether the team may push the sprint's branch and open its PR |
+| `push_rejected` | a push to the sprint's branch was refused (its remote branch moved), at the `push` or `push-rebased` stage; the stage stays and `continue_boundary` reruns it |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 | `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
@@ -2896,12 +2896,15 @@ position changed. `pulled` lists the stories this change pulled ahead.
 the stories in ranking order, with `order` set to the queue and `pulled`.
 The snapshot gives each unfinished story its `tier`.
 
-## Sprint boundaries: sync, full checks, review stack
+## Sprint boundaries: sync, full checks, the sprint's PR
 
 At each sprint's start and end the runner runs a **boundary**: code steps,
 not prompts, that no role can skip. It is saved as `state.json` `boundary`
 (`edge` `start`/`end`, `sprint`, `stage`, `hold`, `failure`, `streak`,
-`rounds`, `escalated`, `restack`, `note`) until it finishes. Each stage logs
+`rounds`, `escalated`, `note`, `sync_from`) until it finishes. A saved
+boundary from before s151 at `review` or `restack` loads at `push`; a
+`review_check` or `review_conflict` failure and the old `restack` key are
+dropped. Each stage logs
 a `boundary` event (`edge`, `sprint`, `stage`, `outcome`, plus `note`,
 `reason`, `sha`, `files`, `branch`, `branches`, `checks`, `hold`, `key`,
 `count`, `history`, `ci`, `prs`, `results`, `story` where they apply). While a boundary is pending, no story
@@ -2912,7 +2915,7 @@ once it passes`.
 **Skipped.** With `[upstream] remote = ""`, no such remote, a failed
 `git fetch` or no `<remote>/<branch>`, the whole boundary is skipped with
 one `skipped` event and a note. This is not an error. (At a sprint end whose
-fetch failed, the sprint is still added to the stack.)
+fetch failed, the sprint's entry is still recorded.)
 
 **Start** (opened by `start_sprint`, before any role runs, including the
 Manager):
@@ -2928,90 +2931,43 @@ Manager):
    waits for the next sprint end. A change the team needs sooner comes
    in as a pick (see "Picks (mid-sprint)" below).
 2. **check**: the full checks on the team branch (skipped when HEAD is the
-   sha that last passed them). The start boundary then finishes; review,
-   push, rebase, restack and ci run only at a sprint end.
+   sha that last passed them). The start boundary then finishes; push, ci,
+   rebase, push-rebased and ci-rebased run only at a sprint end.
 
 **End** (opened when the sprint is finished: every sprint story is done,
 cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run in this order:
 
 1. **sync**: fetch, record the team branch, and add this sprint's entry:
    branch `<prefix><N>`, range `start..end` (start = the previous entry's
-   end, or `git merge-base HEAD <remote>/<branch>` for the first one).
+   end, or `git merge-base HEAD <remote>/<branch>` for the first one). A
+   sprint that added no commit (HEAD is that start) finishes the boundary
+   at once with `sprint N added no commit since the last sprint end;
+   nothing to push or rebase`. Otherwise every earlier entry leaves
+   `upstream.stack` with a `superseded` event (`sprint K's PR #n is
+   superseded: sprint N's branch holds its commits`). Its PR number goes
+   into the new PR's body, and its PR is left open: the runner closes
+   nothing. After an end sync the stack holds only the sprint's own entry.
 2. **check**: the full checks on the team branch.
-3. **review**: in the scratch worktree `.team/run/review/`, the sprint's
-   own entry's commits (`start..end`, no merges, only those whose patch is
-   not in main) are cherry-picked onto the branch below (the latest main
-   for the bottom). This uses `rerere` and skips picks that come out empty.
-   The branch is then set. An entry with nothing left is in main and drops
-   out. The bottom and the newest branch get the full checks. Parent
-   entries keep their heads; after a refused restack (below) every entry is
-   rebuilt from main.
-4. **push** (needs `gh` and permission): the sprint's own review branch is
-   pushed with `--force-with-lease` against the sha the runner last pushed.
-   No PR is created or edited here. An empty stack, no `gh` or no
-   permission moves on (a `local` event with the reason).
-5. **rebase**: fetch, then rebase the team branch onto `<remote>/<branch>`
-   (non-interactive, no autosquash, no autostash; commits already upstream,
-   merge commits and commits that become empty are dropped). There is never
-   a merge, `-s ours` or `-X ours` (s59, ADR-012). After a rebase the
-   runner pairs each old commit with its copy (author, date and message, in
-   order; a dropped commit maps to the last kept copy, or to the target)
-   and rewrites the team hashes in `state.json`: each story's `commit`,
-   `code_commits` and interrupted sha, the run's interrupted shas,
-   `upstream.last_end` and each stack entry's `start`/`end`. Then it
-   records the checkout and saves. `upstream.checked` is not rewritten, so
-   the full checks run again. A path only one side touched must keep that
-   side's version. Otherwise the branch is reset to where it was and the
-   boundary holds `error`. On a conflict the rebase is aborted, the team
-   branch is unchanged, and the PO gets `sync_conflict` with the stopping
-   commit and its files grouped by directory. The human rebases by hand and
-   the PO calls `continue_boundary`. The runner remaps from the HEAD it
-   recorded at that boundary's first sync (`boundary.sync_from`, saved
-   before the rebase starts), so a hand rebase is rewritten too, and so is
-   a rebase that a crash cut off before the hashes were saved. If git stops
-   the rebase for a reason other than a conflict (for example, an untracked
-   file would be overwritten), the boundary holds `error` and the rebase is
-   left stopped. The human finishes it (`git rebase --continue`) or aborts
-   it (`git rebase --abort`), then the PO calls `continue_boundary`. Hashes
-   quoted in reviews and stories are not rewritten. After `rebased` or
-   `current`, `boundary.sync_from` is cleared. The rebased team branch is
-   checked at the next start's **check**.
-6. **restack**: bring every review PR up to date, bottom up.
-   - **Merged parents.** When the boundary delivers (`gh` and permission),
-     the runner looks up the leading stack entries, bottom first, stopping
-     at the first that is not merged: an entry counts as merged when its
-     branch's PR has the same number and is `MERGED`. Each is dropped
-     (`merged` event) after a fresh fetch.
-   - **Fast rebase, all or nothing.** In the review worktree every
-     remaining entry is rebased, bottom first and the sprint's own entry
-     last: the first onto main (from the old head of the last dropped entry,
-     or from its merge-base with main), each other one onto the new head of
-     the entry below. Each rebase must stop cleanly and keep its tree
-     (`new^{tree}` equals the old head's). No branch ref moves until all
-     pass. The tree stays the same exactly when main gained only merged
-     stack PRs.
-   - **Apply.** Bottom first, an entry with no commits left is dropped
-     (`merged` event; its content is in main, e.g. a squash or local
-     merge). Each other entry's branch is set to its new head (`checked`
-     follows it when it was the old head). A `restacked` event names the
-     branches whose head moved. Then each entry is pushed with
-     `--force-with-lease` against the sha last pushed, and its PR is
-     created or updated: **every PR is ready**, the bottom based on `main`
-     and each other one on the branch below, so a PR whose parent was
-     dropped is retargeted here. A closed PR is left alone. The runner posts
-     an `update` to the human with the PRs. That update never calls a PR
-     ready. Without `gh` or permission, nothing is pushed, the human gets
-     the local report, and the boundary finishes.
-   - **Refused** (a rebase stopped, or a tree changed because main gained
-     other commits): a `rebuild` event with the reason, `restack` is set,
-     and the boundary goes back to **review**, which rebuilds every entry
-     from the rebased team branch and checks the ends. Push and rebase then
-     run again (the team branch is `current`), and restack runs on the
-     rebuilt branches. Nothing changed is pushed unchecked.
-   - A refused push at **push** or **restack** holds `push_rejected` and
-     the stage stays; nothing after it is pushed, and `continue_boundary`
-     reruns it (heads already moved rebase as no-ops).
-7. **ci** (s81): for each ready PR in the stack (every PR, s108) the runner runs
+3. **push**, the team branch as built (s151; needs `gh` and permission):
+   the team branch's HEAD, with any fix commits from **check**, is pushed
+   as it is (no cherry-pick, no rebase) to `refs/heads/<prefix><N>` with
+   `--force-with-lease` against the sha the runner last pushed there
+   (none: the branch must not exist yet). No local `<prefix><N>` branch is
+   made. The entry records it as `pushed` and `as_is`. Then the runner
+   finds the branch's PR: it creates it (base `[upstream] branch`, ready),
+   edits an open one whose base or draft state differs, or leaves a closed
+   or merged one alone. The liaison gets `Sprint N's branch <prefix><N>
+   holds the team branch as built (<sha>): PR #n <url>. The runner waits
+   for its CI; the team branch is rebased onto <remote>/<branch> only once
+   it is green.` Without `gh`, or with the human's `no`, nothing is pushed:
+   the boundary finishes with the local report (`… is checked but not
+   pushed (<why>). No CI result exists. The team branch is not rebased onto
+   <remote>/<branch>: the rebase waits for green CI.`).
+
+   A refused push holds `push_rejected` and the stage stays;
+   `continue_boundary` reruns it, and a sha already pushed is not pushed
+   again.
+4. **ci** (s81), the gate: for the sprint's PR the runner runs
    `gh pr checks <n> --watch`, all under one deadline of `[gates]
    ci_timeout_s` (default 1800 s). It then reads `gh pr checks <n> --required --json
    name,state,bucket,link,workflow`, or every check when the repo marks none as
@@ -3034,22 +2990,23 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      `[upstream] branch`'s head (`gh api …/commits/<branch>/check-runs`,
      read only when something is `ours`).
 
-   The result is saved per stack entry as `ci` (`pr`, `url`,
+   The result is saved on the sprint's entry as `ci` (`pr`, `url`,
    `head`, `verdict`, `checks` with `name`, `workflow`, `bucket`, `link`,
    `lines`, `kind`, `step`, `head`). It is also logged on the stage's `boundary` event (`ci`, `prs`,
    `checks`, `results`). A PR's verdict is the first of red (`ours`), infra,
    main, pending (`pending`, `stale`, `rerun`) and green among its checks.
-   The boundary's verdict is green only when every watched PR is green, and
-   one PR with no checks makes it **none**. An empty stack
-   (every sprint is in main) finishes with that note and no watch. No
-   merge is followed at this stage: a PR merged during the wait is handled
-   at the next sprint end. Verdicts:
+   A PR with no checks makes it **none**. No merge is followed at this
+   stage: a PR merged during the wait is handled at the next sprint end.
+   Verdicts:
    - **green** (every check passed on the pushed head or was skipped, at
-     least one passed): the boundary finishes and the sprint is done. The
-     PO gets `ci_green` ("ready to merge") and tells the human. This is
-     the only way a sprint is done: no tool, note or answer can do it.
+     least one passed): a `pass` event, and the boundary moves on to
+     **rebase**. Nothing is called ready yet. Green is the gate: nothing is
+     rebased before it.
    - **red** (a check is `ours`, even with others still pending): the
-     boundary is held `ci_failed`. The PO gets the failing checks with job
+     boundary is held `ci_failed`, and nothing is rebased. The liaison gets
+     an `update`: `Sprint N's CI failed on the team branch as built (<prs>);
+     the boundary holds and nothing is rebased:` and the check lines. The
+     PO gets the failing checks with job
      names, failing steps and test lines. `continue_boundary` is
      **refused** (it names each job and step, and "flaky" is no reason).
      The PO asks the liaison for a bug story at once (`request_story`), or
@@ -3066,20 +3023,85 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      for a bug story for main (`request_story`) and, once the runner has
      opened it, calls `record_ci_bug(story)`, which ends the
      boundary with `ci: main` and the `Review:` text "Sprint N ended, CI
-     blocked by main …". The sprint is not done and its PR stays unmerged
-     in the stack. The story goes first in the next sprint, and the PR is
-     watched again at the next sprint end.
+     blocked by main …". The sprint is not done and its PR stays unmerged.
+     The story goes first in the next sprint, and the next sprint's PR,
+     which holds these commits too, is watched at the next sprint end.
    - **pending** (the deadline passed, or a check ran on another commit):
      held `ci_pending`, naming the running checks. The PR is not ready;
      `continue_boundary` waits again.
-   - **none** (no checks reported, only skipped ones, or no open PR):
-     the boundary finishes. The human is told that no CI result exists, and
-     the PR is not called ready.
+   - **none** (no checks reported, only skipped ones, a closed PR, or no
+     open PR): the boundary finishes. The human is told that no CI result
+     exists, that the PR is not called ready, and that the team branch is
+     not rebased (the rebase waits for green CI).
 
-   The CI stage blocks the router while it waits, as a runner chore
+   A `record_ci_bug(story)` after `ci_failed`, `ci_infra` or `main_broken`
+   ends the boundary without a rebase, and its text says so too. Note that
+   GitHub runs no `pull_request` workflow on a PR that conflicts with its
+   base, so an as-built branch that conflicts with main gets **none**, and
+   the team branch stays where it is until the human rebases it.
+
+   The CI stages block the router while they wait, as a runner chore
    (`sprint boundary: ci`), so health stays green. If the run is stopped
    during the wait, resume waits again. The sprint-end hand-over then says
    `Review: …` with the CI text.
+5. **rebase** (only after green): the stage first checks the gate in code
+   (`boundary.rebase_refusal`): the sprint's entry must have a CI read
+   that is green on the sha it pushed. If not, nothing runs: no fetch, no
+   git call, no hash rewritten. The boundary holds `error` with a
+   `refused` event (`the rebase waits for green CI on the team branch as
+   built: <branch> at <sha> has <verdict>`), and its stage goes back to
+   **ci**, so `continue_boundary` waits for CI again. After the gate it
+   fetches, then rebases the team branch onto `<remote>/<branch>`
+   (non-interactive, no autosquash, no autostash; commits already upstream,
+   merge commits and commits that become empty are dropped). There is never
+   a merge, `-s ours` or `-X ours` (s59, ADR-012). After a rebase the
+   runner pairs each old commit with its copy (author, date and message, in
+   order; a dropped commit maps to the last kept copy, or to the target)
+   and rewrites the team hashes in `state.json`: each story's `commit`,
+   `code_commits` and interrupted sha, the run's interrupted shas,
+   `upstream.last_end` and the entry's `start`/`end` (never its `as_is`,
+   `pushed` or `ci`). Then it records the checkout and saves.
+   `upstream.checked` is not rewritten, so the full checks run again. A
+   path only one side touched must keep that side's version. Otherwise the
+   branch is reset to where it was and the boundary holds `error`. On a
+   conflict the rebase is aborted, the team branch is unchanged, and the PO
+   gets `sync_conflict` with the stopping commit and its files grouped by
+   directory. The human rebases by hand and the PO calls
+   `continue_boundary`. The runner remaps from the HEAD it recorded before
+   the rebase (`boundary.sync_from`, saved before the rebase starts), so a
+   hand rebase is rewritten too, and so is a rebase that a crash cut off
+   before the hashes were saved. If git stops the rebase for a reason other
+   than a conflict (for example, an untracked file would be overwritten),
+   the boundary holds `error` and the rebase is left stopped. The human
+   finishes it (`git rebase --continue`) or aborts it (`git rebase
+   --abort`), then the PO calls `continue_boundary`. Hashes quoted in
+   reviews and stories are not rewritten. After `rebased` or `current`,
+   `boundary.sync_from` is cleared. The rebased team branch is checked at
+   the next start's **check**.
+6. **push-rebased**: when the rebase changed nothing (HEAD is still the
+   sha pushed at **push**), a `pass` event (`the rebase changed nothing;
+   <branch> stays at <sha>`), and the boundary finishes green: the as-built
+   CI is that head's CI, and the PO gets `ci_green`. Otherwise the rebased
+   HEAD is force-pushed to the same `<prefix><N>`, with the lease on the
+   as-built sha. Pushing the branch updates the PR, and the PR's history
+   keeps the as-built push, so the human can compare the two. The PR is
+   not edited. The liaison gets `Sprint N's PR #n now holds the team
+   branch rebased onto <remote>/<branch> (<sha>); the as-built push
+   (<sha>) stays in the PR's history. The runner waits for CI again.` A
+   refused push holds `push_rejected`.
+7. **ci-rebased**: the same CI read as **ci**, for the rebased head. Its
+   result replaces the entry's `ci`, so the Board shows the PR's current
+   head. An `infra` check still gets its one re-run (keyed by the new head).
+   - **green**: the boundary finishes and the sprint is done. The PO gets
+     `ci_green` ("ready to merge") and tells the human. This is the only
+     way a sprint is done: no tool, note or answer can do it.
+   - **anything else** (red, main, pending, none, infra after its re-run):
+     the boundary still finishes, **never held**, with `ci: <verdict>` on
+     the `done` event. The PO's `Review:` text and the liaison's `update`
+     read `Sprint N's CI was green on the team branch as built (<sha>),
+     and is <verdict> on it rebased onto <remote>/<branch> (<prs>). The PR
+     is NOT ready; do not merge it.`, with the check lines. The PO asks the
+     liaison for a bug story when the failure is ours.
 
 **Full checks**: the `[toolchain]` `lint`, `static` and `coverage` commands
 (coverage must reach the gate or the baseline), then each acceptance
@@ -3093,13 +3115,12 @@ whether the run exited 0 or pytest-cov's `fail_under` stopped it with no
 failing test. That is the same rule the implement gate uses
 (`gates.coverage_shortfall`, s68). A non-zero exit never passes.
 
-**Failures.** A failed check or a rebuild conflict becomes a **DevOps fix
-step**, whose brief quotes the output. Failed checks on the team branch or
-a review branch are fixed on the team branch. For that step DevOps may also
-write source, tests and e2e tests, and the runner commits it and checks or
-rebuilds again. A conflict is resolved in the review worktree, in exactly
-the conflicting files, and recorded with `git rerere`, so later rebuilds
-reuse it. A fix step that hands over (blocked, questions…) holds the
+**Failures.** A failed full check becomes a **DevOps fix step**, whose
+brief quotes the output. It is fixed on the team branch. For that step
+DevOps may also write source, tests and e2e tests, and the runner commits
+it and checks again. (Since s151 there is no review branch to rebuild and
+no review worktree; `.team/run/review/` from an older run is left alone.)
+A fix step that hands over (blocked, questions…) holds the
 boundary `fix_handover`. Its triggers go to the PO like any step's, and
 `continue_boundary` reruns the stage. A fix that raises no trigger leaves
 the boundary unheld, and the stage reruns. A stored `boundary.hold` that is
@@ -3117,13 +3138,15 @@ repeated_boundary`, and the Manager's context carries `repeated_boundary`
 **Permission.** The first push asks: the PO gets `push_permission`, asks
 the human once, and records the answer with `set_push_permission` (`yes`
 or `no`). `state.json` keeps it in `upstream.push` for every later sprint.
-With `no`, or without `gh` (missing or logged out), the branches are built
-and checked locally, and the human is told their names and that no CI
-result exists (`local` event with `ci: none`).
+With `no`, or without `gh` (missing or logged out), nothing is pushed: the
+boundary finishes after **check**, the human is told the branch name, that
+no CI result exists and that the team branch is not rebased (`done` event
+with `ci: none`).
 
 **Safety.** The runner pushes only branches that start with `[upstream]
-prefix`, never the team branch, never `[upstream] branch`. The only force
-is the lease on a review branch. Roles still cannot run git commands that
+prefix`, never the team branch, never `[upstream] branch`. It pushes a sha
+(`<sha>:refs/heads/<prefix><N>`), so no local sprint branch is made. The
+only force is the lease on the sprint's branch. Roles still cannot run git commands that
 write.
 
 **PO tools.** `continue_boundary(note)` releases a held boundary. Its stage
@@ -3158,30 +3181,37 @@ that main's head has too is `main_broken`: the sprint ends as "ended, CI
 blocked by main", not done, and the team carries on.
 
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
-`stack` (per entry: `sprint`, `branch`, `start`, `end`, `title`, `stories`,
-`head`, `checked`, `check`, `pushed`, `pr`, `url`, `base`, `mode`, `ci`,
-`commits`: the PR's commit count against its base, set at each push),
+`stack` (after an end sync, only the sprint's own entry: `sprint`,
+`branch`, `start`, `end`, `title`, `stories`, `head`, `pushed`, `as_is`
+(the sha of the as-built push, s151), `supersedes` (earlier sprints' PR
+numbers), `pr`, `url`, `base`, `mode`, `ci` (the latest CI read: the
+as-built one until **ci-rebased** replaces it), `reran`, `reverted`, and
+`commits`: the PR's commit count against main, set at each push; the old
+`checked` and `check` keys are dropped on load),
 `last_end`, `checked` (the last team sha that passed), `closed` (the last
 sprint whose end boundary finished), `report` and `ci_bug` (the bug story
 for a failed CI, until a sprint lists it first).
 
-CI: every PR in the stack is ready (s108; `mode` `draft` survives only in
-an old `state.json`), so every PR runs CI and every one is watched. Once
-`ci_green` says the stack is ready, merge the bottom PR with **Rebase and
-merge**; the next sprint end drops it and brings the PR above it up to date
-on main. GitHub refuses **Rebase and merge** for a PR of more than 100
-commits, so the push, green and none reports add one line per such PR:
+CI: the sprint's PR is ready and based on main (s151), so it runs CI and
+is watched twice: as built, then rebased. Once `ci_green` says it is ready,
+merge it with **Rebase and merge**. It holds the commits of any earlier
+sprint PR still open, so those can then be closed. GitHub refuses **Rebase
+and merge** for a PR of more than 100 commits, so the push, green and none
+reports add a line for such a PR:
 `PR #<n> (<branch>) has <count> commits, more than the 100 GitHub allows for
-"Rebase and merge". When it is the bottom of the stack, merge it by
-fast-forward: git fetch <remote> && git push <remote>
+"Rebase and merge". Merge it by fast-forward: git fetch <remote> && git
+push <remote>
 <remote>/<branch>:<target>`.
 
-Boundary outcomes of s108: `restacked` (good; `branches` moved), `rebuild`
-(warning; the refused restack's reason), `merged` (a parent PR merged or an
-emptied entry dropped). `pushed` is still read from old `events.jsonl`
-lines but no longer logged. Stage names in `runner-stage` events:
-`boundary.sync`, `boundary.check`, `boundary.review`, `boundary.push`,
-`boundary.rebase`, `boundary.restack`, `boundary.ci-wait`.
+Boundary outcomes since s151: `pushed` (each push: `branch`, `sha`, and
+`as_is` on the second), `superseded` (an earlier entry left the stack),
+`refused` (the rebase gate; warning). The s108 outcomes `restacked`,
+`rebuild`, `merged` and `built` are no longer logged, and old
+`events.jsonl` lines with them still render. Stage names in `runner-stage`
+events: `boundary.sync`, `boundary.check`, `boundary.push`,
+`boundary.ci-wait`, `boundary.rebase`, `boundary.push-rebased`,
+`boundary.ci-rebased` (old lines may name `boundary.review` or
+`boundary.restack`).
 
 ### Picks (mid-sprint) (s141)
 
@@ -3351,7 +3381,7 @@ This applies only when the runner runs from `.team/run/runner-pin`
   may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
   `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`,
   `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
-  push. Only the runner pushes, and only review branches (see "Sprint
+  push. Only the runner pushes, and only sprint branches (see "Sprint
   boundaries"). The check sees through prefixes (s65): `X=1 git commit`,
   `env git commit`, `command git commit`, `timeout 5 git commit` and
   `/usr/bin/git commit` count as `git commit`. A confined step

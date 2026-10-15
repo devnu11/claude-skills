@@ -295,24 +295,28 @@ command fails.
    are for a change needed now, never whole sprints of work. The sprint end
    doesn't change: picks and their reverts are pushed with the sprint's
    history. At each sprint
-   end, in order, it builds and checks the sprint's review branch
-   (`team/sprint-<N>`, in `.team/run/review/`) and pushes it. Then it
-   rebases the team branch onto `origin/main` (never a merge) and
-   rewrites the commit hashes recorded in `state.json`. Then, bottom up,
-   it drops the PRs found merged and brings every other review branch up
-   to date: rebase, check the tree is unchanged, push with a lease,
-   retarget. Every PR in the stack is **ready** (none is a draft): the
-   bottom one is based on main, each other one on the PR below, so the
-   bases give the merge order. The dashboard's Board tab
-   shows the **Review stack**. The PO asks the human **once** whether the
-   team may push and open PRs; relay it like any question. After the push
-   the runner waits for CI on every PR in the stack (`gh pr checks --watch`,
-   up to `[gates] ci_timeout_s`, 30 min by default). The sprint is done
-   only when every required check has a green run on the commit the
-   runner pushed, and the runner read it from GitHub itself. No note or
-   answer can make it done. Only a green result says **ready to merge**;
-   tell the human to merge
-   the bottom PR with **Rebase and merge**. A PR with more than 100
+   end (s151), in order, it runs the full checks, then pushes the team
+   branch **as it is** (no cherry-pick, no rebase) to `team/sprint-<N>`
+   with a lease, and opens or reuses that sprint's one PR, based on main.
+   It waits for that push's CI (`gh pr checks --watch`, up to `[gates]
+   ci_timeout_s`, 30 min by default). **Green is the gate**: only then
+   does it rebase the team branch onto `origin/main` (never a merge),
+   rewrite the commit hashes recorded in `state.json`, force-push the
+   rebased branch to the same `team/sprint-<N>` (the PR keeps both pushes,
+   so the human can see what the rebase changed), and wait for CI again.
+   Red CI on the first push holds the boundary, and you get the failing
+   checks in an `update`. Red CI on the rebased push is reported to you
+   and the PO, but doesn't hold. With no CI at all (no `gh`, the human
+   said no, or no checks), nothing is rebased at the sprint end. The new
+   PR holds every earlier unmerged sprint's commits, so their PRs are
+   superseded: the runner leaves them open and names them in the new PR.
+   The dashboard's Board tab shows the **Sprint PR**. The PO asks the
+   human **once** whether the team may push and open PRs; relay it like
+   any question. The sprint is done only when the PR's current head has a
+   green run of every required check, read from GitHub by the runner
+   itself. No note or answer can make it done. Only a green result says
+   **ready to merge**; tell the human to merge the PR with **Rebase and
+   merge**. A PR with more than 100
    commits is too big for that button; the report gives the fast-forward
    command to merge it instead. Red CI comes with the failing jobs,
    steps and test lines, and the runner sorts it out (s111):
@@ -326,10 +330,11 @@ command fails.
    - **The same job and step fail on main's head** (`main_broken`): the
      PO asks you for a bug story for main (`request_story`) and records
      it once the runner opens it. The sprint ends as **"ended, CI
-     blocked by main"**: not done, and the PR stays unmerged. The team
-     starts the next sprint, and the PR is checked again at its end.
+     blocked by main"**: not done, the PR stays unmerged and the team
+     branch isn't rebased. The team starts the next sprint, and the next
+     sprint's PR, which holds these commits too, is checked at its end.
 
-   The Board's Review stack shows each sprint's CI state. Both red and
+   The Board's Sprint PR card shows its CI state. Both red and
    still-running CI mean the PR is **NOT** ready: never relay those as
    ready. **CI rule.** A sprint is done only when a green CI run is
    actually present on GitHub. A re-run counts only when it is green, and

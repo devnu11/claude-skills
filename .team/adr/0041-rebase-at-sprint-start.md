@@ -8,6 +8,8 @@
 
 **Amended by s141 again (new ACs, t107, 2026-10-15):** A pick can now be any local commit or `A..B` range, from main or from an open PR. The PO accepts or denies it, or the human forces it (ADR-0072, amended). The END rebase treats a picked commit like any team commit. Git drops it only when main already has its patch, and a pick of a commit not yet on main stays in the sprint's history and is pushed. R1 to R11 are unchanged, and nothing about the sprint end changes for picks.
 
+**Amended by s151 (2026-10-15):** The END rebase now runs after the as-built push and only once that push's CI is green (`boundary.rebase_refusal`, ADR-0075). It is followed by a second push of the rebased branch to the same `<prefix><N>` and a second CI wait that never holds. With no green CI (no `gh`, no permission, no checks, or a red result settled by `record_ci_bug`) the sprint end does not rebase. R1 to R11 are unchanged.
+
 **Date:** 2026-10-12  
 **Status:** Accepted (amended s108)  
 **Affected:** Runner git model; sprint boundaries; state tracking; review stack (moved to sprint end)

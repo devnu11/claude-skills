@@ -4,6 +4,14 @@
 **Status:** Accepted  
 **Relates to:** ADR-0014 (escalate repeated setbacks), ADR-0013 (liveness), ADR-0009 (routing in code), s3 (sprints)
 
+**Amended by s151 (2026-10-15):** Review branches are no longer derived.
+The cherry-pick `review` stage and the `restack` stage are removed, and PRs
+are no longer stacked. Each sprint end pushes the team branch as it is to
+`<prefix><N>`, opens or reuses one PR based on main, waits for green CI,
+then rebases the team branch and pushes it again to the same PR. Earlier
+sprints' entries leave the stack. See ADR-0075. Sections 2, 3 and the
+stack parts of 4 and 7 below are superseded.
+
 ## Context
 
 **Manual workflow at the end of a sprint:** The human had to push review branches upstream, rebase them on main, verify they still work, then repush. At the start of the next sprint, rebase on the latest upstream main and validate. For stacked PRs, every PR had to be updated to the latest main and rebase-merged in order, one by one.
