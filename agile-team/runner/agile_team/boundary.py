@@ -471,7 +471,7 @@ def own_entry(stack: list[StackEntry], sprint: int) -> StackEntry | None:
     return next((e for e in stack if e.sprint == sprint), None)
 
 
-def rebase_refusal(entry: StackEntry | None) -> str:
+def get_rebase_refusal(entry: StackEntry | None) -> str:
     """Why the rebase must wait; empty only when the as-built push has green CI at its head."""
     if entry is None:
         return NO_AS_IS

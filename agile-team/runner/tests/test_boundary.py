@@ -228,29 +228,29 @@ def test_own_entry_finds_the_sprints_entry_or_none() -> None:
 
 
 def test_rebase_refusal_is_empty_only_on_green_at_the_pushed_head() -> None:
-    assert b.rebase_refusal(green_entry()) == ""
+    assert b.get_rebase_refusal(green_entry()) == ""
 
 
 def test_rebase_refusal_without_an_entry() -> None:
-    assert b.rebase_refusal(None) == b.NO_AS_IS
+    assert b.get_rebase_refusal(None) == b.NO_AS_IS
 
 
 def test_rebase_refusal_without_a_ci_read_names_the_branch_and_sha() -> None:
-    reason = b.rebase_refusal(green_entry(ci=None))
+    reason = b.get_rebase_refusal(green_entry(ci=None))
     assert reason == b.REBASE_WAITS.format(branch="team/sprint-1", sha="p1", verdict="no CI read")
 
 
 def test_rebase_refusal_without_a_push_says_nothing_pushed() -> None:
     entry = green_entry(pushed="", as_is="")
     entry.ci = None
-    assert "nothing pushed" in b.rebase_refusal(entry)
+    assert "nothing pushed" in b.get_rebase_refusal(entry)
 
 
 @pytest.mark.parametrize("verdict", [v for v in CiVerdict if v is not CiVerdict.GREEN])
 def test_rebase_refusal_for_every_other_verdict(verdict) -> None:
     entry = green_entry()
     entry.ci = CiResult(1, "u", "p1", verdict)
-    assert b.rebase_refusal(entry) == b.REBASE_WAITS.format(
+    assert b.get_rebase_refusal(entry) == b.REBASE_WAITS.format(
         branch="team/sprint-1", sha="p1", verdict=verdict
     )
 
@@ -258,7 +258,7 @@ def test_rebase_refusal_for_every_other_verdict(verdict) -> None:
 def test_rebase_refusal_for_green_on_another_sha() -> None:
     entry = green_entry()
     entry.ci = CiResult(1, "u", "other", CiVerdict.GREEN)
-    assert b.rebase_refusal(entry).startswith("the rebase waits for green CI")
+    assert b.get_rebase_refusal(entry).startswith("the rebase waits for green CI")
 
 
 def test_s151_texts_are_exact() -> None:
