@@ -233,7 +233,7 @@ def test_s154_round2_ac3_section_caps_the_list_and_counts_the_rest() -> None:
 
 def test_s154_round2_ac3_section_without_failures_has_no_failure_list() -> None:
     assert "Failing tests" not in results.section([ran()])
-    assert results.failures_text({}) == ""
+    assert results.format_failures({}) == ""
 
 
 # ---------- AC3: gate events ----------
@@ -242,18 +242,18 @@ def test_s154_round2_ac3_section_without_failures_has_no_failure_list() -> None:
 def test_s154_round2_ac3_event_failures_merges_with_later_runs_winning() -> None:
     first = ran(failures={"a": "old", "b": "b"})
     later = Ran("suite-runs", 1, "t", failures={"a": "new"})
-    assert results.event_failures((first, later)) == {"failures": {"a": "new", "b": "b"}}
+    assert results.collect_event_failures((first, later)) == {"failures": {"a": "new", "b": "b"}}
 
 
 def test_s154_round2_ac3_event_failures_caps_and_counts_more() -> None:
-    got = results.event_failures((ran(failures=many(results.FAILURES_SHOWN + 4)),))
+    got = results.collect_event_failures((ran(failures=many(results.FAILURES_SHOWN + 4)),))
     assert len(got["failures"]) == results.FAILURES_SHOWN
     assert got["failures_more"] == 4
 
 
 def test_s154_round2_ac3_event_failures_is_empty_without_failures() -> None:
-    assert results.event_failures((None, ran())) == {}
-    assert results.event_failures(()) == {}
+    assert results.collect_event_failures((None, ran())) == {}
+    assert results.collect_event_failures(()) == {}
 
 
 # ---------- AC3: dashboard page and fixture ----------
