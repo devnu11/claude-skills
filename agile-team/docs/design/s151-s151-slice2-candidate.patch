@@ -1,0 +1,220 @@
+From an s154 developer step (1f150b4a), reverted in 9af43b50 as out of scope. A possible implementation of s151 slice 2 (R13 to R18): the developer may reuse, change or ignore it.
+
+
+diff --git a/agile-team/runner/agile_team/boundary_runner.py b/agile-team/runner/agile_team/boundary_runner.py
+index d3c6c94b..76ddd636 100644
+--- a/agile-team/runner/agile_team/boundary_runner.py
++++ b/agile-team/runner/agile_team/boundary_runner.py
+@@ -18,9 +18,11 @@ from . import halt, handover, loops, pending_tests, repin, revert_log, rewrite,
+ from .boundary import (
+     BOUNDARY_DUE,
+     BOUNDARY_ROLE,
++    CHECKS_FAILED,
+     CI_RED_HELD,
+     CLOSED_NOTE,
+     FIX_KINDS,
++    FIX_NOT_DONE,
+     FIX_ROLE,
+     LOCAL_REPORT,
+     NOT_PERMITTED,
+@@ -28,6 +30,7 @@ from .boundary import (
+     NOTHING_NEW,
+     PR_BODY,
+     PUSHED_REPORT,
++    REBASE_FIX_HELD,
+     REBASE_UNCHANGED,
+     REBASED_NOT_GREEN,
+     REBASED_PUSHED_REPORT,
+@@ -45,6 +48,7 @@ from .boundary import (
+     FixContext,
+     Permission,
+     PrMode,
++    RebaseFix,
+     StackEntry,
+     Stage,
+     StepKind,
+@@ -81,6 +85,7 @@ from .ci_triage import rerun_key
+ from .events import Event, EventKind
+ from .fullcheck import CheckReport, Judging, full_checks, run_checks
+ from .relay import Note
++from .scratch_rebase import REBASE_BRANCH, REBASE_DIR, ScratchRebase
+ from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
+ 
+ if TYPE_CHECKING:
+@@ -202,10 +207,18 @@ class BoundaryRunner:
+         b = self.runtime.state.boundary
+         if b is None or report.get("status") == "halted":
+             return
++        kept = self._keep_rebase_fix(b, report)
+         b.rounds, b.failure, b.note = b.rounds + 1, None, ""
+-        b.hold = fix_hold(report)
++        b.hold = None if kept else fix_hold(report)
+         self.runtime.save()
+ 
++    def _keep_rebase_fix(self, b: Boundary, report: dict[str, Any]) -> bool:
++        """R15: keep DevOps's answer to a rebase conflict for the rebase stage to adopt."""
++        if b.failure is None or b.failure.case is not FixCase.REBASE_CONFLICT:
++            return False
++        b.rebase_fix = RebaseFix(b.failure, report.get("status", ""), report.get("summary", ""))
++        return True
++
+     # ----- events and holds
+ 
+     def _emit(self, b: Boundary, outcome: BoundaryOutcome, **data: Any) -> Event:
+@@ -430,6 +443,8 @@ class BoundaryRunner:
+         refusal = rebase_refusal(self._own(b))
+         if refusal:
+             return self._refuse_rebase(b, refusal)
++        if b.rebase_fix:
++            return self._adopt(b)
+         self._fetch()
+         self._pin_sync_from(b)
+         result = self.remote.rebase_onto(b.sync_from)
+@@ -446,9 +461,63 @@ class BoundaryRunner:
+         b.sync_from = self.runtime.git.head()
+         self.runtime.save()
+ 
++    def _scratch(self, b: Boundary) -> ScratchRebase:
++        path = self.runtime.config.run_dir / REBASE_DIR
++        return ScratchRebase(self.remote, path, REBASE_BRANCH.format(sprint=b.sprint))
++
+     def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
+-        data = {"files": list(result.files), "commit": result.commit[:12]}
+-        self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, subject=result.subject, **data)
++        """R13: stop the same rebase in a scratch worktree and hand it to DevOps; no hold."""
++        scratch = self._scratch(b)
++        scratch.prepare(b.sync_from)
++        b.failure = Failure(
++            Stage.REBASE,
++            FixCase.REBASE_CONFLICT,
++            result.output,
++            branch=scratch.branch,
++            files=list(result.files),
++            commit=result.commit,
++            subject=result.subject,
++            worktree=str(scratch.path),
++        )
++        self._emit(b, Out.CONFLICT, **_conflict_data(b.failure))
++
++    def _adopt(self, b: Boundary) -> None:
++        """R16: move the team branch to DevOps's result, or hold with the first reason."""
++        why = self._adopt_refusal(b)
++        if why:
++            return self._hold_conflict(b, why)
++        self._move_to_fix(b)
++
++    def _adopt_refusal(self, b: Boundary) -> str:
++        fix = b.rebase_fix
++        if fix.status != "done":  # type: ignore[union-attr]
++            return FIX_NOT_DONE.format(status=fix.status)  # type: ignore[union-attr]
++        scratch = self._scratch(b)
++        # Called through the class so a stand-in set on it need not bind to the instance.
++        refusal = ScratchRebase.refusal(scratch, b.sync_from)
++        return refusal or self._checks_refusal(scratch)
++
++    def _checks_refusal(self, scratch: ScratchRebase) -> str:
++        report = self._run_checks(scratch.path)
++        if report.passed:
++            return ""
++        return CHECKS_FAILED.format(path=scratch.path, reason=report.reason())
++
++    def _move_to_fix(self, b: Boundary) -> None:
++        scratch = self._scratch(b)
++        result = self.remote.adopt(b.sync_from, scratch.head())
++        scratch.drop()
++        b.rebase_fix = None
++        self._settle_rebase(b, result)
++
++    def _hold_conflict(self, b: Boundary, why: str) -> None:
++        """R17: tell the liaison and hold for the PO; the worktree and branch are kept."""
++        fix = b.rebase_fix
++        data = _conflict_data(fix.conflict)  # type: ignore[union-attr]
++        data |= {"reason": why, "notes": fix.notes or "none"}  # type: ignore[union-attr]
++        text = {**data, "files": ", ".join(data["files"])}
++        self._post(REBASE_FIX_HELD.format(sprint=b.sprint, target=self.target, **text))
++        self._hold(b, BoundaryHold.REBASE_CONFLICT, Out.CONFLICT, **data)
+ 
+     def _rebase_current(self, b: Boundary, result: Rebase) -> None:
+         self._emit(b, Out.CURRENT)
+@@ -647,6 +716,16 @@ class BoundaryRunner:
+         )
+ 
+ 
++def _conflict_data(failure: Failure) -> dict[str, Any]:
++    """The event fields of a rebase conflict."""
++    return {
++        "files": list(failure.files),
++        "commit": failure.commit[:12],
++        "subject": failure.subject,
++        "branch": failure.branch,
++    }
++
++
+ def _ci_fields(results: list[CiResult]) -> dict[str, Any]:
+     return {
+         "prs": prs_text(results),
+diff --git a/agile-team/runner/agile_team/handover.py b/agile-team/runner/agile_team/handover.py
+index 716c64cb..2d619617 100644
+--- a/agile-team/runner/agile_team/handover.py
++++ b/agile-team/runner/agile_team/handover.py
+@@ -43,6 +43,7 @@ class Trigger(StrEnum):
+     OFF_PIPELINE_FAULT = "off_pipeline_fault"
+     FAULT_NOT_APPLIED = "fault_not_applied"
+     SYNC_CONFLICT = "sync_conflict"
++    REBASE_CONFLICT = "rebase_conflict"
+     PUSH_PERMISSION = "push_permission"
+     PUSH_REJECTED = "push_rejected"
+     BOUNDARY_ERROR = "boundary_error"
+@@ -180,10 +181,18 @@ HANDOVERS: tuple[Rule, ...] = (
+         _held("sync_conflict"),
+         "{story}: sprint {sprint} end: rebasing {team_branch} onto {target} stopped at "
+         '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. The rebase '
+-        "was aborted and the team branch is unchanged. Ask the human to rebase {team_branch} "
+-        "onto {target} by hand (git rebase {target}, resolve, git rebase --continue), then "
+-        "continue_boundary; the runner rewrites the recorded hashes. If the run halts on the "
+-        "moved checkout, they run agile-team accept-checkout first",
++        "was aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
++        "conflict now goes to a DevOps step (s151)",
++    ),
++    Rule(
++        Trigger.REBASE_CONFLICT,
++        _held("rebase_conflict"),
++        "{story}: sprint {sprint} end: rebasing {team_branch} onto {target} stopped at "
++        '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. DevOps could '
++        "not settle it on the scratch branch {branch}: {reason}. DevOps's notes: {notes}. The "
++        "team branch is unchanged and the liaison has the same text. continue_boundary(note) "
++        "runs the rebase and a new DevOps step with your note; if the human rebases "
++        "{team_branch} by hand first, the runner picks that up",
+     ),
+     Rule(
+         Trigger.PUSH_PERMISSION,
+@@ -305,6 +314,7 @@ BOUNDARY_TEXT = (
+     "checks",
+     "commit",
+     "subject",
++    "notes",
+ )
+ 
+ 
+@@ -323,7 +333,7 @@ def _boundary_fields(report: dict) -> dict[str, str]:
+     if not boundary:
+         return {}
+     fields = {name: str(boundary.get(name) or "") for name in BOUNDARY_TEXT}
+-    fields["boundary_reason"] = str(boundary.get("reason") or "")
++    fields["boundary_reason"] = fields["reason"] = str(boundary.get("reason") or "")
+     files = boundary.get("files") or []
+     fields["files"] = ", ".join(files)
+     fields["file_count"] = str(len(files))
+diff --git a/agile-team/runner/agile_team/po_tools.py b/agile-team/runner/agile_team/po_tools.py
+index a15a5f00..668bec87 100644
+--- a/agile-team/runner/agile_team/po_tools.py
++++ b/agile-team/runner/agile_team/po_tools.py
+@@ -419,6 +419,8 @@ class Tools:
+             return text_result(refused(self._ours_refusal(b)))
+         if b.hold in AFTER_REVIEW:
+             b.streak, b.rounds, b.escalated = [], 0, None
++        if b.hold is BoundaryHold.REBASE_CONFLICT:
++            b.rebase_fix = None
+         b.hold, b.failure, b.note = None, None, args.get("note", "")
+         boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
+         self.runtime.save()
