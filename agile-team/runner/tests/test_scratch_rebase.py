@@ -90,7 +90,7 @@ def test_s153_prepare_removes_adds_then_rebases_in_the_worktree(fake: FakeSystem
 def test_s153_prepare_runs_no_writing_command_in_the_team_checkout(fake: FakeSystem) -> None:
     scratch().prepare(OLD)
     for argv in in_team(fake):
-        assert not WRITERS & set(argv[1:])
+        assert argv[1] not in WRITERS
 
 
 def test_s153_prepare_replaces_a_leftover_worktree(fake: FakeSystem) -> None:
@@ -247,7 +247,7 @@ def test_s153_lost_passes_when_no_path_is_one_sided(fake: FakeSystem) -> None:
 
 def test_s153_refusal_is_empty_when_every_check_passes(fake: FakeSystem, monkeypatch) -> None:
     passing = tuple(lambda self, old: "" for _ in sr.SCRATCH_CHECKS)
-    monkeypatch.setattr(sr, "SCRATCH_CHECKS", passing)
+    monkeypatch.setattr("agile_team.scratch_rebase.SCRATCH_CHECKS", passing)
     assert scratch().refusal(OLD) == ""
 
 
@@ -263,7 +263,8 @@ def test_s153_refusal_reads_the_table_at_call_time_and_stops_at_the_first_reason
 
         return run
 
-    monkeypatch.setattr(sr, "SCRATCH_CHECKS", (check(""), check("first"), check("second")))
+    table = (check(""), check("first"), check("second"))
+    monkeypatch.setattr("agile_team.scratch_rebase.SCRATCH_CHECKS", table)
     assert scratch().refusal(OLD) == "first"
     assert calls == ["", "first"]
 
