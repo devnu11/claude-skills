@@ -7,9 +7,14 @@ Two mechanisms, both driven by tables:
 * a patch table (``PATCHED``) for calls with no audit event (pids, waits, signal
   handlers, ``shutil.which``, ``platform``, ``os.stat``, ...).
 
-Both raise ``RealOsCall``. It is a ``BaseException`` so ``except Exception`` in
-the code under test cannot swallow it; a violation is also recorded, so one
-swallowed anyway still fails the test when the phase ends.
+Both raise ``RealOsCall``. It is pytest's ``Failed`` outcome (s154), so pytest
+handles a hit inside its own fixtures (``tmp_path``) like ``pytest.fail`` and keeps
+its fixture state sound for the tests after it. It is still not an ``Exception``,
+so ``except Exception`` in the code under test cannot swallow it; a violation is
+also recorded, so one swallowed anyway still fails the test when the phase ends.
+
+The temp-dir fixtures reach the OS, so a unit test that requests one is refused at
+setup, before any fixture runs (``mark_refusals``, ``refuse_marked``).
 
 An audited call made while ``traceback``/``linecache`` read source is the stdlib's (s89).
 """
@@ -31,8 +36,19 @@ MESSAGE = "unit test reached the real OS: {call} ({category}); " + GUIDANCE
 CALLER_NOTE = " (caller: {caller})"
 
 
-class RealOsCall(BaseException):
-    """A unit test (or the code under it) reached the real OS."""
+OS_FIXTURES: tuple[str, ...] = ("tmp_path", "tmp_path_factory", "tmpdir", "tmpdir_factory")
+OS_FIXTURE_REFUSED = (
+    "unit test requests {names}, which reach the real OS; use the fake world "
+    "(the scratch or repo fixture, FAKE_ROOT), or move the test to tests/e2e/"
+)
+REFUSAL: pytest.StashKey[str] = pytest.StashKey[str]()
+
+
+class RealOsCall(pytest.fail.Exception):  # type: ignore[misc,name-defined]
+    """A unit test (or the code under it) reached the real OS.
+
+    A pytest outcome, not an ``Exception``: pytest handles it even in its own fixtures.
+    """
 
 
 class World(Enum):
@@ -260,3 +276,24 @@ WORLDS = {True: World.REAL, False: World.FAKE}
 def world_of(item: Any) -> World:
     """``REAL`` for ``tests/e2e/``, else ``FAKE``."""
     return WORLDS[item.path.parent.name == "e2e"]
+
+
+def os_fixtures(item: Any) -> tuple[str, ...]:
+    """The OS_FIXTURES a unit-world item requests, sorted; () for e2e or none."""
+    names = set(getattr(item, "fixturenames", ())) & set(OS_FIXTURES)
+    return tuple(sorted(names)) if world_of(item) is World.FAKE else ()
+
+
+def mark_refusals(items: list[Any]) -> None:
+    """Stash the refusal text on every item that requests an OS fixture (G2)."""
+    for item in items:
+        names = os_fixtures(item)
+        if names:
+            item.stash[REFUSAL] = OS_FIXTURE_REFUSED.format(names=", ".join(names))
+
+
+def refuse_marked(item: Any) -> None:
+    """``pytest.fail`` the stashed refusal, pytrace off; nothing for an unmarked item."""
+    text = item.stash.get(REFUSAL, "")
+    if text:
+        pytest.fail(text, pytrace=False)

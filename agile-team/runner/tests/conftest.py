@@ -112,13 +112,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Mark each test with its world's time limit (s72 L4)."""
+    """Mark each test with its world's time limit (s72 L4); refuse OS fixtures (s154)."""
     time_limit.mark(items)
+    os_guard.mark_refusals(items)
 
 
 @pytest.hookimpl(wrapper=True, trylast=True)
 def pytest_runtest_setup(item: pytest.Item) -> Any:
-    """Run fixture setup with the guard on for unit tests."""
+    """Refuse a marked test, then run fixture setup with the guard on for unit tests."""
+    os_guard.refuse_marked(item)
     with os_guard.watching(os_guard.world_of(item)):
         return (yield)
 
