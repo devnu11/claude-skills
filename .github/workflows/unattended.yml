@@ -34,3 +34,14 @@ jobs:
       - run: |
           skips="$(uv run --locked --directory ../../agile-team/runner agile-team --repo ../.. pending-tests --root unattended/runner)"
           PYTEST_ADDOPTS="$skips" uv run --locked pytest --cov
+
+  # The liveness probe is the one Windows path; run its tests on a real kernel32.
+  windows-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run pytest tests/test_store.py -k kernel32

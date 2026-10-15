@@ -211,12 +211,12 @@ class FakeWin32:
     ],
     ids=["running", "exited", "access-denied", "no-such-process"],
 )
-def test_alive_on_windows_asks_the_kernel(win32: FakeWin32, expected: bool) -> None:
-    assert store._alive_on_windows(1234, win32) is expected
+def test_alive_by_kernel32_asks_the_kernel(win32: FakeWin32, expected: bool) -> None:
+    assert store._alive_by_kernel32(1234, win32) is expected
     assert win32.closed == ([win32.handle] if win32.handle else [])
 
 
-def test_alive_on_windows_never_signals(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_alive_by_kernel32_never_signals(monkeypatch: pytest.MonkeyPatch) -> None:
     def refuse(pid: int, sig: int) -> None:
         raise AssertionError("os.kill terminates the process on Windows")
 
@@ -227,6 +227,6 @@ def test_alive_on_windows_never_signals(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the real kernel32 exists only on Windows")
-def test_alive_on_windows_with_the_real_kernel() -> None:  # pragma: no cover -- Windows only
+def test_alive_by_kernel32_with_the_real_kernel() -> None:  # pragma: no cover -- Windows only
     assert store.alive(os.getpid())
     assert not store.alive(999999999)

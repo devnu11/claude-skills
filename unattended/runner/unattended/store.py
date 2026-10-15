@@ -146,10 +146,10 @@ ERROR_ACCESS_DENIED = 5
 
 def alive(pid: int) -> bool:
     """True when a process with ``pid`` exists."""
-    return ALIVE_PROBES.get(sys.platform, _alive_on_posix)(pid)
+    return ALIVE_PROBES.get(sys.platform, _alive_by_signal)(pid)
 
 
-def _alive_on_posix(pid: int) -> bool:
+def _alive_by_signal(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -195,7 +195,7 @@ def kernel32() -> Win32:  # pragma: no cover -- runs only on Windows
     return Win32(ctypes.WinDLL("kernel32", use_last_error=True))  # type: ignore[attr-defined]
 
 
-def _alive_on_windows(pid: int, win32: Any = None) -> bool:
+def _alive_by_kernel32(pid: int, win32: Any = None) -> bool:
     # os.kill(pid, 0) on Windows terminates the process instead of probing it
     api = win32 or kernel32()
     handle = api.open(pid)
@@ -207,7 +207,7 @@ def _alive_on_windows(pid: int, win32: Any = None) -> bool:
         api.close(handle)
 
 
-ALIVE_PROBES: dict[str, Callable[[int], bool]] = {"win32": _alive_on_windows}
+ALIVE_PROBES: dict[str, Callable[[int], bool]] = {"win32": _alive_by_kernel32}
 
 
 @dataclass(frozen=True)
