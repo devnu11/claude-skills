@@ -47,6 +47,13 @@ class Judging:
     run: CommandRunner
     required: float
 
+    def result(self, check: FullCheck, run: test_reports.TestRun) -> CheckResult:
+        """The check's outcome from its run: why it failed, its tail and pending counts."""
+        timed_out = run.code == TIMED_OUT
+        why = TIMED_OUT_WHY if timed_out else JUDGES[check.judge](run, self)
+        pending = pending_tests.counts_text(run.skipped, run.report or junit.Report())
+        return CheckResult(check, run.code, why, gates.tail(run.out), pending)
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -91,21 +98,21 @@ def _failed_text(result: CheckResult) -> str:
     )
 
 
-def _exit_why(code: int, output: str, judging: Judging) -> str:
-    return "" if code == 0 else f"exit {code}"
+def _exit_why(run: test_reports.TestRun, judging: Judging) -> str:
+    return "" if run.code == 0 else f"exit {run.code}"
 
 
-def _coverage_why(code: int, output: str, judging: Judging) -> str:
-    if code != 0:
-        return f"exit {code}"
-    total = gates.parse_coverage(output)
+def _coverage_why(run: test_reports.TestRun, judging: Judging) -> str:
+    if run.code != 0:
+        return f"exit {run.code}"
+    total = gates.parse_coverage(run.out)
     if total is None:
         return "could not read a coverage total"
     below = total < judging.required
     return f"coverage {total}% is below {judging.required}%" if below else ""
 
 
-JUDGES: dict[Judge, Callable[[int, str, Judging], str]] = {
+JUDGES: dict[Judge, Callable[[test_reports.TestRun, Judging], str]] = {
     Judge.EXIT: _exit_why,
     Judge.COVERAGE: _coverage_why,
 }
@@ -134,21 +141,19 @@ def full_checks(config: Config, registry: Registry) -> list[FullCheck]:
     return [*chosen, *e2e]
 
 
-def _run_one(check: FullCheck, judging: Judging) -> CheckResult:
+def _plain_run(command: str, runner: CommandRunner) -> test_reports.TestRun:
+    code, out = runner(command)
+    return test_reports.TestRun(code, out, None, {})
+
+
+def _test_run(check: FullCheck, judging: Judging) -> test_reports.TestRun:
     if check.built is None:
-        code, output = judging.run(check.command)
-        return _result(check, (code, output), judging)
-    run = test_reports.run(check.built, judging.run)
-    counts = pending_tests.counts_text(run.skipped, run.report or junit.Report())
-    return _result(check, (run.code, run.out), judging, counts)
+        return _plain_run(check.command, judging.run)
+    return test_reports.run(check.built, judging.run)
 
 
-def _result(
-    check: FullCheck, ran: tuple[int, str], judging: Judging, pending: str = ""
-) -> CheckResult:
-    code, output = ran
-    why = TIMED_OUT_WHY if code == TIMED_OUT else JUDGES[check.judge](code, output, judging)
-    return CheckResult(check, code, why, gates.tail(output), pending)
+def _run_one(check: FullCheck, judging: Judging) -> CheckResult:
+    return judging.result(check, _test_run(check, judging))
 
 
 def run_checks(checks: list[FullCheck], judging: Judging) -> CheckReport:
