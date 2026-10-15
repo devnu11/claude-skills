@@ -123,7 +123,7 @@ def test_a_second_reconcile_writes_nothing(make_runtime, fake) -> None:
 def test_the_next_start_ledgers_and_says_so(make_runtime, fake, capsys) -> None:
     rt = crash(make_runtime)
     fake.clock += 60
-    cli._reconcile(rt.config)
+    cli._record_cut_off_spend(rt.config)
     got = po_entries(rt.config.run_dir)
     assert len(got) == 1
     err = capsys.readouterr().err
