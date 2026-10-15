@@ -274,8 +274,8 @@ def test_product_owner_defaults_to_sonnet(repo: Path) -> None:
     po = RoleBook.for_repo(repo, {}).resolve("product-owner")
     assert po.model == "sonnet"
     assert po.description == (
-        "Writes the stories, starts sprints and makes the team's judgement calls; "
-        "the only role that talks to the human."
+        "Schedules the stories the liaison writes, starts sprints and makes the team's "
+        "judgement calls; the only role that talks to the human."
     )
 
 
