@@ -235,7 +235,7 @@ class Staged:
     trailers: tuple[str, ...] = ()
 
 
-def _explained(parsed: Handoff | HandoffError, plan: Plan) -> Handoff | HandoffError:
+def _check_explained(parsed: Handoff | HandoffError, plan: Plan) -> Handoff | HandoffError:
     """``parsed``, or a bad handoff when the step's requirement edits were held back (C4)."""
     if not plan.unexplained:
         return parsed
@@ -999,7 +999,7 @@ class Runtime:
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
         report |= self.settle_tree(plan)
-        parsed = _explained(parsed, plan)
+        parsed = _check_explained(parsed, plan)
         self._emit_step_end(plan, parsed, result, report["commit"])
         report |= self._apply(plan, parsed)
         self._land(plan)
@@ -1134,7 +1134,7 @@ class Runtime:
         if commit or quarantined or held:
             self.record_checkout()
         fields: dict[str, Any] = {"commit": commit, "quarantine": quarantined}
-        return fields | self._held_fields(held) | self._record_requirements(plan, sorting)
+        return fields | self._report_held(held) | self._record_requirements(plan, sorting)
 
     def _quarantine(self, plan: Plan, audit: guard.Audit) -> str | None:
         quarantined = guard.quarantine(self.git, audit) if audit.out_of_scope else None
@@ -1155,11 +1155,11 @@ class Runtime:
             return None
         held = requirement_changes.HeldBack(plan.role.name, tuple(sorting.held_files))
         sha = requirement_changes.hold_back(self.git, held)
-        plan.unexplained = requirement_changes.unexplained_text(sorting.held, sha)
+        plan.unexplained = requirement_changes.describe_unexplained(sorting.held, sha)
         return sha
 
     @staticmethod
-    def _held_fields(held: str | None) -> dict[str, str]:
+    def _report_held(held: str | None) -> dict[str, str]:
         return {"held_back": held} if held else {}
 
     def _record_requirements(
@@ -1170,7 +1170,7 @@ class Runtime:
             return {}
         for explained in sorting.landed:
             self.emit(EventKind.REQUIREMENT_CHANGED, plan, **explained.report({"sha": plan.commit}))
-        affected = self._auto_accept(plan, sorting.landed)
+        affected = self._accept_affected(plan, sorting.landed)
         fields = {
             "requirement_changes": [e.report() for e in sorting.landed],
             "redesigned_stories": list(affected.redesign),
@@ -1178,7 +1178,7 @@ class Runtime:
         }
         return {k: v for k, v in fields.items() if v}
 
-    def _auto_accept(
+    def _accept_affected(
         self, plan: Plan, landed: tuple[requirement_changes.Explained, ...]
     ) -> requirement_changes.Affected:
         """Send past-design stories that trace the changes back to design (C8)."""

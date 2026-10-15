@@ -313,15 +313,22 @@ def hold_reason(report: dict) -> str | None:
     return ", ".join(names) if names else None
 
 
+def _find_requirement_fields(report: dict) -> dict[str, str]:
+    """The affected-done and requirement-change text fields (s2)."""
+    changes = report.get("requirement_changes") or []
+    return {
+        "affected_done": ", ".join(report.get("affected_done_stories") or []),
+        "requirement_changes": "; ".join(
+            f"{c['id']} {c['change']}: {c['reason']}" for c in changes
+        ),
+    }
+
+
 def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     """The text fields a line can use; ``""`` when the report lacks one."""
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
-    fields["affected_done"] = ", ".join(report.get("affected_done_stories") or [])
-    changes = report.get("requirement_changes") or []
-    fields["requirement_changes"] = "; ".join(
-        f"{c['id']} {c['change']}: {c['reason']}" for c in changes
-    )
+    fields |= _find_requirement_fields(report)
     ruling = report.get("ruling") or {}
     fields["gate_reason"] = str(_gate(report).get("reason") or "")
     fields["ruling"] = str(ruling.get("ruling") or "")

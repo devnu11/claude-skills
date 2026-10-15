@@ -153,27 +153,27 @@ def _is_candidate(path: PurePosixPath, folder: str) -> bool:
 def classify(versions: Versions) -> Changed:
     """Sort one candidate into added, changed or retired (never refuses)."""
     stem = PurePosixPath(versions.file).stem
-    return Changed(stem, _kind(versions), versions.file, _stories(versions))
+    return Changed(stem, _find_kind(versions), versions.file, _find_stories(versions))
 
 
-def _meta(text: str | None) -> dict[str, Any]:
+def _read_meta(text: str | None) -> dict[str, Any]:
     parsed = frontmatter.parse(text) if text is not None else None
     return parsed[0] if parsed else {}
 
 
-def _kind(versions: Versions) -> Change:
+def _find_kind(versions: Versions) -> Change:
     if versions.before is None:
         return Change.ADDED
     if versions.after is None:
         return Change.RETIRED
-    was, now = (_meta(t).get("status") == "retired" for t in (versions.before, versions.after))
+    was, now = (_read_meta(t).get("status") == "retired" for t in (versions.before, versions.after))
     return Change.RETIRED if now and not was else Change.CHANGED
 
 
-def _stories(versions: Versions) -> tuple[str, ...]:
+def _find_stories(versions: Versions) -> tuple[str, ...]:
     found: set[str] = set()
     for text in (versions.before, versions.after):
-        covers = _meta(text).get("covers")
+        covers = _read_meta(text).get("covers")
         refs = (parse_ref(v) for v in covers) if isinstance(covers, list) else ()
         found |= {r.story for r in refs if r}
     return tuple(sorted(found, key=natural))
@@ -200,7 +200,7 @@ def explain_text(held: Sequence[Changed]) -> str:
     return "; ".join(EXPLAIN.format(id=c.id) for c in held)
 
 
-def unexplained_text(held: Sequence[Changed], sha: str) -> str:
+def describe_unexplained(held: Sequence[Changed], sha: str) -> str:
     """The bad-handoff text for held-back edits."""
     return UNEXPLAINED.format(explain=explain_text(held), sha=sha)
 
@@ -257,7 +257,7 @@ def _split_trailer(value: str) -> tuple[str, str] | None:
 # ----- git and disk -----
 
 
-def name_status(git: Git, paths: Sequence[str]) -> dict[str, str]:
+def read_name_status(git: Git, paths: Sequence[str]) -> dict[str, str]:
     """Path to diff letter; a path the diff doesn't list is untracked, so ``A``."""
     parts = [p for p in git.run(*DIFF_ARGV, *paths).split("\0") if p]
     listed = {
@@ -279,7 +279,7 @@ def find_changes(git: Git, paths: Sequence[str]) -> list[Changed]:
     """Classify the candidate ``paths`` (no git command when there are none)."""
     if not paths:
         return []
-    letters = name_status(git, paths)
+    letters = read_name_status(git, paths)
     return [classify(read_versions(git, (p, letters[p]))) for p in paths]
 
 
