@@ -40,7 +40,7 @@ from .store import HEARTBEAT_ENV, HEARTBEAT_FILE, Job, JobState
 SLICE = 30.0
 ORDER = tuple(Phase)
 STOP_EVENTS = {StopCause.DEADLINE: "deadline", StopCause.IDLE: "idle-stop"}
-STOP_NOTICES = {StopCause.IDLE: Trigger.IDLE_STOP}
+STOP_NOTICES = {StopCause.DEADLINE: Trigger.DEADLINE, StopCause.IDLE: Trigger.IDLE_STOP}
 
 
 class Verdict(StrEnum):
@@ -224,15 +224,10 @@ class RunWatch:
             return ()
         reason = step.stop.reason(step.phase)
         self.job.event(STOP_EVENTS[step.stop.cause], {"phase": step.phase, "reason": reason})
-        self._stop_notice(step, reason)
+        self._notice(STOP_NOTICES[step.stop.cause], reason)
         verdicts = ACTIONS[step.phase](view.state)
         self.halt = reason if verdicts else self.halt
         return verdicts
-
-    def _stop_notice(self, step: Step, reason: str) -> None:
-        trigger = STOP_NOTICES.get(step.stop.cause)
-        if trigger:
-            self._notice(trigger, reason)
 
     def _notice(self, trigger: Trigger, reason: str) -> None:
         post(self.job, Notice(trigger, self.job.load().status, reason))

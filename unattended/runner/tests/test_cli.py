@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import awake, cli
+from unattended import awake, cli, notify
 from unattended.auth import ENV_VAR
 from unattended.awake import SleepPolicy
 from unattended.prompt_job import PromptJob
@@ -81,7 +81,7 @@ def test_start_command_limit_then_resume(
     assert code == 0
     assert printed(capsys)["resumes"] == 1
     events = [json.loads(line)["event"] for line in home_job(tmp_path).path(EVENTS_FILE).open()]
-    assert events == ["start", "keep-awake", "run", "wait", "resume", "run", "end"]
+    assert events == ["start", "keep-awake", "run", "wait", "resume", "run", "end", "notify"]
 
 
 def events_named(tmp_path: Path, name: str) -> list[dict[str, object]]:
@@ -152,7 +152,7 @@ def test_start_detaches(
 
 def test_start_detached_for_real(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "POLL", 0.1)
-    assert run(tmp_path, "start", "j", "--command", "echo detached") == 0
+    assert run(tmp_path, "start", "j", "--command", "echo detached", "--notify", "none") == 0
     assert run(tmp_path, "wait", "j") == 0
     assert "detached" in (home_job(tmp_path).path("output.log")).read_text()
 
@@ -533,3 +533,77 @@ def test_extend_sets_an_idle_stop(tmp_path: Path) -> None:
     job = make(tmp_path, JobStatus.RUNNING)
     assert run(tmp_path, "extend", "j", "--idle-stop", "30m") == 0
     assert job.load().bounds.idle_stop == 1800.0
+
+
+# ----- notices -----------------------------------------------------------------------------
+
+
+def test_an_early_end_notifies_the_os(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, notified: list[Any]
+) -> None:
+    monkeypatch.setattr(notify.sys, "platform", "darwin")
+    monkeypatch.setattr(notify.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert run(tmp_path, "start", "j", "--command", "true", "--for", "1h", "--foreground") == 0
+    assert [e["trigger"] for e in events_of(home_job(tmp_path), "notify")] == ["ended-early"]
+    assert notified[0].command[0] == "osascript"
+
+
+def test_start_with_a_notify_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run(tmp_path, "start", "j", "--command", "true", "--notify", "none", "--foreground") == 0
+    assert printed(capsys)["notify"] == "none"
+
+
+def wait_args(tmp_path: Path, *extra: str) -> Any:
+    return cli.build_parser().parse_args(["--home", str(tmp_path / "home"), "wait", "j", *extra])
+
+
+def live(tmp_path: Path) -> Job:
+    job = make(tmp_path, JobStatus.RUNNING)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    job.event("notify", {"trigger": "idle", "reason": "old"})
+    return job
+
+
+def test_wait_until_notice_returns_on_a_new_notice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = live(tmp_path)
+
+    def idle(seconds: float) -> None:
+        job.event("notify", {"trigger": "idle", "reason": "no progress for 20m"})
+
+    assert cli.cmd_wait(wait_args(tmp_path, "--until-notice"), idle) == cli.NOTICE_EXIT
+    report = printed(capsys)
+    assert (report["status"], report["notice"]["reason"]) == ("running", "no progress for 20m")
+
+
+def test_wait_until_notice_returns_the_end_status(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = live(tmp_path)
+
+    def finish(seconds: float) -> None:
+        job.update(lambda st: st.mark(JobStatus.DONE))
+        job.event("notify", {"trigger": "ended-early", "reason": ""})
+
+    assert cli.cmd_wait(wait_args(tmp_path, "--until-notice"), finish) == 0
+    assert printed(capsys)["notice"]["trigger"] == "ended-early"
+
+
+def test_plain_wait_ignores_notices(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    job = live(tmp_path)
+    calls: list[float] = []
+
+    def idle_then_done(seconds: float) -> None:
+        calls.append(seconds)
+        job.event("notify", {"trigger": "idle", "reason": "x"})
+        if len(calls) == 2:
+            job.update(lambda st: st.mark(JobStatus.DONE))
+
+    assert cli.cmd_wait(wait_args(tmp_path), idle_then_done) == 0
+    assert len(calls) == 2
+    assert "notice" in printed(capsys)
+
+
+def test_notices_without_events(tmp_path: Path) -> None:
+    assert cli.notices(make(tmp_path)) == []

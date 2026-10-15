@@ -49,6 +49,7 @@ from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 
 POLL = 5.0
 IDLE_OFF = "off"
+NOTICE_EXIT = 10
 FOLLOW_POLL = 1.0
 EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.DONE: 0,
@@ -78,6 +79,13 @@ class Launch(StrEnum):
 
     DETACH = "detach"
     FOREGROUND = "foreground"
+
+
+class Until(StrEnum):
+    """What ``wait`` waits for."""
+
+    END = "end"
+    NOTICE = "notice"
 
 
 class Follow(StrEnum):
@@ -126,6 +134,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         sleep=args.sleep,
         idle=_idle(args.idle),
         progress=_progress(args.progress or [], kind),
+        notify=args.notify,
     )
 
 
@@ -343,13 +352,35 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_wait(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
-    """Block until the job ends (or its supervisor is gone); exit with its status code."""
+def cmd_wait(args: argparse.Namespace, sleep: Sleep = time.sleep) -> int:
+    """Block until the job ends (or its supervisor is gone), or with ``--until-notice``
+    until a new notice; print the job and exit with its status code (``NOTICE_EXIT`` for a
+    notice on a job still running)."""
     job = job_home(args).job(args.name)
-    while running(job):
+    seen = len(notices(job))
+    while running(job) and not _noticed(job, args.until, seen):
         sleep(POLL)
-    print_json(report(job))
-    return EXIT_CODES.get(job.load().status, 1)
+    return _waited(job, notices(job)[seen:])
+
+
+def notices(job: Job) -> list[dict[str, Any]]:
+    """Every ``notify`` event so far."""
+    path = job.path(EVENTS_FILE)
+    lines = path.read_text().splitlines() if path.is_file() else []
+    return [event for event in map(json.loads, lines) if event["event"] == "notify"]
+
+
+def _noticed(job: Job, until: Until, seen: int) -> bool:
+    return until is Until.NOTICE and len(notices(job)) > seen
+
+
+def _waited(job: Job, new: list[dict[str, Any]]) -> int:
+    found = report(job)
+    if new:
+        found["notice"] = new[-1]
+    print_json(found)
+    status = job.load().status
+    return EXIT_CODES.get(status, 1) if status in ENDED or not new else NOTICE_EXIT
 
 
 @dataclass
@@ -455,7 +486,8 @@ def limits_report(bounds: Bounds) -> dict[str, Any]:
 def watch_report(spec: Spec) -> dict[str, Any]:
     """The idle notice and the progress probes in use."""
     idle = optional_span(spec.idle) or IDLE_OFF
-    return {"idle": idle, "progress": probes.chosen(spec.progress, spec.kind)}
+    progress = probes.chosen(spec.progress, spec.kind)
+    return {"idle": idle, "progress": progress, "notify": spec.notify or "os"}
 
 
 def _wake(job: Job, args: argparse.Namespace) -> int:
@@ -565,6 +597,9 @@ START_ARGS: tuple[Arg, ...] = (
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
     (("--idle",), {"default": "20m", "metavar": "DURATION",
                    "help": "notify after no progress this long, or 'off' (default 20m)"}),
+    (("--notify",), {"default": "", "metavar": "CMD",
+                     "help": "shell command run on each notice instead of an OS notification, "
+                             "or 'none'"}),
     (("--progress",), {"action": "append", "metavar": "KIND[:ARG]",
                        "help": "a progress probe, repeatable: output, spend, file:PATH, "
                                "json:PATH:KEY[,KEY], cpu, children, command:CMD"}),
@@ -573,6 +608,11 @@ START_ARGS: tuple[Arg, ...] = (
                           "default": SleepPolicy.PREVENT,
                           "help": "let the machine idle-sleep (default: kept awake)"}),
     LAUNCH_ARG,
+)  # fmt: skip
+UNTIL_NOTICE_ARG: Arg = (
+    ("--until-notice",),
+    {"action": "store_const", "dest": "until", "const": Until.NOTICE, "default": Until.END,
+     "help": f"also return on the next notice (exit {NOTICE_EXIT} while the job runs)"},
 )  # fmt: skip
 NOW_ARG: Arg = (
     ("--now",),
@@ -585,7 +625,8 @@ COMMANDS = (
     Command("status", "print a job's state as JSON (all jobs without NAME)", cmd_status,
             ((("name",), {"nargs": "?"}),)),
     Command("list", "print every job's state as JSON", cmd_list),
-    Command("wait", "block until the job ends; run with run_in_background", cmd_wait, (NAME_ARG,)),
+    Command("wait", "block until the job ends; run with run_in_background", cmd_wait,
+            (NAME_ARG, UNTIL_NOTICE_ARG)),
     Command("log", "print the job's events and output", cmd_log, (NAME_ARG,
             (("-f", "--follow"), {"action": "store_const", "const": Follow.FOLLOW,
                                   "default": Follow.ONCE, "help": "keep printing until it ends"}))),

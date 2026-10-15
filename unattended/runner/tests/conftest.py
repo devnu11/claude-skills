@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from unattended import awake
+from unattended import awake, notify
 from unattended.store import Job, JobHome, JobKind, JobState, Spec
 
 MakeJob = Callable[[Spec], Job]
@@ -18,6 +18,14 @@ def spawned(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     commands: list[list[str]] = []
     monkeypatch.setattr(awake, "spawn", commands.append)
     return commands
+
+
+@pytest.fixture(autouse=True)
+def notified(monkeypatch: pytest.MonkeyPatch) -> list[notify.Call]:
+    """Record OS notifications instead of showing them."""
+    calls: list[notify.Call] = []
+    monkeypatch.setattr(notify, "spawn", calls.append)
+    return calls
 
 
 @pytest.fixture

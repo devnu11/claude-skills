@@ -82,6 +82,7 @@ class Spec:
     sleep: SleepPolicy = SleepPolicy.PREVENT
     idle: float | None = DEFAULT_IDLE
     progress: list[str] = field(default_factory=list)
+    notify: str = ""
 
 
 @dataclass
