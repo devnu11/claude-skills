@@ -120,3 +120,33 @@ def test_tail_is_the_last_thirty_lines() -> None:
 
 def test_check_failed_text() -> None:
     assert boundary.CHECK_FAILED == "{name} failed ({why}): {command}\n{tail}"
+
+
+# ----- s152: the known failures ---------------------------------------------------
+
+
+def _result(name: str, why: str = "exit 1", failed: tuple[str, ...] = ()) -> fullcheck.CheckResult:
+    return fullcheck.CheckResult(FullCheck(name, name), 1, why, "", failed=failed)
+
+
+def test_failing_ids_lists_failed_cases_then_names_of_checks_without_any() -> None:
+    report = CheckReport(
+        (
+            _result("lint"),
+            _result("test", failed=("t.py::a", "t.py::b")),
+            _result("coverage", why="", failed=("ignored::x",)),
+            _result("e2e:cli", failed=("t.py::a",)),
+        )
+    )
+    assert report.failing_ids() == ["lint", "t.py::a", "t.py::b"]
+
+
+def test_failing_ids_is_empty_when_all_passed() -> None:
+    assert CheckReport((_result("lint", why=""),)).failing_ids() == []
+
+
+def test_failed_ids_is_empty_without_a_report() -> None:
+    from agile_team import test_reports
+
+    run = test_reports.TestRun(1, "", None, {})
+    assert fullcheck._failed_ids(run) == ()

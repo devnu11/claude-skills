@@ -56,7 +56,7 @@ def test_fix_hold_follows_the_triggers() -> None:
 
 def test_a_fix_with_triggers_holds_fix_handover_and_the_state_loads(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.br.after_fix(BLOCKED)
     b = env.rt.state.boundary
@@ -68,7 +68,7 @@ def test_a_fix_with_triggers_holds_fix_handover_and_the_state_loads(env: Env) ->
 
 def test_a_quiet_fix_holds_nothing(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.br.after_fix({"role": "devops", "status": "done"})
     b = env.rt.state.boundary
@@ -77,7 +77,7 @@ def test_a_quiet_fix_holds_nothing(env: Env) -> None:
 
 def test_a_halted_fix_still_changes_nothing(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.br.after_fix({"role": "devops", "status": "halted"})
     b = env.rt.state.boundary

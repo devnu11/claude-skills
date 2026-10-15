@@ -12,7 +12,7 @@ from agile_team.git_ops import Git
 from agile_team.upstream import Upstream
 
 from .fake_system import FAKE_REPO, Done, FakeSystem
-from .test_boundary_runner import Env, entry, pushes
+from .test_boundary_runner import Env, entry
 
 H1, H2 = "a1" * 20, "b2" * 20
 
@@ -48,76 +48,16 @@ def test_behind_treats_empty_output_as_zero(fake: FakeSystem) -> None:
     assert upstream().behind() == 0
 
 
-# ----- texts -----------------------------------------------------------------
-
-
-def test_start_notes_are_exact() -> None:
-    assert br.START_NOTES == {
-        False: "the team branch is current with {target}",
-        True: (
-            "{target} moved {count} commits since the last sprint-end rebase; "
-            "nothing changes until the next sprint end"
-        ),
-    }
-    assert not hasattr(br, "NOTHING_TO_PUSH")
-    assert not hasattr(br, "START_NOTE")
-
-
-# ----- M3 / AC5: a start sync with main ahead changes nothing ----------------
-
-
-def start_with_main_ahead(env: Env, fake: FakeSystem, count: int) -> list[str]:
-    stack = [entry(9), entry(10)]
-    for e, head in zip(stack, (H1, H2), strict=True):
-        e.head, e.pushed, e.pr = head, head, e.sprint
-    env.rt.state.upstream.stack = stack
-    env.rt.state.upstream.team_branch = "main"
-    finds: list[str] = []
-    env.prs.find = lambda branch: finds.append(branch)
-    fake.reply(("rev-list", "--count"), Done(0, f"{count}\n"))
-    env.open(Edge.START)
-    env.drive()
-    return finds
-
-
-def test_a_start_sync_with_main_ahead_reports_and_changes_nothing(
-    env: Env, fake: FakeSystem
-) -> None:
-    story = env.rt.state.stories["s1"]
-    story.commit = "c" * 40
-    before = (env.rt.git.head(), story.commit, story.code_commits[:], env.rt.state.checkout)
-    finds = start_with_main_ahead(env, fake, 2)
-    up = env.rt.state.upstream
-    assert [(e.head, e.pushed) for e in up.stack] == [(H1, H1), (H2, H2)]
-    assert (env.rt.git.head(), story.commit, story.code_commits, env.rt.state.checkout) == before
-    assert env.outcomes() == ["pass", "pass", "done"]
-    first = env.events()[0].data
-    assert first["note"] == (
-        "origin/main moved 2 commits since the last sprint-end rebase; "
-        "nothing changes until the next sprint end"
-    )
-    assert first["behind"] == 2
-    assert env.rt.state.boundary is None
-    assert finds == [] and env.prs.calls == [] and pushes(fake) == []
-    assert not [c for c in fake.commands if MUTATING & set(c.argv)]
-
-
-def test_a_start_sync_leaves_sync_from_alone(env: Env, fake: FakeSystem) -> None:
-    fake.reply(("rev-list", "--count"), Done(0, "3\n"))
-    b = env.open(Edge.START)
-    env.drive()
-    assert b.sync_from == ""
-
-
-def test_a_start_sync_with_main_not_ahead_says_current(env: Env, fake: FakeSystem) -> None:
-    start_with_main_ahead(env, fake, 0)
-    first = env.events()[0].data
-    assert first["note"] == "the team branch is current with origin/main"
-    assert first["behind"] == 0
+# ----- s152: the start rebases (see test_s152_start.py) ------------------------
 
 
 def test_no_stack_entry_is_dropped_at_start(env: Env, fake: FakeSystem) -> None:
-    start_with_main_ahead(env, fake, 2)
+    stack = [entry(9), entry(10)]
+    env.rt.state.upstream.stack = stack
+    env.rt.state.upstream.team_branch = "main"
+    env.rt.upstream.behind = lambda: 0
+    env.open(Edge.START)
+    env.drive()
     assert "merged" not in env.outcomes()
     assert [e.sprint for e in env.rt.state.upstream.stack] == [9, 10]
 

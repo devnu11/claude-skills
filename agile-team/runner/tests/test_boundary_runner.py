@@ -162,12 +162,12 @@ def fail_lint(env: Env, text: str = "E501 line too long") -> None:
 
 
 def test_team_check_pass_records_head_and_a_second_check_is_skipped(env: Env) -> None:
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     head = FAKE_HEAD
     assert env.rt.state.upstream.checked == head
     calls = len(env.runner.calls)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     assert len(env.runner.calls) == calls
     assert env.events()[-2].data["note"] == f"already checked at {head}"
@@ -175,7 +175,7 @@ def test_team_check_pass_records_head_and_a_second_check_is_skipped(env: Env) ->
 
 def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     [report] = env.drive()
     b = env.rt.state.boundary
     assert b.failure.case is bd.FixCase.TEAM_CHECK and b.failure.stage is Stage.CHECK
@@ -188,25 +188,25 @@ def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> N
     }
     due = env.br.due()
     assert (due.kind, due.role) == (StepKind.TEAM_FIX, "devops")
-    assert due.brief.startswith(bd.FIX_HEADING.format(sprint=1, edge="start", stage="check"))
+    assert due.brief.startswith(bd.FIX_HEADING.format(sprint=1, edge="end", stage="check"))
     assert "E501 line too long" in due.brief
 
 
 def test_after_fix_counts_a_round_and_the_check_reruns(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.runner.results = GREEN
     env.br.after_fix({"role": "devops", "status": "done"})
     b = env.rt.state.boundary
     assert (b.rounds, b.failure, b.hold) == (1, None, None)
-    env.drive()
-    assert env.rt.state.boundary is None and env.outcomes()[-2:] == ["pass", "done"]
+    env.br.step()
+    assert env.outcomes()[-1] == "pass" and env.rt.state.boundary.stage is Stage.PUSH
 
 
 def test_a_blocked_fix_holds_the_boundary_with_the_hand_over_reason(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.br.after_fix({"role": "devops", "status": "blocked", "open_questions": ["which linter?"]})
     b = env.rt.state.boundary
@@ -216,7 +216,7 @@ def test_a_blocked_fix_holds_the_boundary_with_the_hand_over_reason(env: Env) ->
 
 def test_a_halted_fix_changes_nothing(env: Env) -> None:
     fail_lint(env)
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     env.br.after_fix({"role": "devops", "status": "halted"})
     b = env.rt.state.boundary
@@ -224,7 +224,7 @@ def test_a_halted_fix_changes_nothing(env: Env) -> None:
 
 
 def test_the_same_failure_twice_escalates_to_the_manager(env: Env) -> None:
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     fail_lint(env, "FAILED test_x in 1.2s")
     env.drive()
     first = env.events()[-1].data
@@ -237,13 +237,13 @@ def test_the_same_failure_twice_escalates_to_the_manager(env: Env) -> None:
     assert data["outcome"] == "escalate" and data["count"] == 2 and len(data["history"]) == 1
     assert b.hold is BoundaryHold.ESCALATED and b.escalated
     assert env.rt.state.manager_due[-1] == bd.BOUNDARY_DUE.format(
-        sprint=1, edge="start", count=2, stage="check"
+        sprint=1, edge="end", count=2, stage="check"
     )
     assert env.br.due() is None
 
 
 def test_a_different_failure_restarts_the_streak(env: Env) -> None:
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     fail_lint(env, "alpha problem")
     env.drive()
     env.br.after_fix({"role": "devops", "status": "done"})
@@ -254,7 +254,7 @@ def test_a_different_failure_restarts_the_streak(env: Env) -> None:
 
 
 def test_the_round_cap_escalates_even_when_failures_differ(env: Env) -> None:
-    env.open(Edge.START, stage=Stage.CHECK, rounds=env.rt.config.gates.round_cap)
+    env.open(Edge.END, stage=Stage.CHECK, rounds=env.rt.config.gates.round_cap)
     fail_lint(env, "brand new failure")
     [report] = env.drive()
     assert report["boundary"]["outcome"] == "escalate"
@@ -262,7 +262,7 @@ def test_the_round_cap_escalates_even_when_failures_differ(env: Env) -> None:
 
 
 def test_manager_context_and_review_of_an_escalated_boundary(env: Env) -> None:
-    env.open(Edge.START, stage=Stage.CHECK)
+    env.open(Edge.END, stage=Stage.CHECK)
     fail_lint(env, "same")
     env.drive()
     env.br.after_fix({"role": "devops", "status": "done"})
