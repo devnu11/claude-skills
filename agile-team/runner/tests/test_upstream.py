@@ -264,7 +264,7 @@ def test_command_runner_runs_argv_and_maps_missing_binary(fake: FakeSystem) -> N
     assert fake.commands[0].cwd == FAKE_REPO
 
 
-# ----- s153 AC1, AC2: upstreamed, lost_paths, adopt ----------------------------
+# ----- s153 AC1, AC2: find_upstreamed, find_lost_paths, move_team_branch ------
 
 BASE, TARGET_SHA = "d" * 40, "e" * 40
 NO_RENAMES = ("git", "diff", "--name-only", "--no-renames")
@@ -288,14 +288,14 @@ def test_s153_up_rebase_argvs_are_the_flags_plus_the_empty_policy() -> None:
 
 def test_s153_up_upstreamed_runs_cherry_and_keeps_only_the_minus_shas(fake: FakeSystem) -> None:
     fake.reply(("git", "cherry"), Done(0, "- s1\n+ s2\n- s3\n"))
-    assert upstream_for().upstreamed(OLD) == frozenset({"s1", "s3"})
+    assert upstream_for().find_upstreamed(OLD) == frozenset({"s1", "s3"})
     [argv] = issued(fake, "cherry")
     assert argv[-2:] == ("origin/main", OLD)
 
 
 def test_s153_up_upstreamed_of_nothing_is_empty(fake: FakeSystem) -> None:
     fake.reply(("git", "cherry"), Done(0, ""))
-    assert upstream_for().upstreamed(OLD) == frozenset()
+    assert upstream_for().find_upstreamed(OLD) == frozenset()
 
 
 def script_lost(fake: FakeSystem, head: str, mine: str = "", theirs: str = "") -> None:
@@ -307,7 +307,7 @@ def script_lost(fake: FakeSystem, head: str, mine: str = "", theirs: str = "") -
 def test_s153_up_lost_paths_diffs_against_the_given_head(fake: FakeSystem) -> None:
     script_lost(fake, "br", mine="x.py\nb.py\n", theirs="a.py\n")
     spans = up.Spans(OLD, OLD, TARGET_SHA, head="br")
-    assert upstream_for().lost_paths(spans) == ["a.py", "b.py", "x.py"]
+    assert upstream_for().find_lost_paths(spans) == ["a.py", "b.py", "x.py"]
     diffs = issued(fake, *NO_RENAMES)
     assert all("HEAD" not in argv for argv in diffs)
     assert {argv[-1] for argv in diffs} >= {"br"}
@@ -316,7 +316,7 @@ def test_s153_up_lost_paths_diffs_against_the_given_head(fake: FakeSystem) -> No
 def test_s153_up_lost_paths_default_head_is_head(fake: FakeSystem) -> None:
     assert up.Spans("a", "b", "c").head == "HEAD"
     script_lost(fake, "HEAD")
-    assert upstream_for().lost_paths(up.Spans(OLD, OLD, TARGET_SHA)) == []
+    assert upstream_for().find_lost_paths(up.Spans(OLD, OLD, TARGET_SHA)) == []
     assert any(argv[-1] == "HEAD" for argv in issued(fake, *NO_RENAMES))
 
 
@@ -329,7 +329,7 @@ def script_adopt(fake: FakeSystem, head: str) -> None:
 
 def test_s153_up_adopt_resets_keep_and_pairs_the_commits(fake: FakeSystem) -> None:
     script_adopt(fake, OLD)
-    result = upstream_for().adopt(OLD, NEW)
+    result = upstream_for().move_team_branch(OLD, NEW)
     assert result.outcome is up.SyncOutcome.REBASED and result.sha == NEW
     assert dict(result.moved) == {"o1": "n1"}
     [reset] = issued(fake, "reset")
@@ -340,6 +340,6 @@ def test_s153_up_adopt_refuses_when_the_team_branch_moved(fake: FakeSystem) -> N
     script_adopt(fake, NEW)
     fake.reply(("git", "symbolic-ref"), Done(0, "team\n"))
     with pytest.raises(UpstreamError) as raised:
-        upstream_for().adopt(OLD, "c" * 40)
+        upstream_for().move_team_branch(OLD, "c" * 40)
     assert str(raised.value) == up.TEAM_MOVED.format(team="team", old=OLD)
     assert issued(fake, "reset") == []

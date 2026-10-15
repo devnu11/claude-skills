@@ -217,7 +217,7 @@ def test_s151_devops_conflict_ac6_2_the_full_checks_run_in_the_worktree_not_the_
     ran: list[Path] = []
     green = type("R", (), {"passed": True, "reason": lambda s: ""})()
     env.br._run_checks = lambda path: ran.append(path) or green
-    env.rt.upstream.adopt = Adopts(Rebase(SyncOutcome.REBASED, sha=REBASED, moved=MOVED))
+    env.rt.upstream.move_team_branch = Adopts(Rebase(SyncOutcome.REBASED, sha=REBASED, moved=MOVED))
     conflicted(env, scratch)
     fixed(env, scratch)
     env.br.step()
@@ -238,7 +238,7 @@ def test_s151_devops_conflict_ac6_2_devops_never_merges_or_squashes_is_in_its_br
 
 
 class Adopts:
-    """Stands in for ``Upstream.adopt``."""
+    """Stands in for ``Upstream.move_team_branch``."""
 
     def __init__(self, result: Rebase) -> None:
         self.result, self.args = result, []
@@ -250,7 +250,7 @@ class Adopts:
 
 def resolved(env: Env, scratch: Scratch) -> Adopts:
     adopt = Adopts(Rebase(SyncOutcome.REBASED, sha=REBASED, moved=MOVED))
-    env.rt.upstream.adopt = adopt
+    env.rt.upstream.move_team_branch = adopt
     env.br._run_checks = lambda path: type("R", (), {"passed": True, "reason": lambda s: ""})()
     conflicted(env, scratch)
     fixed(env, scratch)
@@ -300,7 +300,7 @@ def test_s151_devops_conflict_ac6_3_a_moved_team_branch_holds_error_and_resets_n
     def moved(old: str, sha: str) -> Rebase:
         raise UpstreamError(upstream.TEAM_MOVED.format(team="main", old=old))
 
-    env.rt.upstream.adopt = moved
+    env.rt.upstream.move_team_branch = moved
     env.br.step()
     assert env.rt.state.boundary.hold is BoundaryHold.ERROR
     assert "moved from" in last(env)["reason"]
@@ -315,14 +315,14 @@ def test_s151_devops_conflict_ac6_3_a_moved_team_branch_can_recover_without_adop
     def moved(old: str, sha: str) -> Rebase:
         raise UpstreamError(upstream.TEAM_MOVED.format(team="main", old=old))
 
-    env.rt.upstream.adopt = moved
+    env.rt.upstream.move_team_branch = moved
     env.br.step()
     b = env.rt.state.boundary
     assert b.hold is BoundaryHold.ERROR
     assert b.rebase_fix is None and b.sync_from == "" and "drop" in scratch.names()
     ran: list[Path] = []
     env.br._run_checks = lambda path: ran.append(path)
-    env.rt.upstream.adopt = adopt
+    env.rt.upstream.move_team_branch = adopt
     json.loads(
         asyncio.run(Tools(env.rt).continue_boundary({"note": "moved"}))["content"][0]["text"]
     )

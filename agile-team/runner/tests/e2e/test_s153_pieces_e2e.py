@@ -140,7 +140,7 @@ def test_ac1_upstreamed_names_only_team_commits_whose_patch_is_in_the_target(
     cmd = ["git", "cherry-pick", landed]
     subprocess.run(cmd, cwd=world.other, env=later, check=True, capture_output=True)
     world.publish()
-    assert world.upstream().upstreamed(kept) == frozenset({landed})
+    assert world.upstream().find_upstreamed(kept) == frozenset({landed})
 
 
 def test_ac1_lost_paths_judges_the_given_head_not_head(tmp_path: Path) -> None:
@@ -152,8 +152,8 @@ def test_ac1_lost_paths_judges_the_given_head_not_head(tmp_path: Path) -> None:
     git(world.team, "checkout", "-q", "side")
     world.commit(world.team, "x.txt", "stray\n", "side: x")
     git(world.team, "checkout", "-q", "main")
-    assert up.lost_paths(Spans(old, old, target_sha)) == []
-    assert up.lost_paths(Spans(old, old, target_sha, head="side")) == ["x.txt"]
+    assert up.find_lost_paths(Spans(old, old, target_sha)) == []
+    assert up.find_lost_paths(Spans(old, old, target_sha, head="side")) == ["x.txt"]
 
 
 # ----- AC2
@@ -165,7 +165,7 @@ def test_ac2_adopt_moves_the_team_branch_and_maps_each_commit(tmp_path: Path) ->
     git(world.team, "rebase", "-q", "origin/main")
     rebased = world.head()
     git(world.team, "reset", "-q", "--hard", old)
-    result = up.adopt(old, rebased)
+    result = up.move_team_branch(old, rebased)
     assert result.outcome is SyncOutcome.REBASED
     assert result.sha == rebased
     assert world.head() == rebased
@@ -179,7 +179,7 @@ def test_ac2_adopt_refuses_when_the_team_branch_moved(tmp_path: Path) -> None:
     world.commit(world.team, "late.txt", "late\n", "team: late")
     moved, tree = world.head(), git(world.team, "write-tree")
     with pytest.raises(UpstreamError, match="moved from"):
-        up.adopt(old, old)
+        up.move_team_branch(old, old)
     assert TEAM_MOVED.format(team="main", old=old).startswith("the team branch main moved")
     assert world.head() == moved
     assert Git(world.team).branch() == "main"
