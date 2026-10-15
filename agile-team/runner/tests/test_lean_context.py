@@ -299,7 +299,10 @@ def test_manager_raises_long_running_roles() -> None:
 def test_po_prompt_explains_renewal_and_handoff_scope() -> None:
     prompt = prompt_of("product-owner")
     assert ".team/po/handoff.md" in prompt
-    assert "Editing anything but stories and your handoff file." in prompt
+    assert (
+        "Editing anything but your handoff file (`.team/po/handoff.md`); "
+        "story files are the runner's."
+    ) in prompt
 
 
 # ----- dashboard (T9-T11) -----------------------------------------------------------
