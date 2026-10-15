@@ -52,3 +52,14 @@ failure reaches the PO and the liaison.
 - The worktree lives under `.team/run/`, which git and the step audit
   ignore; it is a separate checkout, so the team's working tree, index and
   branch are never touched.
+
+## Amended by s153 (2026-10-15)
+
+The decision lands in two slices (Manager ruling on s151). s153 adds the
+pieces with no change in behaviour: `Upstream.upstreamed`, `lost_paths` for
+any head, `adopt`, `ScratchRebase`, the boundary's data (`rebase-fix`,
+`rebase_conflict`, `RebaseFix`, `Failure.worktree`), the state loader and
+the DevOps step's scope. Until s151's implement step wires them, a
+sprint-end conflict still holds `sync_conflict` and no `rebase-fix` step is
+ever due, so a build between the two slices is safe to ship. The real-git
+tests of the pieces are e2e tests, because unit tests run in the fake world.
