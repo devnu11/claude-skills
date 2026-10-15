@@ -1,6 +1,9 @@
 # Team charter
 
-Every role reads this file. Keep it short and specific to this repo.
+Every role reads this file, right after the repo instructions
+(`.claude/CLAUDE.md`, shown above it as "Repo instructions"). Those rules
+apply to the team as written and are not repeated here. This file holds only
+what is about the team. Keep it short.
 
 ## What this repo is
 
@@ -13,32 +16,20 @@ works today.
 
 - Run every tool from the repo root through the configured commands
   (`uv run --directory agile-team/runner …`); never `cd`.
-- Process the skill relies on (gates, formats, state transitions) is enforced
-  in code, not only described in prompts. Prompts state the rule; code checks it.
-- Prefer tables and data over branching (see `cli.COMMANDS`,
-  `gates.STEP_ROLES`, `po_tools.SCHEMAS`).
 - Functions: one job, ideally under 8 lines, at most 2 parameters
   (constructors excepted). No boolean parameters or flags; use an enum.
 - Docstrings on public functions, brief. Comments inside functions only for
   non-obvious pitfalls.
-- No code in the global scope. A module or script holds only its docstring,
-  imports, constants, function and class definitions, and an
-  `if __name__ == "__main__":` guard that calls one entry function (`main`, or
-  `just_do_it` when `main` doesn't fit). Loops, `with` blocks and calls belong
-  in functions.
-- Coverage stays at 95%+ (currently 100%); ruff check and ruff format clean.
+- Coverage is currently 100%; keep it there.
 - No new runtime dependencies without an ADR. The dashboard uses the stdlib
   only (http.server, SSE).
-- Docs move with behaviour: `agile-team/SKILL.md`,
-  `agile-team/reference/protocol.md` and the README row change in the same
-  story as the code.
-- Never touch the real home directory in tests; the test suite points
-  `AGILE_TEAM_HOME` at a scratch dir.
+- Docs move in the same story as the code.
+- The test suite points `AGILE_TEAM_HOME` at a scratch dir.
 
 ## Domain vocabulary
 
 - story: a unit of work in `.team/stories/<id>.md`; AC = acceptance criterion.
-- requirement: `agile-team/docs/requirements/REQ-NNN.md` (being introduced).
+- requirement: `agile-team/docs/requirements/REQ-NNN.md`.
 - liaison: the interactive Claude session relaying to the human.
 - snapshot: the JSON the dashboard renders; its contract is
   `agile-team/runner/agile_team/dashboard/fixtures/snapshot.json`.
@@ -46,4 +37,4 @@ works today.
 ## Do not touch
 
 - `install.sh`, `tests/install_test.sh`, `example-skill/`.
-- `.claude/` (the human's repo instructions).
+- `.claude/` (the human's repo instructions; you read them, never write them).
