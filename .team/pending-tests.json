@@ -1,1 +1,10 @@
-{}
+{
+  "s157": [
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_mixed_output_finds_only_failing_file",
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_mixed_output_places_one_item_with_both_fail_lines",
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_warning_lines_are_not_findings[a/b.py:12: warn function-length: 14 statements]",
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_warning_lines_are_not_findings[a/b.py:3: WARNING x]",
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_warning_lines_are_not_findings[a/b.py:3: Warn x]",
+    "agile-team/runner/tests/test_s157_house_rules_routing.py::test_warning_lines_are_not_findings[a/b.py:3:1: warning: something]"
+  ]
+}
