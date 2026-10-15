@@ -19,17 +19,17 @@ def test_an_answer_wakes_the_router_and_the_po_gets_it(make_runtime, monkeypatch
     rt = build(make_runtime, script, steps=["design"])
     add_story(rt)
     run = PoRun(rt, Start("go"))
-    slept: list[float] = []
+    sleeps: list[float] = []
     seen: list[str | None] = []
 
     async def sleep(seconds: float) -> None:
-        slept.append(seconds)
+        sleeps.append(seconds)
         seen.append(rt.state.status_reason)
         rt.relay.answer("m1", "sqlite")
 
     monkeypatch.setattr(system, "async_sleep", sleep)
     asyncio.run(run.run())
-    assert slept == [5.0]
+    assert sleeps == [5.0]
     assert seen == ["waiting on answers: s1 waits on m1"]
     assert rt.state.status_reason == "Sprint 1 is complete: every story in it is done."
     assert 'The human answered m1 ("Which DB?"): sqlite' in script.po_prompts[1]

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
-import time
 from pathlib import Path
 
 import pytest
@@ -13,6 +12,7 @@ from agile_team import gates
 from agile_team.commands import NO_HUNG_LINE, TIMED_OUT, CommandShell
 from agile_team.guard import WAIT_DENIED, Scope, check_bash
 
+from .. import clock
 from .readiness import wait_until
 
 
@@ -33,10 +33,10 @@ def hanging_suite(tmp_path: Path) -> str:
 
 def test_real_pytest_hang_is_killed_named_and_bounces_tests_gate(tmp_path: Path) -> None:
     run = CommandShell(tmp_path, 3.0).run
-    started = time.monotonic()
+    limit = clock.Deadline(25)
     code, out = run(hanging_suite(tmp_path))
     assert code == TIMED_OUT
-    assert time.monotonic() - started < 25  # the hang sleeps 30 s; only a kill ends it sooner
+    assert not limit.passed()  # the hang sleeps 30 s; only a kill ends it sooner
     assert "test_hang.py::test_hangs" in out
     outcome = gates.Checks({"test": hanging_suite(tmp_path)}, 95.0, run).tests_red()
     assert outcome.verdict == gates.Verdict.BOUNCE

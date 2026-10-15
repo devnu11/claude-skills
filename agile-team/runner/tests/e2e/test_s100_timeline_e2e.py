@@ -19,14 +19,13 @@ def _run(body: str, snap: dict | None = None) -> dict:
     """Run `body` with `view` (the snapshot as of now) bound; it fills `out`."""
     snap = snap or dashboard_node.fixture()
     driver = f"const snap = {json.dumps(snap)};\ndata.cursor = Infinity;\nconst view = asOf(snap, Infinity);\nconst out = {{}};\n(async () => {{\n{body}\nconsole.log(JSON.stringify(out));\n}})();"
-    return dashboard_node.run_page(driver)
+    return dashboard_node.run_page(driver, snap["generated_at"])
 
 
 def test_expanded_story_shows_rows_totals_and_bars() -> None:
     """AC1-AC3: a timeline with role rows, bars, wait strips and the five totals."""
     out = _run("""
     const story = view.stories.find((s) => s.id === "s3");
-    data.skew = view.generated_at - Date.now() / 1000;  // pin "now": the fixture's running step must not stretch with the real clock
     out.html = timelineHtml(view, story);
     out.model = timelineModel({ view, now: tlNow(view) }, story, "story");
     out.rows = out.model.groups[0].rows.map((r) => r.name ?? r.label ?? r.row);
@@ -44,7 +43,6 @@ def test_sprint_scope_groups_every_story() -> None:
     """AC1: Sprint scope draws sprint-1 and each story as a group."""
     out = _run("""
     const story = view.stories.find((s) => s.id === "s3");
-    data.skew = view.generated_at - Date.now() / 1000;  // pin "now": the fixture's running step must not stretch with the real clock
     ui.tl.s3 = { scope: "sprint", span: null, end: null };
     out.html = timelineHtml(view, story);
     """)

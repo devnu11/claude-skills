@@ -10,7 +10,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -19,7 +18,8 @@ from agile_team import events as events_mod
 from agile_team import gates
 from agile_team import state as state_mod
 
-from tests import dashboard_node
+from tests import clock, dashboard_node
+from tests.clock import about
 
 from .readiness import RUNNER, STARTUP_S, Launch, Output, dashboard
 
@@ -31,7 +31,7 @@ def dash(configured: Path, tmp_path: Path) -> Iterator[tuple[subprocess.Popen, s
     run = configured / ".team" / "run"
     run.mkdir(parents=True)
     (run / "events.jsonl").write_text(
-        json.dumps({"id": "e1", "kind": "sprint-start", "at": time.time(), "data": {}}) + "\n"
+        json.dumps({"id": "e1", "kind": "sprint-start", "at": clock.real_now(), "data": {}}) + "\n"
     )
     with dashboard(Launch(configured, tmp_path / "scratch-home")) as live_dash:
         yield live_dash.proc, live_dash.url, run
@@ -53,9 +53,9 @@ def _get(url: str, path: str) -> tuple[int, bytes]:
 
 def _read_until(resp: http.client.HTTPResponse, needle: bytes) -> bytes:
     """Read stream lines until ``needle`` shows or STARTUP_S passes (F6)."""
-    deadline, seen = time.monotonic() + STARTUP_S, b""
+    deadline, seen = clock.Deadline(STARTUP_S), b""
     while needle not in seen:
-        assert time.monotonic() < deadline, f"{needle!r} not on the stream; saw {seen!r}"
+        assert not deadline.passed(), f"{needle!r} not on the stream; saw {seen!r}"
         seen += resp.fp.readline()
     return seen
 
@@ -77,7 +77,9 @@ def test_stream_pushes_new_event(dash) -> None:
     assert resp.status == 200
     assert b"data:" in resp.fp.readline()
     with (run / "events.jsonl").open("a") as fh:
-        fh.write(json.dumps({"id": "e2", "kind": "gate", "at": time.time(), "data": {}}) + "\n")
+        fh.write(
+            json.dumps({"id": "e2", "kind": "gate", "at": clock.real_now(), "data": {}}) + "\n"
+        )
     seen = _read_until(resp, b"e2")
     conn.close()
     assert b"e2" in seen
@@ -265,9 +267,9 @@ def _stream_health(
     conn.request("GET", "/api/stream")
     resp = conn.getresponse()
     seen: list[tuple[str, str]] = []
-    deadline = time.monotonic() + STARTUP_S
+    deadline = clock.Deadline(STARTUP_S)
     while not done(seen):
-        assert time.monotonic() < deadline, f"health never reached the wanted state; saw {seen}"
+        assert not deadline.passed(), f"health never reached the wanted state; saw {seen}"
         line = resp.fp.readline()
         health = json.loads(line[5:]).get("health") if line.startswith(b"data:") else None
         pair = (health["level"], health["reason"]) if health else None
@@ -312,9 +314,9 @@ def test_health_goes_green_amber_red_as_the_step_goes_quiet(dash, step) -> None:
 
 def _read_health_until(resp, seen: list[tuple[str, str]], level: str) -> None:
     """Add stream samples to ``seen`` until one has ``level``; fail after STARTUP_S."""
-    deadline = time.monotonic() + STARTUP_S
+    deadline = clock.Deadline(STARTUP_S)
     while level not in _levels(seen):
-        assert time.monotonic() < deadline, f"never {level}; saw {seen}"
+        assert not deadline.passed(), f"never {level}; saw {seen}"
         line = resp.fp.readline()
         health = json.loads(line[5:]).get("health") if line.startswith(b"data:") else None
         pair = (health["level"], health["reason"]) if health else None
@@ -361,7 +363,7 @@ def test_scope_toggle_totals_match_the_ledger(dash) -> None:
         "s2": gates.StoryState("s2", "two", "implement", sprint=2),
     }
     state_mod.save(run, state)
-    base = time.time()  # recent, so no PO running-total correction applies
+    base = clock.real_now()  # recent, so no PO running-total correction applies
     starts = [
         {"id": f"e{n}", "kind": "sprint-start", "at": base + 100.0 * n, "data": {"sprint": n}}
         for n in (1, 2)
@@ -390,14 +392,14 @@ def test_scope_toggle_totals_match_the_ledger(dash) -> None:
     }}
     console.log(JSON.stringify(out));
     """
-    out = dashboard_node.run_page(driver)
-    assert out["story"] == {"developer-cli": {"tokens": 20, "cost": 2.0, "seconds": 0}}
+    out = dashboard_node.run_page(driver, served["generated_at"])
+    assert out["story"] == {"developer-cli": {"tokens": 20, "cost": 2.0, "seconds": about(0)}}
     assert out["sprint"] == {
-        "developer-cli": {"tokens": 40, "cost": 4.0, "seconds": 0},
-        "product-owner": {"tokens": 80, "cost": 8.0, "seconds": 0},
+        "developer-cli": {"tokens": 40, "cost": 4.0, "seconds": about(0)},
+        "product-owner": {"tokens": 80, "cost": 8.0, "seconds": about(0)},
     }
-    assert out["run"]["product-owner"] == {"tokens": 90, "cost": 9.0, "seconds": 0}
-    assert out["run"]["developer-cli"] == {"tokens": 60, "cost": 6.0, "seconds": 0}
+    assert out["run"]["product-owner"] == {"tokens": 90, "cost": 9.0, "seconds": about(0)}
+    assert out["run"]["developer-cli"] == {"tokens": 60, "cost": 6.0, "seconds": about(0)}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
@@ -411,7 +413,7 @@ def test_stopped_pill_is_plain_and_fallback_pill_has_a_space(dash, step) -> None
     served = json.loads(_get(dash[1], "/api/snapshot")[1])
     driver = f"""
     const view = {json.dumps(served)};
-    const now = view.now ?? Date.now() / 1000;
+    const now = view.generated_at;
     const idle = panelState(view);
     const row = statusPills(view).join("");
     const bare = JSON.parse(JSON.stringify(view));
@@ -421,7 +423,7 @@ def test_stopped_pill_is_plain_and_fallback_pill_has_a_space(dash, step) -> None
       {{id: "x", kind: "step-start", role: "developer", story: "s9", at: now - 5, data: {{}}}}];
     console.log(JSON.stringify({{idle, row, fallback: panelState(bare).who}}));
     """
-    out = dashboard_node.run_page(driver)
+    out = dashboard_node.run_page(driver, served["generated_at"])
     assert out["idle"]["kind"] == "idle" and out["idle"]["line"] == "stopped"
     assert "⚠" not in out["row"]
     assert "h-amber" not in out["row"] and "h-red" not in out["row"]

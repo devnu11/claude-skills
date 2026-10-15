@@ -6,14 +6,13 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from agile_team import state as state_mod
 
-from .. import dashboard_node
+from .. import clock, dashboard_node
 from ..pipeline_helpers import Script, add_story, build
 from .readiness import LOCAL, Launch, dashboard
 from .test_s83_backlog_e2e import _snapshot
@@ -25,8 +24,9 @@ HTML = "flowHtml(flowModel(view))"
 
 def _run(body: str, view: dict | None = None) -> dict:
     """Run `body` in the page with `view` (default: the fixture) bound; it fills `out`."""
-    driver = f"const view = {json.dumps(view or dashboard_node.fixture())};\nconst out = {{}};\n(async () => {{\n{body}\nconsole.log(JSON.stringify(out));\n}})();"
-    return dashboard_node.run_page(driver)
+    view = view or dashboard_node.fixture()
+    driver = f"const view = {json.dumps(view)};\nconst out = {{}};\n(async () => {{\n{body}\nconsole.log(JSON.stringify(out));\n}})();"
+    return dashboard_node.run_page(driver, view["generated_at"])
 
 
 def test_dimmed_boxes_never_use_compositing_styles() -> None:
@@ -184,7 +184,7 @@ def test_served_snapshot_draws_developer_db_only_after_its_first_step(served) ->
         "kind": "step-start",
         "role": "developer-db",
         "story": "s1",
-        "at": time.time(),
+        "at": clock.real_now(),
         "data": {},
     }
     with (rt.config.run_dir / "events.jsonl").open("a") as f:

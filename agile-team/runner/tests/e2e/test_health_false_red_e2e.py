@@ -6,7 +6,6 @@ import json
 import re
 import subprocess
 import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,6 +13,7 @@ import pytest
 from agile_team import events as events_mod
 from agile_team import state as state_mod
 
+from .. import clock
 from .readiness import Output, wait_until
 from .test_dashboard_e2e import _get, dash  # noqa: F401
 from .test_liaison_e2e import run_cli
@@ -54,15 +54,15 @@ def alive() -> Iterator[int]:
 def _beat(run: Path, pid: int, age: float, slept: float = 0.0, **extra) -> None:
     """A version-2 heartbeat ``age`` seconds old; the machine slept ``slept`` of them."""
     (run / "runner.pid").write_text(str(pid))
-    now = time.time()
-    mono = time.monotonic() - (age - slept)
+    now = clock.real_now()
+    mono = clock.real_monotonic() - (age - slept)
     beat = {"version": 2, "pid": pid, "beat": "beating", "at": now - age, "mono": mono}
     beat |= {"started_at": now - 1000, "chore": None, "step": None} | extra
     (run / "heartbeat.json").write_text(json.dumps(beat))
 
 
 def _tool(age: float) -> dict:
-    now = time.time()
+    now = clock.real_now()
     return {
         "role": "reviewer", "story": "s71", "step": "review", "started_at": now - 900,
         "turn": 5, "model": "m", "configured_model": "m", "last_turn_at": now - age,
@@ -87,7 +87,7 @@ def test_late_beat_with_open_tool_is_amber_not_red(configured: Path, run_dir: Pa
 
 def test_late_beat_during_a_gate_is_amber_naming_the_gate(configured, run_dir, alive):
     """AC2: a gate chore with a 100 s late beat is amber, reason names the gate."""
-    chore = {"what": "gate: implement on s71", "since": time.time() - 100}
+    chore = {"what": "gate: implement on s71", "since": clock.real_now() - 100}
     _beat(run_dir, alive, 100, chore=chore)
     health = _health(configured)
     assert health["level"] == "amber", health
@@ -133,7 +133,7 @@ def test_dead_runner_stays_red(configured: Path, run_dir: Path):
     """AC3: the beat is excused-looking but the pid is gone: red, not running."""
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait(timeout=10)
-    _beat(run_dir, dead.pid, 100, chore={"what": "gate: x on s1", "since": time.time() - 100})
+    _beat(run_dir, dead.pid, 100, chore={"what": "gate: x on s1", "since": clock.real_now() - 100})
     health = _health(configured)
     assert health["level"] == "red" and "the runner is not running" in health["reason"]
 

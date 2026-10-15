@@ -17,6 +17,8 @@ from pathlib import Path
 
 from agile_team import events as events_mod
 
+from .. import clock
+
 STARTUP_S = 120.0
 POLL_S = 0.05
 BOOT = "import sys; from agile_team.cli import main; sys.exit(main())"
@@ -27,9 +29,9 @@ LOCAL = ("--host", "127.0.0.1", "--port", "0", "--no-open")
 
 def wait_until(check: Callable[[], bool], what: str) -> None:
     """Poll ``check`` every POLL_S; fail at the monotonic deadline naming ``what``."""
-    deadline = time.monotonic() + STARTUP_S
+    deadline = clock.Deadline(STARTUP_S)
     while not check():
-        assert time.monotonic() < deadline, f"{what} not within {STARTUP_S:.0f} s"
+        assert not deadline.passed(), f"{what} not within {STARTUP_S:.0f} s"
         time.sleep(POLL_S)
 
 
@@ -54,7 +56,7 @@ class Output:
 
     def wait_for(self, pattern: re.Pattern[str]) -> re.Match[str]:
         """The first kept line matching ``pattern``, waiting for new ones."""
-        deadline = time.monotonic() + STARTUP_S
+        deadline = clock.Deadline(STARTUP_S)
         seen = 0
         with self._cond:
             while True:
@@ -63,7 +65,7 @@ class Output:
                     if match:
                         return match
                 seen = len(self._lines)
-                left = deadline - time.monotonic()
+                left = deadline.left()
                 if self._eof or left <= 0:
                     break
                 self._cond.wait(left)

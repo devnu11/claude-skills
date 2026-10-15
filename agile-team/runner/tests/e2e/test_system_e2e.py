@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from agile_team import system
 
+from .. import clock
+
 
 def test_text_round_trip_append_and_bytes(tmp_path):
     f = tmp_path / "a.txt"
@@ -98,7 +100,7 @@ def test_stat_reports_mode_size_and_mtime(tmp_path):
     assert info.mode == 0o600 == stat_bits.S_IMODE(os.stat(f).st_mode)
     assert info.size == 3
     assert info.mtime_ns == os.stat(f).st_mtime_ns
-    assert abs(info.mtime - time.time()) < 60
+    assert abs(info.mtime - clock.real_now()) < 60
 
 
 def test_resolve_and_expand_user(tmp_path, monkeypatch):
@@ -110,7 +112,7 @@ def test_resolve_and_expand_user(tmp_path, monkeypatch):
 
 
 def test_clock_functions():
-    assert abs(system.now() - time.time()) < 5
+    assert abs(system.now() - clock.real_now()) < 5
     a = system.monotonic()
     system.sleep(0.02)
     assert system.monotonic() - a >= 0.015

@@ -9,6 +9,7 @@ import shutil
 import pytest
 
 from .. import dashboard_node
+from ..clock import about
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
@@ -19,12 +20,11 @@ def _run(body: str) -> dict:
     """Run `body` in the page with the fixture as `view`; it fills `out`."""
     view = dashboard_node.fixture()
     driver = f"const view = {json.dumps(view)};\nconst out = {{}};\n(async () => {{\n{body}\nconsole.log(JSON.stringify(out));\n}})();"
-    return dashboard_node.run_page(driver)
+    return dashboard_node.run_page(driver, NOW)
 
 
 def _running(slept: float) -> str:
     return f"""
-    data.skew = {NOW} - Date.now() / 1000;
     view.steps = [{{role: "developer", story: "s1", model: "m", sprint: 1, at: {NOW - 600}, ended_at: null, seconds: null, status: null, clock: "awake", slept: {slept}}}];
     out.awake = awakeSoFar(view, openStep(view, "developer"));
     out.text = fmt.dur1(out.awake);
@@ -34,14 +34,13 @@ def _running(slept: float) -> str:
 def test_running_line_takes_out_sleep_or_marks_wall() -> None:
     """AC2 (AW10, FC11): the live block's awake time is the step's age minus its slept seconds."""
     awake = _run(_running(120))
-    assert awake["awake"] == pytest.approx(480, abs=1) and awake["text"] == "8.0m"
+    assert awake["awake"] == about(480) and awake["text"] == "8.0m"
     assert _run(_running(0))["text"] == "10.0m"
 
 
 def _live_line(clock: str, slept: int) -> str:
     """Driver: the Flow live block of an open developer step with this clock."""
     return f"""
-    data.skew = {NOW} - Date.now() / 1000;
     view.steps = [{{role: "developer", story: "s1", model: "m", sprint: 1, at: {NOW - 600}, ended_at: null, seconds: null, status: null, clock: "{clock}", slept: {slept}}}];
     const m = flowModel(view);
     m.step = {{role: "developer", story: "s1", step: "implement", started_at: {NOW - 600}}};
@@ -67,7 +66,7 @@ def test_time_by_counts_wall_and_tooltip_marks_it() -> None:
     out.noWall = row({steps: 2, seconds: 60, wall: 0, parts: {work: 60}});
     """)
     by = out["by"]["r"]
-    assert (by["steps"], by["seconds"], by["wall"]) == (3, 180, 1)
+    assert (by["steps"], by["seconds"], by["wall"]) == (3, about(180), 1)
     assert "1 may include sleep" in out["withWall"]
     assert "may include sleep" not in out["noWall"]
 
@@ -87,4 +86,4 @@ def test_replay_nulls_clock_and_slept_on_reopened_step() -> None:
     out.kept = stepsAsOf([s], 60);
     """)
     assert out["steps"][0]["clock"] is None and out["steps"][0]["slept"] is None
-    assert out["kept"][0]["clock"] == "awake" and out["kept"][0]["slept"] == 5
+    assert out["kept"][0]["clock"] == "awake" and out["kept"][0]["slept"] == about(5)

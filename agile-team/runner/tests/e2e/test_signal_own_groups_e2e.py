@@ -12,6 +12,8 @@ from agile_team import sandbox
 from agile_team.commands import CommandShell
 from agile_team.guard import Scope, check_bash
 
+from .. import clock
+
 
 def alive(pid: int) -> bool:
     try:
@@ -38,7 +40,7 @@ def test_runner_pid_and_stale_pid_are_refused() -> None:
     pg.signal_child_group(os.getpid(), 0)
     gone = subprocess.Popen(["true"])
     gone.wait()
-    assert not pg.Recorded(gone.pid, time.time()).is_ours()
+    assert not pg.Recorded(gone.pid, clock.real_now()).is_ours()
 
 
 def test_own_session_leader_is_signalled() -> None:

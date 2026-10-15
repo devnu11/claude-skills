@@ -11,6 +11,7 @@ import pytest
 from agile_team import stages
 
 from .. import dashboard_node
+from ..clock import about
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 
@@ -85,10 +86,10 @@ def test_tool_run_numbers_in_run_story_and_sprint_scope() -> None:
     ui.scope = "run"; out.two = roleTools(view)["developer-cli"].after[0];
     out.second = toolRunNumber(view, { stage: rs.data.stage, story: "s3" });
     """)
-    assert (out["run"]["runs"], out["run"]["seconds"]) == (1, 100)
-    assert (out["story"]["runs"], out["story"]["seconds"]) == (1, 100)
-    assert (out["sprint"]["runs"], out["sprint"]["seconds"]) == (1, 60)
-    assert (out["two"]["runs"], out["two"]["seconds"]) == (2, 120)
+    assert (out["run"]["runs"], out["run"]["seconds"]) == (1, about(100))
+    assert (out["story"]["runs"], out["story"]["seconds"]) == (1, about(100))
+    assert (out["sprint"]["runs"], out["sprint"]["seconds"]) == (1, about(60))
+    assert (out["two"]["runs"], out["two"]["seconds"]) == (2, about(120))
     assert (out["first"], out["second"]) == (2, 3)
 
 
@@ -165,8 +166,10 @@ def test_time_totals_by_role() -> None:
     t = out["before"]
     assert (t["runner"]["runs"], t["runner"]["parts"]["runner"]) == (8, pytest.approx(658.4))
     po = t["product-owner"]
-    assert po["turns"] == 1 and po["parts"]["model"] == 9.5 and po["parts"]["tools"] == 0
-    assert po["parts"]["waiting"] == 312.5 and po["seconds"] == 322
+    assert (
+        po["turns"] == 1 and po["parts"]["model"] == about(9.5) and po["parts"]["tools"] == about(0)
+    )
+    assert po["parts"]["waiting"] == about(312.5) and po["seconds"] == about(322)
     for role, work in out["work"].items():
         assert t[role]["parts"]["work"] == pytest.approx(work)
     assert out["after"]["runner"] == t["runner"]

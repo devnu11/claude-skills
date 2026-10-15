@@ -10,6 +10,7 @@ import shutil
 import pytest
 
 from .. import dashboard_node
+from ..clock import about
 from .test_s102_stages_page_e2e import CSS, _contrast, _theme_vars
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
@@ -179,13 +180,13 @@ def test_idle_says_why() -> None:
     out = _run("""
     const idle = structuredClone(view); idle.heartbeat.beat = "stopped";
     out.open = openQuestions(idle).map((q) => q.id);
-    out.waiting = idlePanel(idle).line;
+    out.waitLine = idlePanel(idle).line;
     idle.messages = idle.messages.filter((m) => m.kind !== "question");
     idle.health.reason = "runner stopped"; out.reason = idlePanel(idle).line;
     idle.health.reason = ""; out.status = idlePanel(idle).line; out.runStatus = idle.run.status;
     """)
     assert out["open"], "fixture has open questions"
-    assert out["waiting"] == f"waiting on {', '.join(out['open'])}"
+    assert out["waitLine"] == f"waiting on {', '.join(out['open'])}"
     assert out["reason"] == "runner stopped"
     assert out["status"] == out["runStatus"]
 
@@ -522,7 +523,7 @@ def test_stage_awake_excludes_sleep() -> None:
     const row = {started_at: clockNow(v) - 100, started_slept: 0};
     v.heartbeat.slept = 30; out.awake = Math.round(stageAwake(v, row));
     """)
-    assert out["awake"] == 70
+    assert out["awake"] == about(70)
 
 
 def test_pill_details_first_line_has_the_rate_and_last_turn() -> None:
