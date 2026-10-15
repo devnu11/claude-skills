@@ -18,6 +18,7 @@ from .boundary import (
     Boundary,
     BoundaryHold,
     Failure,
+    RebaseFix,
     StackEntry,
     UpstreamState,
 )
@@ -268,7 +269,16 @@ def _boundary(data: dict[str, Any] | None) -> Boundary | None:
     streak = [Setback(**s) for s in data.get("streak", [])]
     hold = _known_hold(data.get("hold"))
     stage = LEGACY_STAGES.get(data.get("stage", ""), data.get("stage", "sync"))
-    return Boundary(**{**data, "failure": failure, "streak": streak, "hold": hold, "stage": stage})
+    fix = _rebase_fix(data.get("rebase_fix"))
+    loaded = {"failure": failure, "streak": streak, "hold": hold, "stage": stage}
+    return Boundary(**{**data, **loaded, "rebase_fix": fix})
+
+
+def _rebase_fix(data: dict[str, Any] | None) -> RebaseFix | None:
+    """A stored rebase fix with its conflict as a ``Failure``; ``None`` when absent."""
+    if not data:
+        return None
+    return RebaseFix(**{**data, "conflict": Failure(**data["conflict"])})
 
 
 def _without(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:

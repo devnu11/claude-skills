@@ -27,7 +27,7 @@ NO_GH = "gh is not installed"
 GH_LOGGED_OUT = "gh is not logged in"
 NO_PR_SERVICE = "no pull request service is configured"
 REFUSED_PUSH = "refusing to push {branch}: only review branches ({prefix}*) are pushed"
-REBASE_ARGV = (
+REBASE_FLAGS = (
     "-c",
     "rebase.updateRefs=false",
     "-c",
@@ -36,7 +36,11 @@ REBASE_ARGV = (
     "--no-verify",
     "--no-autostash",
     "--no-autosquash",
-    "--empty=drop",
+)
+REBASE_ARGV = (*REBASE_FLAGS, "--empty=drop")
+SCRATCH_REBASE_ARGV = (*REBASE_FLAGS, "--empty=keep")
+TEAM_MOVED = (
+    "the team branch {team} moved from {old} while DevOps resolved the rebase; nothing was reset"
 )
 STAMP_FORMAT = "%H%x1f%an%x1f%ae%x1f%ad%x1f%B%x1e"
 SYNC_LOST = (
@@ -75,11 +79,12 @@ class Rebase:
 
 @dataclass(frozen=True)
 class Spans:
-    """The commits one rebase is judged by: HEAD before it, the old tip, the target."""
+    """The commits a rebase is judged by: HEAD before it, the old tip, the target, the head."""
 
     start: str
     old: str
     target_sha: str
+    head: str = "HEAD"
 
 
 @dataclass(frozen=True)
@@ -382,6 +387,23 @@ class Upstream:
         moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
         return Rebase(SyncOutcome.REBASED, after, moved=moved)
 
+    def upstreamed(self, old: str) -> frozenset[str]:
+        """The shas of ``target..old`` whose patch is already in the target."""
+        out = self.git.run("cherry", self.target, old)
+        return frozenset(ln[2:].strip() for ln in out.splitlines() if ln.startswith("- "))
+
+    def adopt(self, old: str, sha: str) -> Rebase:
+        """Move the team branch to ``sha`` while it is still at ``old``; the moved pairs."""
+        self._refuse_moved(old)
+        target_sha = self.git.run("rev-parse", self.target).strip()
+        self.git.run("reset", "--keep", sha)
+        moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
+        return Rebase(SyncOutcome.REBASED, sha, moved=moved)
+
+    def _refuse_moved(self, old: str) -> None:
+        if self.git.head() != old:
+            raise UpstreamError(TEAM_MOVED.format(team=self.git.branch(), old=old))
+
     def listing(self, span: str) -> tuple[Stamped, ...]:
         """The commits of ``span`` (``a..b``), oldest first, with their stamps."""
         argv = ("log", "--reverse", "--topo-order", "--date=raw", f"--format={STAMP_FORMAT}")
@@ -401,18 +423,19 @@ class Upstream:
         return Rebase(SyncOutcome.CONFLICT, "", files, commit, subject, output=output)
 
     def _check_kept(self, spans: Spans) -> None:
-        lost = self._lost(spans)
+        lost = self.lost_paths(spans)
         if not lost:
             return
         self.git.run("reset", "--hard", spans.start)
         text = SYNC_LOST.format(team=self.git.branch(), target=self.target, paths=", ".join(lost))
         raise UpstreamError(text)
 
-    def _lost(self, spans: Spans) -> list[str]:
+    def lost_paths(self, spans: Spans) -> list[str]:
+        """The paths a rebase changed that only one side touched, sorted."""
         base = self.git.run("merge-base", spans.old, self.target).strip()
         upstream, team = self._names(base, self.target), self._names(base, spans.old)
-        mine = self._names(spans.old, "HEAD") - upstream
-        theirs = self._names(self.target, "HEAD") - team
+        mine = self._names(spans.old, spans.head) - upstream
+        theirs = self._names(self.target, spans.head) - team
         return sorted(mine | theirs)
 
     def _names(self, a: str, b: str) -> set[str]:

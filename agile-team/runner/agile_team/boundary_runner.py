@@ -267,34 +267,6 @@ class BoundaryRunner:
         self._emit(b, Out.PASS, note=note, behind=behind)
         self._advance(b)
 
-    def _pin_sync_from(self, b: Boundary) -> None:
-        """R2: pin the pre-rebase HEAD once and save it, so a crash cannot lose the old hashes."""
-        if b.sync_from:
-            return
-        b.sync_from = self.runtime.git.head()
-        self.runtime.save()
-
-    def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
-        data = {"files": list(result.files), "commit": result.commit[:12]}
-        self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, subject=result.subject, **data)
-
-    def _rebase_current(self, b: Boundary, result: Rebase) -> None:
-        self._emit(b, Out.CURRENT)
-        self._unpin(b)
-        self._advance(b)
-
-    def _unpin(self, b: Boundary) -> None:
-        b.sync_from = ""
-        self.runtime.save()
-
-    def _settle_rebase(self, b: Boundary, result: Rebase) -> None:
-        count = rewrite.remap_state(self.runtime.state, result.moved)
-        self.runtime.record_checkout()
-        self.runtime.save()
-        self._emit(b, Out.REBASED, sha=result.sha, rewritten=count)
-        self._unpin(b)
-        self._advance(b)
-
     def _own(self, b: Boundary) -> StackEntry | None:
         return own_entry(self.stack, b.sprint)
 

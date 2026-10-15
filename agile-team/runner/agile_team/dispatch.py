@@ -47,6 +47,7 @@ from . import (
     runner_tools,
     salvage,
     sandbox,
+    scratch_rebase,
     shares,
     stages,
     stop_checks,
@@ -139,7 +140,8 @@ RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool")
 BOUNDARY_UNGATED = frozenset({MANAGER})
-FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX})
+FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX})
+REBASE_FIX_ENV = {"GIT_EDITOR": "true"}
 BARE_KINDS = frozenset({StepKind.GATE_FIX})
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
@@ -546,7 +548,11 @@ class Runtime:
         step = fitting_step(plan.role.name, GIT_CONFINED)
         if step is None:
             return
-        plan.scope.git_workspace = system.resolve(GIT_CONFINED[step](self, plan))
+        self._confine_to(plan, GIT_CONFINED[step](self, plan))
+
+    def _confine_to(self, plan: Plan, path: Path) -> None:
+        """Confine the step's git to ``path`` and set git's ceiling (G2)."""
+        plan.scope.git_workspace = system.resolve(path)
         env = {**(plan.launch.env or self.env), **git_check.git_env(self.config.run_dir)}
         plan.launch.env = env
 
@@ -587,6 +593,14 @@ class Runtime:
         values = self.config.placeholders()
         wanted = expand_globs(list(FIX_GLOBS), values)
         plan.scope.write = [*plan.scope.write, *(g for g in wanted if not g.startswith("!"))]
+
+    def _rebase_fix_scope(self, plan: Plan) -> None:
+        """A rebase fix may write only the scratch worktree, and its git is confined there."""
+        worktree = self.config.run_dir / scratch_rebase.REBASE_DIR
+        rel = worktree.relative_to(self.config.repo).as_posix()
+        plan.scope.write = [f"{rel}/**"]
+        self._confine_to(plan, worktree)
+        plan.launch.env = {**plan.launch.env, **REBASE_FIX_ENV}
 
     def _lay_out_presentation(self, plan: Plan) -> None:
         with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
@@ -1390,6 +1404,7 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 
 FIX_SETUPS = {
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
+    StepKind.REBASE_FIX: Runtime._rebase_fix_scope,
 }
 
 

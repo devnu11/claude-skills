@@ -82,6 +82,14 @@ FIX_HEADING = (
     "Sprint {sprint} {edge} boundary: the runner's {stage} stage failed, and the sprint's "
     "stories wait until it passes. Fix it, then hand off."
 )
+FIX_NOT_DONE = "the DevOps step ended {status}"
+CHECKS_FAILED = "the full checks failed in {path}: {reason}"
+REBASE_FIX_HELD = (
+    'Sprint {sprint}\'s rebase onto {target} stopped at {commit} "{subject}" (conflicts in '
+    "{files}), and DevOps could not settle it: {reason}. DevOps's notes: {notes}. The team "
+    "branch is unchanged; DevOps's work is on the branch {branch}. The boundary holds for "
+    "the PO."
+)
 OUTPUT_BLOCK = "Output:\n```\n{output}\n```"
 PR_BODY = (
     "Sprint {sprint} of the agile team.\n\n{stories}\n\n{reverted}{supersedes}"
@@ -135,12 +143,14 @@ class StepKind(StrEnum):
     BOUNDARY = "boundary"
     TEAM_FIX = "team-fix"
     GATE_FIX = "gate-fix"
+    REBASE_FIX = "rebase-fix"
 
 
 class BoundaryHold(StrEnum):
     """Why a boundary waits for the PO."""
 
     SYNC_CONFLICT = "sync_conflict"
+    REBASE_CONFLICT = "rebase_conflict"
     ESCALATED = "escalated"
     REVIEWED = "reviewed"
     PUSH_PERMISSION = "push_permission"
@@ -179,6 +189,7 @@ class FixCase(StrEnum):
     """What failed, which decides the fix step's scope."""
 
     TEAM_CHECK = "team_check"
+    REBASE_CONFLICT = "rebase_conflict"
 
 
 class Permission(StrEnum):
@@ -225,12 +236,17 @@ STALL_HINTS = {
         "or record_ci_bug(story)"
     ),
     BoundaryHold.MAIN_BROKEN: "open a bug story for main and record it with record_ci_bug(story)",
+    BoundaryHold.REBASE_CONFLICT: (
+        "relay the conflict; continue_boundary(note) runs the rebase and DevOps again "
+        "with your note"
+    ),
     BoundaryHold.FIX_HANDOVER: (
         "answer the devops fix's handover, then continue_boundary(note) to rerun the stage"
     ),
 }
 FIX_KINDS = {
     FixCase.TEAM_CHECK: StepKind.TEAM_FIX,
+    FixCase.REBASE_CONFLICT: StepKind.REBASE_FIX,
 }
 FIX_LINES = {
     FixCase.TEAM_CHECK: (
@@ -238,6 +254,18 @@ FIX_LINES = {
         "Fix it on the team branch. In this step you may edit source, tests, e2e tests, CI and "
         "the [toolchain] and [[environment]] config. The runner commits your changes and runs "
         "the full checks again.",
+    ),
+    FixCase.REBASE_CONFLICT: (
+        'Rebasing the team branch {team} onto {target} stopped at {commit} "{subject}" with '
+        "conflicts in: {files}. The runner aborted that rebase, so {team} is unchanged.",
+        "The same rebase is stopped in the scratch worktree {worktree}, on the branch {branch}. "
+        "Resolve it there and only there (run git as `git -C {worktree} ...`): edit only the "
+        "conflicting files, keep both sides' intent, `git add` them and run `git rebase "
+        "--continue` until the rebase is done. Never merge, squash, reorder, reword, skip or "
+        "drop a commit; keep a commit that became empty with `git commit --allow-empty -C "
+        "REBASE_HEAD`. Run named tests in {worktree}. The runner then checks the result, runs "
+        "the full checks in {worktree} and moves {team} to {branch} only if they pass. If you "
+        "cannot resolve it, hand off failed with notes the human can act on.",
     ),
 }
 
@@ -253,9 +281,19 @@ class Failure:
     files: list[str] = field(default_factory=list)
     commit: str = ""
     subject: str = ""
+    worktree: str = ""
 
     def __post_init__(self) -> None:
         self.stage, self.case = Stage(self.stage), FixCase(self.case)
+
+
+@dataclass
+class RebaseFix:
+    """DevOps's answer to a sprint-end rebase conflict, waiting for the rebase stage."""
+
+    conflict: Failure  # the REBASE_CONFLICT failure the step was given
+    status: str  # the DevOps handoff's status
+    notes: str  # the DevOps handoff's summary
 
 
 @dataclass
@@ -272,6 +310,7 @@ class Boundary:
     escalated: str | None = None
     note: str = ""
     sync_from: str = ""
+    rebase_fix: RebaseFix | None = None
 
     def __post_init__(self) -> None:
         self.edge, self.stage = Edge(self.edge), Stage(self.stage)
@@ -381,6 +420,7 @@ def _failure_values(failure: Failure) -> dict[str, str]:
         "branch": failure.branch,
         "commit": failure.commit,
         "subject": failure.subject,
+        "worktree": failure.worktree,
         "files": ", ".join(failure.files),
     }
 
