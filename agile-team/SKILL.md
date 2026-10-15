@@ -56,7 +56,11 @@ command fails.
    for this repo (stubs were just created) and, for every repo,
    `~/.config/agile-team/roles/` (offer `$AT roles scaffold --global`).
    `_shared.md` applies to every role and `_leadership.md` to the PO, the
-   Manager and you; `$AT roles list` shows what is active. For a repo
+   Manager and you; `$AT roles list` shows what is active.
+   Every role also reads the repo's own `.claude/CLAUDE.md`, as text and
+   before the charter. Only imports inside the repo are inlined, and no
+   settings or hooks come with it. Their home `~/.claude/CLAUDE.md` never
+   reaches the team. For a repo
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
    run until a blocker (`until-blocker`)? Under `until-blocker`, a sprint end

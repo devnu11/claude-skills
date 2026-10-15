@@ -1074,10 +1074,32 @@ Two layers of human-written role files sit on top of the built-ins:
 Global files can live in a dotfiles repo; the runner only reads them.
 
 System prompt order: `_shared` (+ `_shared` addenda) → for each role in the
-chain, root first: its body, then its global and repo addenda →
-`.team/CLAUDE.md` → file scope. Nothing else is added: a `.team/briefs/`
+chain, root first: its body, then its global and repo addenda → repo
+instructions (`.claude/CLAUDE.md`) → `.team/CLAUDE.md` → file scope. Nothing else is added: a `.team/briefs/`
 directory, if one is left over, is never read (s114). Each step's own brief is
 the message the runner or the PO sends.
+
+**Repo instructions (s142).** Every role, the PO included, gets the repo's
+own `.claude/CLAUDE.md` under `## Repo instructions`, right before the
+`## Repo charter`. So a rule the human writes there once reaches the whole
+team, and the charter holds only what is about the team. The runner reads the
+file's text itself:
+
+- An `@path` import (at the start of a line or after a space, outside
+  backtick code) is resolved relative to the file that holds it. When it
+  resolves to a file inside the repo, its text, with its own imports handled
+  the same way, replaces the import. Each file is inlined at most once per
+  prompt. A repeat or a cycle becomes
+  `(left out: @<path> is already included above)`.
+- A `~` path, or a path that resolves outside the repo, becomes
+  `(left out: @<path> points outside the repo)`. `~` is never expanded. A
+  token that is not a file (`@someone`) stays as it is.
+- A missing file adds no section. Only `.claude/CLAUDE.md` is read. A root
+  `CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules/` are not.
+- Only the text is loaded. Role sessions keep `setting_sources=[]`, so
+  `.claude/settings.json`, its hooks and its permissions never reach a role.
+  The home `~/.claude/CLAUDE.md` is never read. To share a home rule with the
+  team, put it in the repo file.
 
 **Retired roles (s114).** The Scribe is gone. A `[roles.scribe]` section in
 `.agile-team.toml`, or a global or repo `scribe.md` with frontmatter or with

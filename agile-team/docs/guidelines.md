@@ -1,7 +1,9 @@
 # agile-team runner: implementation guidelines
 
-These rules apply to every change in `agile-team/runner/`. The repo charter
-(`.team/CLAUDE.md`) is the source of truth; this file adds how to apply it.
+These rules apply to every change in `agile-team/runner/`. The repo
+instructions (`.claude/CLAUDE.md`) and the team charter (`.team/CLAUDE.md`),
+both in every role's prompt, are the source of truth. This file adds how to
+apply them.
 
 ## Shape of code
 
