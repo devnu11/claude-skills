@@ -355,10 +355,10 @@ def _boundary_fields(report: dict) -> dict[str, str]:
     fields["file_count"] = str(len(files))
     fields["file_groups"] = group_files(files)
     fields["branches"] = ", ".join(boundary.get("branches") or [])
-    return {**fields, **_known_fields(boundary)}
+    return {**fields, **_build_known_fields(boundary)}
 
 
-def _known_fields(boundary: dict) -> dict[str, str]:
+def _build_known_fields(boundary: dict) -> dict[str, str]:
     known = boundary.get("known_failures") or []
     return {"known": ", ".join(known), "known_count": str(len(known))}
 
