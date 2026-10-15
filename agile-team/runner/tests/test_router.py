@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from agile_team import cli, po_tools, router, system
+from agile_team import cli, po_tools, router, sprint_end, system
 from agile_team import state as state_mod
 from agile_team.gates import PreviousStep, StoryState, StoryStatus
 from agile_team.handover import Trigger as T
@@ -339,8 +339,8 @@ def test_stalled_explains_each_unfinished_story(make_runtime, fields, line) -> N
     add_story(rt, "s1", "implement", **fields)
     add_story(rt, "s2", status=StoryStatus.DONE)
     p = advance(rt)
-    assert p.kinds == [T.STALLED]
-    assert p.lines == ["Nothing in sprint 1 can move.", line]
+    assert p.kinds == [T.SPRINT_BACKLOG_STUCK]  # s156 S2 rule 3: stuck, not stalled
+    assert p.lines[1] == line and line in p.lines
     assert p.stories == ["s1"]
 
 
@@ -548,7 +548,8 @@ def test_the_third_bounce_hands_over_the_round_cap(make_runtime) -> None:
     events = handover_events(rt)
     assert events[0].data == {"triggers": ["round_cap"], "stories": ["s1"], "steps": 3}
     assert "s1: hit the round cap; run the manager on it for a ruling" in script.po_prompts[1]
-    assert len(script.po_prompts) == 2  # then stalled and quiet after the PO
+    # the stuck hand-over is not quiet: 2 prompts, then SPRINT_STUCK_CAP stuck hand-overs
+    assert len(script.po_prompts) == 2 + sprint_end.SPRINT_STUCK_CAP
 
 
 def test_an_unroutable_bounce_hands_over(make_runtime) -> None:
@@ -592,8 +593,8 @@ def test_the_router_skips_a_held_story_and_runs_the_others(make_runtime) -> None
     add_story(rt, "s2")
     p = advance(rt)
     assert step_roles(rt) == ["architect"]
-    assert p.kinds == [T.STALLED]
-    assert p.lines[-1] == "s1 at design: held (stopped)"
+    assert p.kinds == [T.SPRINT_BACKLOG_STUCK]
+    assert "s1 at design: held (stopped)" in p.lines
     assert p.steps == 1
 
 

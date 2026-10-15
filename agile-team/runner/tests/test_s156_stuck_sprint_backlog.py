@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from agile_team import gates, handover, po_tools, reverts, router, runner_tools, sprint_end
+from agile_team import gates, handover, po_tools, reverts, router, runner_tools, sprint_end, system
 from agile_team.gates import StoryState, StoryStatus
 from agile_team.handover import HANDOVERS, Trigger
 from agile_team.holds import HoldKind, PoHold
@@ -341,7 +341,7 @@ def test_ac5_nothing_suggests_add_to_sprint_for_a_stuck_sprint_backlog(make_runt
     assert not any("add_to_sprint" in line for line in Router(rt)._idle().lines)
     lines = [line for rule in HANDOVERS for line in vars(rule).values() if isinstance(line, str)]
     assert not [x for x in lines if "add_to_sprint" in x and "stuck" in x.lower()]
-    role = ROLE.read_text()
+    role = system.read_text(ROLE)
     assert "add_to_sprint" not in section(role, "\n## Cadence")
     assert not [x for x in role.splitlines() if "stuck" in x.lower() and "add_to_sprint" in x]
     assert "Sprint Backlog stuck" in role
