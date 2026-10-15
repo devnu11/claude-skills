@@ -111,10 +111,19 @@ def write_marker(run_dir: Path, marker: Marker) -> None:
     system.write_text(run_dir / MARKER_FILE, json.dumps(marker.data()))
 
 
-def start_argv(repo: Path, home: str | None) -> tuple[str, ...]:
-    """P5: the arguments the next process starts with; the cadence is kept by the state."""
-    base = ("start", "--resume", "--repo", str(repo))
+START_COMMAND: tuple[str, ...] = ("start", "--resume")
+CHECK_COMMAND: tuple[str, ...] = ("config", "check")
+
+
+def global_argv(repo: Path, home: str | None) -> tuple[str, ...]:
+    """The CLI's global options for this run; they go before the subcommand."""
+    base = ("--repo", str(repo))
     return (*base, "--home", home) if home else base
+
+
+def start_argv(options: tuple[str, ...]) -> tuple[str, ...]:
+    """P5: the arguments the next process starts with; the cadence is kept by the state."""
+    return (*options, *START_COMMAND)
 
 
 def drop_unpinned(runtime: Runtime) -> None:
@@ -169,8 +178,8 @@ def _check_argv(pin: Pin, _marker: Marker) -> tuple[str, ...]:
     if uv is None:
         raise _StepFailed("uv is not on PATH")
     project = str(pin.run_dir / PIN_DIR)
-    return (uv, "run", "--frozen", "--quiet", "--project", project, "agile-team", "config",
-            "check", "--repo", str(pin.repo))  # fmt: skip
+    return (uv, "run", "--frozen", "--quiet", "--project", project, "agile-team",
+            *pin.options, *CHECK_COMMAND)  # fmt: skip
 
 
 TRIALS: tuple[Trial, ...] = (
@@ -200,7 +209,7 @@ class Pin:
     """The repo's pinned runner: pin it, check it, exec it, or roll it back."""
 
     repo: Path
-    argv: tuple[str, ...]
+    options: tuple[str, ...]
 
     @property
     def run_dir(self) -> Path:
@@ -238,4 +247,4 @@ class Pin:
 
     def exec(self) -> NoReturn:
         """P5: replace this process with the pin's ``start --resume``."""
-        system.exec_replace((str(self.run_dir / PIN_DIR / PIN_EXE), *self.argv))
+        system.exec_replace((str(self.run_dir / PIN_DIR / PIN_EXE), *start_argv(self.options)))

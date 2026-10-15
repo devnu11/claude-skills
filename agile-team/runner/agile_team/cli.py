@@ -415,7 +415,7 @@ def start_from(args: argparse.Namespace) -> Start:
 def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     """Preflight, then run the Product Owner loop in the foreground."""
     place, start = Place.of(args), start_from(args)
-    pin = repin.Pin(place.repo, repin.start_argv(place.repo, args.home))
+    pin = repin.Pin(place.repo, repin.global_argv(place.repo, args.home))
     try:
         runtime = _prepared(args, place, start, query_fn)
     except Exception as exc:
