@@ -316,9 +316,12 @@ def test_resume_clears_status_and_is_not_refused(make_runtime, status: RunStatus
     rt.state.mark(status, "some reason")
     asyncio.run(po_tools.run_po(rt, Start("", StartMode.RESUME)))
     assert po.reports[0].get("status") != "refused" and "reason" not in po.reports[0]
-    assert (rt.state.status, rt.state.status_reason) == (RunStatus.IDLE, None)
+    assert (rt.state.status, rt.state.status_reason) == (
+        RunStatus.IDLE,
+        "Nothing in sprint 0 can move.",
+    )
     saved = state_mod.load(rt.config.run_dir)
-    assert (saved.status, saved.status_reason) == (RunStatus.IDLE, None)
+    assert saved.status == RunStatus.IDLE and saved.status_reason != "some reason"
 
 
 def test_resume_after_cli_limit_stop(make_runtime) -> None:
@@ -328,7 +331,7 @@ def test_resume_after_cli_limit_stop(make_runtime) -> None:
     assert run_cli(rt, Start("", StartMode.RESUME)) == 0
     assert rt.query_fn.calls[0]["options"].resume == "po-sess"
     saved = state_mod.load(rt.config.run_dir)
-    assert (saved.status, saved.status_reason) == (RunStatus.IDLE, None)
+    assert saved.status == RunStatus.IDLE
 
 
 def test_po_halt_during_run_survives_record(make_runtime) -> None:

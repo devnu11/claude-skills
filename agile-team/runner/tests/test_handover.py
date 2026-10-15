@@ -27,6 +27,7 @@ def test_trigger_values_are_snake_case() -> None:
         "unroutable",
         "human_message",
         "sprint_end",
+        "next_sprint",
         "stalled",
         "ready_backlog",
         "ruling_not_applied",
