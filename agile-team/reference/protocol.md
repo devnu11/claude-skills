@@ -21,12 +21,13 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"), `queued_picks` (ids of picks the runner has not settled yet, e.g. `["p1"]`) and `picks` (each settled pick id → `applied <sha12>`, `refused: <why>`, `conflict: <files>` or `failed: <why>`; see "Picks from main (mid-sprint)"). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `share SOURCE --story ID` | The liaison shares a file (a mock, a spec) with the team for story `ID` (s120). Queues `.team/run/liaison/shares/f<N>.json` (the name, the bytes and their SHA-256) and prints `queued f<N>: <docs>/design/<ID>-<name> (sha256 <12 hex>); the runner commits it between steps`. Writes nothing else. Works in any run state, and a stopped run applies it on the next `start`. Checked in order, first refusal wins and nothing is written (exit 1): a bad id or no `.team/stories/<ID>.md` (`no story 's9'…`), a name that is not letters, digits, `.`, `_`, `-` (≤ 100, no stdin), an unreadable file, an empty file, a file over 5 MiB. See "Shared files". |
+| `pick COMMIT --reason TEXT` | The human or the liaison brings one commit from main onto the team branch mid-sprint (s141). The command fetches `<remote>`, checks the ask, and queues `.team/run/picks/p<N>.json` (the full sha, the reason, `origin: liaison`). It prints `queued p<N>: <sha12> "<subject>" from <remote>/<branch>; the runner picks it at the next safe point and tells the PO`. It never changes the tree or a branch, works in any run state, and a stopped run applies the pick on the next `start`. It is checked in order, the first refusal wins, and nothing is queued (exit 1): a blank reason, no upstream (sync off, no remote, fetch failed, no `<remote>/<branch>`), not a commit, not on `<remote>/<branch>`, a merge or root commit, a commit already on the team branch or whose change is. See "Picks from main (mid-sprint)". |
 | `story new FILE --approved-by human\|none [--sprint current\|next\|backlog] [--after ID] [--plan PATH]` | The liaison writes a story (s135). `FILE` is a Markdown draft: frontmatter `title`, `acceptance: [{id, text, environment}]`, optional `depends_on` and other keys (kept as written), no `id` or `shared`, and the user story as the body. Every check runs and every problem is printed, one line each (exit 1, nothing queued). A clean draft is queued as `.team/run/liaison/stories/q<N>.json` and the command prints `queued q<N>: new story "<title>" (<approved>); the runner gives it an id and commits it between steps`. `--sprint` defaults to `backlog`; `--plan` needs `--approved-by human`. Never writes `.team/stories/` or calls git; works in any run state. See "Stories from the liaison". |
 | `story amend ID FILE --approved-by human\|none [--plan PATH]` | The liaison replaces open story `ID`'s ACs (s135). The draft is checked as for `new`, and its `title` and `depends_on` must equal the story's (only the ACs change) and its ACs must differ. Queues `q<N>.json` and prints `queued q<N>: new ACs for <ID> (<approved>); the runner commits them between steps and sends <ID> back to design; the draft's body is not used`. `--sprint` and `--after` are refused. See "Stories from the liaison". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
@@ -2065,6 +2066,7 @@ The pass ends at the first step whose report matches a row of the
 | `ci_infra` | a CI job ran no step, and still ran none after the runner's one re-run. The PR is NOT ready. The PO tells the human; `continue_boundary` reads the checks again once they re-ran it, or `record_ci_bug` records a story that changes the CI job; see the CI rule under **Ready.** |
 | `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO asks the liaison for a bug story for main (`request_story`) and records it with `record_ci_bug` once the runner has opened it: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
 | `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again; see the CI rule under **Ready.** |
+| `main_pick` | the runner settled one or more picks from main (s141). There is one line per pick: picked as `<sha12>` (plan around it, as there is nothing to approve), not picked with the refusal, a conflict naming the files (nothing changed), or a failure. The PO is told after, never asked first; see "Picks from main (mid-sprint)". |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
@@ -2899,7 +2901,8 @@ Manager):
    the next sprint end`. It **changes nothing** (s108): no rebase, reset,
    merge or checkout, no hash rewritten, no stack entry dropped, pushed or
    retargeted, and no `gh` call. A moved main, or a PR merged mid-sprint,
-   waits for the next sprint end (or a pull the human makes by hand).
+   waits for the next sprint end. One commit the team needs sooner comes
+   in as a pick (see "Picks from main (mid-sprint)" below).
 2. **check**: the full checks on the team branch (skipped when HEAD is the
    sha that last passed them). The start boundary then finishes; review,
    push, rebase, restack and ci run only at a sprint end.
@@ -3155,6 +3158,66 @@ emptied entry dropped). `pushed` is still read from old `events.jsonl`
 lines but no longer logged. Stage names in `runner-stage` events:
 `boundary.sync`, `boundary.check`, `boundary.review`, `boundary.push`,
 `boundary.rebase`, `boundary.restack`, `boundary.ci-wait`.
+
+### Picks from main (mid-sprint) (s141)
+
+Mid-sprint, main reaches the team branch **only** by picks. The start sync
+changes nothing, and nothing else merges or rebases main in between
+boundaries. A pick brings exactly one commit that is already on
+`<remote>/<branch>` onto the team branch, for example a fix or a charter rule
+the team needs now. It is never a way to bring in whole sprints of work.
+
+- **Asking.** The human or the liaison runs `agile-team pick <commit>
+  --reason "<text>"`. The PO, for a need the team finds itself, calls
+  `pick_from_main(commit, reason)`. Both fetch `<remote>`, run the checks
+  below, and queue `.team/run/picks/p<N>.json` (`{commit, reason, origin,
+  at}`, with the full sha and `origin` `liaison` or `product-owner`). The
+  PO can't veto, reorder or cancel a queued pick.
+- **Checks**, in order. The first refusal wins and nothing changes:
+  1. a blank reason (`a reason is required: say why the team needs this commit now`);
+  2. no upstream (`cannot pick from main: <why>`: sync off, no remote,
+     fetch failed, no `<remote>/<branch>`);
+  3. not a commit (`'<commit>' is not a commit here (after fetching <remote>)`);
+  4. not on main (`<sha12> is not on <remote>/<branch>; only a commit on <remote>/<branch> can be picked`);
+  5. a merge commit (`<sha12> is a merge commit; pick the commits it brought in, one at a time`)
+     or a root commit (`<sha12> has no parent; it can't be picked`);
+  6. already on the team branch: an ancestor of HEAD (`<sha12> is already on the team branch`),
+     or the same change is there (`<sha12>'s change is already on the team branch`).
+- **Applying.** At each router tick, after the story intake and before
+  anything is handed to the PO, the runner settles the pending picks in
+  number order. It never does this while a sprint boundary is open. For each
+  pick it runs the checks again with a fresh fetch. On a dirty tree it
+  gives up with `failed: the working tree has changes (…); nothing was
+  picked`. Otherwise it runs `git -c core.hooksPath=/dev/null cherry-pick -x
+  <sha>`. That makes one new commit on top of the team branch, with main's
+  message and author plus `(cherry picked from commit <sha>)`, and with no
+  `Co-Authored-By` trailer. No existing hash changes. The runner records the
+  new HEAD for the checkout guard.
+  - On a **conflict**, the runner runs `git cherry-pick --abort`. The branch
+    stays where it was, and the outcome is `conflict` with the files.
+  - A pick that comes out **empty** is aborted and refused as `<sha12>'s
+    change is already on the team branch`.
+  - On **any other failure**, the pick is aborted and the outcome is
+    `failed`.
+
+  After any outcome but `applied`, a HEAD that moved anyway is reset to where
+  it was.
+- **Records.** `state.json` `picks` maps each request id to
+  `applied <sha12>`, `refused: <why>`, `conflict: <files>` or `failed:
+  <why>` (`status` shows it with `queued_picks`). Each pick logs one
+  `main-pick` event (role = its origin; `request`, `origin`, `commit`,
+  `reason`, `outcome`, `sha` (the new commit, or null), `files`, `why`). The
+  liaison gets a note in the outbox. The PO gets the `main_pick` hand-over
+  after the pick, with one line per pick, so it can plan around it. A pick
+  is never put to the PO first. A pick the human or the liaison queued is
+  applied with no PO turn in between.
+- **The sprint end drops it.** At the END boundary's **rebase**, git drops
+  the picked commit, because main already has its patch (or it comes out
+  empty, `--empty=drop`). The hash pairing maps it to the last kept copy
+  before it. The **review** stage leaves it out too: only commits whose patch
+  is not in main are picked, and an empty pick is skipped. So main never gets
+  the change twice. A pick that conflicted reaches the team at that same
+  rebase.
 
 ### Self re-pin (s128)
 

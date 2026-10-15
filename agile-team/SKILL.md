@@ -269,7 +269,24 @@ command fails.
    only** (s108). At each sprint start the runner fetches, reports how
    far `origin/main` moved since the last sprint-end rebase, and runs the
    full checks. It changes nothing: no rebase, no push, no PR edit. A
-   merge made mid-sprint waits for the next sprint end. At each sprint
+   merge made mid-sprint waits for the next sprint end, unless it is
+   picked (below). **Picks from main** (s141): mid-sprint, main reaches
+   the team branch only by picks. When the human needs one commit that is
+   already on main to reach the team now (a test fix, a charter rule), run
+   `$AT pick <commit> --reason "<why>"`. It fetches, checks the ask, and
+   queues it, or refuses it with the reason and queues nothing: a blank
+   reason, no upstream, not a commit, not on `origin/main`, a merge or root
+   commit, or a change already on the team branch. Between steps (never
+   during a boundary) the runner checks it again and runs `git cherry-pick
+   -x` as one commit on top of the team branch. No hash is rewritten. It
+   logs a `main-pick` event, sends you an `update`, and then tells the PO
+   (`main_pick`). The PO is never asked first and can't veto it. A conflict
+   is aborted with the branch unchanged, and the update names the files.
+   `$AT status` lists `queued_picks` and each outcome under `picks`. The
+   PO can pick too (`pick_from_main`) for a need the team finds itself.
+   Picks are for single fixes, never whole sprints of work. The sprint-end
+   rebase drops the picked commit because main already has it, and the
+   review branches leave it out. At each sprint
    end, in order, it builds and checks the sprint's review branch
    (`team/sprint-<N>`, in `.team/run/review/`) and pushes it. Then it
    rebases the team branch onto `origin/main` (never a merge) and
