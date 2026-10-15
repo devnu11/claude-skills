@@ -34,7 +34,7 @@ FINDINGS: dict[Source, tuple[re.Pattern[str], ...]] = {
     ),
     Source.LINT: (
         # ruff concise, flake8, mypy, eslint unix: path:line[:col]: message
-        re.compile(r"^(?P<path>[^\s:]+\.\w+):\d+(?::\d+)?: .*$", re.M),
+        re.compile(r"^(?P<path>[^\s:]+\.\w+):\d+(?::\d+)?: (?!warn(?:ing)?\b).*$", re.M | re.I),
         # ruff full (default since 0.9): "CODE message" then " --> path:line:col"
         re.compile(r"^\S.*\n\s*--> (?P<path>[^\s:]+\.\w+):\d+:\d+\s*$", re.M),
         # ruff format --check
