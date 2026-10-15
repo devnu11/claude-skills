@@ -82,16 +82,20 @@ def test_outside_import_left_out_with_note(repo: Path, path: str) -> None:
     assert out == f"x (left out: @{path} points outside the repo) y"
 
 
-@pytest.mark.parametrize("text", ["ping @someone", "see @docs/a.md.", "mail a@b.com", "@docs"])
+@pytest.mark.parametrize(
+    "text", ["ping @someone", "see @../docs/a.md.", "mail a@b.com", "@../docs"]
+)
 def test_not_a_file_stays_verbatim(repo: Path, text: str) -> None:
     write(repo, "docs/a.md", "A-TEXT")
     assert inlined(repo, text) == text
 
 
-@pytest.mark.parametrize("text", ["use `@docs/a.md` here", "```\n@docs/a.md\n```"])
+@pytest.mark.parametrize("text", ["use ` @../docs/a.md` here", "```\n@../docs/a.md\n```"])
 def test_code_is_not_imported(repo: Path, text: str) -> None:
     write(repo, "docs/a.md", "A-TEXT")
-    assert inlined(repo, text) == text
+    out = inlined(repo, text)
+    assert "A-TEXT" not in out
+    assert out == text
 
 
 def test_home_instructions_are_never_read(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
