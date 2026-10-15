@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from agile_team import instructions, system
+from agile_team import cli, instructions, system
 from agile_team.roles import RoleBook
 
 from .conftest import FakeQuery
@@ -12,6 +12,9 @@ from .test_dispatch import run
 from .test_roles import BUILTIN
 
 HEADING = "## Repo instructions"
+BINARY = b"\x89PNG\r\n\x1a\n\xff\xfe"
+LOGO_NOTE = "(left out: @../docs/logo.png is not UTF-8 text)"
+PROTOCOL = Path(cli.__file__).parents[2] / "reference" / "protocol.md"
 REPEAT = "(left out: @../docs/a.md is already included above)"
 
 
@@ -121,3 +124,60 @@ def test_no_settings_are_loaded(make_runtime, repo: Path) -> None:
     opts = q.calls[0]["options"]
     assert opts.setting_sources == []
     assert "INSTR" in opts.system_prompt and "HOOK-CMD" not in opts.system_prompt
+
+
+def write_logo(repo: Path) -> None:
+    system.make_dirs(repo / "docs")
+    system.write_bytes(repo / "docs/logo.png", BINARY)
+
+
+def test_binary_import_left_out_with_note(repo: Path) -> None:
+    write_logo(repo)
+    assert inlined(repo, "a @../docs/logo.png b") == f"a {LOGO_NOTE} b"
+
+
+def test_other_text_still_loads_beside_a_binary_import(repo: Path) -> None:
+    write_logo(repo)
+    write(repo, "docs/a.md", "A-TEXT")
+    out = inlined(repo, "@../docs/logo.png\n@../docs/a.md\nTAIL")
+    assert LOGO_NOTE in out and "A-TEXT" in out and "TAIL" in out
+
+
+def test_binary_import_is_never_marked_seen(repo: Path) -> None:
+    write_logo(repo)
+    out = inlined(repo, "@../docs/logo.png\n@../docs/logo.png")
+    assert out.count(LOGO_NOTE) == 2
+    assert "already included above" not in out
+
+
+def test_binary_import_inside_an_imported_file(repo: Path) -> None:
+    write(repo, "docs/a.md", "A-TEXT @logo.png")
+    system.write_bytes(repo / "docs/logo.png", BINARY)
+    out = inlined(repo, "@../docs/a.md")
+    assert "A-TEXT (left out: @logo.png is not UTF-8 text)" in out
+
+
+def test_non_ascii_utf8_import_is_inlined_exactly(repo: Path) -> None:
+    write(repo, "docs/a.md", "café ✓")
+    assert inlined(repo, "@../docs/a.md") == "café ✓"
+
+
+def test_step_prompt_is_built_with_a_binary_import(make_runtime, repo: Path) -> None:
+    write_logo(repo)
+    write(repo, ".claude/CLAUDE.md", "INSTR @../docs/logo.png")
+    q = FakeQuery()
+    run(make_runtime(q), "architect")
+    prompt = q.calls[0]["options"].system_prompt
+    assert "INSTR" in prompt and LOGO_NOTE in prompt
+
+
+def test_binary_root_instructions_still_raise(repo: Path) -> None:
+    system.make_dirs(repo / ".claude")
+    system.write_bytes(repo / ".claude/CLAUDE.md", BINARY)
+    with pytest.raises(UnicodeDecodeError):
+        instructions.repo_instructions(repo)
+
+
+def test_protocol_documents_the_utf8_note() -> None:
+    text = " ".join(system.read_text(PROTOCOL).split())
+    assert "(left out: @<path> is not UTF-8 text)" in text
