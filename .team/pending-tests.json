@@ -175,5 +175,13 @@
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac3_a_run_without_a_report_has_no_failures",
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac3_section_lists_failures_after_the_fence",
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac2_refuse_marked_does_nothing_for_an_unmarked_item"
+  ],
+  "s10": [
+    "agile-team/runner/tests/test_reconcile.py",
+    "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.3-s-1.5-0.2]",
+    "agile-team/runner/tests/test_po_cost.py::test_session_cost_defaults",
+    "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.3-u-0.9-0.9]",
+    "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.8-s-1.5-0.0]",
+    "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.3-s-0.2-0.2]"
   ]
 }
