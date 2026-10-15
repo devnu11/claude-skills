@@ -24,7 +24,8 @@ works today.
 - No new runtime dependencies without an ADR. The dashboard uses the stdlib
   only (http.server, SSE).
 - Docs move in the same story as the code.
-- The test suite points `AGILE_TEAM_HOME` at a scratch dir.
+- Never touch the real home directory in tests; the test suite points
+  `AGILE_TEAM_HOME` at a scratch dir.
 
 ## Domain vocabulary
 
