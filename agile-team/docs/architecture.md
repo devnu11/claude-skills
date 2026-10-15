@@ -1071,13 +1071,13 @@ H15: a halt saves the cut-off edits in a reverted commit.
 - **s9, status for a dead run.** Derive `interrupted` in `status_report`
   from `running` plus a missing or dead pid. With s8, a handled stop never
   leaves `running` behind. Only `kill -9` or a power loss does.
-- **s10, PO spend.** `PoRun._collect` is the PO's except-and-re-raise seam.
-  Widen it to `BaseException` and ledger the spend there. Sources: the
-  `ResultMessage(is_error=True)` that the SDK yields **before** raising, or
-  `ResultError.data["total_cost_usd"]` / `["usage"]`. For a role step, do
-  the same in `_step_failed`. `collect` must keep the last `ResultMessage` it
-  saw even when the iteration raises (for example, accumulate into an object
-  owned by the caller).
+- **s10, PO spend.** Shipped differently from the seam first sketched here
+  (ledgering in `PoRun._collect` on the way out). A hard crash never reaches
+  an except clause, so s10 reconciles at the next start instead:
+  `reconcile.reconcile_ledger` turns each `(role, story)`'s `turns.jsonl`
+  lines after its latest ledger row into one estimated row, called in
+  `cli._prepared` before `make_runtime`. See [design/s10.md](design/s10.md)
+  and ADR-0078.
 
 ### Known limits
 
