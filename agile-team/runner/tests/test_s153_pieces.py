@@ -118,7 +118,7 @@ def test_s153_the_texts_format_with_their_fields() -> None:
 def test_s153_dispatch_has_the_rebase_fix_scope_table_entries() -> None:
     assert frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX}) == dispatch.FIX_KINDS_SET
     assert dispatch.REBASE_FIX_ENV == {"GIT_EDITOR": "true"}
-    assert dispatch.FIX_SETUPS[StepKind.REBASE_FIX] == dispatch.Runtime._rebase_fix_scope
+    assert dispatch.FIX_SETUPS[StepKind.REBASE_FIX] == dispatch.Runtime._set_rebase_fix_scope
 
 
 @pytest.fixture
@@ -130,7 +130,7 @@ def test_s153_the_rebase_fix_scope_confines_writes_and_git_to_the_worktree(env: 
     rt = env.rt
     role = roles.RoleBook.for_repo(Path("."), {}).resolve("devops")
     plan = dispatch.Plan(role, guard.Scope("devops", rt.config.repo, ["**"], []), prompt="x")
-    rt._rebase_fix_scope(plan)
+    rt._set_rebase_fix_scope(plan)
     worktree = rt.config.run_dir / sr.REBASE_DIR
     rel = worktree.relative_to(rt.config.repo).as_posix()
     assert plan.scope.write == [f"{rel}/**"]
