@@ -13,7 +13,8 @@ from .test_fullcheck import config_with
 
 DESCRIPTION = (
     "Lint, static analysis, the full suite with coverage, once, "
-    "and each environment's e2e, on the team branch"
+    "and each environment's e2e, on the team branch; "
+    "at a sprint start a failure is recorded as known failures and holds nothing"
 )
 SHORT = "TOTAL 1000 200 80%\nFAIL Required test coverage of 95% not reached\n200 passed"
 PROTOCOL = Path(cli.__file__).parents[2] / "reference" / "protocol.md"

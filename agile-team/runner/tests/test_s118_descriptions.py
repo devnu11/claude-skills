@@ -21,7 +21,7 @@ R12 = {
     "gate.dispute-output": "The full suite, to show a disputed test's output",
     "gate.route-lint": "Lint and static analysis of the whole repo, to route a failed gate's items to their owners",  # noqa: E501
     "gate.green": "The full suite must pass before the PO passes a story stuck at tests",
-    "boundary.check": "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch",  # noqa: E501
+    "boundary.check": "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch; at a sprint start a failure is recorded as known failures and holds nothing",  # noqa: E501
     "runner-tool.run_tests": "Only the tests a developer named, run for that developer",
     "runner-tool.run_new_tests": "Only the story's new test files, run for a developer",
 }
