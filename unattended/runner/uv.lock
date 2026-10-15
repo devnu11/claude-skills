@@ -910,6 +910,7 @@ name = "unattended"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "claude-agent-sdk" },
 ]
 
@@ -921,7 +922,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "claude-agent-sdk", specifier = ">=0.2.163" }]
+requires-dist = [
+    { name = "anyio", specifier = ">=4.0" },
+    { name = "claude-agent-sdk", specifier = ">=0.2.163" },
+]
 
 [package.metadata.requires-dev]
 dev = [

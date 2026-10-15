@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
@@ -15,7 +17,7 @@ from claude_agent_sdk import (
 )
 from unattended import prompt_job
 from unattended.auth import ENV_VAR
-from unattended.limits import Metrics, Outcome, OutcomeKind
+from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
 from unattended.prompt_job import PromptJob
 from unattended.store import DEFAULT_RESUME_PROMPT, OUTPUT_FILE, Job, JobKind, Spec
 from unattended.watch import RunWatch
@@ -186,3 +188,56 @@ def test_budget_error_becomes_budget(job: Job) -> None:
     outcome = PromptJob(job, {}, FakeQuery([init()], error)).run_once(RunWatch(job))
     assert outcome.kind is OutcomeKind.BUDGET
     assert job.load().session_id == "s1"
+
+
+# ----- watched runs ----------------------------------------------------------------------
+
+
+class Hanging:
+    """Yields ``messages`` ``pause`` s apart, then waits forever; records its cleanup.
+
+    With ``pause`` set it ends after the last message instead of waiting.
+    """
+
+    def __init__(self, *messages: Any, pause: float | None = None) -> None:
+        self.messages, self.pause, self.closed = messages, pause, False
+
+    async def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
+        try:
+            for message in self.messages:
+                await anyio.sleep(self.pause or 0)
+                yield message
+            if self.pause is None:
+                await anyio.sleep_forever()
+        finally:
+            self.closed = True
+
+
+def hard_stopped(job: Job) -> RunWatch:
+    """A watch past its deadline and hard stop, checking every 10 ms."""
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=1000.0, hardstop=0.0)))
+    return RunWatch(job, time.time, 0.01)
+
+
+def test_the_hard_stop_cancels_the_query(job: Job) -> None:
+    fake = Hanging(init("kept"), said("working", "kept"))
+    watch = hard_stopped(job)
+    outcome = watch.settle(PromptJob(job, {}, fake).run_once(watch))
+    assert outcome == Outcome(OutcomeKind.HALTED, "deadline (hard stop after 0s)")
+    assert fake.closed
+    assert job.load().session_id == "kept"
+    assert job.path(OUTPUT_FILE).read_text() == "working\n"
+
+
+def test_a_soft_deadline_lets_the_query_finish(job: Job) -> None:
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=1000.0)))
+    watch = RunWatch(job, time.time, 0.01)
+    fake = Hanging(init(), result(), pause=0.05)
+    assert PromptJob(job, {}, fake).run_once(watch).kind is OutcomeKind.DONE
+    assert watch.halt is None
+
+
+def test_each_message_stamps_spend_progress(job: Job) -> None:
+    watch = RunWatch(job)
+    PromptJob(job, {}, FakeQuery([init(), said("a"), result()])).run_once(watch)
+    assert watch.spend.count == 3
