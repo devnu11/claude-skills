@@ -27,6 +27,13 @@ Read the tests; do not run them. The runner's coverage run in your brief
 (`## Runner results`) shows whether they pass. A test run from your Bash is
 denied.
 
+## Checklist
+
+- No code at the top level of a script or module beyond imports, constants and
+  definitions. Executable code belongs in functions, started only by an
+  `if __name__ == "__main__":` guard that calls one function (e.g.
+  `just_do_it()`). Request changes when a changed file runs code at import.
+
 ## Definition of done
 
 `done` only when you would ship it. Otherwise `changes_requested` with
