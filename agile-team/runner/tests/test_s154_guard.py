@@ -144,12 +144,12 @@ def test_s154_round2_ac3_report_failures_maps_failed_and_errored_ids_in_order() 
         case("c", "<error>E   bad c</error>"),
         case("d", "<skipped/>"),
     )
-    got = junit.Report(junit.parse(xml, "")).failures()
+    got = junit.Report(junit.parse(xml, "")).failures
     assert list(got.items()) == [
         ("tests/test_a.py::a", "bad a"),
         ("tests/test_a.py::c", "bad c"),
     ]
-    assert junit.Report().failures() == {}
+    assert junit.Report().failures == {}
 
 
 # ---------- AC3: what the gate keeps ----------

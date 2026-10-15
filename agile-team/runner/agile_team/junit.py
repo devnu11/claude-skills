@@ -39,14 +39,14 @@ ERROR_LINES = 5
 ERROR_MARK = "E "
 
 
-def _marked_lines(lines: list[str]) -> list[str]:
+def _pick_marked_lines(lines: list[str]) -> list[str]:
     return [x[len(ERROR_MARK) :].lstrip() for x in lines if x.startswith(ERROR_MARK)]
 
 
-def error_lines(failure: ET.Element) -> str:
+def pick_error_lines(failure: ET.Element) -> str:
     """The first error lines of a ``<failure>``/``<error>`` element (G4)."""
     lines = (failure.text or "").splitlines()
-    picked = _marked_lines(lines) or [x for x in lines if x.strip()]
+    picked = _pick_marked_lines(lines) or [x for x in lines if x.strip()]
     picked = picked or [failure.get("message", "")]
     return "\n".join(picked[:ERROR_LINES])
 
@@ -76,7 +76,7 @@ def node_id(case: ET.Element, root: str) -> str:
 def _result(case: ET.Element) -> tuple[Result, str, str]:
     for tag in FAILING_TAGS:
         if (child := case.find(tag)) is not None:
-            return Result.FAILED, child.get("message", "").split("\n")[0], error_lines(child)
+            return Result.FAILED, child.get("message", "").split("\n")[0], pick_error_lines(child)
     if case.find("skipped") is not None:
         return Result.SKIPPED, "", ""
     return Result.PASSED, "", ""
@@ -112,6 +112,7 @@ class Report:
         """The cases that failed or errored."""
         return tuple(c for c in self.cases if c.result is Result.FAILED)
 
+    @property
     def failures(self) -> dict[str, str]:
         """Failing or erroring case id -> its detail (or message), in report order (G5)."""
         return {c.id: c.detail or c.message for c in self.failed()}
