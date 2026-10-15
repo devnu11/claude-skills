@@ -1,4 +1,4 @@
-"""When a sprint may end and what to offer while it is stuck (s124 E3, K1, K3). Pure."""
+"""When a sprint may end, what is ready for the next one, and the stuck Sprint Backlog (s124, s128, s156). Pure."""
 
 from __future__ import annotations
 
@@ -8,33 +8,46 @@ from .state import RunState
 
 END_REFUSED = (
     "sprint {sprint} can't end: {stories} unfinished. Finish them, revert_story(story, reason), "
-    "or ask the human to cancel them (request_cancel); add_to_sprint ready backlog stories "
-    "to keep working meanwhile"
+    "or ask the human to cancel them (request_cancel)"
 )
-READY_HEAD = "Ready in the backlog (dependencies done, not held):"
+READY_HEAD = "Ready in the Product Backlog (dependencies done, not held):"
 READY_MORE = "- and {count} more"
-READY_ADVICE = (
-    "Add the next ready stories with add_to_sprint(stories, reason) so the team keeps working. "
-    "Don't end the sprint or wait: it ends only when its stories are done, cancelled or reverted."
-)
 READY_SHOWN = 5
 UNTIL_BLOCKER = "until-blocker"
 NEXT_SPRINT_LEAD = (
     "Cadence until-blocker: start the next sprint now with start_sprint(goal, stories). "
-    "The run ends only when nothing in the backlog can move."
+    "A sprint end doesn't end the run while the Product Backlog has ready stories."
 )
 NEXT_SPRINT_ADVICE = (
     "Don't end your turn without starting a sprint, and don't notify done or blocked while "
-    "stories are ready. A PR waiting for review or merge does not hold the next sprint."
+    "Product Backlog stories are ready. A PR waiting for review or merge does not hold the "
+    "next sprint."
 )
 KEEP_GOING_REFUSED = (
-    "cadence until-blocker: the backlog has ready stories ({ids}); start_sprint them, or "
-    "add_to_sprint while a sprint is open. The run ends only when nothing in the backlog can move"
+    "cadence until-blocker: Sprint Backlog stories can still move ({ids}); end your turn and "
+    "the runner works on them. Notify done or blocked only when nothing in the Sprint Backlog "
+    "can move"
 )
 KEEP_GOING_CAP = 3
 KEEP_GOING_STUCK = (
-    "The PO did not start a sprint or add ready stories after {count} hand-overs; ready: {ids}. "
-    "Tell the PO what to do with `agile-team tell`, then `start --resume`."
+    "The PO did not start a sprint after {count} next-sprint hand-overs; ready in the Product "
+    "Backlog: {ids}. Tell the PO what to do with `agile-team tell`, then `start --resume`."
+)
+SPRINT_STUCK_CAP = 3
+SPRINT_STUCK_LEAD = (
+    "Nothing in the Sprint Backlog of sprint {sprint} can move. Each story and why:"
+)
+SPRINT_STUCK_ADVICE = (
+    "Stuck hand-over {count} of {cap}. Act on these stories: continue_story or release_story "
+    "once the cause is fixed, run_role with your own brief, pass_tests, revert_story, "
+    "request_cancel, or request_story for a bug the team can't fix itself; ask_user when only "
+    "the human can unblock one. Don't refill the sprint to keep the team busy. After {cap} "
+    "stuck hand-overs with none of these, the runner sets the run blocked and tells the human."
+)
+SPRINT_STUCK_BLOCKED = (
+    "Sprint {sprint}: the Sprint Backlog is stuck after {count} hand-overs with no PO action "
+    "on its stories: {reasons}. Tell the PO what to do with `agile-team tell`, then "
+    "`start --resume`."
 )
 
 
@@ -49,12 +62,12 @@ def end_refusal(state: RunState) -> str | None:
 
 def _ready(story: StoryState, stories: dict[str, StoryState]) -> bool:
     free = story.hold is None and story.po_hold is None
-    backlog = story.sprint is None and story.status is StoryStatus.ACTIVE
-    return backlog and free and not dependencies.waiting_on(story, stories)
+    in_product_backlog = story.sprint is None and story.status is StoryStatus.ACTIVE
+    return in_product_backlog and free and not dependencies.waiting_on(story, stories)
 
 
-def ready_backlog(stories: dict[str, StoryState], queue: list[str]) -> list[str]:
-    """K1: ready backlog ids in queue order."""
+def ready_product_backlog(stories: dict[str, StoryState], queue: list[str]) -> list[str]:
+    """K1: ready Product Backlog ids in queue order."""
     return [i for i in queue if _ready(stories[i], stories)]
 
 
@@ -64,11 +77,6 @@ def _ready_list(stories: dict[str, StoryState], ready: list[str]) -> list[str]:
     more = len(ready) - READY_SHOWN
     tail = [READY_MORE.format(count=more)] if more > 0 else []
     return [READY_HEAD, *shown, *tail]
-
-
-def ready_lines(stories: dict[str, StoryState], ready: list[str]) -> list[str]:
-    """K3: the ready list, then READY_ADVICE."""
-    return [*_ready_list(stories, ready), READY_ADVICE]
 
 
 def next_sprint_lines(stories: dict[str, StoryState], ready: list[str]) -> list[str]:
@@ -82,9 +90,36 @@ def ids_text(ready: list[str]) -> str:
     return text + ", …" if len(ready) > READY_SHOWN else text
 
 
-def keep_going_refusal(state: RunState) -> str | None:
-    """K5: KEEP_GOING_REFUSED under until-blocker while backlog stories are ready."""
+def can_move(story: StoryState, state: RunState) -> bool:
+    """S8: a Sprint Backlog story the router could step now, open questions aside."""
+    in_sprint = story.sprint == state.sprint and story.status is StoryStatus.ACTIVE
+    free = story.hold is None and story.po_hold is None and state.boundary is None
+    return in_sprint and free and not dependencies.waiting_on(story, state.stories)
+
+
+def movable_sprint_backlog(state: RunState, blocked: set[str]) -> list[str]:
+    """S7: ids in the current sprint that can_move and aren't waiting on a question."""
+    ids = state.sprint_ids()
+    return [i for i in ids if can_move(state.stories[i], state) and i not in blocked]
+
+
+def keep_going_refusal(state: RunState, blocked: set[str]) -> str | None:
+    """S7: KEEP_GOING_REFUSED under until-blocker while a Sprint Backlog story can move."""
     if state.cadence != UNTIL_BLOCKER:
         return None
-    ready = ready_backlog(state.stories, list(state.stories))
-    return KEEP_GOING_REFUSED.format(ids=ids_text(ready)) if ready else None
+    movable = movable_sprint_backlog(state, blocked)
+    return KEEP_GOING_REFUSED.format(ids=ids_text(movable)) if movable else None
+
+
+def stuck_lines(state: RunState, reasons: list[str]) -> list[str]:
+    """S3: SPRINT_STUCK_LEAD, the story lines, SPRINT_STUCK_ADVICE with state.stuck_asks."""
+    lead = SPRINT_STUCK_LEAD.format(sprint=state.sprint)
+    advice = SPRINT_STUCK_ADVICE.format(count=state.stuck_asks, cap=SPRINT_STUCK_CAP)
+    return [lead, *reasons, advice]
+
+
+def stuck_blocked_text(state: RunState, reasons: list[str]) -> str:
+    """S4: SPRINT_STUCK_BLOCKED for state.sprint and state.stuck_asks."""
+    return SPRINT_STUCK_BLOCKED.format(
+        sprint=state.sprint, count=state.stuck_asks, reasons="; ".join(reasons)
+    )

@@ -107,6 +107,7 @@ class RunState:
     status_reason: str | None = None
     repin: str = ""
     keep_going_asks: int = 0
+    stuck_asks: int = 0  # stuck Sprint Backlog hand-overs since it last moved (s156 S4)
     task: str = ""
     followups: dict[str, list[str]] = field(default_factory=dict)
     delivered: list[str] | None = None
@@ -130,7 +131,6 @@ class RunState:
     unsaved: Cause | None = None
     halt_kind: str | None = None  # the HaltKind value of the halt that set the status (s44)
     load_faults: list[LoadFault] = field(default_factory=list)
-    offered: list[str] = field(default_factory=list)  # the ready-backlog offer made (s124 K2)
 
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
@@ -155,9 +155,14 @@ class RunState:
         """Open the next sprint holding exactly ``ids``; other unfinished stories go back."""
         self.sprint += 1
         self.keep_going_asks = 0
+        self.clear_stuck()
         for sid, story in self.stories.items():
             if story.status not in FINISHED:
                 story.sprint = self.sprint if sid in ids else None
+
+    def clear_stuck(self) -> None:
+        """S5: no stuck Sprint Backlog hand-over is pending."""
+        self.stuck_asks = 0
 
     def sprint_ids(self) -> list[str]:
         """Ids of the stories in the current sprint, done ones included."""
@@ -178,6 +183,7 @@ class RunState:
     def add_to_sprint(self, ids: list[str]) -> None:
         """Put ``ids`` in the current sprint; nothing else changes (SA1)."""
         self.keep_going_asks = 0
+        self.clear_stuck()
         for sid in ids:
             self.stories[sid].sprint = self.sprint
 
@@ -223,7 +229,7 @@ NESTED = {
 }
 
 
-RUN_DROPPED = frozenset({"scribe_due"})
+RUN_DROPPED = frozenset({"scribe_due", "offered"})
 STORY_DROPPED = frozenset({"environment", OLD_ENVIRONMENT_NAME})
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
 

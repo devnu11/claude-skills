@@ -37,7 +37,7 @@ class Trigger(StrEnum):
     SPRINT_END = "sprint_end"
     NEXT_SPRINT = "next_sprint"
     STALLED = "stalled"
-    READY_BACKLOG = "ready_backlog"
+    SPRINT_BACKLOG_STUCK = "sprint_backlog_stuck"
     RULING_NOT_APPLIED = "ruling_not_applied"
     RUNNER_FAULT = "runner_fault"
     OFF_PIPELINE_FAULT = "off_pipeline_fault"

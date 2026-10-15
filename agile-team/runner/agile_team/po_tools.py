@@ -61,7 +61,7 @@ from .providers import DEFAULT as DEFAULT_PROVIDER
 from .relay import REPLY, Note
 from .reverts import Reverter
 from .router import Router
-from .runner_tools import text_result
+from .runner_tools import is_refused, text_result
 from .sprint_add import (  # noqa: F401  (re-exported)
     ADD_NEEDS_REASON,
     ALREADY_IN_SPRINT,
@@ -121,16 +121,31 @@ def _request_text(summary: str, evidence: Evidence) -> str:
     return REQUEST_TEXT.format(summary=summary, where=where, files=files, output=evidence.output)
 
 
-def _no_refusal(_state: RunState) -> str | None:
+def _no_refusal(_runtime: Runtime) -> str | None:
     return None
 
 
-KIND_REFUSALS: dict[str, Callable[[RunState], str | None]] = {
-    REPLY: lambda _state: USE_REPLY,
-    "sprint-end": sprint_end.end_refusal,
-    "done": sprint_end.keep_going_refusal,
-    "blocked": sprint_end.keep_going_refusal,
+def _keep_going_refusal(runtime: Runtime) -> str | None:
+    return sprint_end.keep_going_refusal(runtime.state, runtime.relay.blocked_stories())
+
+
+KIND_REFUSALS: dict[str, Callable[[Runtime], str | None]] = {
+    REPLY: lambda _runtime: USE_REPLY,
+    "sprint-end": lambda runtime: sprint_end.end_refusal(runtime.state),
+    "done": _keep_going_refusal,
+    "blocked": _keep_going_refusal,
 }
+STUCK_RESETS = frozenset(
+    {
+        "continue_story",
+        "release_story",
+        "run_role",
+        "revert_story",
+        "request_cancel",
+        "request_story",
+        "pass_tests",
+    }
+)
 REASON_CUT = 200
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
 RESTART_NEEDS_REASON = (
@@ -232,9 +247,17 @@ class Tools:
 
         async def call(args: dict[str, Any]) -> dict[str, Any]:
             self.touched.note(name, args)
-            return await method(args)
+            result = await method(args)
+            self._note_reset(name, result)
+            return result
 
         return call
+
+    def _note_reset(self, name: str, result: dict[str, Any]) -> None:
+        """S5: a tool that acted on a Sprint Backlog story clears the stuck count."""
+        if name in STUCK_RESETS and not is_refused(result):
+            self.runtime.state.clear_stuck()
+            self.runtime.save()
 
     async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
@@ -473,7 +496,7 @@ class Tools:
 
     async def notify_user(self, args: dict[str, Any]) -> dict[str, Any]:
         kind = args.get("kind", "update")
-        if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime.state):
+        if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime):
             return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
         if kind in STATUS_KINDS:
@@ -543,7 +566,7 @@ class Tools:
         return text_result(Clerk(self.runtime).run(Act.REQUEST_CANCEL, args))
 
     async def revert_story(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Revert a story's commits and put it back in the backlog (s124)."""
+        """Revert a story's commits and put it back in the Product Backlog (s124)."""
         if moved := self.runtime.drift_halt():
             return text_result(halted_report(PO, moved))
         if pending := SprintAdd(self.runtime).boundary_refusal():
@@ -652,7 +675,7 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
 
 
 DASHBOARD_REASON = (
-    "A reason is also required when the change reorders the backlog the human set on the dashboard."
+    "A reason is also required when the change changes the Product Backlog order the human set on the dashboard."
 )
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "run_role": (
@@ -662,7 +685,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
-        "not listed go back to the backlog. The manager must run next."
+        "not listed go back to the Product Backlog. The manager must run next."
         " The order you list them in is their priority within each group; "
         "started stories still come first. "
         "It first reloads depends_on from every open story's file. A bad list (not ids, "
@@ -736,7 +759,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "revert_story": (
         "Revert a story's commits on the team branch in one commit and put it back in the "
-        "backlog at the step before tests. The runner records it in the story file, the "
+        "Product Backlog at the step before tests. The runner records it in the story file, the "
         "events, the board, the review PR and the next brief of each role that worked on "
         "it, and tells the human. A story reverted before is not reverted at once: the human "
         "is asked (revert or keep). Refused for an unknown, done or cancelled story, a blank "

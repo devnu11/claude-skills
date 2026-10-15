@@ -288,10 +288,7 @@ class Router:
 
     def _movable(self, story: StoryState) -> bool:
         rt = self.runtime
-        in_sprint = story.sprint == rt.state.sprint and story.status is StoryStatus.ACTIVE
-        free = story.hold is None and story.po_hold is None and rt.state.boundary is None
-        ready = not dependencies.waiting_on(story, rt.state.stories)
-        return in_sprint and free and ready and story.id not in rt.relay.blocked_stories()
+        return sprint_end.can_move(story, rt.state) and story.id not in rt.relay.blocked_stories()
 
     def _briefed(self, role: str, story: StoryState) -> Work:
         return Work(role, story, standard_brief(self.runtime.config, Work(role, story, "")))
@@ -313,6 +310,7 @@ class Router:
     async def _step(self, work: Work) -> Pass | None:
         self._end_wait()
         self.steps += 1
+        self.runtime.state.clear_stuck()
         report = await self._dispatch(work)
         kinds = handover.triggers(report)
         sid = work.story.id if work.story else None
@@ -385,43 +383,39 @@ class Router:
         return [s for s in state.stories.values() if s.sprint == state.sprint]
 
     def _idle(self) -> Pass | None:
-        mine = self._sprint_stories()
+        """S2: sprint end, wait on a question, the stuck Sprint Backlog, or today's stall."""
         pending = self.runtime.state.boundary
-        unfinished = [s for s in mine if s.status not in FINISHED]
+        unfinished = [s for s in self._sprint_stories() if s.status not in FINISHED]
         if pending is None and self.runtime.state.sprint_complete():
             return self._sprint_end()
-        if pending is None and (offer := self._offer(unfinished)):
-            return offer
         if self.runtime.relay.open_questions():
             return None
+        if pending is None and unfinished:
+            return self._stuck(unfinished)
         return self._stalled(unfinished)
 
-    def _ready(self) -> list[str]:
+    def _ready_product_backlog(self) -> list[str]:
         stories = self.runtime.state.stories
-        return sprint_end.ready_backlog(stories, self.runtime.priority().queue(stories.values()))
+        queue = self.runtime.priority().queue(stories.values())
+        return sprint_end.ready_product_backlog(stories, queue)
 
-    def _offer(self, unfinished: list[StoryState]) -> Pass | None:
-        """K2: hand the PO the ready backlog once per set of stuck and ready stories."""
-        state, ready = self.runtime.state, self._ready()
-        key = [*(s.id for s in unfinished), *ready]
-        repeat = state.cadence == sprint_end.UNTIL_BLOCKER
-        if not (state.sprint_open() and unfinished and ready):
-            return None
-        if key == state.offered and not repeat:
-            return None
-        state.offered = key
+    def _stuck(self, unfinished: list[StoryState]) -> Pass:
+        """S3/S4: hand over the stuck Sprint Backlog with each story's reason; past the cap, block."""
+        state = self.runtime.state
+        reasons = self._story_stall_lines(unfinished)
+        if state.stuck_asks >= sprint_end.SPRINT_STUCK_CAP:
+            return self._block(sprint_end.stuck_blocked_text(state, reasons))
+        state.stuck_asks += 1
         self.runtime.save()
-        stalled = self._stalled(unfinished)
-        lines = [*stalled.lines, *sprint_end.ready_lines(state.stories, ready)]
-        found = Pass([Trigger.READY_BACKLOG], lines, [])
-        return self._asked(found) if repeat else found
+        lines = sprint_end.stuck_lines(state, reasons)
+        return Pass([Trigger.SPRINT_BACKLOG_STUCK], lines, [s.id for s in unfinished])
 
     def _sprint_end(self) -> Pass:
         state = self.runtime.state
         lines = [f"Sprint {state.sprint} is complete: every story in it is done."]
         if state.upstream.report:
             lines.append(f"Review: {state.upstream.report}")
-        ready = self._ready()
+        ready = self._ready_product_backlog()
         if state.cadence != sprint_end.UNTIL_BLOCKER or not ready:
             return Pass([Trigger.SPRINT_END], lines, [])
         lines += sprint_end.next_sprint_lines(state.stories, ready)
@@ -438,9 +432,12 @@ class Router:
 
     def _gave_up(self) -> Pass:
         state = self.runtime.state
-        ids = sprint_end.ids_text(self._ready())
-        text = sprint_end.KEEP_GOING_STUCK.format(count=state.keep_going_asks, ids=ids)
-        state.mark(RunStatus.BLOCKED, text)
+        ids = sprint_end.ids_text(self._ready_product_backlog())
+        return self._block(sprint_end.KEEP_GOING_STUCK.format(count=state.keep_going_asks, ids=ids))
+
+    def _block(self, text: str) -> Pass:
+        """Mark the run blocked with text, post it to the liaison, save; Pass([], [], [])."""
+        self.runtime.state.mark(RunStatus.BLOCKED, text)
         self.runtime.relay.post(Note("blocked", text, []))
         self.runtime.save()
         return Pass([], [], [])
@@ -454,15 +451,19 @@ class Router:
         pending = self.runtime.state.boundary
         if pending:
             return [_boundary_stall(pending)]
-        stories = self.runtime.state.stories
         if unfinished:
-            return [f"{s.id} at {s.step}: {_why(s, stories)}" for s in unfinished]
+            return self._story_stall_lines(unfinished)
         lines = [
             f"No story is in sprint {self.runtime.state.sprint}; "
             "start_sprint with the stories to work on."
         ]
-        backlog = [s.id for s in self.runtime.state.stories.values() if _in_backlog(s)]
-        return lines + ([f"Backlog: {', '.join(backlog)}"] if backlog else [])
+        in_product = [s.id for s in self.runtime.state.stories.values() if _in_product_backlog(s)]
+        return lines + ([f"Product Backlog: {', '.join(in_product)}"] if in_product else [])
+
+    def _story_stall_lines(self, unfinished: list[StoryState]) -> list[str]:
+        """One "<id> at <step>: <why>" line per story."""
+        stories = self.runtime.state.stories
+        return [f"{s.id} at {s.step}: {_why(s, stories)}" for s in unfinished]
 
     async def _wait(self) -> None:
         self._show_wait()
@@ -505,5 +506,5 @@ def _why(story: StoryState, stories: dict[str, StoryState]) -> str:
     return STALL_REASONS.get(story.status, str(story.status))
 
 
-def _in_backlog(story: StoryState) -> bool:
+def _in_product_backlog(story: StoryState) -> bool:
     return story.sprint is None and story.status not in FINISHED

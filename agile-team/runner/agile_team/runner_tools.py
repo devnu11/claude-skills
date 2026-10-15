@@ -48,6 +48,15 @@ SCHEMAS = {
 }
 
 
+def is_refused(result: dict[str, Any]) -> bool:
+    """S6: the tool result's JSON text has status "refused"."""
+    try:
+        data = json.loads(result["content"][0]["text"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("status") == "refused"
+
+
 def text_result(data: Any) -> dict[str, Any]:
     """MCP tool result carrying ``data`` as JSON text."""
     return {"content": [{"type": "text", "text": json.dumps(data, indent=2)}]}

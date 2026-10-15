@@ -360,7 +360,7 @@ def dispatch_refusal(role: str, story: StoryState | None) -> str | None:
 
 
 def _story_checks(story: StoryState) -> str | None:
-    return _repeat_refusal(story) or _status_refusal(story) or _backlog_refusal(story)
+    return _repeat_refusal(story) or _status_refusal(story) or _product_backlog_refusal(story)
 
 
 def fix_refusal(role: str, story: StoryState | None) -> str | None:
@@ -395,10 +395,10 @@ def _status_refusal(story: StoryState) -> str | None:
     return f"story {story.id} {reason}" if reason else None
 
 
-def _backlog_refusal(story: StoryState) -> str | None:
+def _product_backlog_refusal(story: StoryState) -> str | None:
     if story.sprint is not None:
         return None
-    return f"story {story.id} is in the backlog; add it to a sprint"
+    return f"story {story.id} is in the Product Backlog; add it to a sprint"
 
 
 def _step_refusal(role: str, story: StoryState) -> str | None:
