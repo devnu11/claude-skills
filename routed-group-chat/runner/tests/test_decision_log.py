@@ -42,15 +42,15 @@ def test_text_without_markers_changes_nothing() -> None:
 
 def test_render_empty_and_full() -> None:
     log = DecisionLog()
-    assert log.render() == "## Decisions\n- none\n## Open questions\n- none"
+    assert log.markdown == "## Decisions\n- none\n## Open questions\n- none"
     log.apply("human", "DECISION: weekly sync")
-    assert "- [D1] weekly sync (by human)" in log.render()
+    assert "- [D1] weekly sync (by human)" in log.markdown
 
 
 def test_round_trip() -> None:
     log = DecisionLog()
     log.apply("po", "DECISION: a\nQUESTION: b")
-    assert DecisionLog.from_dict(log.to_dict()) == log
+    assert DecisionLog.from_dict(log.json_data) == log
     assert DecisionLog.from_dict({}) == DecisionLog()
 
 
@@ -288,10 +288,10 @@ def test_validate_refuses_bad_log(data: object, message: str) -> None:
         validate(data, ValueError)
 
 
-def test_validate_accepts_to_dict_output() -> None:
+def test_validate_accepts_json_data_output() -> None:
     log = DecisionLog()
     log.apply("po", "DECISION: a\nQUESTION: b")
-    validate(log.to_dict(), ValueError)
+    validate(log.json_data, ValueError)
 
 
 @pytest.mark.parametrize("line", ["DECISION: **", "- **DECISION:** ** "])

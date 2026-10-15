@@ -52,6 +52,7 @@ class Roster:
     team: str
     roles: tuple[Role, ...]
 
+    @property
     def names(self) -> tuple[str, ...]:
         """Every role's @mention name, in roster order."""
         return tuple(role.name for role in self.roles)

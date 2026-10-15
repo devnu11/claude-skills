@@ -17,7 +17,7 @@ def role(**fields: object) -> dict[str, object]:
 def test_load_reads_inline_and_file_prompts(roster_file: Path) -> None:
     roster = load(roster_file)
     assert roster.team == "leadership"
-    assert roster.names() == ("manager", "po", "liaison")
+    assert roster.names == ("manager", "po", "liaison")
     assert roster.get("po") == Role("po", "Product Owner", "You own the backlog.", "haiku")
     assert roster.get("liaison").title == "liaison"
 
@@ -72,7 +72,7 @@ def test_get_unknown_role(roster: Roster) -> None:
 
 def test_example_roster_is_valid() -> None:
     example = Path(__file__).parents[2] / "examples" / "leadership.toml"
-    assert load(example).names() == ("liaison", "manager", "po", "proxy")
+    assert load(example).names == ("liaison", "manager", "po", "proxy")
 
 
 def test_title_and_model_are_kept() -> None:
@@ -97,7 +97,7 @@ def test_name_with_trailing_newline_is_rejected() -> None:
 
 @pytest.mark.parametrize("name", ["a", "a" * 32, "qa-2", "x9"])
 def test_valid_names(name: str) -> None:
-    assert parse({"role": [role(name=name)]}, Path()).names() == (name,)
+    assert parse({"role": [role(name=name)]}, Path()).names == (name,)
 
 
 @pytest.mark.parametrize("name", ["a" * 33, "2a", "-a", "a_b", "", "orchestrator"])
@@ -128,7 +128,7 @@ def test_non_string_team_is_rejected() -> None:
 
 def test_roster_order_is_kept() -> None:
     data = {"role": [role(name="z"), role(name="a"), role(name="m")]}
-    assert parse(data, Path()).names() == ("z", "a", "m")
+    assert parse(data, Path()).names == ("z", "a", "m")
 
 
 @pytest.mark.parametrize(

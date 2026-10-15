@@ -56,7 +56,7 @@ def test_user_prompt_shows_open_questions_and_summary(roster: Roster) -> None:
 
 
 def test_user_prompt_ends_with_cue_for_role(roster: Roster) -> None:
-    for name in roster.names():
+    for name in roster.names:
         assert user_prompt(roster.get(name), ChatState()).endswith(f"Reply as @{name}.")
 
 

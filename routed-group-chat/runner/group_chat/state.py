@@ -41,7 +41,7 @@ def escape_tags(text: str) -> str:
 
 
 def validate(data: Any) -> None:
-    """Raise ``StateError`` unless ``data`` has the shape ``ChatState.to_dict`` writes."""
+    """Raise ``StateError`` unless ``data`` has the shape ``ChatState.json_data`` writes."""
     TableSchema(STATE_FIELDS, "state", StateError).check(data)
     turns = data.get("turns", [])
     ListSchema(dict, "state.turns", StateError).check(turns)
@@ -62,11 +62,13 @@ class Turn:
     speaker: str
     text: str
 
-    def render(self) -> str:
+    @property
+    def line(self) -> str:
         """One line for people: ``@speaker: text``."""
         return f"@{self.speaker}: {self.text}"
 
-    def block(self) -> str:
+    @property
+    def tagged(self) -> str:
         """A delimited block for models; a turn cannot fake another turn's tags."""
         return f'<turn speaker="{self.speaker}">\n{escape_tags(self.text)}\n</turn>'
 
@@ -92,18 +94,19 @@ class ChatState:
         self.turns.append(turn)
         return turn
 
-    def to_dict(self) -> dict[str, Any]:
+    @property
+    def json_data(self) -> dict[str, Any]:
         """JSON-ready form, read back by ``from_dict``."""
         return {
             "turns": [vars(turn) for turn in self.turns],
             "summary": self.summary,
             "last_addressed": list(self.last_addressed),
-            "log": self.log.to_dict(),
+            "log": self.log.json_data,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ChatState:
-        """The state saved by ``to_dict``; missing keys take their defaults."""
+        """The state saved by ``json_data``; missing keys take their defaults."""
         return cls(
             [Turn(**turn) for turn in data.get("turns", [])],
             data.get("summary", ""),
@@ -126,7 +129,7 @@ class Store:
     def lock_path(self) -> Path:
         return self.directory / LOCK_FILE
 
-    def load(self) -> ChatState:
+    def load(self) -> ChatState:  # house-rules: allow query-property -- disk I/O that can raise
         """The saved state, or a fresh one for a new chat."""
         if not self.path.exists():
             return ChatState()
@@ -146,7 +149,7 @@ class Store:
         fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=".state-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w") as handle:
-                handle.write(json.dumps(state.to_dict(), indent=2) + "\n")
+                handle.write(json.dumps(state.json_data, indent=2) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
             Path(tmp).replace(self.path)

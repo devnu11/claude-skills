@@ -69,7 +69,7 @@ class GroupChat:
         replies (and any orchestrator notes) in order."""
         with self.store.locked():
             state = self.store.load()
-            targets = resolve(message, self.roster.names(), state.last_addressed)
+            targets = resolve(message, self.roster.names, state.last_addressed)
             state.add(Turn(HUMAN, message.strip()))
             state.last_addressed = targets
             self.store.save(state)
@@ -84,7 +84,7 @@ class GroupChat:
         while queue:
             turn = self._reply_or_fail(state, queue.pop(0), replies)
             replies.append(turn)
-            nxt = handoff_of(turn.text, self.roster.names(), turn.speaker)
+            nxt = handoff_of(turn.text, self.roster.names, turn.speaker)
             if nxt is None or nxt in queue:
                 continue
             if hops >= self.limits.max_handoffs:

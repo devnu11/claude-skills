@@ -67,6 +67,7 @@ class LockFile:
         finally:
             self._release(owner["token"])
 
+    @property
     def holder(self) -> Owner | None:
         """The current owner record, or ``None`` if absent or unreadable."""
         try:
@@ -86,12 +87,12 @@ class LockFile:
         owner = new_owner()
         if self._create(owner):
             return owner
-        holder = self.holder()
+        holder = self.holder
         if self.is_stale(holder):
             self._remove_if(holder)
             if self._create(owner):
                 return owner
-        raise LockError(self._busy_message(self.holder()))
+        raise LockError(self._busy_message(self.holder))
 
     def _create(self, owner: Owner) -> bool:
         try:
@@ -103,13 +104,13 @@ class LockFile:
         return True
 
     def _release(self, token: str) -> None:
-        holder = self.holder()
+        holder = self.holder
         if holder is not None and holder.get("token") == token:
             self.path.unlink(missing_ok=True)
 
     def _remove_if(self, holder: Owner | None) -> None:
         """Remove the lock only if it still holds ``holder``'s record."""
-        if holder is not None and self.holder() == holder:
+        if holder is not None and self.holder == holder:
             self.path.unlink(missing_ok=True)
 
     def _busy_message(self, holder: Owner | None) -> str:
