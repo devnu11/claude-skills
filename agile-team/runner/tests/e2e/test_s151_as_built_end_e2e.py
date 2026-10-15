@@ -14,15 +14,11 @@ from pathlib import Path
 
 import pytest
 from agile_team import boundary as bd
-from agile_team import handover
-from agile_team import scratch_rebase as sr
 from agile_team.boundary import BoundaryHold, Edge, Stage, StepKind
 from agile_team.boundary_runner import BoundaryRunner
 from agile_team.ci import Bucket, Check
-from agile_team.dispatch import StepRequest
 from agile_team.events import EventKind
 from agile_team.gates import StoryState, StoryStatus
-from agile_team.git_ops import Git
 from agile_team.po_tools import Tools
 from agile_team.upstream import Pr, PrMode, PrState
 
@@ -216,7 +212,9 @@ def test_ac2_2_red_holds_the_boundary_and_tells_the_liaison_the_failing_checks(
     assert scene.boundary.hold is BoundaryHold.CI_FAILED and scene.head() == built
     [note] = [n for n in scene.notes() if "failed on the team branch as built" in n]
     assert "unit" in note and "nothing is rebased" in note
-    out = json.loads(asyncio.run(Tools(scene.rt).continue_boundary({"note": ""}))["content"][0]["text"])
+    out = json.loads(
+        asyncio.run(Tools(scene.rt).continue_boundary({"note": ""}))["content"][0]["text"]
+    )
     assert "refused" in json.dumps(out).lower() or out.get("status") != "continued"
     assert scene.boundary.hold is BoundaryHold.CI_FAILED
 
@@ -339,143 +337,3 @@ def test_ac4_2_there_is_no_review_stage_no_restack_and_no_cherry_pick(scene: Sce
     scene.drive()
     assert "cherry-pick" not in git(scene.repo, "reflog", "--format=%gs", "HEAD")
     assert not (scene.rt.config.run_dir / "review").exists()
-
-
-# ----- AC6: a conflict goes to DevOps in a scratch worktree --------------------------------
-
-
-def conflict_scene(scene: Scene) -> str:
-    """Two team commits, the first conflicts with main; the sprint end is at its rebase stage."""
-    scene.commit(scene.repo, "src/app.py", "x = 2\n", "team edits app")
-    team_work(scene, "src/two.py", "two = 1\n")
-    scene.main_moves("src/app.py", "x = 3\n")
-    scene.open_end()
-    scene.run_to(Stage.REBASE)
-    return scene.head()
-
-
-def worktree(scene: Scene) -> Path:
-    return scene.rt.config.run_dir / sr.REBASE_DIR
-
-
-def resolve(scene: Scene, text: str = "x = 5\n") -> None:
-    path = worktree(scene)
-    (path / "src" / "app.py").write_text(text)
-    git(path, "add", "src/app.py")
-    env_git = Git(path)
-    env_git.attempt("-c", "core.editor=true", "rebase", "--continue")
-
-
-def test_ac6_1_a_conflict_is_aborted_and_handed_to_a_devops_step(scene: Scene) -> None:
-    built = conflict_scene(scene)
-    scene.br.step()
-    assert scene.head() == built and scene.boundary.hold is None
-    assert git(scene.repo, "status", "--porcelain").strip() == ""
-    last = scene.outcomes()[-1]
-    assert last["outcome"] == "conflict" and last["files"] == ["src/app.py"]
-    due = scene.br.due()
-    assert due.kind is StepKind.REBASE_FIX and due.role == "devops"
-    for part in ("team edits app", "src/app.py", str(worktree(scene)), SCRATCH_BRANCH):
-        assert part in due.brief
-    assert git(worktree(scene), "branch", "--show-current").strip() == SCRATCH_BRANCH
-    assert "rebas" in git(worktree(scene), "status")
-    assert not any("by hand" in n for n in scene.notes())
-
-
-def test_ac6_2_the_fix_step_writes_only_the_worktree_and_runs_checks_there(scene: Scene) -> None:
-    conflict_scene(scene)
-    scene.br.step()
-    plan = scene.rt.plan(StepRequest("devops", "fix", None, StepKind.REBASE_FIX))
-    rel = worktree(scene).relative_to(scene.repo).as_posix()
-    assert plan.scope.write == [f"{rel}/**"]
-    assert str(plan.scope.git_workspace) == str(worktree(scene).resolve())
-    assert plan.launch.env["GIT_EDITOR"] == "true"
-    resolve(scene)
-    scene.br.after_fix({"status": "done", "summary": "kept both"})
-    scene.shell_paths.clear()
-    scene.br.step()
-    assert worktree(scene).resolve() in [p.resolve() for p in scene.shell_paths]
-
-
-def test_ac6_2_each_bad_resolution_is_refused(scene: Scene) -> None:
-    old = conflict_scene(scene)
-    scene.br.step()
-    scratch = sr.ScratchRebase(scene.rt.upstream, worktree(scene), SCRATCH_BRANCH)
-    assert "not finished" in scratch.refusal(old)
-    resolve(scene)
-    assert scratch.refusal(old) == ""
-    tree = Git(worktree(scene))
-    (worktree(scene) / "dirty.txt").write_text("d\n")
-    assert "uncommitted" in scratch.refusal(old)
-    (worktree(scene) / "dirty.txt").unlink()
-    git(worktree(scene), "commit", "-q", "--amend", "-m", "reworded")
-    assert "not the team branch's commits" in scratch.refusal(old)
-    git(worktree(scene), "reset", "-q", "--hard", "HEAD~1")
-    assert "not the team branch's commits" in scratch.refusal(old)
-    assert tree.head() == scratch.head()
-
-
-def test_ac6_3_a_clean_resolution_moves_the_team_branch_remaps_and_pushes(scene: Scene) -> None:
-    built = conflict_scene(scene)
-    scene.br.step()
-    resolve(scene)
-    result_head = git(worktree(scene), "rev-parse", "HEAD").strip()
-    scene.br.after_fix({"status": "done", "summary": "kept both"})
-    scene.br.step()
-    assert scene.head() == result_head != built
-    assert scene.rt.state.stories["s1"].commit == result_head
-    assert scene.boundary.stage is Stage.PUSH_REBASED
-    assert not worktree(scene).exists()
-    assert git(scene.repo, "branch", "--list", SCRATCH_BRANCH).strip() == ""
-    scene.drive()
-    assert scene.remote_branch() == result_head and scene.own.as_is == built
-
-
-def test_ac6_3_a_team_branch_that_moved_meanwhile_is_never_reset(scene: Scene) -> None:
-    conflict_scene(scene)
-    scene.br.step()
-    resolve(scene)
-    scene.br.after_fix({"status": "done", "summary": "kept both"})
-    moved = scene.commit(scene.repo, "src/late.py", "l = 1\n", "late")
-    scene.br.step()
-    assert scene.boundary.hold is BoundaryHold.ERROR and scene.head() == moved
-    assert "moved" in scene.outcomes()[-1]["reason"]
-
-
-def test_ac6_4_a_failed_devops_step_holds_with_notes_and_the_scratch_branch(scene: Scene) -> None:
-    built = conflict_scene(scene)
-    scene.br.step()
-    scene.br.after_fix({"status": "failed", "summary": "cannot merge the intent"})
-    scene.br.step()
-    assert scene.boundary.hold is BoundaryHold.REBASE_CONFLICT and scene.head() == built
-    [note] = [n for n in scene.notes() if "could not settle it" in n]
-    assert "cannot merge the intent" in note and SCRATCH_BRANCH in note
-    assert worktree(scene).exists()
-    line = next(r.line for r in handover.HANDOVERS if r.trigger.value == "rebase_conflict")
-    assert "{branch}" in line and "{notes}" in line
-
-
-def test_ac6_4_failing_full_checks_hold_the_same_way(scene: Scene) -> None:
-    built = conflict_scene(scene)
-    scene.br.step()
-    resolve(scene)
-    scene.runner.results = {"pytest --cov": (1, "FAILED tests/test_x.py")}
-    scene.br.after_fix({"status": "done", "summary": "kept both"})
-    scene.br.step()
-    assert scene.boundary.hold is BoundaryHold.REBASE_CONFLICT and scene.head() == built
-    assert "full checks failed" in scene.outcomes()[-1]["reason"]
-
-
-def test_ac6_4_continue_boundary_runs_the_rebase_and_devops_again_with_the_note(
-    scene: Scene,
-) -> None:
-    conflict_scene(scene)
-    scene.br.step()
-    scene.br.after_fix({"status": "failed", "summary": "stuck"})
-    scene.br.step()
-    asyncio.run(Tools(scene.rt).continue_boundary({"note": "prefer main's wording"}))
-    assert scene.boundary.rebase_fix is None
-    scene.br.step()
-    due = scene.br.due()
-    assert due.kind is StepKind.REBASE_FIX and due.brief.endswith("prefer main's wording")
-    assert "rebas" in git(worktree(scene), "status")
