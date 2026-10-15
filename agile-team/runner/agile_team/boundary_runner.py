@@ -286,7 +286,7 @@ class BoundaryRunner:
         """S2: the rebase was aborted; tell the liaison and go on, holding nothing."""
         text = self._start_conflict_text(b, result)
         self._post(text)
-        data = {"files": list(result.files), "commit": result.commit[:12]}
+        data = _conflict_data(result)
         self._emit(b, Out.CONFLICT, note=text, subject=result.subject, **data)
         self._unpin(b)
         self._advance(b)
@@ -372,14 +372,7 @@ class BoundaryRunner:
     def _known_failures(self, b: Boundary, report: CheckReport) -> None:
         """AC2.1, AC2.2: a failing start check holds nothing; its failing ids are recorded."""
         ids, head = report.failing_ids(), self.runtime.git.head()
-        team = self.mine.team_branch or self.remote.team_branch()
-        text = KNOWN_FAILURES_NOTE.format(
-            sprint=b.sprint,
-            count=len(ids),
-            team=team,
-            sha=head[:12],
-            ids=", ".join(ids),
-        )
+        text = self._known_failures_text(b, ids, head)
         self._post(text)
         self._finish(
             b,
@@ -388,6 +381,15 @@ class BoundaryRunner:
             sha=head,
             reason=report.reason(),
             checks=report.summary(),
+        )
+
+    def _known_failures_text(self, b: Boundary, ids: list[str], head: str) -> str:
+        return KNOWN_FAILURES_NOTE.format(
+            sprint=b.sprint,
+            count=len(ids),
+            team=self.mine.team_branch or self.remote.team_branch(),
+            sha=head[:12],
+            ids=", ".join(ids),
         )
 
     def _repin_due(self, b: Boundary, head: str) -> None:
@@ -524,7 +526,7 @@ class BoundaryRunner:
             subject=result.subject,
             worktree=str(scratch.path),
         )
-        data = {"files": list(result.files), "commit": result.commit[:12]}
+        data = _conflict_data(result)
         self._emit(b, Out.CONFLICT, subject=result.subject, branch=scratch.branch, **data)
 
     def _adopt(self, b: Boundary) -> None:
@@ -778,6 +780,11 @@ class BoundaryRunner:
             team=self.mine.team_branch,
             target=self.target,
         )
+
+
+def _conflict_data(result: Rebase) -> dict[str, Any]:
+    """The conflicting files and the short commit of a stopped rebase."""
+    return {"files": list(result.files), "commit": result.commit[:12]}
 
 
 def _ci_fields(results: list[CiResult]) -> dict[str, Any]:
