@@ -8,11 +8,14 @@ import json
 from pathlib import Path
 
 import pytest
-from agile_team import cli, shares, system
+from agile_team import cli, sandbox, shares, system
 from agile_team import state as state_mod
+from agile_team.gates import Verdict
+from agile_team.roles import Handoff
 from agile_team.sharing import Sharer, Shares
 from agile_team.state import RunState
 
+from .test_s120_gates import at, pipe, prepared_with
 from .test_s120_sharer import apply, queue, share_events, told_texts, world
 from .test_s120_shares import BYTES, DESIGN, SHA, STORY, make_config, write_story
 
@@ -55,7 +58,7 @@ def test_a_dotdot_path_is_refused_with_its_resolved_form(configured: Path) -> No
     out = story_listing(configured, bad)
     assert out.files == () and out.paths() == ()
     [problem] = out.problems
-    assert "shared item 1: path " + bad + " resolves to " in problem
+    assert "shared item 1: path " + bad + " resolves to .team/run/liaison/x;" in problem
     assert "a shared file must sit directly in docs/design/" in problem
 
 
@@ -295,3 +298,40 @@ def test_attach_shares_passes_the_plan_story_id(monkeypatch) -> None:
 
 def test_digest_helper_still_matches() -> None:
     assert shares.digest(BYTES) == hashlib.sha256(BYTES).hexdigest()
+
+
+# ----- AC1: a NUL path, and the bad item kept out of every scope ---------------------
+
+
+def test_a_nul_path_is_refused_not_a_crash(configured: Path, monkeypatch) -> None:
+    nul = f"{DESIGN}a\\u0000b.md"
+    real = system.resolve
+
+    def resolve(path: Path) -> Path:
+        if "\x00" in str(path):  # what Path.resolve does with a NUL byte
+            raise ValueError("embedded null byte")
+        return real(path)
+
+    monkeypatch.setattr(system, "resolve", resolve)
+    out = story_listing(configured, nul, GOOD)
+    assert out.paths() == (GOOD,)
+    [problem] = out.problems
+    assert "shared item 1: path " in problem and "outside the repo" in problem
+
+
+def test_one_bad_item_leaves_the_good_one_in_the_scopes_and_holds_the_gate(
+    configured: Path,
+) -> None:
+    from agile_team import config as config_mod
+    from agile_team import story_spec
+
+    out = story_listing(configured, f"{DESIGN}../../.team/x", GOOD)
+    config = config_mod.load(configured)
+    prepared = prepared_with(config, out.paths())
+    globs = sandbox.proxy_read_globs(config, prepared)
+    assert GOOD in globs and not any(".team/x" in g for g in globs)
+    allowed = sandbox._allowed_reads(config, prepared)
+    assert str(config.repo / GOOD) in allowed and not any(a.endswith("/.team/x") for a in allowed)
+    held = pipe(shares.Check(out)).evaluate(at("acceptance"), Handoff("done"))
+    assert held.verdict is Verdict.HOLD
+    assert held.reason == story_spec.STORY_FILE_HOLD.format(refusal="\n".join(out.problems))
