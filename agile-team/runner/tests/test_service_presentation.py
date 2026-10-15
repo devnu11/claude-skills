@@ -58,7 +58,6 @@ def preparer(probe: Any = None, *, busy: bool = False, **kw: Any) -> Preparer:
 def config(configured: Path) -> cfg.Config:
     c = cfg.load(configured)
     c.environments = [DASHBOARD]
-    CURRENT[:] = [c]
     return c
 
 
@@ -70,18 +69,18 @@ def log_file(config: cfg.Config) -> Path:
     return config.run_dir / "customer/ui.log"
 
 
-CURRENT: list[cfg.Config] = []
-
-
-def story_of(step: str = "e2e", story_id: str = "s4", **kw: Any) -> StoryState:
-    """A story whose file names ``environment`` (default: the first configured one)."""
-    config = CURRENT[0]
-    name = kw.pop("environment", None)
-    names = [name] if name else [e.name for e in config.environments[:1]]
+def story_of(config: cfg.Config, step: str = "e2e") -> StoryState:
+    """Story s4 naming the first configured environment (if any), at ``step``."""
+    names = [e.name for e in config.environments[:1]]
     if names:
-        write_story(config, story_id, *names)
-    kw.setdefault("sprint", 1)
-    return StoryState(story_id, "A story", step, **kw)
+        write_story(config, "s4", *names)
+    return StoryState("s4", "A story", step, sprint=1)
+
+
+def story_on(config: cfg.Config, environment: str) -> StoryState:
+    """Story s4 naming ``environment``, at the e2e step."""
+    write_story(config, "s4", environment)
+    return StoryState("s4", "A story", "e2e", sprint=1)
 
 
 def killpgs(fake: FakeSystem) -> list[tuple[int, int]]:
@@ -159,10 +158,9 @@ def test_address_probe_url_and_service_files(scratch: Path) -> None:
 
 def test_make_pipeline_wires_the_trial(configured: Path) -> None:
     config = cfg.load(configured)
-    CURRENT[:] = [config]
     live = cli.make_pipeline(config).checks.liveness
     assert isinstance(live.__self__, Trial) and live.__self__.config is config  # type: ignore[attr-defined]
-    out = live(story_of())
+    out = live(story_of(config))
     assert out.verdict is Verdict.PASS and out.reason == "presentation ready"
 
 
@@ -547,7 +545,7 @@ def trial(config: cfg.Config, raises: Exception | None = None) -> tuple[Trial, F
 def test_trial_passes_stops_the_service_and_names_the_probe(config: cfg.Config) -> None:
     source = present(config, "s4")
     t, fake = trial(config)
-    out = t.liveness(story_of())
+    out = t.liveness(story_of(config))
     assert out.verdict is Verdict.PASS
     assert out.reason == f"presentation ready; {PROBE_URL} answered"
     assert fake.stops == 1
@@ -556,20 +554,20 @@ def test_trial_passes_stops_the_service_and_names_the_probe(config: cfg.Config) 
 
 def test_trial_without_a_presentation_dir_orders_none(config: cfg.Config) -> None:
     t, fake = trial(config)
-    t.liveness(story_of())
+    t.liveness(story_of(config))
     assert fake.orders[0].presentation is None
 
 
 def test_trial_uses_the_stories_own_environment(config: cfg.Config) -> None:
     config.environments = [Environment("cli", "package"), DASHBOARD]
     t, fake = trial(config)
-    t.liveness(story_of(environment="ui"))
+    t.liveness(story_on(config, "ui"))
     assert fake.orders[0].environment.name == "ui"
 
 
 def test_trial_bounces_a_service_that_is_not_up(config: cfg.Config) -> None:
     t, _ = trial(config, NotUp("acceptance environment 'ui' did not start: boom"))
-    out = t.liveness(story_of())
+    out = t.liveness(story_of(config))
     assert out.verdict is Verdict.BOUNCE
     assert (
         out.reason
@@ -579,7 +577,7 @@ def test_trial_bounces_a_service_that_is_not_up(config: cfg.Config) -> None:
 
 def test_trial_holds_on_a_busy_port(config: cfg.Config) -> None:
     t, _ = trial(config, PortBusy("acceptance environment 'ui' cannot start: busy"))
-    out = t.liveness(story_of())
+    out = t.liveness(story_of(config))
     assert out.verdict is Verdict.HOLD
     assert (
         out.reason
@@ -590,7 +588,7 @@ def test_trial_holds_on_a_busy_port(config: cfg.Config) -> None:
 def test_trial_lets_other_sandbox_errors_propagate(config: cfg.Config) -> None:
     t, _ = trial(config, sandbox.SandboxError("kind"))
     with pytest.raises(sandbox.SandboxError, match="kind"):
-        t.liveness(story_of())
+        t.liveness(story_of(config))
 
 
 def test_trial_verdicts_are_data() -> None:
@@ -600,7 +598,7 @@ def test_trial_verdicts_are_data() -> None:
 def test_trial_never_prepares_a_file_only_environment(config: cfg.Config) -> None:
     config.environments = [Environment("cli", "package")]
     t, fake = trial(config)
-    out = t.liveness(story_of())
+    out = t.liveness(story_of(config))
     assert (out.verdict, out.reason) == (Verdict.PASS, "presentation ready")
     assert fake.orders == []
 
@@ -608,7 +606,7 @@ def test_trial_never_prepares_a_file_only_environment(config: cfg.Config) -> Non
 def test_trial_never_prepares_without_a_environment(config: cfg.Config) -> None:
     config.environments = []
     t, fake = trial(config)
-    assert t.liveness(story_of()).verdict is Verdict.PASS and fake.orders == []
+    assert t.liveness(story_of(config)).verdict is Verdict.PASS and fake.orders == []
 
 
 def test_trial_default_prepare_is_a_preparers(config: cfg.Config) -> None:
@@ -637,21 +635,21 @@ def gate_pipeline(files=None, live=None, steps=STEPS) -> tuple[gates.Pipeline, l
 
 def test_default_liveness_always_passes(config: cfg.Config) -> None:
     made = gates.Checks({}, 95.0, FakeRunner())
-    out = made.liveness(story_of())
+    out = made.liveness(story_of(config))
     assert (out.verdict, out.reason) == (Verdict.PASS, gates.READY)
     assert gates.READY == "presentation ready"
 
 
 def test_missing_files_bounce_without_starting_anything(config: cfg.Config) -> None:
     p, calls = gate_pipeline(files=lambda _s: MISSING)
-    out = p.checks.presented(story_of())
+    out = p.checks.presented(story_of(config))
     assert (out.verdict, out.reason) == (Verdict.BOUNCE, MISSING) and calls == []
 
 
 def test_complete_files_then_the_liveness_outcome_decides(config: cfg.Config) -> None:
     live = gates.Outcome(Verdict.PASS, "presentation ready; u answered")
     p, calls = gate_pipeline(live=lambda _s: live)
-    assert p.checks.presented(story_of()) is live and calls == ["s4"]
+    assert p.checks.presented(story_of(config)) is live and calls == ["s4"]
 
 
 def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_round(
@@ -659,7 +657,7 @@ def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_roun
 ) -> None:
     reason = "story s4 presentation is not up: acceptance environment 'dashboard' did not start: x"
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, reason))
-    s = story_of("e2e")
+    s = story_of(config, "e2e")
     out = p.evaluate(s, Handoff("done"))
     assert (out.verdict, out.bounce_to, out.reason) == (Verdict.BOUNCE, "e2e", reason)
     p.advance(s, out)
@@ -668,7 +666,7 @@ def test_e2e_done_with_a_service_that_is_not_up_bounces_to_e2e_and_counts_a_roun
 
 def test_e2e_done_on_a_busy_port_holds_without_a_round(config: cfg.Config) -> None:
     p, _ = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.HOLD, "port busy"))
-    s = story_of("e2e")
+    s = story_of(config, "e2e")
     out = p.evaluate(s, Handoff("done"))
     assert out.verdict is Verdict.HOLD and out.reason == "port busy"
     p.advance(s, out)
@@ -677,7 +675,7 @@ def test_e2e_done_on_a_busy_port_holds_without_a_round(config: cfg.Config) -> No
 
 def test_e2e_done_with_a_live_service_goes_to_acceptance(config: cfg.Config) -> None:
     p, calls = gate_pipeline()
-    s = story_of("e2e")
+    s = story_of(config, "e2e")
     out = p.evaluate(s, Handoff("done"))
     p.advance(s, out)
     assert out.verdict is Verdict.PASS and s.step == "acceptance" and calls == ["s4"]
@@ -686,7 +684,7 @@ def test_e2e_done_with_a_live_service_goes_to_acceptance(config: cfg.Config) -> 
 def test_liveness_is_not_consulted_without_an_acceptance_step(config: cfg.Config) -> None:
     steps = [x for x in STEPS if x != "acceptance"]
     p, calls = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, "x"), steps=steps)
-    assert p.evaluate(story_of("e2e"), Handoff("done")).verdict is Verdict.PASS
+    assert p.evaluate(story_of(config, "e2e"), Handoff("done")).verdict is Verdict.PASS
     assert calls == []
 
 
@@ -694,8 +692,8 @@ def test_liveness_is_not_consulted_at_other_steps_or_for_changes_requested(
     config: cfg.Config,
 ) -> None:
     p, calls = gate_pipeline(live=lambda _s: gates.Outcome(Verdict.BOUNCE, "x"))
-    assert p.evaluate(story_of("review"), Handoff("done")).verdict is Verdict.PASS
-    p.evaluate(story_of("e2e"), Handoff("changes_requested", next_role="developer-cli"))
+    assert p.evaluate(story_of(config, "review"), Handoff("done")).verdict is Verdict.PASS
+    p.evaluate(story_of(config, "e2e"), Handoff("changes_requested", next_role="developer-cli"))
     assert calls == []
 
 
@@ -710,13 +708,13 @@ def test_return_to_e2e_builds_the_return_outcome() -> None:
 
 def test_unpresented_never_runs_the_trial(config: cfg.Config) -> None:
     p, calls = gate_pipeline(files=lambda _s: MISSING)
-    out = p.unpresented(story_of("acceptance"))
+    out = p.unpresented(story_of(config, "acceptance"))
     assert (
         out.verdict is Verdict.RETURN
         and out.reason == f"{MISSING}; run the integration-tester on it"
     )
     p2, calls2 = gate_pipeline()
-    assert p2.unpresented(story_of("acceptance")) is None
+    assert p2.unpresented(story_of(config, "acceptance")) is None
     assert calls == [] and calls2 == []
 
 

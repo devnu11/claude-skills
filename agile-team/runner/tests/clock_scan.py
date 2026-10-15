@@ -47,7 +47,8 @@ class Tree(Enum):
     E2E = "e2e"
 
 
-def _tree_of(path: Path) -> Tree:
+def tree_of(path: Path) -> Tree:
+    """Which Tree a path under TESTS belongs to."""
     first = path.relative_to(TESTS).parts[0]
     return Tree.E2E if first == E2E_DIR else Tree.UNIT
 
@@ -57,7 +58,7 @@ def files_in(tree: Tree) -> list[Path]:
     found = [
         p
         for p in TESTS.rglob("*")
-        if p.is_file() and p.suffix in SCANNED and p.name not in EXEMPT and _tree_of(p) is tree
+        if p.is_file() and p.suffix in SCANNED and p.name not in EXEMPT and tree_of(p) is tree
     ]
     return sorted(found)
 
