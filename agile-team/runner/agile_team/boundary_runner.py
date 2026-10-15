@@ -19,9 +19,11 @@ from . import halt, handover, loops, pending_tests, repin, revert_log, rewrite, 
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
+    CHECKS_FAILED,
     CI_RED_HELD,
     CLOSED_NOTE,
     FIX_KINDS,
+    FIX_NOT_DONE,
     FIX_ROLE,
     KNOWN_FAILURES_NOTE,
     LOCAL_REPORT,
@@ -30,6 +32,7 @@ from .boundary import (
     NOTHING_NEW,
     PR_BODY,
     PUSHED_REPORT,
+    REBASE_FIX_HELD,
     REBASE_UNCHANGED,
     REBASED_NOT_GREEN,
     REBASED_PUSHED_REPORT,
@@ -49,6 +52,7 @@ from .boundary import (
     FixContext,
     Permission,
     PrMode,
+    RebaseFix,
     StackEntry,
     Stage,
     StepKind,
@@ -85,6 +89,7 @@ from .ci_triage import rerun_key
 from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
 from .relay import Note
+from .scratch_rebase import REBASE_BRANCH, REBASE_DIR, ScratchRebase
 from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
 
 if TYPE_CHECKING:
@@ -199,9 +204,17 @@ class BoundaryRunner:
         b = self.runtime.state.boundary
         if b is None or report.get("status") == "halted":
             return
+        kept = self._keep_rebase_fix(b, report)
         b.rounds, b.failure, b.note = b.rounds + 1, None, ""
-        b.hold = fix_hold(report)
+        b.hold = None if kept else fix_hold(report)
         self.runtime.save()
+
+    def _keep_rebase_fix(self, b: Boundary, report: dict[str, Any]) -> bool:
+        """R15: keep DevOps's answer to a rebase conflict for the rebase stage; say if it did."""
+        if b.failure is None or b.failure.case is not FixCase.REBASE_CONFLICT:
+            return False
+        b.rebase_fix = RebaseFix(b.failure, report["status"], report["summary"])
+        return True
 
     # ----- events and holds
 
@@ -475,6 +488,8 @@ class BoundaryRunner:
         refusal = rebase_refusal(self._own(b))
         if refusal:
             return self._refuse_rebase(b, refusal)
+        if b.rebase_fix:
+            return self._adopt(b)
         self._fetch()
         self._pin_sync_from(b)
         result = self.remote.rebase_onto(b.sync_from)
@@ -491,9 +506,72 @@ class BoundaryRunner:
         b.sync_from = self.runtime.git.head()
         self.runtime.save()
 
+    def _scratch(self, b: Boundary) -> ScratchRebase:
+        path = self.runtime.config.run_dir / REBASE_DIR
+        return ScratchRebase(self.remote, path, REBASE_BRANCH.format(sprint=b.sprint))
+
     def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
+        """R13: stop the same rebase in a scratch worktree and wake DevOps; hold nothing."""
+        scratch = self._scratch(b)
+        scratch.prepare(b.sync_from)
+        b.failure = Failure(
+            Stage.REBASE,
+            FixCase.REBASE_CONFLICT,
+            result.output,
+            branch=scratch.branch,
+            files=list(result.files),
+            commit=result.commit,
+            subject=result.subject,
+            worktree=str(scratch.path),
+        )
         data = {"files": list(result.files), "commit": result.commit[:12]}
-        self._hold(b, BoundaryHold.SYNC_CONFLICT, Out.CONFLICT, subject=result.subject, **data)
+        self._emit(b, Out.CONFLICT, subject=result.subject, branch=scratch.branch, **data)
+
+    def _adopt(self, b: Boundary) -> None:
+        """R16: move the team branch to DevOps's result, or hold with the first reason."""
+        why = self._adopt_refusal(b)
+        if why:
+            return self._hold_conflict(b, why)
+        self._move_to_fix(b)
+
+    def _adopt_refusal(self, b: Boundary) -> str:
+        fix = b.rebase_fix
+        if fix.status != "done":  # type: ignore[union-attr]
+            return FIX_NOT_DONE.format(status=fix.status)  # type: ignore[union-attr]
+        scratch = self._scratch(b)
+        return scratch.refusal(b.sync_from) or self._checks_refusal(scratch)
+
+    def _checks_refusal(self, scratch: ScratchRebase) -> str:
+        report = self._run_checks(scratch.path)
+        if report.passed:
+            return ""
+        return CHECKS_FAILED.format(path=scratch.path, reason=report.reason())
+
+    def _move_to_fix(self, b: Boundary) -> None:
+        scratch = self._scratch(b)
+        result = self.remote.adopt(b.sync_from, scratch.head())
+        scratch.drop()
+        b.rebase_fix = None
+        self._settle_rebase(b, result)
+
+    def _hold_conflict(self, b: Boundary, why: str) -> None:
+        """R17: keep the worktree and branch; the liaison and the PO get the notes."""
+        fix = b.rebase_fix
+        c = fix.conflict  # type: ignore[union-attr]
+        data = {
+            "reason": why,
+            "branch": c.branch,
+            "notes": fix.notes or "none",  # type: ignore[union-attr]
+            "commit": c.commit[:12],
+            "subject": c.subject,
+            "files": list(c.files),
+        }
+        self._post(
+            REBASE_FIX_HELD.format(
+                sprint=b.sprint, target=self.target, **{**data, "files": ", ".join(c.files)}
+            )
+        )
+        self._hold(b, BoundaryHold.REBASE_CONFLICT, Out.CONFLICT, **data)
 
     def _rebase_current(self, b: Boundary, result: Rebase) -> None:
         self._emit(b, Out.CURRENT)
