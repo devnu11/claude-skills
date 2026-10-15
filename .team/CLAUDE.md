@@ -1,7 +1,7 @@
 # Team charter
 
 Every role reads this file, right after the repo instructions
-(`.claude/CLAUDE.md`, shown above it as "Repo instructions"). Those rules
+(`.claude/CLAUDE.md`, shown above as "Repo instructions"). Those rules
 apply to the team as written and are not repeated here. This file holds only
 what is about the team. Keep it short.
 
