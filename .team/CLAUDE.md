@@ -21,6 +21,11 @@ works today.
   (constructors excepted). No boolean parameters or flags; use an enum.
 - Docstrings on public functions, brief. Comments inside functions only for
   non-obvious pitfalls.
+- No code in the global scope. A module or script holds only its docstring,
+  imports, constants, function and class definitions, and an
+  `if __name__ == "__main__":` guard that calls one entry function (`main`, or
+  `just_do_it` when `main` doesn't fit). Loops, `with` blocks and calls belong
+  in functions.
 - Coverage stays at 95%+ (currently 100%); ruff check and ruff format clean.
 - No new runtime dependencies without an ADR. The dashboard uses the stdlib
   only (http.server, SSE).

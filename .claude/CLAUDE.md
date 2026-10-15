@@ -30,6 +30,11 @@ A rule that exists only in a prompt is a wish.
 - Before committing, run the same checks as CI:
   `uv run ruff check . && uv run ruff format --check . && uv run pytest --cov`.
 - Each module gets a matching `tests/test_<module>.py`.
+- No code in the global scope. A module or script holds only its docstring,
+  imports, constants, function and class definitions, and an
+  `if __name__ == "__main__":` guard that calls one entry function (`main`, or
+  `just_do_it` when `main` doesn't fit). Loops, `with` blocks and calls belong
+  in functions.
 
 ## Shell
 
