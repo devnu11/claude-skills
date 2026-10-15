@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from group_chat.schema import check, check_items, fits
+from group_chat.schema import ListSchema, TableSchema, fits
 
 pytestmark = pytest.mark.unit
 
@@ -29,24 +29,24 @@ def test_bool_is_not_an_int(value: bool) -> None:
 
 
 def test_check_accepts_valid_and_partial_tables() -> None:
-    check({"name": "a", "count": 1, "tags": []}, FIELDS, "thing", Bad)
-    check({}, FIELDS, "thing", Bad)
+    TableSchema(FIELDS, "thing", Bad).check({"name": "a", "count": 1, "tags": []})
+    TableSchema(FIELDS, "thing", Bad).check({})
 
 
 @pytest.mark.parametrize("table", [[], "x", None, 3])
 def test_check_refuses_non_table(table: Any) -> None:
     with pytest.raises(Bad, match="thing must be a table"):
-        check(table, FIELDS, "thing", Bad)
+        TableSchema(FIELDS, "thing", Bad).check(table)
 
 
 def test_check_refuses_unknown_keys_sorted() -> None:
     with pytest.raises(Bad, match=r"thing has unknown key\(s\): a, z"):
-        check({"z": 1, "a": 2, "name": "x"}, FIELDS, "thing", Bad)
+        TableSchema(FIELDS, "thing", Bad).check({"z": 1, "a": 2, "name": "x"})
 
 
 def test_check_refuses_missing_required_keys() -> None:
     with pytest.raises(Bad, match=r"thing is missing key\(s\): count, name"):
-        check({"tags": []}, FIELDS, "thing", Bad, required=("name", "count"))
+        TableSchema(FIELDS, "thing", Bad, ("name", "count")).check({"tags": []})
 
 
 @pytest.mark.parametrize(
@@ -55,18 +55,18 @@ def test_check_refuses_missing_required_keys() -> None:
 )
 def test_check_refuses_wrong_types(table: dict[str, Any], message: str) -> None:
     with pytest.raises(Bad, match=f"thing: {message}"):
-        check(table, FIELDS, "thing", Bad)
+        TableSchema(FIELDS, "thing", Bad).check(table)
 
 
 def test_check_uses_the_given_error_type() -> None:
     with pytest.raises(KeyError):
-        check([], FIELDS, "thing", KeyError)
+        TableSchema(FIELDS, "thing", KeyError).check([])
 
 
 def test_check_items() -> None:
-    check_items(["a", "b"], str, "names", Bad)
-    check_items([], str, "names", Bad)
+    ListSchema(str, "names", Bad).check(["a", "b"])
+    ListSchema(str, "names", Bad).check([])
     with pytest.raises(Bad, match="names must hold only str values"):
-        check_items(["a", 1], str, "names", Bad)
+        ListSchema(str, "names", Bad).check(["a", 1])
     with pytest.raises(Bad, match="ids must hold only int values"):
-        check_items([1, True], int, "ids", Bad)
+        ListSchema(int, "ids", Bad).check([1, True])

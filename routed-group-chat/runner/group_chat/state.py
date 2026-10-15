@@ -23,7 +23,7 @@ from typing import Any
 from . import decision_log
 from .decision_log import DecisionLog
 from .lock import LockError, LockFile
-from .schema import check, check_items
+from .schema import ListSchema, TableSchema
 
 STATE_FILE = "state.json"
 LOCK_FILE = "lock"
@@ -42,12 +42,12 @@ def escape_tags(text: str) -> str:
 
 def validate(data: Any) -> None:
     """Raise ``StateError`` unless ``data`` has the shape ``ChatState.to_dict`` writes."""
-    check(data, STATE_FIELDS, "state", StateError)
+    TableSchema(STATE_FIELDS, "state", StateError).check(data)
     turns = data.get("turns", [])
-    check_items(turns, dict, "state.turns", StateError)
+    ListSchema(dict, "state.turns", StateError).check(turns)
     for turn in turns:
-        check(turn, TURN_FIELDS, "state.turns entry", StateError, required=TURN_FIELDS)
-    check_items(data.get("last_addressed", []), str, "state.last_addressed", StateError)
+        TableSchema(TURN_FIELDS, "state.turns entry", StateError, TURN_FIELDS).check(turn)
+    ListSchema(str, "state.last_addressed", StateError).check(data.get("last_addressed", []))
     decision_log.validate(data.get("log", {}), StateError)
 
 
