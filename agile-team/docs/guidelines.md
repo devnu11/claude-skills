@@ -174,4 +174,13 @@ rule, update in the same story:
   to make a test pass. A test never asserts on a local-time string: parse it
   and compare instants, or convert to a named zone. A zone-sensitive test sets
   `TZ` itself and runs under at least `UTC` and one other zone.
+- **No test depends on the real clock (s129).** Only `tests/clock.py` reads
+  it. Unit tests use the fake clock. e2e tests that talk to a real process use
+  `clock.real_now()`, `clock.real_monotonic()` or `clock.Deadline`. Page tests
+  run with `Date.now` frozen by `dashboard_node.run_page(driver, now)`
+  (default: the fixture's `generated_at`; a served snapshot passes its own),
+  and drivers never set `data.skew`. Compare durations with `about(x)`, never
+  with `==`. The scan in `tests/e2e/test_s129_clock_scan_e2e.py` enforces
+  both rules; to get past it, add a helper to `tests/clock.py`, never an
+  exemption.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.
