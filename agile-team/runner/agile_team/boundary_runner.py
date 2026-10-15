@@ -543,7 +543,7 @@ class BoundaryRunner:
         if fix.status != "done":  # type: ignore[union-attr]
             return FIX_NOT_DONE.format(status=fix.status)  # type: ignore[union-attr]
         scratch = self._scratch(b)
-        return scratch.refusal(b.sync_from) or self._checks_refusal(scratch)
+        return scratch.find_refusal(b.sync_from) or self._checks_refusal(scratch)
 
     def _checks_refusal(self, scratch: ScratchRebase) -> str:
         report = self._run_checks(scratch.path)
@@ -554,7 +554,7 @@ class BoundaryRunner:
     def _move_to_fix(self, b: Boundary) -> None:
         scratch = self._scratch(b)
         try:
-            result = self.remote.move_team_branch(b.sync_from, scratch.head())
+            result = self.remote.move_team_branch(b.sync_from, scratch.head)
         except UpstreamError:
             self._forget_fix(b, scratch)
             raise

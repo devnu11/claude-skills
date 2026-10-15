@@ -49,20 +49,20 @@ def test_s153_constants() -> None:
     assert sr.REBASE_DIR == "rebase"
     assert sr.REBASE_BRANCH == "agile-team/rebase-sprint-{sprint}"
     assert (
-        sr.ScratchRebase._unfinished,
-        sr.ScratchRebase._off_branch,
-        sr.ScratchRebase._dirty,
-        sr.ScratchRebase._off_target,
+        sr.ScratchRebase._check_unfinished,
+        sr.ScratchRebase._check_off_branch,
+        sr.ScratchRebase._check_dirty,
+        sr.ScratchRebase._check_off_target,
         sr.ScratchRebase._merges,
         sr.ScratchRebase._commits_changed,
-        sr.ScratchRebase._lost,
+        sr.ScratchRebase._check_lost,
     ) == sr.SCRATCH_CHECKS
 
 
 def test_s153_tree_and_head_are_the_worktrees(fake: FakeSystem) -> None:
     fake.reply(("git", "rev-parse", "HEAD"), Done(0, HEAD + "\n"))
     assert scratch().tree.repo == PATH
-    assert scratch().head() == HEAD
+    assert scratch().head == HEAD
     assert commands(fake)[-1][1] == PATH
 
 
@@ -134,40 +134,40 @@ def test_s153_drop_removes_the_worktree_and_deletes_the_branch(fake: FakeSystem)
 def test_s153_unfinished(fake: FakeSystem) -> None:
     fake.reply(("git", "rev-parse", "--absolute-git-dir"), Done(0, "/gd\n"))
     fake.put(Path("/gd/rebase-merge/x"), "")
-    reason = scratch()._unfinished(OLD)
+    reason = scratch()._check_unfinished(OLD)
     assert reason == sr.UNFINISHED.format(path=PATH, operation="rebase")
 
 
 def test_s153_unfinished_passes_on_a_quiet_worktree(fake: FakeSystem) -> None:
     fake.reply(("git", "rev-parse", "--absolute-git-dir"), Done(0, "/gd\n"))
-    assert scratch()._unfinished(OLD) == ""
+    assert scratch()._check_unfinished(OLD) == ""
 
 
 def test_s153_off_branch(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "other\n"))
-    assert scratch()._off_branch(OLD) == sr.OFF_BRANCH.format(path=PATH, branch=BRANCH)
+    assert scratch()._check_off_branch(OLD) == sr.OFF_BRANCH.format(path=PATH, branch=BRANCH)
 
 
 def test_s153_off_branch_passes_on_the_branch_and_fails_when_detached(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, BRANCH + "\n"))
-    assert scratch()._off_branch(OLD) == ""
+    assert scratch()._check_off_branch(OLD) == ""
     fake.reply(("git", "symbolic-ref"), Done(1, ""))
-    assert scratch()._off_branch(OLD) != ""
+    assert scratch()._check_off_branch(OLD) != ""
 
 
 def test_s153_dirty(fake: FakeSystem) -> None:
     fake.reply(("git", "status", "--porcelain"), Done(0, " M a.py\n"))
-    assert scratch()._dirty(OLD) == sr.DIRTY.format(path=PATH, status=" M a.py".strip())
+    assert scratch()._check_dirty(OLD) == sr.DIRTY.format(path=PATH, status=" M a.py".strip())
 
 
 def test_s153_dirty_passes_when_clean(fake: FakeSystem) -> None:
     fake.reply(("git", "status", "--porcelain"), Done(0, ""))
-    assert scratch()._dirty(OLD) == ""
+    assert scratch()._check_dirty(OLD) == ""
 
 
 def test_s153_off_target(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(1, ""))
-    assert scratch()._off_target(OLD) == sr.NOT_ON_TARGET.format(
+    assert scratch()._check_off_target(OLD) == sr.NOT_ON_TARGET.format(
         branch=BRANCH, target="origin/main"
     )
     [argv] = [a for a in in_team(fake) if "--is-ancestor" in a]
@@ -176,7 +176,7 @@ def test_s153_off_target(fake: FakeSystem) -> None:
 
 def test_s153_off_target_passes_when_the_target_is_an_ancestor(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(0, ""))
-    assert scratch()._off_target(OLD) == ""
+    assert scratch()._check_off_target(OLD) == ""
 
 
 def test_s153_merges(fake: FakeSystem) -> None:
@@ -234,12 +234,12 @@ def script_lost(fake: FakeSystem, mine: str) -> None:
 
 def test_s153_lost(fake: FakeSystem) -> None:
     script_lost(fake, "x.py\ny.py\n")
-    assert scratch()._lost(OLD) == sr.LOST_PATHS.format(branch=BRANCH, paths="x.py, y.py")
+    assert scratch()._check_lost(OLD) == sr.LOST_PATHS.format(branch=BRANCH, paths="x.py, y.py")
 
 
 def test_s153_lost_passes_when_no_path_is_one_sided(fake: FakeSystem) -> None:
     script_lost(fake, "")
-    assert scratch()._lost(OLD) == ""
+    assert scratch()._check_lost(OLD) == ""
 
 
 # ----- refusal ------------------------------------------------------------------------
@@ -248,7 +248,7 @@ def test_s153_lost_passes_when_no_path_is_one_sided(fake: FakeSystem) -> None:
 def test_s153_refusal_is_empty_when_every_check_passes(fake: FakeSystem, monkeypatch) -> None:
     passing = tuple(lambda self, old: "" for _ in sr.SCRATCH_CHECKS)
     monkeypatch.setattr("agile_team.scratch_rebase.SCRATCH_CHECKS", passing)
-    assert scratch().refusal(OLD) == ""
+    assert scratch().find_refusal(OLD) == ""
 
 
 def test_s153_refusal_reads_the_table_at_call_time_and_stops_at_the_first_reason(
@@ -265,7 +265,7 @@ def test_s153_refusal_reads_the_table_at_call_time_and_stops_at_the_first_reason
 
     table = (check(""), check("first"), check("second"))
     monkeypatch.setattr("agile_team.scratch_rebase.SCRATCH_CHECKS", table)
-    assert scratch().refusal(OLD) == "first"
+    assert scratch().find_refusal(OLD) == "first"
     assert calls == ["", "first"]
 
 
@@ -274,7 +274,7 @@ def test_s153_refusal_with_real_checks_names_the_first_problem(fake: FakeSystem)
     fake.put(Path("/gd/rebase-merge/x"), "")
     fake.reply(("git", "symbolic-ref"), Done(1, ""))
     fake.reply(("git", "status", "--porcelain"), Done(0, " M a\n"))
-    assert scratch().refusal(OLD) == sr.UNFINISHED.format(path=PATH, operation="rebase")
+    assert scratch().find_refusal(OLD) == sr.UNFINISHED.format(path=PATH, operation="rebase")
 
 
 def test_s153_refusal_with_real_checks_is_empty_for_a_clean_resolution(fake: FakeSystem) -> None:
@@ -283,4 +283,4 @@ def test_s153_refusal_with_real_checks_is_empty_for_a_clean_resolution(fake: Fak
     fake.reply(("git", "rev-parse", "origin/main"), Done(0, "e" * 40 + "\n"))
     fake.reply(("git", "merge-base"), Done(0, BASE + "\n"))
     fake.reply(("git", "cherry"), Done(0, ""))
-    assert scratch().refusal(OLD) == ""
+    assert scratch().find_refusal(OLD) == ""

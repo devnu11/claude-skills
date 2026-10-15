@@ -60,29 +60,30 @@ class ScratchRebase:
         self.remove()
         self.upstream.git.attempt("branch", "-D", self.branch)
 
+    @property
     def head(self) -> str:
         """The scratch worktree's HEAD."""
         return self.tree.head()
 
-    def refusal(self, old: str) -> str:
+    def find_refusal(self, old: str) -> str:
         """The first problem with DevOps's result, else an empty string."""
         reasons = (check(self, old) for check in SCRATCH_CHECKS)
         return next((r for r in reasons if r), "")
 
-    def _unfinished(self, old: str) -> str:
+    def _check_unfinished(self, old: str) -> str:
         found = operation(self.tree)
         return UNFINISHED.format(path=self.path, operation=found) if found else ""
 
-    def _off_branch(self, old: str) -> str:
+    def _check_off_branch(self, old: str) -> str:
         if self.tree.branch() == self.branch:
             return ""
         return OFF_BRANCH.format(path=self.path, branch=self.branch)
 
-    def _dirty(self, old: str) -> str:
+    def _check_dirty(self, old: str) -> str:
         status = self.tree.run("status", "--porcelain").strip()
         return DIRTY.format(path=self.path, status=status) if status else ""
 
-    def _off_target(self, old: str) -> str:
+    def _check_off_target(self, old: str) -> str:
         target = self.upstream.target
         code = self.upstream.git.attempt("merge-base", "--is-ancestor", target, self.branch)[0]
         return NOT_ON_TARGET.format(branch=self.branch, target=target) if code else ""
@@ -101,7 +102,7 @@ class ScratchRebase:
         found = [s.stamp for s in up.listing(f"{target}..{self.branch}")]
         return "" if wanted == found else COMMITS_CHANGED.format(branch=self.branch)
 
-    def _lost(self, old: str) -> str:
+    def _check_lost(self, old: str) -> str:
         up = self.upstream
         target_sha = up.git.run("rev-parse", up.target).strip()
         lost = up.find_lost_paths(Spans(old, old, target_sha, head=self.branch))
@@ -111,11 +112,11 @@ class ScratchRebase:
 
 
 SCRATCH_CHECKS = (
-    ScratchRebase._unfinished,
-    ScratchRebase._off_branch,
-    ScratchRebase._dirty,
-    ScratchRebase._off_target,
+    ScratchRebase._check_unfinished,
+    ScratchRebase._check_off_branch,
+    ScratchRebase._check_dirty,
+    ScratchRebase._check_off_target,
     ScratchRebase._merges,
     ScratchRebase._commits_changed,
-    ScratchRebase._lost,
+    ScratchRebase._check_lost,
 )
