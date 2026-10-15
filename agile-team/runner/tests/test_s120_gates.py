@@ -187,7 +187,7 @@ def attach(rt, role: str, files: bool = True) -> SimpleNamespace:
 @pytest.mark.parametrize("role", ["architect", "customer-proxy"])
 def test_the_roles_in_brief_notes_get_the_section(make_runtime, role: str) -> None:
     plan = attach(make_runtime(), role)
-    want = shares.brief_section(shares.Listed((entry(),)), role)
+    want = shares.brief_section(shares.Listed((entry(),)), shares.Brief("s1", role))
     assert want and plan.prompt.startswith("brief\n\n## Shared files")
     assert f"- `{PATH}` (sha256 {SHA[:12]})" in plan.prompt
     assert shares.BRIEF_NOTES[role] in plan.prompt
