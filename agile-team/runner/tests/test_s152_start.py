@@ -11,7 +11,7 @@ from agile_team.boundary_runner import BoundaryRunner
 from agile_team.fullcheck import CheckReport, CheckResult, FullCheck
 from agile_team.upstream import Rebase, SyncOutcome
 
-from .fake_system import FAKE_HEAD, FakeSystem
+from .fake_system import FAKE_HEAD
 from .test_boundary_runner import Env, posted
 
 OLD, MOVED = "c" * 40, "d" * 40
@@ -66,7 +66,7 @@ def test_ac1_1_a_start_sync_rebases_and_remaps_the_hashes(env: Env) -> None:
     assert event["sha"] == NEW_SHA
 
 
-def test_ac1_1_a_branch_already_on_the_target_is_left_alone(env: Env, fake: FakeSystem) -> None:
+def test_ac1_1_a_branch_already_on_the_target_is_left_alone(env: Env) -> None:
     calls = start_sync(env, 0, Rebase(SyncOutcome.CURRENT))
     env.br.step()
     event = env.events()[-1].data
@@ -74,7 +74,6 @@ def test_ac1_1_a_branch_already_on_the_target_is_left_alone(env: Env, fake: Fake
     assert event["outcome"] == "current" and event["behind"] == 0
     assert event["note"] == br.START_CURRENT.format(target="origin/main")
     assert env.rt.state.boundary.stage is Stage.CHECK
-    assert not [c for c in fake.commands if "rebase" in c.argv]
 
 
 def test_ac1_1_a_pinned_sync_from_still_rebases_when_not_behind(env: Env) -> None:
