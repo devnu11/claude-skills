@@ -7,13 +7,6 @@
     "agile-team/runner/tests/test_po_cost.py::test_session_cost_defaults",
     "agile-team/runner/tests/test_reconcile.py"
   ],
-  "s144": [
-    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_inside_an_imported_file",
-    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_is_never_marked_seen",
-    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_left_out_with_note",
-    "agile-team/runner/tests/test_s142_repo_instructions.py::test_other_text_still_loads_beside_a_binary_import",
-    "agile-team/runner/tests/test_s142_repo_instructions.py::test_step_prompt_is_built_with_a_binary_import"
-  ],
   "s151": [
     "agile-team/runner/tests/test_boundary.py::test_big_pr_note_no_longer_names_the_bottom_of_the_stack",
     "agile-team/runner/tests/test_boundary.py::test_boundary_defaults_and_coercion",
