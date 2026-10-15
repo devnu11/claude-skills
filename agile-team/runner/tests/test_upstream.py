@@ -262,3 +262,84 @@ def test_command_runner_runs_argv_and_maps_missing_binary(fake: FakeSystem) -> N
     code, out = run(["definitely-not-a-binary-xyz"])
     assert code == 127 and out
     assert fake.commands[0].cwd == FAKE_REPO
+
+
+# ----- s153 AC1, AC2: upstreamed, lost_paths, adopt ----------------------------
+
+BASE, TARGET_SHA = "d" * 40, "e" * 40
+NO_RENAMES = ("git", "diff", "--name-only", "--no-renames")
+
+
+def stamped(sha: str, message: str) -> str:
+    return f"{sha}\x1fAda\x1fada@example.com\x1f100 +0000\x1f{message}\x1e\n"
+
+
+def test_s153_rebase_argvs_are_the_flags_plus_the_empty_policy() -> None:
+    assert (*up.REBASE_FLAGS, "--empty=drop") == up.REBASE_ARGV
+    assert (*up.REBASE_FLAGS, "--empty=keep") == up.SCRATCH_REBASE_ARGV
+    assert up.REBASE_FLAGS[:5] == (
+        "-c",
+        "rebase.updateRefs=false",
+        "-c",
+        "rebase.rebaseMerges=false",
+        "rebase",
+    )
+
+
+def test_s153_upstreamed_runs_cherry_and_keeps_only_the_minus_shas(fake: FakeSystem) -> None:
+    fake.reply(("git", "cherry"), Done(0, "- s1\n+ s2\n- s3\n"))
+    assert upstream_for().upstreamed(OLD) == frozenset({"s1", "s3"})
+    [argv] = issued(fake, "cherry")
+    assert argv[-2:] == ("origin/main", OLD)
+
+
+def test_s153_upstreamed_of_nothing_is_empty(fake: FakeSystem) -> None:
+    fake.reply(("git", "cherry"), Done(0, ""))
+    assert upstream_for().upstreamed(OLD) == frozenset()
+
+
+def script_lost(fake: FakeSystem, head: str, mine: str = "", theirs: str = "") -> None:
+    fake.reply(("git", "merge-base"), Done(0, BASE + "\n"))
+    fake.reply((*NO_RENAMES, OLD, head), Done(0, mine))
+    fake.reply((*NO_RENAMES, "origin/main", head), Done(0, theirs))
+
+
+def test_s153_lost_paths_diffs_against_the_given_head(fake: FakeSystem) -> None:
+    script_lost(fake, "br", mine="x.py\nb.py\n", theirs="a.py\n")
+    spans = up.Spans(OLD, OLD, TARGET_SHA, head="br")
+    assert upstream_for().lost_paths(spans) == ["a.py", "b.py", "x.py"]
+    diffs = issued(fake, *NO_RENAMES)
+    assert all("HEAD" not in argv for argv in diffs)
+    assert {argv[-1] for argv in diffs} >= {"br"}
+
+
+def test_s153_lost_paths_default_head_is_head(fake: FakeSystem) -> None:
+    assert up.Spans("a", "b", "c").head == "HEAD"
+    script_lost(fake, "HEAD")
+    assert upstream_for().lost_paths(up.Spans(OLD, OLD, TARGET_SHA)) == []
+    assert any(argv[-1] == "HEAD" for argv in issued(fake, *NO_RENAMES))
+
+
+def script_adopt(fake: FakeSystem, head: str) -> None:
+    fake.reply(("git", "rev-parse", "HEAD"), Done(0, head + "\n"))
+    fake.reply(("git", "rev-parse", "origin/main"), Done(0, TARGET_SHA + "\n"))
+    fake.reply(("git", "log", f"origin/main..{OLD}"), Done(0, stamped("o1", "one")))
+    fake.reply(("git", "log", "origin/main..HEAD"), Done(0, stamped("n1", "one")))
+
+
+def test_s153_adopt_resets_keep_and_pairs_the_commits(fake: FakeSystem) -> None:
+    script_adopt(fake, OLD)
+    result = upstream_for().adopt(OLD, NEW)
+    assert result.outcome is up.SyncOutcome.REBASED and result.sha == NEW
+    assert dict(result.moved) == {"o1": "n1"}
+    [reset] = issued(fake, "reset")
+    assert reset[-2:] == ("--keep", NEW)
+
+
+def test_s153_adopt_refuses_when_the_team_branch_moved(fake: FakeSystem) -> None:
+    script_adopt(fake, NEW)
+    fake.reply(("git", "symbolic-ref"), Done(0, "team\n"))
+    with pytest.raises(UpstreamError) as raised:
+        upstream_for().adopt(OLD, "c" * 40)
+    assert str(raised.value) == up.TEAM_MOVED.format(team="team", old=OLD)
+    assert issued(fake, "reset") == []
