@@ -9,7 +9,7 @@ from . import state as state_mod
 from .ledger import LEDGER, PO_ROLE, Entry, Ledger, Tokens
 from .live import TURNS, Turn
 
-Key = tuple[str, str | None]  # (role, story), RC2
+type Key = tuple[str, str | None]  # (role, story), RC2
 TOLD = (
     "agile-team start: ledgered ${cost:.2f} for {label}, "
     "cut off by the last run (estimated from turns.jsonl)"
@@ -17,7 +17,7 @@ TOLD = (
 BAD_LINE = (ValueError, TypeError, KeyError)
 
 
-def reconcile_ledger(run_dir: Path) -> list[Entry]:
+def record_cut_off_spend(run_dir: Path) -> list[Entry]:
     """Ledger each key's uncovered turns (RC1-RC7); [] while a runner is alive."""
     if state_mod.runner_alive(run_dir):
         return []
@@ -26,11 +26,11 @@ def reconcile_ledger(run_dir: Path) -> list[Entry]:
     entries = [sum_turns(turns) for turns in found.values()]
     for entry in entries:
         ledger.record(entry)
-    _net_po_spend(run_dir, entries)
+    _note_po_spend(run_dir, entries)
     return entries
 
 
-def _net_po_spend(run_dir: Path, entries: list[Entry]) -> None:
+def _note_po_spend(run_dir: Path, entries: list[Entry]) -> None:
     """RC7: note the reconciled PO cost in the session baseline."""
     spent = sum(e.cost_usd for e in entries if e.role == PO_ROLE)
     if spent <= 0:
@@ -45,18 +45,18 @@ def read_turns(path: Path) -> list[Turn]:
     """The parseable turn lines of ``path`` in file order; [] when it is missing (RC6)."""
     if not system.is_file(path):
         return []
-    parsed = (_parsed(line) for line in system.read_text(path).splitlines())
+    parsed = (_parse_turn(line) for line in system.read_text(path).splitlines())
     return [turn for turn in parsed if turn is not None]
 
 
-def _parsed(line: str) -> Turn | None:
+def _parse_turn(line: str) -> Turn | None:
     try:
         return Turn.from_line(line)
     except BAD_LINE:
         return None
 
 
-def _latest(entries: list[Entry]) -> dict[Key, float]:
+def _find_latest(entries: list[Entry]) -> dict[Key, float]:
     latest: dict[Key, float] = {}
     for e in entries:
         key = (e.role, e.story)
@@ -66,7 +66,7 @@ def _latest(entries: list[Entry]) -> dict[Key, float]:
 
 def find_uncovered(turns: list[Turn], entries: list[Entry]) -> dict[Key, list[Turn]]:
     """Per key, its turns after its latest ledger row (RC3), in first-turn order."""
-    latest = _latest(entries)
+    latest = _find_latest(entries)
     found: dict[Key, list[Turn]] = {}
     for turn in turns:
         key = (turn.role, turn.story)
@@ -75,7 +75,7 @@ def find_uncovered(turns: list[Turn], entries: list[Entry]) -> dict[Key, list[Tu
     return found
 
 
-def _turn_count(turns: list[Turn]) -> int:
+def _count_turns(turns: list[Turn]) -> int:
     ids = {t.message_id for t in turns if t.message_id is not None}
     return len(ids) + sum(1 for t in turns if t.message_id is None)
 
@@ -89,11 +89,11 @@ def sum_turns(turns: list[Turn]) -> Entry:
         sum(t.cost_usd or 0.0 for t in turns),
         last.story,
         tokens=sum((t.tokens for t in turns), Tokens()),
-        turns=_turn_count(turns),
+        turns=_count_turns(turns),
     )
 
 
-def told_line(entry: Entry) -> str:
+def format_told_line(entry: Entry) -> str:
     """The stderr line for a reconciled entry (RC8)."""
     label = salvage.label(entry.role, entry.story)
     return TOLD.format(cost=entry.cost_usd, label=label)
