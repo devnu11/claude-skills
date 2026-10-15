@@ -131,3 +131,14 @@ counted correctly.
   so they cannot catch a CLI change. Whoever upgrades `claude-agent-sdk`
   re-checks points 2 and 4 above against the new version and a fresh
   ledger.
+
+## Amended by s10 (2026-10-15)
+
+Rule 4 holds only if a later query resumes the same session and Claude Code
+carried the cut-off cost into its total. A crash that ends the run breaks the
+first condition, and nobody can check the second. So each `start` now ledgers
+the turns that came after a key's latest row, estimated from `turns.jsonl`. It
+stores the PO's part on the baseline as `po_cost.reconciled`, and the next
+same-session delta is reduced by `min(reconciled, delta)`. See
+`.team/adr/0078-start-ledgers-cut-off-spend-from-turns.md` and
+[`../design/s10.md`](../design/s10.md).

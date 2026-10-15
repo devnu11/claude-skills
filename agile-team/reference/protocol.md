@@ -1248,13 +1248,27 @@ difference:
   means the counter restarted). `base` is the running total last seen for
   the session the query resumes, or `0` for a fresh session or a different
   session.
-- `state.json` keeps `po_cost: {"session", "reported"}` with the raw
+- `state.json` keeps `po_cost: {"session", "reported", "reconciled"}` with the raw
   figure, so `start --resume` keeps the baseline. An older `state.json`
   takes its baseline from the last PO ledger entry.
 - The provider's `billing` applies to the own cost. A query with no result
   ledgers `0` and leaves `po_cost` as it was.
 - A PO query that is never ledgered (an error result) is still in the
   next query's running total, so that query's difference pays for it.
+- **Cut-off spend (s10, ADR-0078).** Every `start` checks for queries cut
+  off before their ledger row (a crash, a kill), unless a runner is alive.
+  For each role and story, the `turns.jsonl` lines after its latest ledger
+  row become one ledger row. That row holds the sum of their estimated
+  `cost_usd` (`null` counts 0) and tokens, `turns` (distinct `message_id`s)
+  and the last line's model, stamped with the start time. Torn or bad lines
+  are skipped. A row is written once, because the next start finds those
+  turns covered. The start prints `agile-team start: ledgered $<cost> for
+  <role[ on story]>, cut off by the last run (estimated from turns.jsonl)`.
+  A reconciled PO cost is added to `po_cost.reconciled`. The next query
+  resuming that session takes `min(reconciled, own)` off its own cost,
+  because the session's running total may already include it. A new
+  baseline starts with `reconciled` at 0. A reconciled row fires no budget
+  checkpoint.
 
 Ledger lines are never rewritten. PO entries written before s25 are running
 totals, so they are corrected when the ledger is read (ADR-007):
