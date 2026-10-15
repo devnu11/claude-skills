@@ -548,9 +548,9 @@ class Runtime:
         step = fitting_step(plan.role.name, GIT_CONFINED)
         if step is None:
             return
-        self._confine_to(plan, GIT_CONFINED[step](self, plan))
+        self._set_git_workspace(plan, GIT_CONFINED[step](self, plan))
 
-    def _confine_to(self, plan: Plan, path: Path) -> None:
+    def _set_git_workspace(self, plan: Plan, path: Path) -> None:
         """Confine the step's git to ``path`` and set git's ceiling (G2)."""
         plan.scope.git_workspace = system.resolve(path)
         env = {**(plan.launch.env or self.env), **git_check.git_env(self.config.run_dir)}
@@ -594,12 +594,12 @@ class Runtime:
         wanted = expand_globs(list(FIX_GLOBS), values)
         plan.scope.write = [*plan.scope.write, *(g for g in wanted if not g.startswith("!"))]
 
-    def _rebase_fix_scope(self, plan: Plan) -> None:
+    def _set_rebase_fix_scope(self, plan: Plan) -> None:
         """A rebase fix may write only the scratch worktree, and its git is confined there."""
         worktree = self.config.run_dir / scratch_rebase.REBASE_DIR
         rel = worktree.relative_to(self.config.repo).as_posix()
         plan.scope.write = [f"{rel}/**"]
-        self._confine_to(plan, worktree)
+        self._set_git_workspace(plan, worktree)
         plan.launch.env = {**plan.launch.env, **REBASE_FIX_ENV}
 
     def _lay_out_presentation(self, plan: Plan) -> None:
@@ -1399,7 +1399,7 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 
 FIX_SETUPS = {
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
-    StepKind.REBASE_FIX: Runtime._rebase_fix_scope,
+    StepKind.REBASE_FIX: Runtime._set_rebase_fix_scope,
 }
 
 
