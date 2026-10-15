@@ -78,6 +78,25 @@ that outcome through `Checks.reuse` instead of running again, and its reason
 ends with "(the stop hook's run on this tree)". With no hook run, or with
 different content, the gate runs coverage once, as above.
 
+## Amended by s73 (2026-10-14)
+
+The follow-up above is done. The sprint-boundary full checks
+(`fullcheck.py`) also run the suite once. When a `coverage` command is set,
+`full_checks` leaves the `test` check out (`SUPERSEDED_BY = {"test": "coverage"}`).
+The coverage check alone proves green and gives the total. `test` still runs
+when no `coverage` command is set.
+
+The C4 rule ("a non-zero run whose total fell short, with no failing test, is
+a shortfall") moves into one module function, `gates.coverage_shortfall(output,
+required)`. `Checks._failed_run` and fullcheck's coverage judge both call it,
+so the boundary has no second copy. The boundary keeps its own texts:
+`exit N` for a failing suite and `coverage X% is below Y%` for a shortfall,
+inside `CHECK_FAILED`. One consequence: a `fail_under` shortfall at the
+boundary, which used to read `exit 1`, now reads as the shortfall. That is
+the text the boundary already gave for a shortfall at exit 0.
+
+Design: `agile-team/docs/design/s73.md`.
+
 ## References
 
 - Design: `agile-team/docs/design/s68.md`

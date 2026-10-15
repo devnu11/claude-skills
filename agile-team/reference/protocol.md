@@ -3054,10 +3054,17 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    during the wait, resume waits again. The sprint-end hand-over then says
    `Review: …` with the CI text.
 
-**Full checks**: the `[toolchain]` `lint`, `static`, `test` and `coverage`
-commands (coverage must reach the gate or the baseline), then each
-acceptance environment's `e2e` command. Every configured check runs, and the failed ones
-are quoted (`<name> failed (<why>): <command>` plus the last 30 lines).
+**Full checks**: the `[toolchain]` `lint`, `static` and `coverage` commands
+(coverage must reach the gate or the baseline), then each acceptance
+environment's `e2e` command. The boundary runs the suite **once** (s73), as
+the `coverage` command: that one run proves the suite green and gives the
+coverage figure. `test` runs only when no `coverage` command is set. Every configured check runs, and the failed ones
+are quoted (`<name> failed (<why>): <command>` plus the last 30 lines). For
+the coverage check, a failing suite gives `exit N`, and a coverage
+shortfall gives `coverage X% is below Y%`. A shortfall gives that text
+whether the run exited 0 or pytest-cov's `fail_under` stopped it with no
+failing test. That is the same rule the implement gate uses
+(`gates.coverage_shortfall`, s68). A non-zero exit never passes.
 
 **Failures.** A failed check or a rebuild conflict becomes a **DevOps fix
 step**, whose brief quotes the output. Failed checks on the team branch or
