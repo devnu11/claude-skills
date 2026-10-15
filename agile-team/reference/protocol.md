@@ -2078,7 +2078,8 @@ The pass ends at the first step whose report matches a row of the
 | `runner_fault` | the Manager put a setback on the runner; the story is blocked and the human was told |
 | `off_pipeline_fault` | the Manager put a setback on a role with no pipeline step; brief it, then `continue_story` |
 | `fault_not_applied` | the Manager's `fault` was not applied (missing, unknown role, no story or a done story); the reason is in the line |
-| `sync_conflict` | rebasing the team branch onto upstream at sprint end (the `rebase` stage) conflicts (the stopping commit and its files, grouped by directory with a count; the rebase was aborted and the branch is unchanged) |
+| `rebase_conflict` | the sprint-end rebase conflicted and DevOps could not settle it in the scratch worktree, or its result was refused, or the full checks failed there (the stopping commit and its files, grouped by directory with a count; the reason; DevOps's notes; the scratch branch; the team branch is unchanged). `continue_boundary(note)` starts a fresh rebase and DevOps attempt (s151 AC6) |
+| `sync_conflict` | legacy (before s151 AC6): a saved boundary held on a sprint-end rebase conflict. `continue_boundary` reruns the rebase; a conflict now goes to DevOps |
 | `push_permission` | the team branch is checked at a sprint end, and the human has not yet said whether the team may push the sprint's branch and open its PR |
 | `push_rejected` | a push to the sprint's branch was refused (its remote branch moved), at the `push` or `push-rebased` stage; the stage stays and `continue_boundary` reruns it |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
@@ -3063,11 +3064,40 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    `pushed` or `ci`). Then it records the checkout and saves.
    `upstream.checked` is not rewritten, so the full checks run again. A
    path only one side touched must keep that side's version. Otherwise the
-   branch is reset to where it was and the boundary holds `error`. On a
-   conflict the rebase is aborted, the team branch is unchanged, and the PO
-   gets `sync_conflict` with the stopping commit and its files grouped by
-   directory. The human rebases by hand and the PO calls
-   `continue_boundary`. The runner remaps from the HEAD it recorded before
+   branch is reset to where it was and the boundary holds `error`.
+
+   **A conflict goes to DevOps** (s151 AC6, ADR-0076). The rebase is
+   aborted and the team branch is unchanged. The runner makes a git
+   worktree at `.team/run/rebase` on the scratch branch
+   `agile-team/rebase-sprint-<N>`, starts the same rebase there (commits
+   that become empty are kept), emits `conflict` (no hold) and runs a
+   `rebase-fix` step for `devops`. Its brief names the stopping commit, its
+   subject and files, the worktree and the branch. The step may write only
+   the worktree, and git may change only the worktree (`GIT_EDITOR=true`).
+   DevOps resolves the conflicting files, keeping both sides' intent, and
+   finishes the rebase; it never merges, squashes, reorders, rewords, skips
+   or drops a commit. When it is back, the `rebase` stage (no fetch) judges
+   the result: the step ended `done`; the rebase is finished; the worktree
+   is clean and on its branch; the branch sits on the target with no merge
+   commit; its commits (author, date, message, in order) are the team
+   branch's minus those `git cherry` finds already upstream; no path only
+   one side touched changed; and the full checks, run by the runner in the
+   worktree, pass. Then the team branch is reset to the result (`reset
+   --keep`; if the team HEAD moved meanwhile, `error` and nothing is
+   reset), the hashes are remapped as above, the worktree and the scratch
+   branch are removed, and the boundary goes on to **push-rebased**.
+   Otherwise it holds `rebase_conflict`: the PO's handover and an `update`
+   to the liaison (`Sprint N's rebase onto <target> stopped at <commit>
+   "<subject>" (conflicts in <files>), and DevOps could not settle it:
+   <reason>. DevOps's notes: <notes>. The team branch is unchanged;
+   DevOps's work is on the branch <branch>. …`) carry the conflict, the
+   reason, DevOps's notes and the scratch branch, which is kept.
+   `continue_boundary(note)` starts a fresh rebase and, on a new conflict,
+   a new DevOps step with the note. `sync_conflict` is no longer emitted;
+   a saved boundary held there still loads, and `continue_boundary` reruns
+   the rebase.
+
+   The runner remaps from the HEAD it recorded before
    the rebase (`boundary.sync_from`, saved before the rebase starts), so a
    hand rebase is rewritten too, and so is a rebase that a crash cut off
    before the hashes were saved. If git stops the rebase for a reason other

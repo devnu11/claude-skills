@@ -304,7 +304,9 @@ command fails.
    rewrite the commit hashes recorded in `state.json`, force-push the
    rebased branch to the same `team/sprint-<N>` (the PR keeps both pushes,
    so the human can see what the rebase changed), and wait for CI again.
-   Red CI on the first push holds the boundary, and you get the failing
+   A rebase conflict goes to a DevOps step in a scratch worktree, and the
+   runner moves the team branch to its result only when it checks out
+   clean and the full checks pass there. Red CI on the first push holds the boundary, and you get the failing
    checks in an `update`. Red CI on the rebased push is reported to you
    and the PO, but doesn't hold. With no CI at all (no `gh`, the human
    said no, or no checks), nothing is rebased at the sprint end. The new
@@ -405,13 +407,17 @@ command fails.
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit
-  `state.json` to move a story. The one exception is a **sync conflict** at sprint end (the `rebase` stage):
-  the PO asks the human to rebase the team branch onto `origin/main` by hand.
-  The runner waits and runs nothing meanwhile. The human, or you if they
-  ask, rebases and resolves (`git rebase origin/main`, `git rebase
-  --continue`), runs `agile-team accept-checkout` if the run halts on the
-  moved checkout, and then the question is answered. The runner rewrites
-  the recorded hashes itself; never edit `state.json` for them.
+  `state.json` to move a story. A **rebase conflict** at sprint end (the
+  `rebase` stage) is DevOps's: the runner aborts it, DevOps resolves it in a
+  scratch worktree (`.team/run/rebase`, branch
+  `agile-team/rebase-sprint-<N>`), and the runner checks the result and
+  runs the full checks there before it moves the team branch (s151 AC6).
+  Only when that fails does the boundary hold `rebase_conflict`, and you
+  get the conflict, DevOps's notes and the scratch branch. Relay them; the
+  human may look at the scratch branch or rebase the team branch by hand
+  (then `agile-team accept-checkout` if the run halts on the moved
+  checkout), and the PO calls `continue_boundary`. The runner rewrites the
+  recorded hashes itself; never edit `state.json` for them.
 - **DevOps reviews every design** (s115). The runner always runs
   `ops-review` right after `design`, even when `[gates] steps` leaves it
   out. DevOps says, for each AC, how it is checked automatically: already

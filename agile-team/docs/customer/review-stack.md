@@ -34,7 +34,14 @@ still works:
      Commits you already merged drop out, so they never conflict. The
      runner updates the commit hashes it keeps in `.team/run/state.json`
      itself. It never merges, so the history stays linear. This is the
-     only time the team branch is rebased.
+     only time the team branch is rebased. If the rebase stops on a
+     conflict, the runner aborts it and hands it to DevOps, which resolves
+     it in a scratch worktree (`.team/run/rebase`, branch
+     `agile-team/rebase-sprint-<N>`) without merging or squashing. The
+     runner checks the result, runs the full checks there, and only then
+     moves the team branch to it. If DevOps can't settle it, the boundary
+     holds, and you get the conflict, DevOps's notes and the scratch
+     branch to look at.
   5. It force-pushes the rebased branch to the same `team/sprint-<N>`. The
      pull request updates, and its history keeps the first push: GitHub's
      "force-pushed" line has a **Compare** link that shows exactly what the

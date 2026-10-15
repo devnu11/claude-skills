@@ -40,7 +40,7 @@ nothing is rebased) and `boundary.check`. A sprint end runs, in order:
 | `boundary.check` | Run the full checks |
 | `boundary.push` | Push the team branch as it is to the sprint's branch and open or reuse its PR |
 | `boundary.ci-wait` | Wait for that push's CI and read failing logs; green is the gate for the rebase |
-| `boundary.rebase` | Rebase the team branch onto the target, only after green CI |
+| `boundary.rebase` | Rebase the team branch onto the target, only after green CI; a conflict goes to DevOps in a scratch worktree, and the runner's checks and full checks of its result run here |
 | `boundary.push-rebased` | Force-push the rebased branch to the same sprint branch; the PR keeps both pushes |
 | `boundary.ci-rebased` | Wait for the rebased branch's CI and record it; red is reported, never held |
 
