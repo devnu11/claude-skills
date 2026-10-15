@@ -674,7 +674,8 @@ def _story_checks(config: config_mod.Config, drafted: tuple[StoryRequest, str | 
     """Every problem line with a draft, as ``Checked``; its draft is set when all is clean."""
     request, unread = drafted
     known = _story_known(config, request)
-    checked = Checked(None, (unread,)) if unread else draft_problems(request, known)
+    lines = (unread, *story_drafts.target_status_problems(request, known))
+    checked = Checked(None, lines) if unread else draft_problems(request, known)
     more = [*option_problems(request, known), *_plan_problems(config, request)]
     return replace(checked, problems=(*checked.problems, *more))
 

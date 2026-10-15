@@ -630,6 +630,7 @@ function replayStories(stories, events) {
   const pos = {};
   for (const e of events) {
     if (e.kind === "story-opened") pos[e.story] = { step: e.data.step, status: "active", rounds: 0 };
+    if (e.kind === "story-amended" && pos[e.story]) Object.assign(pos[e.story], { step: e.data.step, rounds: 0 });
     if (e.kind === "gate" && pos[e.story]) {
       Object.assign(pos[e.story], { step: e.data.now_at, status: e.data.story_status, rounds: e.data.rounds });
     }
@@ -1905,7 +1906,12 @@ const TIMELINE = {
     from: e.role, to: "requirements", what: `${e.data.id} ${e.data.change}`, tone: e.data.change === "added" ? "" : "serious",
     body: e.data.reason, meta: e.data.affected_done_stories?.length ? `affects done: ${e.data.affected_done_stories.join(", ")}` : "",
   }),
-  "story-opened": (e) => ({ from: PO, to: "backlog", what: "story opened", body: e.data.title }),
+  "story-opened": (e) => ({ from: e.role === "liaison" ? "liaison" : PO, to: "backlog", what: "story opened", body: e.data.title }),
+  "story-amended": (e) => ({
+    from: "liaison", to: e.data.step, what: "story amended",
+    body: `${(e.data.old ?? []).map((c) => c.id).join(", ")} → ${(e.data.new ?? []).map((c) => c.id).join(", ")}`,
+    meta: `${e.data.from_step} → ${e.data.step}`,
+  }),
   boundary: (e) => ({
     from: "runner", to: BOUNDARY_TO[e.data.outcome] ?? null,
     what: `sprint ${e.data.sprint} ${e.data.edge} · ${e.data.stage}: ${e.data.outcome}`,

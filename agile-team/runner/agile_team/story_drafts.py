@@ -250,14 +250,22 @@ def _body_problems(read: _Read) -> list[str]:
     return [EMPTY_BODY.format(file=read.request.file)]
 
 
-def _target_problems(read: _Read) -> list[str]:
-    request = read.request
-    story = read.known.stories.get(request.story)
+def _status_problems(request: StoryRequest, known: Known) -> list[str]:
+    story = known.stories.get(request.story)
     if story is None:
         return [NO_STORY.format(story=request.story)]
     if story.status in FINISHED:
         return [FINISHED_TARGET.format(story=request.story, status=story.status.value)]
-    return _against_target(read)
+    return []
+
+
+def target_status_problems(request: StoryRequest, known: Known) -> list[str]:
+    """An amend's unknown or finished target lines; they hold even when the draft can't be read."""
+    return _status_problems(request, known) if request.action is Action.AMEND else []
+
+
+def _target_problems(read: _Read) -> list[str]:
+    return _status_problems(read.request, read.known) or _against_target(read)
 
 
 def _against_target(read: _Read) -> list[str]:
