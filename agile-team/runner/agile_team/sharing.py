@@ -6,8 +6,6 @@ records its hash in the story file and commits both, never while a boundary is o
 
 from __future__ import annotations
 
-import itertools
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -16,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from . import shares, story_spec, system
 from .events import Event, EventKind
+from .numbered_queue import Entry, NumberedQueue
 from .relay import LIAISON_DIR
 from .shares import BadRequest, Refused, Request, Share, SharedFile
 
@@ -23,7 +22,8 @@ if TYPE_CHECKING:
     from .dispatch import Runtime
 
 SHARES_DIR = "shares"
-REQUEST_NAME = re.compile(r"^f(\d+)\.json$")
+REQUEST_PREFIX = "f"
+REQUEST_SUFFIX = ".json"
 ROLE = "liaison"
 
 
@@ -38,48 +38,31 @@ class Shares:
         """Where the request files live."""
         return self.run_dir / LIAISON_DIR / SHARES_DIR
 
+    @property
+    def _queue(self) -> NumberedQueue:
+        return NumberedQueue(self.folder, REQUEST_PREFIX, REQUEST_SUFFIX)
+
     def queue(self, share: Share) -> Share:
         """Queue ``share`` as the next ``f<N>.json``, written whole, never overwriting."""
-        system.make_dirs(self.folder)
-        draft = self.folder / f".draft-{system.token()}"
         queued = replace(share, at=system.now())
-        try:
-            system.write_text(draft, queued.to_json())
-            return self._publish(draft, queued)
-        finally:
-            system.remove(draft)
+        entry = self._queue.publish(queued.to_json())
+        return replace(queued, id=entry.id)
 
     def all(self) -> list[Request]:
         """Every numbered request, in number order; unreadable ones are bad requests."""
-        if not system.is_dir(self.folder):
-            return []
-        return [self._read(f"f{n}", path) for n, path in sorted(self._numbered())]
+        return [self._read(entry) for entry in self._queue.entries()]
 
     def pending(self, settled: Mapping[str, str]) -> list[Request]:
         """Requests whose ids are not in ``settled``."""
         return [s for s in self.all() if s.id not in settled]
 
-    def _numbered(self) -> list[tuple[int, Path]]:
-        matched = ((REQUEST_NAME.match(p.name), p) for p in system.list_dir(self.folder))
-        return [(int(m[1]), p) for m, p in matched if m]
-
     @staticmethod
-    def _read(rid: str, path: Path) -> Request:
+    def _read(entry: Entry) -> Request:
         try:
-            return Share.from_json(rid, system.read_text(path))
+            return Share.from_json(entry.id, system.read_text(entry.path))
         except OSError as error:
             problem = shares.UNREADABLE_REQUEST.format(error=error.strerror)
-            return shares.bad_request(rid, problem)
-
-    def _publish(self, draft: Path, share: Share) -> Share:
-        taken = [n for n, _ in self._numbered()]
-        for n in itertools.count(max(taken, default=0) + 1):
-            try:
-                system.hard_link(self.folder / f"f{n}.json", draft)
-            except FileExistsError:
-                continue
-            return replace(share, id=f"f{n}")
-        raise AssertionError("unreachable")  # pragma: no cover
+            return shares.bad_request(entry.id, problem)
 
 
 class Outcome(StrEnum):

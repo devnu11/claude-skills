@@ -11,11 +11,11 @@ PO are ``tell`` files with a thread head (s84, ``threads.py``).
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import system
+from .numbered_queue import NumberedQueue
 
 WAIT_LINE = "{story} waits on {ids}"
 RUN_WAIT_LINE = "the run waits on {ids}"
@@ -26,7 +26,8 @@ OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"
 LIAISON_DIR = "liaison"
 MESSAGES_DIR = "messages"
-TOLD_NAME = re.compile(r"^t(\d+)\.md$")
+TOLD_PREFIX = "t"
+TOLD_SUFFIX = ".md"
 TOLD_LINE = "The human sent you a message ({id}): read {path}."
 
 
@@ -89,45 +90,22 @@ class Relay:
     def messages_dir(self) -> Path:
         return self.run_dir / LIAISON_DIR / MESSAGES_DIR
 
+    @property
+    def _messages(self) -> NumberedQueue:
+        return NumberedQueue(self.messages_dir, TOLD_PREFIX, TOLD_SUFFIX)
+
     def tell(self, text: str) -> Told:
         """Queue ``text`` as the next ``t<N>.md``: written whole, never overwriting (T2)."""
-        system.make_dirs(self.messages_dir)
-        draft = self.messages_dir / f".draft-{system.token()}"
-        try:
-            system.write_text(draft, text)
-            return self._publish(draft)
-        finally:
-            system.remove(draft)
+        entry = self._messages.publish(text)
+        return Told(entry.id, entry.path)
 
     def told(self) -> list[Told]:
         """Every queued message, in number order; other files are ignored (T2)."""
-        if not system.is_dir(self.messages_dir):
-            return []
-        found = [
-            (int(m[1]), p)
-            for p in system.list_dir(self.messages_dir)
-            if (m := TOLD_NAME.match(p.name))
-        ]
-        return [Told(f"t{n}", p) for n, p in sorted(found)]
+        return [Told(e.id, e.path) for e in self._messages.entries()]
 
     def unread(self, told: list[str]) -> list[Told]:
         """Queued messages whose ids are not in ``told`` (T4)."""
         return [t for t in self.told() if t.id not in told]
-
-    def _publish(self, draft: Path) -> Told:
-        n = self._next_number()
-        while True:
-            try:
-                system.hard_link(self._told_at(n).path, draft)
-                return self._told_at(n)
-            except FileExistsError:
-                n += 1
-
-    def _next_number(self) -> int:
-        return max((int(t.id[1:]) for t in self.told()), default=0) + 1
-
-    def _told_at(self, n: int) -> Told:
-        return Told(f"t{n}", self.messages_dir / f"t{n}.md")
 
     def post(self, note: Note) -> Message:
         """Append a message for the liaison and return it."""

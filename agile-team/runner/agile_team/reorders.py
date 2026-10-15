@@ -5,19 +5,19 @@ Queued as files by the server, applied between steps by the router.
 
 from __future__ import annotations
 
-import itertools
 import json
-import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from . import backlog, priority, system
 from .backlog import Ask, View
 from .dispatch import Runtime
+from .numbered_queue import Entry, NumberedQueue
 from .priority import Change, Reorder, Source
 
 REORDERS_DIR = "reorders"
-REQUEST_NAME = re.compile(r"^r(\d+)\.json$")
+REQUEST_PREFIX = "r"
+REQUEST_SUFFIX = ".json"
 MAX_VERSION = 64
 APPLIED = "applied"
 HUMAN_REASON = "moved on the dashboard ({id})"
@@ -81,48 +81,31 @@ class Requests:
         """Where the request files live."""
         return self.run_dir / REORDERS_DIR
 
+    @property
+    def _queue(self) -> NumberedQueue:
+        return NumberedQueue(self.folder, REQUEST_PREFIX, REQUEST_SUFFIX)
+
     def queue(self, ask: Ask) -> Request:
         """Queue ``ask`` as the next ``r<N>.json``, written whole, never overwriting."""
-        system.make_dirs(self.folder)
-        draft = self.folder / f".draft-{system.token()}"
-        try:
-            system.write_text(draft, Request("", ask, system.now()).to_json())
-            return self._publish(draft, ask)
-        finally:
-            system.remove(draft)
+        request = Request("", ask, system.now())
+        entry = self._queue.publish(request.to_json())
+        return replace(request, id=entry.id)
 
     def all(self) -> list[Request]:
         """Every readable request, in number order."""
-        if not system.is_dir(self.folder):
-            return []
-        named = sorted(self._numbered())
-        read = (self._read(f"r{n}", path) for n, path in named)
+        read = (self._read(entry) for entry in self._queue.entries())
         return [r for r in read if r]
 
     def pending(self, settled: dict[str, str]) -> list[Request]:
         """Requests whose ids are not in ``settled``."""
         return [r for r in self.all() if r.id not in settled]
 
-    def _numbered(self) -> list[tuple[int, Path]]:
-        matched = ((REQUEST_NAME.match(p.name), p) for p in system.list_dir(self.folder))
-        return [(int(m[1]), p) for m, p in matched if m]
-
     @staticmethod
-    def _read(rid: str, path: Path) -> Request | None:
+    def _read(entry: Entry) -> Request | None:
         try:
-            return Request.from_json(rid, system.read_text(path))
+            return Request.from_json(entry.id, system.read_text(entry.path))
         except OSError:
             return None
-
-    def _publish(self, draft: Path, ask: Ask) -> Request:
-        taken = [n for n, _ in self._numbered()]
-        for n in itertools.count(max(taken, default=0) + 1):
-            try:
-                system.hard_link(self.folder / f"r{n}.json", draft)
-            except FileExistsError:
-                continue
-            return Request(f"r{n}", ask, system.now())
-        raise AssertionError("unreachable")  # pragma: no cover
 
 
 def told_section(lines: list[str]) -> str:
