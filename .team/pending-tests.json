@@ -152,5 +152,8 @@
     "agile-team/runner/tests/test_s152_start.py::test_ac2_3_a_passing_start_check_raises_no_known_failures",
     "agile-team/runner/tests/test_s152_start.py::test_ac2_3_known_failures_trigger_value",
     "agile-team/runner/tests/test_s152_start.py::test_ac2_3_the_report_hands_the_failures_to_the_po"
+  ],
+  "s153": [
+    "agile-team/runner/tests/test_s153_pieces.py::test_p1_a_sprint_end_conflict_still_holds_sync_conflict"
   ]
 }
