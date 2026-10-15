@@ -107,8 +107,11 @@ def test_stage_order_is_the_gate_order() -> None:
 
 
 def test_fix_kinds_table() -> None:
-    assert b.FIX_KINDS == {b.FixCase.TEAM_CHECK: b.StepKind.TEAM_FIX}
-    assert set(b.FIX_LINES) == {b.FixCase.TEAM_CHECK}
+    assert b.FIX_KINDS == {
+        b.FixCase.TEAM_CHECK: b.StepKind.TEAM_FIX,
+        b.FixCase.REBASE_CONFLICT: b.StepKind.REBASE_FIX,
+    }
+    assert set(b.FIX_LINES) == {b.FixCase.TEAM_CHECK, b.FixCase.REBASE_CONFLICT}
     assert frozenset(b.STAGES[2:]) == b.END_ONLY
     assert b.Stage.SYNC not in b.END_ONLY and b.Stage.CHECK not in b.END_ONLY
 

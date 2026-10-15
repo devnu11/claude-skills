@@ -95,16 +95,16 @@ def test_a_conflict_remaps_and_records_nothing(env: Env, monkeypatch: pytest.Mon
     assert calls == []
 
 
-def test_sync_from_is_set_once_and_reused_after_continue(
+def test_sync_from_is_set_once_and_stays_pinned_after_a_conflict(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """R13/R15/R16: a conflict does not hold or rerun; sync_from stays pinned for DevOps."""
     script = install(env, monkeypatch, CONFLICT, Rebase(SyncOutcome.CURRENT))
     b = env.open(Edge.END, stage=Stage.REBASE)
     env.drive()
-    assert b.sync_from == FAKE_HEAD
-    b.hold = None
-    env.drive()
-    assert script.olds == [FAKE_HEAD, FAKE_HEAD]
+    assert b.sync_from == FAKE_HEAD and b.hold is None and b.failure is not None
+    assert script.olds == [FAKE_HEAD]
+    assert env.br.due().kind is StepKind.REBASE_FIX
 
 
 def test_sync_from_is_not_replaced_when_already_set(
