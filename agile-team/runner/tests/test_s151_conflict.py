@@ -306,6 +306,46 @@ def test_s151_devops_conflict_ac6_3_a_moved_team_branch_holds_error_and_resets_n
     assert "moved from" in last(env)["reason"]
 
 
+def test_s151_devops_conflict_ac6_3_a_moved_team_branch_can_recover_without_adopting_again(
+    env: Env, scratch: Scratch
+) -> None:
+    """Pins s151/AC6.3 (R16, R17): after the error hold the rebase reruns from the new HEAD."""
+    adopt = resolved(env, scratch)
+
+    def moved(old: str, sha: str) -> Rebase:
+        raise UpstreamError(upstream.TEAM_MOVED.format(team="main", old=old))
+
+    env.rt.upstream.adopt = moved
+    env.br.step()
+    b = env.rt.state.boundary
+    assert b.hold is BoundaryHold.ERROR
+    assert b.rebase_fix is None and b.sync_from == "" and "drop" in scratch.names()
+    ran: list[Path] = []
+    env.br._run_checks = lambda path: ran.append(path)
+    env.rt.upstream.adopt = adopt
+    json.loads(
+        asyncio.run(Tools(env.rt).continue_boundary({"note": "moved"}))["content"][0]["text"]
+    )
+    head_is(env, "ee" * 20)
+    rebases = stub_rebase(env, Rebase(SyncOutcome.CURRENT))
+    env.br.step()
+    assert rebases.olds == ["ee" * 20]
+    assert adopt.args == [] and ran == []
+
+
+def test_s151_devops_conflict_ac6_4_a_crashed_devops_step_holds_rebase_conflict(
+    env: Env, scratch: Scratch
+) -> None:
+    """Pins s151/AC6.4 (R15, R17): an error report has no summary and must not raise."""
+    b = conflicted(env, scratch)
+    env.br.after_fix({"status": "error", "role": "devops", "reason": "boom"})
+    assert b.rebase_fix.status == "error" and b.rebase_fix.notes == ""
+    env.br.step()
+    assert b.hold is BoundaryHold.REBASE_CONFLICT
+    assert last(env)["reason"] == bd.FIX_NOT_DONE.format(status="error")
+    assert last(env)["notes"] == "none"
+
+
 def test_s151_devops_conflict_ac6_3_after_fix_records_the_devops_report_and_clears_the_failure(
     env: Env, scratch: Scratch
 ) -> None:
