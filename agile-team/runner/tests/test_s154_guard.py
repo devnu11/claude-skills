@@ -57,6 +57,7 @@ def test_s154_ac2_e2e_items_and_items_without_a_closure_are_not_refused() -> Non
     assert os_guard.os_fixtures(stub(("tmp_path",), "tests/e2e")) == ()
     assert os_guard.os_fixtures(stub(None)) == ()
     assert os_guard.os_fixtures(stub(("fake",))) == ()
+    assert os_guard.os_fixtures(stub(())) == ()
 
 
 def test_s154_ac2_mark_refusals_stashes_the_text_only_on_requesting_items() -> None:
