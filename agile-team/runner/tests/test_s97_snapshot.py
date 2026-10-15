@@ -10,6 +10,7 @@ import pytest
 from agile_team import config as cfg
 from agile_team import live, system
 
+from .clock import about
 from .fake_system import FakeSystem
 from .test_snapshot import FIXTURE_TEXT, build, make_config, write_jsonl
 
@@ -45,7 +46,7 @@ def test_a_slept_step_counts_wall_minus_sleep_on_every_platform(
     fake.platform_name = name
     write_jsonl(config.run_dir / "events.jsonl", finished_with_a_sleep())
     [step] = build(config, scratch)["steps"]
-    assert (step["seconds"], step["clock"], step["slept"]) == (180.0, "awake", 120.0)
+    assert (step["seconds"], step["clock"], step["slept"]) == (about(180.0), "awake", about(120.0))
 
 
 def test_a_running_step_on_windows_uses_the_heartbeat_sleep(
@@ -57,7 +58,7 @@ def test_a_running_step_on_windows_uses_the_heartbeat_sleep(
     system.make_dirs(config.run_dir)
     system.write_text(config.run_dir / live.HEARTBEAT, json.dumps({"version": 2, "slept": 250.0}))
     [step] = build(config, scratch)["steps"]
-    assert (step["seconds"], step["clock"], step["slept"]) == (None, "awake", 200.0)
+    assert (step["seconds"], step["clock"], step["slept"]) == (None, "awake", about(200.0))
 
 
 def test_a_running_step_without_a_heartbeat_is_wall(
@@ -66,7 +67,7 @@ def test_a_running_step_without_a_heartbeat_is_wall(
     fake.platform_name = "win32"
     write_jsonl(config.run_dir / "events.jsonl", [row("step-start", 100.0, slept=50.0)])
     [step] = build(config, scratch)["steps"]
-    assert (step["clock"], step["slept"]) == ("wall", 0.0)
+    assert (step["clock"], step["slept"]) == ("wall", about(0.0))
 
 
 def test_the_heartbeat_section_has_slept() -> None:

@@ -13,6 +13,7 @@ from agile_team.relay import Note
 from agile_team.router import Router, Work, standard_brief
 from agile_team.state import RunStatus
 
+from .clock import about
 from .fake_system import Done, FakeSystem
 from .pipeline_helpers import (
     PO_ROLE,
@@ -402,7 +403,7 @@ def test_waiting_for_an_answer_polls_until_it_arrives(make_runtime, fake: FakeSy
     fake.on_sleep = [lambda: None, lambda: rt.relay.answer("m1", "sqlite")]
 
     p = advance(rt)
-    assert fake.slept == [5.0, 5.0]
+    assert fake.slept == about([5.0, 5.0])
     assert p.kinds == [T.HUMAN_MESSAGE]
     assert p.lines == ['The human answered m1 ("Which DB?"): sqlite']
     assert rt.state.delivered == ["m1"]
@@ -869,7 +870,7 @@ def test_a_held_boundary_waits_when_a_question_is_open(make_runtime, fake: FakeS
     fake.on_sleep = [lambda: rt.relay.answer("m1", "ok")]
 
     p = advance(rt)
-    assert fake.slept == [5.0]
+    assert fake.slept == about([5.0])
     assert p.kinds == [T.HUMAN_MESSAGE]
 
 
@@ -888,7 +889,7 @@ def test_the_complete_sprint_opens_an_end_boundary_first(make_runtime, fake: Fak
     add_story(rt, "s1", status=StoryStatus.DONE)
 
     p = advance(rt)
-    assert fake.slept == []  # opening the boundary is work to do, not a reason to wait
+    assert fake.slept == about([])  # opening the boundary is work to do, not a reason to wait
     assert rt.state.upstream.closed == 1 and rt.state.boundary is None
     assert p.steps == 1 and p.kinds == [T.SPRINT_END]
     [event] = [e for e in rt.events.events() if e.kind == "boundary"]

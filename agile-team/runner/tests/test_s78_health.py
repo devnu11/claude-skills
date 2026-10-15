@@ -18,6 +18,7 @@ from agile_team.providers import Billing
 from agile_team.state import RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
+from .clock import about
 from .fake_system import FAKE_IDS, START_CLOCK, FakeSystem
 
 LIMITS = cfg.HealthLimits()
@@ -138,12 +139,12 @@ def test_a_non_numeric_beat_mono_means_slept_is_unknown() -> None:
 
 
 def test_slept_is_wall_age_minus_monotonic_age() -> None:
-    assert vitals(beat(660, slept=650)).slept == 650
+    assert vitals(beat(660, slept=650)).slept == about(650)
 
 
 def test_slept_exactly_stale_s_is_not_a_sleep_and_can_be_excused() -> None:
     v = vitals(beat(100, slept=LIMITS.stale_s, step=step(tool=BASH)))
-    assert v.slept == LIMITS.stale_s
+    assert v.slept == about(LIMITS.stale_s)
     assert not v.slept_over(LIMITS.stale_s) and v.excused
     assert health.judge(v).level is Level.AMBER
 

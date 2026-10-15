@@ -17,6 +17,7 @@ from agile_team.providers import Billing
 from agile_team.salvage import Cause
 from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, UserMessage
 
+from .clock import about
 from .conftest import FakeQuery
 from .fake_system import FakeSystem
 from .test_halt import PoCallingRole, RaisingQuery, Router, limit_error
@@ -62,7 +63,7 @@ def test_a_span_is_written_on_the_result_not_on_the_use(fake: FakeSystem) -> Non
     fake.clock += 3.0
     meter.take(answers("u1"))
     (row,) = lines()
-    assert row["seconds"] == 3.0 and row["status"] == "ok" and row["label"] == "Dev: list"
+    assert row["seconds"] == about(3.0) and row["status"] == "ok" and row["label"] == "Dev: list"
     assert (row["role"], row["story"], row["step"], row["opened_at"]) == (
         "developer", "s1", "implement", opened,
     )  # fmt: skip
@@ -87,7 +88,7 @@ def test_closing_a_meter_writes_open_calls_as_unfinished(fake: FakeSystem) -> No
     fake.clock += 4.0
     pulse.close(meter)
     (row,) = lines()
-    assert row["status"] == "unfinished" and row["seconds"] == 4.0
+    assert row["status"] == "unfinished" and row["seconds"] == about(4.0)
     pulse.close(meter)
     assert len(lines()) == 1
 
@@ -114,7 +115,7 @@ def test_awake_seconds_ignore_a_faked_sleep_on_posix(fake: FakeSystem) -> None:
     fake.doze(600.0)
     fake.clock += 2.0
     pulse.close(meter)
-    assert lines()[0]["seconds"] == 2.0
+    assert lines()[0]["seconds"] == about(2.0)
 
 
 def test_awake_seconds_ignore_a_counted_sleep_on_windows(fake: FakeSystem) -> None:
@@ -126,15 +127,15 @@ def test_awake_seconds_ignore_a_counted_sleep_on_windows(fake: FakeSystem) -> No
     pulse.slept_s = 600.0
     fake.clock += 2.0
     pulse.close(meter)
-    assert lines()[0]["seconds"] == 2.0
-    assert lines()[0]["slept"] == 0.0
+    assert lines()[0]["seconds"] == about(2.0)
+    assert lines()[0]["slept"] == about(0.0)
 
 
 def test_the_pulse_mark_reads_the_three_clocks(fake: FakeSystem) -> None:
     pulse = pulse_of(fake)
     fake.doze(5.0)
     mark = pulse.mark()
-    assert (mark.at, mark.mono, mark.slept) == (fake.clock, fake.monotonic(), 0.0)
+    assert (mark.at, mark.mono, mark.slept) == (fake.clock, fake.monotonic(), about(0.0))
 
 
 def test_a_failed_write_of_spans_is_ignored(

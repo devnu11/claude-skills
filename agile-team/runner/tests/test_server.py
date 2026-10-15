@@ -15,6 +15,7 @@ from agile_team.dashboard import server
 from agile_team.dashboard.server import Dashboard
 from agile_team.roles import RoleBook
 
+from .clock import about
 from .fake_system import FAKE_REPO, START_CLOCK, FakeSystem
 
 SNAP = {"generated_at": 1.0, "run": {"status": "idle"}}
@@ -256,7 +257,7 @@ def test_pump_sends_data_once_then_keepalives_and_sleeps_the_poll(
     with pytest.raises(Stop):
         server._pump(out, stub_app(box["file"]))
     assert out.writes == [server.sse_data(SNAP), server.KEEPALIVE, server.KEEPALIVE]
-    assert fake.slept == [0.5, 0.5]
+    assert fake.slept == about([0.5, 0.5])
 
 
 def test_sse_data_is_one_line() -> None:

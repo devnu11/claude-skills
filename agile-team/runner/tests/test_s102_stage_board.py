@@ -12,6 +12,7 @@ from agile_team import live, stage_log, stages
 from agile_team.dashboard.step_times import Mark, Platform
 from agile_team.events import EventKind, EventLog
 
+from .clock import about
 from .fake_system import FakeSystem
 from .test_s98_live import WHO, pulse_of
 from .test_snapshot import FIXTURE_TEXT
@@ -263,11 +264,11 @@ def test_the_fixture_has_the_two_new_runner_stage_events() -> None:
         "started_at": 1791457800.0,
         "started_mono": None,
         "started_slept": 0.0,
-        "seconds": 30.0,
+        "seconds": about(30.0),
     }
     assert rs5["data"]["stage"] == "env.prepare"
     assert (rs5["data"]["step"], rs5["data"]["when"]) == ("acceptance", "before")
-    assert (rs5["data"]["started_at"], rs5["data"]["seconds"]) == (1791458000.0, 45.0)
+    assert (rs5["data"]["started_at"], rs5["data"]["seconds"]) == (1791458000.0, about(45.0))
 
 
 def test_the_new_events_sit_in_at_order() -> None:

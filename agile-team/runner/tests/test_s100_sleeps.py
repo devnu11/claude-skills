@@ -11,6 +11,7 @@ from agile_team import config as cfg
 from agile_team import live
 from agile_team.dashboard import snapshot
 
+from .clock import about
 from .fake_system import FakeSystem
 from .test_s78_health import RUN_DIR, make_pulse
 from .test_snapshot import FIXTURE_TEXT, build, make_config, write_jsonl, write_run
@@ -45,7 +46,7 @@ def test_a_normal_beat_returns_none(fake: FakeSystem) -> None:
 
 def test_the_sleep_line_has_three_keys_rounded_to_a_tenth() -> None:
     line = live.Sleep(100.04, 220.06, 99.96).line()
-    assert json.loads(line) == {"from": 100.0, "to": 220.1, "slept": 100.0}
+    assert json.loads(line) == {"from": 100.0, "to": 220.1, "slept": about(100.0)}
     assert list(json.loads(line)) == ["from", "to", "slept"]
     assert "\n" not in line
 
@@ -67,7 +68,7 @@ def test_two_sleeps_append_two_lines_in_order(fake: FakeSystem) -> None:
     fake.clock += 4 * BEAT
     pulse._beat()
     first, second = lines(fake)
-    assert first["to"] == second["from"] and second["slept"] == 3 * BEAT
+    assert first["to"] == second["from"] and second["slept"] == about(3 * BEAT)
 
 
 def test_a_normal_beat_appends_nothing(fake: FakeSystem) -> None:
@@ -88,7 +89,7 @@ def test_a_failed_append_is_swallowed_and_the_sleep_still_counts(fake: FakeSyste
     fake.full = True
     fake.clock += 6 * BEAT
     pulse._beat()
-    assert pulse.slept_s == 5 * BEAT and writes == [1]
+    assert pulse.slept_s == about(5 * BEAT) and writes == [1]
     assert pulse._reported is False
 
 

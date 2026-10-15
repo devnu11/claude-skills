@@ -1,8 +1,10 @@
 # ruff: noqa: E501  (embedded JavaScript lines)
 """Run the dashboard page's functions under node, without a browser (s44, U2).
 
-``run_page(driver)`` stubs the browser globals, appends the page's inline
-script and a driver snippet, runs ``node`` and returns the JSON the driver logs.
+``run_page(driver, now)`` stubs the browser globals, freezes the page's clock
+(``Date.now``) at ``now`` seconds (default: the fixture's ``generated_at``),
+appends the page's inline script and a driver snippet, runs ``node`` and
+returns the JSON the driver logs.
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ from html.parser import HTMLParser
 from importlib import resources
 from pathlib import Path
 from typing import Any
+
+from . import clock
 
 NODE_TIMEOUT_S = 30
 FIXTURE = "fixtures/snapshot.json"
@@ -90,9 +94,10 @@ def page_script() -> str:
     return "\n".join(parsed.scripts)
 
 
-def run_page(driver: str) -> Any:
-    """Run `driver` after the page's script under node; return its logged JSON."""
-    source = "\n".join([PRELUDE, page_script(), driver])
+def run_page(driver: str, now: float | None = None) -> Any:
+    """Run `driver` after the page's script under node, the page's clock frozen at `now`."""
+    pinned = fixture()["generated_at"] if now is None else now
+    source = PRELUDE + clock.page_clock(pinned) + page_script() + "\n" + driver
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "page.js"
         path.write_text(source, encoding="utf-8")

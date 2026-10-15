@@ -168,15 +168,15 @@ def tracked(configured: Path, fake: FakeSystem) -> None:
 def test_a_message_wakes_a_waiting_run(make_runtime, fake: FakeSystem) -> None:
     rt = ready(make_runtime)
     q(rt, "Which DB?", ["s1"])
-    slept = []
+    reasons = []
 
     def sleep() -> None:
-        slept.append(rt.state.status_reason)
+        reasons.append(rt.state.status_reason)
         rt.relay.tell("go on without it")
 
     fake.on_sleep = [sleep]
     found = asyncio.run(Router(rt).advance())
-    assert slept == ["waiting on answers: s1 waits on m1"]
+    assert reasons == ["waiting on answers: s1 waits on m1"]
     assert [k.value for k in found.kinds] == ["human_message"]
     assert found.lines == [LINE.format(id="t1")]
     assert rt.state.status_reason is None

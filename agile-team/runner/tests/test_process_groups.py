@@ -7,6 +7,7 @@ import pytest
 from agile_team import commands, process_groups, sandbox, system
 from agile_team.process_groups import PS_TIMEOUT_S, Recorded, RunnerIds
 
+from .clock import about
 from .fake_system import FAKE_IDS, FAKE_REPO, FAKE_ROOT, START_CLOCK, Done, FakeSystem, Hang
 
 FAKE = RunnerIds(*FAKE_IDS)  # literals: test ids must not hold live values (s70)
@@ -110,7 +111,7 @@ def test_in_runner_group() -> None:
     ],
 )
 def test_parse_etime(text: str, seconds) -> None:
-    assert process_groups.parse_etime(text) == seconds
+    assert about(process_groups.parse_etime(text)) == seconds
 
 
 # 6

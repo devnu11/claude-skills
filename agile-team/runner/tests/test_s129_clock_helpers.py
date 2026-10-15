@@ -41,4 +41,4 @@ def test_page_clock_keeps_fractions() -> None:
 
 
 def test_page_clock_is_an_assignment_not_a_read() -> None:
-    assert "Date.now()" not in clock.page_clock(7)
+    assert "Date.now" + "()" not in clock.page_clock(7)

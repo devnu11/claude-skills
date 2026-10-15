@@ -23,6 +23,7 @@ from agile_team.events import EventKind, EventLog
 from agile_team.git_ops import Git, GitError
 from agile_team.upstream import command_runner
 
+from .clock import about
 from .fake_system import Done, FakeSystem, Hang
 
 NAME = stages.Name
@@ -204,7 +205,7 @@ def test_event_keys_and_values(repo: Path) -> None:
         "stage": "gate.tests+coverage", "when": "after", "attach": "step",
         "step": "implement", "attempt": None, "detail": "uv run pytest --cov -q", "code": 0,
         "raised": None, "started_at": 100, "started_mono": 50, "started_slept": 0.0,
-        "seconds": 2.0,
+        "seconds": about(2.0),
     }  # fmt: skip
 
 
@@ -212,7 +213,7 @@ def test_windows_seconds_less_sleep(repo: Path) -> None:
     log = make_log(repo, Clock(Mark(100, 50, 0.0), Mark(702, 52, 600.0), platform=Platform.WINDOWS))
     with log.open(NAME.GATE_GREEN):
         pass
-    assert runs(log)[0].data["seconds"] == 2.0
+    assert runs(log)[0].data["seconds"] == about(2.0)
 
 
 def test_awake_gap_clamps_and_rounds() -> None:
@@ -228,7 +229,7 @@ def test_awake_seconds_with_the_fake_machine_asleep(repo: Path, fake: FakeSystem
     with log.open(NAME.GATE_GREEN):
         fake.doze(600)
         fake.clock += 2
-    assert runs(log)[0].data["seconds"] == 2.0
+    assert runs(log)[0].data["seconds"] == about(2.0)
 
 
 def test_no_notes_normal_exit_and_raise(repo: Path) -> None:

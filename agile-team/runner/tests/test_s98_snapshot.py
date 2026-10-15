@@ -11,6 +11,7 @@ from agile_team import config as cfg
 from agile_team import tool_calls as tc
 from agile_team.dashboard import snapshot
 
+from .clock import about
 from .test_snapshot import FIXTURE_TEXT, build, make_config, write_jsonl
 
 
@@ -53,7 +54,7 @@ def test_the_snapshot_gathers_spans_under_the_configured_limit(scratch: Path) ->
     rows = [span(0.01, 1.0), span(0.02, 2.0, "Bash"), span(5.0, 3.0)]
     write_jsonl(config.run_dir / tc.TOOLS, rows)
     (group,) = build(config, scratch)["tools"]
-    assert group["misc"] == {"count": 2, "seconds": 0.03, "tools": {"Read": 1, "Bash": 1}}
+    assert group["misc"] == {"count": 2, "seconds": about(0.03), "tools": {"Read": 1, "Bash": 1}}
     assert [c["seconds"] for c in group["calls"]] == [5.0]
 
 

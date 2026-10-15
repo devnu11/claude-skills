@@ -6,6 +6,8 @@ from typing import Any
 
 from agile_team.dashboard import step_times
 
+from .clock import about
+
 
 def ev(
     kind: str, at: float, role: str | None = None, story: str | None = None, **data: Any
@@ -31,10 +33,10 @@ def test_a_pair_gives_rounded_seconds_status_model_and_start_time() -> None:
         "sprint": None,
         "at": 100.0,
         "ended_at": 303.76,
-        "seconds": 203.8,
+        "seconds": about(203.8),
         "status": "done",
         "clock": "wall",
-        "slept": 0.0,
+        "slept": about(0.0),
     }
 
 
@@ -53,12 +55,12 @@ def test_pairs_match_by_story_too() -> None:
     events = [start(10.0, story="s1"), start(12.0, story="s2"), end(20.0, story="s2")]
     first, second = step_times.spans(events)
     assert (first.story, first.seconds, first.ended_at) == ("s1", None, None)
-    assert (second.story, second.seconds) == ("s2", 8.0)
+    assert (second.story, second.seconds) == ("s2", about(8.0))
 
 
 def test_a_storyless_step_pairs() -> None:
     [span] = step_times.spans([start(1.0, "manager", None), end(5.0, "manager", None)])
-    assert (span.story, span.seconds) == (None, 4.0)
+    assert (span.story, span.seconds) == (None, about(4.0))
 
 
 def test_an_open_start_is_running() -> None:
@@ -76,13 +78,13 @@ def test_a_killed_end_has_no_time_but_is_finished() -> None:
 
 def test_a_halt_interrupted_end_keeps_its_time() -> None:
     [span] = step_times.spans([start(10.0), end(40.0, status="interrupted", cause="halt")])
-    assert span.seconds == 30.0 and span.status == "interrupted"
+    assert span.seconds == about(30.0) and span.status == "interrupted"
 
 
 def test_a_second_start_drops_the_first() -> None:
     events = [start(10.0), start(20.0), end(25.0)]
     [span] = step_times.spans(events)
-    assert (span.at, span.seconds) == (20.0, 5.0)
+    assert (span.at, span.seconds) == (20.0, about(5.0))
 
 
 def test_an_end_with_no_open_start_is_ignored() -> None:
@@ -91,7 +93,7 @@ def test_an_end_with_no_open_start_is_ignored() -> None:
 
 def test_a_second_end_is_ignored() -> None:
     [span] = step_times.spans([start(1.0), end(3.0), end(9.0)])
-    assert span.seconds == 2.0
+    assert span.seconds == about(2.0)
 
 
 def test_sprint_is_the_last_sprint_start_before_the_step() -> None:
@@ -109,7 +111,7 @@ def test_sprint_is_the_last_sprint_start_before_the_step() -> None:
 
 def test_an_end_before_its_start_gives_zero() -> None:
     [span] = step_times.spans([start(50.0), end(40.0)])
-    assert span.seconds == 0
+    assert span.seconds == about(0)
 
 
 def test_other_kinds_are_skipped_and_result_is_in_start_order() -> None:
@@ -128,7 +130,7 @@ def test_a_missing_data_key_is_tolerated() -> None:
     bare_end = {"id": "x", "at": 9.0, "kind": "step-end", "role": "architect", "story": "s1"}
     bare_start = {"id": "y", "at": 4.0, "kind": "step-start", "role": "architect", "story": "s1"}
     [span] = step_times.spans([bare_start, bare_end])
-    assert span.seconds == 5.0 and span.model is None
+    assert span.seconds == about(5.0) and span.model is None
 
 
 def test_no_events_no_steps() -> None:

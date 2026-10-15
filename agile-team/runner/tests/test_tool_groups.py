@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 from agile_team.dashboard import tool_groups as tg
 
+from .clock import about
+
 
 def row(seconds: Any, at: float = 0.0, tool: str = "Read", **keys: Any) -> dict[str, Any]:
     base = {"role": "developer", "story": "s1", "step": "implement", "opened_at": 1.0}
@@ -33,7 +35,11 @@ def test_the_shortest_calls_are_gathered_up_to_the_limit_and_the_next_stays_out(
 
 def test_misc_has_count_seconds_and_tools_in_first_gathered_order() -> None:
     gathered, _ = tg.gather(five(), 0.1)
-    assert tg.misc(gathered) == {"count": 3, "seconds": 0.06, "tools": {"Read": 2, "Bash": 1}}
+    assert tg.misc(gathered) == {
+        "count": 3,
+        "seconds": about(0.06),
+        "tools": {"Read": 2, "Bash": 1},
+    }
 
 
 def test_a_group_has_calls_and_misc() -> None:
@@ -67,8 +73,8 @@ def test_a_limit_of_zero_gathers_nothing() -> None:
 
 
 def test_an_empty_group_has_an_empty_misc() -> None:
-    assert tg.misc([]) == {"count": 0, "seconds": 0.0, "tools": {}}
-    assert tg.group([], 0.1)["misc"] == {"count": 0, "seconds": 0.0, "tools": {}}
+    assert tg.misc([]) == {"count": 0, "seconds": about(0.0), "tools": {}}
+    assert tg.group([], 0.1)["misc"] == {"count": 0, "seconds": about(0.0), "tools": {}}
 
 
 def test_ties_in_seconds_gather_the_earlier_call_first() -> None:

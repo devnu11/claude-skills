@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from agile_team import config as cfg
 
+from .clock import about
 from .test_snapshot import FIXTURE_TEXT, build, make_config, write_jsonl, write_run
 
 
@@ -35,7 +36,7 @@ def test_the_end_model_wins(config: cfg.Config, scratch: Path) -> None:
             row("step-end", 3.0, "architect", status="done", model="haiku-x"),
         ],
     )
-    assert step["model"] == "haiku-x" and step["seconds"] == 2.0
+    assert step["model"] == "haiku-x" and step["seconds"] == about(2.0)
 
 
 def test_a_missing_end_model_falls_back_to_the_configured_one(

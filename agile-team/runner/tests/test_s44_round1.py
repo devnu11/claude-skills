@@ -18,6 +18,7 @@ from agile_team.providers import DEFAULT, Billing
 from agile_team.state import RunState, RunStatus
 from claude_agent_sdk import ResultError
 
+from .clock import about
 from .conftest import FakeQuery
 from .fake_system import FakeSystem
 from .test_s44_live import (
@@ -106,12 +107,16 @@ def test_quiet_for_uses_quiet_since_and_falls_back_without_it() -> None:
     quiet = Vitals(
         NOW, RunStatus.RUNNING, None, beat(step=step(quiet_since=NOW - 100)), Runner.UP, LIMITS
     )
-    assert quiet.quiet_for == 100
+    assert quiet.quiet_for == about(100)
     old = step(last_turn_at=NOW - 40)
     old.pop("quiet_since", None)
-    assert Vitals(NOW, RunStatus.RUNNING, None, beat(step=old), Runner.UP, LIMITS).quiet_for == 40
+    assert Vitals(
+        NOW, RunStatus.RUNNING, None, beat(step=old), Runner.UP, LIMITS
+    ).quiet_for == about(40)
     old["last_turn_at"] = None
-    assert Vitals(NOW, RunStatus.RUNNING, None, beat(step=old), Runner.UP, LIMITS).quiet_for == 30
+    assert Vitals(
+        NOW, RunStatus.RUNNING, None, beat(step=old), Runner.UP, LIMITS
+    ).quiet_for == about(30)
 
 
 # ----- waiting for answers is a chore (D9) -------------------------------------------

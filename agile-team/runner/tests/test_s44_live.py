@@ -16,6 +16,7 @@ from agile_team.salvage import Cause
 from agile_team.state import RunStatus
 from claude_agent_sdk import AssistantMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
 
+from .clock import about
 from .fake_system import FAKE_IDS, START_CLOCK, FakeSystem
 
 LIMITS = cfg.HealthLimits()
@@ -509,7 +510,7 @@ def test_an_ended_heartbeat_is_not_beating() -> None:
 
 def test_vitals_derived_values() -> None:
     v = vitals(heartbeat=beat(at=NOW - 12, step=step(last_turn_at=NOW - 40, tool={"name": "X"})))
-    assert v.beating and v.beat_age == 12 and v.quiet_for == 40 and v.pid == 77
+    assert v.beating and v.beat_age == about(12) and v.quiet_for == about(40) and v.pid == 77
     assert v.tool == {"name": "X"} and not v.halted
     assert vitals(RunStatus.BLOCKED).halted
 

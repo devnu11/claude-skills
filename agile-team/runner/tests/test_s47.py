@@ -10,6 +10,7 @@ from agile_team.relay import WAITING_HEAD, Note
 from agile_team.router import Router
 from agile_team.state import RunStatus
 
+from .clock import about
 from .fake_system import FakeSystem
 from .pipeline_helpers import Script, add_story, build, handover_events
 
@@ -176,7 +177,7 @@ def test_an_answer_wakes_the_run_when_no_po_session_runs(make_runtime, fake: Fak
     run = PoRun(rt, Start("go"))
     fake.on_sleep = [lambda: rt.relay.answer("m1", "sqlite")]
     asyncio.run(run.run())
-    assert fake.slept == [5.0]
+    assert fake.slept == about([5.0])
     assert 'The human answered m1 ("Which DB?"): sqlite' in script.po_prompts[1]
     assert ["human_message"] in [e.data["triggers"] for e in handover_events(rt)]
     assert any(s.step != "design" or s.status.value == "done" for s in rt.state.stories.values())

@@ -10,6 +10,8 @@ from agile_team import tool_calls as tc
 from agile_team.dashboard.step_times import Mark, Platform
 from claude_agent_sdk import ToolResultBlock, ToolUseBlock
 
+from .clock import about
+
 WHERE = tc.Where("developer", "s1", "implement", 100.0)
 PO_WHERE = tc.Where("product-owner", None, "po-session", 100.0)
 SPAN_KEYS = [
@@ -40,12 +42,17 @@ def test_a_call_to_its_result_is_one_ok_span_with_the_keys_in_order() -> None:
     assert c.spans == []
     c.finish([result("u1")], mark(12.5))
     (span,) = c.spans
-    assert span.status == tc.Status.OK and span.seconds == 2.5
+    assert span.status == tc.Status.OK and span.seconds == about(2.5)
     data = json.loads(span.line())
     assert list(data) == SPAN_KEYS
     assert data["tool"] == "Bash" and data["tool_use_id"] == "u1"
     assert data["label"] == "Dev: list" and data["detail"] == "ls"
-    assert (data["at"], data["mono"], data["slept"], data["ended_at"]) == (10.0, 10.0, 0.0, 12.5)
+    assert (data["at"], data["mono"], data["slept"], data["ended_at"]) == (
+        10.0,
+        10.0,
+        about(0.0),
+        12.5,
+    )
     assert (data["role"], data["story"], data["step"], data["opened_at"]) == (
         "developer", "s1", "implement", 100.0,
     )  # fmt: skip
@@ -58,7 +65,7 @@ def test_a_repeated_use_id_does_not_reopen_and_an_unknown_result_is_ignored() ->
     c.finish([result("zz")], mark(6.0))
     assert c.spans == []
     c.finish([result("u1")], mark(7.0))
-    assert c.spans[0].seconds == 6.0
+    assert c.spans[0].seconds == about(6.0)
 
 
 def test_a_finished_call_is_not_closed_twice() -> None:
@@ -113,7 +120,7 @@ def test_an_unfinished_call_closes_at_the_mark_and_counts_in_tool_s() -> None:
     c.start([use("a")], mark(10.0))
     c.abandon(mark(15.0))
     (span,) = c.spans
-    assert span.status == tc.Status.UNFINISHED and span.seconds == 5.0
+    assert span.status == tc.Status.UNFINISHED and span.seconds == about(5.0)
     assert span.end == mark(15.0)
     c.abandon(mark(99.0))
     assert len(c.spans) == 1
@@ -285,7 +292,7 @@ def test_a_windows_span_is_awake_across_a_counted_sleep() -> None:
     c = calls(platform=Platform.WINDOWS)
     c.start([use("a")], Mark(10.0, None, 0.0))
     c.finish([result("a")], Mark(612.0, None, 600.0))
-    assert c.spans[0].seconds == 2.0
+    assert c.spans[0].seconds == about(2.0)
 
 
 def test_a_clock_going_backwards_is_zero_seconds_and_seconds_round_to_3() -> None:
