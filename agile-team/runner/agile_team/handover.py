@@ -43,7 +43,6 @@ class Trigger(StrEnum):
     OFF_PIPELINE_FAULT = "off_pipeline_fault"
     FAULT_NOT_APPLIED = "fault_not_applied"
     SYNC_CONFLICT = "sync_conflict"
-    REBASE_CONFLICT = "rebase_conflict"
     PUSH_PERMISSION = "push_permission"
     PUSH_REJECTED = "push_rejected"
     BOUNDARY_ERROR = "boundary_error"
@@ -181,18 +180,10 @@ HANDOVERS: tuple[Rule, ...] = (
         _held("sync_conflict"),
         "{story}: sprint {sprint} end: rebasing {team_branch} onto {target} stopped at "
         '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. The rebase '
-        "was aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
-        "conflict now goes to a DevOps step (s151)",
-    ),
-    Rule(
-        Trigger.REBASE_CONFLICT,
-        _held("rebase_conflict"),
-        "{story}: sprint {sprint} end: rebasing {team_branch} onto {target} stopped at "
-        '{commit} "{subject}" with {file_count} conflicting files: {file_groups}. DevOps could '
-        "not settle it on the scratch branch {branch}: {reason}. DevOps's notes: {notes}. The "
-        "team branch is unchanged and the liaison has the same text. continue_boundary(note) "
-        "runs the rebase and a new DevOps step with your note; if the human rebases "
-        "{team_branch} by hand first, the runner picks that up",
+        "was aborted and the team branch is unchanged. Ask the human to rebase {team_branch} "
+        "onto {target} by hand (git rebase {target}, resolve, git rebase --continue), then "
+        "continue_boundary; the runner rewrites the recorded hashes. If the run halts on the "
+        "moved checkout, they run agile-team accept-checkout first",
     ),
     Rule(
         Trigger.PUSH_PERMISSION,
@@ -314,7 +305,6 @@ BOUNDARY_TEXT = (
     "checks",
     "commit",
     "subject",
-    "notes",
 )
 
 
@@ -333,7 +323,7 @@ def _boundary_fields(report: dict) -> dict[str, str]:
     if not boundary:
         return {}
     fields = {name: str(boundary.get(name) or "") for name in BOUNDARY_TEXT}
-    fields["boundary_reason"] = fields["reason"] = str(boundary.get("reason") or "")
+    fields["boundary_reason"] = str(boundary.get("reason") or "")
     files = boundary.get("files") or []
     fields["files"] = ", ".join(files)
     fields["file_count"] = str(len(files))

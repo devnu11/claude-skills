@@ -419,8 +419,6 @@ class Tools:
             return text_result(refused(self._ours_refusal(b)))
         if b.hold in AFTER_REVIEW:
             b.streak, b.rounds, b.escalated = [], 0, None
-        if b.hold is BoundaryHold.REBASE_CONFLICT:
-            b.rebase_fix = None
         b.hold, b.failure, b.note = None, None, args.get("note", "")
         boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
         self.runtime.save()
