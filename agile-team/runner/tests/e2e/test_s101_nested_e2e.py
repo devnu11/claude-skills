@@ -22,7 +22,8 @@ def _run(body: str) -> dict:
     driver = f"""const snap = {json.dumps(snap)};
 data.cursor = Infinity;
 const view = asOf(snap, Infinity);
-const s3 = view.stories.find((s) => s.id === "s3");
+data.skew = view.generated_at - Date.now() / 1000;  // pin "now": the fixture's running step must not stretch with the real clock
+const s3 =view.stories.find((s) => s.id === "s3");
 const base = timelineModel({{ view, now: tlNow(view), open: new Set() }}, s3, "story");
 const open = new Set(base.groups[0].bars.map((b) => b.key).filter(Boolean));
 const out = {{}};
