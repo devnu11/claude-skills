@@ -71,7 +71,8 @@ When a story's work has to come out, the PO reverts it. The runner then:
 
 The PO can't revert a story twice on its own. The second time, it asks you:
 `Revert story s7 ("…") again? … Answer "revert" to revert it or "keep" to
-keep it.` Until you answer, the card shows `⏸ revert requested: <reason>`.
+keep it.` Until you answer, the card shows `⏸ revert requested`, with the
+reason on its `waits on:` line.
 
 ## The order of work
 
@@ -92,11 +93,12 @@ then s37"). The PO records it, and the runner follows it:
   it. Without a reason the runner refuses.
 
 On the dashboard's **Board**, every column lists stories in that order, and
-each card shows its position (`#1` is next). A waiting story shows
-`⏸ PO hold: …`, `⏸ cancel requested: …`, `⏸ questions`, `⏸ manager`,
-`⏸ round cap`, `⏸ needs the human` or `⏸ held`,
-with a `waits on:` line naming the question (for example `m38: …`) or the
-reason. Each change to the order appears in the timeline as a **priority**
+each card shows its position (`#1` is next). A waiting story shows a
+one-line pill with the reason only: `⏸ PO hold`, `⏸ cancel requested`,
+`⏸ revert requested`, `⏸ questions`, `⏸ manager`, `⏸ round cap`,
+`⏸ needs the human` or `⏸ held`. Hover over the pill for the full reason.
+The card's `waits on:` line names the question (for example `m38: …`) or
+the reason, cut at 140 characters (hover for all of it). Each change to the order appears in the timeline as a **priority**
 row: who moved what (the Product Owner, or `human (dashboard)`), from which
 position to which, and why.
 
@@ -111,8 +113,9 @@ appears in the timeline.
 
 The Product Owner can set a story aside without asking you anything:
 
-- **Hold.** The PO holds a story with a reason. The card shows `⏸ PO hold:
-  <reason>` (for example `⏸ PO hold: waits on s38`). The team skips the
+- **Hold.** The PO holds a story with a reason. The card shows `⏸ PO hold`
+  and the reason on its `waits on:` line (for example `waits on: waits on
+  s38`). The team skips the
   story, but it keeps its place in the order and its `#position`.
 - **Release.** The PO releases a held story, or a blocked one with no open
   question, and the reason goes to the next step's brief. If a question of
@@ -121,7 +124,8 @@ The Product Owner can set a story aside without asking you anything:
 - **Cancel request.** Only you can cancel a story. When the PO thinks a
   story should go, it asks you one question: `Cancel story s7 ("…")? The
   PO asks because: … Answer "cancel" to cancel it or "keep" to keep it.`
-  Until you answer, the card shows `⏸ cancel requested: <reason>`. For a
+  Until you answer, the card shows `⏸ cancel requested`, with the reason
+  on its `waits on:` line. For a
   story that already has code, the reason says what happens to that code.
 
 Answer `cancel` and the story is cancelled: it leaves the order and its

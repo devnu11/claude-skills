@@ -90,8 +90,11 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   written vertically, and the columns with stories share the rest. Every
   column lists stories in priority order, and each unfinished card shows its
   position (`#1` runs next) and its rounds. A story that cannot move shows
-  `⏸ <reason>` (`questions`, `manager`, `round cap`, `needs the human` or
-  `held`) and a `waits on:` line. See
+  a one-line `⏸ <reason>` pill (`questions`, `manager`, `round cap`,
+  `needs the human`, `held`, `PO hold`, `cancel requested` or
+  `revert requested`) whose tooltip is the full reason, and a `waits on:`
+  line with the detail. A card's pills never wrap; a long one is cut with
+  an ellipsis and shows its full text on hover. See
   [Backlog and sprints](backlog-and-sprints.md#the-order-of-work).
 - **Backlog:** every story that isn't done, in the order the team will take
   them, in two groups: **Current sprint** and **Backlog**. Each row shows

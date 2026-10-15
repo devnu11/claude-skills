@@ -151,8 +151,8 @@ command fails.
    order ("s30 before s29"), relay it to the PO. The board shows each
    story's `#position`. A story that cannot move shows `⏸ <reason>` and what
    it waits on; it keeps its place in the order and runs once it is
-   released. The PO parks a story with `hold_story` (`⏸ PO hold: <reason>`,
-   no question) and frees it with `release_story`. **Cancelling is the
+   released. The PO parks a story with `hold_story` (`⏸ PO hold`, the
+   reason on the card's `waits on:` line, no question) and frees it with `release_story`. **Cancelling is the
    human's:** the PO's `request_cancel` asks one question (`cancel` /
    `keep`), and only `$AT answer mN cancel` cancels the story (`keep`
    keeps it). Relay the human's word; never answer it for them. A cancelled

@@ -496,14 +496,19 @@ s86, in both groups, a row with dependencies shows `depends on s1, s5
 timeline entry with `warnings` appends ` · ⚠ <w1>; <w2>` to its meta and
 takes the warning tone. The board keeps that order in every column and shows each
 unfinished story's `#position`. A story that cannot move shows one pill,
-`⏸ <wait.title>`. The first matching reason wins: `cancel requested` and
-`PO hold` (s53; for these two the title is `<reason>: <PO's reason>`, e.g.
-`⏸ PO hold: waits on s38`, so a PO-held story never reads `needs the
-human`), then `questions`, `manager` (a repeated setback), `round cap`,
-`needs the human` (blocked, or an open question names it) or `held` (any
-other hold); for these the title is the reason alone. A done or cancelled
-story has no `wait`. Below the pill is a `waits on: …` line with the open question
-ids and texts, and the last step's summary or the repeated reason. Since
+`⏸ <wait.reason>`, with `wait.title` as its tooltip (s150). The first
+matching reason wins: `cancel requested`, `revert requested` and `PO hold`
+(s53; for these the title is `<reason>: <PO's reason>`, e.g. `PO hold:
+waits on s38`, so a PO-held story never reads `needs the human`), then
+`questions`, `manager` (a repeated setback), `round cap`, `needs the human`
+(blocked, or an open question names it) or `held` (any other hold); for
+these the title is the reason alone. A done or cancelled story has no
+`wait`. The card's `waits on: …` line holds the open question ids and
+texts, and the PO's reason, the last step's summary or the repeated reason;
+it is cut at 140 characters with its full text as its tooltip, and it is
+the one place the detail shows. No pill on a story card wraps: a label too
+long for the card is cut with an ellipsis and its full text is the pill's
+tooltip. Since
 s53 the Backlog tab lists cancelled stories in a read-only **Cancelled**
 group after Backlog, with their label pill and no move handles. The
 timeline shows `escalation`, `fault`, `priority` and `story-admin` events
@@ -2398,7 +2403,7 @@ without that heading in `<docs>/design/sN.md` bounces back to design.
 `revert_story` reverts nothing. It posts `Revert story sN ("<title>") again?
 It was reverted N× already (last: <reason>). The PO asks because: <reason>
 Answer "revert" to revert it or "keep" to keep it.` and sets a `revert
-requested` PO hold (Board `⏸ revert requested: <reason>`). It returns `{"status":
+requested` PO hold (Board `⏸ revert requested`, the reason on its `waits on:` line). It returns `{"status":
 "revert requested", "story", "step", "question"}`. The answer is settled where
 cancel answers are. `revert` reverts as above (on failure, a `PO hold`
 saying why). `keep` clears the hold. Anything else is a `PO hold` (`the answer
