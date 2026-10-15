@@ -68,7 +68,7 @@ def test_start_only_reports_and_the_rebase_is_its_own_stage() -> None:
     assert SYNCS[Edge.END] is BoundaryRunner._end_sync
 
 
-def test_s151_a_sprint_end_conflict_reports_files_commit_and_subject_and_wakes_devops(
+def test_s151_sprint_end_conflict_report_names_files_commit_subject_and_wakes_devops(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pins s151/AC6.1 (slice 2)."""
