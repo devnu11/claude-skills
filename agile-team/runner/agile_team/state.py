@@ -264,29 +264,29 @@ def _story(data: dict[str, Any]) -> StoryState:
 def _boundary(data: dict[str, Any] | None) -> Boundary | None:
     if not data:
         return None
-    data = _without(data, RETIRED_BOUNDARY_KEYS)
-    failure = _nested(Failure, _live_failure(data.get("failure")))
+    data = _drop_keys(data, RETIRED_BOUNDARY_KEYS)
+    failure = _nested(Failure, _drop_retired_failure(data.get("failure")))
     streak = [Setback(**s) for s in data.get("streak", [])]
     hold = _known_hold(data.get("hold"))
     stage = LEGACY_STAGES.get(data.get("stage", ""), data.get("stage", "sync"))
-    fix = _rebase_fix(data.get("rebase_fix"))
+    fix = _load_rebase_fix(data.get("rebase_fix"))
     loaded = {"failure": failure, "streak": streak, "hold": hold, "stage": stage}
     return Boundary(**{**data, **loaded, "rebase_fix": fix})
 
 
-def _rebase_fix(data: dict[str, Any] | None) -> RebaseFix | None:
+def _load_rebase_fix(data: dict[str, Any] | None) -> RebaseFix | None:
     """A stored rebase fix with its conflict as a ``Failure``; ``None`` when absent."""
     if not data:
         return None
     return RebaseFix(**{**data, "conflict": Failure(**data["conflict"])})
 
 
-def _without(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+def _drop_keys(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
     """``data`` minus the retired ``keys``."""
     return {k: v for k, v in data.items() if k not in keys}
 
 
-def _live_failure(data: dict[str, Any] | None) -> dict[str, Any] | None:
+def _drop_retired_failure(data: dict[str, Any] | None) -> dict[str, Any] | None:
     """``data`` unless its case is a retired one."""
     return None if data and data.get("case") in RETIRED_CASES else data
 
@@ -314,12 +314,12 @@ def _load_faults(
 
 def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
     data = data or {}
-    stack = [_stack_entry(e) for e in data.get("stack", [])]
+    stack = [_load_stack_entry(e) for e in data.get("stack", [])]
     return UpstreamState(**{**data, "stack": stack})
 
 
-def _stack_entry(data: dict[str, Any]) -> StackEntry:
-    data = _without(data, RETIRED_ENTRY_KEYS)
+def _load_stack_entry(data: dict[str, Any]) -> StackEntry:
+    data = _drop_keys(data, RETIRED_ENTRY_KEYS)
     return StackEntry(**{**data, "ci": _nested(CiResult, data.get("ci"))})
 
 
