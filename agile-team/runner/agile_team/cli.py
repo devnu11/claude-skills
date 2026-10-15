@@ -28,6 +28,7 @@ from . import (
     opinions,
     pending_tests,
     presentation,
+    reconcile,
     recovery,
     repin,
     requirements,
@@ -436,6 +437,7 @@ def _prepared(
         return _report(moved)
     _recover(config, start)
     _require_preflight(config, place.home)
+    _reconcile(config)
     runtime = make_runtime(place, query_fn or default_query())
     runtime.report_load_faults()
     _load_dependencies(runtime)
@@ -484,6 +486,12 @@ def _recover(config: config_mod.Config, start: Start) -> None:
         lead = RECOVERED_LEADS.get(found.cause) or RECOVERED_LEAD.format(cause=found.cause)
         saved = f"{found.label}'s edits are saved in {found.sha} (reverted)"
         print(f"agile-team start: {lead}; {saved}", file=sys.stderr)
+
+
+def _reconcile(config: config_mod.Config) -> None:
+    """s10: ledger the spend a crash cut off, and say so on stderr."""
+    for entry in reconcile.reconcile_ledger(config.run_dir):
+        print(reconcile.told_line(entry), file=sys.stderr)
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:

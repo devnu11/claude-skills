@@ -109,6 +109,12 @@ class Turn:
     cost_usd: float | None
     message_id: str | None
 
+    @classmethod
+    def from_line(cls, text: str) -> Turn:
+        """Parse one turns.jsonl line; raises ValueError, TypeError or KeyError on a bad one."""
+        data = json.loads(text)
+        return cls(**{**data, "tokens": Tokens(**data["tokens"])})
+
     def line(self) -> str:
         """The JSON line, keys in field order."""
         return json.dumps(asdict(self))

@@ -36,15 +36,19 @@ class SessionCost:
 
     session: str | None = None
     reported: float = 0.0
+    reconciled: float = 0.0  # estimate a start already ledgered from turns.jsonl (s10, RC7)
 
     def own_cost(self, resumed: str | None, reported: float) -> float:
         """The part of ``reported`` that one query spent.
 
         ``resumed`` is the session the query resumed (``None`` for a fresh one).
-        A fall below the stored figure means the counter restarted.
+        A fall below the stored figure means the counter restarted. A same-session
+        delta is reduced by what a start already ledgered for it (s10, RC7).
         """
-        base = self.reported if resumed is not None and resumed == self.session else 0.0
-        return reported - base if reported >= base else reported
+        if resumed is None or resumed != self.session or reported < self.reported:
+            return reported
+        delta = reported - self.reported
+        return delta - min(self.reconciled, delta)
 
 
 @dataclass
