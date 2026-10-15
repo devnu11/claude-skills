@@ -56,10 +56,10 @@ class Name(StrEnum):
     GATE_GREEN = "gate.green"
     BOUNDARY_SYNC = "boundary.sync"
     BOUNDARY_CHECK = "boundary.check"
-    BOUNDARY_REVIEW = "boundary.review"
     BOUNDARY_PUSH = "boundary.push"
     BOUNDARY_REBASE = "boundary.rebase"
-    BOUNDARY_RESTACK = "boundary.restack"
+    BOUNDARY_PUSH_REBASED = "boundary.push-rebased"
+    BOUNDARY_CI_REBASED = "boundary.ci-rebased"
     BOUNDARY_CI_WAIT = "boundary.ci-wait"
     RUN_TESTS = "runner-tool.run_tests"
     RUN_NEW_TESTS = "runner-tool.run_new_tests"
@@ -137,25 +137,28 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     ),
     (
         Name.BOUNDARY_SYNC, B, BOUND, "boundary sync",
-        "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",  # noqa: E501
+        "Fetch the target and record the team branch; at a sprint end, record the sprint's own branch",  # noqa: E501
     ),
     (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch"),  # noqa: E501
-    (Name.BOUNDARY_REVIEW, A, BOUND, "build review branches", "Build and check the per-sprint review branches"),  # noqa: E501
     (
-        Name.BOUNDARY_PUSH, A, BOUND, "review PR + push",
-        "Push the review branches and open or update their pull requests",
-    ),
-    (
-        Name.BOUNDARY_REBASE, A, BOUND, "rebase onto target",
-        "Rebase the team branch onto the target (sprint end only)",
-    ),
-    (
-        Name.BOUNDARY_RESTACK, A, BOUND, "restack review PRs",
-        "Bring every review PR up to date, bottom up: rebase, same tree, push, retarget",
+        Name.BOUNDARY_PUSH, A, BOUND, "push as built + PR",
+        "Push the team branch as it is to the sprint's branch and open or reuse its pull request onto the target",  # noqa: E501
     ),
     (
         Name.BOUNDARY_CI_WAIT, A, BOUND, "CI wait",
-        "Wait for the pull requests' CI checks and read failing logs",
+        "Wait for the as-built push's CI and read failing logs; green is the gate for the rebase",
+    ),
+    (
+        Name.BOUNDARY_REBASE, A, BOUND, "rebase onto target",
+        "Rebase the team branch onto the target, only after green CI (sprint end only)",
+    ),
+    (
+        Name.BOUNDARY_PUSH_REBASED, A, BOUND, "push rebased",
+        "Force-push the rebased team branch to the same sprint branch, so its PR keeps both pushes",
+    ),
+    (
+        Name.BOUNDARY_CI_REBASED, A, BOUND, "CI wait (rebased)",
+        "Wait for the rebased branch's CI and record it; a red result is reported, never held",
     ),
     (Name.RUN_TESTS, D, STEP, "pytest: named tests", "Only the tests a developer named, run for that developer"),  # noqa: E501
     (Name.RUN_NEW_TESTS, D, STEP, "pytest: new test files", "Only the story's new test files, run for a developer"),  # noqa: E501
@@ -179,11 +182,11 @@ QUALITY: dict[str, Name] = {
 BOUNDARY: dict[str, Name] = {
     "sync": Name.BOUNDARY_SYNC,
     "check": Name.BOUNDARY_CHECK,
-    "review": Name.BOUNDARY_REVIEW,
     "push": Name.BOUNDARY_PUSH,
-    "rebase": Name.BOUNDARY_REBASE,
-    "restack": Name.BOUNDARY_RESTACK,
     "ci": Name.BOUNDARY_CI_WAIT,
+    "rebase": Name.BOUNDARY_REBASE,
+    "push-rebased": Name.BOUNDARY_PUSH_REBASED,
+    "ci-rebased": Name.BOUNDARY_CI_REBASED,
 }
 RUNNER_TOOL: dict[str, Name] = {
     "run_tests": Name.RUN_TESTS,

@@ -10,7 +10,17 @@ from pathlib import Path
 from typing import Any
 
 from . import acceptance, system
-from .boundary import Boundary, BoundaryHold, Failure, StackEntry, UpstreamState
+from .boundary import (
+    LEGACY_STAGES,
+    RETIRED_BOUNDARY_KEYS,
+    RETIRED_CASES,
+    RETIRED_ENTRY_KEYS,
+    Boundary,
+    BoundaryHold,
+    Failure,
+    StackEntry,
+    UpstreamState,
+)
 from .ci import CiResult
 from .config import OLD_ENVIRONMENT_NAME, PIPELINE_STEPS
 from .gates import FINISHED, PreviousStep, StoryState, StoryStatus, Trace, load_dispute
@@ -253,10 +263,22 @@ def _story(data: dict[str, Any]) -> StoryState:
 def _boundary(data: dict[str, Any] | None) -> Boundary | None:
     if not data:
         return None
-    failure = _nested(Failure, data.get("failure"))
+    data = _without(data, RETIRED_BOUNDARY_KEYS)
+    failure = _nested(Failure, _live_failure(data.get("failure")))
     streak = [Setback(**s) for s in data.get("streak", [])]
     hold = _known_hold(data.get("hold"))
-    return Boundary(**{**data, "failure": failure, "streak": streak, "hold": hold})
+    stage = LEGACY_STAGES.get(data.get("stage", ""), data.get("stage", "sync"))
+    return Boundary(**{**data, "failure": failure, "streak": streak, "hold": hold, "stage": stage})
+
+
+def _without(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    """``data`` minus the retired ``keys``."""
+    return {k: v for k, v in data.items() if k not in keys}
+
+
+def _live_failure(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """``data`` unless its case is a retired one."""
+    return None if data and data.get("case") in RETIRED_CASES else data
 
 
 def _known_hold(hold: Any) -> str | None:
@@ -282,10 +304,13 @@ def _load_faults(
 
 def _upstream_state(data: dict[str, Any] | None) -> UpstreamState:
     data = data or {}
-    stack = [
-        StackEntry(**{**e, "ci": _nested(CiResult, e.get("ci"))}) for e in data.get("stack", [])
-    ]
+    stack = [_stack_entry(e) for e in data.get("stack", [])]
     return UpstreamState(**{**data, "stack": stack})
+
+
+def _stack_entry(data: dict[str, Any]) -> StackEntry:
+    data = _without(data, RETIRED_ENTRY_KEYS)
+    return StackEntry(**{**data, "ci": _nested(CiResult, data.get("ci"))})
 
 
 def _nested(cls: Callable[..., Any], data: dict[str, Any] | None) -> Any:

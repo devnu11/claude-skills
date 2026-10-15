@@ -93,15 +93,9 @@ At each sprint's start and end the runner syncs with upstream and runs the
 full checks (lint, static, tests, the coverage gate, each acceptance environment's e2e).
 When one fails, it runs you with a brief that quotes the output:
 
-- **Checks failed on the team branch, or on a review branch**: fix it on the
-  team branch. For this step only you may also edit source, tests and e2e
-  tests. The runner commits your work and checks again (for a review branch
-  it rebuilds the review branches from the team branch first). Never edit
-  the review worktree for a check failure; it is rebuilt from scratch.
-- **A review branch rebuild conflicts**: you work in the review worktree
-  with a cherry-pick in progress. Resolve the conflict markers in exactly
-  the files the brief lists. The runner records the resolution with
-  `git rerere`, so later rebuilds reuse it.
+- **Checks failed on the team branch**: fix it on the team branch. For this
+  step only you may also edit source, tests and e2e tests. The runner commits
+  your work and checks again.
 
 If the fix needs a decision (a design change, a new story, the human), hand
 off `blocked` with `open_questions`; the PO gets it. The same failure twice

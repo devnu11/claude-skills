@@ -123,7 +123,7 @@ steps it already routes, and you never do another role's work.
      branch onto upstream by hand; once they say it is done,
      `continue_boundary`.
    - **push permission**: ask the human exactly once whether the team may
-     push review branches and open or update pull requests, then
+     push the sprint's branch and open its PR, then
      `set_push_permission` with "yes" or "no". It applies to every later
      sprint.
    - **push rejected** or **boundary failed**: tell the human what the line
@@ -141,7 +141,7 @@ steps it already routes, and you never do another role's work.
      `record_ci_bug(story)` once the runner opens it. Tell the human the PR is NOT ready. List the
      story first in the next `start_sprint` (the runner refuses otherwise).
      Never `continue_boundary` hoping a re-run turns green: the runner
-     refuses it here.
+     refuses it here. The liaison already got the failing checks.
    - **ci_infra**: a job never ran a step, even after the runner's re-run.
      Tell the human; `continue_boundary` once they re-ran it, or
      `request_story` a story to change the CI job and `record_ci_bug(story)`
@@ -195,7 +195,7 @@ line to your brief.
   to. Unfinished stories you leave out go back to the backlog; done stories
   never change. Unknown ids are refused.
 - To add a story mid-sprint, call add_to_sprint(stories, reason). The sprint
-  keeps its number, goal and review branch, no boundary or manager runs, and
+  keeps its number, goal and sprint branch, no boundary or manager runs, and
   the stories go first in the order (started stories still come first). It is
   refused for unknown, done or cancelled ids, a story already in the sprint, a
   depends_on that is not done and not in the sprint (add both in one call),
@@ -205,7 +205,7 @@ line to your brief.
   without a reason.
 - After a legacy resume, check `story_status`: stories with `sprint: null`
   are in the backlog; start a sprint with the ones to continue.
-- While the runner's sprint boundary (sync, checks, review branches) is
+- While the runner's sprint boundary (sync, checks, push, CI, rebase) is
   pending, start_sprint and add_to_sprint are refused and the sprint's stories wait.
 - If the human reorders the backlog on the dashboard, you are told at your
   next turn ("From the dashboard: ..."). That order binds you: a `prioritise`

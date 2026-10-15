@@ -106,7 +106,6 @@ from .roles import (
     scope_note,
 )
 from .salvage import Cause, Interruption
-from .stack import REVIEW_DIR
 from .stage_log import StageLog, place_of
 from .state import RunState
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
@@ -140,7 +139,7 @@ RULING_AFTER_FAULT = "the fault was not applied, so the ruling was not either"
 NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool")
 BOUNDARY_UNGATED = frozenset({MANAGER})
-FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REVIEW_FIX})
+FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX})
 BARE_KINDS = frozenset({StepKind.GATE_FIX})
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
@@ -588,14 +587,6 @@ class Runtime:
         values = self.config.placeholders()
         wanted = expand_globs(list(FIX_GLOBS), values)
         plan.scope.write = [*plan.scope.write, *(g for g in wanted if not g.startswith("!"))]
-
-    def _review_fix_scope(self, plan: Plan) -> None:
-        """A conflict fix works in the review worktree and writes only the conflicting files."""
-        failure = self.state.boundary.failure if self.state.boundary else None
-        worktree = self.config.run_dir / REVIEW_DIR
-        read = expand_globs(plan.role.read, self.config.placeholders())
-        files = list(failure.files) if failure else []
-        plan.scope = guard.Scope(plan.role.name, worktree, files, read, secrets=self.secrets)
 
     def _lay_out_presentation(self, plan: Plan) -> None:
         with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
@@ -1399,7 +1390,6 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 
 FIX_SETUPS = {
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
-    StepKind.REVIEW_FIX: Runtime._review_fix_scope,
 }
 
 

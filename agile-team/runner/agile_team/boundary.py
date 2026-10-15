@@ -1,4 +1,4 @@
-"""Sprint boundary data and texts: stages, failures, the review stack and fix briefs.
+"""Sprint boundary data and texts: stages, failures, the sprint PR entry and fix briefs.
 
 No I/O here. ``boundary_runner`` runs the stages; this module only says what
 they are called, what state they leave behind and what the runner says.
@@ -11,7 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from . import loops
-from .ci import CiResult
+from .ci import CiResult, CiVerdict
 from .loops import Author, Setback
 
 if TYPE_CHECKING:
@@ -26,7 +26,10 @@ NO_REMOTE = "no remote {remote!r}"
 FETCH_FAILED = "git fetch {remote} failed: {error}"
 NO_TARGET = "{target} does not exist"
 DETACHED = "the repo is on a detached HEAD; check out the team branch"
-MERGED_NOTE = "sprint {sprint} is in {target}; dropped from the stack"
+NOTHING_NEW = "sprint {sprint} added no commit since the last sprint end; nothing to push or rebase"
+SUPERSEDED_NOTE = (
+    "sprint {old}'s PR #{pr} is superseded: sprint {sprint}'s branch holds its commits"
+)
 CLOSED_NOTE = "PR #{pr} for sprint {sprint} is {state}; left alone"
 BOUNDARY_DUE = (
     "sprint {sprint} {edge} boundary failed {count} times at {stage}; see repeated_boundary"
@@ -38,20 +41,40 @@ BOUNDARY_REFUSAL = (
     "sprint {sprint} {edge} boundary is at {stage}{held}; the sprint's stories move once it passes"
 )
 SKIPPED_REPORT = "sync and pull requests skipped: {why}"
-NOTHING_REPORT = "nothing to review: every sprint is in {target}"
 PUSHED_REPORT = (
-    "Sprint {sprint}'s review branches are pushed: {prs}. The runner now waits for CI on "
-    "every PR of the stack; nothing is called ready before CI passes on all of them."
+    "Sprint {sprint}'s branch {branch} holds the team branch as built ({sha}): PR #{pr} {url}. "
+    "The runner waits for its CI; the team branch is rebased onto {target} only once it is green."
 )
+CI_RED_HELD = (
+    "Sprint {sprint}'s CI failed on the team branch as built ({prs}); the boundary holds and "
+    "nothing is rebased:\n{checks}"
+)
+NO_AS_IS = "no as-built push is recorded for this sprint"
+REBASE_WAITS = (
+    "the rebase waits for green CI on the team branch as built: {branch} at {sha} has {verdict}"
+)
+REBASE_UNCHANGED = "the rebase changed nothing; {branch} stays at {sha}"
+REBASED_PUSHED_REPORT = (
+    "Sprint {sprint}'s PR #{pr} now holds the team branch rebased onto {target} ({sha}); the "
+    "as-built push ({as_is}) stays in the PR's history. The runner waits for CI again."
+)
+REBASED_NOT_GREEN = (
+    "Sprint {sprint}'s CI was green on the team branch as built ({as_is}), and is {verdict} on it "
+    "rebased onto {target} ({prs}). The PR is NOT ready; do not merge it.\n{checks}"
+)
+NOT_REBASED = " The team branch is not rebased onto {target}: the rebase waits for green CI."
 REBASE_MERGE_LIMIT = 100
 BIG_PR_NOTE = (
     "PR #{pr} ({branch}) has {commits} commits, more than the {limit} GitHub allows for "
-    '"Rebase and merge". When it is the bottom of the stack, merge it by fast-forward: '
+    '"Rebase and merge". Merge it by fast-forward: '
     "git fetch {remote} && git push {remote} {remote}/{branch}:{target}"
 )
 LOCAL_REPORT = (
-    "Sprint {sprint}'s review branches are built and checked but not pushed ({why}): {branches}."
-    " No CI result exists."
+    "Sprint {sprint}'s branch {branch} is checked but not pushed ({why}). No CI result exists."
+)
+SUPERSEDES_LINE = (
+    "Holds the commits of earlier sprint PRs {prs}, not merged yet; merging this one merges them "
+    "too, so close them once it is merged.\n\n"
 )
 NOT_PERMITTED = "the human said no to pushing"
 CHECK_FAILED = "{name} failed ({why}): {command}\n{tail}"
@@ -61,10 +84,13 @@ FIX_HEADING = (
 )
 OUTPUT_BLOCK = "Output:\n```\n{output}\n```"
 PR_BODY = (
-    "Sprint {sprint} of the agile team.\n\n{stories}\n\n{reverted}{stacked}"
-    'Rebuilt by agile-team from {team} onto {target}. Merge with "Rebase and merge".'
+    "Sprint {sprint} of the agile team.\n\n{stories}\n\n{reverted}{supersedes}"
+    "The team branch {team} as built and tested, then, once its CI passed, rebased onto "
+    '{target}; both pushes are in this PR\'s history. Merge with "Rebase and merge".'
 )
-STACKED_LINE = "Stacked on {base} (#{base_pr}): review and merge that one first.\n\n"
+RETIRED_CASES = frozenset({"review_check", "review_conflict"})
+RETIRED_ENTRY_KEYS = ("checked", "check")
+RETIRED_BOUNDARY_KEYS = ("restack",)
 
 
 def big_pr_notes(stack: list[StackEntry], upstream: UpstreamSettings) -> list[str]:
@@ -95,11 +121,11 @@ class Stage(StrEnum):
 
     SYNC = "sync"
     CHECK = "check"
-    REVIEW = "review"
     PUSH = "push"
-    REBASE = "rebase"
-    RESTACK = "restack"
     CI = "ci"
+    REBASE = "rebase"
+    PUSH_REBASED = "push-rebased"
+    CI_REBASED = "ci-rebased"
 
 
 class StepKind(StrEnum):
@@ -108,7 +134,6 @@ class StepKind(StrEnum):
     ROLE = "role"
     BOUNDARY = "boundary"
     TEAM_FIX = "team-fix"
-    REVIEW_FIX = "review-fix"
     GATE_FIX = "gate-fix"
 
 
@@ -133,14 +158,12 @@ class BoundaryOutcome(StrEnum):
 
     SKIPPED = "skipped"
     CURRENT = "current"
-    MERGED = "merged"
     REBASED = "rebased"
     CONFLICT = "conflict"
     PASS = "pass"
     FAIL = "fail"
     RERUN = "rerun"
     ESCALATE = "escalate"
-    BUILT = "built"
     HELD = "held"
     PUSHED = "pushed"
     LOCAL = "local"
@@ -148,16 +171,14 @@ class BoundaryOutcome(StrEnum):
     DONE = "done"
     CONTINUED = "continued"
     PERMISSION = "permission"
-    RESTACKED = "restacked"
-    REBUILD = "rebuild"
+    SUPERSEDED = "superseded"
+    REFUSED = "refused"
 
 
 class FixCase(StrEnum):
     """What failed, which decides the fix step's scope."""
 
     TEAM_CHECK = "team_check"
-    REVIEW_CHECK = "review_check"
-    REVIEW_CONFLICT = "review_conflict"
 
 
 class Permission(StrEnum):
@@ -166,14 +187,6 @@ class Permission(StrEnum):
     UNASKED = "unasked"
     YES = "yes"
     NO = "no"
-
-
-class CheckState(StrEnum):
-    """Whether a review branch's full checks ran and how."""
-
-    UNCHECKED = "unchecked"
-    PASS = "pass"
-    FAIL = "fail"
 
 
 class PrMode(StrEnum):
@@ -193,8 +206,17 @@ PR_KIND = {
 }
 
 
-STAGES = (Stage.SYNC, Stage.CHECK, Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI)
+STAGES = (
+    Stage.SYNC,
+    Stage.CHECK,
+    Stage.PUSH,
+    Stage.CI,
+    Stage.REBASE,
+    Stage.PUSH_REBASED,
+    Stage.CI_REBASED,
+)
 END_ONLY = frozenset(STAGES[2:])
+LEGACY_STAGES = {"review": Stage.PUSH, "restack": Stage.PUSH}
 CI_BUG_HOLDS = frozenset({BoundaryHold.CI_FAILED, BoundaryHold.CI_INFRA, BoundaryHold.MAIN_BROKEN})
 STALL_HINTS = {
     BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)",
@@ -209,8 +231,6 @@ STALL_HINTS = {
 }
 FIX_KINDS = {
     FixCase.TEAM_CHECK: StepKind.TEAM_FIX,
-    FixCase.REVIEW_CHECK: StepKind.TEAM_FIX,
-    FixCase.REVIEW_CONFLICT: StepKind.REVIEW_FIX,
 }
 FIX_LINES = {
     FixCase.TEAM_CHECK: (
@@ -218,21 +238,6 @@ FIX_LINES = {
         "Fix it on the team branch. In this step you may edit source, tests, e2e tests, CI and "
         "the [toolchain] and [[environment]] config. The runner commits your changes and runs "
         "the full checks again.",
-    ),
-    FixCase.REVIEW_CHECK: (
-        "The full checks failed on review branch {branch} (sprints {sprints} rebased onto "
-        "{target}), checked out in {worktree}. Read that copy to diagnose; do not edit it.",
-        "Fix it on the team branch (this repo). In this step you may edit source, tests, e2e "
-        "tests, CI and the [toolchain] and [[environment]] config. The runner rebuilds the review "
-        "branches from the team branch and checks them again.",
-    ),
-    FixCase.REVIEW_CONFLICT: (
-        "Rebuilding review branch {branch} onto {target} stopped: commit {commit} ({subject}) "
-        "conflicts in {files}. You work in {worktree}, a scratch copy with the cherry-pick in "
-        "progress.",
-        "Resolve the conflict markers in exactly those files, keeping both sides' intent. "
-        "Nothing else you change is kept. The runner records your resolution (git rerere), so "
-        "every later rebuild reuses it.",
     ),
 }
 
@@ -265,7 +270,6 @@ class Boundary:
     streak: list[Setback] = field(default_factory=list)
     rounds: int = 0
     escalated: str | None = None
-    restack: bool = False
     note: str = ""
     sync_from: str = ""
 
@@ -285,8 +289,6 @@ class StackEntry:
     title: str = ""
     stories: list[str] = field(default_factory=list)
     head: str = ""
-    checked: str = ""
-    check: CheckState = CheckState.UNCHECKED
     pushed: str = ""
     pr: int | None = None
     url: str = ""
@@ -296,9 +298,11 @@ class StackEntry:
     commits: int = 0
     reverted: list[str] = field(default_factory=list)
     reran: list[str] = field(default_factory=list)
+    as_is: str = ""
+    supersedes: list[int] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.check, self.mode = CheckState(self.check), PrMode(self.mode)
+        self.mode = PrMode(self.mode)
 
 
 @dataclass
@@ -333,9 +337,7 @@ class FixContext:
 
     team: str
     target: str
-    worktree: str
     sha: str
-    sprints: str
 
 
 def next_stage(b: Boundary) -> Stage | None:
@@ -411,3 +413,20 @@ def manager_view(b: Boundary, events: list[Event]) -> dict[str, Any]:
 def stall_hint(hold: BoundaryHold | None) -> str:
     """What the PO should do about a boundary held for ``hold``."""
     return STALL_HINTS.get(hold, DEFAULT_HINT) if hold else DEFAULT_HINT
+
+
+def own_entry(stack: list[StackEntry], sprint: int) -> StackEntry | None:
+    """The stack entry of ``sprint``, or ``None``."""
+    return next((e for e in stack if e.sprint == sprint), None)
+
+
+def rebase_refusal(entry: StackEntry | None) -> str:
+    """Why the rebase must wait; empty only when the as-built push has green CI at its head."""
+    if entry is None:
+        return NO_AS_IS
+    ci = entry.ci
+    if ci is not None and ci.verdict is CiVerdict.GREEN and ci.head == entry.pushed:
+        return ""
+    verdict = ci.verdict.value if ci else "no CI read"
+    sha = entry.pushed or "nothing pushed"
+    return REBASE_WAITS.format(branch=entry.branch, sha=sha, verdict=verdict)

@@ -1817,7 +1817,7 @@ function stepEndMeta(d) {
 }
 
 const BOUNDARY_TONE = {
-  pass: "good", merged: "good", rebased: "good", built: "good", pushed: "good", done: "good", local: "warning", held: "warning", restacked: "good", rebuild: "warning",
+  pass: "good", merged: "good", rebased: "good", built: "good", pushed: "good", done: "good", local: "warning", held: "warning", restacked: "good", rebuild: "warning", superseded: "good", refused: "warning",
   fail: "serious", conflict: "serious", escalate: "serious", error: "critical",
 };
 const BOUNDARY_TO = { fail: "devops", conflict: "devops", escalate: "manager", held: PO, error: PO };
@@ -2406,14 +2406,13 @@ function boardStories(view) {
 }
 
 const STACK_TONE = { ready: "good", draft: "", none: "warning", closed: "critical" };
-const CHECK_TONE = { pass: "good", fail: "critical", unchecked: "" };
 const CI_TONE = { green: "good", failed: "critical", main: "warning", rerun: "accent", running: "", none: "warning" };
 
 /** One row of the review stack: sprint, branch, PR link, mode, check and CI pills. */
 function stackRow(e) {
   const pr = e.pr ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">#${esc(e.pr)}</a>` : "no PR";
   return `<div class="lane"><span class="who">sprint ${esc(e.sprint)}</span><code>${esc(e.branch)}</code>
-    <span>${pr}</span>${pill(e.mode, STACK_TONE[e.mode] ?? "")}${pill(e.check, CHECK_TONE[e.check] ?? "")}${e.ci ? pill(e.ci.text, CI_TONE[e.ci.state] ?? "") : ""}</div>`;
+    <span>${pr}</span>${pill(e.mode, STACK_TONE[e.mode] ?? "")}${e.ci ? pill(e.ci.text, CI_TONE[e.ci.state] ?? "") : ""}</div>`;
 }
 
 /** The boundary line: `Sprint N <edge>: <stage>` and a held or running pill. */
@@ -2422,13 +2421,13 @@ function boundaryLine(b) {
   return `<p class="sub">${esc(`Sprint ${b.sprint} ${b.edge}: ${b.stage}`)} ${state}</p>`;
 }
 
-/** The Review stack card; hidden when there is no stack and no boundary. */
+/** The Sprint PR card; hidden when there is no stack and no boundary. */
 function renderStack(view) {
   const up = view.upstream, card = $("#stack-card");
   const stack = up?.stack ?? [];
   card.hidden = !up || (!stack.length && !up.boundary);
   if (card.hidden) return;
-  card.innerHTML = `<h2>Review stack</h2>
+  card.innerHTML = `<h2>Sprint PR</h2>
     <p class="sub">${esc(`${up.team_branch} → ${up.remote}/${up.branch} · push: ${up.push}`)}</p>
     ${up.boundary ? boundaryLine(up.boundary) : ""}${stack.map(stackRow).join("")}`;
 }

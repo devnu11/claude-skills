@@ -20,7 +20,7 @@
    "pr": 12,
    "url": "https://github.com/o/r/pull/12",
    "mode": "ready",
-   "check": "pass",
+   "as_is": "",
    "head": "3f9c2ab41d7e",
    "ci": {"state": "green", "text": "CI green"}
   },
@@ -31,7 +31,7 @@
    "pr": null,
    "url": "",
    "mode": "none",
-   "check": "pass",
+   "as_is": "",
    "head": "8be05c61a9f2",
    "ci": {"state": "main", "text": "CI blocked by main: ci / test (macos-latest)"}
   }

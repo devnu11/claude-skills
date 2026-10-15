@@ -84,10 +84,11 @@ class Spans:
 
 @dataclass(frozen=True)
 class Lease:
-    """A review branch and the remote value we expect it to have (empty: absent)."""
+    """Push ``sha`` to ``branch``, expecting the remote at ``expect`` (empty: absent)."""
 
     branch: str
     expect: str
+    sha: str
 
 
 class PrState(StrEnum):
@@ -363,6 +364,11 @@ class Upstream:
         out = self.git.run("rev-list", "--count", f"HEAD..{self.target}")
         return int(out.strip() or 0)
 
+    def count(self, head: str) -> int:
+        """How many commits ``head`` has that the target lacks."""
+        out = self.git.run("rev-list", "--count", f"{self.target}..{head}")
+        return int(out.strip() or 0)
+
     def rebase_onto(self, old: str) -> Rebase:
         """Rebase HEAD onto the target; abort and report on a conflict, check the result."""
         start, target_sha = self.git.head(), self.git.run("rev-parse", self.target).strip()
@@ -418,7 +424,7 @@ class Upstream:
         self._guard(lease.branch)
         ref = f"refs/heads/{lease.branch}"
         argv = ["push", "--porcelain", "--no-verify", f"--force-with-lease={ref}:{lease.expect}"]
-        code, out = self.git.attempt(*argv, self.settings.remote, f"{ref}:{ref}")
+        code, out = self.git.attempt(*argv, self.settings.remote, f"{lease.sha}:{ref}")
         return None if code == 0 else out
 
     def _guard(self, branch: str) -> None:

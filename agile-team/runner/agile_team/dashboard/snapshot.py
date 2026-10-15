@@ -503,7 +503,7 @@ def _stack_entry(entry: Any) -> dict[str, Any]:
         "pr": entry.pr,
         "url": entry.url,
         "mode": str(entry.mode),
-        "check": str(entry.check),
+        "as_is": entry.as_is,
         "head": entry.head,
         "ci": card_of(entry.ci).row() if entry.ci else None,
     }
