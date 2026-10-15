@@ -3532,6 +3532,14 @@ This applies only when the runner runs from `.team/run/runner-pin`
   settings. A sandboxed `curl` gets 200 from a live local service, and it
   exits 7 without the `network` key. Linux is not verified end to end; the
   test is skipped there.
+- The OS sandbox is the Proxy's read wall (s12, ADR-0079). The Bash text check
+  is only an early refusal: it cannot see what the shell expands. On macOS, an
+  e2e test runs a table of escape probes through the real settings: `cd ..`,
+  `cd` alone, `cd /`, `~`, `$HOME`, `$VAR`, `$(…)`, a wildcard, `--file=/abs/path`
+  and a differently cased path. A control run without the sandbox shows each
+  probe reads a source file. With the sandbox, every read is refused. The
+  platforms these tests run on are listed in
+  `tests/e2e/scripted_cli.PROXY_SANDBOX_PLATFORMS`, and s60 adds Linux there.
 
 ## Acceptance environment kinds
 
