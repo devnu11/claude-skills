@@ -141,7 +141,10 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
   - **Working now:** the role at work is outlined green on its first run of
     a step, violet on the first re-run and amber after that, and so is its
     group. Its box shows its tokens per minute now and a live line: story,
-    step, time so far, which run it is and its latest tool call. A time
+    step, time so far, which run it is and its latest tool call. Its
+    tokens, dollars and awake time include the step it is running, so they
+    grow while it works. When the step ends they switch to the recorded
+    numbers, and the step is not counted twice. A time
     measured by the wall clock reads `(may include sleep)` after it.
   - **Runner tools:** the runner's own checks sit in small dashed boxes
     touching the role they serve, above it when they run before its step

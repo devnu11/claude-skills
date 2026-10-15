@@ -758,7 +758,11 @@ step's first run, violet on the first re-run, amber after that (earlier
 `step-start`s of the same role, story and step whose run was not
 interrupted). Its box shows the current tokens per minute with the
 sparkline in that colour, and a live line: story, step, awake time, run
-label and the latest tool call. Runner stages that prepare or gate a
+label and the latest tool call. Its tokens, dollars and awake time include
+the running step when the step is in scope (s137, ADR-0068). The tokens and
+dollars come from `heartbeat.step` until the ledger has a row of the same
+role and story written since the step started. The awake time comes from the
+open `steps` row until `step-end` closes it. So the step is counted once. Runner stages that prepare or gate a
 role's step sit in small dashed boxes touching it, above when they run
 before the step and below when after, on one centred line
 (`label · ↻ runs · time`, s127); the checkout checks and during-step tools
