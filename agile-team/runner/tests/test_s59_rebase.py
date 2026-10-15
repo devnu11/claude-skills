@@ -210,7 +210,7 @@ def test_the_check_does_not_run_when_nothing_changed(fake: FakeSystem) -> None:
 def test_the_push_refuses_the_team_branch(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
     with pytest.raises(UpstreamError, match="refusing to push agile-team"):
-        upstream_for().push(up.Lease("agile-team", OLD))
+        upstream_for().push(up.Lease("agile-team", OLD, NEW))
     assert not seen(fake, "git", "push")
 
 

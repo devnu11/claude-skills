@@ -228,12 +228,13 @@ def test_ac3_1_as_is_pushed_and_ci_are_never_remapped(env: Env) -> None:
     assert (e.as_is, e.pushed, e.ci.head) == (AS_BUILT, AS_BUILT, AS_BUILT)
 
 
-def test_ac3_1_a_rebase_conflict_holds_sync_conflict(env: Env) -> None:
+def test_ac3_1_a_rebase_conflict_goes_to_devops_not_a_hold(env: Env) -> None:
     e = at(env, Stage.REBASE)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
     env.br.step()
-    assert env.rt.state.boundary.hold is BoundaryHold.SYNC_CONFLICT
+    b = env.rt.state.boundary
+    assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
 
 
 # ----- AC3.2: force-push the rebased branch to the same branch ----------------------
@@ -342,9 +343,9 @@ def refused_at_rebase(env: Env, fake: FakeSystem) -> tuple[Rebases, dict]:
     b = env.rt.state.boundary
     before = (env.rt.git.head(), len(fake.commands))
     env.br.step()
+    assert len(fake.commands) == before[1]  # no fetch, no git call at all
     assert env.rt.git.head() == before[0]
     assert b.stage is Stage.CI and b.hold is BoundaryHold.ERROR
-    assert len(fake.commands) == before[1]  # no fetch, no git call at all
     return stub, last(env)
 
 

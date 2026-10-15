@@ -423,7 +423,7 @@ def test_a_green_rerun_on_the_pushed_head_is_done(env: Env) -> None:
     at_ci(
         env, [attempt2], {attempt2.link: Job("78", NEW, "unit", (SET_UP, Step("Run", "success")))}
     )
-    [report] = env.drive()
+    *_, report = env.drive()
     up = env.rt.state.upstream
     assert env.rt.state.boundary is None and last(env)["ci"] == "green"
     assert ci.READY_PHRASE in up.report

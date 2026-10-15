@@ -122,7 +122,7 @@ def restore_upstream(state: RunState, section: dict[str, Any] | None) -> None:
                 "a",
                 "b",
                 head=e["head"],
-                check=e["check"],
+                as_is=e["as_is"],
                 pr=e["pr"],
                 url=e["url"],
                 base=e["base"],
@@ -735,7 +735,7 @@ def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, scratch:
                 url="u",
                 base="main",
                 mode="ready",
-                check="pass",
+                as_is="s",
             )
         ],
     )
@@ -756,7 +756,7 @@ def test_snapshot_upstream_shows_stack_and_boundary(config: cfg.Config, scratch:
             "pr": 4,
             "url": "u",
             "mode": "ready",
-            "check": "pass",
+            "as_is": "s",
             "head": "h",
             "ci": None,
         }

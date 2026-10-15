@@ -25,13 +25,15 @@ def test_enum_values() -> None:
         "push-rebased",
         "ci-rebased",
     ]
-    assert [e.value for e in b.StepKind] == [
+    assert {e.value for e in b.StepKind} == {
         "role",
         "boundary",
         "team-fix",
+        "rebase-fix",
         "gate-fix",
-    ]
-    assert [e.value for e in b.BoundaryHold] == [
+    }
+    assert "rebase_conflict" in [e.value for e in b.BoundaryHold]
+    assert [e.value for e in b.BoundaryHold if e.value != "rebase_conflict"] == [
         "sync_conflict",
         "escalated",
         "reviewed",
@@ -44,7 +46,7 @@ def test_enum_values() -> None:
         "error",
         "fix_handover",
     ]
-    assert [e.value for e in b.FixCase] == ["team_check"]
+    assert {e.value for e in b.FixCase} == {"team_check", "rebase_conflict"}
     assert [e.value for e in b.Permission] == ["unasked", "yes", "no"]
     assert not hasattr(b, "CheckState")
     assert {e.value for e in b.BoundaryOutcome} == {

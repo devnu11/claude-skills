@@ -260,7 +260,7 @@ def test_the_end_entry_and_pr_body_include_the_added_story(make_runtime, fake: F
     fake.reply(("git", "rev-parse", "HEAD"), Done(0, NEW + "\n"))
     entry = env.br._entry(bd.Boundary(Edge.END, 1), "0" * 40)
     assert entry.stories == ["s1", "s2"]
-    assert "- s2: s2" in env.br._body(entry, "")
+    assert "- s2: s2" in env.br._body(entry)
 
 
 # ----- schema

@@ -576,7 +576,7 @@ def test_the_pr_lists_reverted_stories(make_runtime) -> None:
     b = bd.Boundary(Edge.END, 1)
     entry = runner._entry(b, "a" * 40)
     assert entry.reverted == []
-    plain = runner._body(entry, "")
+    plain = runner._body(entry)
     assert "Reverted:" not in plain
     rt.state.stories["s1"].reverted = [
         revert_log.RevertEntry("2026-01-01", 1, "why", [FIRST, FIXUP], REVERT_SHA)
@@ -585,7 +585,7 @@ def test_the_pr_lists_reverted_stories(make_runtime) -> None:
     rt.state.stories["s2"].status = StoryStatus.DONE
     entry = runner._entry(b, "a" * 40)
     assert entry.reverted == ["s1"] and entry.stories == ["s2"]
-    body = runner._body(entry, "")
+    body = runner._body(entry)
     assert "Reverted:\n" in body
     assert (
         f"- s1: Title s1: why (reverted {FIRST[:12]}, {FIXUP[:12]}; revert {REVERT_SHA[:12]})"

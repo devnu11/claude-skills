@@ -255,10 +255,8 @@ BOUNDARY_ROWS = [
         T.SYNC_CONFLICT,
         "run: sprint 2 end: rebasing agile-team onto origin/main stopped at abc123def456 "
         '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
-        "aborted and the team branch is unchanged. Ask the human to rebase agile-team onto "
-        "origin/main by hand (git rebase origin/main, resolve, git rebase --continue), then "
-        "continue_boundary; the runner rewrites the recorded hashes. If the run halts on the "
-        "moved checkout, they run agile-team accept-checkout first",
+        "aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
+        "conflict now goes to a DevOps step (s151)",
     ),
     (
         brep("push_permission", branches=["team/sprint-1", "team/sprint-2"]),
