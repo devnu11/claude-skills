@@ -129,7 +129,7 @@ def test_no_compaction_under_budget(roster: Roster, backend: FakeBackend, tmp_pa
     ],
 )
 def test_handoff_of(text: str, expected: str | None) -> None:
-    assert find_handoff(text, NAMES, "manager") == expected
+    assert find_handoff(Turn("manager", text), NAMES) == expected
 
 
 def test_role_model_is_passed_to_backend(
@@ -202,11 +202,11 @@ def test_message_is_stripped(roster: Roster, backend: FakeBackend, tmp_path: Pat
     ],
 )
 def test_handoff_of_spacing(text: str, expected: str | None) -> None:
-    assert find_handoff(text, NAMES, "manager") == expected
+    assert find_handoff(Turn("manager", text), NAMES) == expected
 
 
 def test_handoff_after_leading_mentions() -> None:
-    assert find_handoff("@po HANDOFF: @liaison", NAMES, "manager") == "liaison"
+    assert find_handoff(Turn("manager", "@po HANDOFF: @liaison"), NAMES) == "liaison"
 
 
 def test_say_holds_the_lock_during_model_calls(roster: Roster, tmp_path: Path) -> None:
@@ -369,16 +369,16 @@ def test_last_addressed_is_human_targets_not_handoff(
     ],
 )
 def test_handoff_prefixes_and_case(text: str) -> None:
-    assert find_handoff(text, NAMES, "manager") == "po"
+    assert find_handoff(Turn("manager", text), NAMES) == "po"
 
 
 @pytest.mark.parametrize("text", ["handoff: @po", "> HANDOFF: @po", "x HANDOFF: @po"])
 def test_handoff_not_at_line_start(text: str) -> None:
-    assert find_handoff(text, NAMES, "manager") is None
+    assert find_handoff(Turn("manager", text), NAMES) is None
 
 
 def test_handoff_to_self_in_other_case_is_ignored() -> None:
-    assert find_handoff("HANDOFF: @MANAGER", NAMES, "manager") is None
+    assert find_handoff(Turn("manager", "HANDOFF: @MANAGER"), NAMES) is None
 
 
 @pytest.mark.parametrize(
@@ -390,11 +390,11 @@ def test_handoff_to_self_in_other_case_is_ignored() -> None:
     ],
 )
 def test_fenced_handoff_is_ignored(text: str) -> None:
-    assert find_handoff(text, NAMES, "manager") is None
+    assert find_handoff(Turn("manager", text), NAMES) is None
 
 
 def test_handoff_after_fence_counts() -> None:
-    assert find_handoff("```\nHANDOFF: @liaison\n```\nHANDOFF: @po", NAMES, "manager") == "po"
+    assert find_handoff(Turn("manager", "```\nHANDOFF: @liaison\n```\nHANDOFF: @po"), NAMES) == "po"
 
 
 def test_partial_reply_error_is_a_backend_error() -> None:

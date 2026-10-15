@@ -58,11 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
     top.add_argument("--dir", type=Path, required=True, help="chat state directory")
     top.add_argument("--max-handoffs", type=parse_non_negative, default=Limits.max_handoffs)
     top.add_argument("--recent-tokens", type=parse_non_negative, default=Limits.recent_tokens)
+    _add_commands(top)
+    return top
+
+
+def _add_commands(top: argparse.ArgumentParser) -> None:
     sub = top.add_subparsers(dest="command", required=True)
     sub.add_parser("say").add_argument("message", nargs="+")
     for name in ("chat", "log", "show"):
         sub.add_parser(name)
-    return top
 
 
 def build(args: argparse.Namespace, io: Io) -> GroupChat:
@@ -77,39 +81,46 @@ def write_turns(turns: Iterable[Turn], out: TextIO) -> None:
         print(f"{turn.line}\n", file=out)
 
 
-def send_and_print(chat: GroupChat, message: str, io: Io) -> int:
-    """Send one message and print what came back; the exit code for it."""
-    try:
-        write_turns(chat.send(message), io.stdout)
-    except PartialReplyError as exc:
-        write_turns(exc.replies, io.stdout)
-        print(f"group-chat: model call failed: {exc}", file=io.stderr)
-        return EXIT_MODEL
-    return 0
+@dataclass(frozen=True)
+class Console:
+    """A chat and the streams its replies and errors go to."""
+
+    chat: GroupChat
+    io: Io
+
+    def send(self, message: str) -> int:
+        """Send one message and print what came back; the exit code for it."""
+        try:
+            write_turns(self.chat.send(message), self.io.stdout)
+        except PartialReplyError as exc:
+            write_turns(exc.replies, self.io.stdout)
+            print(f"group-chat: model call failed: {exc}", file=self.io.stderr)
+            return EXIT_MODEL
+        return 0
+
+    def send_or_warn(self, message: str) -> None:
+        """``send``, reporting a usage error instead of raising it."""
+        try:
+            self.send(message)
+        except USAGE_ERRORS as exc:
+            print(f"group-chat: {exc}", file=self.io.stderr)
 
 
 def run_say(args: argparse.Namespace, io: Io) -> int:
     """``say``: one message."""
-    return send_and_print(build(args, io), " ".join(args.message), io)
+    return Console(build(args, io), io).send(" ".join(args.message))
 
 
 def run_chat(args: argparse.Namespace, io: Io) -> int:
     """``chat``: one message per stdin line; errors are reported and skipped."""
-    chat = build(args, io)
+    console = Console(build(args, io), io)
     for line in io.stdin:
         message = line.strip()
         if message == QUIT:
             break
         if message:
-            _send_or_warn(chat, message, io)
+            console.send_or_warn(message)
     return 0
-
-
-def _send_or_warn(chat: GroupChat, message: str, io: Io) -> None:
-    try:
-        send_and_print(chat, message, io)
-    except USAGE_ERRORS as exc:
-        print(f"group-chat: {exc}", file=io.stderr)
 
 
 def run_log(args: argparse.Namespace, io: Io) -> int:
