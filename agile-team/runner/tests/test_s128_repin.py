@@ -115,16 +115,28 @@ def test_a_marker_that_does_not_parse_is_absent(fake: FakeSystem, run_dir: Path,
     assert repin.read_marker(run_dir) is None
 
 
+def parsed(args: tuple[str, ...]):
+    """Parse an argv with the real CLI parser, so a refused order fails the test."""
+    return cli.build_parser().parse_args(list(args))
+
+
+def test_global_argv(configured: Path) -> None:
+    assert repin.global_argv(configured, None) == ("--repo", str(configured))
+    assert repin.global_argv(configured, "/h") == ("--repo", str(configured), "--home", "/h")
+    assert repin.global_argv(configured, "") == ("--repo", str(configured))
+
+
 def test_start_argv(configured: Path) -> None:
-    assert repin.start_argv(configured, None) == ("start", "--resume", "--repo", str(configured))
-    assert repin.start_argv(configured, "/h") == (
-        "start",
-        "--resume",
-        "--repo",
-        str(configured),
-        "--home",
-        "/h",
-    )
+    with_home = repin.start_argv(repin.global_argv(configured, "/h"))
+    assert with_home == ("--repo", str(configured), "--home", "/h", "start", "--resume")
+    ns = parsed(with_home)
+    assert (ns.command, ns.repo, ns.home) == ("start", str(configured), "/h")
+    assert ns.mode is cli.StartMode.RESUME
+    without = repin.start_argv(repin.global_argv(configured, None))
+    assert without == ("--repo", str(configured), "start", "--resume")
+    ns = parsed(without)
+    assert (ns.command, ns.repo, ns.home) == ("start", str(configured), None)
+    assert ns.mode is cli.StartMode.RESUME
 
 
 def test_the_event_kind() -> None:
@@ -257,16 +269,28 @@ def test_the_start_pins_checks_and_execs_in_order(
             "--project",
             str(pin_dir),
             "agile-team",
-            "config",
-            "check",
             "--repo",
             str(configured),
+            "--home",
+            str(key_home),
+            "config",
+            "check",
         ),
     ]
+    check = argv_of(fake)[-1]
+    ns = parsed(check[check.index("agile-team") + 1 :])
+    assert (ns.command, ns.action, ns.repo, ns.home) == (
+        "config",
+        "check",
+        str(configured),
+        str(key_home),
+    )
     assert seen == [False, False]
     assert fake.execs == [
-        (exe(pin_dir), "start", "--resume", "--repo", str(configured), "--home", str(key_home))
+        (exe(pin_dir), "--repo", str(configured), "--home", str(key_home), "start", "--resume")
     ]
+    ns = parsed(fake.execs[0][1:])
+    assert (ns.command, ns.home) == ("start", str(key_home))
     timeouts = [c.timeout for c in fake.commands if c.argv[0] in ("sh", UV)]
     assert timeouts == [repin.PIN_TIMEOUT_S, repin.CHECK_TIMEOUT_S]
     assert repin.read_marker(run_dir) == Marker(OLD, NEW, 2, Outcome.TRIAL)
@@ -282,16 +306,17 @@ def test_a_stop_request_keeps_the_request_and_does_not_repin(
     rt.state.repin = NEW
     system.make_dirs(rt.config.run_dir)
     system.write_text(rt.config.run_dir / "stop", "")
-    assert cli._repin_or(0, rt, Pin(configured, ("start",))) == 0
+    assert cli._repin_or(0, rt, Pin(configured, repin.global_argv(configured, None))) == 0
     assert rt.state.repin == NEW and fake.execs == [] and argv_of(fake) == []
 
 
 def test_a_failed_exit_or_a_halt_does_not_repin(pinned, make_runtime, fake, configured) -> None:
     rt = make_runtime()
     rt.state.repin = NEW
-    assert cli._repin_or(1, rt, Pin(configured, ("start",))) == 1
+    options = repin.global_argv(configured, None)
+    assert cli._repin_or(1, rt, Pin(configured, options)) == 1
     rt.halted_by = object()
-    assert cli._repin_or(0, rt, Pin(configured, ("start",))) == 0
+    assert cli._repin_or(0, rt, Pin(configured, options)) == 0
     assert fake.execs == [] and rt.state.repin == NEW
 
 
@@ -299,7 +324,7 @@ def test_a_failed_exit_or_a_halt_does_not_repin(pinned, make_runtime, fake, conf
 
 
 def run_repin(configured: Path, run_dir: Path) -> None:
-    Pin(configured, repin.start_argv(configured, None)).repin(Marker(OLD, NEW, 2, Outcome.TRIAL))
+    Pin(configured, ("--repo", str(configured))).repin(Marker(OLD, NEW, 2, Outcome.TRIAL))
 
 
 def rollback_argv(configured: Path) -> tuple[str, ...]:
@@ -307,13 +332,17 @@ def rollback_argv(configured: Path) -> tuple[str, ...]:
 
 
 def start_tuple(configured: Path) -> tuple[str, ...]:
-    return ("start", "--resume", "--repo", str(configured))
+    return ("--repo", str(configured), "start", "--resume")
 
 
 def test_a_clean_repin_execs_the_new_pin(pinned, configured, run_dir, pin_dir, fake) -> None:
     with pytest.raises(Exec):
         run_repin(configured, run_dir)
     assert fake.execs == [(exe(pin_dir), *start_tuple(configured))]
+    check = argv_of(fake)[-1]
+    assert check[check.index("agile-team") + 1 :] == ("--repo", str(configured), "config", "check")
+    assert parsed(check[check.index("agile-team") + 1 :]).home is None
+    assert parsed(fake.execs[0][1:]).command == "start"
     assert repin.read_marker(run_dir).outcome is Outcome.TRIAL
     assert rollback_argv(configured) not in argv_of(fake)
 
@@ -330,6 +359,7 @@ def test_a_failing_check_rolls_back_and_execs_the_old_pin(
     assert (marker.outcome, marker.old, marker.new) == (Outcome.ROLLED_BACK, OLD, NEW)
     assert marker.reason
     assert fake.execs == [(exe(pin_dir), *start_tuple(configured))]
+    assert parsed(fake.execs[-1][1:]).command == "start"
 
 
 def test_a_check_timeout_rolls_back(pinned, configured, run_dir, pin_dir, fake) -> None:
@@ -348,6 +378,7 @@ def test_an_exec_error_rolls_back(pinned, configured, run_dir, pin_dir, fake) ->
         run_repin(configured, run_dir)
     assert argv_of(fake)[-1] == rollback_argv(configured)
     assert fake.execs == [(exe(pin_dir), *start_tuple(configured))] * 2
+    assert parsed(fake.execs[-1][1:]).repo == str(configured)
     assert "exec format error" in repin.read_marker(run_dir).reason
 
 
@@ -368,6 +399,7 @@ def test_a_pin_script_failure_before_the_swap_runs_no_rollback(
     assert argv_of(fake) == [("sh", str(configured / repin.PIN_SCRIPT), NEW)]
     assert repin.read_marker(run_dir).outcome is Outcome.ROLLED_BACK
     assert fake.execs == [(exe(pin_dir), *start_tuple(configured))]
+    assert parsed(fake.execs[0][1:]).command == "start"
 
 
 def test_a_failing_rollback_raises(pinned, configured, run_dir, fake) -> None:
@@ -381,7 +413,7 @@ def test_a_failing_rollback_raises(pinned, configured, run_dir, fake) -> None:
 
 def test_roll_back_does_nothing_before_the_swap(pinned, configured, run_dir, fake) -> None:
     with pytest.raises(Exec):
-        Pin(configured, start_tuple(configured)).roll_back(trial(), "x")
+        Pin(configured, repin.global_argv(configured, None)).roll_back(trial(), "x")
     assert argv_of(fake) == []
 
 
@@ -416,7 +448,7 @@ def test_after_a_rollback_a_failed_start_does_nothing(
 
 
 def test_failed_start_ignores_a_clean_marker_state(configured, fake) -> None:
-    repin.failed_start(Pin(configured, ()), RuntimeError("x"))
+    repin.failed_start(Pin(configured, ()), RuntimeError("x"))  # options unused here
     assert fake.execs == []
 
 
