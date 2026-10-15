@@ -7,7 +7,9 @@ API server") is ``OFFLINE`` instead, so the supervisor waits for the network.
 The limit reason comes from the first source that gives one: agile-team's halt
 line in the last ``TAIL_LINES`` lines of output, its ``state.json`` status
 reason, then free text (``resets`` only with a readable time). Output is
-appended to ``output.log``. The command runs in its own process group, so
+appended to ``output.log``. An exit 0 records ``agile-team <status>: <reason>`` from
+``state.json``, and a failure adds its halt line or that status to ``exit code N``.
+The command runs in its own process group, so
 stopping the job also stops whatever the command started.
 
 The run is waited on in slices; after each, ``RunWatch`` may ask for the
@@ -30,6 +32,7 @@ from . import process_group
 from .limits import (
     LIMIT_PATTERNS,
     NETWORK_PATTERNS,
+    REASON_LIMIT,
     RESET_NOTE,
     Outcome,
     OutcomeKind,
@@ -186,6 +189,24 @@ def status_reason(output: RunOutput) -> str | None:
     return reason if isinstance(reason, str) and reason else None
 
 
+def agile_status(output: RunOutput) -> str | None:
+    """``agile-team <status>: <reason>`` from state.json in cwd, cut to the limit, or None."""
+    try:
+        data = json.loads((output.cwd / STATUS_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+    status = data.get("status") if isinstance(data, dict) else None
+    if not isinstance(status, str):
+        return None
+    reason = data.get("status_reason")
+    text = (
+        f"agile-team {status}: {reason}"
+        if isinstance(reason, str) and reason
+        else f"agile-team {status}"
+    )
+    return text[:REASON_LIMIT]
+
+
 def text_reason(output: RunOutput) -> str | None:
     """A limit named in free text; ``resets`` counts only with a readable time."""
     return find_reason(COMMAND_LIMIT_PATTERNS, output.text)
@@ -208,7 +229,7 @@ def _limit(output: RunOutput) -> Outcome:
 
 
 EXIT_OUTCOMES: dict[int, Callable[[RunOutput], Outcome]] = {
-    0: lambda output: Outcome(OutcomeKind.DONE),
+    0: lambda output: Outcome(OutcomeKind.DONE, agile_status(output) or ""),
     LIMIT_EXIT: _limit,
 }
 
@@ -223,4 +244,6 @@ def _failed(code: int, output: RunOutput) -> Outcome:
     offline = find_reason(NETWORK_PATTERNS, output.text)
     if offline:
         return Outcome(OutcomeKind.OFFLINE, f"{offline}, exit code {code}")
-    return Outcome(OutcomeKind.FAILED, f"exit code {code}")
+    why = halt_reason(output)
+    stopped = f"agile-team halted: {why}" if why else agile_status(output)
+    return Outcome(OutcomeKind.FAILED, f"exit code {code}" + (f"; {stopped}" if stopped else ""))

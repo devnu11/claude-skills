@@ -1066,6 +1066,12 @@ function statePill(view) {
   return live ? `<span class="live">${html}</span>` : html;
 }
 
+/** The pinned runner commit, or "" when the runner is not pinned (P12). */
+function pinPill(view) {
+  const sha = view.run.runner_pin;
+  return sha ? `<span class="pill" title="${esc("runner pinned at " + sha)}">pin ${esc(sha.slice(0, 7))}</span>` : "";
+}
+
 /** One flag when the manager is due, its reasons on hover (HS2). */
 function managerFlag(view) {
   const due = view.run.manager_due ?? [];
@@ -1105,7 +1111,7 @@ function budgetPill(view) {
 
 /** The status row's pills as HTML strings, left to right (HS4). */
 function statusPills(view) {
-  const parts = [statePill(view), managerFlag(view), budgetPill(view), questionsPill(view)];
+  const parts = [statePill(view), pinPill(view), managerFlag(view), budgetPill(view), questionsPill(view)];
   if (markdownState === MD.FAILED) parts.push(`<span class="md-notice" role="status">${MD_NOTICE}</span>`);
   if (MOCK) parts.push(mockControls());
   return parts.filter(Boolean);
@@ -1900,6 +1906,12 @@ TIMELINE.opinion = (e, ctx) => ({
 TIMELINE["opinion-act"] = (e) => ({
   from: "you", to: ACT_TO[e.data.route], what: "opinion " + e.data.act,
   body: e.data.opinion + (e.data.ref ? " → " + e.data.ref : ""),
+});
+
+TIMELINE["runner-repin"] = (e) => ({
+  from: "runner", to: `sprint ${e.data.sprint}`, tone: e.data.outcome === "pinned" ? "" : "warning",
+  what: e.data.outcome === "pinned" ? "runner re-pinned" : "re-pin rolled back",
+  body: [`${e.data.old.slice(0, 7)} → ${e.data.new.slice(0, 7)}`, e.data.reason].filter(Boolean).join("\n"),
 });
 
 TIMELINE.thread = (e, ctx) => ({

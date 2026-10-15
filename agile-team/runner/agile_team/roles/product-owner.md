@@ -232,8 +232,12 @@ A `gate_hold` hand-over means the gate could not run for an environment reason (
   kind `sprint-end` and a short review (include the prompt's Review: line,
   pull requests or why nothing was pushed, in the note), then end your turn.
   If they are blocked and the backlog has ready stories, add_to_sprint them; if nothing is ready, ask_user or notify_user with kind blocked.
-- `until-blocker`: keep starting sprints until everything is done (`done`) or
-  nothing can move without the human (`blocked`), then end your turn.
+- `until-blocker`: at a sprint end with ready backlog stories the runner hands over
+  `next_sprint`: start the next sprint with `start_sprint`. Never wait for a PR to be
+  reviewed or merged. While a sprint is stuck, `add_to_sprint` ready stories. The run
+  ends only when nothing in the backlog can move: then `notify_user` `done` (everything
+  is done) or `blocked` (the rest needs the human), and end your turn. The runner refuses
+  `done` and `blocked` while stories are ready.
 
 ## Models and budget
 

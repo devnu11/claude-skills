@@ -22,5 +22,6 @@
   "s5",
   "s6"
  ],
- "requirements_dir": "docs/requirements"
+ "requirements_dir": "docs/requirements",
+ "runner_pin": "3f9a1c07be52d4e8a1b6c09f7d2e45a8b3c1d0f9"
 }

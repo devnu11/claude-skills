@@ -18,10 +18,11 @@ from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest
 from .gates import FINISHED, STEP_ROLES, StoryState, StoryStatus, role_fits_step
 from .handover import Pass, Trigger
 from .loops import Rule
-from .relay import WAITING_HEAD, Answer, Told
+from .relay import WAITING_HEAD, Answer, Note, Told
 from .reorders import Desk
 from .reverts import Reverter
 from .sharing import Sharer
+from .state import RunStatus
 from .story_admin import Clerk
 
 POLL_S = 5.0
@@ -241,7 +242,8 @@ class Router:
 
     def _ended(self) -> bool:
         rt = self.runtime
-        return rt.stop_requested() or bool(rt.halted_by) or rt.state.halted()
+        stop = rt.stop_requested() or bool(rt.halted_by) or rt.state.halted()
+        return stop or bool(rt.state.repin)
 
     # ----- picking work
 
@@ -398,20 +400,46 @@ class Router:
         """K2: hand the PO the ready backlog once per set of stuck and ready stories."""
         state, ready = self.runtime.state, self._ready()
         key = [*(s.id for s in unfinished), *ready]
-        if not (state.sprint_open() and unfinished and ready) or key == state.offered:
+        repeat = state.cadence == sprint_end.UNTIL_BLOCKER
+        if not (state.sprint_open() and unfinished and ready):
+            return None
+        if key == state.offered and not repeat:
             return None
         state.offered = key
         self.runtime.save()
         stalled = self._stalled(unfinished)
         lines = [*stalled.lines, *sprint_end.ready_lines(state.stories, ready)]
-        return Pass([Trigger.READY_BACKLOG], lines, [])
+        found = Pass([Trigger.READY_BACKLOG], lines, [])
+        return self._asked(found) if repeat else found
 
     def _sprint_end(self) -> Pass:
         state = self.runtime.state
         lines = [f"Sprint {state.sprint} is complete: every story in it is done."]
         if state.upstream.report:
             lines.append(f"Review: {state.upstream.report}")
-        return Pass([Trigger.SPRINT_END], lines, [])
+        ready = self._ready()
+        if state.cadence != sprint_end.UNTIL_BLOCKER or not ready:
+            return Pass([Trigger.SPRINT_END], lines, [])
+        lines += sprint_end.next_sprint_lines(state.stories, ready)
+        return self._asked(Pass([Trigger.NEXT_SPRINT], lines, []))
+
+    def _asked(self, found: Pass) -> Pass:
+        """K4: count a keep-going hand-over; past the cap, block the run instead."""
+        state = self.runtime.state
+        if state.keep_going_asks < sprint_end.KEEP_GOING_CAP:
+            state.keep_going_asks += 1
+            self.runtime.save()
+            return found
+        return self._gave_up()
+
+    def _gave_up(self) -> Pass:
+        state = self.runtime.state
+        ids = sprint_end.ids_text(self._ready())
+        text = sprint_end.KEEP_GOING_STUCK.format(count=state.keep_going_asks, ids=ids)
+        state.mark(RunStatus.BLOCKED, text)
+        self.runtime.relay.post(Note("blocked", text, []))
+        self.runtime.save()
+        return Pass([], [], [])
 
     def _stalled(self, unfinished: list[StoryState]) -> Pass:
         n = self.runtime.state.sprint

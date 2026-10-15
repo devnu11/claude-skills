@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops, pending_tests, revert_log, rewrite, stages
+from . import halt, handover, loops, pending_tests, repin, revert_log, rewrite, stages
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -353,7 +353,8 @@ class BoundaryRunner:
         head = self.runtime.git.head()
         if self.mine.checked == head:
             self._emit(b, Out.PASS, note=f"already checked at {head}")
-            return self._advance(b)
+            self._advance(b)
+            return self._repin_due(b, head)
         report = self._run_checks(self.runtime.config.repo)
         if not report.passed:
             failure = Failure(Stage.CHECK, FixCase.TEAM_CHECK, report.reason())
@@ -361,6 +362,12 @@ class BoundaryRunner:
         self.mine.checked = head
         self._emit(b, Out.PASS, checks=report.summary())
         self._advance(b)
+        self._repin_due(b, head)
+
+    def _repin_due(self, b: Boundary, head: str) -> None:
+        """P2: a passing end check on a pinned runner asks to re-pin to the checked head."""
+        if b.edge is Edge.END and repin.due(self.runtime.config.run_dir, head):
+            self.runtime.state.repin = head
 
     def _fail(self, b: Boundary, failure: Failure, **data: Any) -> None:
         found = setback(b, failure)

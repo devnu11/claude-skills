@@ -35,6 +35,7 @@ class EventKind(StrEnum):
     STORY_OPENED = "story-opened"
     SPRINT_START = "sprint-start"
     SPRINT_ADD = "sprint-add"
+    RUNNER_REPIN = "runner-repin"
     OVERRIDE = "override"
     REQUIREMENT_CHANGED = "requirement-changed"
     HANDOVER = "handover"

@@ -94,6 +94,8 @@ class RunState:
     unreviewed: list[str] = field(default_factory=list)
     manager_due: list[str] = field(default_factory=list)
     status_reason: str | None = None
+    repin: str = ""
+    keep_going_asks: int = 0
     task: str = ""
     followups: dict[str, list[str]] = field(default_factory=dict)
     delivered: list[str] | None = None
@@ -140,6 +142,7 @@ class RunState:
     def begin_sprint(self, ids: list[str]) -> None:
         """Open the next sprint holding exactly ``ids``; other unfinished stories go back."""
         self.sprint += 1
+        self.keep_going_asks = 0
         for sid, story in self.stories.items():
             if story.status not in FINISHED:
                 story.sprint = self.sprint if sid in ids else None
@@ -162,6 +165,7 @@ class RunState:
 
     def add_to_sprint(self, ids: list[str]) -> None:
         """Put ``ids`` in the current sprint; nothing else changes (SA1)."""
+        self.keep_going_asks = 0
         for sid in ids:
             self.stories[sid].sprint = self.sprint
 

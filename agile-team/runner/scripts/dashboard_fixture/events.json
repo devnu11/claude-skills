@@ -2064,5 +2064,19 @@
    "mark": "pass",
    "failed_acs": []
   }
+ },
+ {
+  "id": "e106",
+  "at": 1791473400.0,
+  "kind": "runner-repin",
+  "role": "runner",
+  "story": null,
+  "data": {
+   "old": "9b1e0c47a2d85f3e6a7b8c9d0e1f2a3b4c5d6e7f",
+   "new": "3f9a1c07be52d4e8a1b6c09f7d2e45a8b3c1d0f9",
+   "sprint": 1,
+   "outcome": "pinned",
+   "reason": ""
+  }
  }
 ]

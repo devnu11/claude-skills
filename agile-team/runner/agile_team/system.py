@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 __all__ = [
     "append_text",
@@ -33,6 +33,7 @@ __all__ = [
     "copy_tree",
     "cwd",
     "environ",
+    "exec_replace",
     "exists",
     "expand_user",
     "glob",
@@ -345,6 +346,11 @@ def spawn_logged(command: ShellCommand, log: Path) -> Process:
 def wait_event(event: threading.Event, timeout: float) -> bool:
     """Wait for the event up to ``timeout`` seconds; whether it is set."""
     return event.wait(timeout)
+
+
+def exec_replace(argv: tuple[str, ...]) -> NoReturn:
+    """Replace this process with ``argv`` (``os.execv(argv[0], argv)``)."""
+    os.execv(argv[0], list(argv))
 
 
 def environ() -> Mapping[str, str]:

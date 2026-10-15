@@ -29,6 +29,7 @@ from . import (
     pending_tests,
     presentation,
     recovery,
+    repin,
     requirements,
     revert_log,
     sandbox,
@@ -397,6 +398,22 @@ def start_from(args: argparse.Namespace) -> Start:
 def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     """Preflight, then run the Product Owner loop in the foreground."""
     place, start = Place.of(args), start_from(args)
+    pin = repin.Pin(place.repo, repin.start_argv(place.repo, args.home))
+    try:
+        runtime = _prepared(args, place, start, query_fn)
+    except Exception as exc:
+        repin.failed_start(pin, exc)
+        raise
+    if isinstance(runtime, int):
+        return runtime
+    repin.confirm(runtime)
+    return _repin_or(_run(runtime, start), runtime, pin)
+
+
+def _prepared(
+    args: argparse.Namespace, place: Place, start: Start, query_fn: QueryFn | None
+) -> Runtime | int:
+    """Everything before the run; an exit code when the checkout guard ends the start."""
     config = _load_config(place.repo)
     moved = checkout.Guard(config.run_dir, Git(config.repo)).on_start()
     if moved:
@@ -406,9 +423,24 @@ def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
     runtime = make_runtime(place, query_fn or default_query())
     runtime.report_load_faults()
     _load_dependencies(runtime)
-    runtime.state.cadence = args.cadence or config.team.cadence
+    kept = runtime.state.cadence if start.mode is StartMode.RESUME else config.team.cadence
+    runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
-    return _run(runtime, start)
+    repin.drop_unpinned(runtime)
+    return runtime
+
+
+def _repin_or(code: int, runtime: Runtime, pin: repin.Pin) -> int:
+    """P3: after a clean run end that asked for it, re-pin; else keep the exit code."""
+    state = runtime.state
+    if code != 0 or runtime.halted_by or runtime.stop_requested() or not state.repin:
+        return code
+    old = repin.pin_commit(runtime.config.run_dir)
+    marker = repin.Marker(old, state.repin, state.sprint, repin.Outcome.TRIAL)
+    state.repin = ""
+    state.mark(state_mod.RunStatus.IDLE, repin.REPINNING.format(new7=marker.new[:7]))
+    runtime.save()
+    pin.repin(marker)
 
 
 def _load_dependencies(runtime: Runtime) -> None:

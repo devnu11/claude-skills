@@ -82,7 +82,10 @@ def _no_refusal(_state: RunState) -> str | None:
 KIND_REFUSALS: dict[str, Callable[[RunState], str | None]] = {
     REPLY: lambda _state: USE_REPLY,
     "sprint-end": sprint_end.end_refusal,
+    "done": sprint_end.keep_going_refusal,
+    "blocked": sprint_end.keep_going_refusal,
 }
+REASON_CUT = 200
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
 SPRINT_REFUSAL_BOUNDARY = (
     "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
@@ -500,7 +503,8 @@ class Tools:
             return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
         if kind in STATUS_KINDS:
-            self.runtime.state.status = RunStatus(kind)
+            reason = args["text"].splitlines()[0][:REASON_CUT] if args["text"] else None
+            self.runtime.state.mark(RunStatus(kind), reason)
             self.runtime.save()
         return text_result({"id": msg.id})
 
@@ -894,6 +898,7 @@ class PoRun:
     runtime: Runtime
     start: Start
     router: Router = field(init=False)
+    ended_by: str | None = field(default=None, init=False)
     RENEWERS: ClassVar[dict[RenewPath, Callable[[PoRun, PoTurn], Awaitable[PoTurn]]]] = {}
 
     def __post_init__(self) -> None:
@@ -908,7 +913,7 @@ class PoRun:
         self._set_status(RunStatus.RUNNING)
         result = await self._turns()
         if state.status is RunStatus.RUNNING:
-            self._set_status(RunStatus.IDLE)
+            self._set_status(RunStatus.IDLE, self.ended_by)
         return result
 
     async def _turns(self) -> StepResult:
@@ -996,7 +1001,10 @@ class PoRun:
 
     async def _after_po(self) -> PoTurn | None:
         found = await self.router.advance()
-        return None if found.quiet() else self._hand_over(found, "")
+        if found.quiet():
+            self.ended_by = found.lines[0] if found.lines else None
+            return None
+        return self._hand_over(found, "")
 
     def _hand_over(self, found: handover.Pass, lead: str) -> PoTurn | None:
         if not found.kinds:
@@ -1071,8 +1079,8 @@ class PoRun:
         }
         self.runtime.events.emit(Event(EventKind.PO_TURN, PO, None, data))
 
-    def _set_status(self, status: RunStatus) -> None:
-        self.runtime.state.mark(status)
+    def _set_status(self, status: RunStatus, reason: str | None = None) -> None:
+        self.runtime.state.mark(status, reason)
         self.runtime.save()
 
     def _record(self, model: str, result: StepResult) -> None:

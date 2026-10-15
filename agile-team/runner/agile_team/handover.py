@@ -35,6 +35,7 @@ class Trigger(StrEnum):
     UNROUTABLE = "unroutable"
     HUMAN_MESSAGE = "human_message"
     SPRINT_END = "sprint_end"
+    NEXT_SPRINT = "next_sprint"
     STALLED = "stalled"
     READY_BACKLOG = "ready_backlog"
     RULING_NOT_APPLIED = "ruling_not_applied"
