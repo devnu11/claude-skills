@@ -107,6 +107,14 @@ class Settled:
         return self.outcome.value
 
 
+@dataclass(frozen=True)
+class Note:
+    """A request id and the state text recorded for it."""
+
+    rid: str
+    text: str
+
+
 @dataclass
 class Sharer:
     """Applies pending shares between steps (S4)."""
@@ -132,7 +140,7 @@ class Sharer:
             "outcome": Outcome.REFUSED.value,
             "reason": bad.reason,
         }
-        self._note(bad.id, f"refused: {bad.reason}", Event(EventKind.SHARE, ROLE, None, data))
+        self._note(Note(bad.id, f"refused: {bad.reason}"), Event(EventKind.SHARE, ROLE, None, data))
 
     def _settle(self, share: Share) -> None:
         config = self.runtime.config
@@ -176,12 +184,12 @@ class Sharer:
 
     def _record(self, share: Share, settled: Settled) -> None:
         event = Event(EventKind.SHARE, ROLE, share.story, self._data(share, settled))
-        self._note(share.id, settled.state_text(), event)
+        self._note(Note(share.id, settled.state_text()), event)
         if settled.outcome is Outcome.APPLIED:
             self._tell(share, settled.commit or "")
 
-    def _note(self, rid: str, text: str, event: Event) -> None:
-        self.runtime.state.shares[rid] = text
+    def _note(self, note: Note, event: Event) -> None:
+        self.runtime.state.shares[note.rid] = note.text
         self.runtime.save()
         self.runtime.events.emit(event)
 

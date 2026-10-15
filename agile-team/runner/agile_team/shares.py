@@ -296,7 +296,10 @@ class Where:
 def resolved_path(repo: Path, path: str) -> str | None:
     """``path`` resolved against ``repo`` as a repo-relative POSIX path, None outside it."""
     root = system.resolve(repo)
-    full = system.resolve(repo / path)
+    try:
+        full = system.resolve(repo / path)
+    except ValueError:  # an embedded NUL byte cannot name a file
+        return None
     return full.relative_to(root).as_posix() if full.is_relative_to(root) else None
 
 
