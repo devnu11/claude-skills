@@ -183,5 +183,14 @@
     "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.3-u-0.9-0.9]",
     "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.8-s-1.5-0.0]",
     "agile-team/runner/tests/test_po_cost.py::test_own_cost_after_a_reconcile[0.3-s-0.2-0.2]"
+  ],
+  "s138": [
+    "agile-team/runner/tests/test_s86_dependencies.py::test_start_refused_text",
+    "agile-team/runner/tests/test_s94_story_spec.py::test_the_hold_text",
+    "agile-team/runner/tests/test_s138_texts.py::test_role_texts_do_not_say_edit[the story file must be fixed before acceptance:\\n{refusal}\\nEdit the file; no state change is needed]",
+    "agile-team/runner/tests/test_s138_texts.py::test_role_texts_do_not_say_edit[story {story}'s suite_runs must be a whole number from 1 to {most}, not {value!r}; fix the story file's frontmatter]",
+    "agile-team/runner/tests/test_s138_texts.py::test_hold_names_who_acts",
+    "agile-team/runner/tests/test_s138_texts.py::test_start_refusal_gives_only_the_humans_edit",
+    "agile-team/runner/tests/test_s138_texts.py::test_exact_texts"
   ]
 }
