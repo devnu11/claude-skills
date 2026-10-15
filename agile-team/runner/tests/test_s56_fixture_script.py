@@ -1,10 +1,10 @@
 """s56/AC1: the dashboard fixture script holds no code at its top level."""
 
 import ast
-import linecache
 from pathlib import Path
 
 import pytest
+from agile_team import system
 from agile_team.roles import RoleBook
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "make_dashboard_fixture.py"
@@ -62,8 +62,10 @@ def stray_statements(tree: ast.Module) -> list[str]:
 
 
 def script_tree() -> ast.Module:
-    """The fixture script's tree, read as source lines (the guard allows that)."""
-    return ast.parse("".join(linecache.getlines(str(SCRIPT))))
+    """The fixture script's tree, read through the system seam; empty source fails."""
+    tree = ast.parse(system.read_text(SCRIPT))
+    assert tree.body
+    return tree
 
 
 def test_fixture_script_has_no_top_level_code() -> None:

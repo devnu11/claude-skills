@@ -58,6 +58,7 @@ SKILL_DOCS = (  # prose the doc tests read
     "reference/protocol.md",
     "reference/liaison-template.md",
     "../README.md",
+    "runner/scripts/make_dashboard_fixture.py",
 )
 
 
