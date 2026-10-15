@@ -252,7 +252,7 @@ def test_po_session_event_kind() -> None:
 def test_po_may_write_its_handoff(make_runtime) -> None:
     rt = make_runtime()
     role = rt.resolve("product-owner")
-    assert ".team/po/**" in role.write and ".team/stories/**" in role.write
+    assert role.write == [".team/po/**"]
     scope = rt.scope_for(role)
     root = rt.config.repo
     ok = guard.check_tool_use(

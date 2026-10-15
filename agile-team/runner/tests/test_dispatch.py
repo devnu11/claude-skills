@@ -347,14 +347,14 @@ def test_run_halted(status, cadence, halted) -> None:
     assert RunState(cadence=cadence, status=RunStatus(status)).halted() is halted
 
 
-def test_po_story_edits_committed_before_next_role(
+def test_po_file_edits_committed_before_next_role(
     make_runtime, configured: Path, fake: FakeSystem
 ) -> None:
     rt = make_runtime(FakeQuery(action=write(configured, "docs/a.md")))
-    write(configured, ".team/stories/s1.md", "As a user…")()
+    write(configured, ".team/po/handoff.md", "note")()
     run(rt, "architect")
     assert subjects(fake, 2) == ["chore(team): architect step", "chore(team): product-owner step"]
-    assert ".team/stories/s1.md" in fake.tree.commits[-2].paths()
+    assert ".team/po/handoff.md" in fake.tree.commits[-2].paths()
     assert rt.git.is_clean()
 
 

@@ -8,6 +8,7 @@ Unit tests have a 1 s limit, the real world ``e2e_timeout`` (s72).
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -20,7 +21,7 @@ import tomli_w
 from agile_team import config as config_mod
 from agile_team import gates, system
 from agile_team.dispatch import Runtime
-from agile_team.git_ops import Git
+from agile_team.git_ops import Git, GitError
 from agile_team.ledger import Ledger
 from agile_team.relay import Relay
 from agile_team.roles import RoleBook
@@ -403,3 +404,15 @@ def write_story(config: config_mod.Config, story_id: str, *environments: str) ->
     system.make_dirs(folder)
     head = f'---\nid: {story_id}\ntitle: "A story"\nacceptance:\n{items}---\nbody\n'
     system.write_text(folder / f"{story_id}.md", head)
+    commit_story(config, story_id)
+
+
+def commit_story(config: config_mod.Config, story_id: str) -> None:
+    """Commit the story file as the liaison's CLI leaves it, so no step audits it as its change.
+
+    An untracked fake tree has no commit to make; that is fine, it audits nothing.
+    """
+    repo = Git(config.repo)
+    with contextlib.suppress(GitError):
+        repo.run("add", f".team/stories/{story_id}.md")
+        repo.run("commit", "-q", "-m", f"story {story_id}")
