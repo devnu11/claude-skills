@@ -10,6 +10,7 @@ from agile_team import cli, state
 from agile_team.po_tools import Tools
 
 from ..conftest import write_story
+from ..story_setup import Opening, opened
 
 BACKLOG_REFUSAL = "story {} is in the backlog; add it to a sprint"
 
@@ -26,7 +27,7 @@ def cli_status(repo: Path, capsys) -> dict:
 def open_all(tools: Tools, *ids: str) -> None:
     for sid in ids:
         write_story(tools.runtime.config, sid, "cli")
-        call(tools.open_story({"id": sid, "title": sid}))
+        opened(tools.runtime, Opening(sid, sid))
 
 
 def test_opened_stories_start_in_backlog_on_disk(make_runtime, configured, capsys) -> None:

@@ -21,8 +21,6 @@ def test_share_commits_exactly_the_copy_and_the_story_file(
 ) -> None:
     rt = make_runtime()
     write_story(rt.config, "s1", "cli")
-    git(configured, "add", "-A")
-    git(configured, "commit", "-q", "-m", "story")
     source = tmp_path / "mock.html"
     source.write_bytes(MOCK)
     before = int(git(configured, "rev-list", "--count", "HEAD").strip())

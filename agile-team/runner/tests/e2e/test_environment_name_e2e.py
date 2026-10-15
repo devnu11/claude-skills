@@ -1,74 +1,64 @@
-"""s64/s94 end to end: open_story accepts only story files naming configured [[environment]]s."""
+"""s64/s94/s135 end to end: `story new` accepts only drafts naming configured [[environment]]s."""
 
 from __future__ import annotations
 
-import asyncio
-import json
+from pathlib import Path
 
-from agile_team import cli, state
-from agile_team.po_tools import Tools
+import tomli_w
+from agile_team import cli, system
+from agile_team import config as config_mod
 
-from ..conftest import write_story
-
-
-def call(coro) -> dict:
-    return json.loads(asyncio.run(coro)["content"][0]["text"])
+from ..conftest import PY_CONFIG
 
 
-def stories_on_disk(rt) -> dict:
-    return json.loads((rt.config.run_dir / state.STATE_FILE).read_text())["stories"]
+def draft(repo: Path, *environments: str) -> str:
+    items = "".join(
+        f'  - id: AC{n}\n    text: "criterion {n}"\n    environment: {name}\n'
+        for n, name in enumerate(environments, 1)
+    )
+    text = f'---\ntitle: "t"\nacceptance:\n{items}---\n\nAs a user, I want it.\n'
+    system.write_text(repo / "draft.md", text)
+    return str(repo / "draft.md")
 
 
-def test_prose_environment_refused_with_names_and_nothing_saved(make_runtime) -> None:
-    """AC1: a prose environment in the file is refused, valid names listed, nothing saved."""
-    rt = make_runtime()
-    write_story(rt.config, "s1", "runner (guard)")
-    out = call(Tools(rt).open_story({"id": "s1", "title": "t"}))
-    assert out["status"] == "refused"
-    assert "not a configured [[environment]]" in out["reason"]
-    assert out["reason"].endswith("use one of: cli")
-    assert "s1" not in rt.state.stories
-    assert not [e for e in rt.events.events() if e.kind == "story-opened"]
+def new(repo: Path, *environments: str) -> int:
+    path = draft(repo, *environments)
+    return cli.main(["--repo", str(repo), "story", "new", path, "--approved-by", "none"])
 
 
-def test_exact_name_accepted_and_case_refused(make_runtime, configured, capsys) -> None:
-    """AC3: exact name opens; 'CLI' and 'cli ' are refused; status lists the story."""
-    rt = make_runtime()
-    tools = Tools(rt)
+def queued(repo: Path) -> list[str]:
+    folder = repo / ".team" / "run" / "liaison" / "stories"
+    return [p.name for p in system.list_dir(folder)] if system.is_dir(folder) else []
+
+
+def test_prose_environment_refused_with_names_and_nothing_saved(configured, capsys) -> None:
+    """AC1: a prose environment is refused, valid names listed, nothing queued."""
+    assert new(configured, "runner (guard)") != 0
+    err = capsys.readouterr().err
+    assert "not a configured [[environment]]" in err
+    assert err.rstrip().endswith("use one of: cli")
+    assert queued(configured) == []
+
+
+def test_exact_name_accepted_and_case_refused(configured, capsys) -> None:
+    """AC3: exact name queues; 'CLI' and 'cli ' are refused."""
     for bad in ("CLI", '"cli "'):
-        write_story(rt.config, "s9", bad)
-        assert call(tools.open_story({"id": "s9", "title": "t"}))["status"] == "refused"
-    write_story(rt.config, "s1", "cli")
-    assert call(tools.open_story({"id": "s1", "title": "t"}))["status"] == "opened"
-    assert "s1" in stories_on_disk(rt)
-    assert cli.main(["--repo", str(configured), "status"]) == 0
-    assert "s1" in json.loads(capsys.readouterr().out)["stories"]
+        assert new(configured, bad) != 0
+    assert queued(configured) == []
+    assert new(configured, "cli") == 0
+    assert len(queued(configured)) == 1
 
 
-def test_missing_environment_refused(make_runtime) -> None:
+def test_missing_environment_refused(configured, capsys) -> None:
     """s94 AC: an AC with no environment is refused."""
-    rt = make_runtime()
-    write_story(rt.config, "s1")
-    out = call(Tools(rt).open_story({"id": "s1", "title": "t"}))
-    assert out["status"] == "refused"
+    assert new(configured) != 0
+    assert queued(configured) == []
 
 
-def test_no_environments_configured_says_so(make_runtime) -> None:
+def test_no_environments_configured_says_so(configured, capsys) -> None:
     """AC4: refusal names no list when none are configured."""
-    rt = make_runtime()
-    write_story(rt.config, "s1", "cli")
-    rt.config.environments.clear()
-    out = call(Tools(rt).open_story({"id": "s1", "title": "t"}))
-    assert out["status"] == "refused"
-    assert "configures no" in out["reason"] and "use one of" not in out["reason"]
-
-
-def test_duplicate_id_checked_first(make_runtime) -> None:
-    """Duplicate id wins over a bad story file."""
-    rt = make_runtime()
-    tools = Tools(rt)
-    write_story(rt.config, "s1", "cli")
-    call(tools.open_story({"id": "s1", "title": "t"}))
-    write_story(rt.config, "s1", "bogus")
-    out = call(tools.open_story({"id": "s1", "title": "t"}))
-    assert out["reason"] == "story s1 already exists"
+    bare = {k: v for k, v in PY_CONFIG.items() if k != "environment"}
+    system.write_text(configured / config_mod.CONFIG_NAME, tomli_w.dumps(bare))
+    assert new(configured, "cli") != 0
+    err = capsys.readouterr().err
+    assert "configures no" in err and "use one of" not in err

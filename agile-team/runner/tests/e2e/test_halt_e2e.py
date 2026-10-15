@@ -22,6 +22,7 @@ from agile_team.relay import Relay
 from claude_agent_sdk import AssistantMessage, ResultError, TextBlock
 
 from ..conftest import FakeQuery, git, result_message, write_story
+from ..story_setup import Opening, opened
 
 LIMIT_TEXT = "You\u2019ve hit your session limit \u00b7 resets 2:20pm (America/Edmonton)"
 REASON = "session limit, resets 2:20pm (America/Edmonton)"
@@ -77,7 +78,7 @@ class PoRunsRole:
     async def _gen(self) -> AsyncIterator[Any]:
         rt = self.holder[0]
         tools = Tools(rt)
-        await tools.open_story({"id": "s1", "title": "S1"})
+        opened(rt, Opening("s1", "S1"))
         await tools.start_sprint({"goal": "g", "stories": ["s1"]})
         rt.state.boundary = None  # the sprint-start boundary (s29) is not under test here
         rt.state.manager_due.clear()  # skip the sprint-start manager review
@@ -175,8 +176,6 @@ def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> 
     start, holder = harness
     po = PoRunsRole(holder)
     write_story(config_mod.load(configured), "s1", "cli")  # open_story needs the file (s94)
-    git(configured, "add", ".team/stories")
-    git(configured, "commit", "-qm", "story file")
     head = git(configured, "rev-parse", "HEAD")
     assert start(Router(po, RoleWritesThenLimit(configured)), "--task", "t") == 75
     assert po.reports[0]["status"] == "halted"
