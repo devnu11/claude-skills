@@ -374,7 +374,8 @@ def at_ci(env: Env, checks: list[Check], jobs: dict[str, Job] | None = None, **k
     env.prs.check_list = checks
     env.prs.jobs = {LINK: job()} if jobs is None else jobs
     env.prs.failed_log = lambda link: ""
-    env.rt.state.upstream.stack = [entry(1, pr=5, mode=PrMode.READY, url="https://h/5")]
+    built = entry(1, pr=5, mode=PrMode.READY, url="https://h/5")
+    env.rt.state.upstream.stack = [env.as_built(built)]
     return env.open(Edge.END, stage=Stage.CI, **kw)
 
 

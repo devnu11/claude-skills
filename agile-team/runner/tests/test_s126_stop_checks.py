@@ -517,9 +517,9 @@ def test_runtime_plan_attaches_the_hook_to_role_steps_only(rig: Callable[..., Ri
 
     r = rig()
     role = StepRequest("developer", "s1", "go", kind=StepKind.ROLE)
-    review_fix = StepRequest("developer", "s1", "go", kind=StepKind.REVIEW_FIX)
+    team_fix = StepRequest("developer", "s1", "go", kind=StepKind.TEAM_FIX)
     assert isinstance(r.rt.plan(role).stop_hook, StopChecks)
-    assert r.rt.plan(review_fix).stop_hook is None
+    assert r.rt.plan(team_fix).stop_hook is None
 
 
 def test_drain_keeps_the_latest_text_in_said() -> None:

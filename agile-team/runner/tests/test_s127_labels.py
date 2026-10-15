@@ -29,11 +29,11 @@ LB2 = {
     "gate.green": "pytest: must pass",
     "boundary.sync": "boundary sync",
     "boundary.check": "boundary check",
-    "boundary.review": "build review branches",
-    "boundary.push": "review PR + push",
-    "boundary.rebase": "rebase onto target",
-    "boundary.restack": "restack review PRs",
+    "boundary.push": "push as built + PR",
     "boundary.ci-wait": "CI wait",
+    "boundary.rebase": "rebase onto target",
+    "boundary.push-rebased": "push rebased",
+    "boundary.ci-rebased": "CI wait (rebased)",
     "runner-tool.run_tests": "pytest: named tests",
     "runner-tool.run_new_tests": "pytest: new test files",
     "stop.handoff": "stop: handoff parses",
@@ -76,11 +76,13 @@ def test_the_checker_catches_a_missing_a_long_and_a_repeated_label() -> None:
 
 def test_the_table_covers_every_stage_and_no_other() -> None:
     assert set(LB2) == set(built_in())
+    assert "boundary.review" not in LB2 and "boundary.restack" not in LB2
 
 
 @pytest.mark.parametrize(("name", "label"), list(LB2.items()))
 def test_a_built_in_label_word_for_word(name: str, label: str) -> None:
-    assert stages.STAGES[Name(name)].label == label
+    row = stages.STAGES[Name(name)]
+    assert row.label == label and len(row.label) <= stages.LABEL_MAX
 
 
 def test_as_dict_keys_are_in_order() -> None:

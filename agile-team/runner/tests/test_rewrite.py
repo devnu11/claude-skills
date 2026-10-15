@@ -78,7 +78,7 @@ def seeded() -> RunState:
     st.interrupted = [Interruption("developer-cli", "s2", "b", "limit", "o4")]
     st.upstream = UpstreamState(last_end="o5", checked="o1")
     st.upstream.stack = [
-        StackEntry(1, "team/sprint-1", "o6", "o7", head="o1", checked="o2", pushed="o3", base="o4")
+        StackEntry(1, "team/sprint-1", "o6", "o7", head="o1", pushed="o3", base="o4")
     ]
     return st
 
@@ -96,11 +96,12 @@ def test_remap_state_rewrites_exactly_the_recorded_team_hashes() -> None:
     assert count == 7
 
 
-def test_remap_state_leaves_review_branch_fields_and_the_check_alone() -> None:
+def test_remap_state_leaves_pushed_and_as_is_and_the_check_alone() -> None:
     st = seeded()
+    st.upstream.stack[0].as_is = "o5"
     remap_state(st, MOVED)
     entry = st.upstream.stack[0]
-    assert (entry.head, entry.checked, entry.pushed, entry.base) == ("o1", "o2", "o3", "o4")
+    assert (entry.head, entry.pushed, entry.as_is, entry.base) == ("o1", "o3", "o5", "o4")
     assert st.upstream.checked == "o1"
 
 

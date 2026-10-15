@@ -13,7 +13,8 @@ from agile_team.upstream import Upstream
 
 from .fake_system import FAKE_REPO, Done, FakeSystem
 from .test_boundary_runner import Env, entry, pushes
-from .test_s108_restack import H1, H2
+
+H1, H2 = "a1" * 20, "b2" * 20
 
 MUTATING = {"rebase", "reset", "merge", "checkout", "cherry-pick", "branch", "push", "worktree"}
 
@@ -58,7 +59,7 @@ def test_start_notes_are_exact() -> None:
             "nothing changes until the next sprint end"
         ),
     }
-    assert br.NOTHING_TO_PUSH == "no review branch to push"
+    assert not hasattr(br, "NOTHING_TO_PUSH")
     assert not hasattr(br, "START_NOTE")
 
 
@@ -121,54 +122,47 @@ def test_no_stack_entry_is_dropped_at_start(env: Env, fake: FakeSystem) -> None:
     assert [e.sprint for e in env.rt.state.upstream.stack] == [9, 10]
 
 
-def test_a_start_boundary_saved_with_restack_finishes_without_pushing(
-    env: Env, fake: FakeSystem
-) -> None:
-    env.rt.state.upstream.stack = [entry(9)]
-    env.open(Edge.START, stage=Stage.CHECK, restack=True)
-    env.drive()
-    assert env.outcomes()[-1] == "done" and pushes(fake) == []
-
-
 # ----- stages ----------------------------------------------------------------
 
 
-def test_the_stage_order_has_rebase_and_restack_between_push_and_ci() -> None:
+def test_the_stage_order_is_push_ci_rebase_push_rebased_ci_rebased() -> None:
     assert bd.STAGES == (
         Stage.SYNC,
         Stage.CHECK,
-        Stage.REVIEW,
         Stage.PUSH,
-        Stage.REBASE,
-        Stage.RESTACK,
         Stage.CI,
+        Stage.REBASE,
+        Stage.PUSH_REBASED,
+        Stage.CI_REBASED,
     )
-    assert (Stage.REBASE.value, Stage.RESTACK.value) == ("rebase", "restack")
 
 
-def test_the_end_only_stages_are_skipped_at_start_even_with_restack() -> None:
-    assert {Stage.REVIEW, Stage.PUSH, Stage.REBASE, Stage.RESTACK, Stage.CI} == bd.END_ONLY
-    for restack in (False, True):
-        b = bd.Boundary(Edge.START, 1, stage=Stage.CHECK, restack=restack)
-        assert bd.next_stage(b) is None
+def test_the_end_only_stages_are_skipped_at_start() -> None:
+    assert set(bd.STAGES[2:]) == bd.END_ONLY
+    b = bd.Boundary(Edge.START, 1, stage=Stage.CHECK)
+    assert bd.next_stage(b) is None
 
 
-def test_the_end_edge_runs_push_rebase_restack_ci_in_order() -> None:
-    b = bd.Boundary(Edge.END, 1, stage=Stage.PUSH)
-    seen = []
-    while (following := bd.next_stage(b)) is not None:
-        seen.append(following)
-        b.stage = following
-    assert seen == [Stage.REBASE, Stage.RESTACK, Stage.CI]
+def test_the_end_edge_runs_the_five_end_stages_in_order() -> None:
+    assert [bd.STAGES[i] for i in range(2, 7)] == [
+        Stage.PUSH,
+        Stage.CI,
+        Stage.REBASE,
+        Stage.PUSH_REBASED,
+        Stage.CI_REBASED,
+    ]
+    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.CHECK)) is Stage.PUSH
 
 
 def test_every_stage_has_a_runner_and_a_stage_row() -> None:
     assert set(br.STAGE_RUNNERS) == set(bd.Stage)
-    assert br.STAGE_RUNNERS[Stage.RESTACK] is br.BoundaryRunner._restack
+    assert br.STAGE_RUNNERS[Stage.PUSH_REBASED] is br.BoundaryRunner._push_rebased
+    assert br.STAGE_RUNNERS[Stage.CI_REBASED] is br.BoundaryRunner._ci_rebased
     for stage in bd.Stage:
         assert stages.BOUNDARY[stage.value] in stages.STAGES
     assert stages.BOUNDARY["rebase"] is stages.Name.BOUNDARY_REBASE
-    assert stages.BOUNDARY["restack"] is stages.Name.BOUNDARY_RESTACK
+    assert stages.BOUNDARY["push-rebased"] is stages.Name.BOUNDARY_PUSH_REBASED
+    assert stages.BOUNDARY["ci-rebased"] is stages.Name.BOUNDARY_CI_REBASED
 
 
 def test_the_removed_follow_names_are_gone() -> None:

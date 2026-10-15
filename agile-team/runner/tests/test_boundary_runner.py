@@ -9,6 +9,7 @@ from agile_team.boundary import BoundaryHold, Edge, Stage, StepKind
 from agile_team.boundary_runner import BoundaryRunner
 from agile_team.events import EventKind
 from agile_team.gates import StoryState, StoryStatus
+from agile_team.upstream import Pr, PrMode, PrState, Rebase, SyncOutcome
 
 from .conftest import FakeRunner
 from .fake_system import FAKE_HEAD, Done, FakeSystem
@@ -45,6 +46,13 @@ class Env:
     def open(self, edge: Edge, **kw) -> bd.Boundary:
         self.rt.state.boundary = bd.Boundary(edge, self.rt.state.sprint, **kw)
         return self.rt.state.boundary
+
+    def as_built(self, entry: bd.StackEntry) -> bd.StackEntry:
+        """Mark ``entry`` as pushed as built at its head, HEAD there, and main unmoved (s151)."""
+        entry.pushed = entry.as_is = entry.head
+        self.rt.git.head = lambda: entry.head
+        self.rt.upstream.rebase_onto = lambda old: Rebase(SyncOutcome.CURRENT)
+        return entry
 
     def events(self) -> list:
         return [e for e in self.rt.events.events() if e.kind == EventKind.BOUNDARY]
@@ -265,7 +273,7 @@ def test_manager_context_and_review_of_an_escalated_boundary(env: Env) -> None:
     assert len(view["history"]) == 2 and view["events"]
 
 
-# ----- U15-U18 push (the stack is seeded; building it is proven on real git in e2e) ----
+# ----- s151 push as built (the stack is seeded; real git is proven in e2e) ----------
 
 
 def entry(sprint: int, **kw) -> bd.StackEntry:
@@ -284,12 +292,15 @@ def pushes(fake: FakeSystem) -> list:
     return [c.argv for c in fake.commands if c.argv[:2] == ("git", "push")]
 
 
+def posted(env: Env) -> list[str]:
+    return [m.text for m in env.rt.relay.messages()]
+
+
 def test_the_first_push_asks_for_permission_and_pushes_nothing(env: Env, fake: FakeSystem) -> None:
     b = at_push(env, entry(1))
     env.drive()
     assert b.hold is BoundaryHold.PUSH_PERMISSION
     assert env.events()[-1].data["outcome"] == "held"
-    assert env.events()[-1].data["branches"] == ["team/sprint-1"]
     assert env.prs.calls == [] and pushes(fake) == []
 
 
@@ -298,63 +309,156 @@ def release_push(env: Env, answer: str) -> None:
     env.rt.state.boundary.hold = None
 
 
-def test_permission_yes_pushes_the_sprints_branch_only_and_opens_no_pr(
+def test_permission_yes_pushes_head_as_it_is_to_the_sprints_branch(
     env: Env, fake: FakeSystem
 ) -> None:
+    """AC1.1: the sha of HEAD, no cherry-pick, no rebase, with the lease (absent branch)."""
     b = at_push(env, entry(1))
     env.br.step()
     release_push(env, "yes")
     env.br.step()
     [argv] = pushes(fake)
-    assert argv[-1] == "refs/heads/team/sprint-1:refs/heads/team/sprint-1"
+    assert argv[-1] == f"{FAKE_HEAD}:refs/heads/team/sprint-1"
+    assert "--force-with-lease=refs/heads/team/sprint-1:" in argv
+    assert not [c for c in fake.commands if {"cherry-pick", "rebase"} & set(c.argv)]
     [e] = env.rt.state.upstream.stack
-    assert e.pushed == e.head and e.pr is None
-    assert env.prs.calls == [] and b.stage is Stage.REBASE
-    assert env.outcomes()[-1] == "pass"
-    assert env.events()[-1].data["note"] == "pushed team/sprint-1"
+    assert e.head == e.end == e.pushed == e.as_is == FAKE_HEAD
+    assert env.rt.state.upstream.last_end == FAKE_HEAD
+    assert b.stage is Stage.CI and env.outcomes()[-1] == "pushed"
 
 
-def test_permission_no_goes_on_with_a_local_event(env: Env, fake: FakeSystem) -> None:
+def test_the_push_opens_a_ready_pr_onto_the_target(env: Env) -> None:
+    """AC1.2: one create, branch <prefix><N>, base [upstream] branch, ready."""
     b = at_push(env, entry(1))
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    [(_, spec)] = [c for c in env.prs.calls if c[0] == "create"]
+    assert spec.branch == "team/sprint-1" and spec.base == "main" and spec.mode is PrMode.READY
+    [e] = env.rt.state.upstream.stack
+    assert e.pr == 1 and e.mode is PrMode.READY and b.stage is Stage.CI
+
+
+def test_the_pushed_report_goes_to_the_liaison(env: Env) -> None:
+    at_push(env, entry(1))
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    [text] = [t for t in posted(env) if "as built" in t]
+    assert "team/sprint-1" in text and "#1" in text and "only once it is green" in text
+
+
+def test_an_open_pr_is_reused_not_created(env: Env) -> None:
+    env.prs.prs["team/sprint-1"] = Pr(7, "https://h/7", PrState.OPEN, False, "main")
+    at_push(env, entry(1))
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    assert [c for c in env.prs.calls if c[0] in ("create", "edit")] == []
+    assert env.rt.state.upstream.stack[0].pr == 7
+
+
+def test_an_open_draft_pr_is_made_ready(env: Env) -> None:
+    env.prs.prs["team/sprint-1"] = Pr(7, "https://h/7", PrState.OPEN, True, "main")
+    at_push(env, entry(1))
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    [(_, number, spec)] = [c for c in env.prs.calls if c[0] == "edit"]
+    assert number == 7 and spec.mode is PrMode.READY
+
+
+def test_a_closed_pr_is_left_alone(env: Env) -> None:
+    env.prs.prs["team/sprint-1"] = Pr(7, "https://h/7", PrState.CLOSED, False, "main")
+    at_push(env, entry(1))
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    assert [c for c in env.prs.calls if c[0] in ("create", "edit")] == []
+    assert env.rt.state.upstream.stack[0].mode == "closed"
+
+
+def test_permission_no_finishes_local_and_says_not_rebased(env: Env, fake: FakeSystem) -> None:
+    at_push(env, entry(1))
     env.rt.state.upstream.push = bd.Permission.NO
     env.br.step()
     assert pushes(fake) == [] and env.prs.calls == []
-    assert env.outcomes()[-1] == "local" and b.stage is Stage.REBASE
+    assert env.rt.state.boundary is None and env.outcomes()[-1] == "done"
+    report = env.rt.state.upstream.report
+    assert "checked but not pushed" in report and "not rebased onto origin/main" in report
+    assert bd.NOT_REBASED.format(target="origin/main") in posted(env)[-1]
 
 
-def test_no_pr_service_is_a_local_event_with_that_reason(env: Env, fake: FakeSystem) -> None:
-    b = at_push(env, entry(1))
+def test_no_pr_service_finishes_local_with_that_reason(env: Env, fake: FakeSystem) -> None:
+    at_push(env, entry(1))
     env.prs.reason = "gh is not installed"
     env.rt.state.upstream.push = bd.Permission.YES
     env.br.step()
-    assert env.events()[-1].data["note"] == "gh is not installed"
-    assert env.outcomes()[-1] == "local" and pushes(fake) == [] and b.stage is Stage.REBASE
+    assert "gh is not installed" in env.rt.state.upstream.report
+    assert pushes(fake) == [] and env.rt.state.boundary is None
 
 
-def test_a_stack_entry_not_the_sprints_is_not_pushed_at_push(env: Env, fake: FakeSystem) -> None:
+def test_only_the_sprints_own_branch_is_pushed(env: Env, fake: FakeSystem) -> None:
+    env.rt.state.sprint = 2
     env.rt.state.upstream.push = bd.Permission.YES
     at_push(env, entry(1), entry(2))
     env.br.step()
-    assert pushes(fake) == []
+    [argv] = pushes(fake)
+    assert argv[-1].endswith("refs/heads/team/sprint-2")
 
 
-def test_rejected_push_holds_and_pushes_nothing_after_it(env: Env, fake: FakeSystem) -> None:
-    env.rt.state.sprint = 2
-    at_push(env, entry(1), entry(2))
+def test_rejected_push_holds_and_opens_no_pr(env: Env, fake: FakeSystem) -> None:
+    b = at_push(env, entry(1))
     fake.reply(("git", "push"), Done(1, "! [rejected]"))
     env.rt.state.upstream.push = bd.Permission.YES
     report = env.br.step()
-    b = env.rt.state.boundary
-    assert b.hold is BoundaryHold.PUSH_REJECTED and report["boundary"]["branch"] == "team/sprint-2"
+    assert b.hold is BoundaryHold.PUSH_REJECTED and report["boundary"]["branch"] == "team/sprint-1"
     assert report["boundary"]["reason"] == "! [rejected]" and env.prs.calls == []
     assert len(pushes(fake)) == 1 and b.stage is Stage.PUSH
 
 
-def test_an_empty_stack_finishes_with_nothing_to_review(env: Env) -> None:
-    at_push(env)
+def test_a_sha_already_pushed_is_not_pushed_again(env: Env, fake: FakeSystem) -> None:
+    e = entry(1, pushed=FAKE_HEAD)
+    at_push(env, e)
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.br.step()
+    assert pushes(fake) == []
+
+
+def test_the_end_sync_with_nothing_new_finishes_at_once(env: Env, fake: FakeSystem) -> None:
+    env.rt.state.upstream.last_end = FAKE_HEAD
+    env.open(Edge.END)
     env.drive()
     assert env.rt.state.boundary is None
-    assert env.rt.state.upstream.report == bd.NOTHING_REPORT.format(target="origin/main")
+    assert env.rt.state.upstream.report == bd.NOTHING_NEW.format(sprint=1)
+    assert env.rt.state.upstream.stack == [] and pushes(fake) == []
+    assert env.runner.calls == [] and env.prs.calls == []
+
+
+def test_the_end_sync_supersedes_older_entries(env: Env) -> None:
+    older = entry(0, pr=12)
+    env.rt.state.upstream.stack = [older]
+    env.rt.state.upstream.last_end = OLD
+    env.open(Edge.END)
+    env.br.step()
+    [own] = env.rt.state.upstream.stack
+    assert own.sprint == 1 and own.supersedes == [12]
+    assert "superseded" in env.outcomes()
+    assert not [c for c in env.prs.calls if c[0] not in ("find",)]
+
+
+def test_a_superseded_entry_without_a_pr_adds_no_number(env: Env) -> None:
+    env.rt.state.upstream.stack = [entry(0)]
+    env.rt.state.upstream.last_end = OLD
+    env.open(Edge.END)
+    env.br.step()
+    [own] = env.rt.state.upstream.stack
+    assert own.supersedes == []
+
+
+def test_the_pr_body_names_the_superseded_prs(env: Env) -> None:
+    env.rt.state.upstream.stack = [entry(0, pr=12), entry(-1, pr=13)]
+    env.rt.state.upstream.last_end = OLD
+    env.rt.state.upstream.push = bd.Permission.YES
+    env.open(Edge.END)
+    env.drive()
+    [(_, spec)] = [c for c in env.prs.calls if c[0] == "create"]
+    assert "#12, #13" in spec.body and "Rebase and merge" in spec.body
 
 
 def test_open_end_when_the_sprint_is_complete(env: Env) -> None:

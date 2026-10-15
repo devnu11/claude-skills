@@ -5,6 +5,7 @@ from agile_team import boundary as bd
 from agile_team import rewrite
 from agile_team.boundary import BoundaryHold, Edge, Stage
 from agile_team.boundary_runner import STAGE_RUNNERS, SYNCS, BoundaryRunner
+from agile_team.ci import CiResult, CiVerdict
 from agile_team.upstream import Rebase, SyncOutcome, UpstreamError
 
 from .fake_system import FAKE_HEAD
@@ -16,7 +17,13 @@ NEW_HEAD = "9" * 40
 
 @pytest.fixture
 def env(make_runtime) -> Env:
-    return Env(make_runtime)
+    """An Env whose sprint already has a green as-built push, so the rebase gate (s151) opens."""
+    env = Env(make_runtime)
+    entry = bd.StackEntry(1, "team/sprint-1", FAKE_HEAD, FAKE_HEAD, head=FAKE_HEAD, pr=1)
+    entry.pushed = entry.as_is = FAKE_HEAD
+    entry.ci = CiResult(1, "u", FAKE_HEAD, CiVerdict.GREEN)
+    env.rt.state.upstream.stack = [entry]
+    return env
 
 
 class Script:

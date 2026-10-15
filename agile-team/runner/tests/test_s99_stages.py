@@ -45,11 +45,11 @@ EXPECTED = [
     "gate.green",
     "boundary.sync",
     "boundary.check",
-    "boundary.review",
     "boundary.push",
-    "boundary.rebase",
-    "boundary.restack",
     "boundary.ci-wait",
+    "boundary.rebase",
+    "boundary.push-rebased",
+    "boundary.ci-rebased",
     "runner-tool.run_tests",
     "runner-tool.run_new_tests",
     "stop.handoff",
@@ -88,6 +88,8 @@ def runs(log: stage_log.StageLog) -> list:
 def test_table_has_every_name_in_order() -> None:
     assert set(stages.STAGES) == set(NAME)
     assert [str(n) for n in stages.STAGES] == EXPECTED
+    ends = [n for n in EXPECTED if n.startswith("boundary.")]
+    assert ends[-3:] == ["boundary.rebase", "boundary.push-rebased", "boundary.ci-rebased"]
     for key, row in stages.STAGES.items():
         assert row.name == key and stages.STAGE_NAME.fullmatch(row.name)
         assert isinstance(row.when, stages.When) and isinstance(row.attach, stages.Attach)
@@ -401,6 +403,7 @@ def test_tools_command_prints_both_lists(configured: Path, capsys) -> None:
     assert cli.main(["--repo", str(configured), "tools"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert [r["name"] for r in out["built_in"]] == EXPECTED
+    assert "boundary.ci-rebased" in [r["name"] for r in out["built_in"]]
     assert list(out["built_in"][0]) == ["name", "label", "description", "when", "attach"]
     assert out["repo"] == [{"name": "x.y", "description": "D", "command": "C", "label": ""}]
 

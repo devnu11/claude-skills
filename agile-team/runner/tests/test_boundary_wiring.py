@@ -5,7 +5,7 @@ import json
 
 import pytest
 from agile_team import boundary as bd
-from agile_team import handover, system
+from agile_team import handover
 from agile_team.boundary import BoundaryHold, Edge, Stage, StepKind
 from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState
@@ -195,17 +195,8 @@ def test_a_team_fix_may_write_source_and_tests_but_not_elsewhere(make_runtime) -
     assert not writable(plan.scope, "random/notes.txt")
 
 
-def test_a_review_fix_works_in_the_worktree_and_writes_only_the_files(make_runtime) -> None:
-    rt = make_runtime()
-    wt = rt.config.run_dir / "review"
-    system.make_dirs(wt)
-    rt.state.boundary = bd.Boundary(Edge.END, 1, stage=Stage.REVIEW)
-    rt.state.boundary.failure = bd.Failure(
-        Stage.REVIEW, bd.FixCase.REVIEW_CONFLICT, "c", files=["a.py"]
-    )
-    plan = rt.plan(StepRequest("devops", "fix", None, StepKind.REVIEW_FIX))
-    assert plan.scope.repo == wt
-    assert writable(plan.scope, "a.py") and not writable(plan.scope, "b.py")
+def test_there_is_no_review_fix_kind() -> None:
+    assert not hasattr(StepKind, "REVIEW_FIX")
 
 
 # ----- U13: the Manager sees the boundary -----------------------------------

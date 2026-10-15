@@ -84,18 +84,18 @@ def test_merge_base(fake: FakeSystem) -> None:
     assert argv[-2:] == ("HEAD", "origin/main")
 
 
-def test_push_sends_the_branch_with_its_lease(fake: FakeSystem) -> None:
+def test_push_sends_the_sha_with_its_lease(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
-    assert upstream_for().push(Lease("team/sprint-1", OLD)) is None
+    assert upstream_for().push(Lease("team/sprint-1", OLD, NEW)) is None
     [argv] = issued(fake, "push")
     ref = "refs/heads/team/sprint-1"
     assert f"--force-with-lease={ref}:{OLD}" in argv and "--no-verify" in argv
-    assert argv[-2:] == ("origin", f"{ref}:{ref}")
+    assert argv[-2:] == ("origin", f"{NEW}:{ref}")
 
 
 def test_push_with_an_empty_expectation_leases_the_absent_branch(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
-    assert upstream_for().push(Lease("team/sprint-1", "")) is None
+    assert upstream_for().push(Lease("team/sprint-1", "", NEW)) is None
     [argv] = issued(fake, "push")
     assert "--force-with-lease=refs/heads/team/sprint-1:" in argv
 
@@ -103,7 +103,7 @@ def test_push_with_an_empty_expectation_leases_the_absent_branch(fake: FakeSyste
 def test_a_rejected_push_returns_gits_output(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
     fake.reply(("git", "push"), Done(1, "! [rejected] (stale info)"))
-    out = upstream_for().push(Lease("team/sprint-1", OLD))
+    out = upstream_for().push(Lease("team/sprint-1", OLD, NEW))
     assert out == "! [rejected] (stale info)"
 
 
@@ -111,8 +111,15 @@ def test_a_rejected_push_returns_gits_output(fake: FakeSystem) -> None:
 def test_push_refuses_main_team_and_unprefixed_branches(fake: FakeSystem, branch: str) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
     with pytest.raises(UpstreamError, match="refusing to push"):
-        upstream_for().push(Lease(branch, ""))
+        upstream_for().push(Lease(branch, "", NEW))
     assert not issued(fake, "push")
+
+
+def test_count_is_the_commits_from_the_target_to_the_head(fake: FakeSystem) -> None:
+    fake.reply(("rev-list", "--count"), Done(0, "5\n"))
+    assert upstream_for().count(NEW) == 5
+    [argv] = issued(fake, "rev-list")
+    assert argv[-1] == f"origin/main..{NEW}" and "--count" in argv
 
 
 def test_refused_push_text() -> None:

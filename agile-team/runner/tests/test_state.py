@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from agile_team import state, system
 from agile_team.gates import StoryState, StoryStatus
 
@@ -181,3 +182,71 @@ def test_order_round_trips_and_legacy_loads_empty() -> None:
     del raw["order"]
     system.write_text(path, json.dumps(raw))
     assert state.load(tmp_path).order == []
+
+
+# ----- s151 R11: legacy state loads -------------------------------------------
+
+
+def legacy_json(boundary: dict | None = None, entry: dict | None = None, **top) -> str:
+    st = state.RunState()
+    data = json.loads(st.to_json())
+    data["boundary"] = boundary
+    if entry is not None:
+        data["upstream"]["stack"] = [entry]
+    data.update(top)
+    return json.dumps(data)
+
+
+def boundary_dict(**kw) -> dict:
+    return {"edge": "end", "sprint": 3, "stage": "check", **kw}
+
+
+@pytest.mark.parametrize("old", ["review", "restack"])
+def test_a_boundary_at_a_removed_stage_loads_at_push(old: str) -> None:
+    from agile_team import boundary as bd
+
+    back = state.RunState.from_json(legacy_json(boundary_dict(stage=old)))
+    assert back.boundary.stage is bd.Stage.PUSH
+
+
+def test_a_removed_restack_key_is_dropped() -> None:
+    back = state.RunState.from_json(legacy_json(boundary_dict(stage="ci", restack=True)))
+    assert not hasattr(back.boundary, "restack")
+
+
+@pytest.mark.parametrize("case", ["review_check", "review_conflict"])
+def test_a_retired_failure_case_is_dropped(case: str) -> None:
+    failure = {"stage": "review", "case": case, "reason": "boom"}
+    back = state.RunState.from_json(legacy_json(boundary_dict(stage="review", failure=failure)))
+    assert back.boundary.failure is None
+
+
+def test_a_team_check_failure_survives_the_load() -> None:
+    failure = {"stage": "check", "case": "team_check", "reason": "boom"}
+    back = state.RunState.from_json(legacy_json(boundary_dict(failure=failure)))
+    assert back.boundary.failure.reason == "boom"
+
+
+def test_stack_entries_drop_checked_and_check() -> None:
+    entry = {
+        "sprint": 2,
+        "branch": "team/sprint-2",
+        "start": "a",
+        "end": "b",
+        "checked": "b",
+        "check": "pass",
+    }
+    back = state.RunState.from_json(legacy_json(entry=entry))
+    [loaded] = back.upstream.stack
+    assert loaded.sprint == 2 and not hasattr(loaded, "check")
+    assert loaded.as_is == "" and loaded.supersedes == []
+
+
+def test_as_is_and_supersedes_round_trip() -> None:
+    from agile_team import boundary as bd
+
+    st = state.RunState()
+    entry = bd.StackEntry(4, "team/sprint-4", "a", "b", as_is="aa", supersedes=[2, 3])
+    st.upstream = bd.UpstreamState(stack=[entry])
+    back = state.RunState.from_json(st.to_json())
+    assert (back.upstream.stack[0].as_is, back.upstream.stack[0].supersedes) == ("aa", [2, 3])
