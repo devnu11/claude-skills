@@ -317,13 +317,13 @@ def test_empty_sprint_is_stalled_not_ended(make_runtime) -> None:
     assert len(p.lines) == 2 and p.stories == []
 
 
-def test_empty_sprint_lists_the_backlog(make_runtime) -> None:
+def test_empty_sprint_lists_the_product_backlog(make_runtime) -> None:
     rt = make_runtime()
     add_story(rt, "s9", sprint=None)
     rt.state.stories["s8"] = StoryState("s8", "t", "design", sprint=1, status=StoryStatus.DONE)
     rt.state.sprint = 2
     p = advance(rt)
-    assert p.lines[-1] == "Backlog: s9" and p.lines[0] == "Nothing in sprint 2 can move."
+    assert p.lines[-1] == "Product Backlog: s9" and p.lines[0] == "Nothing in sprint 2 can move."
 
 
 STALLS = [

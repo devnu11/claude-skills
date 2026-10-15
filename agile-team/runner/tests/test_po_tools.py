@@ -160,7 +160,7 @@ def test_story_status_shows_sprint(make_runtime) -> None:
 def test_start_sprint_schema_takes_stories_list() -> None:
     desc, schema = po_tools.SCHEMAS["start_sprint"]
     assert schema == {"goal": str, "stories": list, "reason": str}
-    assert "backlog" in desc
+    assert "Product Backlog" in desc
 
 
 def test_ask_notify_and_wait(make_runtime, fake: FakeSystem) -> None:

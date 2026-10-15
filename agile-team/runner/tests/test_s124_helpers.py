@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from agile_team import revert_log, reverts, sprint_end
+from agile_team import revert_log, reverts
 from agile_team.events import Event, EventKind
 from agile_team.gates import StoryState, StoryStatus
 from agile_team.git_ops import Git, GitError
@@ -140,17 +140,6 @@ def test_reverted_story_resets_and_keeps() -> None:
     assert new.reverted == [ENTRY] and new.revert_owed == ["architect"]
     again = reverts.reverted_story(new, back)
     assert again.reverted == [ENTRY, ENTRY]
-
-
-def test_ready_lines() -> None:
-    stories = {f"s{n}": StoryState(f"s{n}", f"T{n}", "design") for n in range(1, 8)}
-    ids = list(stories)
-    lines = sprint_end.ready_lines(stories, ids[:2])
-    assert lines == [sprint_end.READY_HEAD, "- s1: T1", "- s2: T2", sprint_end.READY_ADVICE]
-    more = sprint_end.ready_lines(stories, ids)
-    assert more[1:6] == [f"- s{n}: T{n}" for n in range(1, 6)]
-    assert more[6] == "- and 2 more" and more[-1] == sprint_end.READY_ADVICE
-    assert sprint_end.READY_SHOWN == 5
 
 
 # ----- Git methods --------------------------------------------------------------------

@@ -8,7 +8,6 @@ go through the fake working tree.
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass, field
 
 import pytest
@@ -23,7 +22,6 @@ from agile_team.git_ops import Git, GitError
 from agile_team.handover import Trigger
 from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
-from agile_team.relay import Note
 from agile_team.reverts import Reverter
 from agile_team.router import Router
 from agile_team.state import CheckoutRecord, RunState
@@ -591,89 +589,6 @@ def test_the_pr_lists_reverted_stories(make_runtime) -> None:
         f"- s1: Title s1: why (reverted {FIRST[:12]}, {FIXUP[:12]}; revert {REVERT_SHA[:12]})"
         in body
     )
-
-
-# ----- K1-K3: the ready backlog --------------------------------------------------------------
-
-
-def backlog(rt, sid: str, **kw) -> None:
-    rt.state.stories[sid] = StoryState(sid, f"Title {sid}", "design", sprint=None, **kw)
-    rt.state.order.append(sid)
-
-
-def stalled_sprint(make_runtime):
-    rt, _ = setup(make_runtime, steps=("s1", "s2"))
-    rt.state.stories["s1"].status = StoryStatus.DONE
-    rt.state.stories["s2"].po_hold = PoHold(HoldKind.HOLD, "r")
-    return rt
-
-
-def test_ready_backlog_selects_in_queue_order(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    backlog(rt, "s3")
-    backlog(rt, "s4", depends_on=["s9"])  # unmet dependency
-    backlog(rt, "s5", hold="stopped")
-    backlog(rt, "s6", po_hold=PoHold(HoldKind.HOLD, "r"))
-    backlog(rt, "s7", status=StoryStatus.CANCELLED)
-    queue = rt.priority().queue(rt.state.stories.values())
-    assert sprint_end.ready_backlog(rt.state.stories, queue) == ["s3"]
-
-
-def test_the_offer_is_made_once_while_a_question_is_open(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    backlog(rt, "s3")
-    backlog(rt, "s4", depends_on=["s9"])
-    rt.relay.post(Note("question", "which?"))
-    first = Router(rt)._idle()
-    assert first.kinds == [Trigger.READY_BACKLOG] and first.stories == []
-    assert not first.quiet()
-    assert first.lines[0] == "Nothing in sprint 1 can move."
-    assert sprint_end.READY_HEAD in first.lines and "- s3: Title s3" in first.lines
-    assert not any("s4:" in line for line in first.lines if line.startswith("- "))
-    assert first.lines[-1] == sprint_end.READY_ADVICE
-    assert rt.state.offered == ["s2", "s3"]
-    assert Router(rt)._idle() is None  # the same key: wait on the question
-    backlog(rt, "s8")
-    again = Router(rt)._idle()
-    assert again.kinds == [Trigger.READY_BACKLOG] and rt.state.offered == ["s2", "s3", "s8"]
-
-
-def test_the_offer_state_is_saved(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    backlog(rt, "s3")
-    Router(rt)._idle()
-    saved = json.loads(rt.state.to_json())
-    assert saved["offered"] == ["s2", "s3"]
-    assert RunState.from_json(rt.state.to_json()).offered == ["s2", "s3"]
-
-
-def test_without_ready_stories_it_stalls_as_before(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    backlog(rt, "s4", depends_on=["s9"])
-    assert Router(rt)._idle().kinds == [Trigger.STALLED]
-    rt.relay.post(Note("question", "which?"))
-    assert Router(rt)._idle() is None
-
-
-def test_no_offer_while_a_boundary_is_pending(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    backlog(rt, "s3")
-    rt.state.boundary = bd.Boundary(Edge.END, 1)
-    assert Router(rt)._idle().kinds != [Trigger.READY_BACKLOG]
-
-
-def test_six_ready_stories_show_five_and_a_count(make_runtime) -> None:
-    rt = stalled_sprint(make_runtime)
-    for n in range(3, 9):
-        backlog(rt, f"s{n}")
-    lines = Router(rt)._idle().lines
-    shown = [x for x in lines if x.startswith("- s")]
-    assert len(shown) == 5 and sprint_end.READY_MORE.format(count=1) in lines
-
-
-def test_the_offer_trigger_is_not_quiet_after_the_po() -> None:
-    assert Trigger.READY_BACKLOG == "ready_backlog"
-    assert Trigger.READY_BACKLOG not in __import__("agile_team.handover").handover.QUIET_AFTER_PO
 
 
 # ----- schema ---------------------------------------------------------------------------------

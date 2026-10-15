@@ -12,7 +12,6 @@ from agile_team.gates import StoryState, StoryStatus
 from agile_team.handover import QUIET_AFTER_PO, Trigger
 from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
-from agile_team.relay import Note
 from agile_team.router import Router
 from agile_team.state import RunState, RunStatus
 
@@ -100,7 +99,6 @@ def test_next_sprint_lines_are_the_lead_the_list_and_the_advice() -> None:
         *sprint_end._ready_list(stories, ["s3"]),
         sprint_end.NEXT_SPRINT_ADVICE,
     ]
-    assert sprint_end.ready_lines(stories, ["s3"])[0] == sprint_end.READY_HEAD
 
 
 # ----- K4: the ask cap ------------------------------------------------------------------------
@@ -139,42 +137,28 @@ def test_an_old_state_loads_the_new_fields_empty() -> None:
     assert (loaded.keep_going_asks, loaded.repin) == (0, "")
 
 
-# ----- K3: a stuck sprint under until-blocker ---------------------------------------------------
-
-
-def test_a_stuck_sprint_repeats_the_offer_and_counts_toward_the_cap(make_runtime) -> None:
-    rt = stuck_sprint(make_runtime)
-    rt.relay.post(Note("question", "which?"))
-    for asks in (1, 2, 3):
-        assert Router(rt)._idle().kinds == [Trigger.READY_BACKLOG]
-        assert rt.state.keep_going_asks == asks
-    assert Router(rt)._idle().kinds == []
-    assert rt.state.status is RunStatus.BLOCKED
-
-
-def test_a_stuck_sprint_under_sprint_cadence_is_offered_once(make_runtime) -> None:
-    rt = stuck_sprint(make_runtime, "sprint")
-    rt.relay.post(Note("question", "which?"))
-    assert Router(rt)._idle().kinds == [Trigger.READY_BACKLOG]
-    assert Router(rt)._idle() is None
-    assert rt.state.keep_going_asks == 0
-
-
 # ----- K5: no early end -----------------------------------------------------------------------
 
 
 def test_keep_going_refusal() -> None:
-    state = RunState(cadence=UB)
-    assert sprint_end.keep_going_refusal(state) is None
+    state = RunState(cadence=UB, sprint=1)
+    assert sprint_end.keep_going_refusal(state, set()) is None
     state.stories["s3"] = StoryState("s3", "t", "design", sprint=None)
-    assert sprint_end.keep_going_refusal(state) == sprint_end.KEEP_GOING_REFUSED.format(ids="s3")
+    assert sprint_end.keep_going_refusal(state, set()) is None
+    state.stories["s3"].sprint = 1
+    want = sprint_end.KEEP_GOING_REFUSED.format(ids="s3")
+    assert sprint_end.keep_going_refusal(state, set()) == want
+    assert sprint_end.keep_going_refusal(state, {"s3"}) is None
     state.cadence = "sprint"
-    assert sprint_end.keep_going_refusal(state) is None
+    assert sprint_end.keep_going_refusal(state, set()) is None
 
 
 @pytest.mark.parametrize("kind", ["done", "blocked"])
-def test_done_and_blocked_are_refused_while_stories_are_ready(make_runtime, kind: str) -> None:
+def test_done_and_blocked_are_refused_while_sprint_stories_can_move(
+    make_runtime, kind: str
+) -> None:
     rt = ended_sprint(make_runtime)
+    rt.state.stories["s3"].sprint = 1
     rt.save()
     before, messages = snapshot(rt), len(rt.relay.messages())
     out = call(Tools(rt).notify_user({"kind": kind, "text": "bye"}))
@@ -184,7 +168,9 @@ def test_done_and_blocked_are_refused_while_stories_are_ready(make_runtime, kind
 
 
 @pytest.mark.parametrize("kind", ["done", "blocked"])
-def test_done_and_blocked_are_accepted_without_ready_stories(make_runtime, kind: str) -> None:
+def test_done_and_blocked_are_accepted_when_nothing_in_the_sprint_moves(
+    make_runtime, kind: str
+) -> None:
     rt = ended_sprint(make_runtime)
     del rt.state.stories["s3"]
     assert "id" in call(Tools(rt).notify_user({"kind": kind, "text": "bye"}))
@@ -198,8 +184,7 @@ def test_done_and_blocked_are_always_accepted_under_sprint(make_runtime, kind: s
 
 
 def test_the_refusals_are_wired_to_the_kinds() -> None:
-    assert po_tools.KIND_REFUSALS["done"] is sprint_end.keep_going_refusal
-    assert po_tools.KIND_REFUSALS["blocked"] is sprint_end.keep_going_refusal
+    assert po_tools.KIND_REFUSALS["done"] is po_tools.KIND_REFUSALS["blocked"]
     assert "sprint-end" in po_tools.KIND_REFUSALS
 
 

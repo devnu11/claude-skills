@@ -29,7 +29,7 @@ def test_trigger_values_are_snake_case() -> None:
         "sprint_end",
         "next_sprint",
         "stalled",
-        "ready_backlog",
+        "sprint_backlog_stuck",
         "ruling_not_applied",
         "runner_fault",
         "off_pipeline_fault",
