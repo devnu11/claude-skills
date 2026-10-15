@@ -73,6 +73,13 @@ unique within a home.
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
 | `supervisor.pid`, `stop`, `wake` | The live supervisor; a stop request; a request to end the wait now. |
 
+**Is the supervisor alive?** `status`, `wait`, `stop` and `resume` read `supervisor.pid` and probe the process, by platform (`store.ALIVE_PROBES`):
+
+| Platform | Probe |
+|---|---|
+| macOS, Linux | `os.kill(pid, 0)`: no such process means not alive; a permission error means alive. |
+| Windows | `OpenProcess` and then `GetExitCodeProcess` (`STILL_ACTIVE`) through `ctypes`. Access denied means alive. `os.kill` isn't used, because on Windows it terminates the process instead of probing it. |
+
 ### Statuses
 
 `running`, `waiting` (until `next_wake`), and the final ones: `done`, `failed`,

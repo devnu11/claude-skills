@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -136,8 +137,19 @@ def _wake_on(data: dict[str, Any]) -> WakeOn | None:
     return WakeOn(stored) if stored else None
 
 
+# Win32 values for the Windows probe
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+NO_INHERIT = 0
+STILL_ACTIVE = 259  # GetExitCodeProcess's code for a process that has not exited
+ERROR_ACCESS_DENIED = 5
+
+
 def alive(pid: int) -> bool:
     """True when a process with ``pid`` exists."""
+    return ALIVE_PROBES.get(sys.platform, _alive_on_posix)(pid)
+
+
+def _alive_on_posix(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -145,6 +157,57 @@ def alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+@dataclass(frozen=True)
+class Win32:
+    """The kernel32 calls the Windows probe makes."""
+
+    dll: Any
+
+    def open(self, pid: int) -> int:  # pragma: no cover -- runs only on Windows
+        """A query handle for ``pid``, or 0."""
+        return self.dll.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, NO_INHERIT, pid)
+
+    def last_error(self) -> int:  # pragma: no cover -- runs only on Windows
+        """The calling thread's last Win32 error."""
+        import ctypes
+
+        return ctypes.get_last_error()  # type: ignore[attr-defined]
+
+    def exit_code(self, handle: int) -> int:  # pragma: no cover -- runs only on Windows
+        """The process's exit code; ``STILL_ACTIVE`` while it runs."""
+        import ctypes
+
+        code = ctypes.c_ulong()
+        self.dll.GetExitCodeProcess(handle, ctypes.byref(code))
+        return code.value
+
+    def close(self, handle: int) -> None:  # pragma: no cover -- runs only on Windows
+        """Release ``handle``."""
+        self.dll.CloseHandle(handle)
+
+
+def kernel32() -> Win32:  # pragma: no cover -- runs only on Windows
+    """The real kernel32, with Win32 errors kept per thread."""
+    import ctypes
+
+    return Win32(ctypes.WinDLL("kernel32", use_last_error=True))  # type: ignore[attr-defined]
+
+
+def _alive_on_windows(pid: int, win32: Any = None) -> bool:
+    # os.kill(pid, 0) on Windows terminates the process instead of probing it
+    api = win32 or kernel32()
+    handle = api.open(pid)
+    if not handle:
+        return api.last_error() == ERROR_ACCESS_DENIED
+    try:
+        return api.exit_code(handle) == STILL_ACTIVE
+    finally:
+        api.close(handle)
+
+
+ALIVE_PROBES: dict[str, Callable[[int], bool]] = {"win32": _alive_on_windows}
 
 
 @dataclass(frozen=True)
