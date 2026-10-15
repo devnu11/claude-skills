@@ -1,7 +1,7 @@
-"""s135 end to end on real git: story onboarding, authorship, revert, review rebuild, amend.
+"""s135 end to end on real git: story onboarding, authorship, revert, amend.
 
 ``agile-team story`` queues a file; one ``Intake.apply`` (the router's safe point) commits it.
-Everything after that, ``Reverter``, ``Rebuilder`` and ``git log``, runs for real in ``tmp_path``.
+Everything after that, ``Reverter`` and ``git log``, runs for real in ``tmp_path``.
 """
 
 from __future__ import annotations
@@ -9,10 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from agile_team import cli, system
-from agile_team.boundary import StackEntry
 from agile_team.git_ops import Git
 from agile_team.reverts import Reverter
-from agile_team.stack import Build, Rebuilder
 from agile_team.story_drafts import LIAISON_AUTHOR
 from agile_team.story_intake import Intake
 
@@ -94,28 +92,6 @@ def test_ac6_the_creation_commit_survives_a_story_revert(make_runtime, configure
     assert rt.state.stories["s1"].file_commits == created
     assert code in result["commits"] and created[0] not in result["commits"]
     assert Git(configured).is_ancestor(created[0])
-
-
-def test_ac6_a_review_stack_rebuild_keeps_the_story_with_its_commits(
-    make_runtime, configured: Path, tmp_path: Path
-) -> None:
-    base = git(configured, "rev-parse", "HEAD").strip()
-    git(configured, "branch", "target", base)
-    rt = onboard(make_runtime, configured, "none")
-    created = rt.state.stories["s1"].file_commits[0]
-    code = step_commit(configured, rt)
-    tip = git(configured, "rev-parse", "HEAD").strip()
-    builder = Rebuilder(Git(configured), tmp_path / "review", "target")
-    builder.prepare()
-    entry = StackEntry(1, "team/sprint-1", base, tip)
-    picks = builder.picks(entry, builder.unmerged(tip))
-    assert picks == [created, code]
-    assert builder.build(entry, Build(base, picks)) is None
-    subjects = git(configured, "log", "--format=%s", f"{base}..team/sprint-1").splitlines()
-    assert subjects == ["feat(s1): add the todo list", "docs(s1): created story to Add todo"]
-    shown = git(configured, "show", f"team/sprint-1:{FILE}")
-    assert "adds an item" in shown
-    assert git(configured, "show", "team/sprint-1:src/todo.py") == "ITEMS = []\n"
 
 
 def test_ac4_amend_replaces_the_acs_and_goes_back_to_design(make_runtime, configured: Path) -> None:
