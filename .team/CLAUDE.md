@@ -42,6 +42,14 @@ works today.
 - liaison: the interactive Claude session relaying to the human.
 - snapshot: the JSON the dashboard renders; its contract is
   `agile-team/runner/agile_team/dashboard/fixtures/snapshot.json`.
+- **Product Backlog**: every open story not committed to a sprint (`sprint`
+  is `null` in `state.json`). The runner, the docs and the dashboard still
+  call this "the backlog".
+- **Sprint Backlog**: the stories committed to the current sprint that are
+  not done.
+- Always say **Product Backlog** or **Sprint Backlog**, never just
+  "backlog". When anyone, the human included, says only "backlog" and it
+  matters which one, ask which they mean before acting.
 
 ## Do not touch
 
