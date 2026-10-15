@@ -21,12 +21,14 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
-| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet) and `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`). |
+| `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `share SOURCE --story ID` | The liaison shares a file (a mock, a spec) with the team for story `ID` (s120). Queues `.team/run/liaison/shares/f<N>.json` (the name, the bytes and their SHA-256) and prints `queued f<N>: <docs>/design/<ID>-<name> (sha256 <12 hex>); the runner commits it between steps`. Writes nothing else. Works in any run state, and a stopped run applies it on the next `start`. Checked in order, first refusal wins and nothing is written (exit 1): a bad id or no `.team/stories/<ID>.md` (`no story 's9'…`), a name that is not letters, digits, `.`, `_`, `-` (≤ 100, no stdin), an unreadable file, an empty file, a file over 5 MiB. See "Shared files". |
+| `story new FILE --approved-by human\|none [--sprint current\|next\|backlog] [--after ID] [--plan PATH]` | The liaison writes a story (s135). `FILE` is a Markdown draft: frontmatter `title`, `acceptance: [{id, text, environment}]`, optional `depends_on` and other keys (kept as written), no `id` or `shared`, and the user story as the body. Every check runs and every problem is printed, one line each (exit 1, nothing queued). A clean draft is queued as `.team/run/liaison/stories/q<N>.json` and the command prints `queued q<N>: new story "<title>" (<approved>); the runner gives it an id and commits it between steps`. `--sprint` defaults to `backlog`; `--plan` needs `--approved-by human`. Never writes `.team/stories/` or calls git; works in any run state. See "Stories from the liaison". |
+| `story amend ID FILE --approved-by human\|none [--plan PATH]` | The liaison replaces open story `ID`'s ACs (s135). The draft is checked as for `new`, and its `title` and `depends_on` must equal the story's (only the ACs change) and its ACs must differ. Queues `q<N>.json` and prints `queued q<N>: new ACs for <ID> (<approved>); the runner commits them between steps and sends <ID> back to design; the draft's body is not used`. `--sprint` and `--after` are refused. See "Stories from the liaison". |
 | `reply STORY SOURCE` | The liaison answers on story `STORY`'s dashboard thread. `SOURCE` is a file, or `-` for stdin (as `tell`). Appends `{"story", "text", "at"}` to `.team/run/liaison/replies.jsonl` and prints `replied lr<N> on <story>`. Works in any run state, with no runner. Exit 1 on an empty text (`the message is empty`), a text over 4000 characters (`the message is longer than 4000 characters`), an unknown story (`no story 's9'`) or an unreadable file; nothing is written. See "Story threads". |
 | `opinion STORY KIND SOURCE` | The liaison records its opinion on story `STORY` (s85). `KIND` is `keep`, `move-up`, `move-down`, `fold`, `close`, `scope` or `ask`; `SOURCE` is a file, or `-` for stdin. Appends `{"story", "kind", "text", "at"}` to `.team/run/liaison/opinions.jsonl` and prints `recorded o<N>: <kind> on <story>`. Checked in order, first refusal wins and nothing is written (exit 1): an unknown story (`no story 's9'`; a done story is allowed), an unknown kind (`no opinion kind 'x'; use one of: keep, move-up, …`), an empty or over-long text (as `reply`). Works in any run state. See "Liaison opinions". |
 | `reviewed SOURCE` | The liaison records that it reviewed the backlog, with a short summary from a file or `-` (stdin). Appends `{"text", "at"}` to `.team/run/liaison/reviews.jsonl` and prints `recorded backlog review v<N>`. Exit 1 on an empty or over-long text. See "Liaison opinions". |
@@ -54,9 +56,11 @@ command's executable is missing; `config check` fails.
 ```
 
 `kind` is one of `question`, `update`, `sprint-end`, `blocked`, `done`,
-`failed`, `stopped`, `reply`. A `reply` is the PO's answer on a story's
+`failed`, `stopped`, `reply`, `story-request`. A `reply` is the PO's answer on a story's
 thread (see "Story threads"); only the `reply_story` tool writes it, and its
-`stories` names that one story. A `question` blocks only the stories it lists. While a
+`stories` names that one story. A `story-request` is the PO asking the
+liaison to write a story; only the `request_story` tool writes it (see
+"Stories from the liaison"). A `question` blocks only the stories it lists. While a
 question is open and nothing else can move, the runner keeps running and
 waits for the answer. The runner itself posts an `update` at each sprint
 end that pushed review branches (or built them without pushing; see
@@ -745,7 +749,7 @@ opacity. A role with no data reads `idle`.
 
 **The PO in Story scope (s113).** Each `po-turn` event's `data.stories`
 lists the stories the turn's PO tool calls named (a `story` or `stories`
-argument, and `open_story`'s `id`), once each, `[]` for none; the event's
+argument), once each, `[]` for none; the event's
 `story` stays `null`. In Story scope the PO's time, waiting, bar and
 sparkline come from the turns that named the focus story. A turn that named
 several counts in each, and the waiting line then ends `· shared turns`.
@@ -939,8 +943,8 @@ repo can't add one: the set is the security boundary.
 
 Each acceptance criterion names its environment in the story file (s94; see
 "Story files"). The name must equal a configured `[[environment]]` `name`
-exactly (no prose, no case folding); `open_story` refuses any other name and
-lists the valid ones. A story's environments are the distinct names of its
+exactly (no prose, no case folding); `agile-team story new` and `story amend`
+refuse any other name and list the valid ones. A story's environments are the distinct names of its
 ACs, in config order. Each is presented and tried on its own (s95, see
 "Acceptance per environment").
 
@@ -1365,7 +1369,7 @@ step). A malformed list is a handoff error. The ops gate:
 |---|---|
 | `done`, a row per AC, every `missing` row names an existing story | pass to `tests`; before the story moves, the runner writes the rows into the story file under `## Tooling` (one `chore(<id>): record the tooling review in the story file` commit). If that commit fails, the runner puts the story file back, and the pass becomes a gate hold at `ops-review` (no round). The reason names the git error; fix it, then `continue_story` |
 | `done`, an AC without a row, an unknown or repeated AC, or a story id with no story file | bounce back to `ops-review` (a round) |
-| `done`, a `missing` row with no story | gate hold: the PO opens a story for each need, then `continue_story` with a note naming them; DevOps runs again and fills in the ids |
+| `done`, a `missing` row with no story | gate hold: the PO asks the liaison for a story for each need (`request_story`), then, once the runner has opened them, `continue_story` with a note naming them; DevOps runs again and fills in the ids |
 | `changes_requested` | bounce to `design` with DevOps's summary as the reason, whatever `next_role` says: the design assumes tooling that can't exist |
 
 The `## Tooling` section reads `- AC1: automatic today: …`,
@@ -2041,7 +2045,7 @@ The pass ends at the first step whose report matches a row of the
 | `refused` | the step was refused |
 | `error` | the step raised an error other than a limit (traceback in `crash.log`) |
 | `stopped` | the handoff is `blocked` or `failed` |
-| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process), or a story file that went bad before a Proxy step (s94, "Story files"); `continue_story` once it is fixed |
+| `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process), or a story file that went bad before a Proxy step (s94, "Story files"); `continue_story` once it is fixed. The PO can't fix a story file: the liaison does, with `story amend` (see "Story files") |
 | `bad_handoff` | the `manager` gave no valid handoff |
 | `questions` | the handoff has `open_questions` |
 | `quarantine` | the step's out-of-scope changes were quarantined |
@@ -2057,9 +2061,9 @@ The pass ends at the first step whose report matches a row of the
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 | `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
-| `ci_failed` | the review PR's CI failed where our code ran; the line names each failing check (workflow / job), its failing step, its link and its failing test lines. `continue_boundary` is refused here (s111). The PO opens a bug story at once (or picks an open story that fixes it), records it with `record_ci_bug`, tells the human the PR is **NOT** ready, and lists the story first in the next sprint; see the CI rule under **Ready.** |
+| `ci_failed` | the review PR's CI failed where our code ran; the line names each failing check (workflow / job), its failing step, its link and its failing test lines. `continue_boundary` is refused here (s111). The PO asks the liaison for a bug story at once (`request_story`; or picks an open story that fixes it), records it with `record_ci_bug` once the runner has opened it, tells the human the PR is **NOT** ready, and lists the story first in the next sprint; see the CI rule under **Ready.** |
 | `ci_infra` | a CI job ran no step, and still ran none after the runner's one re-run. The PR is NOT ready. The PO tells the human; `continue_boundary` reads the checks again once they re-ran it, or `record_ci_bug` records a story that changes the CI job; see the CI rule under **Ready.** |
-| `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO opens a bug story for main and records it with `record_ci_bug`: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
+| `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO asks the liaison for a bug story for main (`request_story`) and records it with `record_ci_bug` once the runner has opened it: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
 | `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again; see the CI rule under **Ready.** |
 
 The runner also hands over `human_message` (the inbox has answers the PO has
@@ -2184,16 +2188,16 @@ with no reasons and the `compact` path.
 Each story in `state.json` has `sprint`: the number of the sprint it is
 committed to, or `null` when it is in the backlog.
 
-- `open_story` puts a story in the backlog. The PO writes the story file
-  first. `open_story` refuses an existing id, then a story file with problems
-  (see "Story files"), and changes nothing when it refuses. It has no
-  `environment` argument. Its `depends_on` argument (s86) is checked next; see
-  "Story dependencies".
+- The liaison writes every story (`agile-team story new`), and the runner
+  opens it between steps: it gives it an id, commits its file and places it
+  in the running sprint, first for the next sprint, or in the backlog, as
+  the liaison asked (see "Stories from the liaison"). The PO never writes a
+  story file and has no tool to open one (s135).
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
   go back to the backlog. Done stories never move; they keep the sprint they
   finished in. It refuses an empty list or unknown ids (`unknown stories: s7;
-  open them with open_story first`) and changes nothing when it refuses.
+  ask the liaison for them with request_story`) and changes nothing when it refuses.
   Once those checks pass, it reloads every open story's `depends_on` from
   its file and is refused if the files are bad (see "Story dependencies").
 - The `sprint-start` event carries `{"sprint", "goal", "stories"}`, plus
@@ -2299,7 +2303,7 @@ nothing:
 
 | Tool | Refused when (text) |
 |---|---|
-| all | unknown story (`unknown story 'sN'; open it with open_story`); blank reason (`a reason is required`); done or cancelled (`story sN is done; there is nothing to hold`, with `release` or `cancel`) |
+| all | unknown story (`unknown story 'sN'; ask the liaison for it with request_story`); blank reason (`a reason is required`); done or cancelled (`story sN is done; there is nothing to hold`, with `release` or `cancel`) |
 | `hold_story` | a cancel request is pending (`story sN already waits on the human's answer to mN about cancelling it; answer mN instead`) |
 | `release_story` | an open question names the story (`story sN has an open question; answer m3, m7 instead`); the story waits on the Manager (`… run the manager on it`); no PO hold and not blocked (`… nothing to release (continue_story releases a hand-over hold)`) |
 | `request_cancel` | a cancel request is pending (as for `hold_story`); the story has commits (or `code_commits`) and the reason contains neither `code` nor `commit` (`story sN has commits (N); say in the reason what happens to its code (kept, reverted by a new story, …)`) |
@@ -2403,7 +2407,7 @@ every item is reported, in file order.
 
 | # | Check | Problem text |
 |---|---|---|
-| 1 | the file exists and is readable | `no story file; write it before open_story` |
+| 1 | the file exists and is readable | `no story file` |
 | 2 | it starts with frontmatter | `no YAML frontmatter; start the file with --- and the keys id, title and acceptance` |
 | 3 | the frontmatter parses and is a mapping | `frontmatter does not parse: <error>` |
 | 4 | `id` equals the file's story id | `id is 's12', not 's120'` |
@@ -2427,13 +2431,23 @@ story-level problem. One read lists everything to fix.
 
 | When | On problems |
 |---|---|
-| `open_story`, after the duplicate-id check and before `depends_on` | the tool returns the refusal; the story is not opened |
+| `story new` and `story amend` (the draft: no `id` check, and `id` or `shared` in it is a problem) | the command prints the refusal and queues nothing |
+| the runner's intake, before it commits a queued draft (the draft, then the file with its `id:` line) | the request is refused (see "Stories from the liaison") |
 | before every Customer Proxy step on the story (after the PO's turn, before the unpresented check) | the step does not run and nothing is billed; the gate holds the story with `the story file must be fixed before acceptance:` + the refusal + `Edit the file; no state change is needed`, which the PO gets as a `gate_hold` hand-over |
 
-A clean file is used as it is, so an edit since `open_story` takes effect at
-the next Proxy step. **Fixing an environment is an edit to the file**: no tool
-and no state change. A held story goes on with `continue_story`, and the next
-Proxy request reads the file again. The hold counts as a setback like any gate
+**Only the runner writes story files** (s135). The guard refuses every
+role's Write, Edit or NotebookEdit under `.team/stories/` (`product-owner
+may not write .team/stories/s1.md; only the runner writes it`), a step's
+Bash change there is quarantined, and no role layer can grant it. A file
+reaches git only as the runner's `docs(<id>): …` commit (see "Stories from
+the liaison"), a `share` or a runner record (`## Tooling`, `## Reverted`).
+**Fixing an environment** is one of two things. If the config lost the
+environment, DevOps or the human fixes `.agile-team.toml`, and the PO then
+calls `continue_story`; the next Proxy request reads the file again. If the
+ACs are wrong, the PO asks the human, and the liaison sends corrected ACs
+with `story amend`. That sends the story back to design and clears the hold.
+The hold text still ends `Edit the file; no state change is needed`; for
+the PO that means the two fixes above. The hold counts as a setback like any gate
 hold, so the same unfixed hold repeated can escalate.
 
 **State and snapshot.** `state.json` keeps no environment for a story. The
@@ -2498,6 +2512,143 @@ file (`<path>: sha256 <found> (shared <recorded>)` or
 `<path>: missing (shared <recorded>)`). A malformed `shared:` list holds the
 story with the story-file hold text. Only a new `share` changes a recorded
 hash.
+
+### Stories from the liaison (s135)
+
+The liaison writes every story, and the runner commits it. No role writes a
+story file, and the PO schedules stories and asks for new ones (ADR-0070).
+
+**The commands.** `agile-team story new <file.md> --approved-by human|none
+[--sprint current|next|backlog] [--after <id>] [--plan <path>]` and
+`agile-team story amend <id> <file.md> --approved-by human|none
+[--plan <path>]` (see "CLI"). The draft is UTF-8 Markdown:
+
+```markdown
+---
+title: "Export the board as CSV"
+depends_on: [s83]          # optional
+acceptance:
+  - id: AC1
+    text: "agile-team export --csv prints one row per story."
+    environment: cli
+---
+As the human, I want the board as CSV, so I can share it.
+```
+
+`id` and `shared` are refused, because the runner writes them. Any other key
+(`suite_runs`, …) is kept as written. Every check runs, and the command
+prints every problem, one line each:
+
+- the file can't be read (`cannot read <file>: <reason>`);
+- the "Story files" checks, except the `id` check;
+- `<file>: <key> is written by the runner; remove it`, for `id` and `shared`;
+- a bad `depends_on` (see "Story dependencies");
+- a blank body (`<file>: the body must hold the user story`);
+- `--after` naming no story, or a done or cancelled one;
+- `--plan` with `--approved-by none`, or naming no file;
+- for `amend`: an unknown or finished story, `--sprint` or `--after` given, a
+  story file with no readable frontmatter, a changed `title` or
+  `depends_on`, or ACs equal to the story's (`nothing to amend`).
+
+A problem exits 1 and queues nothing. A clean draft is queued as
+`.team/run/liaison/stories/q<N>.json` (`action`, `story`, `approved_by`,
+`plan`, `sprint`, `after`, `file`, `text`, `at`), with the same numbered
+queue as `tell` and `share`. The command never writes `.team/stories/` and
+never calls git. It works in any run state; a stopped run settles the
+request at its next `start`. `status` lists `queued_stories` and each
+outcome under `story_requests`.
+
+**Onboarding at a safe point.** Each router tick, right after the shares,
+the runner settles each queued request in number order, between steps. It
+waits while a sprint boundary is open, except at the CI holds (`ci_failed`,
+`ci_infra`, `main_broken`), where the PO needs the bug story for
+`record_ci_bug`. For `new`, the runner:
+
+1. runs the draft checks again, against the current config and state;
+2. gives the story the next id (`s<highest + 1>` over the stories in state
+   and the story files);
+3. writes `.team/stories/<id>.md`, the draft with `id: <id>` added as the
+   first frontmatter line, and commits that file alone;
+4. records the commit in the story's `file_commits`: a sprint-start rebase
+   remaps it, a revert keeps it (the story keeps its file), the review branch
+   of the sprint it was committed in carries it, and the Backlog tab lists
+   it first among the story's commits. It is not the story's `commit`, so it
+   doesn't make the story "started";
+5. places the story: `current` adds it to the running sprint like
+   `add_to_sprint` (role `liaison`), or puts it in the backlog when the add
+   is refused, saying why; `next` puts it in the backlog after the current
+   sprint's stories; `backlog` puts it at the end of the order. `--after
+   <id>` puts it right after that story instead (dropped, with a note, if
+   that story has finished since);
+6. tells the PO, as a queued `tell`: `Runner note: the liaison's story q<N>
+   is now <id> "<title>" (<approved>; commit <sha12>), placed <placed>. Read
+   <file>, then schedule it.`, and posts an `update` to the liaison:
+   `Runner: story q<N> is <id>, commit <sha12>, placed <placed>.`
+
+**Authorship.** The commit says who wrote the story and how much the human
+was involved:
+
+```text
+docs(<id>): created story to <title>
+
+Human-involvement: <involvement>
+Liaison-request: q<N>
+```
+
+| `--approved-by` | Author | `Human-involvement:` |
+|---|---|---|
+| `human` | the repo's git user (no `--author`) | ``approved plan `<plan>` `` with `--plan`, else `approved by the human` |
+| `none` | `Claude (agile-team liaison) <noreply@anthropic.com>` | `none: written and submitted by the liaison` |
+
+An amend's subject is `docs(<id>): amended story to <title>`, with the same
+body and author. The usual `Co-Authored-By` trailer is added to both.
+
+**Amend.** The runner runs the checks again. It replaces only the story
+file's `acceptance:` block (other keys and the body stay) and commits that
+file alone, appending the commit to `file_commits`. It then sends the story
+back to `design`: rounds, holds and tried environments are cleared, the
+story's ACs must be traced again, and the PO's hold or an open question
+stays. The PO is told `Runner note: the liaison amended <id>'s ACs (q<N>;
+<approved>; commit <sha12>). It is back at <step> from <from_step>. Old:
+<ids>. New: <ids>. Read <file>.`, and the liaison gets an `update`.
+
+**Refusal.** A request that fails a check at onboarding, a commit that fails
+(the file is put back) or a request file that is not valid JSON of the
+queued shape is settled once as `refused: <reason>`, and never retried. The
+liaison gets `Runner: story q<N> was refused: <reason>`, and the PO is not
+told.
+
+**Events** (role `liaison`, except `story-request`):
+
+| Event | Story | Data |
+|---|---|---|
+| `story-opened` | the new id | `title`, `step`, `depends_on`, `request`, `commit`, `approved_by`, `sprint`, `after` (what was asked) |
+| `story-amended` | the story | `request`, `commit`, `approved_by`, `from_step`, `step`, `old` and `new` (the ACs as `{id, text, environment}`) |
+| `story-refused` | the amended story, or `null` | `request`, `action`, `reason` |
+| `sprint-add` | — | as for `add_to_sprint`, for `--sprint current` |
+| `story-request` (role `product-owner`) | the story the PO named, or `null` | `message`, `summary`, `step`, `files` |
+
+**The PO asks with `request_story(summary, evidence)`.** It is for a bug the
+team couldn't fix in its own turns: a red CI run, a broken main, a runner
+fault, a check that `ops-review` says is missing. `evidence` is `{story,
+step, output, files}`: where it showed (empty outside any story), the
+failing output (required; the last 6000 characters are kept), and the files
+involved. It posts a `story-request` outbox entry, which `watch` reports as
+a `message`:
+
+```text
+The PO asks for a story: <summary>
+Story: <story> at <step>          (or "Story: none")
+Files: <a, b>                     (or "Files: none")
+Failing output:
+<output>
+```
+
+It blocks nothing and returns `{"status": "requested", "message": "m<N>",
+…}`. The liaison writes the story (with the human, or alone with
+`--approved-by none`) and sends it with `story new`. The runner opens it and
+tells the PO its id. For any other missing story, the PO asks the human with
+`ask_user`, and the liaison writes it the same way.
 
 ## Requirements
 
@@ -2579,7 +2730,7 @@ depends_on:
 ```
 
 A missing key means `[]`, and a duplicate id is dropped (the first one is
-kept). The PO writes the list. Never write "Depends on sN" in a story's
+kept). The liaison writes the list in the draft (`story new`). Never write "Depends on sN" in a story's
 prose. `state.json` keeps a validated copy per story (`depends_on`). The
 router, the `priority` events and the snapshot read only that copy.
 
@@ -2589,7 +2740,7 @@ router, the `priority` events and the snapshot read only that copy.
 |---|---|---|
 | `agile-team start` (every mode), before the PO or router runs | every story that is not done and has a file | the command fails with `story files: <refusal>; fix depends_on in .team/stories` and the run does not start |
 | `start_sprint`, after its other refusals pass, before the sprint opens | the same | the tool returns the refusal and the sprint does not begin |
-| `open_story` | the new story only, from its `depends_on` argument | the tool returns the refusal and the story is not opened |
+| `story new`, and the runner's intake before it commits the draft | the draft only | the command, or the intake, refuses the draft (see below) |
 
 For the loaded stories, the file's list wins. A story with no file keeps the
 list it had in state, and a done story is never reloaded. A refusal changes
@@ -2604,7 +2755,7 @@ refusal wins:
 |---|---|---|
 | a | the frontmatter does not parse, or `depends_on` is not a list of strings (`depends_on: s1`, `depends_on: null` and a bare `depends_on:` all count) | `depends_on must be a list of story ids: s3, s9` |
 | b | a story lists itself | `a story cannot depend on itself: s4` |
-| c | a listed id is not a story in state (done stories are known, and a done dependency is satisfied) | `depends_on names unknown stories: s2 on s77, s5 on s78; open them with open_story first` |
+| c | a listed id is not a story in state (done stories are known, and a done dependency is satisfied) | `depends_on names unknown stories: s2 on s77, s5 on s78; only opened stories can be listed` |
 | d | the graph has a cycle | `depends_on has a cycle: s1 -> s2 -> s3 -> s1` |
 
 Ids are in natural order (`s9` before `s10`). The cycle is the first one
@@ -2612,12 +2763,15 @@ found by a depth-first walk from each id in natural order, following each
 list in its own order. A story file that is not valid UTF-8 is not refused:
 reading it raises an error.
 
-`open_story(…, depends_on=[…])` checks, after the duplicate-id and story file
-checks: the argument is a list of strings (a missing or empty argument means
-`[]`); if the story's file already exists, its frontmatter is good and its
-list is the same, in the same order (`s7's file has depends_on [s1, s2], not
-[s2]; pass the same list, or fix the file`); then checks b–d, with the new id
-counted as known. The `story-opened` event's data gains `"depends_on"`.
+A draft's `depends_on` (s135) is checked by `story new` and again by the
+intake: it must be a list of strings (`<file>: depends_on must be a list of
+story ids`), and every id must be a story in state (`<file>: depends_on
+names unknown stories: s7`). A new story can't close a cycle, because no
+story lists it yet. The `story-opened` event's data has `"depends_on"`.
+`story amend` refuses a changed list (only the ACs change), so a wrong list,
+or a `start` refused with `fix depends_on in .team/stories`, is the human's
+to fix: with the run stopped, they edit and commit the file, then
+`accept-checkout` if the next start halts on the moved checkout.
 
 **Routing.** A story whose dependencies are not all done is not movable
 (see "Routing"). `run_role` by the PO is not checked. A started story whose
@@ -2703,7 +2857,7 @@ so a held story keeps the place the PO gave it, even when the PO reorders
 other stories while it is held. A story opened later has no explicit place until the
 PO gives it one. Refusals change nothing:
 `no stories listed; pass the story ids in the order to work on them`,
-`unknown stories: s7; open them with open_story first`, `done stories have
+`unknown stories: s7; ask the liaison for them with request_story`, `done stories have
 no place in the order: s1`, `position must be a whole number from 1 to N`,
 and the pull refusal above. Each change is logged as a `priority` event
 (role `product-owner`; `story` is the moved story for a move):
@@ -2871,9 +3025,9 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      boundary is held `ci_failed`. The PO gets the failing checks with job
      names, failing steps and test lines. `continue_boundary` is
      **refused** (it names each job and step, and "flaky" is no reason).
-     The PO opens a bug story at once, or picks an open story that fixes
-     it, calls `record_ci_bug(story)` and tells the human the PR is NOT
-     ready.
+     The PO asks the liaison for a bug story at once (`request_story`), or
+     picks an open story that fixes it, calls `record_ci_bug(story)` once
+     the story is open and tells the human the PR is NOT ready.
    - **infra** (a check is `infra`): the runner re-runs each such job once
      for the pushed head (`gh run rerun --job <id>`; the key is kept in the
      entry's `reran`). It emits a `rerun` boundary event, waits until GitHub
@@ -2881,8 +3035,9 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      A check whose re-run also runs no step holds `ci_infra`.
      `continue_boundary` reads again with no further re-run, and
      `record_ci_bug(story)` ends the boundary, not done (`ci: infra`).
-   - **main** (a check is `main`): held `main_broken`. The PO opens a bug
-     story for main and calls `record_ci_bug(story)`, which ends the
+   - **main** (a check is `main`): held `main_broken`. The PO asks the liaison
+     for a bug story for main (`request_story`) and, once the runner has
+     opened it, calls `record_ci_bug(story)`, which ends the
      boundary with `ci: main` and the `Review:` text "Sprint N ended, CI
      blocked by main …". The sprint is not done and its PR stays unmerged
      in the stack. The story goes first in the next sprint, and the PR is
@@ -3035,6 +3190,10 @@ This applies only when the runner runs from `.team/run/runner-pin`
   (so it can read and rewrite its own report) and `<docs>/customer/`; its
   Bash may not name a forbidden root, `..`, or repo paths outside the
   sandbox. The Integration Tester may also write `.team/run/presentation/**`.
+- Runner-only files: `.team/pending-tests.json` (s125) and every story file,
+  `.team/stories/**` (s135). The hook refuses any role's Write/Edit/NotebookEdit
+  there, whatever its write globs say (`<role> may not write <path>; only the
+  runner writes it`), and a step's Bash change there is quarantined.
 - Before any Bash check, for every role, the hook joins line continuations
   as bash and zsh do: a newline after an odd run of `\` is deleted along with
   the last `\`. After an even run (escaped `\\` pairs) the newline stays and

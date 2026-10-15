@@ -23,7 +23,7 @@ These rules apply to every change in `agile-team/runner/`. The repo charter
 - Check every refusal **before** changing any state. A refused call leaves
   `state.json`, `events.jsonl` and the relay untouched.
 - A reason says what is wrong **and** what to do next ("…; add it to a
-  sprint", "…; open it with open_story"). The PO acts on the reason text.
+  sprint", "…; ask the liaison for it with request_story"). The PO acts on the reason text.
 - Chain refusal checks with `or` (or `next(...)` over a tuple). The first
   reason wins, so order checks from the most specific to the most general.
 

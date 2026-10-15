@@ -66,6 +66,9 @@ command fails.
 5. **Start in the background:**
    `$AT start --cadence <c> --task "<the human's task, verbatim>"`
    (add `--onboard` for the onboarding sprint, `--resume` to continue).
+   The PO doesn't write stories: you write the task's stories with the
+   human and send each with `$AT story new` (step 7), before or after the
+   start, and the PO schedules them.
    Next to it, also in the background, start the dashboard:
    `$AT dashboard` (add `--no-open` over SSH or when the human is on another
    machine). It prints `dashboard: http://localhost:<port>/?token=<t>`, then
@@ -101,7 +104,8 @@ command fails.
    stand as already seen and waits for something new (use `$AT status` for
    where the run stands). Run one at a time. For each new message, relay `text`
    to the human verbatim, with a one-line summary above it. For `question`
-   entries, include the id. An outbox message of kind `reply` is the PO's
+   entries, include the id. A `story-request` entry is the PO asking you
+   for a story; answer it with `story new` (step 7). An outbox message of kind `reply` is the PO's
    answer on a story's thread and is already on the dashboard, so relay it
    only as a one-line summary. For each post under `posts`, answer it on the
    thread: write the answer to a file with the Write tool and run
@@ -153,8 +157,8 @@ command fails.
    `depends_on: [s31]` keeps the story from running until s31 is done.
    A stall then reads `waiting on s31`. When the human says "s32 needs s31",
    relay it to the PO. If `$AT start` fails with `story files: …; fix
-   depends_on in .team/stories`, show the human the message. The PO (or the
-   human) fixes the named files.
+   depends_on in .team/stories`, show the human the message. The human fixes
+   the named files and commits them (`story amend` changes only the ACs).
 7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
    something the PO did not ask for, write the human's words verbatim to a
    file with the Write tool (for example `.team/run/liaison/draft.md`), then
@@ -180,6 +184,44 @@ command fails.
    digits, `.`, `_` and `-`, up to 5 MiB, and stdin can't be shared. Keep
    the liaison's own notes in `.team/run/liaison/LIAISON.md`, started from
    [`reference/liaison-template.md`](reference/liaison-template.md).
+   **Write a story** (s135): you write every story, and the runner commits
+   it. No role writes story files (the guard refuses it, even for the PO),
+   and you never write or commit one in `.team/stories/` yourself. Write a
+   draft with the Write tool: frontmatter `title`, `acceptance: [{id, text,
+   environment}]` (each environment the exact name of an `[[environment]]`
+   in `.agile-team.toml`), optional `depends_on: [sN]`, no `id`, and the
+   user story as the body. Then run `$AT story new <draft> --approved-by
+   human|none [--sprint current|next|backlog] [--after sN] [--plan <path>]`.
+   It checks the draft, prints every problem at once (exit 1, nothing
+   queued), or queues it as `.team/run/liaison/stories/q<N>.json`. It never
+   commits, and it works in any run state. Between steps (a safe point;
+   never during a sprint boundary except its CI holds), the runner gives the
+   story the next id and commits `.team/stories/<id>.md` alone as
+   `docs(<id>): created story to <title>`, recorded against the story like
+   its step commits. It places the story as `--sprint` and `--after` ask
+   (default: the end of the backlog), logs `story-opened` and tells the PO
+   its id. You get an `update` naming the id and commit. **Authorship:**
+   `--approved-by human` means the human approved this story (`--plan`
+   names the approved plan); the commit is the human's (the repo's git user)
+   with `Human-involvement: approved by the human` or ``approved plan
+   `<path>` ``. `--approved-by none` means you wrote it alone; the author is
+   the liaison and the line says `none: written and submitted by the
+   liaison`. Never claim an approval the human didn't give. **To change a
+   story's ACs** (text or environment), write a draft with the same `title`
+   and `depends_on` and the new ACs, then `$AT story amend <id> <draft>
+   --approved-by …`. The runner replaces only the ACs in one `docs(<id>):
+   amended story to <title>` commit, sends the story back to design (logged
+   `story-amended`, old and new ACs) and tells the PO. A request that fails
+   at the runner is `refused` (`story-refused`, and an `update` to you).
+   `$AT status` lists `queued_stories` and each outcome under
+   `story_requests`. **A `story-request` message** is the PO asking you for
+   a story (`request_story`): a bug the team couldn't fix, with the story,
+   step, files and failing output. Relay it to the human, write the story
+   with them (or alone, as `--approved-by none`, when it only restates the
+   evidence), and send it with `story new`: `--sprint current` mid-sprint,
+   `--sprint next` at a CI hold (the boundary is open, so a `current` add
+   lands in the backlog anyway). The PO schedules it once the runner tells
+   it the id.
 8. When the runner exits, show `$AT status` (stories with their sprint, where
    `null` means backlog, and spend) and the new
    commits (`git log --oneline <start-sha>..`). `fixup!` commits are
@@ -203,14 +245,13 @@ command fails.
    127.0.0.1 (macOS verified). The service's output is in
    `.team/run/customer/<environment>.log`. A `gate_hold` hand-over about a
    port in use means another process holds the environment's port. Tell the
-   human. Write the story file before `open_story`: frontmatter `id`,
-   `title` and `acceptance: [{id, text, environment}]`, where each AC's
-   environment is the exact name of an `[[environment]]` in
-   `.agile-team.toml` (s94). `open_story` has no `environment` argument; it
-   refuses a bad file with every problem (file, AC, problem). To change an
-   AC's environment, edit the file; the runner reads it again before each
-   Proxy step and holds the story (`gate_hold`) if it went bad: fix it, then
-   `continue_story`. A `manual` environment's script reaches
+   human. Each AC's environment is the exact name of an `[[environment]]`
+   in `.agile-team.toml` (s94); `story new` refuses any other with every
+   problem (file, AC, problem). To change an AC's environment, send the
+   corrected ACs with `story amend` (step 7). The runner reads the story
+   file again before each Proxy step and holds the story (`gate_hold`) if
+   it went bad. Fix the config and the PO calls `continue_story`, or amend
+   the ACs, which sends the story back to design. A `manual` environment's script reaches
    you as a question for the human; a `document` environment asks nothing.
    When the same setback repeats on a story, the runner stops the loop and
    runs the Manager on it (`⏸ manager` on the dashboard board). It
@@ -251,13 +292,15 @@ command fails.
    command to merge it instead. Red CI comes with the failing jobs,
    steps and test lines, and the runner sorts it out (s111):
    - **Our code ran and failed** (`ci_failed`): `continue_boundary` is
-     refused. The PO opens a bug story (or picks an open one that fixes
-     it), records it with `record_ci_bug`, and puts it first in the next
-     sprint.
+     refused. The PO asks you for a bug story (a `story-request`; write it
+     at once with `--sprint next`: the boundary is open) or picks an open one that fixes it,
+     records it with `record_ci_bug` once it is open, and puts it first in
+     the next sprint.
    - **A job never ran a step**: the runner re-runs it once. If it still
      never runs, the boundary holds `ci_infra`.
    - **The same job and step fail on main's head** (`main_broken`): the
-     PO records a bug story for main. The sprint ends as **"ended, CI
+     PO asks you for a bug story for main (`request_story`) and records
+     it once the runner opens it. The sprint ends as **"ended, CI
      blocked by main"**: not done, and the PR stays unmerged. The team
      starts the next sprint, and the PR is checked again at its end.
 
@@ -344,7 +387,7 @@ command fails.
   out. DevOps says, for each AC, how it is checked automatically: already
   (`automatic`), added in that step to CI or the toolchain config (`added`),
   or `missing`, with a story that adds it. When no such story exists, the
-  story is held and the PO opens one. A design that needs tooling that can't
+  story is held and the PO asks you for one (`request_story`). A design that needs tooling that can't
   exist goes back to the architect. The runner writes the list into the
   story file under `## Tooling`.
 - **Requirements are files** (s1): `<docs>/requirements/REQ-NNN.md`, with

@@ -64,3 +64,27 @@ only to schedule (t99).
   `depends_on` is the only list now, so there is nothing to compare it with.
 - A role layer can no longer give any role write access to story files. A
   repo that wants the PO to write stories would need a new ADR.
+
+## Amended by s136 (2026-10-14)
+
+s136 writes the docs and role prose for this decision, and it settles three
+points this ADR left open. None of them changes code.
+
+- **Fixing a story file.** An AC's text or environment is fixed only by a
+  `story amend` from the liaison (back to design). A story held because the
+  config lost an environment is fixed in `.agile-team.toml`, then
+  `continue_story`. A wrong `title` or `depends_on` (which `story amend`
+  refuses to change) is the human's own edit and commit with the run
+  stopped, as any hand edit to the repo is. The runner's texts
+  `story_spec.STORY_FILE_HOLD` ("Edit the file; no state change is needed") and
+  `cli.START_REFUSED` ("fix depends_on in .team/stories") still read as if
+  a role edits the file. The docs say who acts. Rewording them is left to a
+  follow-up story.
+- **Stories the PO needs that are not bugs.** `request_story` requires
+  failing output, so it is for bugs (a red CI run, a broken main, a runner
+  fault, a check `ops-review` reports missing, where the ops-review row is
+  the output). For any other story the PO needs, it asks the human with
+  `ask_user`, and the liaison writes it.
+- **Bug stories at a CI hold.** The boundary is open there, so a
+  `--sprint current` add is refused and the story lands in the backlog. The
+  docs tell the liaison to send these with `--sprint next`.
