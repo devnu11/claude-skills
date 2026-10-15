@@ -240,7 +240,8 @@ def test_the_start_pins_checks_and_execs_in_order(
     runner = fake.run
 
     def watching(command):
-        seen.append(system.exists(run_dir / "runner.pid"))
+        if command.argv[0] in ("sh", UV):
+            seen.append(system.exists(run_dir / "runner.pid"))
         return runner(command)
 
     monkeypatch.setattr(system, "run", watching)

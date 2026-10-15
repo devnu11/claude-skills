@@ -68,6 +68,7 @@ def test_a_quiet_end_stores_idle_with_the_hand_over_line(make_runtime, fake: Fak
 def test_the_snapshot_carries_the_pinned_commit(scratch: Path) -> None:
     snapshot_config = make_config(scratch / "repo")
     assert build_snapshot(snapshot_config, scratch)["run"]["runner_pin"] == ""
+    system.make_dirs(snapshot_config.run_dir)
     system.write_text(snapshot_config.run_dir / "runner-pin.commit", "abc1234" + "0" * 33 + "\n")
     assert build_snapshot(snapshot_config, scratch)["run"]["runner_pin"] == "abc1234" + "0" * 33
 

@@ -352,6 +352,7 @@ def test_run_section_reads_config(config: cfg.Config, scratch: Path) -> None:
         "order_version": order_version([], []),
         "backlog": [],
         "requirements_dir": "docs/requirements",
+        "runner_pin": "",
     }
 
 
