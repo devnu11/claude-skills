@@ -23,6 +23,7 @@ from typing import Any, get_args
 
 from claude_agent_sdk.types import PermissionMode
 
+from . import probes
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
@@ -47,6 +48,7 @@ from .store import (
 from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 
 POLL = 5.0
+IDLE_OFF = "off"
 FOLLOW_POLL = 1.0
 EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.DONE: 0,
@@ -122,6 +124,8 @@ def spec_from(args: argparse.Namespace) -> Spec:
         permission_mode=args.permission_mode,
         fallback_wait=_duration(args.fallback_wait),
         sleep=args.sleep,
+        idle=_idle(args.idle),
+        progress=_progress(args.progress or [], kind),
     )
 
 
@@ -153,6 +157,19 @@ def _prompt_text(args: argparse.Namespace) -> str:
         return Path(args.prompt_file).read_text()
     except OSError as exc:
         raise CliError(f"cannot read --prompt-file: {exc.strerror}") from exc
+
+
+def _idle(text: str) -> float | None:
+    """``--idle``: a duration, or ``off`` for no idle notice."""
+    return None if text == IDLE_OFF else _duration(text)
+
+
+def _progress(texts: list[str], kind: JobKind) -> list[str]:
+    """The ``--progress`` probes, refused when any is unknown or malformed."""
+    found = probes.problems(texts, kind)
+    if found:
+        raise CliError("; ".join(found))
+    return texts
 
 
 def _duration(text: str) -> float:
@@ -195,6 +212,7 @@ def limits_given(args: argparse.Namespace) -> dict[str, Any]:
         "max_resumes": args.max_resumes,
         "max_cost": args.max_cost,
         "hardstop": _optional_duration(args.hardstop),
+        "idle_stop": _optional_duration(args.idle_stop),
     }
 
 
@@ -305,7 +323,7 @@ def report(job: Job) -> dict[str, Any]:
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
-        **limits_report(st.bounds),
+        **limits_report(st.bounds), **watch_report(st.spec),
         "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:
@@ -426,8 +444,18 @@ def _require_not_ended(state: JobState) -> None:
 
 
 def limits_report(bounds: Bounds) -> dict[str, Any]:
-    """The deadline and the hard stop, readable."""
-    return {"deadline": iso(bounds.deadline), "hardstop": optional_span(bounds.hardstop)}
+    """The deadline, the hard stop and the idle stop, readable."""
+    return {
+        "deadline": iso(bounds.deadline),
+        "hardstop": optional_span(bounds.hardstop),
+        "idle_stop": optional_span(bounds.idle_stop),
+    }
+
+
+def watch_report(spec: Spec) -> dict[str, Any]:
+    """The idle notice and the progress probes in use."""
+    idle = optional_span(spec.idle) or IDLE_OFF
+    return {"idle": idle, "progress": probes.chosen(spec.progress, spec.kind)}
 
 
 def _wake(job: Job, args: argparse.Namespace) -> int:
@@ -518,6 +546,8 @@ def limit_args(max_resumes: int | None) -> tuple[Arg, ...]:
         (("--max-cost",), {"type": float, "help": "stop resuming once this many USD are spent"}),
         (("--hardstop",), {"metavar": "DURATION",
                            "help": "end a run by force this long after the deadline (e.g. 20m)"}),
+        (("--idle-stop",), {"metavar": "DURATION",
+                            "help": "stop a job that makes no progress this long (e.g. 1h)"}),
     )  # fmt: skip
 
 
@@ -533,6 +563,11 @@ START_ARGS: tuple[Arg, ...] = (
     (("--permission-mode",), {"choices": get_args(PermissionMode),
                               "help": "default: your settings decide"}),
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
+    (("--idle",), {"default": "20m", "metavar": "DURATION",
+                   "help": "notify after no progress this long, or 'off' (default 20m)"}),
+    (("--progress",), {"action": "append", "metavar": "KIND[:ARG]",
+                       "help": "a progress probe, repeatable: output, spend, file:PATH, "
+                               "json:PATH:KEY[,KEY], cpu, children, command:CMD"}),
     *limit_args(10),
     (("--allow-sleep",), {"action": "store_const", "dest": "sleep", "const": SleepPolicy.ALLOW,
                           "default": SleepPolicy.PREVENT,

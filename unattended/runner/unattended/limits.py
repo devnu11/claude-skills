@@ -264,14 +264,16 @@ class Progress:
 class Bounds:
     """The limits that end a job: deadline (epoch seconds), resumes and total cost.
 
-    ``hardstop`` is how many seconds after the deadline a run is ended by force;
-    None keeps the deadline soft (it bounds waits only).
+    ``hardstop`` is how many seconds after the deadline (or an idle stop) a run
+    is ended by force; None keeps the deadline soft (it bounds waits only).
+    ``idle_stop`` starts the stop sequence once a run makes no progress that long.
     """
 
     deadline: float | None = None
     max_resumes: int = DEFAULT_MAX_RESUMES
     max_cost: float | None = None
     hardstop: float | None = None
+    idle_stop: float | None = None
 
     def deadline_stop(self) -> Stop | None:
         """The deadline's stop sequence, or None without a deadline."""

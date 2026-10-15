@@ -104,3 +104,101 @@ def test_each_check_rereads_the_deadline(job: Job) -> None:
     job.update(lambda st: setattr(st.bounds, "deadline", DEADLINE + 3600))
     clock.now = DEADLINE + 1
     assert watch.check() == ()
+
+
+# ----- idle --------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def beating(make_job: MakeJob, workdir: Path) -> Job:
+    """A command job whose only probe is the file ``beat`` in its cwd."""
+    spec = command_spec(workdir, "true")
+    spec.progress = ["file:beat"]
+    return make_job(spec)
+
+
+def beat(job: Job, text: str) -> None:
+    (Path(job.load().spec.cwd) / "beat").write_text(text)
+
+
+def notices(job: Job) -> list[tuple[object, object]]:
+    return [(e["trigger"], e["reason"]) for e in events(job) if e["event"] == "notify"]
+
+
+def set_spec(job: Job, **changes: object) -> Job:
+    job.update(lambda st: [setattr(st.spec, k, v) for k, v in changes.items()])
+    return job
+
+
+def test_idle_notices_once_then_rearms_on_progress(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=60.0), clock)
+    for clock.now in (30.0, 60.0, 90.0):
+        assert watch.check() == ()
+    assert notices(beating) == [("idle", "no progress for 1m")]
+    beat(beating, "moved")
+    clock.now = 100.0
+    watch.check()
+    clock.now = 160.0
+    watch.check()
+    assert len(notices(beating)) == 2
+
+
+def test_the_default_idle_notice_comes_after_20_minutes(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(beating, clock)
+    clock.now = 19 * 60.0
+    watch.check()
+    assert notices(beating) == []
+    clock.now = 20 * 60.0
+    watch.check()
+    assert notices(beating) == [("idle", "no progress for 20m")]
+
+
+def test_idle_off_never_notices(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=None), clock)
+    clock.now = 1e9
+    watch.check()
+    assert notices(beating) == []
+
+
+def test_idle_stop_goes_graceful_then_hard(beating: Job) -> None:
+    set_spec(beating, idle=60.0, stop_command="agile-team stop")
+    with_bounds(beating, Bounds(idle_stop=120.0, hardstop=60.0))
+    clock = Clock(0.0)
+    watch = RunWatch(beating, clock)
+    seen = []
+    for clock.now in (60.0, 120.0, 150.0, 180.0):
+        seen.append(watch.check())
+        if seen[-1]:
+            beat(beating, str(clock.now))  # progress after the stop began does not cancel it
+    assert seen == [(), (Verdict.GRACEFUL,), (), (Verdict.END,)]
+    assert watch.settle(DONE).reason == "idle (no progress for 2m; hard stop)"
+    assert [t for t, _ in notices(beating)] == ["idle", "idle-stop", "idle-stop"]
+    stops = [(e["event"], e["phase"]) for e in events(beating) if e["event"] == "idle-stop"]
+    assert stops == [("idle-stop", "graceful"), ("idle-stop", "hard")]
+
+
+def test_idle_stop_without_a_hard_stop_ends_at_once(beating: Job) -> None:
+    with_bounds(beating, Bounds(idle_stop=120.0))
+    watch = RunWatch(set_spec(beating, idle=None), Clock(0.0))
+    watch.clock = Clock(120.0)
+    assert watch.check() == (Verdict.END,)
+    assert watch.halt == "idle (no progress for 2m; hard stop)"
+
+
+def test_progress_keeps_the_idle_stop_away(beating: Job) -> None:
+    with_bounds(beating, Bounds(idle_stop=120.0))
+    clock = Clock(0.0)
+    watch = RunWatch(beating, clock)
+    for step in range(1, 10):
+        clock.now = step * 100.0
+        beat(beating, str(step))
+        assert watch.check() == ()
+
+
+def test_track_points_the_group_probes(beating: Job) -> None:
+    watch = RunWatch(beating)
+    watch.track(42)
+    assert watch.context.pgid == 42
