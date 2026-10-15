@@ -19,7 +19,6 @@ WINDOWS_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="needs a real 
 def windows_names(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Windows-only constants, so the Windows group can be built anywhere."""
     monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
-    monkeypatch.setattr(signal, "CTRL_BREAK_EVENT", 1, raising=False)
 
 
 def test_by_session_starts_a_session_and_signals_the_group(
@@ -41,30 +40,13 @@ def test_windows_starts_a_process_group(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.usefixtures("windows_names")
-def test_windows_terminate_sends_ctrl_break(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent: list[tuple[int, int]] = []
-    monkeypatch.setattr(os, "kill", lambda pid, sig: sent.append((pid, sig)))
-    process_group.by_process_group().terminate(42)
-    assert sent == [(42, 1)]
-
-
-@pytest.mark.usefixtures("windows_names")
-def test_windows_terminate_without_a_console_leaves_it_to_the_kill(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def no_console(pid: int, sig: int) -> None:
-        raise OSError("no console")
-
-    monkeypatch.setattr(os, "kill", no_console)
-    process_group.by_process_group().terminate(42)
-
-
-@pytest.mark.usefixtures("windows_names")
-def test_windows_kill_ends_the_tree_with_taskkill(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_windows_ends_the_tree_with_taskkill(monkeypatch: pytest.MonkeyPatch) -> None:
     ran: list[list[str]] = []
     monkeypatch.setattr(subprocess, "run", lambda argv, **_: ran.append(argv))
-    process_group.by_process_group().kill(42)
-    assert ran == [["taskkill", "/T", "/F", "/PID", "42"]]
+    group = process_group.by_process_group()
+    group.terminate(42)
+    group.kill(42)
+    assert ran == [["taskkill", "/T", "/F", "/PID", "42"]] * 2
 
 
 def test_other_platforms_use_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
