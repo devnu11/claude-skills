@@ -439,3 +439,53 @@ def test_resume_sets_a_hard_stop_and_keeps_the_rest(tmp_path: Path) -> None:
     job.update(lambda st: setattr(st.bounds, "max_cost", 4.0))
     assert run(tmp_path, "resume", "j", "--hardstop", "5m", "--foreground") == 0
     assert (job.load().bounds.hardstop, job.load().bounds.max_cost) == (300.0, 4.0)
+
+
+# ----- extend ----------------------------------------------------------------------------
+
+
+def events_of(job: Job, name: str) -> list[dict[str, Any]]:
+    return [e for e in map(json.loads, job.path(EVENTS_FILE).open()) if e["event"] == name]
+
+
+@pytest.mark.parametrize("status", [JobStatus.RUNNING, JobStatus.WAITING])
+def test_extend_a_live_job(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], status: JobStatus
+) -> None:
+    job = make(tmp_path, status)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    job.update(lambda st: setattr(st.bounds, "max_cost", 4.0))
+    assert run(tmp_path, "extend", "j", "--for", "10m", "--hardstop", "1m") == 0
+    bounds = job.load().bounds
+    assert bounds.deadline is not None and bounds.deadline > time.time() + 500
+    assert (bounds.hardstop, bounds.max_cost, job.load().status) == (60.0, 4.0, status)
+    assert printed(capsys)["hardstop"] == "1m"
+    extend = events_of(job, "extend")
+    assert (extend[0]["by"], extend[0]["hardstop"]) == ("user", "1m")
+
+
+def test_extend_an_orphan(tmp_path: Path) -> None:
+    job = make(tmp_path, JobStatus.WAITING)
+    assert run(tmp_path, "extend", "j", "--max-resumes", "20") == 0
+    assert job.load().bounds.max_resumes == 20
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--until", "2001-01-01T00:00"], "has already passed"),
+        (["--hardstop", "x"], "cannot read duration"),
+    ],
+)
+def test_extend_refuses_bad_limits(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    make(tmp_path, JobStatus.RUNNING)
+    assert run(tmp_path, "extend", "j", *argv) == 1
+    assert message in capsys.readouterr().err
+
+
+def test_extend_refuses_an_ended_job(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    make(tmp_path, JobStatus.DONE)
+    assert run(tmp_path, "extend", "j", "--for", "1h") == 1
+    assert "`unattended resume j` reruns it" in capsys.readouterr().err
