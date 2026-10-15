@@ -59,7 +59,10 @@ command fails.
    Manager and you; `$AT roles list` shows what is active. For a repo
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
-   run until a blocker (`until-blocker`)?
+   run until a blocker (`until-blocker`)? Under `until-blocker`, a sprint end
+   never stops the team: the PO must start the next sprint while the backlog
+   has ready stories, and the run ends only when nothing can move. A resume
+   keeps the cadence.
 5. **Start in the background:**
    `$AT start --cadence <c> --task "<the human's task, verbatim>"`
    (add `--onboard` for the onboarding sprint, `--resume` to continue).

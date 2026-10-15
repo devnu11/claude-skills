@@ -20,7 +20,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `requirements check` | Parse and check every `<docs>/requirements/REQ-*.md` (s1). Print one JSON object: `problems` (one `{file}: {problem}` line each: a broken file, a `covers` ref to an unknown story or AC, a duplicate id), `coverage` (every story file that reads clean, in id order: each AC id → the active requirements covering it, `[]` when none) and `unreadable` (other story files → their problems). Exit 1 when `problems` is non-empty, else 0. Untraced ACs are not problems. See "Requirements". |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
-| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human". Exit codes: see "Run status and stops". |
+| `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the review stack; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet) and `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
 | `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
@@ -80,7 +80,10 @@ the PO; `unsaved` the cause of a halt whose salvage was skipped because the
 checkout moved, else `null`, see "Interrupted steps"),
 `ledger.jsonl` (per-step cost), `turns.jsonl` and `heartbeat.json` (the
 live meter, see "Live meter and health"), `runner.pid` (the live runner's pid; a
-stale one is ignored and the next `start` overwrites it), `stop`, `crash.log` (append-only tracebacks of every error the
+stale one is ignored and the next `start` overwrites it), `stop`,
+`repin.json` (a self re-pin in progress, see "Self re-pin"), `runner-pin/`,
+`runner-pin.commit`, `runner-pin.prev/`, `runner-pin.prev.commit` and
+`runner-pin.failed/` (self-hosting only), `crash.log` (append-only tracebacks of every error the
 runner handled, each headed `--- <time> <ExceptionType>`),
 `customer/<environment>/` (Customer Proxy sandboxes, one per acceptance
 environment), `presentation/<story>/<environment>/`
@@ -445,7 +448,8 @@ reason. `start_sprint` is exempt.
 The snapshot has these keys: `generated_at`, `run` (status, sprint, cadence,
 task, budget, Manager checkpoint percentage, round cap, `manager_due`,
 `order`: the priority queue, `backlog`: the queued stories outside the
-current sprint, `order_version`: a 12-hex digest of both), `pipeline`
+current sprint, `order_version`: a 12-hex digest of both, `runner_pin`: the
+pinned runner's full sha or `""`, shown in the header as `pin <sha7>`), `pipeline`
 (enabled steps), `roles` (name,
 model, provider, with PO overrides applied, and from s104 `used`: true when
 a step in the repo's pipeline routes to the role, where the generic
@@ -2096,7 +2100,18 @@ story.
 - The run ends when a stop is requested, the run halts, the PO sets
   `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
   and the next pass finds only "sprint complete" or "nothing can move" without
-  running a step.
+  running a step. The PO's note (first line) becomes `status_reason`. A quiet
+  end stores the hand-over's first line with status `idle`. A self re-pin also
+  ends the loop, but the run goes on in the new process (see "Self re-pin").
+- Under `until-blocker` (s128), the run ends only when nothing in the backlog
+  can move. A sprint end with ready backlog stories hands over `next_sprint`
+  (the ready list and "start the next sprint now"). A stuck sprint hands over
+  `ready_backlog` on every idle pass, not once. Neither is quiet, so a PO turn
+  that starts or adds nothing gets them again. After 3 such hand-overs with no
+  `start_sprint` or `add_to_sprint`, the runner sets `blocked`
+  ("The PO did not start a sprint or add ready stories after 3 hand-overs; …")
+  and posts it. `notify_user` `done` and `blocked` are refused while ready
+  stories exist. A PR waiting for review or merge never holds the next sprint.
 - `start --resume` with no `--task` runs a router pass first. The PO gets a
   turn only when that pass hands over; its prompt then starts with the resume
   note. Exception: with interrupted steps pending, the PO gets the first
@@ -2958,6 +2973,36 @@ emptied entry dropped). `pushed` is still read from old `events.jsonl`
 lines but no longer logged. Stage names in `runner-stage` events:
 `boundary.sync`, `boundary.check`, `boundary.review`, `boundary.push`,
 `boundary.rebase`, `boundary.restack`, `boundary.ci-wait`.
+
+### Self re-pin (s128)
+
+This applies only when the runner runs from `.team/run/runner-pin`
+(self-hosting, see `self-hosting.md`). Installed skills never re-pin.
+
+1. When the end boundary's `check` stage passes (or finds the head already
+   checked) and the head differs from `runner-pin.commit`, the runner records
+   `repin` in `state.json`. The boundary has already moved on to its next
+   stage. The start edge and a skipped boundary never re-pin.
+2. The router loop ends with no hand-over, and the status is `idle` with
+   `re-pinning the runner at <sha7>`. The runner removes `runner.pid` and runs
+   `sh agile-team/runner/scripts/pin-runner.sh <head>`, which keeps the old pin
+   as `runner-pin.prev`. Then it runs
+   `uv run --frozen --quiet --project .team/run/runner-pin agile-team config check`.
+3. If both pass, it writes `repin.json` (`trial`) and replaces its own process
+   (`os.execv`, same pid) with `.team/run/runner-pin/.venv/bin/agile-team start
+   --resume --repo <repo>`. An unattended job sees no exit. The new runner
+   logs one `runner-repin` event `{"old", "new", "sprint", "outcome":
+   "pinned", "reason": ""}` and removes the marker. The rest of the boundary
+   runs on the new code.
+4. If the pin script, the config check or the exec fails, or the new runner's
+   start fails before its loop, the runner runs `pin-runner.sh --rollback`
+   (only if the swap happened). The restored old pin then takes over through
+   the same exec. It logs `runner-repin` with `"outcome": "rolled_back"` and
+   the reason, and posts an `update` naming both commits. The failed pin stays
+   in `runner-pin.failed`.
+5. A stop requested at the same time wins. `repin` stays in `state.json`, and
+   the next `start --resume` re-pins first. A start that is not pinned drops a
+   leftover `repin`.
 
 ## Enforcement
 

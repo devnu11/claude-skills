@@ -51,7 +51,8 @@ Every flag, the job files, limit detection and the command contract are in
    the human what the notice says, then wait again. Notices also reach the
    OS notification centre (`--notify CMD` replaces it, `--notify none`
    turns it off).
-4. **Report:** `$UN status NAME`, and the output (`output.md` for prompts,
+4. **Report:** `$UN status NAME` (for an `agile-team` job, its `reason` says
+   why the run stopped, e.g. `agile-team blocked: …`), and the output (`output.md` for prompts,
    `output.log` for commands, in the job's `dir`). `$UN log NAME` shows the
    events: each run, wait and resume.
 

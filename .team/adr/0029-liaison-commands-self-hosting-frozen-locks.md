@@ -65,6 +65,19 @@ The runner also depends on uv's ability to re-resolve dependencies, but users in
 - Snapshots could embed `queued_messages` for dashboard display.
 - An unattended framework could wrap `start --resume` and retry on policy.
 
+## Amended by s128 (2026-10-14)
+
+P1 and P2 change. `pin-runner.sh <commit>` now keeps the pin it replaces as
+`.team/run/runner-pin.prev` (and `runner-pin.prev.commit`).
+`pin-runner.sh --rollback` swaps that back and keeps the replaced pin as
+`runner-pin.failed`. A re-pin no longer needs a human to stop the team: at a
+sprint end whose full check passed, the runner releases `runner.pid` itself,
+pins the checked head, checks the config under the new pin, and execs into it,
+rolling back on any failure. The "team is stopped" check in P2 still holds,
+because the runner has released its pid by then. Why: the human wants new
+runner code live at each sprint end without stopping an unattended run. See
+ADR-0065 and `agile-team/docs/design/s128.md`.
+
 ## References
 
 - Story: `.team/stories/s62.md`

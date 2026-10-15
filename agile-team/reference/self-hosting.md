@@ -34,19 +34,34 @@ AT="uv run --frozen --quiet --project .team/run/runner-pin agile-team"
 `--frozen` installs exactly the pinned `uv.lock` and never rewrites it. The
 first `uv run` builds the pin's venv.
 
-## When to re-pin
+## The runner re-pins itself at each sprint end
+
+You rarely re-pin by hand. When a sprint's end-of-sprint full check passes,
+the pinned runner re-pins itself to the head it just checked. It releases
+`runner.pid`, runs `pin-runner.sh <head>`, runs `config check` under the new
+pin, then replaces its own process (`os.execv`, same pid) with the new pin's
+`start --resume`. The unattended job never sees an exit. The old pin stays in
+`.team/run/runner-pin.prev`. If the pin, the check or the new runner's first
+start fails, the runner rolls back to the old pin, carries on, and posts an
+`update` saying why. Each re-pin is a `runner-repin` event, and the
+dashboard header shows `pin <sha7>`. Details: "Self re-pin" in `protocol.md`.
+
+The exec runs `.team/run/runner-pin/.venv/bin/agile-team`, uv's default
+project venv. Don't set `UV_PROJECT_ENVIRONMENT` for the job, or every re-pin
+rolls back.
+
+## Re-pinning by hand
 
 - **Only accepted code.** Pin a commit whose stories the Customer Proxy
   accepted and whose checks pass, never a commit in the middle of a story.
-  To pick up a runner fix the team just shipped, wait until its story is
-  done.
 - **Only with the team stopped.** Run `$AT stop` (or `stop --now`), wait for
   the runner to exit (`$AT status` shows `"running": false`), re-pin, then
   `$AT start --resume`. The script refuses while `runner.pid` is alive.
+- **Roll back** with `sh agile-team/runner/scripts/pin-runner.sh --rollback`
+  (team stopped). It swaps `runner-pin.prev` back in and keeps the replaced
+  pin as `runner-pin.failed`.
 - **Restart the dashboard** after a re-pin if it runs from the pin. It is
   read-only and never needs the team stopped.
-- Keep the old sha (from `runner-pin.commit`) in the liaison's decision log.
-  Rolling back is a re-pin at that sha.
 
 ## Running under unattended
 
@@ -69,8 +84,14 @@ $UN start agile-team-run --cwd "$PWD" \
 - A step cut off by a kill or a checkout halt keeps its edits. The runner
   saves them on `start --resume` (see "Interrupted steps" in
   `protocol.md`). No wrapper should stash or clean the tree.
-- Re-pinning does not change the job. Stop the job (`$UN stop <job>`), stop
-  the team, re-pin, then `$UN resume <job>`.
+- Sprint-end re-pins happen inside the job and need nothing from you. A
+  re-pin by hand doesn't change the job either: stop the job
+  (`$UN stop <job>`), stop the team, re-pin, then `$UN resume <job>`.
+- `start --resume` keeps the run's cadence, so `until-blocker` survives
+  every resume and re-pin.
+- When the run does stop, the job's `reason` says why:
+  `agile-team blocked: <reason>`, `agile-team done: …`, `agile-team idle: …`,
+  or `exit code N; agile-team halted: <reason>`.
 
 ## What stays off limits
 

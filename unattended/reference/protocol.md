@@ -312,6 +312,17 @@ to the local one, and the next occurrence after now is used.
 
   When a reason has no readable time, the fallback wait applies and
   `wake_on` is `fallback`.
+- **Stop reason (s128):** when `--cwd` holds an agile-team run
+  (`.team/run/state.json`), the job records why the run stopped. On exit 0
+  the `done` reason is `agile-team <status>: <status_reason>`, or
+  `agile-team <status>` when the reason is empty (for example
+  `agile-team blocked: Need the API key.` or `agile-team idle: Nothing in
+  sprint 4 can move.`). On a failure exit it is
+  `exit code N; agile-team halted: <reason>` when the halt line is in the last
+  50 output lines, else `exit code N; agile-team <status>…` from the state
+  file. Without a state file or a halt line, the reason is what it was before:
+  empty on exit 0, `exit code N` on a failure. Reasons are cut to the usual
+  reason length.
 - **Shell:** the command runs with `sh -c` in `--cwd`, in its own process
   group, with stdin closed and stdout and stderr appended to `output.log`.
 - **agile-team:** wrap it as `--command "agile-team start --task '…'"

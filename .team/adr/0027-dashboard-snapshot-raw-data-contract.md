@@ -71,6 +71,12 @@ browser can't derive it. S3 still holds: the Board's membership (current
 sprint only) and its badge count are derived in the browser, not in Python.
 See `agile-team/docs/design/s121.md` RQ1.
 
+## Amended by s128 (2026-10-14)
+
+`run` gains `runner_pin`: the full sha in `.team/run/runner-pin.commit`, or
+`""` when the runner is not pinned. It is a raw file value. The header shows
+`pin <sha7>` from it. See `agile-team/docs/design/s128.md` P12 and ADR-0065.
+
 ## References
 
 - Story: `.team/stories/s4.md`
