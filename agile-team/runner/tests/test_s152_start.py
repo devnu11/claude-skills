@@ -154,8 +154,8 @@ def test_ac2_1_a_failing_end_check_still_asks_for_a_team_fix(env: Env) -> None:
 
 def test_ac2_1_the_check_tables_map_edges_to_handlers() -> None:
     assert {
-        Edge.START: BoundaryRunner._known_failures,
-        Edge.END: BoundaryRunner._team_fix,
+        Edge.START: BoundaryRunner._record_known_failures,
+        Edge.END: BoundaryRunner._fail_team_check,
     } == br.CHECK_FAILURES
 
 

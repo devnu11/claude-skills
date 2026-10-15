@@ -97,7 +97,7 @@ def test_the_end_edge_runs_the_five_end_stages_in_order() -> None:
 def test_every_stage_has_a_runner_and_a_stage_row() -> None:
     assert set(br.STAGE_RUNNERS) == set(bd.Stage)
     assert br.STAGE_RUNNERS[Stage.PUSH_REBASED] is br.BoundaryRunner._push_rebased
-    assert br.STAGE_RUNNERS[Stage.CI_REBASED] is br.BoundaryRunner._ci_rebased
+    assert br.STAGE_RUNNERS[Stage.CI_REBASED] is br.BoundaryRunner._check_rebased_ci
     for stage in bd.Stage:
         assert stages.BOUNDARY[stage.value] in stages.STAGES
     assert stages.BOUNDARY["rebase"] is stages.Name.BOUNDARY_REBASE
