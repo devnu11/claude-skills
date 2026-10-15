@@ -4,7 +4,8 @@ A probe is data, ``KIND`` or ``KIND:ARG`` (``--progress``, repeatable), read
 through the ``PROBES`` table. Each probe returns a ``Reading`` whose ``value``
 changes only when the job makes progress; the watch compares readings slice
 by slice. A reading may also carry ``alive_at``, a liveness stamp (the
-heartbeat's ``at``). Paths are relative to the job's cwd. ``cpu`` and
+heartbeat's ``at``), which makes a stale one *hung*. Paths are relative to
+the job's cwd. ``cpu`` and
 ``children`` read the run's process group with ``ps``, so they are POSIX only.
 """
 
@@ -97,6 +98,15 @@ def json_probe(arg: str, ctx: Context) -> Probe:
         return Reading(tuple(dotted(data, key) for key in keys))
 
     return read
+
+
+def heartbeat_reading(path: Path) -> Reading:
+    """``{"at": <epoch>, "progress": <any>}``: progress is the value, ``at`` the liveness stamp."""
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return Reading(None)
+    at = data.get("at")
+    return Reading(data.get("progress"), float(at) if isinstance(at, int | float) else None)
 
 
 def cpu_seconds(text: str) -> float:
@@ -197,6 +207,8 @@ PROBES: dict[str, ProbeKind] = {
                        Takes.NOTHING, PROMPT_JOB),
     "file": ProbeKind(lambda arg, ctx: lambda: file_reading(ctx.cwd / arg), Takes.TEXT, ANY_JOB),
     "json": ProbeKind(json_probe, Takes.JSON, ANY_JOB),
+    "heartbeat": ProbeKind(lambda arg, ctx: lambda: heartbeat_reading(ctx.cwd / arg),
+                           Takes.TEXT, ANY_JOB),
     "cpu": ProbeKind(lambda arg, ctx: lambda: cpu_reading(ctx), Takes.NOTHING, COMMAND_JOB),
     "children": ProbeKind(lambda arg, ctx: lambda: children_reading(ctx),
                           Takes.NOTHING, COMMAND_JOB),

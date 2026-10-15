@@ -2,7 +2,7 @@
 
 A job directory holds ``state.json`` (written atomically), ``events.jsonl``,
 the output (``output.md`` for prompts, ``output.log`` for commands), the stop
-file and the supervisor's pid file.
+file, the supervisor's pid file and the run's heartbeat file.
 """
 
 from __future__ import annotations
@@ -30,6 +30,8 @@ LOG_FILE = "output.log"
 STOP_FILE = "stop"
 WAKE_FILE = "wake"
 PID_FILE = "supervisor.pid"
+HEARTBEAT_FILE = "heartbeat.json"
+HEARTBEAT_ENV = "UNATTENDED_HEARTBEAT"
 SUPERVISOR_LOG = "supervisor.log"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 DEFAULT_IDLE = 20 * 60.0

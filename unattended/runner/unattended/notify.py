@@ -16,6 +16,7 @@ class Trigger(StrEnum):
     """Why a notice fires."""
 
     IDLE = "idle"
+    HUNG = "hung"
     IDLE_STOP = "idle-stop"
 
 

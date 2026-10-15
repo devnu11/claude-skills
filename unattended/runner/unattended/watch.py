@@ -7,8 +7,9 @@ within one slice. It then:
 1. **Samples the progress probes** (``probes.PROBES``). The last time any
    reading changed is the run's last progress.
 2. **Raises notices** (``CONDITIONS``) as they become true: ``idle`` once no
-   probe has moved for ``--idle``; it re-arms when progress resumes.
-3. **Starts the idle stop** once no probe has moved for ``--idle-stop``: a
+   probe has moved for ``--idle``, ``hung`` once a heartbeat's ``at`` is older
+   than ``--idle``. Each re-arms when it stops being true.
+3. **Starts the idle stop** once the run has been idle or hung for ``--idle-stop``: a
    stop sequence from now, going hard after ``--hardstop`` (at once without).
 4. **Walks each stop sequence** (deadline, idle stop; see ``limits.PHASES``),
    acting once per phase per run:
@@ -34,7 +35,7 @@ from . import probes
 from .limits import Outcome, OutcomeKind, Phase, Stop, StopCause, span
 from .notify import Notice, Trigger, post
 from .probes import Context, Probe, Reading, Stamp
-from .store import Job, JobState
+from .store import HEARTBEAT_ENV, HEARTBEAT_FILE, Job, JobState
 
 SLICE = 30.0
 ORDER = tuple(Phase)
@@ -54,15 +55,27 @@ Verdicts = tuple[Verdict, ...]
 
 @dataclass(frozen=True)
 class View:
-    """The run as one check sees it: the job's state, the time and the last progress."""
+    """The run as one check sees it: the job's state, the time, the last progress and the
+    stalest heartbeat (None when no heartbeat has been written)."""
 
     state: JobState
     now: float
     moved_at: float
+    alive_at: float | None = None
 
     @property
     def idle_for(self) -> float:
         return self.now - self.moved_at
+
+    @property
+    def stale_for(self) -> float:
+        """How long the stalest heartbeat has gone unwritten; 0 without one."""
+        return 0.0 if self.alive_at is None else self.now - self.alive_at
+
+    @property
+    def quiet_for(self) -> float:
+        """How long the run has been idle or hung, whichever is longer."""
+        return max(self.idle_for, self.stale_for)
 
 
 @dataclass(frozen=True)
@@ -96,7 +109,15 @@ def idle(view: View) -> str | None:
     return f"no progress for {span(view.idle_for)}"
 
 
-CONDITIONS: dict[Trigger, Callable[[View], str | None]] = {Trigger.IDLE: idle}
+def hung(view: View) -> str | None:
+    """Why the run counts as hung (a heartbeat older than ``--idle``), or None."""
+    limit = view.state.spec.idle
+    if limit is None or view.alive_at is None or view.stale_for < limit:
+        return None
+    return f"heartbeat stale for {span(view.stale_for)}"
+
+
+CONDITIONS: dict[Trigger, Callable[[View], str | None]] = {Trigger.IDLE: idle, Trigger.HUNG: hung}
 
 
 @dataclass
@@ -106,14 +127,20 @@ class Liveness:
     probes: list[Probe]
     moved_at: float
     last: list[object] = field(default_factory=list)
+    alive_at: float | None = None
 
-    def sample(self, now: float) -> list[Reading]:
+    def sample(self, now: float) -> None:
         """Read every probe; a changed value moves ``moved_at`` to ``now``."""
         readings = [probe() for probe in self.probes]
         values = [reading.value for reading in readings]
         if values != self.last:
             self.last, self.moved_at = values, now
-        return readings
+        self.alive_at = stalest(readings)
+
+
+def stalest(readings: list[Reading]) -> float | None:
+    """The oldest liveness stamp among ``readings``, or None when none has one."""
+    return min((r.alive_at for r in readings if r.alive_at is not None), default=None)
 
 
 @dataclass
@@ -133,13 +160,22 @@ class RunWatch:
     def __post_init__(self) -> None:
         spec = self.job.load().spec
         self.context = Context(self.job, Path(spec.cwd), Stamp())
-        chosen = probes.chosen(spec.progress, spec.kind)
+        chosen = [*probes.chosen(spec.progress, spec.kind), f"heartbeat:{self.heartbeat}"]
         self.liveness = Liveness([probes.build(text, self.context) for text in chosen], 0.0)
         self.liveness.sample(self.clock())
 
     @property
     def spend(self) -> Stamp:
         return self.context.spend
+
+    @property
+    def heartbeat(self) -> Path:
+        """The job's own heartbeat file, which the run finds in ``$UNATTENDED_HEARTBEAT``."""
+        return self.job.path(HEARTBEAT_FILE)
+
+    def env(self) -> dict[str, str]:
+        """What the run's environment gains: where to write its heartbeat."""
+        return {HEARTBEAT_ENV: str(self.heartbeat)}
 
     def track(self, pgid: int) -> None:
         """Point the ``cpu`` and ``children`` probes at the run's process group."""
@@ -149,7 +185,7 @@ class RunWatch:
         """What the runner must do now; empty to keep waiting."""
         now = self.clock()
         self.liveness.sample(now)
-        view = View(self.job.load(), now, self.liveness.moved_at)
+        view = View(self.job.load(), now, self.liveness.moved_at, self.liveness.alive_at)
         self._raise_notices(view)
         self._start_idle_stop(view)
         return self._walk(view)
@@ -173,7 +209,7 @@ class RunWatch:
 
     def _start_idle_stop(self, view: View) -> None:
         bounds = view.state.bounds
-        if self.idle_stop or bounds.idle_stop is None or view.idle_for < bounds.idle_stop:
+        if self.idle_stop or bounds.idle_stop is None or view.quiet_for < bounds.idle_stop:
             return
         self.idle_stop = Stop(StopCause.IDLE, view.now, bounds.hardstop or 0.0, bounds.idle_stop)
 

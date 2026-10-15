@@ -19,7 +19,15 @@ from unattended import prompt_job
 from unattended.auth import ENV_VAR
 from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
 from unattended.prompt_job import PromptJob
-from unattended.store import DEFAULT_RESUME_PROMPT, OUTPUT_FILE, Job, JobKind, Spec
+from unattended.store import (
+    DEFAULT_RESUME_PROMPT,
+    HEARTBEAT_ENV,
+    HEARTBEAT_FILE,
+    OUTPUT_FILE,
+    Job,
+    JobKind,
+    Spec,
+)
 from unattended.watch import RunWatch
 
 from .conftest import MakeJob
@@ -90,7 +98,7 @@ def test_first_run_options(job: Job, workdir: Path) -> None:
     assert options.cwd == str(workdir)
     assert options.model == "haiku"
     assert options.setting_sources == ["user", "project", "local"]
-    assert options.env == {ENV_VAR: "k"}
+    assert options.env == {ENV_VAR: "k", HEARTBEAT_ENV: str(job.path(HEARTBEAT_FILE))}
 
 
 def test_session_id_is_saved_at_the_first_message(job: Job) -> None:

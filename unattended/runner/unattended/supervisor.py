@@ -28,7 +28,7 @@ from typing import Protocol
 
 from . import network
 from .limits import Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
-from .store import Job, JobState, JobStatus
+from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
 from .watch import SLICE, RunWatch
 
 STOP_REASON = "stopped by the user"
@@ -99,6 +99,7 @@ class Supervisor:
         self._check_stop()
         self._check_deadline()
         self.job.update(lambda st: st.mark(JobStatus.RUNNING))
+        self.job.path(HEARTBEAT_FILE).unlink(missing_ok=True)
         watch = RunWatch(self.job, self.clock)
         outcome = watch.settle(self.runner.run_once(watch))
         state = self._record(outcome)

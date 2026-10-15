@@ -256,3 +256,9 @@ def test_exit_code_within_the_timeout() -> None:
     assert command_job.exit_code(proc, 0.01) is None
     proc.kill()
     assert command_job.exit_code(proc, 5) is not None
+
+
+def test_the_command_finds_its_heartbeat_path(make_job: MakeJob, workdir: Path) -> None:
+    job = make_job(command_spec(workdir, 'echo "$UNATTENDED_HEARTBEAT"'))
+    CommandJob(job, os.environ).run_once(RunWatch(job))
+    assert job.path(LOG_FILE).read_text().splitlines()[1] == str(job.path("heartbeat.json"))
