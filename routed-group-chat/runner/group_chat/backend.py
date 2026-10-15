@@ -1,7 +1,7 @@
 """The model call behind each role: one tool-free, single-turn completion.
 
 ``ClaudeBackend`` runs on the user's Claude Code login through the Agent SDK.
-``options_for`` isolates each call the way agile-team's ``dispatch`` does: no
+``build_options`` isolates each call the way agile-team's ``dispatch`` does: no
 tools exist (``tools=[]``, not just none pre-approved), no MCP servers load
 (``strict_mcp_config``, and claude.ai connectors are switched off in the env),
 and no user or project settings apply, so a role's context is only what
@@ -38,7 +38,7 @@ class Backend(Protocol):
     def complete(self, system: str, prompt: str, model: str | None) -> str: ...
 
 
-def options_for(system: str, model: str | None) -> ClaudeAgentOptions:
+def build_options(system: str, model: str | None) -> ClaudeAgentOptions:
     """A single turn with no tools, MCP servers, connectors or user settings."""
     return ClaudeAgentOptions(
         system_prompt=system,
@@ -52,7 +52,7 @@ def options_for(system: str, model: str | None) -> ClaudeAgentOptions:
     )
 
 
-def text_of(message: Any) -> str:
+def join_text(message: Any) -> str:
     """The text blocks of an assistant message, joined; ``""`` for anything else."""
     if not isinstance(message, AssistantMessage):
         return ""
@@ -74,14 +74,14 @@ class ClaudeBackend:
 
     async def _collect(self, system: str, prompt: str, model: str | None) -> str:
         text, result = "", None
-        async for message in self.query_fn(prompt=prompt, options=options_for(system, model)):
-            text = text_of(message) or text
+        async for message in self.query_fn(prompt=prompt, options=build_options(system, model)):
+            text = join_text(message) or text
             if isinstance(message, ResultMessage):
                 result = message
-        return _final(text, result)
+        return _pick_final_text(text, result)
 
 
-def _final(text: str, result: ResultMessage | None) -> str:
+def _pick_final_text(text: str, result: ResultMessage | None) -> str:
     if result is not None and result.is_error:
         raise BackendError(result.result or "model returned an error")
     final = (result.result if result else None) or text

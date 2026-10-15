@@ -25,13 +25,13 @@ class AddressError(ValueError):
 
 def resolve(message: str, names: Sequence[str], last: Sequence[str]) -> tuple[str, ...]:
     """The roles that answer ``message``, in order."""
-    mentioned = leading_mentions(message)
+    mentioned = find_leading_mentions(message)
     if not mentioned:
-        return _sticky(last, names)
+        return _resolve_sticky(last, names)
     return _expand(mentioned, names)
 
 
-def leading_mentions(message: str) -> list[str]:
+def find_leading_mentions(message: str) -> list[str]:
     """The @names at the start of ``message``, lowercased, in order."""
     match = LEADING_RE.match(message)
     if not match:
@@ -39,21 +39,21 @@ def leading_mentions(message: str) -> list[str]:
     return [mention[1:].lower() for mention in MENTION_RE.findall(match.group(1))]
 
 
-def _sticky(last: Sequence[str], names: Sequence[str]) -> tuple[str, ...]:
+def _resolve_sticky(last: Sequence[str], names: Sequence[str]) -> tuple[str, ...]:
     current = tuple(name for name in last if name in names)
     if not current:
-        raise AddressError(f"address someone first: {_choices(names)}")
+        raise AddressError(f"address someone first: {_format_choices(names)}")
     return current
 
 
 def _expand(mentioned: list[str], names: Sequence[str]) -> tuple[str, ...]:
     unknown = [name for name in mentioned if name not in names and name != BROADCAST]
     if unknown:
-        raise AddressError(f"unknown @{', @'.join(unknown)}; choose from {_choices(names)}")
+        raise AddressError(f"unknown @{', @'.join(unknown)}; choose from {_format_choices(names)}")
     if BROADCAST in mentioned:
         return tuple(names)
     return tuple(dict.fromkeys(mentioned))
 
 
-def _choices(names: Sequence[str]) -> str:
+def _format_choices(names: Sequence[str]) -> str:
     return " ".join(f"@{name}" for name in [*names, BROADCAST])

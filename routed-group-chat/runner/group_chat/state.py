@@ -3,7 +3,7 @@
 One ``state.json`` per chat directory. Writes go to a unique temp file that is
 fsynced and then renamed over ``state.json``, so a crash mid-write leaves the
 previous state intact. ``load`` checks the file's shape against the same kind
-of field table as the roster. ``Store.locked`` holds ``<dir>/lock`` (see
+of field table as the roster. ``Store.hold_lock`` holds ``<dir>/lock`` (see
 ``lock``) for a whole message, so two ``say`` calls cannot interleave; the
 second is refused, not queued.
 """
@@ -40,7 +40,7 @@ def escape_tags(text: str) -> str:
     return TAG_RE.sub(r"&lt;\1", text)
 
 
-def validate(data: Any) -> None:
+def check_shape(data: Any) -> None:
     """Raise ``StateError`` unless ``data`` has the shape ``ChatState.json_data`` writes."""
     TableSchema(STATE_FIELDS, "state", StateError).check(data)
     turns = data.get("turns", [])
@@ -48,7 +48,7 @@ def validate(data: Any) -> None:
     for turn in turns:
         TableSchema(TURN_FIELDS, "state.turns entry", StateError, TURN_FIELDS).check(turn)
     ListSchema(str, "state.last_addressed", StateError).check(data.get("last_addressed", []))
-    decision_log.validate(data.get("log", {}), StateError)
+    decision_log.check_shape(data.get("log", {}), StateError)
 
 
 class StateError(RuntimeError):
@@ -126,7 +126,7 @@ class Store:
         return self.directory / STATE_FILE
 
     @property
-    def lock_path(self) -> Path:
+    def lockfile(self) -> Path:
         return self.directory / LOCK_FILE
 
     def load(self) -> ChatState:  # house-rules: allow query-property -- disk I/O that can raise
@@ -138,7 +138,7 @@ class Store:
         except (OSError, ValueError) as exc:
             raise StateError(f"{self.path} is unreadable: {exc}") from exc
         try:
-            validate(data)
+            check_shape(data)
         except StateError as exc:
             raise StateError(f"{self.path} is malformed: {exc}") from exc
         return ChatState.from_dict(data)
@@ -158,11 +158,11 @@ class Store:
             raise
 
     @contextmanager
-    def locked(self) -> Iterator[None]:
+    def hold_lock(self) -> Iterator[None]:
         """Hold the chat's lock; ``StateError`` if a live process holds it."""
         self.directory.mkdir(parents=True, exist_ok=True)
         try:
-            with LockFile(self.lock_path).held():
+            with LockFile(self.lockfile).hold():
                 yield
         except LockError as exc:
             raise StateError(str(exc)) from exc

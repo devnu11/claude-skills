@@ -6,7 +6,7 @@ Only the model is faked; every message is saved to and reloaded from state.json.
 from __future__ import annotations
 
 import pytest
-from group_chat.compaction import turns_tokens
+from group_chat.compaction import measure_turns
 
 from ..conftest import FailingBackend, FakeBackend
 from .conftest import MakeChat
@@ -27,7 +27,7 @@ class CountingSummary(FakeBackend):
 def chatter(make_chat: MakeChat, backend: FakeBackend, count: int, budget: int) -> None:
     for i in range(count):
         marker = f"DECISION: decision {i}" if i % 3 == 0 else f"note {i} " + "x" * 80
-        make_chat(backend, recent_tokens=budget).say(f"@po {marker}")
+        make_chat(backend, recent_tokens=budget).send(f"@po {marker}")
 
 
 def test_log_is_intact_after_many_compactions(make_chat: MakeChat) -> None:
@@ -51,7 +51,7 @@ def test_each_summary_feeds_the_next(make_chat: MakeChat) -> None:
 def test_role_sees_summary_and_full_log_after_compaction(make_chat: MakeChat) -> None:
     backend = CountingSummary()
     chatter(make_chat, backend, 9, budget=60)
-    make_chat(backend, recent_tokens=60).say("@manager recap?")
+    make_chat(backend, recent_tokens=60).send("@manager recap?")
     prompt = next(c.prompt for c in reversed(backend.calls) if "Reply as @manager." in c.prompt)
     assert "- [D1] decision 0 (by human)" in prompt
     assert "--- SUMMARY OF EARLIER DISCUSSION ---\nsummary-" in prompt
@@ -70,18 +70,18 @@ def test_kept_turns_respect_budget_or_keep(make_chat: MakeChat) -> None:
     chatter(make_chat, backend, 8, budget=200)
     turns = make_chat(backend).store.load().turns
     assert len(turns) >= 4
-    assert len(turns) == 4 or turns_tokens(turns) <= 200
+    assert len(turns) == 4 or measure_turns(turns) <= 200
 
 
 def test_summary_failure_then_recovery_keeps_log(make_chat: MakeChat) -> None:
     backend = FailingBackend(fail_summary=True)
     for i in range(4):
-        make_chat(backend, recent_tokens=40).say(f"@po DECISION: d{i}")
+        make_chat(backend, recent_tokens=40).send(f"@po DECISION: d{i}")
     stuck = make_chat(backend).store.load()
     assert stuck.summary == ""
     assert any(t.text.startswith("summary skipped") for t in stuck.turns)
     backend.fail_summary = False
-    make_chat(backend, recent_tokens=40).say("@po go on")
+    make_chat(backend, recent_tokens=40).send("@po go on")
     state = make_chat(backend).store.load()
     assert state.summary == "SUMMARY"
     assert [e.text for e in state.log.decisions] == ["d0", "d1", "d2", "d3"]

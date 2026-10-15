@@ -1,4 +1,4 @@
-"""Unit tests for ``lock``: the owned lock file, staleness and ``pid_alive``."""
+"""Unit tests for ``lock``: the owned lock file, staleness and ``is_pid_alive``."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import socket
 from pathlib import Path
 
 import pytest
-from group_chat.lock import LockError, LockFile, new_owner, pid_alive
+from group_chat.lock import LockError, LockFile, is_pid_alive, new_owner
 
 from .lockutil import dead_pid, live_pid, write_owner
 
@@ -33,7 +33,7 @@ def test_new_owner_names_this_process() -> None:
 
 def test_held_writes_owner_and_releases(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
-    with lock.held():
+    with lock.hold():
         holder = lock.holder
         assert holder is not None
         assert holder["pid"] == os.getpid()
@@ -42,21 +42,21 @@ def test_held_writes_owner_and_releases(tmp_path: Path) -> None:
 
 def test_released_after_exception(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
-    with pytest.raises(RuntimeError), lock.held():
+    with pytest.raises(RuntimeError), lock.hold():
         raise RuntimeError("boom")
     assert not lock.path.exists()
 
 
 def test_release_keeps_a_lock_someone_else_retook(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
-    with lock.held():
+    with lock.hold():
         write_owner(lock.path, live_pid(), token="other")
     assert json.loads(lock.path.read_text())["token"] == "other"
 
 
 def test_release_when_lock_was_deleted(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
-    with lock.held():
+    with lock.hold():
         lock.path.unlink()
     assert not lock.path.exists()
 
@@ -64,7 +64,7 @@ def test_release_when_lock_was_deleted(tmp_path: Path) -> None:
 def test_live_holder_refuses_with_pid_and_host(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock", alive=always)
     write_owner(lock.path, 4242, host="box")
-    with pytest.raises(LockError, match="is held by pid 4242 on box; delete it if"), lock.held():
+    with pytest.raises(LockError, match="is held by pid 4242 on box; delete it if"), lock.hold():
         pass  # pragma: no cover
     assert json.loads(lock.path.read_text())["pid"] == 4242
 
@@ -72,7 +72,7 @@ def test_live_holder_refuses_with_pid_and_host(tmp_path: Path) -> None:
 def test_unreadable_holder_is_never_stale(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock", alive=never)
     lock.path.write_text("not json")
-    with pytest.raises(LockError, match="held by another process"), lock.held():
+    with pytest.raises(LockError, match="held by another process"), lock.hold():
         pass  # pragma: no cover
     assert lock.path.read_text() == "not json"
 
@@ -90,7 +90,7 @@ def test_missing_lock_has_no_holder(tmp_path: Path) -> None:
 def test_dead_holder_on_this_host_is_taken_over(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock", alive=never)
     write_owner(lock.path, 4242)
-    with lock.held():
+    with lock.hold():
         holder = lock.holder
         assert holder is not None
         assert holder["pid"] == os.getpid()
@@ -100,7 +100,7 @@ def test_dead_holder_on_this_host_is_taken_over(tmp_path: Path) -> None:
 def test_dead_pid_with_real_pid_alive_is_taken_over(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock")
     write_owner(lock.path, dead_pid())
-    with lock.held():
+    with lock.hold():
         assert lock.holder is not None
     assert not lock.path.exists()
 
@@ -108,7 +108,7 @@ def test_dead_pid_with_real_pid_alive_is_taken_over(tmp_path: Path) -> None:
 def test_foreign_host_is_never_stale(tmp_path: Path) -> None:
     lock = LockFile(tmp_path / "lock", alive=never)
     write_owner(lock.path, 4242, host="elsewhere")
-    with pytest.raises(LockError, match="pid 4242 on elsewhere"), lock.held():
+    with pytest.raises(LockError, match="pid 4242 on elsewhere"), lock.hold():
         pass  # pragma: no cover
 
 
@@ -141,7 +141,7 @@ def test_takeover_race_lost_to_new_holder(tmp_path: Path) -> None:
         return False
 
     write_owner(path, 4242, token="dead")
-    with pytest.raises(LockError, match=f"pid {live_pid()}"), LockFile(path, racing).held():
+    with pytest.raises(LockError, match=f"pid {live_pid()}"), LockFile(path, racing).hold():
         pass  # pragma: no cover
     assert json.loads(path.read_text())["token"] == "winner"
 
@@ -157,18 +157,18 @@ def test_takeover_race_lost_after_removal(tmp_path: Path) -> None:
             write_owner(path, live_pid(), token="winner")
 
     write_owner(path, 4242, token="dead")
-    with pytest.raises(LockError), Sneaky(path, never).held():
+    with pytest.raises(LockError), Sneaky(path, never).hold():
         pass  # pragma: no cover
     assert calls == [1]
 
 
 def test_pid_alive_is_always_true_on_windows() -> None:
-    assert pid_alive(dead_pid(), platform="win32") is True
+    assert is_pid_alive(dead_pid(), platform="win32") is True
 
 
 def test_pid_alive_posix_live_and_dead() -> None:
-    assert pid_alive(live_pid(), platform="linux") is True
-    assert pid_alive(dead_pid(), platform="linux") is False
+    assert is_pid_alive(live_pid(), platform="linux") is True
+    assert is_pid_alive(dead_pid(), platform="linux") is False
 
 
 def test_pid_alive_permission_error_means_alive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,4 +176,4 @@ def test_pid_alive_permission_error_means_alive(monkeypatch: pytest.MonkeyPatch)
         raise PermissionError
 
     monkeypatch.setattr("group_chat.lock.os.kill", denied)
-    assert pid_alive(1, platform="linux") is True
+    assert is_pid_alive(1, platform="linux") is True

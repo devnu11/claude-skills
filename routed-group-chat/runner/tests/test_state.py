@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from group_chat.lock import LockError
-from group_chat.state import ChatState, StateError, Store, Turn, escape_tags, validate
+from group_chat.state import ChatState, StateError, Store, Turn, check_shape, escape_tags
 
 from .lockutil import dead_pid, live_pid, write_owner
 
@@ -176,31 +176,31 @@ def test_save_fsyncs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_lock_is_created_and_released(tmp_path: Path) -> None:
     store = Store(tmp_path / "chat")
-    with store.locked():
-        assert store.lock_path.exists()
-    assert not store.lock_path.exists()
+    with store.hold_lock():
+        assert store.lockfile.exists()
+    assert not store.lockfile.exists()
 
 
 def test_lock_released_after_error(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    with pytest.raises(RuntimeError), store.locked():
+    with pytest.raises(RuntimeError), store.hold_lock():
         raise RuntimeError("boom")
-    assert not store.lock_path.exists()
+    assert not store.lockfile.exists()
 
 
 def test_held_lock_raises_and_is_left_alone(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    store.lock_path.write_text("")
-    with pytest.raises(StateError, match="held by another process"), store.locked():
+    store.lockfile.write_text("")
+    with pytest.raises(StateError, match="held by another process"), store.hold_lock():
         pass  # pragma: no cover
-    assert store.lock_path.exists()
+    assert store.lockfile.exists()
 
 
 def test_nested_lock_is_refused(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    with store.locked(), pytest.raises(StateError), store.locked():
+    with store.hold_lock(), pytest.raises(StateError), store.hold_lock():
         pass  # pragma: no cover
-    assert not store.lock_path.exists()
+    assert not store.lockfile.exists()
 
 
 def test_block_escapes_forged_tags_in_any_case() -> None:
@@ -238,8 +238,8 @@ def test_malformed_state_names_the_problem(tmp_path: Path, content: str, message
 def test_validate_accepts_what_json_data_writes() -> None:
     state = ChatState(summary="s", last_addressed=("po",))
     state.add(Turn("po", "DECISION: a\nQUESTION: b"))
-    validate(json.loads(json.dumps(state.json_data)))
-    validate({})
+    check_shape(json.loads(json.dumps(state.json_data)))
+    check_shape({})
 
 
 def test_os_error_reading_state_is_unreadable(tmp_path: Path) -> None:
@@ -265,15 +265,15 @@ def test_escape_tags(text: str, expected: str) -> None:
 
 def test_locked_turns_lock_error_into_state_error(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    write_owner(store.lock_path, live_pid(), token="other")
-    with pytest.raises(StateError, match=f"held by pid {live_pid()}") as exc, store.locked():
+    write_owner(store.lockfile, live_pid(), token="other")
+    with pytest.raises(StateError, match=f"held by pid {live_pid()}") as exc, store.hold_lock():
         pass  # pragma: no cover
     assert isinstance(exc.value.__cause__, LockError)
 
 
 def test_locked_takes_over_dead_lock(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    write_owner(store.lock_path, dead_pid())
-    with store.locked():
-        assert json.loads(store.lock_path.read_text())["pid"] == os.getpid()
-    assert not store.lock_path.exists()
+    write_owner(store.lockfile, dead_pid())
+    with store.hold_lock():
+        assert json.loads(store.lockfile.read_text())["pid"] == os.getpid()
+    assert not store.lockfile.exists()

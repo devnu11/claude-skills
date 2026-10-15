@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from group_chat.addressing import AddressError, leading_mentions, resolve
+from group_chat.addressing import AddressError, find_leading_mentions, resolve
 
 pytestmark = pytest.mark.unit
 
@@ -43,7 +43,7 @@ def test_unknown_mention() -> None:
 
 
 def test_leading_mentions_none() -> None:
-    assert leading_mentions("no mentions") == []
+    assert find_leading_mentions("no mentions") == []
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,7 @@ def test_leading_mention_with_punctuation_and_whitespace(
 
 
 def test_email_address_is_not_a_mention() -> None:
-    assert leading_mentions("a@b.com is the contact") == []
+    assert find_leading_mentions("a@b.com is the contact") == []
     assert resolve("a@b.com is the contact", NAMES, ("po",)) == ("po",)
 
 
@@ -74,7 +74,7 @@ def test_leading_dotted_name_is_refused_as_unknown() -> None:
 
 
 def test_mentions_stop_at_first_word() -> None:
-    assert leading_mentions("@po hi @manager") == ["po"]
+    assert find_leading_mentions("@po hi @manager") == ["po"]
 
 
 def test_broadcast_dedupes_to_roster_order() -> None:
@@ -115,7 +115,7 @@ def test_uppercase_all_broadcasts() -> None:
 
 
 def test_leading_mentions_are_lowercased() -> None:
-    assert leading_mentions("@PO, @Manager! hi") == ["po", "manager"]
+    assert find_leading_mentions("@PO, @Manager! hi") == ["po", "manager"]
 
 
 def test_sticky_drops_roles_no_longer_in_roster() -> None:

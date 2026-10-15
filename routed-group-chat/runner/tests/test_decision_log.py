@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from group_chat.decision_log import PREFIX, DecisionLog, Entry, strip_fences, validate
+from group_chat.decision_log import PREFIX, DecisionLog, Entry, check_shape, strip_fences
 
 pytestmark = pytest.mark.unit
 
@@ -285,13 +285,13 @@ def test_tilde_fenced_markers_are_ignored() -> None:
 )
 def test_validate_refuses_bad_log(data: object, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        validate(data, ValueError)
+        check_shape(data, ValueError)
 
 
 def test_validate_accepts_json_data_output() -> None:
     log = DecisionLog()
     log.apply("po", "DECISION: a\nQUESTION: b")
-    validate(log.json_data, ValueError)
+    check_shape(log.json_data, ValueError)
 
 
 @pytest.mark.parametrize("line", ["DECISION: **", "- **DECISION:** ** "])

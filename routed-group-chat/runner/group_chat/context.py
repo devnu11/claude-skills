@@ -24,24 +24,24 @@ To raise an open question, add a line: QUESTION: <text>
 To close one, add a line: RESOLVED: Q<n>"""
 
 
-def system_prompt(role: Role, roster: Roster) -> str:
+def build_system_prompt(role: Role, roster: Roster) -> str:
     """The role's own prompt followed by the chat rules."""
     members = ", ".join(f"@{r.name} ({r.title})" for r in roster.roles)
     rules = RULES.format(name=role.name, title=role.title, team=roster.team, members=members)
     return f"{role.prompt}\n\n{rules}"
 
 
-def transcript(turns: Sequence[Turn]) -> str:
+def format_transcript(turns: Sequence[Turn]) -> str:
     """Turns as delimited blocks, oldest first."""
     return "\n\n".join(turn.tagged for turn in turns)
 
 
-def user_prompt(role: Role, state: ChatState) -> str:
+def build_user_prompt(role: Role, state: ChatState) -> str:
     """Pinned log, summary and transcript, then the cue for this role."""
     sections = [
         ("PINNED: DECISIONS AND OPEN QUESTIONS", escape_tags(state.log.markdown)),
         ("SUMMARY OF EARLIER DISCUSSION", escape_tags(state.summary) or "(none)"),
-        ("RECENT TURNS", transcript(state.turns) or "(none)"),
+        ("RECENT TURNS", format_transcript(state.turns) or "(none)"),
     ]
     body = "\n\n".join(f"--- {title} ---\n{text}" for title, text in sections)
     return f"{body}\n\n--- YOUR TURN ---\nReply as @{role.name}."
