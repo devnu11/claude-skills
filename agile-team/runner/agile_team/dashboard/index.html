@@ -854,13 +854,37 @@ function touchedFocus(view, role) {
     || view.events.some((e) => e.kind === "step-start" && e.role === role && e.story === focus);
 }
 
-/** Everything the flow chart's labels and classes read, computed once per draw. */
-function flowContext(view) {
+/** Whether the ledger already holds the live `step`: a row of its role and story written since it started (LT4). */
+const inLedger = (view, step) => view.ledger.some((l) => l.role === step.role
+  && (l.story ?? null) === (step.story ?? null) && l.at >= step.started_at);
+
+/** The live step's awake seconds so far from its open steps row, 0 without one (LT3). */
+function liveSeconds(view, step) {
+  const open = openStep(view, step.role);
+  const same = open && (open.story ?? null) === (step.story ?? null);
+  return same ? Math.max(0, awakeSoFar(view, open)) : 0;
+}
+
+/** The live step's tokens and dollars, 0 once the ledger holds them (LT2, LT4). */
+function liveSpend(view, step) {
+  if (inLedger(view, step)) return { tokens: 0, cost: 0 };
+  return { tokens: sumTok(step.tokens), cost: step.cost_usd ?? 0 };
+}
+
+/** `{tokens, cost, seconds}` of the live step in scope, or null (LT1-LT4). */
+function liveTotals(view) {
   const step = liveStep(view);
-  return {
-    stats: flowStats(view), totals: scopeTotals(view), focus: focusStory(view), step,
-    liveRole: step?.role ?? null, level: healthLevel(view),
-  };
+  if (!step || !inScope(view)({ story: step.story, at: step.started_at })) return null;
+  return { ...liveSpend(view, step), seconds: liveSeconds(view, step) };
+}
+
+/** The Flow chart's totals: `scopeTotals` plus the live step's numbers on its role (LT5-LT7). */
+function flowTotals(view) {
+  const totals = scopeTotals(view), live = liveTotals(view);
+  if (!live) return totals;
+  const t = (totals[liveStep(view).role] ??= { tokens: 0, cost: 0, seconds: 0 });
+  t.tokens += live.tokens; t.cost += live.cost; t.seconds += live.seconds;
+  return totals;
 }
 
 // ----- live panel -------------------------------------------------------------
@@ -1570,7 +1594,7 @@ function flowModel(view) {
   return {
     view, step, now: clockNow(view), groups: flowRoles(view), tools: roleTools(view),
     run: step ? runLook(stepRunNumber(view, step)) : null,
-    ctx: { totals: scopeTotals(view), stats: flowStats(scoped) },
+    ctx: { totals: flowTotals(view), stats: flowStats(scoped) },
   };
 }
 
