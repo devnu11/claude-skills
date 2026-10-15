@@ -40,7 +40,7 @@ def test_held_lock_exits_2_and_records_nothing(cli: Cli, backend: FakeBackend) -
 
 
 def test_lock_released_after_success(cli: Cli) -> None:
-    """state: `Store.locked` holds `<dir>/lock` for a whole message."""
+    """state: `Store.hold_lock` holds `<dir>/lock` for a whole message."""
     assert cli.say("@po hi").code == 0
     assert not (cli.directory / "lock").exists()
     assert cli.say("@po again").code == 0

@@ -24,10 +24,10 @@ def test_lock_owner_record_during_say(make_chat: MakeChat) -> None:
 
     class Spy(FakeBackend):
         def complete(self, system: str, prompt: str, model: str | None) -> str:
-            seen.append(json.loads(chat.store.lock_path.read_text()))
+            seen.append(json.loads(chat.store.lockfile.read_text()))
             return super().complete(system, prompt, model)
 
-    make_chat(Spy()).say("@po hi")
+    make_chat(Spy()).send("@po hi")
     assert seen[0]["pid"] == os.getpid()
     assert set(seen[0]) == {"pid", "host", "token"}
 
@@ -37,18 +37,18 @@ def test_dead_lock_is_taken_over_and_message_saved(
 ) -> None:
     chat = make_chat(backend)
     chat.store.directory.mkdir()
-    write_owner(chat.store.lock_path, dead_pid())
-    assert [t.speaker for t in chat.say("@po hi")] == ["po"]
-    assert not chat.store.lock_path.exists()
+    write_owner(chat.store.lockfile, dead_pid())
+    assert [t.speaker for t in chat.send("@po hi")] == ["po"]
+    assert not chat.store.lockfile.exists()
     assert len(chat.store.load().turns) == 2
 
 
 def test_live_lock_refuses_and_is_kept(make_chat: MakeChat, backend: FakeBackend) -> None:
     chat = make_chat(backend)
     chat.store.directory.mkdir()
-    write_owner(chat.store.lock_path, live_pid(), token="theirs")
+    write_owner(chat.store.lockfile, live_pid(), token="theirs")
     with pytest.raises(StateError, match=f"held by pid {live_pid()}"):
-        chat.say("@po hi")
-    assert json.loads(chat.store.lock_path.read_text())["token"] == "theirs"
+        chat.send("@po hi")
+    assert json.loads(chat.store.lockfile.read_text())["token"] == "theirs"
     assert backend.calls == []
     assert not chat.store.path.exists()

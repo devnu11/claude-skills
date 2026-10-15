@@ -1,7 +1,7 @@
 """Test helper: hold a chat directory's lock until killed.
 
 ``python tests/hold_lock.py <chat dir>`` installs the CLI's SIGTERM handler,
-takes ``Store(<chat dir>).locked()``, prints ``locked`` and sleeps.
+takes ``Store(<chat dir>).hold_lock()``, prints ``locked`` and sleeps.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from group_chat.state import Store
 
 def main(directory: str) -> None:
     signal.signal(signal.SIGTERM, exit_on_sigterm)
-    with Store(Path(directory)).locked():
+    with Store(Path(directory)).hold_lock():
         print("locked", flush=True)
         time.sleep(60)
 

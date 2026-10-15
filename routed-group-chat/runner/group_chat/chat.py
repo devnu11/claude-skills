@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 
 from .addressing import resolve
 from .backend import Backend, BackendError
-from .compaction import SUMMARY_SYSTEM, split, summary_prompt
-from .context import system_prompt, user_prompt
+from .compaction import SUMMARY_SYSTEM, build_summary_prompt, split
+from .context import build_system_prompt, build_user_prompt
 from .decision_log import PREFIX, strip_fences
 from .roster import Roster
 from .state import HUMAN, ChatState, Store, Turn
@@ -48,7 +48,7 @@ class Limits:
     summary_model: str | None = None
 
 
-def handoff_of(text: str, names: tuple[str, ...], speaker: str) -> str | None:
+def find_handoff(text: str, names: tuple[str, ...], speaker: str) -> str | None:
     """The member a reply hands the floor to, if it names a valid other member."""
     found = [name.lower() for name in HANDOFF_RE.findall(strip_fences(text))]
     valid = [name for name in found if name in names and name != speaker]
@@ -64,17 +64,17 @@ class GroupChat:
     store: Store
     limits: Limits = field(default_factory=Limits)
 
-    def say(self, message: str) -> list[Turn]:
+    def send(self, message: str) -> list[Turn]:
         """Record ``message``, collect the replies, compact, save; return the
         replies (and any orchestrator notes) in order."""
-        with self.store.locked():
+        with self.store.hold_lock():
             state = self.store.load()
             targets = resolve(message, self.roster.names, state.last_addressed)
             state.add(Turn(HUMAN, message.strip()))
             state.last_addressed = targets
             self.store.save(state)
             replies = self._answer(state, list(targets))
-            replies.extend(self._compact(state))
+            replies.extend(self._summarize_old_turns(state))
             self.store.save(state)
             return replies
 
@@ -82,9 +82,9 @@ class GroupChat:
         replies: list[Turn] = []
         hops = 0
         while queue:
-            turn = self._reply_or_fail(state, queue.pop(0), replies)
+            turn = self._collect_reply(state, queue.pop(0), replies)
             replies.append(turn)
-            nxt = handoff_of(turn.text, self.roster.names, turn.speaker)
+            nxt = find_handoff(turn.text, self.roster.names, turn.speaker)
             if nxt is None or nxt in queue:
                 continue
             if hops >= self.limits.max_handoffs:
@@ -94,9 +94,9 @@ class GroupChat:
             queue.append(nxt)
         return replies
 
-    def _reply_or_fail(self, state: ChatState, name: str, replies: list[Turn]) -> Turn:
+    def _collect_reply(self, state: ChatState, name: str, replies: list[Turn]) -> Turn:
         try:
-            turn = self._reply(state, name)
+            turn = self._ask_role(state, name)
         except BackendError as exc:
             note = state.note(f"@{name} could not answer: {exc}")
             self.store.save(state)
@@ -104,20 +104,20 @@ class GroupChat:
         self.store.save(state)
         return turn
 
-    def _reply(self, state: ChatState, name: str) -> Turn:
+    def _ask_role(self, state: ChatState, name: str) -> Turn:
         role = self.roster.get(name)
         text = self.backend.complete(
-            system_prompt(role, self.roster), user_prompt(role, state), role.model
+            build_system_prompt(role, self.roster), build_user_prompt(role, state), role.model
         )
         turn = Turn(name, text)
         state.add(turn)
         return turn
 
-    def _compact(self, state: ChatState) -> list[Turn]:
+    def _summarize_old_turns(self, state: ChatState) -> list[Turn]:
         evicted, kept = split(state.turns, self.limits.recent_tokens, self.limits.keep_turns)
         if not evicted:
             return []
-        prompt = summary_prompt(state.summary, evicted)
+        prompt = build_summary_prompt(state.summary, evicted)
         try:
             state.summary = self.backend.complete(SUMMARY_SYSTEM, prompt, self.limits.summary_model)
         except BackendError as exc:

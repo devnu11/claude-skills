@@ -73,9 +73,9 @@ class DecisionLog:
         return "\n".join(
             [
                 "## Decisions",
-                *_lines(self.decisions),
+                *_format_entries(self.decisions),
                 "## Open questions",
-                *_lines(self.questions),
+                *_format_entries(self.questions),
             ]
         )
 
@@ -100,7 +100,7 @@ class DecisionLog:
         )
 
 
-def validate(data: Any, error: type[Exception]) -> None:
+def check_shape(data: Any, error: type[Exception]) -> None:
     """Raise ``error`` unless ``data`` has the shape ``DecisionLog.json_data`` writes."""
     TableSchema(LOG_FIELDS, "log", error).check(data)
     for key in ("decisions", "questions"):
@@ -116,13 +116,13 @@ def strip_fences(text: str) -> str:
     kept: list[str] = []
     fence: str | None = None
     for line in text.splitlines():
-        fence, keep = _fence_step(fence, line.lstrip())
+        fence, keep = _step_fence(fence, line.lstrip())
         if keep:
             kept.append(line)
     return "\n".join(kept)
 
 
-def _fence_step(fence: str | None, line: str) -> tuple[str | None, bool]:
+def _step_fence(fence: str | None, line: str) -> tuple[str | None, bool]:
     """The fence still open after ``line``, and whether ``line`` is kept."""
     if fence is not None:
         return (None if line.startswith(fence) else fence), False
@@ -132,7 +132,7 @@ def _fence_step(fence: str | None, line: str) -> tuple[str | None, bool]:
     return opener, False
 
 
-def _lines(entries: list[Entry]) -> list[str]:
+def _format_entries(entries: list[Entry]) -> list[str]:
     return [f"- [{entry.id}] {entry.text} (by {entry.by})" for entry in entries] or ["- none"]
 
 

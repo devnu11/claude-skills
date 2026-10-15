@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from .context import transcript
+from .context import format_transcript
 from .state import Turn
 
 CHARS_PER_TOKEN = 4
@@ -17,26 +17,27 @@ turns below into one updated summary: who said what that still matters, open
 threads and positions taken. Be concise. Output only the summary."""
 
 
-def estimate_tokens(text: str) -> int:
+def measure_tokens(text: str) -> int:
     """A rough token count; enough to decide when to compact."""
     return len(text) // CHARS_PER_TOKEN + 1
 
 
-def turns_tokens(turns: Sequence[Turn]) -> int:
+def measure_turns(turns: Sequence[Turn]) -> int:
     """Estimated tokens of ``turns`` as a role sees them."""
-    return sum(estimate_tokens(turn.tagged) for turn in turns)
+    return sum(measure_tokens(turn.tagged) for turn in turns)
 
 
 def split(turns: Sequence[Turn], budget: int, keep: int) -> tuple[list[Turn], list[Turn]]:
     """``(evicted, kept)``: evict oldest turns until the rest fit ``budget``,
     always keeping the last ``keep`` turns."""
     cut = 0
-    while len(turns) - cut > keep and turns_tokens(turns[cut:]) > budget:
+    while len(turns) - cut > keep and measure_turns(turns[cut:]) > budget:
         cut += 1
     return list(turns[:cut]), list(turns[cut:])
 
 
-def summary_prompt(summary: str, evicted: Sequence[Turn]) -> str:
+def build_summary_prompt(summary: str, evicted: Sequence[Turn]) -> str:
     """The summarizer's input: the earlier summary, then the turns to fold in."""
     earlier = summary or "(none)"
-    return f"--- EARLIER SUMMARY ---\n{earlier}\n\n--- TURNS TO FOLD IN ---\n{transcript(evicted)}"
+    turns = format_transcript(evicted)
+    return f"--- EARLIER SUMMARY ---\n{earlier}\n\n--- TURNS TO FOLD IN ---\n{turns}"

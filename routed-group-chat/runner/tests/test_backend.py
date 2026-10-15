@@ -19,7 +19,7 @@ from claude_agent_sdk import (
     ThinkingBlock,
 )
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
-from group_chat.backend import BackendError, ClaudeBackend, options_for, text_of
+from group_chat.backend import BackendError, ClaudeBackend, build_options, join_text
 
 pytestmark = pytest.mark.unit
 
@@ -44,7 +44,7 @@ def scripted(*messages: Any) -> tuple[ClaudeBackend, list[dict[str, Any]]]:
 
 
 def test_options_are_single_turn_and_tool_free() -> None:
-    options = options_for("sys", "haiku")
+    options = build_options("sys", "haiku")
     assert options.system_prompt == "sys"
     assert options.model == "haiku"
     assert options.max_turns == 1
@@ -87,16 +87,16 @@ def test_empty_reply_raises() -> None:
 
 
 def test_text_of_ignores_other_messages() -> None:
-    assert text_of(result("x")) == ""
+    assert join_text(result("x")) == ""
 
 
 def test_options_default_model_is_none() -> None:
-    assert options_for("sys", None).model is None
+    assert build_options("sys", None).model is None
 
 
 def test_text_of_joins_text_blocks_and_skips_thinking() -> None:
     message = AssistantMessage([TextBlock("a"), ThinkingBlock("hmm", "sig"), TextBlock("b")], "m")
-    assert text_of(message) == "a\nb"
+    assert join_text(message) == "a\nb"
 
 
 def test_last_non_empty_assistant_text_wins() -> None:
@@ -124,19 +124,19 @@ def test_query_gets_options_for_role() -> None:
 
 
 def test_options_isolate_tools_mcp_and_settings() -> None:
-    options = options_for("sys", None)
+    options = build_options("sys", None)
     assert options.tools == []
     assert options.strict_mcp_config is True
     assert options.env == {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
 def test_options_env_is_a_fresh_copy() -> None:
-    options_for("sys", None).env["X"] = "1"
-    assert "X" not in options_for("sys", None).env
+    build_options("sys", None).env["X"] = "1"
+    assert "X" not in build_options("sys", None).env
 
 
 def test_sdk_command_has_no_tools_and_strict_mcp(tmp_path: Path) -> None:
-    options = replace(options_for("sys", "haiku"), cli_path=tmp_path / "claude")
+    options = replace(build_options("sys", "haiku"), cli_path=tmp_path / "claude")
     command = SubprocessCLITransport(prompt="x", options=options)._build_command()
     assert command[command.index("--tools") + 1] == ""
     assert "--strict-mcp-config" in command

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import CLINotFoundError
 from group_chat.backend import BackendError, ClaudeBackend
-from group_chat.cli import Io, exit_on_sigterm, main, non_negative, run
+from group_chat.cli import Io, exit_on_sigterm, main, parse_non_negative, run
 from group_chat.state import Store
 
 from .conftest import FailingBackend, FakeBackend
@@ -175,7 +175,7 @@ def test_non_integer_limit_is_refused(roster_file: Path, chat_io: Io) -> None:
 
 @pytest.mark.parametrize("text", ["0", "7"])
 def test_non_negative_accepts(text: str) -> None:
-    assert non_negative(text) == int(text)
+    assert parse_non_negative(text) == int(text)
 
 
 @pytest.mark.parametrize("command", ["log", "show"])
@@ -228,9 +228,9 @@ def test_main_installs_sigterm_handler(roster_file: Path) -> None:
 
 def test_sigterm_handler_releases_lock(roster_file: Path) -> None:
     store = Store(roster_file.parent / "chat")
-    with pytest.raises(SystemExit), store.locked():
+    with pytest.raises(SystemExit), store.hold_lock():
         exit_on_sigterm(signal.SIGTERM, None)
-    assert not store.lock_path.exists()
+    assert not store.lockfile.exists()
 
 
 def test_sdk_error_exits_1_end_to_end(roster_file: Path) -> None:

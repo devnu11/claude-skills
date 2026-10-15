@@ -33,7 +33,7 @@ class LockError(RuntimeError):
     """Another live process holds the lock."""
 
 
-def pid_alive(pid: int, platform: str = sys.platform) -> bool:
+def is_pid_alive(pid: int, platform: str = sys.platform) -> bool:
     """Whether ``pid`` runs on this host; always ``True`` on Windows (see module doc)."""
     if platform == "win32":
         return True
@@ -56,12 +56,12 @@ class LockFile:
     """The lock at ``path``; ``alive`` is injectable for tests."""
 
     path: Path
-    alive: Callable[[int], bool] = pid_alive
+    alive: Callable[[int], bool] = is_pid_alive
 
     @contextmanager
-    def held(self) -> Iterator[None]:
+    def hold(self) -> Iterator[None]:
         """Hold the lock for the ``with`` body; ``LockError`` if a live process has it."""
-        owner = self._acquire()
+        owner = self._claim()
         try:
             yield
         finally:
@@ -83,7 +83,7 @@ class LockFile:
         pid = holder.get("pid")
         return fits(pid, int) and not self.alive(pid)
 
-    def _acquire(self) -> Owner:
+    def _claim(self) -> Owner:
         owner = new_owner()
         if self._create(owner):
             return owner
@@ -92,7 +92,7 @@ class LockFile:
             self._remove_if(holder)
             if self._create(owner):
                 return owner
-        raise LockError(self._busy_message(self.holder))
+        raise LockError(self._describe_busy(self.holder))
 
     def _create(self, owner: Owner) -> bool:
         try:
@@ -113,6 +113,6 @@ class LockFile:
         if holder is not None and self.holder == holder:
             self.path.unlink(missing_ok=True)
 
-    def _busy_message(self, holder: Owner | None) -> str:
+    def _describe_busy(self, holder: Owner | None) -> str:
         who = f"pid {holder.get('pid')} on {holder.get('host')}" if holder else "another process"
         return f"{self.path} is held by {who}; delete it if that process is not running"

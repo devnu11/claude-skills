@@ -52,14 +52,14 @@ class FakeSdk:
 def test_reply_flows_through_sdk_messages(make_chat: MakeChat) -> None:
     sdk = FakeSdk({"po": "Cut search.\nDECISION: no search in v1"})
     chat = make_chat(ClaudeBackend(sdk.query))
-    replies = chat.say("@po what do we cut?")
+    replies = chat.send("@po what do we cut?")
     assert replies[0].text == "Cut search.\nDECISION: no search in v1"
     assert chat.store.load().log.decisions[0].text == "no search in v1"
 
 
 def test_options_are_tool_free_with_role_model(make_chat: MakeChat) -> None:
     sdk = FakeSdk()
-    make_chat(ClaudeBackend(sdk.query)).say("@po @manager hi")
+    make_chat(ClaudeBackend(sdk.query)).send("@po @manager hi")
     (_, po_opts), (_, mgr_opts) = sdk.seen
     assert (po_opts.model, mgr_opts.model) == ("haiku", None)
     for opts in (po_opts, mgr_opts):
@@ -73,7 +73,7 @@ def test_options_are_tool_free_with_role_model(make_chat: MakeChat) -> None:
 def test_handoff_and_compaction_through_sdk(make_chat: MakeChat) -> None:
     sdk = FakeSdk({"manager": "Over to PO.\nHANDOFF: @po"})
     chat = make_chat(ClaudeBackend(sdk.query), recent_tokens=1, keep_turns=1)
-    replies = chat.say("@manager scope?")
+    replies = chat.send("@manager scope?")
     assert [t.speaker for t in replies] == ["manager", "po"]
     assert chat.store.load().summary == "SDK SUMMARY"
 
@@ -82,7 +82,7 @@ def test_sdk_error_keeps_human_turn_and_notes_failure(make_chat: MakeChat) -> No
     sdk = FakeSdk(error="overloaded")
     chat = make_chat(ClaudeBackend(sdk.query))
     with pytest.raises(PartialReplyError, match="overloaded") as exc:
-        chat.say("@po hi")
+        chat.send("@po hi")
     assert isinstance(exc.value.__cause__, BackendError)
     assert chat.store.load().turns == [
         Turn("human", "@po hi"),
@@ -101,7 +101,7 @@ def test_sdk_exception_becomes_partial_reply_with_note(make_chat: MakeChat) -> N
 
     chat = make_chat(ClaudeBackend(query))
     with pytest.raises(PartialReplyError) as exc:
-        chat.say("@manager @po plan?")
+        chat.send("@manager @po plan?")
     assert isinstance(exc.value, BackendError)
     note = Turn("orchestrator", "@po could not answer: CLINotFoundError: Claude Code not found")
     assert exc.value.replies == [Turn("manager", "Fine."), note]

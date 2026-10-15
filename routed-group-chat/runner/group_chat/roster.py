@@ -80,18 +80,18 @@ def parse(data: Mapping[str, Any], base: Path) -> Roster:
     raw = data.get("role")
     if not raw:
         raise RosterError("roster needs at least one [[role]]")
-    roles = tuple(_role(item, base) for item in raw)
+    roles = tuple(_parse_role(item, base) for item in raw)
     _check_unique(roles)
     return Roster(data.get("team", "group chat"), roles)
 
 
-def _role(item: Any, base: Path) -> Role:
+def _parse_role(item: Any, base: Path) -> Role:
     TableSchema(ROLE_FIELDS, "each [[role]]", RosterError).check(item)
-    name = _name(item.get("name"))
-    return Role(name, item.get("title", name), _prompt(name, item, base), item.get("model"))
+    name = _check_name(item.get("name"))
+    return Role(name, item.get("title", name), _read_role_prompt(item, base), item.get("model"))
 
 
-def _name(value: Any) -> str:
+def _check_name(value: Any) -> str:
     if not isinstance(value, str) or not NAME_RE.fullmatch(value):
         raise RosterError(f"role name {value!r} must match {NAME_RE.pattern}")
     if value in RESERVED:
@@ -99,7 +99,9 @@ def _name(value: Any) -> str:
     return value
 
 
-def _prompt(name: str, item: Mapping[str, Any], base: Path) -> str:
+def _read_role_prompt(item: Mapping[str, Any], base: Path) -> str:
+    """The role's prompt text; call after ``_check_name`` has passed ``item['name']``."""
+    name = item["name"]
     inline, file = item.get("prompt"), item.get("prompt_file")
     if (inline is None) == (file is None):
         raise RosterError(f"role {name!r} needs exactly one of prompt or prompt_file")
