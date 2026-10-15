@@ -85,6 +85,14 @@ class Hang(NamedTuple):
     out: str = ""
 
 
+class Exec(Exception):
+    """Raised by ``FakeSystem.exec_replace``: the process would have been replaced (s128)."""
+
+    def __init__(self, argv: tuple[str, ...]) -> None:
+        super().__init__(argv)
+        self.argv = argv
+
+
 class FakeProcess:
     """A spawned child: ``Done`` has exited; ``Hang`` runs until the fake signals it."""
 
@@ -195,6 +203,8 @@ class FakeSystem:
         self.tokens = 0
         self.survivors: set[int] = set()
         self.commands: list[Any] = []
+        self.execs: list[tuple[str, ...]] = []
+        self.exec_error: BaseException | None = None
         self.rules: list[_Rule] = []
         self.procs: dict[int, FakeProcess] = {}
         self.next_pid = FIRST_CHILD_PID
@@ -585,6 +595,14 @@ class FakeSystem:
         self.ticks -= 1
         self.clock += timeout
         return False
+
+    def exec_replace(self, argv: tuple[str, ...]) -> Any:
+        """Record the argv and raise ``Exec`` (or a one-shot scripted error)."""
+        self.execs.append(argv)
+        failure, self.exec_error = self.exec_error, None
+        if failure is not None:
+            raise failure
+        raise Exec(argv)
 
     def environ(self) -> Mapping[str, str]:
         """The scripted environment (empty by default)."""
