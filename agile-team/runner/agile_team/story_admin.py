@@ -19,7 +19,7 @@ from .pending_tests import PendingSet
 from .relay import Answer, Note
 from .state import RunState
 
-UNKNOWN = "unknown story {story!r}; open it with open_story"
+UNKNOWN = "unknown story {story!r}; ask the liaison for it with request_story"
 NO_REASON = "a reason is required"
 FINISHED_TEXT = "story {story} is {status}; there is nothing to {verb}"
 CANCEL_PENDING = (

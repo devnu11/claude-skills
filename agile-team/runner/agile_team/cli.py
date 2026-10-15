@@ -35,6 +35,7 @@ from . import (
     sandbox,
     shares,
     stages,
+    story_drafts,
     story_spec,
     suite_runs,
     system,
@@ -65,6 +66,17 @@ from .roles import (
 )
 from .salvage import Cause
 from .sharing import Shares
+from .story_drafts import (
+    Action,
+    Approval,
+    Checked,
+    Known,
+    Placing,
+    StoryRequest,
+    draft_problems,
+    option_problems,
+)
+from .story_intake import StoryQueue
 from .upstream import GhPrs, command_runner
 
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
@@ -570,6 +582,8 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
         "queued_messages": [t.id for t in unread],
         "queued_shares": [s.id for s in Shares(config.run_dir).pending(st.shares)],
         "shares": st.shares,
+        "queued_stories": [r.id for r in StoryQueue(config.run_dir).pending(st.story_requests)],
+        "story_requests": st.story_requests,
     }
 
 
@@ -612,6 +626,71 @@ def cmd_share(args: argparse.Namespace) -> int:
     queued = Shares(config.run_dir).queue(share)
     path = shares.target_of(config.team.docs_dir, queued)
     print(shares.QUEUED.format(id=queued.id, path=path, short=queued.sha256()[: shares.SHORT]))
+    return 0
+
+
+TARGET_COUNTS = {Action.NEW: 1, Action.AMEND: 2}
+
+
+def _story_request(args: argparse.Namespace, config: config_mod.Config) -> StoryRequest:
+    """The request for ``story <action> <target…>``; USAGE when the target count is wrong."""
+    action = Action(args.action)
+    if len(args.target) != TARGET_COUNTS[action]:
+        raise CliError(story_drafts.USAGE)
+    *story, file = args.target
+    default = Placing.BACKLOG.value if action is Action.NEW else ""
+    plan = shares.resolved_path(config.repo, args.plan) or args.plan if args.plan else ""
+    return StoryRequest(
+        "", action, "".join(story), Approval(args.approved_by), plan,
+        args.sprint or default, args.after, file, "",
+    )  # fmt: skip
+
+
+def _read_draft(request: StoryRequest) -> tuple[StoryRequest, str | None]:
+    """``request`` holding the draft's text, and the read problem line when it can't be read."""
+    try:
+        return replace(request, text=system.read_text(Path(request.file))), None
+    except OSError as exc:
+        return request, story_drafts.CANNOT_READ.format(file=request.file, error=exc.strerror)
+
+
+def _story_known(config: config_mod.Config, request: StoryRequest) -> Known:
+    names = tuple(e.name for e in config.environments)
+    stories = state_mod.load(config.run_dir).stories
+    try:
+        target = system.read_text(config.repo / story_spec.file_of(config, request.story))
+    except OSError:
+        target = None
+    return Known(names, stories, target if request.story else None)
+
+
+def _plan_problems(config: config_mod.Config, request: StoryRequest) -> list[str]:
+    if not request.plan or system.is_file(config.repo / request.plan):
+        return []
+    return [story_drafts.PLAN_MISSING.format(plan=request.plan)]
+
+
+def _story_checks(config: config_mod.Config, drafted: tuple[StoryRequest, str | None]) -> Checked:
+    """Every problem line with a draft, as ``Checked``; its draft is set when all is clean."""
+    request, unread = drafted
+    known = _story_known(config, request)
+    checked = Checked(None, (unread,)) if unread else draft_problems(request, known)
+    more = [*option_problems(request, known), *_plan_problems(config, request)]
+    return replace(checked, problems=(*checked.problems, *more))
+
+
+def cmd_story(args: argparse.Namespace) -> int:
+    """Check a liaison's story draft and queue it for the runner (s135); never commits."""
+    config = _load_config(repo_of(args))
+    request, unread = _read_draft(_story_request(args, config))
+    checked = _story_checks(config, (request, unread))
+    if checked.problems:
+        raise CliError("\n".join(checked.problems))
+    queued = StoryQueue(config.run_dir).queue(request)
+    title = checked.draft.spec.title if checked.draft else ""
+    approved = story_drafts.APPROVED[request.approved_by]
+    text = story_drafts.QUEUED[request.action]
+    print(text.format(id=queued.id, title=title, story=request.story, approved=approved))
     return 0
 
 
@@ -788,6 +867,15 @@ WATCH_ARGS: tuple[Arg, ...] = (
 PENDING_ARGS: tuple[Arg, ...] = (
     (("--root",), {"default": "", "help": "repo-relative directory pytest runs in"}),
 )  # fmt: skip
+STORY_ARGS: tuple[Arg, ...] = (
+    (("action",), {"choices": [a.value for a in Action]}),
+    (("target",), {"nargs": "+", "help": "new: <file.md>; amend: <id> <file.md>"}),
+    (("--approved-by",), {"required": True, "dest": "approved_by",
+                          "choices": [a.value for a in Approval]}),
+    (("--sprint",), {"choices": [p.value for p in Placing], "default": None}),
+    (("--after",), {"default": "", "help": "place it right after this story"}),
+    (("--plan",), {"default": "", "help": "the approved plan (needs --approved-by human)"}),
+)  # fmt: skip
 COMMANDS = (
     Command("init", "phase A onboarding (no API calls)", cmd_init, INIT_ARGS),
     Command("config", "validate .agile-team.toml and roles", cmd_config_check,
@@ -809,6 +897,8 @@ COMMANDS = (
             cmd_share,
             ((("source",), {"help": "the file to share; its name is kept (no stdin)"}),
              (("--story",), {"required": True, "help": "the story it is for, e.g. s118"}))),
+    Command("story", "write a story (new) or replace its ACs (amend) from a draft file; "
+            "the runner commits it", cmd_story, STORY_ARGS),
     Command("reply", "reply on a story's dashboard thread (a file, or - for stdin)", cmd_reply,
             ((("story",), {}),
              (("source",), {"help": "file holding the reply, or - to read stdin"}))),

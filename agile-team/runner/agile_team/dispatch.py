@@ -467,7 +467,7 @@ class Runtime:
     def _story_refusal(self, request: StepRequest) -> str | None:
         sid = request.story_id
         if sid and sid not in self.state.stories:
-            return f"unknown story {sid!r}; open it with open_story"
+            return f"unknown story {sid!r}; ask the liaison for it with request_story"
         if sid in self.relay.blocked_stories():
             return f"story {sid} is blocked waiting on an answer"
         story = self.state.stories.get(sid or "")

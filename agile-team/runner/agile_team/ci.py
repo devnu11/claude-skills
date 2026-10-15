@@ -66,8 +66,9 @@ CI_MAIN_REPORT = (
 CI_STALE = "a check ran on another commit than the pushed head; it does not count"
 CI_OURS_REFUSAL = (
     "sprint {sprint}'s CI failed where our code ran: {failures}. A re-run is not a fix and "
-    '"flaky" is not a reason: open a bug story (open_story) and record_ci_bug(story), or '
-    "route the fix to an open story with record_ci_bug(story)"
+    '"flaky" is not a reason: ask the liaison for a bug story (request_story) and '
+    "record_ci_bug(story) once it is opened, or route the fix to an open story with "
+    "record_ci_bug(story)"
 )
 NO_STEP_NAMED = "step not named"
 __all__ = ["FAILING", "PASSING", "Bucket"]

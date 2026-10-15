@@ -110,6 +110,7 @@ class RunState:
     human_order: list[str] = field(default_factory=list)
     reorders: dict[str, str] = field(default_factory=dict)
     reorders_told: list[str] = field(default_factory=list)
+    story_requests: dict[str, str] = field(default_factory=dict)  # request id -> outcome (s135)
     shares: dict[str, str] = field(default_factory=dict)  # share request id -> outcome (s120)
     in_flight: InFlight | None = None
     interrupted: list[Interruption] = field(default_factory=list)

@@ -11,7 +11,7 @@ from typing import Any
 from .gates import FINISHED, StoryState, StoryStatus
 
 NO_STORIES = "no stories listed; pass the story ids in the order to work on them"
-UNKNOWN = "unknown stories: {ids}; open them with open_story first"
+UNKNOWN = "unknown stories: {ids}; ask the liaison for them with request_story"
 CANCELLED_IDS = "cancelled stories can't be ordered: {ids}"
 DONE = "done stories have no place in the order: {ids}"
 BAD_POSITION = "position must be a whole number from 1 to {count}"
@@ -54,6 +54,14 @@ class Pull:
 
 
 @dataclass(frozen=True)
+class After:
+    """A story to place, and the story it goes right after."""
+
+    story: str
+    anchor: str
+
+
+@dataclass(frozen=True)
 class Placement:
     """A story and the position the PO asks for (validated by ``move_refusal``)."""
 
@@ -66,9 +74,14 @@ class Source(StrEnum):
 
     PO = "product-owner"
     HUMAN = "human (dashboard)"
+    LIAISON = "liaison"
 
 
-SOURCE_ROLES: dict[Source, str | None] = {Source.PO: "product-owner", Source.HUMAN: None}
+SOURCE_ROLES: dict[Source, str | None] = {
+    Source.PO: "product-owner",
+    Source.HUMAN: None,
+    Source.LIAISON: "liaison",
+}
 
 
 @dataclass(frozen=True)
@@ -220,6 +233,12 @@ class Priority:
         """The plan with ``ids`` first, in the order given."""
         plan = self.plan(stories)
         return [i for i in ids if i in plan] + [i for i in plan if i not in ids]
+
+    def with_after(self, after: After, stories: Iterable[StoryState]) -> list[str]:
+        """The plan with ``after.story`` right after ``after.anchor`` (at the end when absent)."""
+        plan = [i for i in self.plan(stories) if i != after.story]
+        at = plan.index(after.anchor) + 1 if after.anchor in plan else len(plan)
+        return [*plan[:at], after.story, *plan[at:]]
 
     def board_move(self, placement: Placement, stories: dict[str, StoryState]) -> list[str]:
         """The queue with one story put at its board position (G16)."""

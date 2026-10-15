@@ -17,7 +17,6 @@ from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 
 from . import (
     backlog,
-    dependencies,
     handover,
     live,
     po_session,
@@ -25,7 +24,7 @@ from . import (
     reorders,
     salvage,
     sprint_end,
-    story_spec,
+    story_admin,
     system,
     threads,
 )
@@ -37,7 +36,7 @@ from .boundary import (
     BoundaryOutcome,
     Edge,
     Permission,
-    held_text,
+    held_text,  # noqa: F401  (re-exported)
 )
 from .boundary_runner import BoundaryRunner, boundary_event
 from .checkout import CheckoutChanged
@@ -63,6 +62,14 @@ from .relay import REPLY, Note
 from .reverts import Reverter
 from .router import Router
 from .runner_tools import text_result
+from .sprint_add import (  # noqa: F401  (re-exported)
+    ADD_NEEDS_REASON,
+    ALREADY_IN_SPRINT,
+    NO_OPEN_SPRINT,
+    SPRINT_REFUSAL_BOUNDARY,
+    Addition,
+    SprintAdd,
+)
 from .stage_log import place_of
 from .state import ModelOverride, RunState, RunStatus
 from .story_admin import Act, Clerk
@@ -73,6 +80,45 @@ WAIT_CHORE = "waiting for answers to {ids}"
 DEFAULT_WAIT_S = 1800
 RESUME_NOTE = "Resume the run from state."
 USE_REPLY = "use reply_story to answer on a story's thread"
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """What the PO saw: the story and step, the failing output, the files involved."""
+
+    story: str
+    step: str
+    output: str
+    files: list[str]
+
+    @classmethod
+    def of(cls, raw: dict[str, Any]) -> Evidence:
+        """Read a checked evidence object; the output keeps its last ``MAX_OUTPUT`` characters."""
+        output = raw["output"]
+        if len(output) > MAX_OUTPUT:
+            output = CUT_HEAD.format(n=len(output) - MAX_OUTPUT) + output[-MAX_OUTPUT:]
+        return cls(raw.get("story", ""), raw.get("step", ""), output, raw.get("files", []))
+
+
+def _evidence_refusal(raw: dict[str, Any], stories: dict[str, StoryState]) -> str | None:
+    """S5 refusals 3 to 6, in order."""
+    for key in ("story", "step", "output"):
+        if not isinstance(raw.get(key, ""), str):
+            return EVIDENCE_NOT_STRING.format(key=key)
+    story = raw.get("story", "")
+    if story and story not in stories:
+        return f"unknown story {story!r}"
+    if not raw.get("output", "").strip():
+        return EVIDENCE_NO_OUTPUT
+    files = raw.get("files", [])
+    ok = isinstance(files, list) and all(isinstance(f, str) for f in files)
+    return None if ok else EVIDENCE_BAD_FILES
+
+
+def _request_text(summary: str, evidence: Evidence) -> str:
+    where = f"{evidence.story} at {evidence.step}" if evidence.story else "none"
+    files = ", ".join(evidence.files) or "none"
+    return REQUEST_TEXT.format(summary=summary, where=where, files=files, output=evidence.output)
 
 
 def _no_refusal(_state: RunState) -> str | None:
@@ -87,14 +133,6 @@ KIND_REFUSALS: dict[str, Callable[[RunState], str | None]] = {
 }
 REASON_CUT = 200
 STATUS_KINDS = {"sprint-end", "done", "blocked"}
-SPRINT_REFUSAL_BOUNDARY = (
-    "sprint {sprint} {edge} boundary is still pending ({stage}{held}); finish it first"
-)
-NO_OPEN_SPRINT = (
-    "no sprint is open to add to (none started, or sprint {sprint} has ended); use start_sprint"
-)
-ALREADY_IN_SPRINT = "already in sprint {sprint}: {ids}"
-ADD_NEEDS_REASON = "add_to_sprint needs a reason: say why these stories join sprint {sprint}"
 RESTART_NEEDS_REASON = (
     "sprint {sprint} still has unfinished stories ({ids}); use add_to_sprint to add work, "
     "or give a reason for starting a new sprint"
@@ -105,7 +143,21 @@ NO_CI_HOLD = (
     "no boundary is held on failed CI; record_ci_bug applies after a ci_failed, ci_infra "
     "or main_broken hand-over"
 )
-UNKNOWN_BUG = "unknown story {story!r}; open it with open_story first"
+MAX_OUTPUT = 6000
+CUT_HEAD = "[first {n} characters cut]\n"
+REQUEST_TEXT = (
+    "The PO asks for a story: {summary}\nStory: {where}\nFiles: {files}\nFailing output:\n{output}"
+)
+REQUEST_NEXT = "the liaison writes the story; the runner opens it and tells you its id"
+NEEDS_SUMMARY = "a summary is required"
+EVIDENCE_NOT_OBJECT = "evidence must be an object {story, step, output, files}"
+EVIDENCE_NOT_STRING = "evidence.{key} must be a string"
+EVIDENCE_NO_OUTPUT = "evidence.output must hold the failing output"
+EVIDENCE_BAD_FILES = "evidence.files must be a list of paths"
+UNKNOWN_BUG = (
+    "unknown story {story!r}; ask the liaison for it with request_story, "
+    "then record_ci_bug once the runner opens it"
+)
 DONE_BUG = "story {story} is done; open a new story for the failing CI"
 NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it"
 PERMISSION_REFUSAL = 'answer must be "yes" or "no"'
@@ -137,15 +189,7 @@ class Sprint:
     reason: str
 
 
-@dataclass(frozen=True)
-class Addition:
-    """The arguments of one add_to_sprint call."""
-
-    ids: list[str]
-    reason: str
-
-
-STORY_ARGS: dict[str, tuple[str, ...]] = {"open_story": ("id",)}
+STORY_ARGS: dict[str, tuple[str, ...]] = {}
 DEFAULT_STORY_ARGS = ("story", "stories")
 
 
@@ -196,41 +240,27 @@ class Tools:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
         return text_result(await self.runtime.run_role(request))
 
-    def _open_refusal(self, args: dict[str, Any]) -> str | None:
-        """Why ``open_story`` must refuse ``args``, or None (duplicate id, file, depends_on)."""
-        if args["id"] in self.runtime.state.stories:
-            return f"story {args['id']} already exists"
-        return story_spec.read(self.runtime.config, args["id"]).refusal() or self._depends_refusal(
-            args
-        )
-
-    def _depends_refusal(self, args: dict[str, Any]) -> str | None:
-        """DP6: the checks on ``open_story``'s ``depends_on``."""
-        sid, stories = args["id"], self.runtime.state.stories
-        given = dependencies.listed(args.get("depends_on") or [])
-        if given is None:
-            return dependencies.NOT_A_LIST.format(ids=sid)
-        found = dependencies.declared(self.runtime.config, [sid])
-        graph = {**dependencies.graph_of(stories), sid: given}
-        return priority.first_refusal(
-            [
-                lambda: dependencies.shape_refusal(found.bad),
-                lambda: dependencies.mismatch_refusal(dependencies.Proposal(sid, given), found),
-                lambda: dependencies.graph_refusal(graph, {*stories, sid}),
-            ]
-        )
-
-    async def open_story(self, args: dict[str, Any]) -> dict[str, Any]:
-        rt, sid = self.runtime, args["id"]
-        if reason := self._open_refusal(args):
+    async def request_story(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Ask the liaison for a story; the runner opens it and tells the PO its id (s135)."""
+        if reason := self._request_refusal(args):
             return text_result(refused(reason))
-        first = rt.pipeline.first()
-        given = dependencies.listed(args.get("depends_on") or []) or []
-        rt.state.stories[sid] = StoryState(sid, args["title"], first, depends_on=given)
-        rt.save()
-        data = {"title": args["title"], "step": first, "depends_on": given}
-        rt.events.emit(Event(EventKind.STORY_OPENED, PO, sid, data))
-        return text_result({"status": "opened", "step": first})
+        evidence = Evidence.of(args["evidence"])
+        summary = args["summary"].strip()
+        story = evidence.story
+        note = Note("story-request", _request_text(summary, evidence), [story] if story else [])
+        msg = self.runtime.relay.post(note)
+        data = {"message": msg.id, "summary": summary, "step": evidence.step}
+        data["files"] = evidence.files
+        self.runtime.events.emit(Event(EventKind.STORY_REQUEST, PO, story or None, data))
+        return text_result({"status": "requested", "message": msg.id, "next": REQUEST_NEXT})
+
+    def _request_refusal(self, args: dict[str, Any]) -> str | None:
+        summary, evidence = args.get("summary"), args.get("evidence")
+        if not (isinstance(summary, str) and summary.strip()):
+            return NEEDS_SUMMARY
+        if not isinstance(evidence, dict):
+            return EVIDENCE_NOT_OBJECT
+        return _evidence_refusal(evidence, self.runtime.state.stories)
 
     async def start_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
         ids = list(dict.fromkeys(args.get("stories") or []))
@@ -252,72 +282,14 @@ class Tools:
     async def add_to_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
         """Add open stories to the running sprint without restarting it."""
         ids = list(dict.fromkeys(args.get("stories") or []))
-        add = Addition(ids, args.get("reason") or "")
-        if reason := self._add_refusal(add):
+        add, adder = Addition(ids, args.get("reason") or ""), SprintAdd(self.runtime)
+        if reason := adder.refusal(add):
             return text_result(refused(reason))
-        return text_result(self._add(add))
-
-    def _add_refusal(self, add: Addition) -> str | None:
-        stories = self.runtime.state.stories
-        return priority.first_refusal(
-            [
-                self._boundary_refusal,
-                self._open_sprint_refusal,
-                lambda: priority.order_refusal(add.ids, stories),
-                lambda: self._in_sprint_refusal(add.ids),
-                lambda: self._unmet_refusal(add.ids),
-                lambda: self._add_reason_refusal(add.reason),
-            ]
+        order = adder.apply(add)
+        state = self.runtime.state
+        return text_result(
+            {"status": "added", "sprint": state.sprint, "stories": ids, "order": order}
         )
-
-    def _add_reason_refusal(self, reason: str) -> str | None:
-        if reason.strip():
-            return None
-        return ADD_NEEDS_REASON.format(sprint=self.runtime.state.sprint)
-
-    def _open_sprint_refusal(self) -> str | None:
-        state = self.runtime.state
-        if state.sprint_open():
-            return None
-        return NO_OPEN_SPRINT.format(sprint=state.sprint)
-
-    def _in_sprint_refusal(self, ids: list[str]) -> str | None:
-        state = self.runtime.state
-        inside = set(state.sprint_ids())
-        already = [i for i in ids if i in inside]
-        if not already:
-            return None
-        return ALREADY_IN_SPRINT.format(sprint=state.sprint, ids=", ".join(already))
-
-    def _unmet_refusal(self, ids: list[str]) -> str | None:
-        state = self.runtime.state
-        members = frozenset([*state.sprint_ids(), *ids])
-        return dependencies.unmet_refusal(ids, dependencies.Scope(state.stories, members))
-
-    def _add(self, add: Addition) -> dict[str, Any]:
-        rt = self.runtime
-        state = rt.state
-        state.add_to_sprint(add.ids)
-        rt.save()
-        data = {"sprint": state.sprint, "stories": add.ids, "reason": add.reason}
-        rt.events.emit(Event(EventKind.SPRINT_ADD, PO, None, data))
-        order = rt.priority().with_first(add.ids, state.stories.values())
-        ordered = self._reorder(Reorder(Change.SPRINT, order, None, add.reason))
-        return {
-            "status": "added",
-            "sprint": state.sprint,
-            "stories": add.ids,
-            "order": ordered["order"],
-        }
-
-    def _boundary_refusal(self) -> str | None:
-        pending = self.runtime.state.boundary
-        if not pending:
-            return None
-        return SPRINT_REFUSAL_BOUNDARY.format(
-            sprint=pending.sprint, edge=pending.edge, stage=pending.stage,
-            held=held_text(pending),
-        )  # fmt: skip
 
     def _restart_refusal(self, reason: str) -> str | None:
         state = self.runtime.state
@@ -327,7 +299,7 @@ class Tools:
         return RESTART_NEEDS_REASON.format(sprint=state.sprint, ids=", ".join(unfinished))
 
     def _sprint_refusal(self, sprint: Sprint) -> str | None:
-        if pending := self._boundary_refusal():
+        if pending := SprintAdd(self.runtime).boundary_refusal():
             return pending
         if not sprint.ids:
             return "no stories listed; pass the story ids this sprint commits to"
@@ -572,7 +544,7 @@ class Tools:
         """Revert a story's commits and put it back in the backlog (s124)."""
         if moved := self.runtime.drift_halt():
             return text_result(halted_report(PO, moved))
-        if pending := self._boundary_refusal():
+        if pending := SprintAdd(self.runtime).boundary_refusal():
             return text_result(refused(pending))
         return text_result(Reverter(self.runtime).run(args))
 
@@ -617,7 +589,7 @@ class Tools:
     def _story_for(self, args: dict[str, Any]) -> tuple[StoryState | None, str | None]:
         story = self.runtime.state.stories.get(args["story"])
         if story is None:
-            return None, f"unknown story {args['story']!r}; open it with open_story"
+            return None, story_admin.UNKNOWN.format(story=args["story"])
         return story, None
 
     def _developer_refusal(self, role: str) -> str | None:
@@ -685,17 +657,6 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Run one role step yourself with your own brief; the runner runs standard steps on "
         "its own. Returns the handoff and gate.",
         {"role": str, "brief": str, "story": str},
-    ),
-    "open_story": (
-        "Register a story; it starts in the backlog until start_sprint lists it. "
-        "Write `.team/stories/<id>.md` first: frontmatter `id`, `title` and "
-        "`acceptance: [{id, text, environment}]`, where every AC's environment is a "
-        "configured [[environment]]. A bad file is refused with every problem; fix the file "
-        "and call again. "
-        "depends_on: the ids of stories that must be done before this one starts. Write the "
-        "same list in the story file's frontmatter `depends_on`; a different list is refused. "
-        "Unknown ids, the story itself and cycles are refused.",
-        {"id": str, "title": str, "depends_on": list},
     ),
     "start_sprint": (
         "Begin the next sprint with exactly the listed story ids; unfinished stories "
@@ -819,6 +780,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "set_role_model": (
         "Override a role's provider/model/effort with a logged reason.",
         {"role": str, "provider": str, "model": str, "effort": str, "reason": str},
+    ),
+    "request_story": (
+        "Ask the liaison to write a story, for a bug the team couldn't fix in its own turns; "
+        "you can't write story files. summary: what is wrong, in a sentence or two. evidence: "
+        "{story, step, output, files}: the story and step where it showed (empty for a failure "
+        "outside any story), the failing output, and the files involved. The liaison writes "
+        "the story; the runner opens it and tells you its id.",
+        {"summary": str, "evidence": dict},
     ),
     "story_status": ("Pipeline position of every story, in priority order, with the order.", {}),
 }

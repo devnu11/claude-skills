@@ -78,10 +78,16 @@ def _swap(obj: object, attr: str, moved: Mapping[str, str]) -> int:
 
 def _story(story: StoryState, moved: Mapping[str, str]) -> int:
     count = _swap(story, "commit", moved)
-    for i, sha in enumerate(story.code_commits):
-        story.code_commits[i] = _moved(sha, moved)
-        count += _changed(sha, story.code_commits[i])
+    count += _remap_all(story.code_commits, moved) + _remap_all(story.file_commits, moved)
     return count + _interruptions([story.interrupted] if story.interrupted else [], moved)
+
+
+def _remap_all(shas: list[str], moved: Mapping[str, str]) -> int:
+    count = 0
+    for i, sha in enumerate(shas):
+        shas[i] = _moved(sha, moved)
+        count += _changed(sha, shas[i])
+    return count
 
 
 def _interruptions(items: Sequence[Interruption], moved: Mapping[str, str]) -> int:

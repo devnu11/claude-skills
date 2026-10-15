@@ -19,11 +19,8 @@ from .roles import RoleError, split_frontmatter
 
 NOT_A_LIST = "depends_on must be a list of story ids: {ids}"
 SELF = "a story cannot depend on itself: {ids}"
-UNKNOWN = "depends_on names unknown stories: {pairs}; open them with open_story first"
+UNKNOWN = "depends_on names unknown stories: {pairs}; only opened stories can be listed"
 CYCLE = "depends_on has a cycle: {cycle}"
-MISMATCH = (
-    "{story}'s file has depends_on [{file}], not [{given}]; pass the same list, or fix the file"
-)
 UNMET = (
     "depends_on not done and not in the sprint: {pairs}; add those stories in the same "
     "call, or add this one once they are done"
@@ -40,14 +37,6 @@ class Declared:
 
     lists: Graph
     bad: list[str]
-
-
-@dataclass(frozen=True)
-class Proposal:
-    """`open_story`'s argument for a new story."""
-
-    story: str
-    deps: list[str]
 
 
 @dataclass(frozen=True)
@@ -106,16 +95,6 @@ def _ids(ids: list[str]) -> str:
 def shape_refusal(bad: list[str]) -> str | None:
     """DP4 (a): files whose depends_on is not a list of ids."""
     return NOT_A_LIST.format(ids=_ids(bad)) if bad else None
-
-
-def mismatch_refusal(proposal: Proposal, found: Declared) -> str | None:
-    """DP6: the story's file lists something other than the argument."""
-    file = found.lists.get(proposal.story)
-    if file is None or file == proposal.deps:
-        return None
-    return MISMATCH.format(
-        story=proposal.story, file=", ".join(file), given=", ".join(proposal.deps)
-    )
 
 
 def find_cycle(graph: Graph) -> list[str]:

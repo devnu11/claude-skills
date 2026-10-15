@@ -19,10 +19,22 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import yaml
-
-from . import roles, story_spec, system
+from . import frontmatter, roles, story_spec, system
 from .config import Config
+from .request_files import (  # noqa: F401  (re-exported)
+    BAD_REQUEST,
+    MISSING_FIELD,
+    NOT_JSON,
+    NOT_OBJECT,
+    NUMBER,
+    STRING,
+    UNREADABLE_REQUEST,
+    WRONG_TYPE,
+    BadRequest,
+    FieldKind,
+    Fields,
+    bad_request,
+)
 
 MAX_BYTES = 5 * 1024 * 1024
 FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -57,14 +69,8 @@ BRIEF_NOTES: dict[str, str] = {
 NOT_STRING = "path must be a string"
 OUTSIDE = "path {path} resolves to {resolved}; a shared file must sit directly in {design}"
 OUTSIDE_REPO = "a place outside the repo"
-BAD_REQUEST = "bad request file {file}: {problem}"
-NOT_JSON = "not JSON ({error})"
-NOT_OBJECT = "not a JSON object"
-MISSING_FIELD = "missing field '{field}'"
-WRONG_TYPE = "field '{field}' must be {word}"
 NOT_BASE64 = "field 'data' is not base64"
 HASH_MISMATCH = "field 'sha256' does not match the data"
-UNREADABLE_REQUEST = "cannot read it ({error})"
 UNPARSED = "the frontmatter does not parse, or its shared list is malformed"
 
 
@@ -144,16 +150,6 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-@dataclass(frozen=True)
-class FieldKind:
-    """The types a request field accepts, and how a refusal names them."""
-
-    types: tuple[type, ...]
-    word: str
-
-
-STRING = FieldKind((str,), "a string")
-NUMBER = FieldKind((int, float), "a number")  # bool is refused explicitly
 REQUEST_FIELDS: dict[str, FieldKind] = {
     "story": STRING,
     "name": STRING,
@@ -192,7 +188,7 @@ class Share:
     @classmethod
     def from_json(cls, rid: str, text: str) -> Share | BadRequest:
         """Read a request file, or a ``BadRequest`` naming the first problem (C4)."""
-        raw = _loaded(text)
+        raw = Fields(REQUEST_FIELDS).loaded(text)
         if isinstance(raw, str):
             return bad_request(rid, raw)
         data = _decoded(raw)
@@ -203,41 +199,7 @@ class Share:
         return cls(rid, raw["story"], raw["name"], data, float(raw["at"]))
 
 
-@dataclass(frozen=True)
-class BadRequest:
-    """A queued request file that failed validation; settled as refused, never applied."""
-
-    id: str
-    reason: str
-
-
 Request = Share | BadRequest
-
-
-def bad_request(rid: str, problem: str) -> BadRequest:
-    """A ``BadRequest`` for file ``rid``.json with ``problem``."""
-    reason = BAD_REQUEST.format(file=f"{rid}.json", problem=problem)
-    return BadRequest(rid, reason)
-
-
-def _field_problem(raw: dict[str, Any], field: str) -> str | None:
-    if field not in raw:
-        return MISSING_FIELD.format(field=field)
-    kind, value = REQUEST_FIELDS[field], raw[field]
-    if isinstance(value, kind.types) and type(value) is not bool:
-        return None
-    return WRONG_TYPE.format(field=field, word=kind.word)
-
-
-def _loaded(text: str) -> dict[str, Any] | str:
-    try:
-        raw = json.loads(text)
-    except json.JSONDecodeError as error:
-        return NOT_JSON.format(error=error.msg)
-    if not isinstance(raw, dict):
-        return NOT_OBJECT
-    problems = (_field_problem(raw, f) for f in REQUEST_FIELDS)
-    return next((p for p in problems if p), raw)
 
 
 def _decoded(raw: dict[str, Any]) -> bytes | str:
@@ -353,44 +315,26 @@ def render(files: tuple[SharedFile, ...]) -> str:
     return f"{KEY}:\n{rows}"
 
 
-def _without_block(head: str) -> str:
-    kept: list[str] = []
-    inside = False
-    for line in head.split("\n"):
-        inside = (inside and line[:1] in (" ", "\t")) or line.startswith(f"{KEY}:")
-        if not inside:
-            kept.append(line)
-    return "\n".join(kept)
-
-
 def _merged(files: tuple[SharedFile, ...], entry: SharedFile) -> tuple[SharedFile, ...]:
     if any(f.path == entry.path for f in files):
         return tuple(entry if f.path == entry.path else f for f in files)
     return (*files, entry)
 
 
-def _parse(text: str) -> tuple[dict[str, Any], str] | None:
-    try:
-        meta, body = roles.split_frontmatter("story", text)
-    except (roles.RoleError, yaml.YAMLError):
-        return None
-    return None if meta is None else (meta, body)
-
-
 def with_entry(text: str, entry: SharedFile) -> str | None:
     """``text`` with ``entry`` in its ``shared:`` list (S5), or None when that is unsafe."""
-    parsed, match = _parse(text), roles.FRONTMATTER.match(text)
+    parsed, match = frontmatter.parse(text), roles.FRONTMATTER.match(text)
     anywhere = Where("", "")
     if parsed is None or match is None or (old := listed(anywhere, parsed[0])).problems:
         return None
     files = _merged(old.files, entry)
-    head = _without_block(match.group(1)).rstrip("\n")
+    head = frontmatter.without_key(match.group(1), KEY).rstrip("\n")
     made = f"---\n{head}\n{render(files)}".removesuffix("\n") + text[match.end(1) :]
     return made if _safe(made, parsed, files) else None
 
 
 def _safe(made: str, parsed: tuple[dict[str, Any], str], files: tuple[SharedFile, ...]) -> bool:
-    again = _parse(made)
+    again = frontmatter.parse(made)
     if again is None or again[1] != parsed[1]:
         return False
     rest = {k: v for k, v in again[0].items() if k != KEY}
@@ -419,7 +363,7 @@ def listed_of(config: Config, story: str) -> Listed:
     """The shared files in a story's file; empty when it is missing or unparseable."""
     file = story_spec.file_of(config, story)
     try:
-        parsed = _parse(system.read_text(config.repo / file))
+        parsed = frontmatter.parse(system.read_text(config.repo / file))
     except OSError:
         return Listed()
     if parsed is None:

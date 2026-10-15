@@ -20,7 +20,17 @@ from .numbered_queue import NumberedQueue
 WAIT_LINE = "{story} waits on {ids}"
 RUN_WAIT_LINE = "the run waits on {ids}"
 WAITING_HEAD = "waiting on answers: "
-KINDS = ("question", "update", "sprint-end", "blocked", "done", "failed", "stopped", "reply")
+KINDS = (
+    "question",
+    "update",
+    "sprint-end",
+    "blocked",
+    "done",
+    "failed",
+    "stopped",
+    "reply",
+    "story-request",
+)
 REPLY = "reply"
 OUTBOX = "outbox.jsonl"
 INBOX = "inbox.jsonl"

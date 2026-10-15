@@ -222,9 +222,10 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.CI_FAILED,
         _held("ci_failed"),
         "{story}: sprint {sprint}'s CI failed where our code ran, on {prs}; the PR is NOT ready. "
-        "Failing checks:\n{checks}\ncontinue_boundary is refused here: a re-run is not a fix. Open "
-        "a bug story for it now (open_story), or pick an open story that fixes it, record it "
-        "with record_ci_bug(story), tell the human the PR is NOT ready, and list the story "
+        "Failing checks:\n{checks}\ncontinue_boundary is refused here: a re-run is not a fix. "
+        "Ask the liaison for a bug story now (request_story), or pick an open story that fixes "
+        "it, record it with record_ci_bug(story), tell the human the PR is NOT ready, and list "
+        "the story "
         "first when you start the next sprint",
     ),
     Rule(
@@ -239,8 +240,9 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.MAIN_BROKEN,
         _held("main_broken"),
         "{story}: sprint {sprint}'s CI failed on {prs}, and the same job and step fail on "
-        "{target}'s head: main is broken, not this sprint:\n{checks}\nOpen a bug story for main "
-        'now (open_story) and record_ci_bug(story). The sprint then ends as "ended, CI blocked '
+        "{target}'s head: main is broken, not this sprint:\n{checks}\nAsk the liaison for a "
+        "bug story for main now (request_story), and record_ci_bug(story) once the runner "
+        'opens it. The sprint then ends as "ended, CI blocked '
         'by main": NOT done, the PR stays unmerged, and you start the next sprint with that '
         "story first. Tell the human",
     ),

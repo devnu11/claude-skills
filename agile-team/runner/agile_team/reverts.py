@@ -120,6 +120,7 @@ def reverted_story(story: StoryState, back: Back) -> StoryState:
         developer=story.developer,
         po_developer=story.po_developer,
         depends_on=story.depends_on,
+        file_commits=story.file_commits,
         reverted=[*story.reverted, back.entry],
         revert_owed=back.owed,
         trace=story.trace,

@@ -4,7 +4,7 @@ description: Writes the stories, starts sprints and makes the team's judgement c
 model: sonnet
 effort: high
 tools: [Read, Grep, Glob, Write, Edit]
-write: [".team/stories/**", ".team/po/**"]
+write: [".team/po/**"]
 read: [".team/**", "{docs}"]
 extends: _leadership
 ---

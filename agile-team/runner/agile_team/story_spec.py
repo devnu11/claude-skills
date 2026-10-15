@@ -1,4 +1,7 @@
-"""A story file's frontmatter: its ACs and their acceptance environments (s94 SF1-SF9)."""
+"""A story file's frontmatter: its ACs and their acceptance environments (s94 SF1-SF9).
+
+Read by ``gates`` and ``acceptance`` (filed stories) and ``story_drafts`` (liaison drafts).
+"""
 
 from __future__ import annotations
 
@@ -30,10 +33,21 @@ class Problem(StrEnum):
     NO_ENVIRONMENT = "no_environment"
     UNKNOWN_ENVIRONMENT = "unknown_environment"
     NONE_CONFIGURED = "none_configured"
+    RUNNER_KEY = "runner_key"
+
+
+class Kind(StrEnum):
+    """Whose file is read."""
+
+    FILED = "filed"  # .team/stories/<id>.md: its id must be the story's
+    DRAFT = "draft"  # a liaison draft (s135): no runner-written key; the runner adds the id
+
+
+RUNNER_KEYS = ("id", "shared")
 
 
 PROBLEMS: dict[Problem, str] = {
-    Problem.NO_FILE: "no story file; write it before open_story",
+    Problem.NO_FILE: "no story file",
     Problem.NO_FRONTMATTER: (
         "no YAML frontmatter; start the file with --- and the keys id, title and acceptance"
     ),
@@ -53,6 +67,7 @@ PROBLEMS: dict[Problem, str] = {
         "environment {name!r} cannot be checked: .agile-team.toml configures no "
         "[[environment]]; ask the human to add one"
     ),
+    Problem.RUNNER_KEY: "{key} is written by the runner; remove it",
 }
 LINE = "{file}: {where}{problem}"
 STORY_FILE_HOLD = (
@@ -77,6 +92,7 @@ class Source:
     story: str
     file: str
     text: str | None
+    kind: Kind = Kind.FILED
 
 
 @dataclass(frozen=True)
@@ -140,11 +156,25 @@ def _has_criteria(meta: dict[str, Any]) -> bool:
     return isinstance(criteria, list) and bool(criteria)
 
 
+def _filed_id_problems(ctx: _Ctx, meta: dict[str, Any]) -> list[str]:
+    if meta.get("id") == ctx.source.story:
+        return []
+    return [ctx.line(Problem.WRONG_ID, found=meta.get("id"), story=ctx.source.story)]
+
+
+def _draft_id_problems(ctx: _Ctx, meta: dict[str, Any]) -> list[str]:
+    return [ctx.line(Problem.RUNNER_KEY, key=key) for key in RUNNER_KEYS if key in meta]
+
+
+ID_CHECKS: dict[Kind, Callable[[_Ctx, dict[str, Any]], list[str]]] = {
+    Kind.FILED: _filed_id_problems,
+    Kind.DRAFT: _draft_id_problems,
+}
+
+
 def _story_problems(ctx: _Ctx, meta: dict[str, Any]) -> list[str]:
     """Checks 4-6, all reported."""
-    found = []
-    if meta.get("id") != ctx.source.story:
-        found.append(ctx.line(Problem.WRONG_ID, found=meta.get("id"), story=ctx.source.story))
+    found = ID_CHECKS[ctx.source.kind](ctx, meta)
     if not _non_empty(meta.get("title")):
         found.append(ctx.line(Problem.NO_TITLE))
     if not _has_criteria(meta):

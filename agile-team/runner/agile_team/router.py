@@ -24,6 +24,7 @@ from .reverts import Reverter
 from .sharing import Sharer
 from .state import RunStatus
 from .story_admin import Clerk
+from .story_intake import Intake
 
 POLL_S = 5.0
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
@@ -201,6 +202,7 @@ class Router:
     boundaries: BoundaryRunner = field(init=False)
     desk: Desk = field(init=False)
     sharer: Sharer = field(init=False)
+    intake: Intake = field(init=False)
     clerk: Clerk = field(init=False)
     reverter: Reverter = field(init=False)
 
@@ -208,6 +210,7 @@ class Router:
         self.boundaries = BoundaryRunner(self.runtime)
         self.desk = Desk(self.runtime)
         self.sharer = Sharer(self.runtime)
+        self.intake = Intake(self.runtime)
         self.clerk = Clerk(self.runtime)
         self.reverter = Reverter(self.runtime)
 
@@ -225,6 +228,7 @@ class Router:
             return None
         self.desk.apply()
         self.sharer.apply()
+        self.intake.apply()
         self.clerk.settle()
         self.reverter.settle()
         answers, told = self._news(), self._unread()

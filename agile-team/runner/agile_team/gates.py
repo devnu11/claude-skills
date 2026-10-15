@@ -271,6 +271,7 @@ class StoryState:
     disputes: int = 0
     implemented: int = 0
     code_commits: list[str] = field(default_factory=list)
+    file_commits: list[str] = field(default_factory=list)  # the runner's story-file commits (s135)
     test_files: list[str] = field(default_factory=list)
     streak: list[Setback] = field(default_factory=list)
     repeated: str | None = None
@@ -354,7 +355,7 @@ def dispatch_refusal(role: str, story: StoryState | None) -> str | None:
     if role in UNGATED_ROLES:
         return None
     if story is None:
-        return None if role in STORYLESS_ROLES else f"{role} only runs on a story; open_story"
+        return None if role in STORYLESS_ROLES else f"{role} only runs on a story"
     return _story_checks(story) or _step_refusal(role, story)
 
 
@@ -1138,6 +1139,14 @@ class Pipeline:
         story.status = StoryStatus.ACTIVE
         self._clear(story)
         self._forward(story)
+
+    def redesign(self, story: StoryState) -> None:
+        """Send ``story`` back to design with its loop state, tried environments and hold clear."""
+        self._clear(story)
+        story.step = self.design_step()
+        story.hold, story.tried, story.trace = None, [], Trace.CHECKED
+        if story.status is StoryStatus.NEEDS_MANAGER:
+            story.status = StoryStatus.ACTIVE
 
     def _clear(self, story: StoryState) -> None:
         story.rounds, story.disputes, story.dispute = 0, 0, None

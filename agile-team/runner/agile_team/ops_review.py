@@ -60,8 +60,9 @@ PROBLEMS = {
 }
 BAD_LIST = "the tooling list is incomplete: {problems}. Hand off again with one row per AC"
 UNFILED = (
-    "devops found tooling outside its files with no story yet: {needs}. Open a story "
-    "for each (open_story), then continue_story with a note naming each AC's story; "
+    "devops found tooling outside its files with no story yet: {needs}. "
+    "Ask the liaison for a story for each (request_story), then continue_story with a note "
+    "naming each AC's story; "
     "devops runs ops-review again and records them"
 )
 PASSED = "tooling recorded: {automatic} automatic today, {added} added now, {missing} missing"

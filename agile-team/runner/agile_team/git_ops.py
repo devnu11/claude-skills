@@ -17,6 +17,14 @@ CO_AUTHOR = "Co-Authored-By: Claude <noreply@anthropic.com>"
 RENAME_CODES = frozenset("RC")
 
 
+@dataclass(frozen=True)
+class Authored:
+    """A commit message and who wrote it; an empty author is git's configured user."""
+
+    text: str
+    author: str = ""
+
+
 class GitError(Exception):
     """A git command exited non-zero."""
 
@@ -99,9 +107,14 @@ class Git:
 
     def commit(self, paths: Sequence[str], message: str) -> str:
         """Stage exactly ``paths`` (including deletions) and commit them."""
+        return self.commit_by(paths, Authored(message))
+
+    def commit_by(self, paths: Sequence[str], authored: Authored) -> str:
+        """Like ``commit``, as ``authored.author`` when it is set (else git's own user)."""
         self.run("reset", "-q")
         self.run("add", "-A", "--", *paths)
-        self.run("commit", "--no-verify", "-m", with_trailer(message))
+        author = [f"--author={authored.author}"] if authored.author else []
+        self.run("commit", "--no-verify", *author, "-m", with_trailer(authored.text))
         return self.head()
 
     def revert(self, sha: str) -> str:

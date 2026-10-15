@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import git_check, pending_tests, system
+from . import config, git_check, pending_tests, system
 from .git_ops import Git
 from .kill_check import kill_denial
 from .paths import could_climb, matches, reaches, repo_relative, resolve_in
@@ -40,7 +40,8 @@ READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path"}
 PATH_KEYS = {**WRITE_TOOLS, **READ_TOOLS}
 ALWAYS_IGNORED = [".team/run/**"]
 PROTECTED = [".git", ".git/**"]
-RUNNER_FILES = (pending_tests.REGISTRY,)
+STORY_FILES = f"{config.STORIES_DIR}/**"
+RUNNER_FILES = (pending_tests.REGISTRY, STORY_FILES)
 RUNNER_ONLY = "{role} may not write {rel}; only the runner writes it"
 SECRET_WORDS = ("ANTHROPIC_API_KEY", "anthropic-api-key")
 QUARANTINE = "chore(team): quarantine out-of-scope changes by {role}"

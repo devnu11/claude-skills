@@ -340,7 +340,9 @@ def _story(files: RunFiles, story: Any) -> dict:
         "acceptance": _acceptance(files.config, story.id),
         "disputes": story.disputes,
         "developer": story.developer,
-        "commits": [c for c in dict.fromkeys([story.commit, *story.code_commits]) if c],
+        "commits": [
+            c for c in dict.fromkeys([*story.file_commits, story.commit, *story.code_commits]) if c
+        ],
         "files": story_files.existing(files.config, story.id),
         "label": backlog.label(story),
         **_dependency_keys(files, story),
