@@ -35,7 +35,8 @@
 
 All go in `<system temp>/render-markdown/`, named after the Markdown file's
 stem, and are replaced by the next render of the same name: `<stem>.html`,
-`<stem>.pdf`, `<stem>.page1.png` and, for raster printing, `<stem>.raster`.
+`<stem>.pdf`, `<stem>.page1.png` and, for raster printing, `<stem>.raster`,
+plus `<printer>.ppd` when the queue's PPD had to be fetched from CUPS.
 The commands never delete them. `pdf -o OUT.pdf` puts the PDF and its preview
 (`OUT.page1.png`) beside `OUT.pdf` instead.
 
@@ -60,7 +61,9 @@ The commands never delete them. `pdf -o OUT.pdf` puts the PDF and its preview
   page prints.
 - **Time limit:** every program the runner starts, Chrome included, is stopped
   after 300 s (exit 124), so a network that drops packets to the CDN fails the
-  render instead of hanging it.
+  render instead of hanging it. On macOS and Linux the program runs as its own
+  process group and the whole group is killed (Chrome's renderer and GPU
+  processes too); Windows kills the program alone.
 - **No page numbers:** Chrome's command line can't add a footer once its own
   header and footer are off.
 
@@ -92,7 +95,9 @@ can look at the real page before printing.
    `/etc/cups/ppd/<printer>.ppd` when readable; otherwise (on Debian it is
    readable only by the `lp` group) a copy from the CUPS web server
    (`http://<server>/printers/<printer>.ppd`). A queue with no PPD or neither
-   filter, or `--send pdf`, gets the PDF itself. Raster is the default because a Chrome PDF sent straight to an
+   filter, or `--send pdf`, gets the PDF itself; without `--send pdf` that prints a
+   `warning:` line. The PPD is fetched without any `http_proxy`, and `lpstat`
+   runs in the C locale so its output parses the same everywhere. Raster is the default because a Chrome PDF sent straight to an
    HP Color LaserJet Pro M453 completed with 0 pages printed, while the same
    document as URF printed.
 4. **Send:** `lp -d PRINTER -t TITLE -n COPIES -o sides=two-sided-long-edge|one-sided

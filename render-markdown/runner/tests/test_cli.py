@@ -127,6 +127,7 @@ def test_print_sends_follows_and_reports_pages(
     assert code == 0
     out = capsys.readouterr().out
     assert "sent: job hp-71 as application/pdf" in out and "printed: 3 pages on hp" in out
+    assert "warning: no raster filter or PPD for this printer; sending the PDF itself" in out
     assert "sides=one-sided" in fake.find_calls("lp")[0]
 
 
@@ -173,3 +174,19 @@ def test_a_count_only_cups_made_still_exits_0(
     monkeypatch.setattr(cli, "trace_job", lambda sent, clock: counted)
     fake.answer("lp", "request id is hp-73 (1 file(s))\n")
     assert cli.main(["print", str(SAMPLE), "--printer", "hp", "--paper", "a4"]) == 0
+
+
+def test_a_raster_send_has_no_warning(
+    fake: FakeSystem,
+    rendered: list,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raster = printer.Payload(Path("/tmp/sample.raster"), "image/urf")
+    monkeypatch.setattr(cli, "prepare_payload", lambda pdf, job: raster)
+    printed = Traced(Outcome.PRINTED, Status("completed", "none", 3))
+    monkeypatch.setattr(cli, "trace_job", lambda sent, clock: printed)
+    fake.answer("lp", "request id is hp-74 (1 file(s))\n")
+    assert cli.main(["print", str(SAMPLE), "--printer", "hp", "--paper", "a4"]) == 0
+    out = capsys.readouterr().out
+    assert "sent: job hp-74 as image/urf" in out and "no raster filter" not in out

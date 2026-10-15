@@ -28,6 +28,7 @@ from render_markdown.printer import (
 )
 from render_markdown.system import Finished
 
+OPEN_URL = printer.open_url
 JOB = Job("hp", "Story branches", Sides.TWO, 2, Send.RASTER)
 SENT = Sent("hp", "hp-69")
 
@@ -265,14 +266,14 @@ def test_an_unreadable_ppd_is_fetched_from_cups(
     fake: FakeSystem, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_dir: Path
 ) -> None:
     write_ppd(tmp_path, monkeypatch, "")
-    monkeypatch.setattr("os.access", lambda path, mode: False)
+    monkeypatch.setattr(printer, "is_readable", lambda path: False)
     urls: list[str] = []
 
-    def answer(url: str, timeout: float) -> FakeResponse:
+    def answer(url: str) -> FakeResponse:
         urls.append(url)
         return FakeResponse(b'*cupsFilter2: "image/urf image/urf 10 -"\n')
 
-    monkeypatch.setattr("urllib.request.urlopen", answer)
+    monkeypatch.setattr(printer, "open_url", answer)
     payload = prepare_payload(tmp_path / "doc.pdf", JOB)
     assert payload.format == "image/urf" and urls == ["http://localhost:631/printers/hp.ppd"]
     assert fake.find_calls("cupsfilter")[0][2] == str(output_dir / "hp.ppd")
@@ -284,3 +285,34 @@ def test_no_ppd_at_all_sends_the_pdf(
     monkeypatch.setattr(printer, "PPD_DIR", tmp_path)
     pdf = tmp_path / "doc.pdf"
     assert prepare_payload(pdf, JOB) == Payload(pdf, "application/pdf")
+
+
+def test_lpstat_runs_in_the_c_locale(fake: FakeSystem) -> None:
+    fake.environment["LANG"] = "de_DE.UTF-8"
+    fake.answer("lpstat", "system default destination: hp\n")
+    assert select_printer(None) == "hp"
+    assert fake.environments[0]["LANG"] == "C" and fake.environments[0]["LC_ALL"] == "C"
+
+
+def test_open_url_ignores_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+    handlers: list[object] = []
+
+    class Opener:
+        def open(self, url: str, timeout: float) -> str:
+            return url
+
+    def build(*given: object) -> Opener:
+        handlers.extend(given)
+        return Opener()
+
+    monkeypatch.setattr("urllib.request.build_opener", build)
+    monkeypatch.setattr(printer, "open_url", OPEN_URL)
+    assert printer.open_url("http://localhost:631/x") == "http://localhost:631/x"
+    assert handlers[0].proxies == {}
+
+
+def test_is_readable(tmp_path: Path) -> None:
+    ppd = tmp_path / "hp.ppd"
+    assert not printer.is_readable(ppd)
+    ppd.write_text("x")
+    assert printer.is_readable(ppd)

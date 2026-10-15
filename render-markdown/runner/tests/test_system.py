@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -53,3 +55,32 @@ def test_a_program_past_the_time_limit_exits_124(
     slow = [sys.executable, "-c", "import time; time.sleep(5)"]
     assert system.run(slow).code == 124
     assert system.run_into(slow, tmp_path / "out").code == 124
+
+
+def test_a_timeout_stops_the_whole_process_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(system, "TIMEOUT_SECONDS", 1)
+    marker = tmp_path / "child.pid"
+    code = (
+        "import subprocess, sys, time;"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']);"
+        f"open({str(marker)!r}, 'w').write(str(child.pid)); time.sleep(30)"
+    )
+    assert system.run([sys.executable, "-c", code]).code == 124
+    child = int(marker.read_text())
+    with pytest.raises(ProcessLookupError):
+        for _ in range(50):
+            os.kill(child, 0)
+            time.sleep(0.05)
+
+
+def test_windows_stops_only_the_process() -> None:
+    killed: list[str] = []
+
+    class Process:
+        def kill(self) -> None:
+            killed.append("kill")
+
+    system.STOPPERS["win32"](Process())
+    assert killed == ["kill"]
