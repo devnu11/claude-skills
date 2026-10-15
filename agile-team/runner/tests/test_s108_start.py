@@ -1,4 +1,4 @@
-"""s108 M3/M3a (AC5): the sprint-start sync fetches and reports; it changes nothing."""
+"""s108 M3/M3a (AC5): the sprint-start sync fetches; s152 makes it rebase (test_s152_start.py)."""
 
 from __future__ import annotations
 
