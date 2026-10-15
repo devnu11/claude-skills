@@ -1,1 +1,8 @@
-{}
+{
+  "s56": [
+    "agile-team/runner/tests/test_s56_fixture_script.py::test_code_reviewer_checklist_names_the_rule[## Checklist]",
+    "agile-team/runner/tests/test_s56_fixture_script.py::test_code_reviewer_checklist_names_the_rule[if __name__ == \"__main__\":]",
+    "agile-team/runner/tests/test_s56_fixture_script.py::test_code_reviewer_checklist_names_the_rule[just_do_it]",
+    "agile-team/runner/tests/test_s56_fixture_script.py::test_code_reviewer_checklist_names_the_rule[top level]"
+  ]
+}
