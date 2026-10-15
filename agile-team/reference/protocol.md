@@ -3425,10 +3425,12 @@ This applies only when the runner runs from `.team/run/runner-pin`
    `re-pinning the runner at <sha7>`. The runner removes `runner.pid` and runs
    `sh agile-team/runner/scripts/pin-runner.sh <head>`, which keeps the old pin
    as `runner-pin.prev`. Then it runs
-   `uv run --frozen --quiet --project .team/run/runner-pin agile-team config check`.
+   `uv run --frozen --quiet --project .team/run/runner-pin agile-team --repo <repo>
+   [--home <home>] config check`. The run's `--repo` and `--home` always go
+   before the subcommand, where the CLI accepts them (s158).
 3. If both pass, it writes `repin.json` (`trial`) and replaces its own process
-   (`os.execv`, same pid) with `.team/run/runner-pin/.venv/bin/agile-team start
-   --resume --repo <repo>`. An unattended job sees no exit. The new runner
+   (`os.execv`, same pid) with `.team/run/runner-pin/.venv/bin/agile-team --repo
+   <repo> [--home <home>] start --resume`. An unattended job sees no exit. The new runner
    logs one `runner-repin` event `{"old", "new", "sprint", "outcome":
    "pinned", "reason": ""}` and removes the marker. The rest of the boundary
    runs on the new code.
