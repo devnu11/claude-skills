@@ -44,3 +44,22 @@ and its permissions, which would fight the runner's own guard and Stop hook.
   change. It remains the human's file. The team never writes it.
 - Only `.claude/CLAUDE.md` is read. A root `CLAUDE.md`, `CLAUDE.local.md` and
   `.claude/rules/` would each need a story.
+
+## Amended by s144 (2026-10-15)
+
+An in-repo import of a file that is not UTF-8 text made `system_prompt` raise
+`UnicodeDecodeError`, so every step failed until the human edited the file.
+Now:
+
+- The `Inliner` decodes every file as UTF-8 itself
+  (`system.read_bytes(...).decode("utf-8")`), not with the locale's encoding.
+  So the same file counts as text on macOS, Linux and Windows.
+- An import whose file is not UTF-8 becomes
+  `(left out: @<path> is not UTF-8 text)`, like an import outside the repo.
+  Such a file is not marked as included, so each import of it gets this
+  note, not the "already included above" one.
+- The root `.claude/CLAUDE.md` is unchanged: if it is not UTF-8, the step
+  still fails. It is the human's own file, and a silent drop of every repo
+  rule would be worse than a loud failure.
+
+Design: `agile-team/docs/design/s144.md`.

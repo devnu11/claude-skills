@@ -1099,6 +1099,11 @@ file's text itself:
 - A `~` path, or a path that resolves outside the repo, becomes
   `(left out: @<path> points outside the repo)`. `~` is never expanded. A
   token that is not a file (`@someone`) stays as it is.
+- Files are read as UTF-8 on every platform. An in-repo import that cannot be
+  read as text (not valid UTF-8, for example `@docs/logo.png`) becomes
+  `(left out: @<path> is not UTF-8 text)`, and the rest of the file still
+  loads (s144). Each import of such a file gets the note. A root
+  `.claude/CLAUDE.md` that is not UTF-8 still fails the step.
 - A missing file adds no section. Only `.claude/CLAUDE.md` is read. A root
   `CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules/` are not.
 - Only the text is loaded. Role sessions keep `setting_sources=[]`, so
