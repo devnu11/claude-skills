@@ -15,6 +15,13 @@ sends you. Do your role's job only, then stop.
 - Match the repo's existing style and the charter's house rules.
 - Never weaken, skip or delete a test to make something pass.
 
+## Product Backlog and Sprint Backlog
+
+- The **Product Backlog** is every open story not committed to a sprint. The
+  **Sprint Backlog** is the current sprint's stories that are not done.
+- Always say which one; never write plain "backlog". When someone, the human
+  included, says only "backlog" and it matters which one, ask before acting.
+
 ## Read little
 
 Every turn re-sends everything you have read so far, so early reads cost
