@@ -138,7 +138,7 @@ def test_ac2_three_hand_overs_then_the_run_is_blocked(make_runtime, cadence: str
 
 def test_ac2_stuck_blocked_text_names_each_story(make_runtime) -> None:
     state = RunState(sprint=2, stuck_asks=3)
-    text = sprint_end.stuck_blocked_text(state, ["a: x", "b: y"])
+    text = sprint_end.format_stuck_blocked_text(state, ["a: x", "b: y"])
     assert "Sprint 2" in text and "a: x; b: y" in text and "the Sprint Backlog is stuck" in text
 
 
@@ -270,8 +270,8 @@ def test_ac3_one_can_move_rule(make_runtime) -> None:
     rt = movable_sprint(make_runtime)
     s1 = rt.state.stories["s1"]
     assert sprint_end.can_move(s1, rt.state)
-    assert sprint_end.movable_sprint_backlog(rt.state, set()) == ["s1"]
-    assert sprint_end.movable_sprint_backlog(rt.state, {"s1"}) == []
+    assert sprint_end.list_movable_sprint_backlog(rt.state, set()) == ["s1"]
+    assert sprint_end.list_movable_sprint_backlog(rt.state, {"s1"}) == []
     assert not sprint_end.can_move(rt.state.stories["s3"], rt.state)
     s1.hold = "h"
     assert not sprint_end.can_move(s1, rt.state)
@@ -312,7 +312,7 @@ def test_ac4_ready_product_backlog_selects_in_queue_order(make_runtime) -> None:
     product_backlog(rt, "s6", po_hold=PoHold(HoldKind.HOLD, "r"))
     product_backlog(rt, "s7", status=StoryStatus.CANCELLED)
     queue = rt.priority().queue(rt.state.stories.values())
-    assert sprint_end.ready_product_backlog(rt.state.stories, queue) == ["s3"]
+    assert sprint_end.select_ready_product_backlog(rt.state.stories, queue) == ["s3"]
     assert not hasattr(sprint_end, "ready_backlog")
 
 
@@ -370,4 +370,4 @@ def test_ac6_the_empty_sprint_lists_the_product_backlog(make_runtime) -> None:
     rt.state.sprint = 2
     lines = Router(rt)._idle().lines
     assert lines[-1] == "Product Backlog: s9"
-    assert not hasattr(router, "_in_backlog") and hasattr(router, "_in_product_backlog")
+    assert not hasattr(router, "_in_backlog") and hasattr(router, "_is_in_product_backlog")
