@@ -115,7 +115,7 @@ START_COMMAND: tuple[str, ...] = ("start", "--resume")
 CHECK_COMMAND: tuple[str, ...] = ("config", "check")
 
 
-def global_argv(repo: Path, home: str | None) -> tuple[str, ...]:
+def build_global_argv(repo: Path, home: str | None) -> tuple[str, ...]:
     """The CLI's global options for this run; they go before the subcommand."""
     base = ("--repo", str(repo))
     return (*base, "--home", home) if home else base
