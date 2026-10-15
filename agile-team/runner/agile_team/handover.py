@@ -52,6 +52,7 @@ class Trigger(StrEnum):
     CI_INFRA = "ci_infra"
     MAIN_BROKEN = "main_broken"
     CI_PENDING = "ci_pending"
+    KNOWN_FAILURES = "known_failures"
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,14 @@ def _gate_held(report: dict) -> bool:
     stopped = report.get("status") in STOPPED_HANDOFFS
     return _gate(report).get("verdict") == "hold" and not stopped
 
+
+KNOWN_LINE = (
+    "{story}: sprint {sprint} starts with {known_count} known failures on {team_branch} at "
+    "{sha}: {known}. Nothing is held and the sprint goes on. Unless an open story already "
+    "covers them, ask the liaison for a story now with request_story (evidence: the failing "
+    "output below); the liaison writes it and places it at the top of this sprint or later, and "
+    "the runner tells you its id. Failing output:\n{boundary_reason}"
+)
 
 HANDOVERS: tuple[Rule, ...] = (
     Rule(
@@ -252,6 +261,11 @@ HANDOVERS: tuple[Rule, ...] = (
         "{story}: sprint {sprint}'s PR {prs} is NOT ready: {boundary_reason}:\n{checks}\n"
         "Tell the human, then continue_boundary to wait again",
     ),
+    Rule(
+        Trigger.KNOWN_FAILURES,
+        lambda r: bool(_boundary(r).get("known_failures")),
+        KNOWN_LINE,
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -295,6 +309,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
 
 
 BOUNDARY_TEXT = (
+    "sha",
     "sprint",
     "edge",
     "stage",
@@ -329,7 +344,12 @@ def _boundary_fields(report: dict) -> dict[str, str]:
     fields["file_count"] = str(len(files))
     fields["file_groups"] = group_files(files)
     fields["branches"] = ", ".join(boundary.get("branches") or [])
-    return fields
+    return {**fields, **_known_fields(boundary)}
+
+
+def _known_fields(boundary: dict) -> dict[str, str]:
+    known = boundary.get("known_failures") or []
+    return {"known": ", ".join(known), "known_count": str(len(known))}
 
 
 def report_lines(report: dict, story_id: str | None) -> list[str]:

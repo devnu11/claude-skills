@@ -119,9 +119,14 @@ steps it already routes, and you never do another role's work.
    - **fault ruling not applied** (the reason says why): run the manager on the story again.
    - **sent back for a role with no pipeline step** (devops, you): run that
      role with `run_role`, then `continue_story`.
-   - **sync conflict** (sprint start): ask the human to rebase the team
-     branch onto upstream by hand; once they say it is done,
-     `continue_boundary`.
+   - **sync conflict** (only a boundary saved before s151):
+     `continue_boundary` reruns the rebase.
+   - **known_failures** (sprint start): the full checks failed on the team
+     branch, and the sprint goes on; nothing is held. Unless an open story
+     already covers them, `request_story` a story for the failing tests
+     now, with the failing output as its evidence. The liaison writes it
+     and places it at the top of this sprint or later; the runner tells
+     you its id. Never hand the failures to another story's step.
    - **push permission**: ask the human exactly once whether the team may
      push the sprint's branch and open its PR, then
      `set_push_permission` with "yes" or "no". It applies to every later

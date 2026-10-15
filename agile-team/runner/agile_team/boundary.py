@@ -77,6 +77,17 @@ SUPERSEDES_LINE = (
     "too, so close them once it is merged.\n\n"
 )
 NOT_PERMITTED = "the human said no to pushing"
+START_CURRENT = "the team branch is current with {target}"
+START_CONFLICT = (
+    'Sprint {sprint} start: rebasing {team} onto {target} stopped at {commit} "{subject}" with '
+    "conflicts in: {files}. The rebase was aborted, {team} is unchanged and the sprint goes on "
+    "from it. The human can rebase {team} by hand; until then the sprint end's PR conflicts "
+    "with {target}, so it gets no CI and the end does not rebase."
+)
+KNOWN_FAILURES_NOTE = (
+    "Sprint {sprint} starts with {count} known failures on {team} at {sha}: {ids}. Nothing is "
+    "held and the sprint goes on; the PO asks you for a story for them (request_story)."
+)
 CHECK_FAILED = "{name} failed ({why}): {command}\n{tail}"
 FIX_HEADING = (
     "Sprint {sprint} {edge} boundary: the runner's {stage} stage failed, and the sprint's "

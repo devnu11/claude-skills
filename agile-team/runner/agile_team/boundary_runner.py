@@ -5,7 +5,7 @@ The stages: sync, check, push as built, ci, rebase, push rebased, ci rebased.
 The router asks ``due`` for the next unit of work, runs a stage with ``step`` or
 a devops fix with ``run_role``, and calls ``after_fix`` when the fix is back.
 All git access goes through ``runtime.upstream`` and ``runtime.prs``; checks run
-through ``runtime.shell``. Only the rebase stage rewrites the team branch, through ``Upstream``.
+through ``runtime.shell``. Only the start sync and the end's rebase stage rewrite the team branch, through ``Upstream``.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from .boundary import (
     CLOSED_NOTE,
     FIX_KINDS,
     FIX_ROLE,
+    KNOWN_FAILURES_NOTE,
     LOCAL_REPORT,
     NOT_PERMITTED,
     NOT_REBASED,
@@ -33,6 +34,8 @@ from .boundary import (
     REBASED_PUSHED_REPORT,
     SKIPPED_REPORT,
     SPRINT_TITLE,
+    START_CONFLICT,
+    START_CURRENT,
     SUPERSEDED_NOTE,
     SUPERSEDES_LINE,
     Boundary,
@@ -88,13 +91,6 @@ if TYPE_CHECKING:
 
 Out = BoundaryOutcome
 FETCH_PREFIX = "git fetch "
-START_NOTES = {
-    False: "the team branch is current with {target}",
-    True: (
-        "{target} moved {count} commits since the last sprint-end rebase; "
-        "nothing changes until the next sprint end"
-    ),
-}
 
 
 def fetch_failed(why: str) -> bool:
@@ -261,11 +257,35 @@ class BoundaryRunner:
         self._close(b, SKIPPED_REPORT.format(why=why))
 
     def _start_sync(self, b: Boundary) -> None:
-        """Report how far the target moved; change nothing (the next sprint end rebases)."""
-        behind = self.remote.behind()
-        note = START_NOTES[behind > 0].format(target=self.remote.target, count=behind)
-        self._emit(b, Out.PASS, note=note, behind=behind)
+        """AC1.1: rebase the team branch onto the target; a branch already on it is left alone."""
+        if not b.sync_from and self.remote.behind() == 0:
+            return self._start_current(b)
+        self._pin_sync_from(b)
+        result = self.remote.rebase_onto(b.sync_from)
+        START_REBASES[result.outcome](self, b, result)
+
+    def _start_current(self, b: Boundary) -> None:
+        self._emit(b, Out.CURRENT, note=START_CURRENT.format(target=self.target), behind=0)
         self._advance(b)
+
+    def _start_conflict(self, b: Boundary, result: Rebase) -> None:
+        """S2: the rebase was aborted; tell the liaison and go on, holding nothing."""
+        text = self._start_conflict_text(b, result)
+        self._post(text)
+        data = {"files": list(result.files), "commit": result.commit[:12]}
+        self._emit(b, Out.CONFLICT, note=text, subject=result.subject, **data)
+        self._unpin(b)
+        self._advance(b)
+
+    def _start_conflict_text(self, b: Boundary, result: Rebase) -> str:
+        return START_CONFLICT.format(
+            sprint=b.sprint,
+            team=self.mine.team_branch,
+            target=self.target,
+            commit=result.commit[:12],
+            subject=result.subject,
+            files=", ".join(result.files),
+        )
 
     def _own(self, b: Boundary) -> StackEntry | None:
         return own_entry(self.stack, b.sprint)
@@ -325,12 +345,36 @@ class BoundaryRunner:
             return self._repin_due(b, head)
         report = self._run_checks(self.runtime.config.repo)
         if not report.passed:
-            failure = Failure(Stage.CHECK, FixCase.TEAM_CHECK, report.reason())
-            return self._fail(b, failure, checks=report.summary())
+            return CHECK_FAILURES[b.edge](self, b, report)
         self.mine.checked = head
         self._emit(b, Out.PASS, checks=report.summary())
         self._advance(b)
         self._repin_due(b, head)
+
+    def _team_fix(self, b: Boundary, report: CheckReport) -> None:
+        failure = Failure(Stage.CHECK, FixCase.TEAM_CHECK, report.reason())
+        self._fail(b, failure, checks=report.summary())
+
+    def _known_failures(self, b: Boundary, report: CheckReport) -> None:
+        """AC2.1, AC2.2: a failing start check holds nothing; its failing ids are recorded."""
+        ids, head = report.failing_ids(), self.runtime.git.head()
+        team = self.mine.team_branch or self.remote.team_branch()
+        text = KNOWN_FAILURES_NOTE.format(
+            sprint=b.sprint,
+            count=len(ids),
+            team=team,
+            sha=head[:12],
+            ids=", ".join(ids),
+        )
+        self._post(text)
+        self._finish(
+            b,
+            note=text,
+            known_failures=ids,
+            sha=head,
+            reason=report.reason(),
+            checks=report.summary(),
+        )
 
     def _repin_due(self, b: Boundary, head: str) -> None:
         """P2: a passing end check on a pinned runner asks to re-pin to the checked head."""
@@ -690,4 +734,10 @@ AFTER_REBASE = {
     SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
     SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
 }
+START_REBASES = {
+    SyncOutcome.CONFLICT: BoundaryRunner._start_conflict,
+    SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
+    SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
+}
+CHECK_FAILURES = {Edge.START: BoundaryRunner._known_failures, Edge.END: BoundaryRunner._team_fix}
 SYNCS = {Edge.START: BoundaryRunner._start_sync, Edge.END: BoundaryRunner._end_sync}

@@ -137,9 +137,9 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     ),
     (
         Name.BOUNDARY_SYNC, B, BOUND, "boundary sync",
-        "Fetch the target and record the team branch; at a sprint end, record the sprint's own branch",  # noqa: E501
+        "Fetch the target and record the team branch; at a sprint start, rebase it onto the target; at a sprint end, record the sprint's own branch",  # noqa: E501
     ),
-    (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch"),  # noqa: E501
+    (Name.BOUNDARY_CHECK, A, BOUND, "boundary check", "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch; at a sprint start a failure is recorded as known failures and holds nothing"),  # noqa: E501
     (
         Name.BOUNDARY_PUSH, A, BOUND, "push as built + PR",
         "Push the team branch as it is to the sprint's branch and open or reuse its pull request onto the target",  # noqa: E501
