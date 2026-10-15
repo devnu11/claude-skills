@@ -17,7 +17,7 @@ from .priority import natural
 from .roles import RoleError, split_frontmatter
 
 FILE_NAME = re.compile(r"REQ-\d{3,}\.md")
-REF = re.compile(r"(s\d+)/([A-Za-z][\w-]*)")
+REF = re.compile(r"(s\d+)/([A-Za-z][\w-]*(?:\.[\w-]+)*)")
 LINE = "{file}: {problem}"
 
 
