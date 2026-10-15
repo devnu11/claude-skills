@@ -449,9 +449,8 @@ def test_stall_line_says_waiting_on(make_runtime) -> None:
     add_story(rt, "s1", "implement", hold="stopped")
     add_story(rt, "s2", depends_on=["s1"])
     p = asyncio.run(Router(rt).advance())
-    assert p.kinds == [T.STALLED]
-    assert p.lines == [
-        "Nothing in sprint 1 can move.",
+    assert p.kinds == [T.SPRINT_BACKLOG_STUCK]
+    assert p.lines[1:3] == [
         "s1 at implement: held (stopped)",
         "s2 at design: waiting on s1",
     ]

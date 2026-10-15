@@ -159,7 +159,7 @@ def test_load_baseline(repo: Path) -> None:
     assert gates.load_baseline(repo)["coverage"] == 70
 
 
-BACKLOG = "story s1 is in the backlog; add it to a sprint"
+BACKLOG = "story s1 is in the Product Backlog; add it to a sprint"
 
 
 def test_story_sprint_defaults_to_backlog() -> None:

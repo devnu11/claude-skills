@@ -51,15 +51,17 @@ def test_a_plain_update_leaves_the_status_alone(make_runtime) -> None:
     assert rt.state.status_reason is None and rt.state.status is RunStatus.IDLE
 
 
-def test_a_quiet_end_stores_idle_with_the_hand_over_line(make_runtime, fake: FakeSystem) -> None:
+def test_a_stuck_sprint_blocks_after_the_cap_with_the_blocked_text(
+    make_runtime, fake: FakeSystem
+) -> None:
     fake.track()
     fake.reply(("git", "remote", "get-url"), Done(2))
     rt = build(make_runtime, Script())
     add_story(rt).po_hold = PoHold(HoldKind.HOLD, "r")
     rt.state.cadence = "sprint"
     drive(rt)
-    assert rt.state.status is RunStatus.IDLE
-    assert rt.state.status_reason == "Nothing in sprint 1 can move."
+    assert rt.state.status is RunStatus.BLOCKED
+    assert rt.state.status_reason.startswith("Sprint 1: the Sprint Backlog is stuck after 3")
 
 
 # ----- P12: the snapshot and the page ---------------------------------------------------------

@@ -108,7 +108,7 @@ def test_old_state_drops_scribe_override_and_keeps_others() -> None:
 
 
 def test_run_dropped_names_scribe_due() -> None:
-    assert set(state.RUN_DROPPED) == {"scribe_due"}
+    assert set(state.RUN_DROPPED) == {"scribe_due", "offered"}
 
 
 # ----- SC6: [roles.scribe] refused -----------------------------------------------------

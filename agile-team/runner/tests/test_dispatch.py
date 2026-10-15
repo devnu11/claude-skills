@@ -416,7 +416,7 @@ def test_backlog_story_is_refused_for_story_bound_roles(make_runtime) -> None:
     open_story(rt, sprint=None)
     out = run(rt, "architect", story="s1")
     assert out["status"] == "refused"
-    assert out["reason"] == "story s1 is in the backlog; add it to a sprint"
+    assert out["reason"] == "story s1 is in the Product Backlog; add it to a sprint"
 
 
 def test_backlog_story_still_allows_manager(make_runtime) -> None:
