@@ -33,7 +33,7 @@ from . import network
 from .limits import Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
 from .notify import Notice, Trigger, post
 from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
-from .watch import SLICE, RunWatch
+from .watch import SLICE, RunWatch, StopRequested
 
 STOP_REASON = "stopped by the user"
 FINAL: dict[OutcomeKind, JobStatus] = {
@@ -50,10 +50,6 @@ class Runner(Protocol):
     """Runs a job once: the first time, or as a resume once it has run."""
 
     def run_once(self, watch: RunWatch) -> Outcome: ...
-
-
-class StopRequested(BaseException):
-    """The user asked the job to stop; a BaseException so job code cannot swallow it."""
 
 
 class Halted(Exception):

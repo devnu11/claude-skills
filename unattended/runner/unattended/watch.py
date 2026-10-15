@@ -147,6 +147,10 @@ def stalest(readings: list[Reading]) -> float | None:
     return min((r.alive_at for r in readings if r.alive_at is not None), default=None)
 
 
+class StopRequested(BaseException):
+    """The user asked the job to stop; a BaseException so job code cannot swallow it."""
+
+
 @dataclass
 class RunWatch:
     """The per-slice checks of one run; ``clock`` and ``slice`` are injectable for tests."""
@@ -186,6 +190,11 @@ class RunWatch:
         just started; what the start wrote (the log header) is not progress."""
         self.context.pgid = pgid
         self.liveness.rebase()
+
+    def check_stop(self) -> None:
+        """Raise ``StopRequested`` once ``stop`` wrote the stop file (how Windows stops a run)."""
+        if self.job.stop_requested():
+            raise StopRequested
 
     def check(self) -> Verdicts:
         """What the runner must do now; empty to keep waiting."""
