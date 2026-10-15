@@ -65,11 +65,11 @@ def test_candidates_keep_only_direct_req_files_in_the_folder() -> None:
         "src/a.py",
         f"{FOLDER}/REQ-010.md",
     ]
-    assert rc.candidates(paths, FOLDER) == [f"{FOLDER}/REQ-003.md", f"{FOLDER}/REQ-010.md"]
+    assert rc.select_candidates(paths, FOLDER) == [f"{FOLDER}/REQ-003.md", f"{FOLDER}/REQ-010.md"]
 
 
 def test_candidates_of_nothing_is_empty() -> None:
-    assert rc.candidates([], FOLDER) == []
+    assert rc.select_candidates([], FOLDER) == []
 
 
 # ----- classify (C2) -----
@@ -125,19 +125,19 @@ def changed(req_id: str = "REQ-003", kind: rc.Change = rc.Change.CHANGED) -> rc.
 
 
 def test_reason_whitespace_is_collapsed_to_one_line() -> None:
-    assert rc.reason_for(changed(), {"REQ-003": "  two\n  lines\there "}) == "two lines here"
+    assert rc.find_reason(changed(), {"REQ-003": "  two\n  lines\there "}) == "two lines here"
 
 
 def test_an_added_change_without_a_reason_gets_the_default() -> None:
     added = changed(kind=rc.Change.ADDED)
-    assert rc.reason_for(added, {}) == rc.NEW_REASON == "new requirement"
-    assert rc.reason_for(added, {"REQ-003": "because"}) == "because"
+    assert rc.find_reason(added, {}) == rc.NEW_REASON == "new requirement"
+    assert rc.find_reason(added, {"REQ-003": "because"}) == "because"
 
 
 def test_a_blank_reason_on_a_changed_requirement_is_empty() -> None:
-    assert rc.reason_for(changed(), {"REQ-003": "  "}) == ""
-    assert rc.reason_for(changed(), {}) == ""
-    assert rc.reason_for(changed(kind=rc.Change.RETIRED), {}) == ""
+    assert rc.find_reason(changed(), {"REQ-003": "  "}) == ""
+    assert rc.find_reason(changed(), {}) == ""
+    assert rc.find_reason(changed(kind=rc.Change.RETIRED), {}) == ""
 
 
 def test_needs_reason_kinds() -> None:
@@ -169,13 +169,13 @@ def test_a_reason_for_a_non_candidate_is_ignored() -> None:
 
 def test_explained_reports_and_trailers() -> None:
     explained = rc.Explained(changed(kind=rc.Change.RETIRED), "gone")
-    assert explained.trailer() == "Requirement-Changed: REQ-003: gone"
-    assert explained.report() == {"id": "REQ-003", "change": "retired", "reason": "gone"}
+    assert explained.trailer == "Requirement-Changed: REQ-003: gone"
+    assert explained.entry == {"id": "REQ-003", "change": "retired", "reason": "gone"}
 
 
-def test_explain_text_joins_with_semicolons() -> None:
+def test_describe_held_joins_with_semicolons() -> None:
     held = [changed("REQ-003"), changed("REQ-004")]
-    assert rc.explain_text(held) == "explain change to REQ-003; explain change to REQ-004"
+    assert rc.describe_held(held) == "explain change to REQ-003; explain change to REQ-004"
 
 
 def test_messages_are_exact() -> None:
@@ -198,8 +198,8 @@ def test_traced_unions_needs_reason_kinds_without_the_own_story() -> None:
         landed("REQ-002", rc.Change.RETIRED, ("s2", "s5")),
         landed("REQ-003", rc.Change.ADDED, ("s7",)),
     ]
-    assert rc.traced(items, "s9") == ["s2", "s5", "s10"]
-    assert rc.traced(items, None) == ["s2", "s5", "s9", "s10"]
+    assert rc.collect_traced(items, "s9") == ["s2", "s5", "s10"]
+    assert rc.collect_traced(items, None) == ["s2", "s5", "s9", "s10"]
 
 
 def story(sid: str, step: str, status: StoryStatus = StoryStatus.ACTIVE) -> StoryState:
@@ -222,14 +222,14 @@ def test_affected_defaults_to_nothing() -> None:
     assert rc.Affected() == rc.Affected((), ())
 
 
-def test_redesign_note_names_the_step_story_sha_and_only_its_changes() -> None:
+def test_build_redesign_note_names_the_step_story_sha_and_only_its_changes() -> None:
     items = [
         landed("REQ-003", rc.Change.CHANGED, ("s5",), "wording"),
         landed("REQ-004", rc.Change.RETIRED, ("s6",), "obsolete"),
         landed("REQ-005", rc.Change.RETIRED, ("s5", "s6"), "dropped"),
     ]
     sha = "ab" * 20
-    note = rc.redesign_note(items, rc.NoteTarget("s5", "s9", sha))
+    note = rc.build_redesign_note(items, rc.NoteTarget("s5", "s9", sha))
     assert note.startswith("Back to design: s9's step changed requirements this story traces (")
     assert "REQ-003 changed: wording; REQ-005 retired: dropped" in note
     assert "REQ-004" not in note and sha[:12] in note
@@ -238,11 +238,11 @@ def test_redesign_note_names_the_step_story_sha_and_only_its_changes() -> None:
 # ----- git seam (C2, C4, C10) -----
 
 
-def test_name_status_reads_z_pairs_and_marks_untracked_as_added() -> None:
+def test_read_name_status_reads_z_pairs_and_marks_untracked_as_added() -> None:
     a, b, c, d = (f"{FOLDER}/REQ-00{n}.md" for n in (1, 2, 3, 4))
     out = f"M\0{a}\0D\0{b}\0T\0{c}\0"
     git = StubGit({"diff": out})
-    assert rc.name_status(git, [a, b, c, d]) == {a: "M", b: "D", c: "M", d: "A"}
+    assert rc.read_name_status(git, [a, b, c, d]) == {a: "M", b: "D", c: "M", d: "A"}
     argv = git.calls[0]
     assert argv[: len(rc.DIFF_ARGV)] == rc.DIFF_ARGV and list(argv[len(rc.DIFF_ARGV) :]) == [
         a, b, c, d,
@@ -326,7 +326,7 @@ def test_parse_log_of_nothing_is_empty() -> None:
 
 def test_log_runs_one_git_log_limited_to_the_folder() -> None:
     git = StubGit({"log": record("e" * 40, "2026-03-01T00:00:00+00:00", "REQ-001: x")})
-    rows = rc.log(git, FOLDER)
+    rows = rc.read_log(git, FOLDER)
     assert [r["id"] for r in rows] == ["REQ-001"]
     argv = git.calls[0]
     assert len(git.calls) == 1 and argv[0] == "log" and "--reverse" in argv
@@ -336,4 +336,4 @@ def test_log_runs_one_git_log_limited_to_the_folder() -> None:
 
 def test_log_lets_a_git_error_through() -> None:
     with pytest.raises(GitError):
-        rc.log(StubGit({"log": GitError("not a repo")}), FOLDER)
+        rc.read_log(StubGit({"log": GitError("not a repo")}), FOLDER)
