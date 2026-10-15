@@ -137,6 +137,10 @@ class Liveness:
             self.last, self.moved_at = values, now
         self.alive_at = stalest(readings)
 
+    def rebase(self) -> None:
+        """Take the current readings as the starting point, without counting them as progress."""
+        self.last = [probe().value for probe in self.probes]
+
 
 def stalest(readings: list[Reading]) -> float | None:
     """The oldest liveness stamp among ``readings``, or None when none has one."""
@@ -178,8 +182,10 @@ class RunWatch:
         return {HEARTBEAT_ENV: str(self.heartbeat)}
 
     def track(self, pgid: int) -> None:
-        """Point the ``cpu`` and ``children`` probes at the run's process group."""
+        """Point the ``cpu`` and ``children`` probes at the run's process group, which has
+        just started; what the start wrote (the log header) is not progress."""
         self.context.pgid = pgid
+        self.liveness.rebase()
 
     def check(self) -> Verdicts:
         """What the runner must do now; empty to keep waiting."""
