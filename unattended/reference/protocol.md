@@ -78,7 +78,7 @@ unique within a home.
 | Platform | Probe |
 |---|---|
 | macOS, Linux | `os.kill(pid, 0)`: no such process means not alive; a permission error means alive. |
-| Windows | `OpenProcess` and then `GetExitCodeProcess` (`STILL_ACTIVE`) through `ctypes`. Access denied means alive. `os.kill` isn't used, because on Windows it terminates the process instead of probing it. |
+| Windows | `OpenProcess` and then `GetExitCodeProcess` (`STILL_ACTIVE`) through `ctypes`. Access denied means alive. `os.kill` isn't used, because on Windows it terminates the process instead of probing it. CI runs these tests on `windows-latest`. |
 
 ### Statuses
 
