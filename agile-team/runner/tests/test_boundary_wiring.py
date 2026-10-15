@@ -251,6 +251,7 @@ BOUNDARY_ROWS = [
             files=["a/x.py", "a/y.py", "docs/z.md"],
             commit="abc123def456",
             subject="fix x",
+            branch="agile-team/rebase-sprint-2",
         ),
         T.SYNC_CONFLICT,
         "run: sprint 2 end: rebasing agile-team onto origin/main stopped at abc123def456 "
@@ -284,6 +285,7 @@ BOUNDARY_ROWS = [
 def test_boundary_rows_match_and_format(report, trigger, line) -> None:
     assert handover.triggers(report) == [trigger]
     assert handover.report_lines(report, None) == [line]
+    assert "by hand" not in line
 
 
 def test_escalated_row_matches_only_a_reviewed_boundary() -> None:

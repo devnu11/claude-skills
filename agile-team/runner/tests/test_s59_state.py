@@ -64,3 +64,12 @@ def test_sync_from_round_trips() -> None:
 def test_the_boundary_text_fields_include_commit_and_subject(name: str) -> None:
     assert name in handover.BOUNDARY_TEXT
     assert "sync_from" in asdict(bd.Boundary(bd.Edge.START, 1))
+
+
+def test_s151_a_rebase_fix_round_trips_with_its_conflict() -> None:
+    conflict = bd.Failure(bd.Stage.REBASE, bd.FixCase.REBASE_CONFLICT, "out", files=["a.py"])
+    st = RunState(sprint=1)
+    st.boundary = bd.Boundary(bd.Edge.END, 1, rebase_fix=bd.RebaseFix(conflict, "done", "n"))
+    fix = RunState.from_json(st.to_json()).boundary.rebase_fix
+    assert fix == bd.RebaseFix(conflict, "done", "n")
+    assert isinstance(fix.conflict, bd.Failure)

@@ -235,6 +235,7 @@ def test_ac3_1_a_rebase_conflict_goes_to_devops_not_a_hold(env: Env) -> None:
     env.br.step()
     b = env.rt.state.boundary
     assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
+    assert b.failure.stage is bd.Stage.REBASE and b.sync_from
 
 
 # ----- AC3.2: force-push the rebased branch to the same branch ----------------------

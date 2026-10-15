@@ -398,6 +398,7 @@ def test_ac6_4_continue_boundary_clears_the_fix_and_reruns_the_rebase(
 
 def test_ac6_4_the_stall_hint_exists() -> None:
     assert BoundaryHold.REBASE_CONFLICT in bd.STALL_HINTS
+    assert "continue_boundary" in bd.STALL_HINTS[BoundaryHold.REBASE_CONFLICT]
 
 
 def test_ac6_4_a_legacy_sync_conflict_hold_still_exists() -> None:

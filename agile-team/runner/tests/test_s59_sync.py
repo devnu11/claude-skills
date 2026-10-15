@@ -80,6 +80,7 @@ def test_a_conflict_reports_files_commit_and_subject_and_wakes_devops(
     assert data["files"] == ["a/x.py", "b.py"]
     assert data["commit"] == FAILED[:12] and len(data["commit"]) == 12
     assert data["subject"] == "fix the thing"
+    assert data["outcome"] != "held" and env.rt.state.boundary.failure is not None
     assert env.br.due().kind is StepKind.REBASE_FIX
 
 
