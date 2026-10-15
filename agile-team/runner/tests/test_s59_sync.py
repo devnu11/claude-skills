@@ -103,6 +103,7 @@ def test_sync_from_is_set_once_and_reused_after_continue(
     env.drive()
     assert b.sync_from == FAKE_HEAD
     b.hold = None
+    b.failure = None  # the conflict goes to a DevOps step (s151); here the stage is simply rerun
     env.drive()
     assert script.olds == [FAKE_HEAD, FAKE_HEAD]
 

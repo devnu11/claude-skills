@@ -139,13 +139,12 @@ def test_s153_the_rebase_fix_scope_confines_writes_and_git_to_the_worktree(env: 
     assert "GIT_CEILING_DIRECTORIES" in plan.launch.env
 
 
-def test_p1_a_sprint_end_conflict_still_holds_sync_conflict(env: Env) -> None:
+def test_p1_a_sprint_end_conflict_goes_to_a_devops_step_without_a_hold(env: Env) -> None:
     e = at(env, Stage.REBASE)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
     env.br.step()
     b = env.rt.state.boundary
-    assert b.hold == BoundaryHold.SYNC_CONFLICT
-    assert b.failure is None and b.rebase_fix is None and b.sync_from
-    due = env.br.due()
-    assert due is None or due.kind is not StepKind.REBASE_FIX
+    assert b.hold is None
+    assert b.failure is not None and b.rebase_fix is None and b.sync_from
+    assert env.br.due().kind is StepKind.REBASE_FIX
