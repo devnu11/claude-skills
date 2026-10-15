@@ -297,13 +297,13 @@ def test_a_boundary_run_skips_pending_files_but_fails_on_another_red_test(
     file_id = f"{ROOT}/tests/test_p.py"
     config = full_config(configured)
     checks_ = fullcheck.full_checks(config, Registry({"s1": (file_id,)}))
-    (test_check,) = [c for c in checks_ if c.name == "test"]
-    assert "--ignore=tests/test_p.py" in shlex.split(test_check.built.command)
+    (cov_check,) = [c for c in checks_ if c.name == "coverage"]
+    assert "--ignore=tests/test_p.py" in shlex.split(cov_check.built.command)
     run = Writer([report(case("tests/test_o.py", "tests.test_o", "test_x", 0, FAIL))], code=1)
-    result = fullcheck.run_checks([test_check], fullcheck.Judging(run, 95.0)).results[0]
+    result = fullcheck.run_checks([cov_check], fullcheck.Judging(run, 95.0)).results[0]
     assert not result.passed
     assert result.pending == "pending (s1): 1"
-    assert result.check.command == TEST_CMD
+    assert result.check.command == COV_CMD
 
 
 # ---- the guard: only the runner writes the registry ----------------------------------------

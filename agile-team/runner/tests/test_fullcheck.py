@@ -28,7 +28,6 @@ def test_order_is_toolchain_then_e2e_and_unset_are_left_out(scratch: Path) -> No
     )
     assert full_checks(c, Registry()) == [
         FullCheck("lint", "l", Judge.EXIT),
-        FullCheck("test", "t", Judge.EXIT),
         FullCheck("coverage", "cov", Judge.COVERAGE),
         FullCheck("e2e:cli", "run-e2e", Judge.EXIT),
         FullCheck("e2e:web", "run-web", Judge.EXIT),
