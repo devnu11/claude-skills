@@ -70,6 +70,7 @@ class Spec:
     command: str = ""
     resume_prompt: str = DEFAULT_RESUME_PROMPT
     resume_command: str = ""
+    stop_command: str = ""
     auth: Auth = Auth.LOGIN
     key_file: str | None = None
     model: str | None = None
