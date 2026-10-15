@@ -138,10 +138,34 @@ dependencies.
 
 ### What a story file holds
 
-Each story is a file, `.team/stories/<id>.md`. The Product Owner writes it
-before the story enters the backlog. Its frontmatter lists the acceptance
-criteria, and each one says where the customer tries it: the name of one of
-your `[[environment]]` rows in `.agile-team.toml`.
+Each story is a file, `.team/stories/<id>.md`. Its frontmatter lists the
+acceptance criteria, and each one says where the customer tries it: the name
+of one of your `[[environment]]` rows in `.agile-team.toml`.
+
+Only the runner writes story files. The liaison writes a draft and submits
+it; the Product Owner schedules stories but can't write them:
+
+```
+agile-team story new draft.md --approved-by human --sprint current
+agile-team story amend s120 draft.md --approved-by none
+```
+
+A draft has a `title`, the `acceptance` list and an optional `depends_on`,
+with the user story as the body. It has no `id`: the runner gives it one.
+The command checks the draft and lists every problem, or queues it and
+prints its queue id (`q3`). Between steps, the runner gives a new story the
+next id and writes its file. It commits the file as
+`docs(s121): created story to <title>`, and places the story: in the running
+sprint (`current`), first in the backlog (`next`), or last in the backlog
+(`backlog`, the default). `--after s119` puts it right after s119. Then it
+tells the Product Owner. With `--approved-by none`, the commit's author is
+the liaison. With `human`, it is your git user. Its `Human-involvement:`
+line says which (`--plan <path>` names the plan you approved).
+
+`story amend` replaces a story's acceptance criteria in one commit, then
+sends the story back to design. When the team finds a bug it couldn't fix,
+the Product Owner asks the liaison for a story (`request_story`). The story
+commits belong to the story: a revert of the story keeps its file.
 
 ```yaml
 ---
@@ -163,16 +187,17 @@ Each try sees only that environment's criteria. Every environment runs even
 when an earlier one fails; the story passes only when all pass, and
 otherwise goes back once, naming every failed environment and criterion.
 After the fix, every environment is tried again.
-The runner refuses to open a story whose file has a missing or unknown
-environment, a missing or repeated criterion id, or YAML it can't read; the
-refusal names the file, the criterion and the problem. To move a criterion
-to another environment, edit the file. The runner reads it again before the
-Customer Proxy's turn, and holds the story until a bad file is fixed.
+`story new` refuses a draft with a missing or unknown environment, a
+missing or repeated criterion id, or YAML it can't read. The refusal names
+the file, the criterion and the problem. To move a criterion to another
+environment, use `story amend`. The runner reads the story file again
+before the Customer Proxy's turn, and holds the story until a bad file is
+fixed.
 
 ### Stories that depend on others
 
-When a story needs other stories done first, the Product Owner lists them in
-the story file's `depends_on`:
+When a story needs other stories done first, the liaison's draft lists them
+in `depends_on`, which the story file keeps:
 
 ```yaml
 ---
