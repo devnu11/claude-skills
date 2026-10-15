@@ -57,7 +57,7 @@ def test_a_sleeping_beat_appends_exactly_one_line(fake: FakeSystem) -> None:
     start = fake.clock
     fake.clock += 6 * BEAT
     pulse._beat()
-    assert lines(fake) == [{"from": start, "to": start + 6 * BEAT, "slept": 5 * BEAT}]
+    assert lines(fake) == [{"from": start, "to": start + 6 * BEAT, "slept": about(5 * BEAT)}]
 
 
 def test_two_sleeps_append_two_lines_in_order(fake: FakeSystem) -> None:
@@ -128,7 +128,7 @@ def test_valid_rows_are_sorted_by_from(config: cfg.Config, scratch: Path) -> Non
 
 def test_rows_ship_only_the_three_keys(config: cfg.Config, scratch: Path) -> None:
     row = {"from": 1, "to": 9, "slept": 4, "extra": "x"}
-    assert sleeps_for(config, scratch, [row]) == [{"from": 1, "to": 9, "slept": 4}]
+    assert sleeps_for(config, scratch, [row]) == [{"from": 1, "to": 9, "slept": about(4)}]
 
 
 def test_boundary_rows_are_kept(config: cfg.Config, scratch: Path) -> None:

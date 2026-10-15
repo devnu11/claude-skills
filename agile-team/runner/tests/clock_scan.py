@@ -104,6 +104,8 @@ def _one_sided(a: ast.expr, b: ast.expr) -> bool:
 
 
 def _dict_violation(node: ast.expr) -> bool:
+    if isinstance(node, ast.List | ast.Tuple):
+        return any(_dict_violation(e) for e in node.elts)
     if not isinstance(node, ast.Dict):
         return False
     return any(_dict_item_bad(k, v) for k, v in zip(node.keys, node.values, strict=True))

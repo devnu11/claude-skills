@@ -82,6 +82,8 @@ def test_clock_reads_passes_other_time_use(text: str) -> None:
         'assert (b["steps"], b["seconds"]) == (3, 180)',
         'assert out["s"] == {"tokens": 2, "seconds": 0}',
         "assert ok and x.slept_s == 5",
+        'assert lines(f) == [{"from": 1, "slept": 5}]',
+        'assert lines(f) == ({"slept": 5},)',
     ],
 )
 def test_exact_compares_are_caught(line: str) -> None:
@@ -102,6 +104,7 @@ def test_exact_compares_are_caught(line: str) -> None:
         'assert row["seconds"] < 25',
         'ok = row["seconds"] == 3',
         'assert out["s"] == {"tokens": 2, "seconds": about(0)}',
+        'assert lines(f) == [{"from": 1, "slept": about(5)}]',
     ],
 )
 def test_tolerant_or_other_compares_pass(line: str) -> None:
