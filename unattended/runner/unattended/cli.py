@@ -1,6 +1,6 @@
 """``unattended``: run a prompt or command unattended, resuming after usage limits.
 
-start | status | list | wait | log | stop | resume. Jobs live in the repo's
+start | status | list | wait | log | stop | resume | extend. Jobs live in the repo's
 ``.claude/jobs/`` when it exists, else ``~/.claude/jobs/``. Errors print
 ``unattended <cmd>: <message>`` and return 1.
 """
@@ -305,7 +305,7 @@ def report(job: Job) -> dict[str, Any]:
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
-        "deadline": iso(st.bounds.deadline), "hardstop": optional_span(st.bounds.hardstop),
+        **limits_report(st.bounds),
         "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:
@@ -405,6 +405,29 @@ def cmd_resume(args: argparse.Namespace) -> int:
     job.clear_stop()
     job.event("resume", {"by": "user"})
     return LAUNCHERS[args.launch](job, args)
+
+
+def cmd_extend(args: argparse.Namespace) -> int:
+    """Change the limits of a job that has not ended; its supervisor sees them within a slice."""
+    job = job_home(args).job(args.name)
+    state = job.load()
+    _require_not_ended(state)
+    bounds = updated_bounds(state.bounds, args)
+    _require_room(bounds, state.cost)
+    job.update(lambda st: setattr(st, "bounds", bounds))
+    job.event("extend", {"by": "user", **limits_report(bounds)})
+    print_json(report(job))
+    return 0
+
+
+def _require_not_ended(state: JobState) -> None:
+    if state.status in ENDED:
+        raise CliError(f"job ended {state.status}; `unattended resume {state.name}` reruns it")
+
+
+def limits_report(bounds: Bounds) -> dict[str, Any]:
+    """The deadline and the hard stop, readable."""
+    return {"deadline": iso(bounds.deadline), "hardstop": optional_span(bounds.hardstop)}
 
 
 def _wake(job: Job, args: argparse.Namespace) -> int:
@@ -534,6 +557,8 @@ COMMANDS = (
     Command("stop", "stop the job", cmd_stop, (NAME_ARG,)),
     Command("resume", "restart a stopped or limit-reached job", cmd_resume, RESUME_ARGS,
             (DEADLINE,)),
+    Command("extend", "change the limits of a job that has not ended", cmd_extend,
+            (NAME_ARG, *limit_args(None)), (DEADLINE,)),
     Command("supervise", "internal: supervise a job directory in this process", cmd_supervise,
             ((("dir",), {}),)),
 )  # fmt: skip
