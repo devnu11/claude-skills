@@ -7,6 +7,14 @@
     "agile-team/runner/tests/test_po_cost.py::test_session_cost_defaults",
     "agile-team/runner/tests/test_reconcile.py"
   ],
+  "s150": [
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_dot_has_its_own_display_and_gap",
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_helper_puts_the_tooltip_on_the_pill",
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_card_pill_rule_keeps_one_line_and_cuts_with_an_ellipsis",
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_no_rule_lets_a_card_pill_wrap",
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_role_and_revert_pills_are_card_pills",
+    "agile-team/runner/tests/test_s150_wait_pill_source.py::test_wait_pill_shows_the_reason_and_titles_the_full_title"
+  ],
   "s151": [
     "agile-team/runner/tests/test_boundary.py::test_big_pr_note_no_longer_names_the_bottom_of_the_stack",
     "agile-team/runner/tests/test_boundary.py::test_boundary_defaults_and_coercion",
@@ -47,6 +55,8 @@
     "agile-team/runner/tests/test_boundary_runner.py::test_the_pushed_report_goes_to_the_liaison",
     "agile-team/runner/tests/test_boundary_wiring.py::test_s151_sync_conflict_handover_text_points_at_devops",
     "agile-team/runner/tests/test_boundary_wiring.py::test_there_is_no_review_fix_kind",
+    "agile-team/runner/tests/test_handover.py::test_table_rows_are_in_design_order",
+    "agile-team/runner/tests/test_handover.py::test_trigger_values_are_snake_case",
     "agile-team/runner/tests/test_s108_start.py::test_every_stage_has_a_runner_and_a_stage_row",
     "agile-team/runner/tests/test_s108_start.py::test_start_notes_are_exact",
     "agile-team/runner/tests/test_s108_start.py::test_the_end_edge_runs_the_five_end_stages_in_order",
@@ -107,6 +117,7 @@
     "agile-team/runner/tests/test_s151_end.py::test_the_old_flow_events_still_render_by_name",
     "agile-team/runner/tests/test_s151_end.py::test_the_po_pushes_the_sprints_branch_and_knows_the_liaison_got_the_checks",
     "agile-team/runner/tests/test_s59_sync.py::test_s151_sprint_end_conflict_report_names_files_commit_subject_and_wakes_devops",
+    "agile-team/runner/tests/test_s59_sync.py::test_sync_from_is_set_once_and_reused_after_continue",
     "agile-team/runner/tests/test_s81_boundary.py::test_a_full_push_run_records_ci_on_the_entry",
     "agile-team/runner/tests/test_s81_boundary.py::test_no_permission_or_no_gh_is_local_with_ci_none[gh]",
     "agile-team/runner/tests/test_s81_boundary.py::test_no_permission_or_no_gh_is_local_with_ci_none[no]",
@@ -128,10 +139,7 @@
     "agile-team/runner/tests/test_upstream.py::test_push_refuses_main_team_and_unprefixed_branches[main]",
     "agile-team/runner/tests/test_upstream.py::test_push_refuses_main_team_and_unprefixed_branches[teamsprint-1]",
     "agile-team/runner/tests/test_upstream.py::test_push_sends_the_sha_with_its_lease",
-    "agile-team/runner/tests/test_upstream.py::test_push_with_an_empty_expectation_leases_the_absent_branch",
-    "agile-team/runner/tests/test_handover.py::test_table_rows_are_in_design_order",
-    "agile-team/runner/tests/test_handover.py::test_trigger_values_are_snake_case",
-    "agile-team/runner/tests/test_s59_sync.py::test_sync_from_is_set_once_and_reused_after_continue"
+    "agile-team/runner/tests/test_upstream.py::test_push_with_an_empty_expectation_leases_the_absent_branch"
   ],
   "s152": [
     "agile-team/runner/tests/test_fullcheck.py::test_failed_ids_is_empty_without_a_report",
