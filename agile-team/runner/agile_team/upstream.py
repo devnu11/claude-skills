@@ -384,8 +384,7 @@ class Upstream:
         if after == old:
             return Rebase(SyncOutcome.CURRENT)
         self._check_kept(Spans(start, old, target_sha))
-        moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
-        return Rebase(SyncOutcome.REBASED, after, moved=moved)
+        return self._rebased(old, after, target_sha)
 
     def upstreamed(self, old: str) -> frozenset[str]:
         """The shas of ``target..old`` whose patch is already in the target."""
@@ -397,6 +396,9 @@ class Upstream:
         self._refuse_moved(old)
         target_sha = self.git.run("rev-parse", self.target).strip()
         self.git.run("reset", "--keep", sha)
+        return self._rebased(old, sha, target_sha)
+
+    def _rebased(self, old: str, sha: str, target_sha: str) -> Rebase:
         moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
         return Rebase(SyncOutcome.REBASED, sha, moved=moved)
 
