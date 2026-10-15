@@ -2477,7 +2477,8 @@ strings and whose `at` is a number, with `data` valid base64 that matches
 (story `null`, outcome `refused`), writes nothing and is never retried.
 
 **Where a shared path may point (s133).** Before a listed path is used, it
-is resolved (`.`, `..`, symlinks, absolute paths). It counts only when it
+is resolved (`.`, `..`, symlinks, absolute paths; a path that cannot name a
+file, such as one with a NUL byte, resolves to nowhere). It counts only when it
 already is its own resolved form and sits directly in `<docs>/design/`.
 Otherwise it is a `shared:` problem
 (`path <p> resolves to <where>; a shared file must sit directly in <docs>/design/`).
