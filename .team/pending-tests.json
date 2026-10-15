@@ -1,1 +1,9 @@
-{}
+{
+  "s143": [
+    "agile-team/runner/tests/test_s143_dotted_refs.py::test_accepts_with_round_trip[s1/AC1.2.3-s1-AC1.2.3]",
+    "agile-team/runner/tests/test_s143_dotted_refs.py::test_accepts_with_round_trip[s141/AC1.1-s141-AC1.1]",
+    "agile-team/runner/tests/test_s143_dotted_refs.py::test_accepts_with_round_trip[s141/AC8.3-s141-AC8.3]",
+    "agile-team/runner/tests/test_s143_dotted_refs.py::test_accepts_with_round_trip[s2/a-b_c.d-s2-a-b_c.d]",
+    "agile-team/runner/tests/test_s143_dotted_refs.py::test_dotted_cover_has_no_bad_ref"
+  ]
+}
