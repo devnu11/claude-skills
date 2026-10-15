@@ -384,21 +384,21 @@ class Upstream:
         if after == old:
             return Rebase(SyncOutcome.CURRENT)
         self._check_kept(Spans(start, old, target_sha))
-        return self._rebased(old, after, target_sha)
+        return self._build_rebased(old, after, target_sha)
 
-    def upstreamed(self, old: str) -> frozenset[str]:
+    def find_upstreamed(self, old: str) -> frozenset[str]:
         """The shas of ``target..old`` whose patch is already in the target."""
         out = self.git.run("cherry", self.target, old)
         return frozenset(ln[2:].strip() for ln in out.splitlines() if ln.startswith("- "))
 
-    def adopt(self, old: str, sha: str) -> Rebase:
+    def move_team_branch(self, old: str, sha: str) -> Rebase:
         """Move the team branch to ``sha`` while it is still at ``old``; the moved pairs."""
         self._refuse_moved(old)
         target_sha = self.git.run("rev-parse", self.target).strip()
         self.git.run("reset", "--keep", sha)
-        return self._rebased(old, sha, target_sha)
+        return self._build_rebased(old, sha, target_sha)
 
-    def _rebased(self, old: str, sha: str, target_sha: str) -> Rebase:
+    def _build_rebased(self, old: str, sha: str, target_sha: str) -> Rebase:
         moved = pair(self.listing(f"{self.target}..{old}"), self._new_listing(target_sha))
         return Rebase(SyncOutcome.REBASED, sha, moved=moved)
 
@@ -425,14 +425,14 @@ class Upstream:
         return Rebase(SyncOutcome.CONFLICT, "", files, commit, subject, output=output)
 
     def _check_kept(self, spans: Spans) -> None:
-        lost = self.lost_paths(spans)
+        lost = self.find_lost_paths(spans)
         if not lost:
             return
         self.git.run("reset", "--hard", spans.start)
         text = SYNC_LOST.format(team=self.git.branch(), target=self.target, paths=", ".join(lost))
         raise UpstreamError(text)
 
-    def lost_paths(self, spans: Spans) -> list[str]:
+    def find_lost_paths(self, spans: Spans) -> list[str]:
         """The paths a rebase changed that only one side touched, sorted."""
         base = self.git.run("merge-base", spans.old, self.target).strip()
         upstream, team = self._names(base, self.target), self._names(base, spans.old)

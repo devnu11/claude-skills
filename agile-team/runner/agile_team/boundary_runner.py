@@ -554,7 +554,7 @@ class BoundaryRunner:
     def _move_to_fix(self, b: Boundary) -> None:
         scratch = self._scratch(b)
         try:
-            result = self.remote.adopt(b.sync_from, scratch.head())
+            result = self.remote.move_team_branch(b.sync_from, scratch.head())
         except UpstreamError:
             self._forget_fix(b, scratch)
             raise

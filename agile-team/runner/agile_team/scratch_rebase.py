@@ -96,7 +96,7 @@ class ScratchRebase:
 
     def _commits_changed(self, old: str) -> str:
         up, target = self.upstream, self.upstream.target
-        done = up.upstreamed(old)
+        done = up.find_upstreamed(old)
         wanted = [s.stamp for s in up.listing(f"{target}..{old}") if s.sha not in done]
         found = [s.stamp for s in up.listing(f"{target}..{self.branch}")]
         return "" if wanted == found else COMMITS_CHANGED.format(branch=self.branch)
@@ -104,7 +104,7 @@ class ScratchRebase:
     def _lost(self, old: str) -> str:
         up = self.upstream
         target_sha = up.git.run("rev-parse", up.target).strip()
-        lost = up.lost_paths(Spans(old, old, target_sha, head=self.branch))
+        lost = up.find_lost_paths(Spans(old, old, target_sha, head=self.branch))
         if not lost:
             return ""
         return LOST_PATHS.format(branch=self.branch, paths=", ".join(lost))
