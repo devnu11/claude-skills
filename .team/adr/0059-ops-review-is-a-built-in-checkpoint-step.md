@@ -43,3 +43,15 @@ Manager fault could send a story back to.
 - The story file gains a runner-written section, like `## Reverted`
   (ADR-0057); the Customer Proxy reads it there (it may read
   `.team/stories/**`).
+
+## Amended by s131 (2026-10-14)
+
+The `## Tooling` record used to be written after the story advanced. If its
+commit failed, the story was already at `tests` and the record was gone. The
+record is now written and committed **before** the story advances, as the
+pending registry already was (P13). A commit that fails puts the story file
+back to its old text, unstages it, and turns the pass into a gate hold
+(`Verdict.HOLD`) whose reason names the git error. The story stays at
+`ops-review`, no round is counted, and the PO gets a `gate_hold` hand-over.
+The rule covers every `PASS_RECORDS` row, so a future pass record gets the
+same order and the same failure handling for free.

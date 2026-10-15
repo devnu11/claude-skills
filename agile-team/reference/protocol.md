@@ -1359,7 +1359,7 @@ step). A malformed list is a handoff error. The ops gate:
 
 | Handoff | Result |
 |---|---|
-| `done`, a row per AC, every `missing` row names an existing story | pass to `tests`; the runner writes the rows into the story file under `## Tooling` (one `chore(<id>): record the tooling review in the story file` commit) |
+| `done`, a row per AC, every `missing` row names an existing story | pass to `tests`; before the story moves, the runner writes the rows into the story file under `## Tooling` (one `chore(<id>): record the tooling review in the story file` commit). If that commit fails, the runner puts the story file back, and the pass becomes a gate hold at `ops-review` (no round). The reason names the git error; fix it, then `continue_story` |
 | `done`, an AC without a row, an unknown or repeated AC, or a story id with no story file | bounce back to `ops-review` (a round) |
 | `done`, a `missing` row with no story | gate hold: the PO opens a story for each need, then `continue_story` with a note naming them; DevOps runs again and fills in the ids |
 | `changes_requested` | bounce to `design` with DevOps's summary as the reason, whatever `next_role` says: the design assumes tooling that can't exist |
