@@ -2263,16 +2263,16 @@ with no reasons and the `compact` path.
 ## Backlog and sprints
 
 Each story in `state.json` has `sprint`: the number of the sprint it is
-committed to, or `null` when it is in the backlog.
+committed to, or `null` when it is in the Product Backlog.
 
 - The liaison writes every story (`agile-team story new`), and the runner
   opens it between steps: it gives it an id, commits its file and places it
-  in the running sprint, first for the next sprint, or in the backlog, as
+  in the running sprint, first for the next sprint, or in the Product Backlog, as
   the liaison asked (see "Stories from the liaison"). The PO never writes a
   story file and has no tool to open one (s135).
 - `start_sprint(goal, stories)` is the only way into a sprint. It opens sprint
   `N+1` with exactly the listed stories. Unfinished stories it does not list
-  go back to the backlog. Done stories never move; they keep the sprint they
+  go back to the Product Backlog. Done stories never move; they keep the sprint they
   finished in. It refuses an empty list or unknown ids (`unknown stories: s7;
   ask the liaison for them with request_story`) and changes nothing when it refuses.
   Once those checks pass, it reloads every open story's `depends_on` from
@@ -2330,7 +2330,7 @@ committed to, or `null` when it is in the backlog.
   action, but the runner never suggests it for a stuck sprint. An old
   `state.json` holding `offered` loads, and the field is dropped.
 - `state.json` from before backlogs existed loads every story into the
-  backlog. Step, rounds, status and commit are kept. On resume, the runner
+  Product Backlog. Step, rounds, status and commit are kept. On resume, the runner
   tells the PO that nothing can move, and the PO starts a sprint with the
   stories to continue.
 - `start_sprint` opens the sprint's **start boundary**, and it is refused
@@ -2433,7 +2433,7 @@ first, in **one** commit: `revert(sN): <title>`, body `Reverts <shas>.` and
   before the first entry, `- <UTC date>, sprint <N>: <reason> Reverted
   commits: <shas>. Revert commit: <sha>.` (12-character shas). It commits this
   separately as `chore(sN): record the revert in the story file`;
-- resets the story: back in the backlog (`sprint: null`) at the step before
+- resets the story: back in the Product Backlog (`sprint: null`) at the step before
   `tests` (or its current step when that comes earlier), with commit, code
   commits, rounds, holds, dispute and fix records cleared. It keeps its id,
   title, `depends_on`, developer choices and `reverted` history, keeps its
