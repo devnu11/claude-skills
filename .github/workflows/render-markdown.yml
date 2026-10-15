@@ -1,0 +1,38 @@
+name: render-markdown
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
+    defaults:
+      run:
+        working-directory: render-markdown/runner
+    env:
+      # GitHub's runners ship Chrome: the real renders must run, not skip.
+      RENDER_MARKDOWN_SMOKE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --dev
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pytest --cov
