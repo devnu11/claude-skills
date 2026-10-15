@@ -61,3 +61,14 @@ def test_only_local_paths_are_relative() -> None:
     assert is_relative("a/b.md") and is_relative("pic%20one.png")
     for target in ("#part", "/abs/x.md", "https://x.org", "mailto:a@b.c", ""):
         assert not is_relative(target)
+
+
+def test_links_inside_code_are_left_as_written(tmp_path: Path) -> None:
+    document = load_document(write(tmp_path, 'Write `<img src="pic.png">` or `<a href="x.md">`.\n'))
+    assert 'src="pic.png"' in document.body and 'href="x.md"' in document.body
+    assert document.warnings == ()
+
+
+def test_escaped_marks_are_literal_text(tmp_path: Path) -> None:
+    document = load_document(write(tmp_path, "Plain line\nShow \\*\\*bold\\*\\* and \\|---\\|\n"))
+    assert document.literal_text == "Show **bold** and |---|"

@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import tempfile
 import time
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from urllib.parse import quote
 
 from . import system
 
 PPD_DIR = Path("/etc/cups/ppd")
+CUPS_DEFAULT_HOST = "localhost:631"
+CUPS_PORT = 631
+PRINTER_BACKENDS = frozenset({"ipp", "ipps"})  # backends that relay the printer's own count
 POLL_SECONDS = 2.0
 WAIT_SECONDS = 300.0
 ENVIRONMENT_PRINTERS = ("LPDEST", "PRINTER")
@@ -53,8 +60,10 @@ class Outcome(StrEnum):
 
     PRINTED = "printed"
     PRINTED_NOTHING = "printed nothing"
+    COUNTED_BY_CUPS = "counted by CUPS"
     FAILED = "failed"
     UNCONFIRMED = "unconfirmed"
+    UNTRACKED = "untracked"
 
 
 SIDES_OPTIONS = {
@@ -133,18 +142,48 @@ def list_printers() -> str:
 
 def prepare_payload(pdf: Path, job: Job) -> Payload:
     """The PDF converted to the printer's raster format, or the PDF itself."""
-    raster = find_raster_format(job.printer) if job.send is Send.RASTER else None
-    if not raster:
+    ppd = find_ppd(job.printer) if job.send is Send.RASTER else None
+    raster = find_raster_format(ppd)
+    if not ppd or not raster:
         return Payload(pdf, PDF_FORMAT)
     target = pdf.with_suffix(".raster")
-    convert(Conversion(pdf, target, raster, job))
+    convert(Conversion(pdf, target, raster, job, ppd))
     return Payload(target, raster)
 
 
-def find_raster_format(printer: str) -> str | None:
-    """The first raster format the queue's PPD has a filter for."""
-    ppd = PPD_DIR / f"{printer}.ppd"
-    text = ppd.read_text(errors="replace") if ppd.is_file() else ""
+def find_ppd(printer: str) -> Path | None:
+    """The queue's PPD: the local file when readable, else a copy CUPS serves to anyone."""
+    local = PPD_DIR / f"{printer}.ppd"
+    if local.is_file() and os.access(local, os.R_OK):
+        return local
+    copy = Path(tempfile.gettempdir()) / "render-markdown" / f"{printer}.ppd"
+    return copy if get_served_ppd(printer, copy) else None
+
+
+def get_served_ppd(printer: str, copy: Path) -> bool:
+    """Download the queue's PPD from the CUPS web server into ``copy``; False when it can't."""
+    url = f"http://{get_cups_host()}/printers/{quote(printer)}.ppd"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = response.read()
+    except OSError:
+        return False
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_bytes(data)
+    return True
+
+
+def get_cups_host() -> str:
+    """``CUPS_SERVER`` as host:port, or the local server; a socket path means the local one."""
+    server = system.get_environment().get("CUPS_SERVER", "")
+    if not server or server.startswith("/"):
+        return CUPS_DEFAULT_HOST
+    return server if ":" in server else f"{server}:{CUPS_PORT}"
+
+
+def find_raster_format(ppd: Path | None) -> str | None:
+    """The first raster format the PPD has a filter for."""
+    text = ppd.read_text(errors="replace") if ppd else ""
     filters = " ".join(re.findall(r"^\*cupsFilter2?:.*$", text, re.M))
     return next((kind for kind in RASTER_FORMATS if kind in filters), None)
 
@@ -157,12 +196,13 @@ class Conversion:
     target: Path
     format: str
     job: Job
+    ppd: Path
 
 
 def convert(conversion: Conversion) -> None:
     """Run ``cupsfilter`` with the queue's PPD to make the raster file."""
     options = [arg for option in SIDES_OPTIONS[conversion.job.sides] for arg in ("-o", option)]
-    ppd = str(PPD_DIR / f"{conversion.job.printer}.ppd")
+    ppd = str(conversion.ppd)
     argv = ["cupsfilter", "-p", ppd, "-m", conversion.format, *options, str(conversion.pdf)]
     done = system.run_into(argv, conversion.target)
     if done.code != 0 or conversion.target.stat().st_size == 0:
@@ -190,13 +230,30 @@ class Traced:
 
 
 def trace_job(sent: Sent, clock: Clock) -> Traced:
-    """Poll CUPS until the job ends or the wait runs out, and evaluate_status the result."""
+    """Poll CUPS until the job ends or the wait runs out, and judge the result."""
+    if not shutil.which("ipptool"):
+        return Traced(Outcome.UNTRACKED, None)
     deadline = clock.now() + WAIT_SECONDS
     status = read_status(sent)
     while (status is None or status.state not in TERMINAL_STATES) and clock.now() < deadline:
         clock.sleep(POLL_SECONDS)
         status = read_status(sent)
-    return Traced(evaluate_status(status), status)
+    return Traced(limit_outcome(evaluate_status(status), sent.printer), status)
+
+
+def limit_outcome(outcome: Outcome, printer: str) -> Outcome:
+    """A page count CUPS made itself, for a non-IPP backend, doesn't prove paper came out."""
+    if outcome is not Outcome.PRINTED or read_backend(printer) in PRINTER_BACKENDS:
+        return outcome
+    return Outcome.COUNTED_BY_CUPS
+
+
+def read_backend(printer: str) -> str:
+    """The queue's backend: ``ipp``, ``ipps``, ``usb``…; a dnssd URI names its service type."""
+    out = system.capture(["lpstat", "-v", printer]) or ""
+    uri = out.split(": ", 1)[-1].strip()
+    service = re.search(r"\._(ipps?)\._tcp", uri)
+    return service[1] if uri.startswith("dnssd:") and service else uri.split(":", 1)[0]
 
 
 def evaluate_status(status: Status | None) -> Outcome:
@@ -211,11 +268,11 @@ def evaluate_status(status: Status | None) -> Outcome:
 
 
 def read_status(sent: Sent) -> Status | None:
-    """The job's state, reasons and impressions from the local CUPS server, via ``ipptool``."""
+    """The job's state, reasons and impressions from the CUPS server, via ``ipptool``."""
     number = sent.job_id.rsplit("-", 1)[-1]
     with tempfile.NamedTemporaryFile("w", suffix=".test", delete=False) as query:
         query.write(JOB_QUERY)
-    uri = f"ipp://localhost/printers/{sent.printer}"
+    uri = f"ipp://{get_cups_host()}/printers/{sent.printer}"
     out = system.capture(["ipptool", "-T", "10", "-tv", "-d", f"job={number}", uri, query.name])
     Path(query.name).unlink()
     return parse_status(out or "")

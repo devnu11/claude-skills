@@ -65,8 +65,8 @@ def strip_spaces(text: str) -> str:
 
 
 def find_raw_markdown(texts: list[str], document: Document) -> list[str]:
-    """Markdown syntax in the PDF's text that no code block, code span or diagram explains."""
-    allowed = strip_spaces(document.code_text + "".join(document.diagrams))
+    """Markdown syntax in the PDF's text that no code, escaped text or diagram explains."""
+    allowed = strip_spaces(document.code_text + document.literal_text + "".join(document.diagrams))
     return [
         f"page {number}: raw Markdown ({kind}): {line.strip()[:80]}"
         for number, text in enumerate(texts, 1)

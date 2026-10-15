@@ -19,14 +19,25 @@ class Finished:
 
 
 MISSING = Finished(127, "", "not found")
+TIMEOUT_SECONDS = 300
+TIMED_OUT = Finished(124, "", f"timed out after {TIMEOUT_SECONDS} s")
 
 
 def run(argv: Sequence[str], env: Mapping[str, str] | None = None) -> Finished:
-    """Run ``argv`` to the end; a program that isn't installed exits 127."""
+    """Run ``argv`` to the end; a missing program exits 127, one past the time limit 124."""
     try:
-        done = subprocess.run(list(argv), capture_output=True, text=True, env=env, check=False)
+        done = subprocess.run(
+            list(argv),
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+            timeout=TIMEOUT_SECONDS,
+        )
     except FileNotFoundError:
         return MISSING
+    except subprocess.TimeoutExpired:
+        return TIMED_OUT
     return Finished(done.returncode, done.stdout, done.stderr)
 
 
@@ -34,9 +45,17 @@ def run_into(argv: Sequence[str], target: Path) -> Finished:
     """Run ``argv`` with its standard output written, as bytes, to ``target``."""
     try:
         with target.open("wb") as out:
-            done = subprocess.run(list(argv), stdout=out, stderr=subprocess.PIPE, check=False)
+            done = subprocess.run(
+                list(argv),
+                stdout=out,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=TIMEOUT_SECONDS,
+            )
     except FileNotFoundError:
         return MISSING
+    except subprocess.TimeoutExpired:
+        return TIMED_OUT
     return Finished(done.returncode, "", done.stderr.decode(errors="replace"))
 
 

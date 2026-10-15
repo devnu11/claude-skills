@@ -18,6 +18,7 @@ from render_markdown.printer import (
     Sent,
     Sides,
     Status,
+    Traced,
     evaluate_status,
     parse_status,
     prepare_payload,
@@ -157,18 +158,24 @@ def test_a_refused_job_is_an_error(fake: FakeSystem, tmp_path: Path) -> None:
         send_job(Payload(tmp_path / "doc.pdf", "application/pdf"), JOB)
 
 
-def test_follow_polls_until_the_job_ends(fake: FakeSystem) -> None:
+@pytest.fixture
+def ipptool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+
+
+def test_follow_polls_until_the_job_ends(fake: FakeSystem, ipptool: None) -> None:
     fake.answers["ipptool"] = [ipp("pending"), ipp("processing", 2), ipp("completed", 5)]
+    fake.answer("lpstat", "device for hp: ipps://hp.local:631/ipp/print\n")
     clock, fake_clock = make_clock()
     traced = trace_job(SENT, clock)
     assert (traced.outcome, traced.status.impressions) == (Outcome.PRINTED, 5)
     assert fake_clock.sleeps == [2.0, 2.0]
     argv = fake.find_calls("ipptool")[0]
     assert argv[:6] == ["ipptool", "-T", "10", "-tv", "-d", "job=69"]
-    assert argv[6] == "ipp://localhost/printers/hp"
+    assert argv[6] == "ipp://localhost:631/printers/hp"
 
 
-def test_follow_gives_up_after_the_wait(fake: FakeSystem) -> None:
+def test_follow_gives_up_after_the_wait(fake: FakeSystem, ipptool: None) -> None:
     fake.answers["ipptool"] = [ipp("processing", 0)]
     clock, fake_clock = make_clock()
     assert trace_job(SENT, clock).outcome is Outcome.UNCONFIRMED
@@ -195,3 +202,85 @@ def test_parse_status() -> None:
     assert parse_status(ipp("completed", 5).out) == Status("completed", "none", 5)
     assert parse_status("        job-state (enum) = pending") == Status("pending", "", None)
     assert parse_status("error") is None
+
+
+def test_without_ipptool_the_job_is_untracked_at_once(
+    fake: FakeSystem, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    clock, fake_clock = make_clock()
+    assert trace_job(SENT, clock) == Traced(Outcome.UNTRACKED, None)
+    assert fake_clock.sleeps == [] and fake.calls == []
+
+
+@pytest.mark.parametrize(
+    ("device", "outcome"),
+    [
+        ("ipp://hp.local/ipp/print", Outcome.PRINTED),
+        ("dnssd://HP%20M453._ipps._tcp.local./?uuid=1", Outcome.PRINTED),
+        ("dnssd://HP%20M453._pdl-datastream._tcp.local./", Outcome.COUNTED_BY_CUPS),
+        ("usb://HP/LaserJet?serial=1", Outcome.COUNTED_BY_CUPS),
+        ("socket://10.0.0.5", Outcome.COUNTED_BY_CUPS),
+    ],
+)
+def test_only_an_ipp_backend_confirms_the_count(
+    fake: FakeSystem, ipptool: None, device: str, outcome: Outcome
+) -> None:
+    fake.answers["ipptool"] = [ipp("completed", 4)]
+    fake.answer("lpstat", f"device for hp: {device}\n")
+    assert trace_job(SENT, make_clock()[0]).outcome is outcome
+
+
+def test_the_cups_server_is_asked(fake: FakeSystem, ipptool: None) -> None:
+    fake.environment["CUPS_SERVER"] = "print.example"
+    fake.answers["ipptool"] = [ipp("completed", 0)]
+    assert trace_job(SENT, make_clock()[0]).outcome is Outcome.PRINTED_NOTHING
+    assert fake.find_calls("ipptool")[0][6] == "ipp://print.example:631/printers/hp"
+
+
+@pytest.mark.parametrize(
+    ("server", "host"),
+    [("", "localhost:631"), ("/run/cups/cups.sock", "localhost:631"), ("a:8631", "a:8631")],
+)
+def test_get_cups_host(fake: FakeSystem, server: str, host: str) -> None:
+    fake.environment["CUPS_SERVER"] = server
+    assert printer.get_cups_host() == host
+
+
+class FakeResponse:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.data
+
+
+def test_an_unreadable_ppd_is_fetched_from_cups(
+    fake: FakeSystem, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_dir: Path
+) -> None:
+    write_ppd(tmp_path, monkeypatch, "")
+    monkeypatch.setattr("os.access", lambda path, mode: False)
+    urls: list[str] = []
+
+    def answer(url: str, timeout: float) -> FakeResponse:
+        urls.append(url)
+        return FakeResponse(b'*cupsFilter2: "image/urf image/urf 10 -"\n')
+
+    monkeypatch.setattr("urllib.request.urlopen", answer)
+    payload = prepare_payload(tmp_path / "doc.pdf", JOB)
+    assert payload.format == "image/urf" and urls == ["http://localhost:631/printers/hp.ppd"]
+    assert fake.find_calls("cupsfilter")[0][2] == str(output_dir / "hp.ppd")
+
+
+def test_no_ppd_at_all_sends_the_pdf(
+    fake: FakeSystem, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(printer, "PPD_DIR", tmp_path)
+    pdf = tmp_path / "doc.pdf"
+    assert prepare_payload(pdf, JOB) == Payload(pdf, "application/pdf")

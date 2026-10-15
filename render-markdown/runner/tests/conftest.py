@@ -54,6 +54,16 @@ class FakeSystem:
         return [call for call in self.calls if Path(call[0]).name == program]
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never reach a real CUPS web server; one that needs it scripts ``urlopen``."""
+
+    def refuse(url: str, timeout: float) -> None:
+        raise OSError(f"no network in tests: {url}")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+
+
 @pytest.fixture
 def fake(monkeypatch: pytest.MonkeyPatch) -> FakeSystem:
     """Every external program replaced by scripted answers."""

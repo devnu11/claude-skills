@@ -25,7 +25,7 @@ SAMPLE = load_document(FIXTURES / "sample.md")
 
 
 def make_document(code_text: str = "", diagrams: tuple[str, ...] = ()) -> Document:
-    return Document(Path("x.md"), "T", TitleSource.HEADING, "", code_text, diagrams, ())
+    return Document(Path("x.md"), "T", TitleSource.HEADING, "", code_text, "", diagrams, ())
 
 
 def make_blank_pdf(path: Path, pages: int = 1) -> Path:
@@ -89,7 +89,7 @@ def test_page_one_must_show_a_heading_title() -> None:
     document = make_document()
     assert find_missing_title(["no title here"], document) == ["page 1: the title is missing: T"]
     assert find_missing_title(["T\nmore"], document) == []
-    named = Document(Path("x.md"), "x", TitleSource.FILE_NAME, "", "", (), ())
+    named = Document(Path("x.md"), "x", TitleSource.FILE_NAME, "", "", "", (), ())
     assert find_missing_title(["anything"], named) == []
     assert find_missing_title([], document) == []
 
@@ -115,3 +115,8 @@ def test_encode_png_drops_row_padding() -> None:
     idat = data.index(b"IDAT")
     length = struct.unpack(">I", data[idat - 4 : idat])[0]
     assert zlib.decompress(data[idat + 4 : idat + 4 + length]) == bytes([0, 1, 2, 3, 0, 4, 5, 6])
+
+
+def test_escaped_markdown_is_not_raw_markdown() -> None:
+    document = Document(Path("x.md"), "T", TitleSource.HEADING, "", "", "a **b** |---|", (), ())
+    assert find_raw_markdown(["a **b** |---|"], document) == []

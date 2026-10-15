@@ -8,6 +8,8 @@ import re
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import system
@@ -79,10 +81,22 @@ def require_version(chrome: Path) -> Path:
 
 
 def read_major_version(chrome: Path) -> int | None:
-    """The major version from ``--version``, or from a Windows install's version folder."""
-    match = VERSION.search(system.capture([str(chrome), "--version"]) or "")
-    if match:
-        return int(match[1])
+    """The major version, read the way this platform allows."""
+    reader = VERSION_READERS.get(sys.platform, read_reported_version)
+    return reader(chrome)
+
+
+def read_reported_version(chrome: Path) -> int | None:
+    """The major version ``--version`` prints, run in a scratch home."""
+    with new_scratch_home() as environment:
+        # Linux's google-chrome wrapper writes under $HOME even for --version.
+        done = system.run([str(chrome), "--version"], environment)
+    match = VERSION.search(done.out if done.code == 0 else "")
+    return int(match[1]) if match else None
+
+
+def read_folder_version(chrome: Path) -> int | None:
+    """The newest version folder beside ``chrome.exe``; Windows Chrome has no ``--version``."""
     folders = [VERSION_FOLDER.fullmatch(child.name) for child in list_siblings(chrome)]
     majors = [int(folder[1]) for folder in folders if folder]
     return max(majors) if majors else None
@@ -96,11 +110,20 @@ def list_siblings(chrome: Path) -> list[Path]:
 def write_pdf(page: Path, pdf: Path) -> None:
     """Print ``page`` to ``pdf`` with headless Chrome, in a scratch home it removes after."""
     chrome = find_chrome()
-    with tempfile.TemporaryDirectory(prefix="render-markdown-") as scratch:
-        environment = system.get_environment() | {"HOME": scratch}
-        profile = f"--user-data-dir={Path(scratch) / 'profile'}"
+    with new_scratch_home() as environment:
+        profile = f"--user-data-dir={Path(environment['HOME']) / 'profile'}"
         argv = [str(chrome), *FLAGS, profile, f"--print-to-pdf={pdf}", page.as_uri()]
         pdf.unlink(missing_ok=True)
         done = system.run(argv, environment)
     if not pdf.is_file():
         raise ChromeError(f"Chrome made no PDF (exit {done.code}): {done.err.strip()[-400:]}")
+
+
+@contextmanager
+def new_scratch_home() -> Iterator[dict[str, str]]:
+    """This process's environment with ``HOME`` in a scratch folder, removed afterwards."""
+    with tempfile.TemporaryDirectory(prefix="render-markdown-") as scratch:
+        yield system.get_environment() | {"HOME": scratch}
+
+
+VERSION_READERS: dict[str, Callable[[Path], int | None]] = {"win32": read_folder_version}

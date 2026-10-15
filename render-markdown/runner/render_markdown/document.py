@@ -16,6 +16,8 @@ MERMAID_BLOCK = re.compile(r'<pre><code class="language-mermaid">(.*?)</code></p
 CODE = re.compile(r"<code[^>]*>(.*?)</code>", re.S)
 LINK = re.compile(r'\b(src|href)="([^"]*)"')
 TAG = re.compile(r"<[^>]+>")
+CODE_SPLIT = re.compile(r"(<code[^>]*>.*?</code>)", re.S)
+ESCAPED = re.compile(r"\\([*|`])")
 
 
 class TitleSource(StrEnum):
@@ -34,6 +36,7 @@ class Document:
     title_source: TitleSource
     body: str
     code_text: str
+    literal_text: str
     diagrams: tuple[str, ...]
     warnings: tuple[str, ...]
 
@@ -41,13 +44,19 @@ class Document:
 def load_document(source: Path) -> Document:
     """Render ``source`` to an HTML body and collect its title, code, diagrams and warnings."""
     converter = markdown.Markdown(extensions=list(EXTENSIONS))
-    body = converter.convert(source.read_text(encoding="utf-8"))
-    title, title_source = find_title(converter.toc_tokens, source)
-    body, warnings = replace_links(body, source.parent)
-    diagrams = tuple(html.unescape(text) for text in MERMAID_BLOCK.findall(body))
+    text = source.read_text(encoding="utf-8")
+    body, warnings = replace_links(converter.convert(text), source.parent)
+    title = find_title(converter.toc_tokens, source)
+    diagrams = tuple(html.unescape(block) for block in MERMAID_BLOCK.findall(body))
     body = mark_diagrams(wrap_tables(body))
-    code_text = "\n".join(html.unescape(text) for text in CODE.findall(body))
-    return Document(source, title, title_source, body, code_text, diagrams, warnings)
+    code_text = "\n".join(html.unescape(block) for block in CODE.findall(body))
+    return Document(source, *title, body, code_text, find_literal_text(text), diagrams, warnings)
+
+
+def find_literal_text(text: str) -> str:
+    """Lines that escape ``*``, ``|`` or a backtick, as they render: the marks shown literally."""
+    lines = [line for line in text.splitlines() if ESCAPED.search(line)]
+    return "\n".join(ESCAPED.sub(r"\1", line) for line in lines)
 
 
 def find_title(tokens: list[dict], source: Path) -> tuple[str, TitleSource]:
@@ -75,7 +84,7 @@ def wrap_tables(body: str) -> str:
 
 
 def replace_links(body: str, base: Path) -> tuple[str, tuple[str, ...]]:
-    """Point relative ``src`` and ``href`` at absolute file URLs; name missing images."""
+    """Point relative ``src`` and ``href`` outside code at file URLs; name missing images."""
     warnings: list[str] = []
 
     def replace_link(match: re.Match[str]) -> str:
@@ -87,7 +96,11 @@ def replace_links(body: str, base: Path) -> tuple[str, tuple[str, ...]]:
             warnings.append(f"missing image: {target}")
         return f'{attribute}="{html.escape(join_fragment(path, target))}"'
 
-    return LINK.sub(replace_link, body), tuple(warnings)
+    parts = CODE_SPLIT.split(body)  # odd parts are code, shown as written
+    replaced = [
+        part if index % 2 else LINK.sub(replace_link, part) for index, part in enumerate(parts)
+    ]
+    return "".join(replaced), tuple(warnings)
 
 
 def is_relative(target: str) -> bool:
