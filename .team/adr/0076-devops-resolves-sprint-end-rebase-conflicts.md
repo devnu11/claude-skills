@@ -63,3 +63,17 @@ the DevOps step's scope. Until s151's implement step wires them, a
 sprint-end conflict still holds `sync_conflict` and no `rebase-fix` step is
 ever due, so a build between the two slices is safe to ship. The real-git
 tests of the pieces are e2e tests, because unit tests run in the fake world.
+
+## Amended by s153, round-2 review (2026-10-15)
+
+s151's slice-2 unit tests stay in the tree while s153 runs (Manager and PO
+rulings), and they belong to s151, not s153. The registry is runner-only.
+A red test joins a story's pending ids only at that story's own tests gate,
+and only if the step touched the test's lines. So one s151 tests step runs
+during s153 and registers them. That step changes no assertion. It moves the
+`sync_conflict` handover case out of the shared `BOUNDARY_ROWS` constant
+into a test of its own, and adds `Pins s151/AC6.N (slice 2).` to each
+other red test's docstring. Because the pending tests were registered in
+the wrong order once, a split story whose later slice's tests are
+already in the tree must have that slice's tests step run before the
+earlier slice's gates. See design/s153.md (P7, Step order 5 and 6).
