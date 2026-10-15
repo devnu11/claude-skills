@@ -185,4 +185,12 @@ rule, update in the same story:
   `tests/test_s129_clock_scan.py` on the unit tree and by
   `tests/e2e/test_s129_clock_scan_e2e.py` on the e2e tree. To get past it,
   add a helper to `tests/clock.py`, never an exemption.
+- **Every test passes in any order (s130).** The agile-team runner's suite runs
+  in random order by default (pytest-randomly; `-p no:randomly` turns it off,
+  `--randomly-seed=N` replays a failing order). A helper takes the config or
+  other state it needs as a parameter or a fixture. It never reads them from a
+  module-level list or dict. No function in a test file writes to a
+  module-level mutable value or uses `global`. `tests/state_scan.py` enforces
+  this, run by `tests/test_s130_module_state.py` (unit tree) and
+  `tests/e2e/test_s130_module_state_e2e.py` (e2e tree), with no exemptions.
 - No new runtime dependency without an ADR. The dashboard uses only the stdlib.
