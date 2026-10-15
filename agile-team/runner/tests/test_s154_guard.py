@@ -165,14 +165,14 @@ def two_failures() -> junit.Report:
 
 
 def test_s154_round2_ac3_failures_of_a_run_come_from_its_report() -> None:
-    assert gates._failures_of(red_run(two_failures())) == {
+    assert gates._read_failures(red_run(two_failures())) == {
         "tests/test_a.py::a": "x",
         "tests/test_a.py::b": "y",
     }
 
 
 def test_s154_round2_ac3_a_run_without_a_report_has_no_failures() -> None:
-    assert gates._failures_of(red_run(None)) == {}
+    assert gates._read_failures(red_run(None)) == {}
 
 
 def test_s154_round2_ac3_test_ran_has_code_tail_and_failures() -> None:
