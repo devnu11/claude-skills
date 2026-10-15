@@ -37,7 +37,7 @@ class Inliner:
 
         Raises ``UnicodeDecodeError`` (before marking) when the file is not UTF-8.
         """
-        text = _utf8(path)
+        text = _read_utf8(path)
         self.seen.add(path)
         return _IMPORT.sub(lambda m: self._replace(m, path.parent), text)
 
@@ -56,9 +56,9 @@ class Inliner:
             return f"@{path}"
         if target in self.seen:
             return REPEATED.format(path=path)
-        return self._inline(path, target)
+        return self._read_inline(path, target)
 
-    def _inline(self, path: str, target: Path) -> str:
+    def _read_inline(self, path: str, target: Path) -> str:
         """``target``'s inlined text, or the ``UNREADABLE`` note when it is not UTF-8."""
         try:
             return self.file(target).strip()
@@ -71,6 +71,6 @@ def _target(path: str, base: Path) -> Path | None:
     return None if path.startswith("~") else system.resolve(base / path)
 
 
-def _utf8(path: Path) -> str:
+def _read_utf8(path: Path) -> str:
     """The file's text decoded as UTF-8 on every platform (never the locale's encoding)."""
     return system.read_bytes(path).decode("utf-8")
