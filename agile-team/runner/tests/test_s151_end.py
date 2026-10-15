@@ -229,7 +229,7 @@ def test_ac3_1_as_is_pushed_and_ci_are_never_remapped(env: Env) -> None:
 
 
 def test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing(env: Env) -> None:
-    """Pins s151/AC6.1 (slice 2)."""
+    """Pins s151/AC6.1 (slice 2): a rebase conflict wakes DevOps and sets no hold."""
     e = at(env, Stage.REBASE)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
@@ -237,6 +237,7 @@ def test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing(env: Env) -> 
     b = env.rt.state.boundary
     assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
     assert b.failure.stage is bd.Stage.REBASE and b.sync_from
+    assert b.failure.files == ("a.py",)
     assert env.br.due().kind is bd.StepKind.REBASE_FIX
 
 

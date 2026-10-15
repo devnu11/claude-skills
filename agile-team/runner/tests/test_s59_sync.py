@@ -71,7 +71,7 @@ def test_start_only_reports_and_the_rebase_is_its_own_stage() -> None:
 def test_s151_sprint_end_conflict_report_names_files_commit_subject_and_wakes_devops(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pins s151/AC6.1 (slice 2)."""
+    """Pins s151/AC6.1 (slice 2): the conflict report names files and subject, DevOps is due."""
     install(env, monkeypatch, CONFLICT)
     env.open(Edge.END, stage=Stage.REBASE)
     [report] = env.drive()

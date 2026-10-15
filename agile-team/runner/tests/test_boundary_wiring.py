@@ -266,7 +266,7 @@ BOUNDARY_ROWS = [
 
 
 def test_s151_sync_conflict_handover_text_points_at_devops() -> None:
-    """Pins s151/AC6.4 (slice 2): the legacy hold's text no longer asks for a hand rebase."""
+    """Pins s151/AC6.4 (slice 2): the legacy hold's text points at DevOps, not a hand rebase."""
     report, trigger, line = (
         brep(
             "sync_conflict",
