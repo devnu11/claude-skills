@@ -64,7 +64,7 @@ def _ready(story: StoryState, stories: dict[str, StoryState]) -> bool:
     return in_product_backlog and free and not dependencies.waiting_on(story, stories)
 
 
-def ready_product_backlog(stories: dict[str, StoryState], queue: list[str]) -> list[str]:
+def select_ready_product_backlog(stories: dict[str, StoryState], queue: list[str]) -> list[str]:
     """K1: ready Product Backlog ids in queue order."""
     return [i for i in queue if _ready(stories[i], stories)]
 
@@ -95,7 +95,7 @@ def can_move(story: StoryState, state: RunState) -> bool:
     return in_sprint and free and not dependencies.waiting_on(story, state.stories)
 
 
-def movable_sprint_backlog(state: RunState, blocked: set[str]) -> list[str]:
+def list_movable_sprint_backlog(state: RunState, blocked: set[str]) -> list[str]:
     """S7: ids in the current sprint that can_move and aren't waiting on a question."""
     ids = state.sprint_ids()
     return [i for i in ids if can_move(state.stories[i], state) and i not in blocked]
@@ -105,7 +105,7 @@ def keep_going_refusal(state: RunState, blocked: set[str]) -> str | None:
     """S7: KEEP_GOING_REFUSED under until-blocker while a Sprint Backlog story can move."""
     if state.cadence != UNTIL_BLOCKER:
         return None
-    movable = movable_sprint_backlog(state, blocked)
+    movable = list_movable_sprint_backlog(state, blocked)
     return KEEP_GOING_REFUSED.format(ids=ids_text(movable)) if movable else None
 
 
@@ -116,7 +116,7 @@ def list_stuck(state: RunState, reasons: list[str]) -> list[str]:
     return [lead, *reasons, advice]
 
 
-def stuck_blocked_text(state: RunState, reasons: list[str]) -> str:
+def format_stuck_blocked_text(state: RunState, reasons: list[str]) -> str:
     """S4: SPRINT_STUCK_BLOCKED for state.sprint and state.stuck_asks."""
     return SPRINT_STUCK_BLOCKED.format(
         sprint=state.sprint, count=state.stuck_asks, reasons="; ".join(reasons)

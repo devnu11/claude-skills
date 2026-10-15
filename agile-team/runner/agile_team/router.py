@@ -398,14 +398,14 @@ class Router:
     def _ready_ids(self) -> list[str]:
         stories = self.runtime.state.stories
         queue = self.runtime.priority().queue(stories.values())
-        return sprint_end.ready_product_backlog(stories, queue)
+        return sprint_end.select_ready_product_backlog(stories, queue)
 
     def _hand_over_stuck(self, unfinished: list[StoryState]) -> Pass:
         """S3/S4: hand over the stuck Sprint Backlog with each reason; past the cap, block."""
         state = self.runtime.state
         reasons = self._list_stall_lines(unfinished)
         if state.stuck_asks >= sprint_end.SPRINT_STUCK_CAP:
-            return self._block(sprint_end.stuck_blocked_text(state, reasons))
+            return self._block(sprint_end.format_stuck_blocked_text(state, reasons))
         state.stuck_asks += 1
         self.runtime.save()
         lines = sprint_end.list_stuck(state, reasons)
@@ -455,7 +455,9 @@ class Router:
             f"No story is in sprint {self.runtime.state.sprint}; "
             "start_sprint with the stories to work on."
         ]
-        in_product = [s.id for s in self.runtime.state.stories.values() if _in_product_backlog(s)]
+        in_product = [
+            s.id for s in self.runtime.state.stories.values() if _is_in_product_backlog(s)
+        ]
         return lines + ([f"Product Backlog: {', '.join(in_product)}"] if in_product else [])
 
     def _list_stall_lines(self, unfinished: list[StoryState]) -> list[str]:
@@ -504,5 +506,5 @@ def _why(story: StoryState, stories: dict[str, StoryState]) -> str:
     return STALL_REASONS.get(story.status, str(story.status))
 
 
-def _in_product_backlog(story: StoryState) -> bool:
+def _is_in_product_backlog(story: StoryState) -> bool:
     return story.sprint is None and story.status not in FINISHED
