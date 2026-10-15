@@ -1,2 +1,8 @@
 # house-rules settings for this repo. The defaults are the global code rules;
 # see house-rules/reference/rules.md.
+
+# The team checkout holds untracked runner copies; scan only the real tree (s157).
+exclude = [
+    "**/.venv/**", "**/build/**", "**/dist/**", "**/node_modules/**",
+    ".team/run/**", ".claude/worktrees/**",
+]
