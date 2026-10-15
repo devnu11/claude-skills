@@ -72,7 +72,7 @@ def test_done(job: Job) -> None:
     assert status is JobStatus.DONE
     assert (state.status, state.runs, state.resumes, state.cost) == (JobStatus.DONE, 1, 0, 0.5)
     assert clock.sleeps == []
-    assert events(job) == ["run", "end"]
+    assert events(job) == ["run", "end", "notify"]
 
 
 def test_failed(job: Job) -> None:
@@ -87,7 +87,7 @@ def test_limit_then_resume_then_done(job: Job) -> None:
     assert status is JobStatus.DONE
     assert (state.runs, state.resumes, state.cost) == (2, 1, 1.5)
     assert state.next_wake is None
-    assert events(job) == ["run", "wait", "resume", "run", "end"]
+    assert events(job) == ["run", "wait", "resume", "run", "end", "notify"]
     reset = local(START).replace(hour=19, minute=0, second=0, microsecond=0)
     reset = reset if reset.timestamp() > START else reset + timedelta(days=1)
     assert clock.now == (reset + GRACE).timestamp()
@@ -245,7 +245,7 @@ def test_offline_waits_for_the_network_without_a_resume(job: Job) -> None:
     assert status is JobStatus.DONE
     assert (state.runs, state.resumes, state.retries) == (2, 0, 0)
     assert clock.sleeps == [supervisor.SLICE] * 3
-    assert events(job) == ["run", "offline", "online", "run", "end"]
+    assert events(job) == ["run", "offline", "online", "run", "end", "notify"]
 
 
 def test_no_stale_wake_after_a_limit_then_an_offline_wait(job: Job) -> None:
@@ -400,3 +400,42 @@ def test_each_run_starts_without_a_stale_heartbeat(job: Job) -> None:
     script.before = lambda: seen.append(job.path(HEARTBEAT_FILE).exists())
     supervise(job, script)
     assert seen == [False]
+
+
+# ----- notices ---------------------------------------------------------------------------
+
+
+def notified_triggers(job: Job) -> list[object]:
+    lines = job.path(EVENTS_FILE).read_text().splitlines()
+    return [e["trigger"] for e in map(json.loads, lines) if e["event"] == "notify"]
+
+
+@pytest.mark.parametrize(
+    ("deadline", "outcome", "triggers"),
+    [
+        (None, DONE, ["ended-early"]),
+        (START + 3600, Outcome(OutcomeKind.FAILED, "exit 1"), ["ended-early"]),
+        (START, DONE, ["limit-reached"]),
+    ],
+)
+def test_end_notices(
+    job: Job, deadline: float | None, outcome: Outcome, triggers: list[str]
+) -> None:
+    job.update(lambda st: setattr(st.bounds, "deadline", deadline))
+    supervise(job, Script(outcome))
+    assert notified_triggers(job) == triggers
+
+
+def test_done_after_the_deadline_is_not_early(job: Job) -> None:
+    job.update(lambda st: setattr(st.bounds, "deadline", START + 60))
+    clock = FakeClock()
+    script = Script(DONE)
+    script.before = lambda: clock.sleep(120)
+    Supervisor(job, script, clock, clock.sleep).run()
+    assert notified_triggers(job) == []
+
+
+def test_a_stop_by_the_user_notifies_nobody(job: Job) -> None:
+    job.request_stop()
+    supervise(job, Script(DONE))
+    assert notified_triggers(job) == []

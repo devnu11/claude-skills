@@ -68,7 +68,9 @@ def test_the_stop_command_is_asked_for_once_at_the_deadline(stoppable: Job) -> N
     clock.now = DEADLINE
     assert watch.check() == (Verdict.GRACEFUL,)
     assert watch.check() == ()
-    assert [e["event"] for e in events(stoppable)] == ["deadline"]
+    assert [(e["event"], e.get("trigger")) for e in events(stoppable)] == [
+        ("deadline", None), ("notify", "deadline"),
+    ]  # fmt: skip
     assert events(stoppable)[0]["phase"] == "graceful"
 
 
@@ -87,7 +89,7 @@ def test_the_hard_stop_ends_the_run_after_the_grace(job: Job) -> None:
     clock.now = DEADLINE + 60
     assert watch.check() == (Verdict.END,)
     assert watch.settle(DONE).reason == "deadline (hard stop after 1m)"
-    assert [(e["event"], e["phase"]) for e in events(job)] == [
+    assert [(e["event"], e["phase"]) for e in events(job) if e["event"] == "deadline"] == [
         ("deadline", "graceful"), ("deadline", "hard"),
     ]  # fmt: skip
 

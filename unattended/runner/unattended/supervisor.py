@@ -15,6 +15,9 @@ command is sent, and from the deadline plus ``--hardstop`` the run is ended.
 A run that ends after a stop was sent ends the job as ``limit-reached`` with
 the stop's reason. Once the deadline has passed, no new run, resume or wait
 starts (``Halted``).
+
+When the job ends ``done`` or ``failed`` before its deadline (or without
+one) it posts an ``ended-early`` notice; ``limit-reached`` posts one too.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from typing import Protocol
 
 from . import network
 from .limits import Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
+from .notify import Notice, Trigger, post
 from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
 from .watch import SLICE, RunWatch
 
@@ -197,6 +201,26 @@ class Supervisor:
             raise Halted(stop.reason(Phase.GRACEFUL))
 
     def _finish(self, status: JobStatus, reason: str) -> JobStatus:
-        self.job.update(lambda st: st.mark(status, reason))
+        state = self.job.update(lambda st: st.mark(status, reason))
         self.job.event("end", {"status": status, "reason": reason})
+        trigger = END_NOTICES.get(status, never)(state, self.clock())
+        if trigger:
+            post(self.job, Notice(trigger, status, reason))
         return status
+
+
+def early(state: JobState, now: float) -> Trigger | None:
+    """``EARLY`` when the job ended before its deadline, or has none."""
+    deadline = state.bounds.deadline
+    return Trigger.EARLY if deadline is None or now < deadline else None
+
+
+def never(state: JobState, now: float) -> Trigger | None:
+    return None
+
+
+END_NOTICES: dict[JobStatus, Callable[[JobState, float], Trigger | None]] = {
+    JobStatus.DONE: early,
+    JobStatus.FAILED: early,
+    JobStatus.LIMIT_REACHED: lambda state, now: Trigger.LIMIT,
+}
