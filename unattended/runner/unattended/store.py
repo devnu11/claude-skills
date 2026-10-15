@@ -32,6 +32,7 @@ WAKE_FILE = "wake"
 PID_FILE = "supervisor.pid"
 SUPERVISOR_LOG = "supervisor.log"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+DEFAULT_IDLE = 20 * 60.0
 DEFAULT_RESUME_PROMPT = "Continue where you left off. If you are done, say so."
 
 
@@ -77,6 +78,8 @@ class Spec:
     permission_mode: str | None = None
     fallback_wait: float = DEFAULT_FALLBACK
     sleep: SleepPolicy = SleepPolicy.PREVENT
+    idle: float | None = DEFAULT_IDLE
+    progress: list[str] = field(default_factory=list)
 
 
 @dataclass

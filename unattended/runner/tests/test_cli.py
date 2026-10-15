@@ -489,3 +489,47 @@ def test_extend_refuses_an_ended_job(tmp_path: Path, capsys: pytest.CaptureFixtu
     make(tmp_path, JobStatus.DONE)
     assert run(tmp_path, "extend", "j", "--for", "1h") == 1
     assert "`unattended resume j` reruns it" in capsys.readouterr().err
+
+
+# ----- idle and progress -------------------------------------------------------------------
+
+
+def test_start_defaults_to_a_20m_idle_notice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(tmp_path, "start", "j", "--command", "true", "--foreground") == 0
+    report = printed(capsys)
+    assert (report["idle"], report["idle_stop"], report["progress"]) == (
+        "20m", None, ["output", "cpu"],
+    )  # fmt: skip
+
+
+def test_start_with_idle_settings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    argv = ["--idle", "off", "--idle-stop", "1h", "--progress", "file:x", "--progress", "children"]
+    assert run(tmp_path, "start", "j", "--command", "true", *argv, "--foreground") == 0
+    report = printed(capsys)
+    assert (report["idle"], report["idle_stop"]) == ("off", "1h")
+    assert report["progress"] == ["file:x", "children"]
+    assert home_job(tmp_path).load().spec.idle is None
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--command", "c", "--progress", "nope"], "unknown probe 'nope'"),
+        (["--prompt", "p", "--progress", "cpu"], "does not apply to prompt jobs"),
+        (["--command", "c", "--idle", "soon"], "cannot read duration"),
+        (["--command", "c", "--idle-stop", "soon"], "cannot read duration"),
+    ],
+)
+def test_start_refuses_bad_idle_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    assert run(tmp_path, "start", "j", *argv, "--foreground") == 1
+    assert message in capsys.readouterr().err
+
+
+def test_extend_sets_an_idle_stop(tmp_path: Path) -> None:
+    job = make(tmp_path, JobStatus.RUNNING)
+    assert run(tmp_path, "extend", "j", "--idle-stop", "30m") == 0
+    assert job.load().bounds.idle_stop == 1800.0

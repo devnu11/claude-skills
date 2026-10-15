@@ -36,9 +36,12 @@ def test_state_without_sleep_keeps_the_machine_awake() -> None:
 
 def test_state_from_before_hard_stops_loads() -> None:
     data = json.loads(state().to_json())
-    del data["spec"]["stop_command"], data["bounds"]["hardstop"]
+    for key in ("stop_command", "idle", "progress"):
+        del data["spec"][key]
+    del data["bounds"]["hardstop"], data["bounds"]["idle_stop"]
     loaded = JobState.from_json(json.dumps(data))
     assert (loaded.spec.stop_command, loaded.bounds.hardstop) == ("", None)
+    assert (loaded.spec.idle, loaded.spec.progress, loaded.bounds.idle_stop) == (1200.0, [], None)
 
 
 def test_mark_clears_reason() -> None:

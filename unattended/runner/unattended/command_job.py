@@ -90,6 +90,7 @@ class CommandRun:
     def watched(self, watch: RunWatch) -> int:
         """Run the command to its end, obeying ``watch`` after each slice; its exit code."""
         proc = self._start()
+        watch.track(proc.pid)
         try:
             return self._wait(proc, watch)
         finally:
