@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -175,3 +177,56 @@ def test_alive_on_a_process_we_cannot_signal(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(os, "kill", deny)
     assert store.alive(1)
+
+
+@dataclass
+class FakeWin32:
+    """kernel32 stand-in: ``handle`` 0 means OpenProcess failed with ``error``."""
+
+    handle: int = 7
+    code: int = store.STILL_ACTIVE
+    error: int = 0
+    closed: list[int] = field(default_factory=list)
+
+    def open(self, pid: int) -> int:
+        return self.handle
+
+    def last_error(self) -> int:
+        return self.error
+
+    def exit_code(self, handle: int) -> int:
+        return self.code
+
+    def close(self, handle: int) -> None:
+        self.closed.append(handle)
+
+
+@pytest.mark.parametrize(
+    ("win32", "expected"),
+    [
+        (FakeWin32(), True),
+        (FakeWin32(code=0), False),
+        (FakeWin32(handle=0, error=store.ERROR_ACCESS_DENIED), True),
+        (FakeWin32(handle=0, error=87), False),
+    ],
+    ids=["running", "exited", "access-denied", "no-such-process"],
+)
+def test_alive_on_windows_asks_the_kernel(win32: FakeWin32, expected: bool) -> None:
+    assert store._alive_on_windows(1234, win32) is expected
+    assert win32.closed == ([win32.handle] if win32.handle else [])
+
+
+def test_alive_on_windows_never_signals(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(pid: int, sig: int) -> None:
+        raise AssertionError("os.kill terminates the process on Windows")
+
+    monkeypatch.setattr(os, "kill", refuse)
+    monkeypatch.setattr(store.sys, "platform", "win32")
+    monkeypatch.setattr(store, "kernel32", FakeWin32)
+    assert store.alive(1234)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the real kernel32 exists only on Windows")
+def test_alive_on_windows_with_the_real_kernel() -> None:  # pragma: no cover -- Windows only
+    assert store.alive(os.getpid())
+    assert not store.alive(999999999)
