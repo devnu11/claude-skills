@@ -202,3 +202,50 @@ def test_track_points_the_group_probes(beating: Job) -> None:
     watch = RunWatch(beating)
     watch.track(42)
     assert watch.context.pgid == 42
+
+
+# ----- heartbeat ---------------------------------------------------------------------------
+
+
+def heartbeat(watch: RunWatch, at: float, progress: object = 1) -> None:
+    watch.heartbeat.write_text(json.dumps({"at": at, "progress": progress}))
+
+
+def test_the_run_is_told_where_its_heartbeat_goes(beating: Job) -> None:
+    watch = RunWatch(beating)
+    assert watch.env() == {"UNATTENDED_HEARTBEAT": str(beating.path("heartbeat.json"))}
+
+
+def test_never_writing_the_heartbeat_is_not_hung(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=60.0), clock)
+    clock.now = 600.0
+    watch.check()
+    assert [t for t, _ in notices(beating)] == ["idle"]
+
+
+def test_a_heartbeat_written_once_then_stopped_is_hung(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=60.0), clock)
+    heartbeat(watch, at=10.0)
+    for clock.now in (30.0, 69.0, 70.0, 80.0):
+        beat(beating, str(clock.now))  # other probes keep moving
+        watch.check()
+    assert notices(beating) == [("hung", "heartbeat stale for 1m")]
+    heartbeat(watch, at=80.0)
+    clock.now = 90.0
+    watch.check()
+    assert watch.raised == set()
+
+
+def test_a_hung_run_reaches_the_idle_stop(beating: Job) -> None:
+    with_bounds(beating, Bounds(idle_stop=120.0))
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=None), clock)
+    heartbeat(watch, at=0.0, progress=1)
+    clock.now = 60.0
+    beat(beating, "moving")
+    assert watch.check() == ()
+    clock.now = 120.0
+    beat(beating, "still moving")
+    assert watch.check() == (Verdict.END,)

@@ -75,7 +75,8 @@ class CommandJob:
         with log.open("a") as out:
             out.write(f"--- run {state.runs + 1}: {command_for(state)}\n")
             out.flush()
-            code = CommandRun(state, out.fileno(), dict(self.env)).watched(watch)
+            env = {**self.env, **watch.env()}
+            code = CommandRun(state, out.fileno(), env).watched(watch)
         return outcome_for(code, RunOutput(tail(log), Path(state.spec.cwd)))
 
 

@@ -144,10 +144,11 @@ def leaves(exc: BaseException) -> list[BaseException]:
 
 @dataclass(frozen=True)
 class Run:
-    """One run: the job's state when it started and what its query has produced."""
+    """One run: the job's state when it started, what its query has produced, and its env."""
 
     state: JobState
     drain: Drain
+    env: dict[str, str]
 
 
 async def _watch(watch: RunWatch, scope: anyio.CancelScope) -> None:
@@ -175,7 +176,7 @@ class PromptJob:
         state = self.job.load()
         drain = Drain(self.job, state.session_id, watch.spend)
         try:
-            asyncio.run(self._watched(Run(state, drain), watch))
+            asyncio.run(self._watched(Run(state, drain, {**self.env, **watch.env()}), watch))
         except Exception as exc:
             return drain.failed(exc)
         finally:
@@ -191,7 +192,7 @@ class PromptJob:
                 watcher.cancel_scope.cancel()
 
     async def _drain(self, run: Run) -> None:
-        options = options_for(run.state, self.env)
+        options = options_for(run.state, run.env)
         async for message in self.query_fn(prompt=prompt_for(run.state), options=options):
             run.drain.note(message)
 

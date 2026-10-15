@@ -185,3 +185,25 @@ def test_children_lists_the_group(ctx: Context) -> None:
         os.killpg(proc.pid, 9)
         proc.wait()
     assert isinstance(members, frozenset) and proc.pid in members and len(members) == 2
+
+
+# ----- heartbeat ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("content", "reading"),
+    [
+        (None, Reading(None)),
+        ("[1]", Reading(None)),
+        ('{"at": 5, "progress": [1, "edit"]}', Reading([1, "edit"], 5.0)),
+        ('{"at": "soon", "progress": 2}', Reading(2)),
+    ],
+)
+def test_heartbeat_reading(ctx: Context, content: str | None, reading: Reading) -> None:
+    if content is not None:
+        (ctx.cwd / "hb.json").write_text(content)
+    assert probes.build("heartbeat:hb.json", ctx)() == reading
+
+
+def test_heartbeat_needs_a_path() -> None:
+    assert probes.problem("heartbeat", JobKind.PROMPT) == "probe 'heartbeat' needs an argument"

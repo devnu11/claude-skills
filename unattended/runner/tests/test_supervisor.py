@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from unattended import supervisor
 from unattended.limits import GRACE, Bounds, Metrics, Outcome, OutcomeKind, WakeOn, local
-from unattended.store import EVENTS_FILE, Job, JobKind, JobStatus, Spec
+from unattended.store import EVENTS_FILE, HEARTBEAT_FILE, Job, JobKind, JobStatus, Spec
 from unattended.supervisor import StopRequested, Supervisor
 from unattended.watch import RunWatch, Verdict
 
@@ -391,3 +391,12 @@ def test_a_wait_ends_when_the_deadline_moves_into_it(job: Job) -> None:
     assert status is JobStatus.LIMIT_REACHED
     assert job.load().reason == "deadline (graceful)"
     assert clock.now == START + 60
+
+
+def test_each_run_starts_without_a_stale_heartbeat(job: Job) -> None:
+    job.path(HEARTBEAT_FILE).write_text('{"at": 1, "progress": 1}')
+    seen: list[bool] = []
+    script = Script(DONE)
+    script.before = lambda: seen.append(job.path(HEARTBEAT_FILE).exists())
+    supervise(job, script)
+    assert seen == [False]
