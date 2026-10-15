@@ -24,6 +24,7 @@ from claude_agent_sdk import (
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
 from .store import OUTPUT_FILE, Job, JobState
+from .watch import RunWatch
 
 SETTING_SOURCES: list[Any] = ["user", "project", "local"]
 # The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
@@ -138,7 +139,7 @@ class PromptJob:
     env: Mapping[str, str]
     query_fn: QueryFn = query
 
-    def run_once(self) -> Outcome:
+    def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
         drain = Drain(self.job, state.session_id)
         try:

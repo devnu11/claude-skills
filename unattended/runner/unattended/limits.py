@@ -31,6 +31,7 @@ class OutcomeKind(StrEnum):
     BUDGET = "budget"
     OFFLINE = "offline"
     FAILED = "failed"
+    HALTED = "halted"
 
 
 @dataclass(frozen=True)

@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 from unattended import command_job
 from unattended.command_job import CommandJob, RunOutput
-from unattended.limits import Outcome, OutcomeKind
-from unattended.store import LOG_FILE
+from unattended.limits import Bounds, Outcome, OutcomeKind
+from unattended.store import LOG_FILE, Job
+from unattended.watch import RunWatch
 
 from .conftest import MakeJob, command_spec
 
@@ -32,29 +33,29 @@ def script(workdir: Path, body: str) -> str:
 
 def test_done(make_job: MakeJob, workdir: Path) -> None:
     job = make_job(command_spec(workdir, "echo hello"))
-    assert CommandJob(job, os.environ).run_once() == Outcome(OutcomeKind.DONE)
+    assert CommandJob(job, os.environ).run_once(RunWatch(job)) == Outcome(OutcomeKind.DONE)
     assert job.path(LOG_FILE).read_text() == "--- run 1: echo hello\nhello\n"
 
 
 def test_limit_then_done(make_job: MakeJob, workdir: Path) -> None:
     job = make_job(command_spec(workdir, script(workdir, LIMIT_ONCE)))
     runner = CommandJob(job, os.environ)
-    assert runner.run_once() == Outcome(OutcomeKind.LIMIT, "session limit, resets 7pm")
+    assert runner.run_once(RunWatch(job)) == Outcome(OutcomeKind.LIMIT, "session limit, resets 7pm")
     job.update(lambda st: setattr(st, "runs", 1))
-    assert runner.run_once().kind is OutcomeKind.DONE
+    assert runner.run_once(RunWatch(job)).kind is OutcomeKind.DONE
     assert "finished" in job.path(LOG_FILE).read_text()
 
 
 def test_resume_command_after_the_first_run(make_job: MakeJob, workdir: Path) -> None:
     job = make_job(command_spec(workdir, "echo first", "echo again"))
     job.update(lambda st: setattr(st, "runs", 1))
-    CommandJob(job, os.environ).run_once()
+    CommandJob(job, os.environ).run_once(RunWatch(job))
     assert job.path(LOG_FILE).read_text().splitlines() == ["--- run 2: echo again", "again"]
 
 
 def test_runs_in_cwd_with_env(make_job: MakeJob, workdir: Path) -> None:
     job = make_job(command_spec(workdir, 'pwd; echo "$UNATTENDED_TEST"'))
-    CommandJob(job, {**os.environ, "UNATTENDED_TEST": "yes"}).run_once()
+    CommandJob(job, {**os.environ, "UNATTENDED_TEST": "yes"}).run_once(RunWatch(job))
     lines = job.path(LOG_FILE).read_text().splitlines()
     assert Path(lines[1]).resolve() == workdir.resolve()
     assert lines[2] == "yes"
@@ -62,7 +63,8 @@ def test_runs_in_cwd_with_env(make_job: MakeJob, workdir: Path) -> None:
 
 def test_failure(make_job: MakeJob, workdir: Path) -> None:
     job = make_job(command_spec(workdir, "exit 3"))
-    assert CommandJob(job, os.environ).run_once() == Outcome(OutcomeKind.FAILED, "exit code 3")
+    outcome = CommandJob(job, os.environ).run_once(RunWatch(job))
+    assert outcome == Outcome(OutcomeKind.FAILED, "exit code 3")
 
 
 def test_network_failure_is_offline() -> None:
@@ -167,7 +169,7 @@ def test_unreadable_status_file_is_no_reason(tmp_path: Path) -> None:
 def test_run_once_passes_cwd_to_the_status_file(make_job: MakeJob, workdir: Path) -> None:
     write_status(workdir, blocked("session limit, resets 4am (UTC)"))
     job = make_job(command_spec(workdir, "echo PO says resets the count; exit 75"))
-    outcome = CommandJob(job, os.environ).run_once()
+    outcome = CommandJob(job, os.environ).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.LIMIT, "session limit, resets 4am (UTC)")
 
 
@@ -203,3 +205,54 @@ def test_end_ignores_a_finished_process() -> None:
     proc = subprocess.Popen(["true"])
     proc.wait()
     command_job.end(proc)
+
+
+# ----- watched runs ----------------------------------------------------------------------
+
+PAST = 1_000.0
+
+
+def watched(job: Job, *, hardstop: float | None = None) -> RunWatch:
+    """A watch whose deadline has long passed, checking every 50 ms."""
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=PAST, hardstop=hardstop)))
+    return RunWatch(job, time.time, 0.05)
+
+
+def test_the_hard_stop_terms_a_sleeping_command(make_job: MakeJob, workdir: Path) -> None:
+    job = make_job(command_spec(workdir, "sleep 30"))
+    watch = watched(job, hardstop=0.0)
+    started = time.monotonic()
+    outcome = watch.settle(CommandJob(job, os.environ).run_once(watch))
+    assert time.monotonic() - started < 10
+    assert outcome == Outcome(OutcomeKind.HALTED, "deadline (hard stop after 0s)")
+
+
+def test_the_graceful_stop_runs_the_stop_command(make_job: MakeJob, workdir: Path) -> None:
+    spec = command_spec(workdir, "while [ ! -e stopped ]; do sleep 0.05; done; echo clean exit")
+    spec.stop_command = "touch stopped"
+    job = make_job(spec)
+    watch = watched(job)
+    outcome = CommandJob(job, os.environ).run_once(watch)
+    assert outcome == Outcome(OutcomeKind.DONE)
+    assert watch.settle(outcome).reason == "deadline (graceful)"
+    lines = job.path(LOG_FILE).read_text().splitlines()
+    assert lines[1:] == ["--- stop command: touch stopped", "clean exit"]
+
+
+def test_a_slow_stop_command_times_out(
+    make_job: MakeJob, workdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(command_job, "STOP_TIMEOUT", 0.1)
+    spec = command_spec(workdir, "true")
+    spec.stop_command = "sleep 5"
+    job = make_job(spec)
+    with job.path(LOG_FILE).open("a") as out:
+        command_job.CommandRun(job.load(), out.fileno(), dict(os.environ)).stop_gracefully()
+    assert "stop command timed out after 0.1 s" in job.path(LOG_FILE).read_text()
+
+
+def test_exit_code_within_the_timeout() -> None:
+    proc = subprocess.Popen(["sleep", "5"])
+    assert command_job.exit_code(proc, 0.01) is None
+    proc.kill()
+    assert command_job.exit_code(proc, 5) is not None

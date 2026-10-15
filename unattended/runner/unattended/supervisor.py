@@ -9,6 +9,12 @@ plain TCP probe reaches the API again, so waiting costs no tokens; it does not
 count as a resume, but ``MAX_RECONNECTS`` in a row fail the job. A stop (the
 stop file, SIGTERM or Ctrl-C) raises ``StopRequested`` and ends it as
 ``stopped``. An offline wait has no wake time (``wake_on`` is ``network``).
+
+Each run is watched (``watch.RunWatch``): from the deadline the job's stop
+command is sent, and from the deadline plus ``--hardstop`` the run is ended.
+A run that ends after a stop was sent ends the job as ``limit-reached`` with
+the stop's reason. Once the deadline has passed, no new run, resume or wait
+starts (``Halted``).
 """
 
 from __future__ import annotations
@@ -21,15 +27,16 @@ from types import FrameType
 from typing import Protocol
 
 from . import network
-from .limits import Outcome, OutcomeKind, Waits, Wake, WakeOn, backoff, local
+from .limits import Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
 from .store import Job, JobState, JobStatus
+from .watch import SLICE, RunWatch
 
-SLICE = 30.0
 STOP_REASON = "stopped by the user"
 FINAL: dict[OutcomeKind, JobStatus] = {
     OutcomeKind.DONE: JobStatus.DONE,
     OutcomeKind.FAILED: JobStatus.FAILED,
     OutcomeKind.BUDGET: JobStatus.LIMIT_REACHED,
+    OutcomeKind.HALTED: JobStatus.LIMIT_REACHED,
 }
 RETRIED = frozenset({OutcomeKind.RATE_LIMITED, OutcomeKind.OFFLINE})
 MAX_RECONNECTS = 10
@@ -38,11 +45,15 @@ MAX_RECONNECTS = 10
 class Runner(Protocol):
     """Runs a job once: the first time, or as a resume once it has run."""
 
-    def run_once(self) -> Outcome: ...
+    def run_once(self, watch: RunWatch) -> Outcome: ...
 
 
 class StopRequested(BaseException):
     """The user asked the job to stop; a BaseException so job code cannot swallow it."""
+
+
+class Halted(Exception):
+    """The deadline has passed between runs; the message is the job's end reason."""
 
 
 def raise_stop(signum: int, frame: FrameType | None) -> None:
@@ -79,13 +90,17 @@ class Supervisor:
                 status = self._cycle()
         except (StopRequested, KeyboardInterrupt):
             status = self._finish(JobStatus.STOPPED, STOP_REASON)
+        except Halted as halted:
+            status = self._finish(JobStatus.LIMIT_REACHED, str(halted))
         return status
 
     def _cycle(self) -> JobStatus | None:
         """One run and what follows; the final status, or None to run again."""
         self._check_stop()
+        self._check_deadline()
         self.job.update(lambda st: st.mark(JobStatus.RUNNING))
-        outcome = self.runner.run_once()
+        watch = RunWatch(self.job, self.clock)
+        outcome = watch.settle(self.runner.run_once(watch))
         state = self._record(outcome)
         if outcome.kind in FINAL:
             return self._finish(FINAL[outcome.kind], outcome.reason)
@@ -158,6 +173,7 @@ class Supervisor:
         """Sleep in ``SLICE`` steps, checking the stop and wake files before each."""
         while (left := wake - self.clock()) > 0 and not self._woken():
             self._check_stop()
+            self._check_deadline()
             self.sleep(min(SLICE, left))
         self._check_stop()
 
@@ -172,6 +188,12 @@ class Supervisor:
     def _check_stop(self) -> None:
         if self.job.stop_requested():
             raise StopRequested
+
+    def _check_deadline(self) -> None:
+        """Raise ``Halted`` once the deadline has passed: no new run, resume or wait."""
+        stop = self.job.load().bounds.deadline_stop()
+        if stop and stop.phase(self.clock()) is not Phase.OPEN:
+            raise Halted(stop.reason(Phase.GRACEFUL))
 
     def _finish(self, status: JobStatus, reason: str) -> JobStatus:
         self.job.update(lambda st: st.mark(status, reason))

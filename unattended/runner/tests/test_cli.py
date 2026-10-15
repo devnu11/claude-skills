@@ -169,6 +169,8 @@ def test_start_uses_the_repo_jobs_dir(tmp_path: Path) -> None:
     [
         (["--prompt", "p", "--resume-command", "c"], "--resume-command only apply to command"),
         (["--command", "c", "--model", "m"], "--model only apply to prompt jobs"),
+        (["--prompt", "p", "--stop-command", "s"], "--stop-command only apply to command"),
+        (["--command", "c", "--hardstop", "soon"], "cannot read duration"),
         (["--command", "c", "--cwd", "nowhere"], "--cwd nowhere is not a directory"),
         (["--prompt-file", "missing.md"], "cannot read --prompt-file"),
         (["--command", "c", "--until", "2001-01-01T00:00"], "has already passed"),
@@ -417,3 +419,23 @@ def test_resume_now_on_a_stopped_job_restarts_it(tmp_path: Path) -> None:
     job = make(tmp_path)
     assert run(tmp_path, "resume", "j", "--now", "--foreground") == 0
     assert job.load().status is JobStatus.DONE
+
+
+# ----- hard stop -------------------------------------------------------------------------
+
+
+def test_start_with_a_hard_stop_and_a_stop_command(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["--command", "true", "--for", "1h", "--hardstop", "20m", "--stop-command", "s"]
+    assert run(tmp_path, "start", "j", *argv, "--foreground") == 0
+    state = home_job(tmp_path).load()
+    assert (state.bounds.hardstop, state.spec.stop_command) == (1200.0, "s")
+    assert printed(capsys)["hardstop"] == "20m"
+
+
+def test_resume_sets_a_hard_stop_and_keeps_the_rest(tmp_path: Path) -> None:
+    job = make(tmp_path)
+    job.update(lambda st: setattr(st.bounds, "max_cost", 4.0))
+    assert run(tmp_path, "resume", "j", "--hardstop", "5m", "--foreground") == 0
+    assert (job.load().bounds.hardstop, job.load().bounds.max_cost) == (300.0, 4.0)
