@@ -3150,7 +3150,9 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    one side touched changed; and the full checks, run by the runner in the
    worktree, pass. Then the team branch is reset to the result (`reset
    --keep`; if the team HEAD moved meanwhile, `error` and nothing is
-   reset), the hashes are remapped as above, the worktree and the scratch
+   reset: the worktree, the scratch branch and the pinned start are
+   dropped, so `continue_boundary` rebases afresh from the new HEAD), the
+   hashes are remapped as above, the worktree and the scratch
    branch are removed, and the boundary goes on to **push-rebased**.
    Otherwise it holds `rebase_conflict`: the PO's handover and an `update`
    to the liaison (`Sprint N's rebase onto <target> stopped at <commit>

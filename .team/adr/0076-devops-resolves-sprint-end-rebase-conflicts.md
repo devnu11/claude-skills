@@ -77,3 +77,19 @@ other red test's docstring. Because the pending tests were registered in
 the wrong order once, a split story whose later slice's tests are
 already in the tree must have that slice's tests step run before the
 earlier slice's gates. See design/s153.md (P7, Step order 5 and 6).
+
+## Amended by s151, design review (2026-10-15)
+
+Two cases the decision left open, settled by the s151 code review:
+
+- **A moved team branch at adopt.** When the team HEAD moved during the
+  DevOps step, `adopt` refuses (an `error` hold, nothing reset). Before that
+  hold the runner drops the scratch worktree and branch and forgets the fix
+  and the pinned `sync_from`. So `continue_boundary` starts a fresh rebase
+  from the new HEAD instead of adopting the stale result again. Keeping the
+  fix made every retry re-run the full checks and fail the same way. The
+  cost is that DevOps's resolution is lost in this case. The branch moved,
+  so it has to be rebased again anyway.
+- **A crashed DevOps step.** A step with no handoff (no `summary`) counts
+  as status `error` with empty notes, so it holds `rebase_conflict` with
+  notes `none`. It never crashes the runner.
