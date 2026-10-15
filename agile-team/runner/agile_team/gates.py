@@ -622,7 +622,7 @@ class Checks:
         with self.stages(stages.QUALITY[name]):
             if name in TEST_COMMANDS:
                 run = self._test_run(name)
-                return _ran(name, run.code, run.out)
+                return _test_ran(name, run)
             return _ran(name, *self.run(self.commands[name]))
 
     def _test_run(self, name: str) -> TestRun:
@@ -659,7 +659,7 @@ class Checks:
     def _finished(self, outcome: Outcome, run: TestRun, name: str) -> Outcome:
         """``outcome`` with the run it was judged on, its report and the skipped-ids note."""
         noted = _noted(outcome, run)
-        return replace(noted, ran=_ran(name, run.code, run.out), report=run.report)
+        return replace(noted, ran=_test_ran(name, run), report=run.report)
 
     def _red_outcome(self, run: TestRun) -> Outcome:
         if timeout := timed_out(run.code, run.out):
@@ -793,7 +793,7 @@ class Checks:
             start = system.monotonic()
             run = self._test_run("test")
             took = system.monotonic() - start
-            runs.append(suite_runs.SuiteRun(n, total, run.code, took, run.out))
+            runs.append(suite_runs.SuiteRun(n, total, run.code, took, run.out, _failures_of(run)))
             if run.code != 0:
                 break
         return runs
@@ -802,7 +802,7 @@ class Checks:
 def _suite_outcome(first: Outcome, runs: list[suite_runs.SuiteRun]) -> Outcome:
     """The gate's outcome after the suite runs (SR3, SR4)."""
     last = runs[-1]
-    ran = Ran(suite_runs.SUITE_RUNS, last.code, suite_runs.report(runs))
+    ran = Ran(suite_runs.SUITE_RUNS, last.code, suite_runs.report(runs), failures=last.failures)
     extra = (*first.extra_ran, ran)
     if last.code == 0:
         text = suite_runs.passed_text(runs)
@@ -842,6 +842,16 @@ def _noted(outcome: Outcome, run: TestRun) -> Outcome:
 
 def _ran(name: str, code: int, out: str) -> Ran:
     return Ran(name, code, result_tail(out))
+
+
+def _failures_of(run: TestRun) -> dict[str, str]:
+    """The run's report failures, {} without a report (G5)."""
+    return run.report.failures() if run.report else {}
+
+
+def _test_ran(name: str, run: TestRun) -> Ran:
+    """A test command's Ran: code, output tail and failures."""
+    return Ran(name, run.code, result_tail(run.out), failures=_failures_of(run))
 
 
 def _with_ran(outcome: Outcome, ran: Ran | None) -> Outcome:

@@ -86,6 +86,7 @@ class SuiteRun:
     code: int
     seconds: float
     out: str = field(repr=False)
+    failures: dict[str, str] = field(default_factory=dict, repr=False)
 
     def line(self) -> str:
         """The run's one-line report."""

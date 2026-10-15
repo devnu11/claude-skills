@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import system
 
@@ -16,6 +18,11 @@ RESULTS_HEAD = (
 )
 RESULT_HEAD = "### {name}: exit {code} ({where}, at {at})"
 FENCE = "```"
+FAILURES_SHOWN = 10
+FAILURES_HEAD = "Failing tests ({count}), first error lines:"
+FAILURE_ITEM = "- {id}\n{lines}"
+FAILURES_MORE = "- … and {count} more in .team/run/results/"
+INDENT = "    "
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,7 @@ class Ran:
     tail: str
     at: str = ""
     where: str = ""
+    failures: dict[str, str] = field(default_factory=dict)
 
 
 BRIEF_RESULTS: dict[str, tuple[str, ...]] = {
@@ -43,9 +51,39 @@ def result_tail(text: str) -> str:
     return "\n".join(text.splitlines()[-RESULT_LINES:])
 
 
+def _item(id: str, lines: str) -> str:
+    indented = "\n".join(INDENT + x for x in lines.splitlines())
+    return FAILURE_ITEM.format(id=id, lines=indented)
+
+
+def failures_text(failures: dict[str, str]) -> str:
+    """The head, the first FAILURES_SHOWN items and the 'more' line; "" for none (G6)."""
+    if not failures:
+        return ""
+    shown = list(failures.items())[:FAILURES_SHOWN]
+    parts = [FAILURES_HEAD.format(count=len(failures)), *(_item(i, t) for i, t in shown)]
+    if len(failures) > FAILURES_SHOWN:
+        parts.append(FAILURES_MORE.format(count=len(failures) - FAILURES_SHOWN))
+    return "\n".join(parts)
+
+
+def event_failures(found: Iterable[Ran | None]) -> dict[str, Any]:
+    """A gate event's ``failures`` (merged, later runs winning) and ``failures_more`` (G7)."""
+    merged: dict[str, str] = {}
+    for ran in found:
+        merged |= ran.failures if ran else {}
+    if not merged:
+        return {}
+    out: dict[str, Any] = {"failures": dict(list(merged.items())[:FAILURES_SHOWN])}
+    if len(merged) > FAILURES_SHOWN:
+        out["failures_more"] = len(merged) - FAILURES_SHOWN
+    return out
+
+
 def _block(ran: Ran) -> str:
     head = RESULT_HEAD.format(name=ran.name, code=ran.code, where=ran.where, at=ran.at[:SHA_CHARS])
-    return f"{head}\n{FENCE}text\n{ran.tail}\n{FENCE}"
+    block = f"{head}\n{FENCE}text\n{ran.tail}\n{FENCE}"
+    return block + (f"\n{failures_text(ran.failures)}" if ran.failures else "")
 
 
 def section(found: list[Ran]) -> str:

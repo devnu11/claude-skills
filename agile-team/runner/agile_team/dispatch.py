@@ -1277,6 +1277,8 @@ class Runtime:
             result["fixes"] = [
                 {"role": f.role, "files": [i.shown for i in f.items]} for f in outcome.fixes
             ]
+        if outcome.verdict is not Verdict.PASS:
+            result |= results_mod.event_failures((outcome.ran, *outcome.extra_ran))
         result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
         result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
         event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)

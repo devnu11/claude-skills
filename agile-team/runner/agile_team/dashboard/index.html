@@ -1830,6 +1830,15 @@ function priorityLabel(e) {
   return `#${m.from} → #${m.to}`;
 }
 
+/** The gate entry's failing tests with their error lines, "" for none (s154). */
+function failuresText(data) {
+  if (!data.failures) return "";
+  const items = Object.entries(data.failures).map(([id, lines]) =>
+    id + "\n" + lines.split("\n").map((l) => "  " + l).join("\n"));
+  const more = data.failures_more ? [`… and ${data.failures_more} more`] : [];
+  return ["Failing tests:", ...items, ...more].join("\n");
+}
+
 const TIMELINE = {
   "story-reverted": (e) => ({
     from: PO, to: e.story, what: `reverted (${e.data.count}×)`,
@@ -1858,7 +1867,8 @@ const TIMELINE = {
       : e.data.verdict === "next"
       ? `${e.data.step} · ${e.data.environment} ${e.data.mark} → next environment`
       : `${e.data.step} → ${["bounce", "return"].includes(e.data.verdict) ? "back to " : ""}${e.data.now_at}`,
-    tone: STATUS_TONE[e.data.verdict], body: e.data.reason,
+    tone: STATUS_TONE[e.data.verdict],
+    body: [e.data.reason, failuresText(e.data)].filter(Boolean).join("\n\n"),
     meta: e.data.story_status === "needs_manager" ? "round cap reached; manager must rule" : e.data.rounds ? `round ${e.data.rounds}` : "",
   }),
   "gate-fix": (e) => ({

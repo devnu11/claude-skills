@@ -1646,7 +1646,10 @@
     "now_at": "implement",
     "rounds": 1,
     "story_status": "active",
-    "reason": "coverage 88.1% is below 95%"
+    "reason": "coverage 88.1% is below 95%",
+    "failures": {
+     "tests/test_csv_export.py::test_quotes_fields": "AssertionError: assert 'a,b' == '\"a,b\"'"
+    }
    }
   },
   {

@@ -27,6 +27,7 @@ class Case:
     line: int | None
     result: Result
     message: str = ""
+    detail: str = ""
 
 
 class ReportError(Exception):
@@ -34,6 +35,20 @@ class ReportError(Exception):
 
 
 FAILING_TAGS = ("failure", "error")
+ERROR_LINES = 5
+ERROR_MARK = "E "
+
+
+def _marked_lines(lines: list[str]) -> list[str]:
+    return [x[len(ERROR_MARK) :].lstrip() for x in lines if x.startswith(ERROR_MARK)]
+
+
+def error_lines(failure: ET.Element) -> str:
+    """The first error lines of a ``<failure>``/``<error>`` element (G4)."""
+    lines = (failure.text or "").splitlines()
+    picked = _marked_lines(lines) or [x for x in lines if x.strip()]
+    picked = picked or [failure.get("message", "")]
+    return "\n".join(picked[:ERROR_LINES])
 
 
 def _prefixed(root: str, path: str) -> str:
@@ -58,13 +73,13 @@ def node_id(case: ET.Element, root: str) -> str:
     return _prefixed(root, f"{file}::{_class_part(classname, file)}{case.get('name', '')}")
 
 
-def _result(case: ET.Element) -> tuple[Result, str]:
+def _result(case: ET.Element) -> tuple[Result, str, str]:
     for tag in FAILING_TAGS:
         if (child := case.find(tag)) is not None:
-            return Result.FAILED, child.get("message", "").split("\n")[0]
+            return Result.FAILED, child.get("message", "").split("\n")[0], error_lines(child)
     if case.find("skipped") is not None:
-        return Result.SKIPPED, ""
-    return Result.PASSED, ""
+        return Result.SKIPPED, "", ""
+    return Result.PASSED, "", ""
 
 
 def _line(case: ET.Element) -> int | None:
@@ -73,9 +88,9 @@ def _line(case: ET.Element) -> int | None:
 
 
 def _case(element: ET.Element, root: str) -> Case:
-    result, message = _result(element)
+    result, message, detail = _result(element)
     file = _prefixed(root, element.get("file", ""))
-    return Case(node_id(element, root), file, _line(element), result, message)
+    return Case(node_id(element, root), file, _line(element), result, message, detail)
 
 
 def parse(text: str, root: str) -> tuple[Case, ...]:
@@ -96,6 +111,10 @@ class Report:
     def failed(self) -> tuple[Case, ...]:
         """The cases that failed or errored."""
         return tuple(c for c in self.cases if c.result is Result.FAILED)
+
+    def failures(self) -> dict[str, str]:
+        """Failing or erroring case id -> its detail (or message), in report order (G5)."""
+        return {c.id: c.detail or c.message for c in self.failed()}
 
     def _of(self, id: str) -> list[Case]:
         if "::" in id:
