@@ -27,9 +27,9 @@ KINDS = (
     "blocked",
     "done",
     "failed",
+    "story-request",
     "stopped",
     "reply",
-    "story-request",
 )
 REPLY = "reply"
 OUTBOX = "outbox.jsonl"
