@@ -127,7 +127,7 @@ def test_fetch_failure_at_the_end_still_adds_the_entry(env: Env, fake: FakeSyste
 def test_start_with_nothing_new_is_current_with_no_commit(env: Env) -> None:
     env.open(Edge.START)
     env.drive()
-    assert env.outcomes()[0] == "pass"
+    assert env.outcomes()[0] == "current"
     assert env.events()[0].data["note"].startswith("the team branch is current with")
     assert env.rt.state.boundary is None
 
