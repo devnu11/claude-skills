@@ -239,7 +239,7 @@ def _check_explained(parsed: Handoff | HandoffError, plan: Plan) -> Handoff | Ha
     """``parsed``, or a bad handoff when the step's requirement edits were held back (C4)."""
     if not plan.unexplained:
         return parsed
-    return requirement_changes.unexplained_error(parsed, plan.unexplained)
+    return requirement_changes.build_unexplained_error(parsed, plan.unexplained)
 
 
 @dataclass
@@ -1145,7 +1145,7 @@ class Runtime:
     def _sort_requirements(self, plan: Plan, audit: guard.Audit) -> requirement_changes.Sorting:
         """Classify the step's requirement files and split them by their reasons (C1-C3)."""
         folder = requirements.folder_of(self.config)
-        paths = requirement_changes.candidates(audit.in_scope, folder)
+        paths = requirement_changes.select_candidates(audit.in_scope, folder)
         found = requirement_changes.find_changes(self.git, paths)
         return requirement_changes.sort_changes(found, plan.reasons)
 
@@ -1169,10 +1169,10 @@ class Runtime:
         if not sorting.landed or plan.commit is None:
             return {}
         for explained in sorting.landed:
-            self.emit(EventKind.REQUIREMENT_CHANGED, plan, **explained.report({"sha": plan.commit}))
+            self.emit(EventKind.REQUIREMENT_CHANGED, plan, **explained.entry, sha=plan.commit)
         affected = self._accept_affected(plan, sorting.landed)
         fields = {
-            "requirement_changes": [e.report() for e in sorting.landed],
+            "requirement_changes": [e.entry for e in sorting.landed],
             "redesigned_stories": list(affected.redesign),
             "affected_done_stories": list(affected.done),
         }
@@ -1184,13 +1184,13 @@ class Runtime:
         """Send past-design stories that trace the changes back to design (C8)."""
         own = plan.story.id if plan.story else None
         scope = requirement_changes.AcceptScope(
-            tuple(requirement_changes.traced(landed, own)), self.pipeline.is_past_design
+            tuple(requirement_changes.collect_traced(landed, own)), self.pipeline.is_past_design
         )
         affected = requirement_changes.find_affected(self.state.stories, scope)
         for sid in affected.redesign:
             target = requirement_changes.NoteTarget(sid, own or "run", plan.commit or "")
             self.pipeline.redesign(self.state.stories[sid])
-            self.state.stories[sid].note = requirement_changes.redesign_note(landed, target)
+            self.state.stories[sid].note = requirement_changes.build_redesign_note(landed, target)
         if affected.redesign:
             self.save()
         return affected

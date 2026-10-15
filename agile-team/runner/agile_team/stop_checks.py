@@ -317,13 +317,13 @@ class StopChecks:
         with self._open(stages.Name.STOP_REQUIREMENTS):
             audit = guard.audit_step(self.runtime.git, self.plan.scope)
             folder = requirements.folder_of(self.runtime.config)
-            paths = requirement_changes.candidates(audit.in_scope, folder)
+            paths = requirement_changes.select_candidates(audit.in_scope, folder)
             found = requirement_changes.find_changes(self.runtime.git, paths)
             held = requirement_changes.sort_changes(found, handoff.requirement_changes).held
         if not held:
             return None
         return requirement_changes.STOP_EXPLAIN.format(
-            explain=requirement_changes.explain_text(held)
+            explain=requirement_changes.describe_held(held)
         )
 
 

@@ -259,7 +259,7 @@ def _check_requirements(config: config_mod.Config) -> int:
 def _log_requirements(config: config_mod.Config) -> int:
     """Print the change history from the ``Requirement-Changed`` trailers (s2 C10)."""
     try:
-        rows = requirement_changes.log(Git(config.repo), requirements.folder_of(config))
+        rows = requirement_changes.read_log(Git(config.repo), requirements.folder_of(config))
     except GitError as error:
         print(f"agile-team requirements log: {error}", file=sys.stderr)
         return 1

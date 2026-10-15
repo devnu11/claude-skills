@@ -77,14 +77,15 @@ class Explained:
     changed: Changed
     reason: str
 
-    def trailer(self, template: str = TRAILER) -> str:
-        """The ``Requirement-Changed`` trailer line (``template`` is the line's format)."""
-        return template.format(id=self.changed.id, reason=self.reason)
+    @property
+    def trailer(self) -> str:
+        """The ``Requirement-Changed`` trailer line."""
+        return TRAILER.format(id=self.changed.id, reason=self.reason)
 
-    def report(self, extra: Mapping[str, str] | None = None) -> dict[str, str]:
-        """The change as the step report lists it, plus any ``extra`` keys."""
-        base = {"id": self.changed.id, "change": self.changed.change.value, "reason": self.reason}
-        return base | dict(extra or {})
+    @property
+    def entry(self) -> dict[str, str]:
+        """The change as the step report lists it."""
+        return {"id": self.changed.id, "change": self.changed.change.value, "reason": self.reason}
 
 
 @dataclass(frozen=True)
@@ -102,7 +103,7 @@ class Sorting:
     @property
     def trailers(self) -> tuple[str, ...]:
         """The landed changes as trailer lines."""
-        return tuple(e.trailer() for e in self.landed)
+        return tuple(e.trailer for e in self.landed)
 
 
 @dataclass(frozen=True)
@@ -141,7 +142,7 @@ class HeldBack:
 # ----- pure -----
 
 
-def candidates(paths: Sequence[str], folder: str) -> list[str]:
+def select_candidates(paths: Sequence[str], folder: str) -> list[str]:
     """The ``REQ-*.md`` files directly in ``folder``."""
     return [p for p in paths if _is_candidate(PurePosixPath(p), folder)]
 
@@ -179,7 +180,7 @@ def _find_stories(versions: Versions) -> tuple[str, ...]:
     return tuple(sorted(found, key=natural))
 
 
-def reason_for(changed: Changed, reasons: Mapping[str, str]) -> str:
+def find_reason(changed: Changed, reasons: Mapping[str, str]) -> str:
     """The one-line reason for ``changed`` ("" when a changed or retired one has none)."""
     reason = " ".join(reasons.get(changed.id, "").split())
     return reason or (NEW_REASON if changed.change is Change.ADDED else "")
@@ -188,31 +189,31 @@ def reason_for(changed: Changed, reasons: Mapping[str, str]) -> str:
 def sort_changes(changes: Sequence[Changed], reasons: Mapping[str, str]) -> Sorting:
     """Split ``changes`` into landed (added or explained) and held (unexplained)."""
     ordered = sorted(changes, key=lambda c: natural(c.id))
-    explained = [Explained(c, reason_for(c, reasons)) for c in ordered]
+    explained = [Explained(c, find_reason(c, reasons)) for c in ordered]
     return Sorting(
         landed=tuple(e for e in explained if e.reason),
         held=tuple(e.changed for e in explained if not e.reason),
     )
 
 
-def explain_text(held: Sequence[Changed]) -> str:
+def describe_held(held: Sequence[Changed]) -> str:
     """One ``explain change to ID`` per held change, joined by ``; ``."""
     return "; ".join(EXPLAIN.format(id=c.id) for c in held)
 
 
 def describe_unexplained(held: Sequence[Changed], sha: str) -> str:
     """The bad-handoff text for held-back edits."""
-    return UNEXPLAINED.format(explain=explain_text(held), sha=sha)
+    return UNEXPLAINED.format(explain=describe_held(held), sha=sha)
 
 
-def unexplained_error(parsed: Handoff | HandoffError, text: str) -> HandoffError:
+def build_unexplained_error(parsed: Handoff | HandoffError, text: str) -> HandoffError:
     """The bad handoff for ``text``, after the parse error when there already was one."""
     if isinstance(parsed, HandoffError):
         return HandoffError(f"{parsed}; {text}")
     return HandoffError(text)
 
 
-def traced(landed: Sequence[Explained], own: str | None) -> list[str]:
+def collect_traced(landed: Sequence[Explained], own: str | None) -> list[str]:
     """Stories traced by changed or retired requirements, without the step's own."""
     found = {s for e in landed if e.changed.change in NEEDS_REASON for s in e.changed.stories}
     return sorted(found - {own}, key=natural)
@@ -226,7 +227,7 @@ def find_affected(stories: Mapping[str, StoryState], scope: AcceptScope) -> Affe
     return Affected(redesign=back, done=done)
 
 
-def redesign_note(landed: Sequence[Explained], target: NoteTarget) -> str:
+def build_redesign_note(landed: Sequence[Explained], target: NoteTarget) -> str:
     """The note a story sent back to design carries."""
     named = [
         e for e in landed if e.changed.change in NEEDS_REASON and target.story in e.changed.stories
@@ -290,7 +291,7 @@ def hold_back(git: Git, held: HeldBack) -> str:
     return sha
 
 
-def log(git: Git, folder: str) -> list[dict[str, str]]:
+def read_log(git: Git, folder: str) -> list[dict[str, str]]:
     """The requirement change history from the ``Requirement-Changed`` trailers."""
     out = git.run("log", "--reverse", f"--format={LOG_FORMAT}", "--", folder)
     return parse_log(out)
