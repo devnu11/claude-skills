@@ -1,4 +1,4 @@
-"""The PO's revert_story tool (s124): revert a story's commits and put it back in the Product Backlog.
+"""The PO's revert_story tool (s124): revert a story's commits, back to the Product Backlog.
 
 The pure rules come first; ``Reverter`` does the git, file, state, event and relay I/O.
 """
@@ -38,7 +38,8 @@ REVERT_BODY = "Reverts {commits}.\n\nReason: {reason}"
 RECORD_SUBJECT = "chore({story}): record the revert in the story file"
 NOTICE = (
     'Story {story} ("{title}") was reverted in sprint {sprint}: {reason} '
-    "Reverted commits: {commits}; revert commit {revert}. It is back in the Product Backlog at {step}."
+    "Reverted commits: {commits}; revert commit {revert}. "
+    "It is back in the Product Backlog at {step}."
 )
 TESTS_STEP = "tests"
 FIXUP = "fixup! "
@@ -112,7 +113,7 @@ def dependents(stories: dict[str, StoryState], story_id: str) -> list[str]:
 
 
 def reverted_story(story: StoryState, back: Back) -> StoryState:
-    """R6: a fresh story back in the Product Backlog, keeping its identity and its revert history."""
+    """R6: a fresh story back in the Product Backlog, keeping identity and revert history."""
     return StoryState(
         story.id,
         story.title,

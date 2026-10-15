@@ -71,7 +71,7 @@ from .sprint_add import (  # noqa: F401  (re-exported)
     SprintAdd,
 )
 from .stage_log import place_of
-from .state import ModelOverride, RunState, RunStatus
+from .state import ModelOverride, RunStatus
 from .story_admin import Act, Clerk
 
 SERVER = "team"
@@ -675,7 +675,8 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
 
 
 DASHBOARD_REASON = (
-    "A reason is also required when the change changes the Product Backlog order the human set on the dashboard."
+    "A reason is also required when the change changes the Product Backlog order "
+    "the human set on the dashboard."
 )
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "run_role": (

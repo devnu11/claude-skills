@@ -1,4 +1,4 @@
-"""When a sprint may end, what is ready for the next one, and the stuck Sprint Backlog (s124, s128, s156). Pure."""
+"""When a sprint may end, what is ready next, and the stuck Sprint Backlog (s156). Pure."""
 
 from __future__ import annotations
 
@@ -34,9 +34,7 @@ KEEP_GOING_STUCK = (
     "Backlog: {ids}. Tell the PO what to do with `agile-team tell`, then `start --resume`."
 )
 SPRINT_STUCK_CAP = 3
-SPRINT_STUCK_LEAD = (
-    "Nothing in the Sprint Backlog of sprint {sprint} can move. Each story and why:"
-)
+SPRINT_STUCK_LEAD = "Nothing in the Sprint Backlog of sprint {sprint} can move. Each story and why:"
 SPRINT_STUCK_ADVICE = (
     "Stuck hand-over {count} of {cap}. Act on these stories: continue_story or release_story "
     "once the cause is fixed, run_role with your own brief, pass_tests, revert_story, "
@@ -111,7 +109,7 @@ def keep_going_refusal(state: RunState, blocked: set[str]) -> str | None:
     return KEEP_GOING_REFUSED.format(ids=ids_text(movable)) if movable else None
 
 
-def stuck_lines(state: RunState, reasons: list[str]) -> list[str]:
+def list_stuck(state: RunState, reasons: list[str]) -> list[str]:
     """S3: SPRINT_STUCK_LEAD, the story lines, SPRINT_STUCK_ADVICE with state.stuck_asks."""
     lead = SPRINT_STUCK_LEAD.format(sprint=state.sprint)
     advice = SPRINT_STUCK_ADVICE.format(count=state.stuck_asks, cap=SPRINT_STUCK_CAP)

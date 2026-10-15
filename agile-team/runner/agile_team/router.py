@@ -391,23 +391,24 @@ class Router:
         if self.runtime.relay.open_questions():
             return None
         if pending is None and unfinished:
-            return self._stuck(unfinished)
+            return self._hand_over_stuck(unfinished)
         return self._stalled(unfinished)
 
-    def _ready_product_backlog(self) -> list[str]:
+    @property
+    def _ready_ids(self) -> list[str]:
         stories = self.runtime.state.stories
         queue = self.runtime.priority().queue(stories.values())
         return sprint_end.ready_product_backlog(stories, queue)
 
-    def _stuck(self, unfinished: list[StoryState]) -> Pass:
-        """S3/S4: hand over the stuck Sprint Backlog with each story's reason; past the cap, block."""
+    def _hand_over_stuck(self, unfinished: list[StoryState]) -> Pass:
+        """S3/S4: hand over the stuck Sprint Backlog with each reason; past the cap, block."""
         state = self.runtime.state
-        reasons = self._story_stall_lines(unfinished)
+        reasons = self._list_stall_lines(unfinished)
         if state.stuck_asks >= sprint_end.SPRINT_STUCK_CAP:
             return self._block(sprint_end.stuck_blocked_text(state, reasons))
         state.stuck_asks += 1
         self.runtime.save()
-        lines = sprint_end.stuck_lines(state, reasons)
+        lines = sprint_end.list_stuck(state, reasons)
         return Pass([Trigger.SPRINT_BACKLOG_STUCK], lines, [s.id for s in unfinished])
 
     def _sprint_end(self) -> Pass:
@@ -415,7 +416,7 @@ class Router:
         lines = [f"Sprint {state.sprint} is complete: every story in it is done."]
         if state.upstream.report:
             lines.append(f"Review: {state.upstream.report}")
-        ready = self._ready_product_backlog()
+        ready = self._ready_ids
         if state.cadence != sprint_end.UNTIL_BLOCKER or not ready:
             return Pass([Trigger.SPRINT_END], lines, [])
         lines += sprint_end.next_sprint_lines(state.stories, ready)
@@ -428,12 +429,9 @@ class Router:
             state.keep_going_asks += 1
             self.runtime.save()
             return found
-        return self._gave_up()
-
-    def _gave_up(self) -> Pass:
-        state = self.runtime.state
-        ids = sprint_end.ids_text(self._ready_product_backlog())
-        return self._block(sprint_end.KEEP_GOING_STUCK.format(count=state.keep_going_asks, ids=ids))
+        ids = sprint_end.ids_text(self._ready_ids)
+        stuck = sprint_end.KEEP_GOING_STUCK.format(count=state.keep_going_asks, ids=ids)
+        return self._block(stuck)
 
     def _block(self, text: str) -> Pass:
         """Mark the run blocked with text, post it to the liaison, save; Pass([], [], [])."""
@@ -452,7 +450,7 @@ class Router:
         if pending:
             return [_boundary_stall(pending)]
         if unfinished:
-            return self._story_stall_lines(unfinished)
+            return self._list_stall_lines(unfinished)
         lines = [
             f"No story is in sprint {self.runtime.state.sprint}; "
             "start_sprint with the stories to work on."
@@ -460,7 +458,7 @@ class Router:
         in_product = [s.id for s in self.runtime.state.stories.values() if _in_product_backlog(s)]
         return lines + ([f"Product Backlog: {', '.join(in_product)}"] if in_product else [])
 
-    def _story_stall_lines(self, unfinished: list[StoryState]) -> list[str]:
+    def _list_stall_lines(self, unfinished: list[StoryState]) -> list[str]:
         """One "<id> at <step>: <why>" line per story."""
         stories = self.runtime.state.stories
         return [f"{s.id} at {s.step}: {_why(s, stories)}" for s in unfinished]
