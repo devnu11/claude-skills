@@ -1,266 +1,341 @@
-"""s10: a start ledgers the spend a crash cut off, estimated from turns.jsonl."""
+"""s10: a start ledgers the spend a crash cut off, estimated from turns.jsonl (ADR-0078)."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from agile_team import cli, live, reconcile, system
+from agile_team import cli, reconcile, system
 from agile_team import state as state_mod
-from agile_team.ledger import Entry, Ledger, SessionCost, Tokens
-from agile_team.po_tools import PoRun, Start
+from agile_team.ledger import LEDGER, Entry, Ledger, SessionCost, Tokens
+from agile_team.live import TURNS, Turn
+from agile_team.po_tools import PoRun, PoTurn, Start
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from .conftest import FakeQuery
-from .fake_system import FAKE_IDS, START_CLOCK, FakeSystem
-from .test_cli import any_tool, start_args
-from .test_po_cost import Totals, po_costs, po_run, turn
+from .conftest import result_message
 
-PO = "product-owner"
 OPUS = "claude-opus-4-1"
-EARLY = START_CLOCK - 1000.0
+USAGE = {"input_tokens": 1000, "output_tokens": 200}
+
+
+def tline(at: float, **kw: Any) -> Turn:
+    """A turn line; PO by default, 1 dollar, one distinct message id per ``at``."""
+    fields: dict[str, Any] = {
+        "role": "product-owner",
+        "story": None,
+        "step": None,
+        "turn": 1,
+        "model": OPUS,
+        "tokens": Tokens(10, 5),
+        "tools": [],
+        "cost_usd": 1.0,
+        "message_id": f"m{at}",
+    }
+    return Turn(at=at, **{**fields, **kw})
+
+
+def put_turns(run_dir: Path, *lines: Turn | str) -> None:
+    text = "".join((t.line() if isinstance(t, Turn) else t) + "\n" for t in lines)
+    system.make_dirs(run_dir)
+    system.write_text(run_dir / TURNS, text)
+
+
+def ledger_of(run_dir: Path) -> Ledger:
+    return Ledger(run_dir / LEDGER)
+
+
+def row(role: str, at: float, story: str | None = None, cost: float = 9.0) -> Entry:
+    return Entry(role, OPUS, cost, story, at=at)
 
 
 class Crashing:
-    """A fake PO query: two model messages, then a crash before any ResultMessage."""
+    """A fake PO query: two assistant messages with usage, then a crash (no result)."""
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
         return self._gen()
 
     async def _gen(self) -> AsyncIterator[Any]:
-        for n in (1, 2):
-            usage = {"input_tokens": 1000 * n, "output_tokens": 500 * n}
+        for mid in ("a", "b"):
             yield AssistantMessage(
-                content=[TextBlock(text="t")], model=OPUS, usage=usage, message_id=f"m{n}"
+                content=[TextBlock(text="t")], model=OPUS, usage=USAGE, message_id=mid
             )
         raise RuntimeError("crash")
 
 
-def a_turn(
-    n: int,
-    role: str = PO,
-    story: str | None = None,
-    cost: float | None = 1.0,
-    mid: str | None = None,
-    model: str = OPUS,
-) -> live.Turn:
-    """A turn line at ``EARLY + n`` with 10 input and 5 output tokens."""
-    return live.Turn(
-        at=EARLY + n, role=role, story=story, step=None, turn=n, model=model,
-        tokens=Tokens(input=10, output=5), tools=[], cost_usd=cost,
-        message_id=mid or f"id{n}",
-    )  # fmt: skip
+class Resumed:
+    """A fake PO query that reports one running total."""
+
+    def __init__(self, total: float):
+        self.total = total
+
+    def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
+        return self._gen()
+
+    async def _gen(self) -> AsyncIterator[Any]:
+        yield result_message("ok", self.total, "sess")
 
 
-def write_turns(run_dir: Path, turns: list[live.Turn]) -> None:
-    system.make_dirs(run_dir)
-    system.write_text(run_dir / live.TURNS, "".join(t.line() + "\n" for t in turns))
+def po_entries(run_dir: Path) -> list[Entry]:
+    return [e for e in ledger_of(run_dir).entries() if e.role == "product-owner"]
 
 
-def row(role: str, at: float, story: str | None = None, cost: float = 1.0) -> Entry:
-    return Entry(role, OPUS, cost, story=story, at=at)
+# ----- the story's test: crash mid PO turn, then the next start -----------------------
 
 
-def ledger_of(run_dir: Path) -> Ledger:
-    return Ledger(run_dir / "ledger.jsonl")
-
-
-def crashed_po(make_runtime) -> PoRun:
-    """A PO run whose query crashed mid-turn: two turn lines, no ledger row."""
-    run = po_run(make_runtime, Crashing())
+def crash(make_runtime) -> Any:
+    rt = make_runtime(Crashing())
     with pytest.raises(RuntimeError):
-        turn(run, None)
-    return run
+        asyncio.run(PoRun(rt, Start("t"))._turn(PoTurn("go", None)))
+    return rt
 
 
-def turn_lines(run: PoRun) -> list[dict]:
-    text = system.read_text(run.runtime.config.run_dir / live.TURNS)
-    return [json.loads(x) for x in text.splitlines()]
-
-
-# ----- AC1: the story's test ---------------------------------------------------------
-
-
-def test_a_crash_mid_po_turn_is_ledgered_from_turns_jsonl(make_runtime) -> None:
-    run = crashed_po(make_runtime)
-    run_dir = run.runtime.config.run_dir
-    lines = [x for x in turn_lines(run) if x["role"] == PO]
-    assert len(lines) == 2
-    assert po_costs(run) == []
+def test_crash_mid_turn_is_ledgered_at_the_next_start(make_runtime, fake) -> None:
+    rt = crash(make_runtime)
+    run_dir = rt.config.run_dir
+    lines = [Turn.from_line(x) for x in system.read_text(run_dir / TURNS).splitlines()]
+    assert len(lines) == 2 and {t.role for t in lines} == {"product-owner"}
+    assert po_entries(run_dir) == []
+    fake.clock += 60
     written = reconcile.reconcile_ledger(run_dir)
-    rows = [e for e in ledger_of(run_dir).entries() if e.role == PO]
-    assert rows == written
-    assert len(rows) == 1
-    assert rows[0].story is None
-    assert rows[0].cost_usd == pytest.approx(sum(x["cost_usd"] for x in lines))
-    assert rows[0].cost_usd > 0
-    assert rows[0].tokens == Tokens(input=3000, output=1500)
-    assert rows[0].turns == 2
+    got = po_entries(run_dir)
+    assert len(got) == 1 and written == got
+    assert got[0].story is None and got[0].turns == 2
+    assert got[0].cost_usd == pytest.approx(sum(t.cost_usd or 0 for t in lines))
+    assert got[0].cost_usd > 0
+    assert got[0].tokens == sum((t.tokens for t in lines), Tokens())
 
 
-def test_a_second_reconcile_writes_nothing(make_runtime) -> None:
-    run = crashed_po(make_runtime)
-    run_dir = run.runtime.config.run_dir
+def test_a_second_reconcile_writes_nothing(make_runtime, fake) -> None:
+    run_dir = crash(make_runtime).config.run_dir
+    fake.clock += 60
     reconcile.reconcile_ledger(run_dir)
-    total = sum(e.cost_usd for e in ledger_of(run_dir).entries())
+    total = ledger_of(run_dir).total()
+    fake.clock += 60
     assert reconcile.reconcile_ledger(run_dir) == []
-    assert sum(e.cost_usd for e in ledger_of(run_dir).entries()) == pytest.approx(total)
+    assert ledger_of(run_dir).total() == total
 
 
-def test_covered_turns_get_no_row(scratch: Path) -> None:
-    write_turns(scratch, [a_turn(1, "developer-cli", "s7"), a_turn(2, "developer-cli", "s7")])
-    ledger_of(scratch).record(row("developer-cli", EARLY + 3, "s7"))
-    assert reconcile.reconcile_ledger(scratch) == []
-    assert len(ledger_of(scratch).entries()) == 1
-
-
-def test_covered_role_alongside_crashed_po(scratch: Path) -> None:
-    write_turns(scratch, [a_turn(1, "developer-cli", "s7"), a_turn(2), a_turn(3)])
-    ledger_of(scratch).record(row("developer-cli", EARLY + 4, "s7"))
-    written = reconcile.reconcile_ledger(scratch)
-    assert [(e.role, e.story) for e in written] == [(PO, None)]
-    assert written[0].turns == 2
-
-
-# ----- next start --------------------------------------------------------------------
-
-
-def test_the_next_start_ledgers_the_cut_off_po_and_says_so(
-    configured: Path, key_home: Path, capsys, fake: FakeSystem
-) -> None:
-    any_tool(fake)
-    run_dir = configured / ".team/run"
-    write_turns(run_dir, [a_turn(1, cost=0.25), a_turn(2, cost=0.5)])
-    args = start_args(configured, key_home, "--task", "t")
-    assert not isinstance(
-        cli._prepared(args, cli.Place(configured, key_home), Start("t"), FakeQuery()), int
+def test_the_next_start_ledgers_and_says_so(make_runtime, fake, capsys) -> None:
+    rt = crash(make_runtime)
+    fake.clock += 60
+    cli._reconcile(rt.config)
+    got = po_entries(rt.config.run_dir)
+    assert len(got) == 1
+    err = capsys.readouterr().err
+    assert err == (
+        f"agile-team start: ledgered ${got[0].cost_usd:.2f} for product-owner, "
+        "cut off by the last run (estimated from turns.jsonl)\n"
     )
-    rows = ledger_of(run_dir).entries()
-    assert [(e.role, e.cost_usd) for e in rows] == [(PO, pytest.approx(0.75))]
-    assert (
-        "agile-team start: ledgered $0.75 for product-owner, "
+
+
+def test_told_line_names_role_and_story() -> None:
+    entry = Entry("developer-cli", OPUS, 1.234, "s7")
+    assert reconcile.told_line(entry) == (
+        "agile-team start: ledgered $1.23 for developer-cli on s7, "
         "cut off by the last run (estimated from turns.jsonl)"
-    ) in capsys.readouterr().err
+    )
 
 
-# ----- RC3 / RC4 / RC2 ----------------------------------------------------------------
+# ----- covered and uncovered turns ----------------------------------------------------
+
+
+def test_turns_before_their_row_are_covered(scratch: Path) -> None:
+    put_turns(
+        scratch,
+        tline(1, role="developer-cli", story="s7"),
+        tline(2, role="developer-cli", story="s7"),
+        tline(10),
+        tline(11),
+    )
+    ledger_of(scratch).record(row("developer-cli", 5, "s7"))
+    written = reconcile.reconcile_ledger(scratch)
+    assert [(e.role, e.story) for e in written] == [("product-owner", None)]
+    assert len(ledger_of(scratch).entries()) == 2
 
 
 def test_only_turns_after_the_latest_row_count(scratch: Path) -> None:
-    write_turns(scratch, [a_turn(1, cost=5), a_turn(2, cost=5), a_turn(4, cost=2), a_turn(5)])
-    ledger_of(scratch).record(row(PO, EARLY + 3))
-    (written,) = reconcile.reconcile_ledger(scratch)
-    assert written.cost_usd == pytest.approx(3.0)
-    assert written.turns == 2
+    put_turns(scratch, tline(1, cost_usd=1.0), tline(2, cost_usd=2.0), tline(8, cost_usd=4.0))
+    ledger_of(scratch).record(row("product-owner", 5, cost=2.5))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.cost_usd == pytest.approx(4.0) and entry.turns == 1
 
 
-def test_sum_turns_null_cost_counts_zero_and_last_model_wins() -> None:
-    entry = reconcile.sum_turns([a_turn(1, cost=None, model="old"), a_turn(2, cost=0.5)])
-    assert (entry.cost_usd, entry.model, entry.at) == (0.5, OPUS, 0)
-    assert entry.tokens == Tokens(input=20, output=10)
+def test_a_turn_at_the_rows_time_is_covered(scratch: Path) -> None:
+    put_turns(scratch, tline(5))
+    ledger_of(scratch).record(row("product-owner", 5))
+    assert reconcile.reconcile_ledger(scratch) == []
 
 
-def test_sum_turns_counts_distinct_message_ids() -> None:
-    same = [a_turn(1, mid="x"), a_turn(2, mid="x"), a_turn(3, mid="y")]
-    assert reconcile.sum_turns(same).turns == 2
-
-
-def test_sum_turns_null_ids_count_one_each() -> None:
-    nulls = [a_turn(1), a_turn(2), a_turn(3)]
-    for t in nulls:
-        object.__setattr__(t, "message_id", None)
-    assert reconcile.sum_turns(nulls).turns == 3
-
-
-def test_a_role_step_gets_its_own_row_after_the_po_row(scratch: Path) -> None:
-    write_turns(
-        scratch, [a_turn(1, "developer-cli", "s7"), a_turn(2), a_turn(3, "developer-cli", "s7")]
+def test_a_role_step_gets_its_own_row(scratch: Path) -> None:
+    put_turns(
+        scratch,
+        tline(1, role="developer-cli", story="s7", cost_usd=2.0),
+        tline(2),
+        tline(3, role="developer-cli", story="s7", cost_usd=3.0),
     )
-    written = reconcile.reconcile_ledger(scratch)
-    assert [(e.role, e.story, e.turns) for e in written] == [
-        ("developer-cli", "s7", 2),
-        (PO, None, 1),
-    ]
+    first, second = reconcile.reconcile_ledger(scratch)
+    assert (first.role, first.story, first.cost_usd) == ("developer-cli", "s7", 5.0)
+    assert (second.role, second.story, second.cost_usd) == ("product-owner", None, 1.0)
 
 
-def test_find_uncovered_keys_in_first_turn_order() -> None:
-    turns = [a_turn(1, "b", "s1"), a_turn(2, "a"), a_turn(3, "b", "s1")]
-    found = reconcile.find_uncovered(turns, [])
-    assert list(found) == [("b", "s1"), ("a", None)]
-    assert len(found[("b", "s1")]) == 2
+def test_same_role_other_story_is_a_separate_key(scratch: Path) -> None:
+    put_turns(
+        scratch, tline(1, role="architect", story="s1"), tline(2, role="architect", story="s2")
+    )
+    ledger_of(scratch).record(row("architect", 5, "s1"))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.story == "s2"
 
 
-# ----- RC6 ----------------------------------------------------------------------------
+def test_rows_follow_the_first_uncovered_line(scratch: Path) -> None:
+    put_turns(scratch, tline(1, role="b-role"), tline(2, role="a-role"), tline(3, role="b-role"))
+    assert [e.role for e in reconcile.reconcile_ledger(scratch)] == ["b-role", "a-role"]
+
+
+# ----- how a key's turns are summed ---------------------------------------------------
+
+
+def test_null_cost_counts_zero(scratch: Path) -> None:
+    put_turns(scratch, tline(1, cost_usd=None), tline(2, cost_usd=1.5))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.cost_usd == pytest.approx(1.5)
+
+
+def test_turns_count_distinct_message_ids(scratch: Path) -> None:
+    put_turns(
+        scratch,
+        tline(1, message_id="x"),
+        tline(2, message_id="x"),
+        tline(3, message_id=None),
+        tline(4, message_id=None),
+        tline(5, message_id="y"),
+    )
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.turns == 4
+
+
+def test_model_is_the_last_lines(scratch: Path) -> None:
+    put_turns(scratch, tline(1, model="claude-opus-4-1"), tline(2, model="claude-sonnet-4-5"))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.model == "claude-sonnet-4-5"
+
+
+def test_tokens_are_summed(scratch: Path) -> None:
+    put_turns(scratch, tline(1, tokens=Tokens(1, 2, 3, 4)), tline(2, tokens=Tokens(10, 20, 30, 40)))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.tokens == Tokens(11, 22, 33, 44)
+
+
+def test_the_row_is_stamped_at_the_start(scratch: Path, fake) -> None:
+    put_turns(scratch, tline(fake.clock - 5))
+    fake.clock += 100
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.at == pytest.approx(fake.clock)
+
+
+# ----- bad input ----------------------------------------------------------------------
 
 
 def test_bad_lines_are_skipped(scratch: Path) -> None:
-    good = a_turn(1).line()
-    system.write_text(scratch / live.TURNS, f'{good}\n\n[1]\n{{"x": 1}}\n{good}\n{good[:20]}')
-    assert reconcile.read_turns(scratch / live.TURNS) == [a_turn(1), a_turn(1)]
+    good = tline(1, cost_usd=2.0)
+    torn = tline(2).line()[:30]
+    put_turns(scratch, good, "", "   ", torn, "[1, 2]", "3", '{"at": 1}', "not json", tline(3))
+    (entry,) = reconcile.reconcile_ledger(scratch)
+    assert entry.cost_usd == pytest.approx(3.0) and entry.turns == 2
 
 
-def test_a_missing_turns_file_reconciles_nothing(scratch: Path) -> None:
-    assert reconcile.read_turns(scratch / live.TURNS) == []
+def test_a_torn_last_line_is_skipped(scratch: Path) -> None:
+    system.write_text(scratch / TURNS, tline(1).line() + "\n" + tline(2).line()[:20])
+    assert [t.at for t in reconcile.read_turns(scratch / TURNS)] == [1]
+
+
+def test_missing_turns_file_reconciles_nothing(scratch: Path) -> None:
+    assert reconcile.read_turns(scratch / TURNS) == []
     assert reconcile.reconcile_ledger(scratch) == []
-    assert not system.exists(scratch / "ledger.jsonl")
+    assert not system.exists(scratch / LEDGER)
 
 
-def test_turn_from_line_round_trips() -> None:
-    assert live.Turn.from_line(a_turn(3).line()) == a_turn(3)
-
-
-@pytest.mark.parametrize("text", ["{torn", "[1]", '{"at": 1}', ""])
-def test_turn_from_line_rejects_bad_lines(text: str) -> None:
-    with pytest.raises((ValueError, TypeError, KeyError)):
-        live.Turn.from_line(text)
-
-
-# ----- RC1 ----------------------------------------------------------------------------
-
-
-def test_nothing_is_written_while_a_runner_is_alive(scratch: Path) -> None:
-    write_turns(scratch, [a_turn(1)])
-    system.write_text(scratch / state_mod.PID_FILE, str(FAKE_IDS[0]))
+def test_empty_turns_file_reconciles_nothing(scratch: Path) -> None:
+    put_turns(scratch)
     assert reconcile.reconcile_ledger(scratch) == []
-    assert not system.exists(scratch / "ledger.jsonl")
 
 
-# ----- RC7 ----------------------------------------------------------------------------
+# ----- a live runner ------------------------------------------------------------------
 
 
-def test_the_resumed_session_does_not_charge_the_reconciled_cost_twice(make_runtime) -> None:
-    run = po_run(make_runtime, Totals([1.0 + 0.75 + 0.25], ["sess"]))
-    run_dir = run.runtime.config.run_dir
-    state_mod.save(run_dir, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
-    write_turns(run_dir, [a_turn(1, cost=0.25), a_turn(2, cost=0.5)])
-    reconcile.reconcile_ledger(run_dir)
-    assert state_mod.load(run_dir).po_cost == SessionCost("sess", 1.0, 0.75)
-    run.runtime.state = state_mod.load(run_dir)
-    turn(run)
-    assert po_costs(run)[-1] == pytest.approx(0.25)
-    assert state_mod.load(run_dir).po_cost == SessionCost("sess", 2.0)
+def test_nothing_is_written_while_a_runner_is_alive(scratch: Path, monkeypatch) -> None:
+    put_turns(scratch, tline(1))
+    system.write_text(scratch / state_mod.PID_FILE, "4242")
+    monkeypatch.setattr(system, "kill", lambda pid, sig: None)
+    assert reconcile.reconcile_ledger(scratch) == []
+    assert not system.exists(scratch / LEDGER)
 
 
-def test_without_a_baseline_state_is_left_alone(scratch: Path) -> None:
-    state_mod.save(scratch, state_mod.RunState())
-    write_turns(scratch, [a_turn(1)])
-    reconcile.reconcile_ledger(scratch)
-    assert state_mod.load(scratch).po_cost is None
+def test_a_dead_runner_pid_does_not_stop_it(scratch: Path, monkeypatch) -> None:
+    def gone(pid: int, sig: int) -> None:
+        raise ProcessLookupError
+
+    put_turns(scratch, tline(1))
+    system.write_text(scratch / state_mod.PID_FILE, "4242")
+    monkeypatch.setattr(system, "kill", gone)
+    assert len(reconcile.reconcile_ledger(scratch)) == 1
 
 
-def test_a_role_row_does_not_touch_the_po_baseline(scratch: Path) -> None:
+# ----- the PO session's running total (RC7) -------------------------------------------
+
+
+def test_reconciled_po_cost_is_noted_in_the_state(scratch: Path) -> None:
     state_mod.save(scratch, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
-    write_turns(scratch, [a_turn(1, "developer-cli", "s7")])
+    put_turns(scratch, tline(1, cost_usd=0.5), tline(2, cost_usd=0.25))
+    reconcile.reconcile_ledger(scratch)
+    assert state_mod.load(scratch).po_cost == SessionCost("sess", 1.0, 0.75)
+
+
+def test_a_role_row_leaves_the_state_alone(scratch: Path) -> None:
+    state_mod.save(scratch, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
+    put_turns(scratch, tline(1, role="architect", story="s1"))
     reconcile.reconcile_ledger(scratch)
     assert state_mod.load(scratch).po_cost == SessionCost("sess", 1.0)
 
 
-def test_told_line_formats_cost_and_label() -> None:
-    line = reconcile.told_line(Entry("developer-cli", OPUS, 1.234, story="s7"))
-    assert line == (
-        "agile-team start: ledgered $1.23 for developer-cli on s7, "
-        "cut off by the last run (estimated from turns.jsonl)"
-    )
+def test_without_a_baseline_the_state_is_not_rewritten(scratch: Path) -> None:
+    state_mod.save(scratch, state_mod.RunState())
+    put_turns(scratch, tline(1))
+    reconcile.reconcile_ledger(scratch)
+    assert state_mod.load(scratch).po_cost is None
+
+
+def test_the_resumed_query_ledgers_only_what_is_new(make_runtime) -> None:
+    rt = make_runtime(Resumed(0.0))
+    run_dir = rt.config.run_dir
+    state_mod.save(run_dir, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
+    put_turns(run_dir, tline(1, cost_usd=0.5))
+    reconcile.reconcile_ledger(run_dir)
+    rt.state = state_mod.load(run_dir)
+    assert rt.state.po_cost == SessionCost("sess", 1.0, 0.5)
+    rt.query_fn = Resumed(1.0 + 0.5 + 0.2)
+    asyncio.run(PoRun(rt, Start("t"))._turn(PoTurn("go", "sess")))
+    assert po_entries(run_dir)[-1].cost_usd == pytest.approx(0.2)
+    assert state_mod.load(run_dir).po_cost == SessionCost("sess", 1.7, 0.0)
+
+
+# ----- live.Turn.from_line ------------------------------------------------------------
+
+
+def test_turn_from_line_round_trips() -> None:
+    turn = tline(3, tools=["Bash"], story="s1", step="design", cost_usd=None, message_id=None)
+    assert Turn.from_line(turn.line()) == turn
+
+
+@pytest.mark.parametrize("text", ["", "nope", "[]", "1", '{"at": 1}'])
+def test_turn_from_line_rejects_bad_lines(text: str) -> None:
+    with pytest.raises((ValueError, TypeError, KeyError)):
+        Turn.from_line(text)
+
+
+def test_turn_line_is_json() -> None:
+    assert json.loads(tline(1).line())["role"] == "product-owner"
