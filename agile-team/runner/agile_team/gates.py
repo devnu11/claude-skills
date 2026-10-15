@@ -846,7 +846,7 @@ def _ran(name: str, code: int, out: str) -> Ran:
 
 def _failures_of(run: TestRun) -> dict[str, str]:
     """The run's report failures, {} without a report (G5)."""
-    return run.report.failures() if run.report else {}
+    return run.report.failures if run.report else {}
 
 
 def _test_ran(name: str, run: TestRun) -> Ran:
