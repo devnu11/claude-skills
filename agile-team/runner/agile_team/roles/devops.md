@@ -60,7 +60,7 @@ Hand off one `tooling` row per AC:
   `changed_files`, status `done`.
 - Missing and outside your files: mark the row `missing` with what it needs.
   Name an existing story that adds it in `story`, or leave `story` empty;
-  the runner holds the story and the PO opens one, then you run again with
+  the runner holds the story and the PO asks the liaison for one, then you run again with
   its id in your brief and fill it in.
 - The design assumes tooling that cannot exist: status
   `changes_requested` with the reason in `summary`; the story goes back to
