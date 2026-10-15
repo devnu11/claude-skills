@@ -26,7 +26,7 @@ TABLE_M = {
     "s32": ["s31"],
     "s33": ["s31"],
     "s34": [],
-    "s35": ["s31", "s32", "s36"],
+    "s35": [],  # the PO dropped its met dependencies (7fb8ab6)
     "s36": ["s31"],
     "s39": [],
     "s54": [],
