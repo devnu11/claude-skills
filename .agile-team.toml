@@ -113,3 +113,29 @@ write = [
     "README.md",
     ".team/adr/**",
 ]
+
+# s157: every role that changes Python may write the house-rules baseline.
+# A [roles.<name>] write replaces the built-in list, so each restates it.
+[roles.developer]
+write = ["{source}", "!{tests}", "!{e2e}", ".house-rules-baseline.json"]
+
+[roles.developer-cli]
+write = ["{source}", "!{tests}", "!{e2e}", ".house-rules-baseline.json"]
+
+[roles.developer-api]
+write = ["{source}", "!{tests}", "!{e2e}", ".house-rules-baseline.json"]
+
+[roles.developer-db]
+write = ["{source}", "!{tests}", "!{e2e}", ".house-rules-baseline.json"]
+
+[roles.developer-gui]
+write = ["{source}", "!{tests}", "!{e2e}", ".house-rules-baseline.json"]
+
+[roles.unit-tester]
+write = ["{tests}", ".house-rules-baseline.json"]
+
+[roles.integration-tester]
+write = ["{e2e}", ".team/run/presentation/**", ".house-rules-baseline.json"]
+
+[roles.devops]
+write = ["{ci}", "{config}", ".team/baseline.json", ".house-rules-baseline.json", ".house-rules.toml"]
