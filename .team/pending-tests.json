@@ -1,1 +1,5 @@
-{}
+{
+  "s130": [
+    "agile-team/runner/tests/test_s130_module_state.py::test_pytest_randomly_is_installed_so_random_order_is_the_default"
+  ]
+}
