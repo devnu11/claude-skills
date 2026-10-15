@@ -24,11 +24,6 @@ def test_a_stories_argument_names_each_story() -> None:
     assert named_stories("ask_user", {"stories": ["s1", "s2"]}) == ["s1", "s2"]
 
 
-def test_open_story_names_its_id() -> None:
-    assert named_stories("open_story", {"id": "s9"}) == ["s9"]
-    assert named_stories("open_story", {"story": "s1"}) == []
-
-
 def test_other_tools_do_not_name_through_id() -> None:
     assert named_stories("run_role", {"id": "s9"}) == []
 
@@ -49,7 +44,7 @@ def test_both_keys_are_read_for_a_default_tool() -> None:
 
 
 def test_the_tables_are_data() -> None:
-    assert po_tools.STORY_ARGS["open_story"] == ("id",)
+    assert po_tools.STORY_ARGS == {}
     assert po_tools.DEFAULT_STORY_ARGS == ("story", "stories")
 
 
@@ -57,7 +52,7 @@ def test_touched_keeps_first_named_order_and_drops_repeats() -> None:
     touched = po_tools.Touched()
     touched.note("run_role", {"story": "s2"})
     touched.note("ask_user", {"stories": ["s1", "s2"]})
-    touched.note("open_story", {"id": "s1"})
+    touched.note("hold_story", {"story": "s1"})
     touched.note("budget_status", {})
     assert touched.ids == ["s2", "s1"]
 

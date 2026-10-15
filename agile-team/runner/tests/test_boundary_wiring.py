@@ -14,6 +14,7 @@ from agile_team.handover import Trigger as T
 from agile_team.po_tools import Tools
 from agile_team.roles import Handoff
 
+from . import story_setup
 from .conftest import write_story
 
 
@@ -38,7 +39,7 @@ def sprint_story(rt, sid: str = "s1", **kw) -> None:
 def story(rt, sid: str) -> None:
     """Open ``sid`` with a valid story file (s94)."""
     write_story(rt.config, sid, "cli")
-    call(Tools(rt).open_story({"id": sid, "title": "Add"}))
+    story_setup.opened(rt, story_setup.Opening(sid, "Add"))
 
 
 # ----- U1/U14: start_sprint, continue_boundary, set_push_permission ----------

@@ -1,4 +1,4 @@
-"""s94: open_story, the pre-acceptance read, state and the view follow the story file (SF4-SF9)."""
+"""s94: the pre-acceptance read, state and the view follow the story file (SF4-SF9)."""
 
 import contextlib
 import json
@@ -6,7 +6,7 @@ from functools import partial
 from pathlib import Path
 
 from agile_team import config as cfg
-from agile_team import po_tools, presentation, state, story_spec, system
+from agile_team import presentation, state, story_spec, system
 from agile_team.config import Environment
 from agile_team.gates import StoryState, StoryStatus
 from agile_team.po_tools import Tools
@@ -27,65 +27,7 @@ def wire(rt) -> None:
     rt.pipeline.checks.story_spec = partial(story_spec.read, rt.config)
 
 
-# ----- SF4: open_story --------------------------------------------------------
-
-
-def test_open_story_schema_has_no_environment_key() -> None:
-    desc, schema = po_tools.SCHEMAS["open_story"]
-    assert "environment" not in schema
-    assert set(schema) == {"id", "title", "depends_on"}
-    assert ".team/stories/<id>.md" in desc and "acceptance" in desc
-
-
-def test_open_story_without_a_file_is_refused(make_runtime) -> None:
-    rt = make_runtime()
-    out = call(Tools(rt).open_story({"id": "s1", "title": "Add"}))
-    assert out["status"] == "refused"
-    assert "no story file; write it before open_story" in out["reason"]
-    assert ".team/stories/s1.md" in out["reason"]
-    assert rt.state.stories == {}
-
-
-def test_open_story_with_a_bad_ac_names_the_file_and_the_ac(make_runtime) -> None:
-    rt = make_runtime()
-    write_story(rt.config, "s1", "mars")
-    out = call(Tools(rt).open_story({"id": "s1", "title": "Add"}))
-    assert out["status"] == "refused"
-    assert out["reason"].startswith(".team/stories/s1.md: AC AC1: environment 'mars'")
-    assert rt.state.stories == {}
-
-
-def test_open_story_with_the_file_fixed_opens_it(make_runtime) -> None:
-    rt = make_runtime()
-    t = Tools(rt)
-    write_story(rt.config, "s1", "mars")
-    assert call(t.open_story({"id": "s1", "title": "Add"}))["status"] == "refused"
-    write_story(rt.config, "s1", "cli")
-    assert call(t.open_story({"id": "s1", "title": "Add"}))["step"] == "design"
-    assert "s1" in rt.state.stories and not hasattr(rt.state.stories["s1"], "environment")
-
-
-def test_duplicate_id_is_refused_before_the_file(make_runtime) -> None:
-    rt = make_runtime()
-    t = Tools(rt)
-    write_story(rt.config, "s1", "cli")
-    call(t.open_story({"id": "s1", "title": "Add"}))
-    write_story(rt.config, "s1", "mars")
-    out = call(t.open_story({"id": "s1", "title": "Add"}))
-    assert out["status"] == "refused" and "story_file" not in out["reason"]
-    assert "mars" not in out["reason"]
-
-
-def test_depends_on_is_refused_after_the_file(make_runtime) -> None:
-    rt = make_runtime()
-    t = Tools(rt)
-    # a bad file and a bad depends_on: the file comes first
-    write_story(rt.config, "s1", "mars")
-    out = call(t.open_story({"id": "s1", "title": "A", "depends_on": ["s404"]}))
-    assert "AC AC1" in out["reason"] and "s404" not in out["reason"]
-    write_story(rt.config, "s1", "cli")
-    out = call(t.open_story({"id": "s1", "title": "A", "depends_on": ["s404"]}))
-    assert out["status"] == "refused" and "s404" in out["reason"]
+# ----- SF4: the file checks moved to the story CLI (s135) ---------------------
 
 
 def test_config_no_longer_has_environment_refusal() -> None:

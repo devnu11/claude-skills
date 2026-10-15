@@ -199,7 +199,7 @@ def test_none_configured_when_there_are_no_names() -> None:
 
 
 def test_problems_text_table_is_exact() -> None:
-    assert PROBLEMS[Problem.NO_FILE] == "no story file; write it before open_story"
+    assert PROBLEMS[Problem.NO_FILE] == "no story file"
     assert PROBLEMS[Problem.NO_ID] == "id is missing or empty"
     assert PROBLEMS[Problem.DUPLICATE_ID] == "id is used by an earlier AC"
     assert PROBLEMS[Problem.NO_TEXT] == "text is missing or empty"

@@ -13,6 +13,7 @@ from agile_team.po_tools import Tools
 from agile_team.relay import Note
 from agile_team.router import Router
 
+from . import story_setup
 from .conftest import write_story
 from .pipeline_helpers import add_story
 
@@ -25,7 +26,7 @@ def opened(make_runtime, *ids: str) -> Tools:
     t = Tools(make_runtime())
     for sid in ids:
         write_story(t.runtime.config, sid, "cli")
-        call(t.open_story({"id": sid, "title": sid}))
+        story_setup.opened(t.runtime, story_setup.Opening(sid, sid))
     return t
 
 

@@ -412,9 +412,9 @@ def test_our_failure_holds_and_continue_is_refused(env: Env) -> None:
     assert len(env.events()) == seen
 
 
-def test_the_refusal_says_to_open_or_route_a_fix() -> None:
+def test_the_refusal_says_to_request_or_route_a_fix() -> None:
     text = ci.CI_OURS_REFUSAL
-    assert "open_story" in text and "record_ci_bug" in text and "flaky" in text
+    assert "request_story" in text and "record_ci_bug" in text and "flaky" in text
 
 
 def test_a_green_rerun_on_the_pushed_head_is_done(env: Env) -> None:
@@ -626,7 +626,7 @@ def brep(hold: str, **fields) -> dict:
 @pytest.mark.parametrize(
     ("hold", "trigger", "words"),
     [
-        ("ci_failed", T.CI_FAILED, ["continue_boundary is refused", "open_story", "NOT ready"]),
+        ("ci_failed", T.CI_FAILED, ["continue_boundary is refused", "request_story", "NOT ready"]),
         ("ci_infra", T.CI_INFRA, ["never ran a step", "NOT ready", "record_ci_bug"]),
         (
             "main_broken",

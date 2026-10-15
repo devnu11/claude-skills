@@ -140,7 +140,7 @@ def test_take_fresh_returns_each_span_once() -> None:
     ("block", "expected"),
     [
         (use("u", "mcp__team__run_role"), "po.run_role"),
-        (use("u", "mcp__team__open_story"), "po.open_story"),
+        (use("u", "mcp__team__request_story"), "po.request_story"),
         (use("u", "mcp__runner__run_tests"), "runner-tool.run_tests"),
         (use("u", "Bash", description="run the tests", command="pytest"), "Dev: run the tests"),
         (use("u", "Bash", description="  ", command="pytest"), "Dev: Bash"),

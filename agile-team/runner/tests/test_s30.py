@@ -52,7 +52,10 @@ def snap(rt) -> str:
 def test_unknown_story_is_refused(make_runtime) -> None:
     t, _, _ = stuck_tools(make_runtime)
     out = call(t.pass_tests({"story": "s9", "reason": "r"}))
-    assert out == {"status": "refused", "reason": "unknown story 's9'; open it with open_story"}
+    assert out == {
+        "status": "refused",
+        "reason": "unknown story 's9'; ask the liaison for it with request_story",
+    }
 
 
 def test_an_empty_reason_is_refused_and_changes_nothing(make_runtime) -> None:

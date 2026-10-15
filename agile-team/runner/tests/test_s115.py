@@ -187,7 +187,7 @@ def test_missing_without_story_holds() -> None:
     h = hand(tooling=[AUTO, {**AUTO, "ac": "AC2"}, UNFILED])
     out = evaluate(h)
     assert out.verdict is Verdict.HOLD
-    assert "AC3: a browser harness" in out.reason and "open_story" in out.reason
+    assert "AC3: a browser harness" in out.reason and "request_story" in out.reason
 
 
 def test_unknown_story_bounces_to_ops_review() -> None:

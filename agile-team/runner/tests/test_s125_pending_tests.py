@@ -326,7 +326,7 @@ def test_a_bash_edit_of_the_registry_is_out_of_scope(repo: Path, fake: FakeSyste
 
 
 def test_the_registry_is_listed_as_runner_only() -> None:
-    assert guard.RUNNER_FILES == (pending_tests.REGISTRY,)
+    assert guard.RUNNER_FILES == (pending_tests.REGISTRY, guard.STORY_FILES)
 
 
 # ---- onboarding, CLI, tally ----------------------------------------------------------------

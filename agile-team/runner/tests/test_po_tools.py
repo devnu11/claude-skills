@@ -12,32 +12,32 @@ from agile_team.state import RunStatus
 
 from .conftest import FakeQuery, write_story
 from .fake_system import FakeSystem
+from .story_setup import Opening, opened
 
 
 def call(coro) -> dict:
     return json.loads(asyncio.run(coro)["content"][0]["text"])
 
 
-def test_open_story_and_status(make_runtime) -> None:
+def test_opened_story_and_status(make_runtime) -> None:
     t = Tools(make_runtime())
     write_story(t.runtime.config, "s1", "cli")
-    assert call(t.open_story({"id": "s1", "title": "Add"}))["step"] == "design"
-    assert call(t.open_story({"id": "s1", "title": "Add"}))["status"] == "refused"
+    assert opened(t.runtime, Opening("s1", "Add")).step == "design"
     status = call(t.story_status({}))
     assert "environment" not in status["stories"]["s1"]
-    opened = t.runtime.events.events()
+    opens = t.runtime.events.events()
     want = {"title": "Add", "step": "design", "depends_on": []}
-    assert len(opened) == 1 and opened[0].data == want
+    assert len(opens) == 1 and opens[0].data == want
     assert "developer" in status["roles"]
 
 
 def open_stories(t: Tools, *ids: str) -> None:
     for sid in ids:
         write_story(t.runtime.config, sid, "cli")
-        call(t.open_story({"id": sid, "title": sid}))
+        opened(t.runtime, Opening(sid, sid))
 
 
-def test_open_story_starts_in_backlog(make_runtime) -> None:
+def test_an_opened_story_starts_in_backlog(make_runtime) -> None:
     t = Tools(make_runtime())
     open_stories(t, "s1")
     assert t.runtime.state.stories["s1"].sprint is None
@@ -130,7 +130,7 @@ def snapshot(rt) -> tuple:
         ),
         (
             {"goal": "G", "stories": ["s1", "s9", "s7"]},
-            "unknown stories: s9, s7; open them with open_story first",
+            "unknown stories: s9, s7; ask the liaison for them with request_story",
         ),
     ],
 )
@@ -298,7 +298,7 @@ def test_continue_story_refusals_change_nothing(make_runtime) -> None:
     ghost = refusal_snapshot(t, "continue_story", {"story": "s9", "note": "n"})
     assert ghost == {
         "status": "refused",
-        "reason": "unknown story 's9'; open it with open_story",
+        "reason": "unknown story 's9'; ask the liaison for it with request_story",
     }
 
 
@@ -334,7 +334,10 @@ def test_set_developer_records_the_choice(make_runtime) -> None:
 @pytest.mark.parametrize(
     ("args", "reason"),
     [
-        ({"story": "s9", "role": "developer-gui"}, "unknown story 's9'; open it with open_story"),
+        (
+            {"story": "s9", "role": "developer-gui"},
+            "unknown story 's9'; ask the liaison for it with request_story",
+        ),
         ({"story": "s1", "role": "ghost"}, "unknown role 'ghost'"),
         ({"story": "s1", "role": "architect"}, "architect is not a developer role"),
     ],

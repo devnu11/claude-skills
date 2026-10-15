@@ -1,7 +1,8 @@
-"""s64: open_story schema still states the environment rule (checks moved to s94)."""
+"""s64: the PO tool schemas no longer carry an environment rule (open_story left in s135)."""
 
 from agile_team.po_tools import SCHEMAS
 
 
-def test_schema_description_mentions_environment_rule() -> None:
-    assert "[[environment]]" in str(SCHEMAS["open_story"])
+def test_no_schema_mentions_the_environment_table() -> None:
+    assert "open_story" not in SCHEMAS
+    assert [name for name, spec in SCHEMAS.items() if "[[environment]]" in str(spec)] == []
