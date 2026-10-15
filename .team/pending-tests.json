@@ -1,1 +1,12 @@
-{}
+{
+  "s132": [
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_coverage_below_required",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_every_function_has_at_most_two_parameters",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_exit_failure_text",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_module_result_is_gone",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_pending_counts_from_skipped",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_plain_passing_run",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_result_takes_check_and_run",
+    "agile-team/runner/tests/test_s132_fullcheck_params.py::test_timed_out_for_both_judges"
+  ]
+}
