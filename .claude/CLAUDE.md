@@ -45,7 +45,7 @@ A rule that exists only in a prompt is a wish.
 
 ## Never touch the real home directory
 
-- Code, tests and manual checks never read or write anything under the real
+- Tests and manual checks never read or write anything under the real
   home directory (`~`), not only `~/.claude` and `~/.config`.
 - Tests and manual checks use a scratch `HOME` (`HOME=$(mktemp -d)`) or
   `CLAUDE_SKILLS_DIR`. Never use the real `~/.claude` or `~/.config`.
