@@ -79,9 +79,9 @@ still open, the new one holds its commits too:
 - The team tells you a pull request is **ready to merge** only when every
   check passed on its current head, that is, after the rebase.
 - If CI fails on the first push, the team tells you the PR is **not**
-  ready. You get the failing jobs and test lines, the team opens a bug
-  story that comes first in the next sprint, and the team branch is not
-  rebased this time. If CI is still running when the wait ends, the team
+  ready. You get the failing jobs and test lines. The Product Owner asks
+  the liaison for a bug story, the liaison writes it, and the runner opens
+  it first in the next sprint. The team branch is not rebased this time. If CI is still running when the wait ends, the team
   tells you it is not ready yet and waits again.
 - If CI fails only after the rebase, the sprint still ends. The team tells
   you the PR is **not** ready, with the failing checks: the rebase onto

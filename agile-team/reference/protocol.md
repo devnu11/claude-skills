@@ -2480,7 +2480,7 @@ story-level problem. One read lists everything to fix.
 |---|---|
 | `story new` and `story amend` (the draft: no `id` check, and `id` or `shared` in it is a problem) | the command prints the refusal and queues nothing |
 | the runner's intake, before it commits a queued draft (the draft, then the file with its `id:` line) | the request is refused (see "Stories from the liaison") |
-| before every Customer Proxy step on the story (after the PO's turn, before the unpresented check) | the step does not run and nothing is billed; the gate holds the story with `the story file must be fixed before acceptance:` + the refusal + `Edit the file; no state change is needed`, which the PO gets as a `gate_hold` hand-over |
+| before every Customer Proxy step on the story (after the PO's turn, before the unpresented check) | the step does not run and nothing is billed; the gate holds the story with `the story file must be fixed before acceptance:` + the refusal + `Only the runner writes story files. If the config lost the environment, route the fix to devops and continue_story once it is in; if the ACs are wrong, ask the human with ask_user, and the liaison sends new ACs with story amend`, which the PO gets as a `gate_hold` hand-over |
 
 **Only the runner writes story files** (s135). The guard refuses every
 role's Write, Edit or NotebookEdit under `.team/stories/` (`product-owner
@@ -2493,8 +2493,10 @@ environment, DevOps or the human fixes `.agile-team.toml`, and the PO then
 calls `continue_story`; the next Proxy request reads the file again. If the
 ACs are wrong, the PO asks the human, and the liaison sends corrected ACs
 with `story amend`. That sends the story back to design and clears the hold.
-The hold text still ends `Edit the file; no state change is needed`; for
-the PO that means the two fixes above. The hold counts as a setback like any gate
+The hold text names these two fixes and never tells a role to edit the
+file (s138). A `suite_runs` value the gate can't use is held the same way:
+`… only the runner writes story files: ask the human with ask_user for a
+valid suite_runs`. The hold counts as a setback like any gate
 hold, so the same unfixed hold repeated can escalate.
 
 **State and snapshot.** `state.json` keeps no environment for a story. The
@@ -2785,7 +2787,7 @@ router, the `priority` events and the snapshot read only that copy.
 
 | When | What loads | On a refusal |
 |---|---|---|
-| `agile-team start` (every mode), before the PO or router runs | every story that is not done and has a file | the command fails with `story files: <refusal>; fix depends_on in .team/stories` and the run does not start |
+| `agile-team start` (every mode), before the PO or router runs | every story that is not done and has a file | the command fails with `story files: <refusal>; story amend cannot change depends_on, so the human fixes it: edit depends_on in the story's file in .team/stories, git commit it, then agile-team start again (agile-team accept-checkout first if start halts on the moved checkout)` and the run does not start |
 | `start_sprint`, after its other refusals pass, before the sprint opens | the same | the tool returns the refusal and the sprint does not begin |
 | `story new`, and the runner's intake before it commits the draft | the draft only | the command, or the intake, refuses the draft (see below) |
 
@@ -2816,7 +2818,7 @@ story ids`), and every id must be a story in state (`<file>: depends_on
 names unknown stories: s7`). A new story can't close a cycle, because no
 story lists it yet. The `story-opened` event's data has `"depends_on"`.
 `story amend` refuses a changed list (only the ACs change), so a wrong list,
-or a `start` refused with `fix depends_on in .team/stories`, is the human's
+or a `start` refused for a bad list, is the human's
 to fix: with the run stopped, they edit and commit the file, then
 `accept-checkout` if the next start halts on the moved checkout.
 
