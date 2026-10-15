@@ -57,6 +57,7 @@ SAMPLES = {
     "answer": {"message": "m1"},
     "requirement-changed": {"id": "REQ-1", "change": "added", "reason": BODY},
     "story-opened": {"title": BODY},
+    "story-amended": {"old": [{"id": BODY}], "new": [{"id": "AC2"}], "step": "x", "from_step": "y"},
     "boundary": {"outcome": "pass", "sprint": 1, "edge": "end", "stage": "s", "reason": BODY},
     "sprint-start": {"goal": BODY, "sprint": 1},
     "sprint-add": {"reason": BODY, "sprint": 1, "stories": ["s3"]},
