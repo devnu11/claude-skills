@@ -334,10 +334,10 @@ def test_addenda_follow_the_extends_chain() -> None:
     assert body == "LEAD\n\nDecided once.\n\nBOSS\n\nBoss note."
 
 
-def test_leadership_reaches_po_and_manager_only(tmp_path: Path) -> None:
-    (tmp_path / ".team" / "roles").mkdir(parents=True)
-    (tmp_path / ".team" / "roles" / "_leadership.md").write_text("Raise budgets slowly.")
-    real = RoleBook.for_repo(tmp_path, {})
+def test_leadership_reaches_po_and_manager_only(repo: Path) -> None:
+    system.make_dirs(repo / ".team" / "roles")
+    system.write_text(repo / ".team" / "roles" / "_leadership.md", "Raise budgets slowly.")
+    real = RoleBook.for_repo(repo, {})
     assert "_leadership" not in real.names()
     for name in ("product-owner", "manager"):
         assert "Raise budgets slowly." in real.resolve(name).body
