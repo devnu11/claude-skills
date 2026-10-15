@@ -793,7 +793,7 @@ class Checks:
             start = system.monotonic()
             run = self._test_run("test")
             took = system.monotonic() - start
-            runs.append(suite_runs.SuiteRun(n, total, run.code, took, run.out, _failures_of(run)))
+            runs.append(suite_runs.SuiteRun(n, total, run.code, took, run.out, _read_failures(run)))
             if run.code != 0:
                 break
         return runs
@@ -844,14 +844,14 @@ def _ran(name: str, code: int, out: str) -> Ran:
     return Ran(name, code, result_tail(out))
 
 
-def _failures_of(run: TestRun) -> dict[str, str]:
+def _read_failures(run: TestRun) -> dict[str, str]:
     """The run's report failures, {} without a report (G5)."""
     return run.report.failures if run.report else {}
 
 
 def _test_ran(name: str, run: TestRun) -> Ran:
     """A test command's Ran: code, output tail and failures."""
-    return Ran(name, run.code, result_tail(run.out), failures=_failures_of(run))
+    return Ran(name, run.code, result_tail(run.out), failures=_read_failures(run))
 
 
 def _with_ran(outcome: Outcome, ran: Ran | None) -> Outcome:
