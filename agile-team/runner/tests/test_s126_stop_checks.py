@@ -550,12 +550,13 @@ def test_stop_stages_are_after_step_rows() -> None:
             stages.Name.STOP_SUITE,
             stages.Name.STOP_RED,
             stages.Name.STOP_PRESENTATION,
+            stages.Name.STOP_REQUIREMENTS,
         ]
     )
     rows = [stages.STAGES[n] for n in names]
     assert all(r.when == stages.When.AFTER and r.attach == stages.Attach.STEP for r in rows)
     labels = [r.label for r in rows]
-    assert len(set(labels)) == 5 and all(len(x) <= 24 for x in labels)
+    assert len(set(labels)) == 6 and all(len(x) <= 24 for x in labels)
     assert stages.reserved("stop.anything")
 
 

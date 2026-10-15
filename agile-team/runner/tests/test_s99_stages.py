@@ -57,6 +57,7 @@ EXPECTED = [
     "stop.suite",
     "stop.red",
     "stop.presentation",
+    "stop.requirements",
 ]
 
 

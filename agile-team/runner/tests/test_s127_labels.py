@@ -41,6 +41,7 @@ LB2 = {
     "stop.suite": "stop: suite + coverage",
     "stop.red": "stop: new tests red",
     "stop.presentation": "stop: presentation",
+    "stop.requirements": "stop: requirements",
 }
 
 
