@@ -44,3 +44,23 @@ proposal m137 (copy with a hash) asks for the same fix.
 - Shares are capped at 5 MiB each, because they are committed.
 - No new dependency (stdlib `hashlib`, `base64`). `system` gains
   `write_bytes`.
+
+## Amended by s133 (2026-10-14)
+
+Design: `agile-team/docs/design/s133.md`. The s120 review found that a
+hand-edited story or queue file could get past the checks (F2, F3, F4).
+
+- **A shared path is resolved, then checked.** It passes only when it already
+  is its own resolved form (no `.`, `..`, link or absolute part) and its parent
+  is `<docs>/design`. Any other path is a `shared:` problem. Only the paths
+  that pass reach the Proxy's scope and sandbox, the briefs and the hash
+  check. This is stricter than "resolves inside the folder": a link that
+  stays inside the folder is refused too, because the runner never writes
+  one, and refusing it means the listed path and the read path are the same.
+- **A request file is typed on load.** `Share.from_json` gives a `Share` or a
+  `BadRequest` with its reason, and never `None`. A bad request is settled
+  once as `refused: <reason>`, with one `share` event and no write. It used
+  to be skipped silently on every tick, or to raise in the router.
+- **The story id is passed in.** The brief section gets its story from its
+  caller (`Brief(story, role)`). It no longer works the id out from a file
+  name.

@@ -2469,6 +2469,21 @@ gone, or its frontmatter can't be rewritten without touching other keys,
 the share is `refused: <why>`. Each outcome shows under `status`'s
 `shares`.
 
+**Bad request files (s133).** The runner checks each request file when it
+loads it: a JSON object whose `story`, `name`, `sha256` and `data` are
+strings and whose `at` is a number, with `data` valid base64 that matches
+`sha256`. A file that fails is settled once as
+`refused: bad request file f<N>.json: <problem>`. It emits one `share` event
+(story `null`, outcome `refused`), writes nothing and is never retried.
+
+**Where a shared path may point (s133).** Before a listed path is used, it
+is resolved (`.`, `..`, symlinks, absolute paths). It counts only when it
+already is its own resolved form and sits directly in `<docs>/design/`.
+Otherwise it is a `shared:` problem
+(`path <p> resolves to <where>; a shared file must sit directly in <docs>/design/`).
+A problem holds the story at acceptance, and the path never reaches the
+Proxy's scope or sandbox, a brief or the hash check.
+
 **Who reads them.** Every role reads `<docs>/design/`. The Customer Proxy
 gets read access to exactly its story's shared paths, in its scope and its OS
 sandbox. The architect's and the Proxy's briefs have a `## Shared files`
