@@ -507,6 +507,7 @@
     "agile-team/runner/agile_team/gates.py::_red_by_exit::verb-name": 1,
     "agile-team/runner/agile_team/gates.py::_routable::verb-name": 1,
     "agile-team/runner/agile_team/gates.py::_routed::verb-name": 1,
+    "agile-team/runner/agile_team/gates.py::_product_backlog_refusal::verb-name": 1,
     "agile-team/runner/agile_team/gates.py::_status_refusal::verb-name": 1,
     "agile-team/runner/agile_team/gates.py::_story_checks::verb-name": 1,
     "agile-team/runner/agile_team/gates.py::_stuck::verb-name": 1,
