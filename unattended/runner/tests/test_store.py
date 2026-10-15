@@ -19,7 +19,8 @@ def state(name: str = "nightly") -> JobState:
 def test_state_round_trips() -> None:
     original = state()
     original.spec.auth = Auth.API_KEY
-    original.bounds = Bounds(deadline=5.0, max_resumes=3, max_cost=1.5)
+    original.spec.stop_command = "agile-team stop"
+    original.bounds = Bounds(deadline=5.0, max_resumes=3, max_cost=1.5, hardstop=60.0)
     original.mark(JobStatus.WAITING, "session limit")
     loaded = JobState.from_json(original.to_json())
     assert loaded == original
@@ -31,6 +32,13 @@ def test_state_without_sleep_keeps_the_machine_awake() -> None:
     data = json.loads(state().to_json())
     del data["spec"]["sleep"]
     assert JobState.from_json(json.dumps(data)).spec.sleep is SleepPolicy.PREVENT
+
+
+def test_state_from_before_hard_stops_loads() -> None:
+    data = json.loads(state().to_json())
+    del data["spec"]["stop_command"], data["bounds"]["hardstop"]
+    loaded = JobState.from_json(json.dumps(data))
+    assert (loaded.spec.stop_command, loaded.bounds.hardstop) == ("", None)
 
 
 def test_mark_clears_reason() -> None:

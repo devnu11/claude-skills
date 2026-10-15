@@ -261,11 +261,22 @@ class Progress:
 
 @dataclass
 class Bounds:
-    """The limits that end a job: deadline (epoch seconds), resumes and total cost."""
+    """The limits that end a job: deadline (epoch seconds), resumes and total cost.
+
+    ``hardstop`` is how many seconds after the deadline a run is ended by force;
+    None keeps the deadline soft (it bounds waits only).
+    """
 
     deadline: float | None = None
     max_resumes: int = DEFAULT_MAX_RESUMES
     max_cost: float | None = None
+    hardstop: float | None = None
+
+    def deadline_stop(self) -> Stop | None:
+        """The deadline's stop sequence, or None without a deadline."""
+        if self.deadline is None:
+            return None
+        return Stop(StopCause.DEADLINE, self.deadline, self.hardstop)
 
     def budget_left(self, spent: float) -> float | None:
         """USD the next run may spend, or None without a cost cap."""
@@ -296,3 +307,74 @@ def _cost(bounds: Bounds, progress: Progress) -> str | None:
 
 
 CHECKS: tuple[Callable[[Bounds, Progress], str | None], ...] = (_deadline, _resumes, _cost)
+
+
+# ----- stop phases ---------------------------------------------------------------
+
+SPAN_UNITS = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
+
+
+def span(seconds: float) -> str:
+    """A duration as ``parse_duration`` reads it: ``20m``, ``1h30m``, ``45s``."""
+    left, parts = round(seconds), []
+    for unit, size in SPAN_UNITS:
+        count, left = divmod(left, size)
+        parts += [f"{count}{unit}"] if count else []
+    return "".join(parts) or "0s"
+
+
+class Phase(StrEnum):
+    """Where a stop sequence stands: not started, asking the job to stop, or ending it."""
+
+    OPEN = "open"
+    GRACEFUL = "graceful"
+    HARD = "hard"
+
+
+class StopCause(StrEnum):
+    """What started a stop sequence."""
+
+    DEADLINE = "deadline"
+    IDLE = "idle"
+
+
+@dataclass(frozen=True)
+class Stop:
+    """A stop sequence: graceful from ``at``, hard ``hard_after`` s later (never when None).
+
+    ``idle`` is the idle span that started an idle stop, for its reason.
+    """
+
+    cause: StopCause
+    at: float
+    hard_after: float | None = None
+    idle: float = 0.0
+
+    def phase(self, now: float) -> Phase:
+        """The first phase in ``PHASES`` that has started by ``now``, else ``OPEN``."""
+        return next((p for p, start in PHASES if _started(start(self), now)), Phase.OPEN)
+
+    def reason(self, phase: Phase) -> str:
+        """Why the job ended in ``phase``: ``deadline (graceful)``, ``idle (…; hard stop)``."""
+        hard = span(self.hard_after or 0.0)
+        return REASONS[self.cause, phase].format(hard=hard, idle=span(self.idle))
+
+
+def _started(start: float | None, now: float) -> bool:
+    return start is not None and now >= start
+
+
+def _hard_start(stop: Stop) -> float | None:
+    return None if stop.hard_after is None else stop.at + stop.hard_after
+
+
+PHASES: tuple[tuple[Phase, Callable[[Stop], float | None]], ...] = (
+    (Phase.HARD, _hard_start),
+    (Phase.GRACEFUL, lambda stop: stop.at),
+)
+REASONS: dict[tuple[StopCause, Phase], str] = {
+    (StopCause.DEADLINE, Phase.GRACEFUL): "deadline (graceful)",
+    (StopCause.DEADLINE, Phase.HARD): "deadline (hard stop after {hard})",
+    (StopCause.IDLE, Phase.GRACEFUL): "idle (no progress for {idle}; graceful)",
+    (StopCause.IDLE, Phase.HARD): "idle (no progress for {idle}; hard stop)",
+}

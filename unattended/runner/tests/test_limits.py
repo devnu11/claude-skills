@@ -5,7 +5,17 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from unattended import limits
-from unattended.limits import Bounds, OutcomeKind, Progress, Waits, Wake, WakeOn
+from unattended.limits import (
+    Bounds,
+    OutcomeKind,
+    Phase,
+    Progress,
+    Stop,
+    StopCause,
+    Waits,
+    Wake,
+    WakeOn,
+)
 
 EDMONTON = ZoneInfo("America/Edmonton")
 NOW = datetime(2026, 10, 9, 14, 0, tzinfo=EDMONTON)
@@ -231,3 +241,54 @@ def test_budget_left() -> None:
     assert Bounds().budget_left(5.0) is None
     assert Bounds(max_cost=2.0).budget_left(0.5) == 1.5
     assert Bounds(max_cost=2.0).budget_left(2.5) == 0.0
+
+
+# ----- stop phases --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("seconds", "text"),
+    [(0, "0s"), (45, "45s"), (1200, "20m"), (3600, "1h"), (5400, "1h30m"), (90061, "1d1h1m1s")],
+)
+def test_span(seconds: float, text: str) -> None:
+    assert limits.span(seconds) == text
+    assert seconds == 0 or limits.parse_duration(text) == seconds
+
+
+def test_a_soft_deadline_never_goes_hard() -> None:
+    stop = Stop(StopCause.DEADLINE, 100.0)
+    phases = [stop.phase(t) for t in (99.0, 100.0, 1e12)]
+    assert phases == [Phase.OPEN, Phase.GRACEFUL, Phase.GRACEFUL]
+
+
+def test_a_hard_deadline_goes_hard_after_the_grace() -> None:
+    stop = Stop(StopCause.DEADLINE, 100.0, hard_after=60.0)
+    assert [stop.phase(t) for t in (99.0, 100.0, 159.0, 160.0)] == [
+        Phase.OPEN, Phase.GRACEFUL, Phase.GRACEFUL, Phase.HARD,
+    ]  # fmt: skip
+
+
+def test_no_grace_goes_hard_at_once() -> None:
+    assert Stop(StopCause.IDLE, 100.0, hard_after=0.0).phase(100.0) is Phase.HARD
+
+
+@pytest.mark.parametrize(
+    ("stop", "phase", "reason"),
+    [
+        (Stop(StopCause.DEADLINE, 0.0), Phase.GRACEFUL, "deadline (graceful)"),
+        (Stop(StopCause.DEADLINE, 0.0, 1200.0), Phase.HARD, "deadline (hard stop after 20m)"),
+        (Stop(StopCause.IDLE, 0.0, idle=3600.0), Phase.GRACEFUL,
+         "idle (no progress for 1h; graceful)"),
+        (Stop(StopCause.IDLE, 0.0, 0.0, 7200.0), Phase.HARD,
+         "idle (no progress for 2h; hard stop)"),
+    ],
+)  # fmt: skip
+def test_stop_reasons(stop: Stop, phase: Phase, reason: str) -> None:
+    assert stop.reason(phase) == reason
+
+
+def test_deadline_stop() -> None:
+    assert Bounds().deadline_stop() is None
+    assert Bounds(deadline=5.0, hardstop=60.0).deadline_stop() == Stop(
+        StopCause.DEADLINE, 5.0, 60.0
+    )
