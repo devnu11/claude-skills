@@ -1,1 +1,17 @@
-{}
+{
+  "s73": [
+    "agile-team/runner/tests/test_fullcheck.py::test_order_is_toolchain_then_e2e_and_unset_are_left_out",
+    "agile-team/runner/tests/test_s118_descriptions.py::test_a_rewritten_stage_description[boundary.check-Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_both_callers_use_the_one_helper",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_set_drops_the_test_check_and_runs_the_command_once",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_shortfall[-None]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_shortfall[1 failed\\nTOTAL 80%-None]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_shortfall[TOTAL 80%-80.0]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_shortfall[TOTAL 96%-None]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_coverage_shortfall[no total-None]",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_fail_under_stop_with_no_failing_test_reads_as_a_shortfall",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_static_still_precedes_coverage",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_superseded_by_is_data_and_the_toolchain_rows_are_kept",
+    "agile-team/runner/tests/test_s73_boundary_once.py::test_the_stage_description_says_the_suite_runs_once"
+  ]
+}
