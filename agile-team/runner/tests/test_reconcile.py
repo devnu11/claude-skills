@@ -16,7 +16,8 @@ from agile_team.live import TURNS, Turn
 from agile_team.po_tools import PoRun, PoTurn, Start
 from claude_agent_sdk import AssistantMessage, TextBlock
 
-from .conftest import result_message
+from .conftest import FakeQuery, result_message
+from .test_cli import any_tool, start_args
 
 OPUS = "claude-opus-4-1"
 USAGE = {"input_tokens": 1000, "output_tokens": 200}
@@ -339,3 +340,26 @@ def test_turn_from_line_rejects_bad_lines(text: str) -> None:
 
 def test_turn_line_is_json() -> None:
     assert json.loads(tline(1).line())["role"] == "product-owner"
+
+
+# ----- a real start reconciles before the runtime loads state (RC1, RC7) ---------------
+
+
+def test_cmd_start_reconciles_before_make_runtime(
+    configured: Path, key_home: Path, fake, capsys, monkeypatch
+) -> None:
+    any_tool(fake)
+    run_dir = cli._load_config(configured).run_dir
+    put_turns(run_dir, tline(1.0), tline(2.0))
+    seen: list[int] = []
+    real = cli.make_runtime
+
+    def spy(place, query):
+        seen.append(len(po_entries(run_dir)))
+        return real(place, query)
+
+    monkeypatch.setattr(cli, "make_runtime", spy)
+    args = start_args(configured, key_home, "--task", "t")
+    assert cli.cmd_start(args, FakeQuery()) == 0
+    assert seen == [1]
+    assert "ledgered $2.00 for product-owner" in capsys.readouterr().err
