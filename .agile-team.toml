@@ -17,8 +17,17 @@ preset = "python"
 test = "uv run --directory agile-team/runner pytest -n auto -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner}"
 coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner}"
 lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check ."
-static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check ."
+# house-rules over the whole repo (s157 R4): gates, the quality step and both
+# boundary checks run `static`, and its fail lines route to their owners.
+static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check . && uv run --frozen --quiet --project house-rules/runner house-rules check"
 pragma = "# pragma: no cover"
+
+# The stop hook's lint check (s126). Runs under sh from the repo root, so "$PWD"
+# is the repo root before uv's --directory (s157, ADR-0081). `fix` throws away
+# any hand edit to the house-rules baseline, then lets it only shrink (R6).
+[toolchain.files]
+fix = "uv run --directory {root} ruff check --fix --exit-zero --quiet {files} && uv run --directory {root} ruff format --quiet {files}; git restore --source=HEAD --staged --worktree -- .house-rules-baseline.json && uv run --frozen --quiet --project house-rules/runner house-rules baseline"
+lint_files = 'uv run --directory {root} ruff check --quiet {files} && uv run --frozen --quiet --directory {root} --project "$PWD/house-rules/runner" house-rules check {files}'
 
 [toolchain.globs]
 source = [
