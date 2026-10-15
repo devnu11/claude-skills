@@ -119,6 +119,7 @@ REWORK_BRIEF = (
     "(you checked the existing tests already cover it)."
 )
 GATE_CHORE = "gate: {step} on {story}"
+RECORD_FAILED = "the {step} record was not committed: {error}"
 QUALITY_CHORE = "quality checks for {story}"
 PENDING_SUBJECT = "chore({story}): pending tests"
 PENDING_WHERE = {"implement": "implement gate"}
@@ -146,6 +147,23 @@ FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
 
 QueryFn = Callable[..., AsyncIterator[Any]]
 PrepareFn = sandbox.PrepareFn
+
+
+@dataclass(frozen=True)
+class FileEdit:
+    """A runner-written file: its repo-relative path, its text before and after."""
+
+    file: str
+    old: str
+    new: str
+
+
+@dataclass(frozen=True)
+class Recorded:
+    """A pass record's gate-report fields, or the hold that replaces the pass (s131)."""
+
+    fields: dict[str, Any] = field(default_factory=dict)
+    failure: Outcome | None = None
 
 
 @dataclass
@@ -1116,29 +1134,53 @@ class Runtime:
         return f"feat({story.id}): {story.title}"
 
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
-        """Evaluate the story's current step gate and advance the story."""
+        """Evaluate the step's gate, commit its pass record, then advance the story (s131)."""
         self.verify_checkout()
         outcome = self._evaluate(plan, handoff)
         self._apply_pending(plan, outcome)
-        result = self._advance_and_log(plan, outcome)
-        record = PASS_RECORDS.get(result["step"])
-        if record and result["verdict"] is Verdict.PASS:
-            result |= record(self, plan, handoff)
-        return result
+        record = self._pass_record(plan, handoff) if outcome.verdict is Verdict.PASS else Recorded()
+        return self._advance_and_log(plan, record.failure or outcome) | record.fields
+
+    def _pass_record(self, plan: Plan, handoff: Handoff) -> Recorded:
+        """Run the step's PASS_RECORDS row; a GitError becomes a gate hold naming it (s131 R2)."""
+        row = PASS_RECORDS.get(plan.story.step)  # type: ignore[union-attr]
+        if row is None:
+            return Recorded()
+        try:
+            return Recorded(row(self, plan, handoff))
+        except GitError as error:
+            reason = RECORD_FAILED.format(step=plan.story.step, error=error)  # type: ignore[union-attr]
+            return Recorded(failure=Outcome(Verdict.HOLD, reason))
 
     def _record_tooling(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """R1: write the Tooling section into the story file and commit only that file."""
         story = plan.story.id  # type: ignore[union-attr]
         file = story_spec.file_of(self.config, story)
-        path = self.config.repo / file
-        old = system.read_text(path)
-        new = ops_review.with_section(old, handoff.tooling)
-        sha = None
-        if new != old:
-            system.write_text(path, new)
-            sha = self.git.commit([file], ops_review.RECORD_SUBJECT.format(story=story))
+        old = system.read_text(self.config.repo / file)
+        edit = FileEdit(file, old, ops_review.with_section(old, handoff.tooling))
+        sha = self._commit_edit(edit, ops_review.RECORD_SUBJECT.format(story=story))
         self.record_checkout()
         return {"tooling": {"file": file, "commit": sha}}
+
+    def _commit_edit(self, edit: FileEdit, subject: str) -> str | None:
+        """Write ``edit`` and commit only its file; None when unchanged.
+
+        On a GitError, restore the old text and re-raise.
+        """
+        if edit.new == edit.old:
+            return None
+        system.write_text(self.config.repo / edit.file, edit.new)
+        try:
+            return self.git.commit([edit.file], subject)
+        except GitError:
+            self._restore(edit)
+            raise
+
+    def _restore(self, edit: FileEdit) -> None:
+        """Put ``edit``'s file back to its old text and unstage it (s131 R2)."""
+        system.write_text(self.config.repo / edit.file, edit.old)
+        # attempt, not run: git may be what broke, and a raise here would hide the first error.
+        self.git.attempt("reset", "-q")
 
     def _attach_ops_review(self, plan: Plan) -> None:
         """B1: the ops-review section, only for a story at ops-review."""
