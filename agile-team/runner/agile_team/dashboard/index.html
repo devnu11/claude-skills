@@ -265,7 +265,11 @@ select { max-width: 100%; font: inherit; font-size: 12.5px; padding: 3px 6px; bo
 .col.empty { flex: 0 0 44px; padding: 8px 4px; }
 .col.empty h3 { writing-mode: vertical-rl; margin: 2px auto; gap: 6px; justify-content: flex-start; }
 .col h3 span { color: var(--muted); font-weight: 500; }
-.story .pill { white-space: normal; }
+.story .pill {
+  display: inline-block; max-width: 100%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+}
+.story .pill .dot { display: inline-block; margin-right: 5px; vertical-align: middle; }
 .story { overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; }
 .story.working { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .story .sid { font-size: 11.5px; color: var(--muted); font-weight: 600; }
@@ -500,6 +504,11 @@ const fmt = {
 const finished = (s) => s.ended_at != null;
 const pill = (text, tone = "", dot = true) =>
   `<span class="pill tone-${tone}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
+
+/** A story card's pill (s150): one line, cut by CSS; its tooltip is `title`, else its text. */
+const cardPill = (text, { tone = "", title = text, dot = true } = {}) =>
+  `<span class="pill tone-${tone}" title="${esc(title)}">${dot ? '<span class="dot"></span>' : ""}${esc(text)}</span>`;
+
 const ENV_MARKS = {
   pass: { tone: "good", mark: " ✓", title: "passed" },
   fail: { tone: "critical", mark: " ✗", title: "failed" },
@@ -2019,7 +2028,7 @@ function backlogGroups(view) {
   };
 }
 
-const revertPill = (s) => s.reverts ? pill(`reverted (${s.reverts}×)`, "warning", false) : "";
+const revertPill = (s) => s.reverts ? cardPill(`reverted (${s.reverts}×)`, { tone: "warning", dot: false }) : "";
 
 function storyLabel(story) {
   return story.label ? pill(story.label, LABEL_TONE[story.label] ?? "") : "";
@@ -2463,9 +2472,9 @@ function storyCard(view, s, act) {
   const reqs = view.requirements.filter((r) => r.covers.some((c) => c.startsWith(s.id + "/"))).map((r) => r.id);
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
-    working ? pill(`▶ ${act.role}`, "accent") : "",
+    working ? cardPill(`▶ ${act.role}`, { tone: "accent" }) : "",
     revertPill(s),
-    s.wait ? pill(`⏸ ${s.wait.title}`, WAIT_TONE[s.wait.reason] ?? "warning") : "",
+    s.wait ? cardPill(`⏸ ${s.wait.reason}`, { tone: WAIT_TONE[s.wait.reason] ?? "warning", title: s.wait.title }) : "",
   ].join("");
   return `<div class="story ${working ? "working" : ""}">
     <div class="sid">${s.position != null ? `#${s.position} · ` : ""}${esc(s.id)}${envPills(s)}
