@@ -81,8 +81,9 @@ still open, the new one holds its commits too:
 - If CI fails on the first push, the team tells you the PR is **not**
   ready. You get the failing jobs and test lines. The Product Owner asks
   the liaison for a bug story, the liaison writes it, and the runner opens
-  it first in the next sprint. The team branch is not rebased this time. If CI is still running when the wait ends, the team
-  tells you it is not ready yet and waits again.
+  it first in the next sprint. The team branch is not rebased this time.
+  If CI is still running when the wait ends, the team tells you it is not
+  ready yet and waits again.
 - If CI fails only after the rebase, the sprint still ends. The team tells
   you the PR is **not** ready, with the failing checks: the rebase onto
   your newer main is what broke it.
