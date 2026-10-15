@@ -58,7 +58,7 @@ class Scratch:
         for name in ("prepare", "drop", "remove"):
             monkeypatch.setattr(sr.ScratchRebase, name, self._record(name))
         monkeypatch.setattr(sr.ScratchRebase, "head", lambda s: self.new_head)
-        monkeypatch.setattr(sr.ScratchRebase, "refusal", self._refusal)
+        monkeypatch.setattr(sr.ScratchRebase, "refusal", self._refusal_method())
 
     def _record(self, name):
         def method(scratch, *args):
@@ -66,9 +66,12 @@ class Scratch:
 
         return method
 
-    def _refusal(self, scratch, old: str) -> str:
-        self.calls.append(("refusal", old))
-        return self.why
+    def _refusal_method(self):
+        def refusal(scratch, old: str) -> str:
+            self.calls.append(("refusal", old))
+            return self.why
+
+        return refusal
 
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]

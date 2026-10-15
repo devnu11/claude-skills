@@ -237,7 +237,7 @@ def test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing(env: Env) -> 
     b = env.rt.state.boundary
     assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
     assert b.failure.stage is bd.Stage.REBASE and b.sync_from
-    assert b.failure.files == ("a.py",)
+    assert b.failure.files == ["a.py"]
     assert env.br.due().kind is bd.StepKind.REBASE_FIX
 
 
