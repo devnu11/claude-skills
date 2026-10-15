@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from agile_team import system
+from agile_team.numbered_queue import NumberedQueue
 from agile_team.relay import Relay, Told
 
 from .fake_system import FAKE_REPO, FakeSystem
@@ -84,7 +85,7 @@ def test_told_is_empty_without_a_folder(fake: FakeSystem) -> None:
 def test_a_lost_race_lands_in_the_next_number(fake: FakeSystem, monkeypatch) -> None:
     relay = Relay(RUN)
     fake.put(relay.messages_dir / "t1.md", "first")
-    monkeypatch.setattr(Relay, "_next_number", lambda self: 1)
+    monkeypatch.setattr(NumberedQueue, "_next_number", lambda self: 1)
     told = relay.tell("second")
     assert told.id == "t2" and fake.text_of(told.path) == "second"
     assert fake.text_of(relay.messages_dir / "t1.md") == "first"
