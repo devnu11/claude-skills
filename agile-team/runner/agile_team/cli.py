@@ -897,11 +897,11 @@ COMMANDS = (
             cmd_share,
             ((("source",), {"help": "the file to share; its name is kept (no stdin)"}),
              (("--story",), {"required": True, "help": "the story it is for, e.g. s118"}))),
+    Command("story", "write a story (new) or replace its ACs (amend) from a draft file; "
+            "the runner commits it", cmd_story, STORY_ARGS),
     Command("reply", "reply on a story's dashboard thread (a file, or - for stdin)", cmd_reply,
             ((("story",), {}),
              (("source",), {"help": "file holding the reply, or - to read stdin"}))),
-    Command("story", "write a story (new) or replace its ACs (amend) from a draft file; "
-            "the runner commits it", cmd_story, STORY_ARGS),
     Command("opinion", "record the liaison's opinion on a story (a file, or - for stdin)",
             cmd_opinion,
             ((("story",), {}),
