@@ -120,19 +120,19 @@ def parsed(args: tuple[str, ...]):
     return cli.build_parser().parse_args(list(args))
 
 
-def test_global_argv(configured: Path) -> None:
-    assert repin.global_argv(configured, None) == ("--repo", str(configured))
-    assert repin.global_argv(configured, "/h") == ("--repo", str(configured), "--home", "/h")
-    assert repin.global_argv(configured, "") == ("--repo", str(configured))
+def test_build_global_argv(configured: Path) -> None:
+    assert repin.build_global_argv(configured, None) == ("--repo", str(configured))
+    assert repin.build_global_argv(configured, "/h") == ("--repo", str(configured), "--home", "/h")
+    assert repin.build_global_argv(configured, "") == ("--repo", str(configured))
 
 
 def test_start_argv(configured: Path) -> None:
-    with_home = repin.start_argv(repin.global_argv(configured, "/h"))
+    with_home = repin.start_argv(repin.build_global_argv(configured, "/h"))
     assert with_home == ("--repo", str(configured), "--home", "/h", "start", "--resume")
     ns = parsed(with_home)
     assert (ns.command, ns.repo, ns.home) == ("start", str(configured), "/h")
     assert ns.mode is cli.StartMode.RESUME
-    without = repin.start_argv(repin.global_argv(configured, None))
+    without = repin.start_argv(repin.build_global_argv(configured, None))
     assert without == ("--repo", str(configured), "start", "--resume")
     ns = parsed(without)
     assert (ns.command, ns.repo, ns.home) == ("start", str(configured), None)
@@ -306,14 +306,14 @@ def test_a_stop_request_keeps_the_request_and_does_not_repin(
     rt.state.repin = NEW
     system.make_dirs(rt.config.run_dir)
     system.write_text(rt.config.run_dir / "stop", "")
-    assert cli._repin_or(0, rt, Pin(configured, repin.global_argv(configured, None))) == 0
+    assert cli._repin_or(0, rt, Pin(configured, repin.build_global_argv(configured, None))) == 0
     assert rt.state.repin == NEW and fake.execs == [] and argv_of(fake) == []
 
 
 def test_a_failed_exit_or_a_halt_does_not_repin(pinned, make_runtime, fake, configured) -> None:
     rt = make_runtime()
     rt.state.repin = NEW
-    options = repin.global_argv(configured, None)
+    options = repin.build_global_argv(configured, None)
     assert cli._repin_or(1, rt, Pin(configured, options)) == 1
     rt.halted_by = object()
     assert cli._repin_or(0, rt, Pin(configured, options)) == 0
@@ -413,7 +413,7 @@ def test_a_failing_rollback_raises(pinned, configured, run_dir, fake) -> None:
 
 def test_roll_back_does_nothing_before_the_swap(pinned, configured, run_dir, fake) -> None:
     with pytest.raises(Exec):
-        Pin(configured, repin.global_argv(configured, None)).roll_back(trial(), "x")
+        Pin(configured, repin.build_global_argv(configured, None)).roll_back(trial(), "x")
     assert argv_of(fake) == []
 
 
