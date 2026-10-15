@@ -16,7 +16,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, get_args
@@ -26,7 +26,7 @@ from claude_agent_sdk.types import PermissionMode
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
-from .limits import Bounds, local, parse_duration, parse_until
+from .limits import Bounds, local, parse_duration, parse_until, span
 from .prompt_job import PromptJob
 from .store import (
     DEFAULT_RESUME_PROMPT,
@@ -97,6 +97,10 @@ def iso(epoch: float | None) -> str | None:
     return local(epoch).isoformat(timespec="seconds") if epoch is not None else None
 
 
+def optional_span(seconds: float | None) -> str | None:
+    return span(seconds) if seconds is not None else None
+
+
 # ----- building a job ------------------------------------------------------------
 
 
@@ -111,6 +115,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         command=args.command or "",
         resume_prompt=args.resume_prompt or DEFAULT_RESUME_PROMPT,
         resume_command=args.resume_command or "",
+        stop_command=args.stop_command or "",
         auth=args.auth,
         key_file=str(Path(args.key_file).resolve()) if args.key_file else None,
         model=args.model,
@@ -122,7 +127,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
 
 KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
     JobKind.PROMPT: ("resume_prompt", "model", "permission_mode"),
-    JobKind.COMMAND: ("resume_command",),
+    JobKind.COMMAND: ("resume_command", "stop_command"),
 }
 
 
@@ -179,12 +184,22 @@ def _future(deadline: float, now: float) -> float:
 
 def updated_bounds(bounds: Bounds, args: argparse.Namespace) -> Bounds:
     """``bounds`` with whichever limits the flags give replaced."""
-    deadline = deadline_from(args, time.time())
-    return Bounds(
-        deadline=bounds.deadline if deadline is None else deadline,
-        max_resumes=bounds.max_resumes if args.max_resumes is None else args.max_resumes,
-        max_cost=bounds.max_cost if args.max_cost is None else args.max_cost,
-    )
+    given = {name: value for name, value in limits_given(args).items() if value is not None}
+    return replace(bounds, **given)
+
+
+def limits_given(args: argparse.Namespace) -> dict[str, Any]:
+    """Each limit the flags set, None where a flag is absent."""
+    return {
+        "deadline": deadline_from(args, time.time()),
+        "max_resumes": args.max_resumes,
+        "max_cost": args.max_cost,
+        "hardstop": _optional_duration(args.hardstop),
+    }
+
+
+def _optional_duration(text: str | None) -> float | None:
+    return None if text is None else _duration(text)
 
 
 def auth_setup(spec: Spec, home: Path) -> AuthSetup:
@@ -266,7 +281,7 @@ LAUNCHERS: dict[Launch, Callable[[Job, argparse.Namespace], int]] = {
 def cmd_start(args: argparse.Namespace) -> int:
     """Create the job, then supervise it detached or in the foreground."""
     spec = spec_from(args)
-    bounds = Bounds(deadline_from(args, time.time()), args.max_resumes, args.max_cost)
+    bounds = updated_bounds(Bounds(), args)
     require_auth(spec, Path(args.home))
     job = job_home(args).create(JobState(args.name, spec, bounds))
     job.event("start", {"kind": spec.kind, "cwd": spec.cwd})
@@ -290,7 +305,7 @@ def report(job: Job) -> dict[str, Any]:
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
-        "deadline": iso(st.bounds.deadline),
+        "deadline": iso(st.bounds.deadline), "hardstop": optional_span(st.bounds.hardstop),
         "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:
@@ -478,12 +493,15 @@ def limit_args(max_resumes: int | None) -> tuple[Arg, ...]:
         (("--max-resumes",), {"type": int, "default": max_resumes,
                               "help": f"most automatic resumes (default {max_resumes})"}),
         (("--max-cost",), {"type": float, "help": "stop resuming once this many USD are spent"}),
+        (("--hardstop",), {"metavar": "DURATION",
+                           "help": "end a run by force this long after the deadline (e.g. 20m)"}),
     )  # fmt: skip
 
 
 START_ARGS: tuple[Arg, ...] = (
     NAME_ARG,
     (("--resume-command",), {"help": "command for resumes (default: the command)"}),
+    (("--stop-command",), {"help": "command that asks the job to stop, run once at the deadline"}),
     (("--resume-prompt",), {"help": f"prompt for resumes (default: {DEFAULT_RESUME_PROMPT!r})"}),
     (("--cwd",), {"default": ".", "help": "directory the job runs in (default: cwd)"}),
     (("--auth",), {"type": Auth, "choices": list(Auth), "default": Auth.LOGIN}),

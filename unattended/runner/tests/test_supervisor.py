@@ -13,6 +13,7 @@ from unattended import supervisor
 from unattended.limits import GRACE, Bounds, Metrics, Outcome, OutcomeKind, WakeOn, local
 from unattended.store import EVENTS_FILE, Job, JobKind, JobStatus, Spec
 from unattended.supervisor import StopRequested, Supervisor
+from unattended.watch import RunWatch, Verdict
 
 from .conftest import MakeJob
 
@@ -45,7 +46,7 @@ class Script:
         self.outcomes = list(outcomes)
         self.before: Callable[[], None] = lambda: None
 
-    def run_once(self) -> Outcome:
+    def run_once(self, watch: RunWatch) -> Outcome:
         self.before()
         return self.outcomes.pop(0)
 
@@ -339,3 +340,54 @@ def test_stop_while_offline(job: Job) -> None:
 
     status = Supervisor(job, Script(OFFLINE), clock, sleep, Network(down=99)).run()
     assert status is JobStatus.STOPPED
+
+
+# ----- deadline phases -------------------------------------------------------------------
+
+
+def test_a_halted_run_ends_the_job_limit_reached(job: Job) -> None:
+    halted = Outcome(OutcomeKind.HALTED, "deadline (hard stop after 20m)", Metrics(cost=0.25))
+    status, _ = supervise(job, Script(halted))
+    assert status is JobStatus.LIMIT_REACHED
+    assert (job.load().reason, job.load().cost) == ("deadline (hard stop after 20m)", 0.25)
+
+
+class Overrun:
+    """A run that lasts an hour, checking its watch once at the end; records the verdicts."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self.clock, self.verdicts = clock, []
+
+    def run_once(self, watch: RunWatch) -> Outcome:
+        self.clock.now += 3600
+        self.verdicts.append(watch.check())
+        return Outcome(OutcomeKind.FAILED, "exit code -15")
+
+
+def test_the_watch_settles_the_outcome(job: Job) -> None:
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=START + 60, hardstop=60.0)))
+    clock = FakeClock()
+    runner = Overrun(clock)
+    assert Supervisor(job, runner, clock, clock.sleep).run() is JobStatus.LIMIT_REACHED
+    assert runner.verdicts == [(Verdict.END,)]
+    assert job.load().reason == "deadline (hard stop after 1m)"
+
+
+def test_no_run_starts_after_the_deadline(job: Job) -> None:
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=START)))
+    status, _ = supervise(job, Script(DONE))
+    assert status is JobStatus.LIMIT_REACHED
+    assert (job.load().reason, job.load().runs) == ("deadline (graceful)", 0)
+
+
+def test_a_wait_ends_when_the_deadline_moves_into_it(job: Job) -> None:
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        clock.sleep(seconds)
+        job.update(lambda st: setattr(st.bounds, "deadline", START + 60))
+
+    status = Supervisor(job, Script(UNREADABLE, DONE), clock, sleep).run()
+    assert status is JobStatus.LIMIT_REACHED
+    assert job.load().reason == "deadline (graceful)"
+    assert clock.now == START + 60

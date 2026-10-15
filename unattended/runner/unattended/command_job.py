@@ -9,6 +9,11 @@ line in the last ``TAIL_LINES`` lines of output, its ``state.json`` status
 reason, then free text (``resets`` only with a readable time). Output is
 appended to ``output.log``. The command runs in its own process group, so
 stopping the job also stops whatever the command started.
+
+The run is waited on in slices; after each, ``RunWatch`` may ask for the
+job's ``--stop-command`` (run once in cwd, its output in the log) or for the
+hard stop, which is ``end``: SIGTERM to the group, SIGKILL after ``TERM_GRACE``.
+Process groups are POSIX: on Windows the hard stop is not supported.
 """
 
 from __future__ import annotations
@@ -31,11 +36,13 @@ from .limits import (
     find_reason,
 )
 from .store import LOG_FILE, Job, JobState
+from .watch import RunWatch, Verdict, Verdicts
 
 LIMIT_EXIT = 75
 TAIL_LINES = 50
 TAIL_BYTES = 64 * 1024
 TERM_GRACE = 30.0
+STOP_TIMEOUT = 60.0
 DEFAULT_LIMIT_REASON = f"usage limit (exit {LIMIT_EXIT})"
 # A stated reset beats a bare "hit your limit", wherever the reset line is.
 COMMAND_LIMIT_PATTERNS = LIMIT_PATTERNS[:1] + RESET_NOTE + LIMIT_PATTERNS[1:]
@@ -62,30 +69,73 @@ class CommandJob:
     job: Job
     env: Mapping[str, str]
 
-    def run_once(self) -> Outcome:
+    def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
         log = self.job.path(LOG_FILE)
         with log.open("a") as out:
             out.write(f"--- run {state.runs + 1}: {command_for(state)}\n")
             out.flush()
-            code = self._run(state, out.fileno())
+            code = CommandRun(state, out.fileno(), dict(self.env)).watched(watch)
         return outcome_for(code, RunOutput(tail(log), Path(state.spec.cwd)))
 
-    def _run(self, state: JobState, out: int) -> int:
-        proc = subprocess.Popen(
-            command_for(state),
+
+@dataclass(frozen=True)
+class CommandRun:
+    """One run of a command: the job's state, the output's file descriptor and the env."""
+
+    state: JobState
+    out: int
+    env: dict[str, str]
+
+    def watched(self, watch: RunWatch) -> int:
+        """Run the command to its end, obeying ``watch`` after each slice; its exit code."""
+        proc = self._start()
+        try:
+            return self._wait(proc, watch)
+        finally:
+            end(proc)
+
+    def _start(self) -> subprocess.Popen[bytes]:
+        return subprocess.Popen(
+            command_for(self.state),
             shell=True,
-            cwd=state.spec.cwd,
-            env=dict(self.env),
+            cwd=self.state.spec.cwd,
+            env=self.env,
             stdin=subprocess.DEVNULL,
-            stdout=out,
+            stdout=self.out,
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        try:
-            return proc.wait()
-        finally:
+
+    def _wait(self, proc: subprocess.Popen[bytes], watch: RunWatch) -> int:
+        while (code := exit_code(proc, watch.slice)) is None:
+            self._obey(watch.check(), proc)
+        return code
+
+    def _obey(self, verdicts: Verdicts, proc: subprocess.Popen[bytes]) -> None:
+        if Verdict.GRACEFUL in verdicts:
+            self.stop_gracefully()
+        if Verdict.END in verdicts:
             end(proc)
+
+    def stop_gracefully(self) -> None:
+        """Run the job's stop command in cwd, its output to the log, for ``STOP_TIMEOUT`` s."""
+        command = self.state.spec.stop_command
+        os.write(self.out, f"--- stop command: {command}\n".encode())
+        try:
+            subprocess.run(command, shell=True, cwd=self.state.spec.cwd, env=self.env,
+                           stdin=subprocess.DEVNULL, stdout=self.out, stderr=subprocess.STDOUT,
+                           timeout=STOP_TIMEOUT, check=False)  # fmt: skip
+        except subprocess.TimeoutExpired:
+            os.write(self.out, f"--- stop command timed out after {STOP_TIMEOUT:g} s\n".encode())
+
+
+def exit_code(proc: subprocess.Popen[bytes], timeout: float) -> int | None:
+    """The exit code once ``proc`` ends within ``timeout`` s, else None."""
+    try:
+        return proc.wait(timeout)
+    except subprocess.TimeoutExpired:
+        return None
 
 
 def command_for(state: JobState) -> str:
