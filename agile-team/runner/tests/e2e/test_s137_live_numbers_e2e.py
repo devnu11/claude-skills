@@ -112,7 +112,7 @@ def test_after_the_step_totals_are_the_ledger_and_the_step_seconds() -> None:
     dev = _numbers(FIRST_STEP + LEDGER_ROW + CLOSED)["roles"][ROLE]
     assert dev["tokens"] == LEDGER_TOKENS
     assert dev["cost"] == pytest.approx(LEDGER_COST)
-    assert dev["seconds"] == 200
+    assert dev["seconds"] == about(200)
 
 
 def test_an_earlier_ledger_row_does_not_stop_the_live_tokens() -> None:
