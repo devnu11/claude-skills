@@ -10,16 +10,17 @@ import pytest
 from . import clock, clock_scan
 
 SOURCES = clock_scan.read_tree(clock_scan.Tree.UNIT)
+CLOCK_HITS = clock_scan.clock_read_hits(SOURCES)  # scanned at collection: untimed
+DURATION_HITS = clock_scan.duration_hits(SOURCES)
 HELPER_TEXT = (clock_scan.TESTS / "clock.py").read_text()
 
 
 def test_no_test_reads_the_real_clock() -> None:
-    hits = clock_scan.clock_read_hits(SOURCES)
-    assert hits == [], f"real-clock reads outside tests/clock.py: {hits}"
+    assert CLOCK_HITS == [], f"real-clock reads outside tests/clock.py: {CLOCK_HITS}"
 
 
 def test_no_test_compares_a_duration_exactly() -> None:
-    hits = clock_scan.duration_hits(SOURCES)
+    hits = DURATION_HITS
     assert hits == [], f"exact duration compares (use clock.about), file:line: {hits}"
 
 
