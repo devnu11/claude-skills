@@ -3,31 +3,26 @@
 from __future__ import annotations
 
 import copy
-import json
-import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
-import claude_agent_sdk
 import pytest
 from agile_team import config as cfg
 from agile_team import sandbox
 from agile_team.config import Environment
 
 from .readiness import serving
+from .scripted_cli import CliRun, run_scripted
 
 CURL_MAX_S = 60
-CLI_S = 600
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin",
     reason="allowLocalBinding applies to Claude Code's macOS (Seatbelt) sandbox; "
     "the Linux bubblewrap sandbox is not verified (s58)",
 )
-
-CLI = Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude"
 
 
 class Service(BaseHTTPRequestHandler):
@@ -43,116 +38,12 @@ class Service(BaseHTTPRequestHandler):
         pass
 
 
-def sse(event: str, data: dict) -> bytes:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
-
-
-def message(blocks: list[dict], stop: str) -> dict:
-    return {
-        "id": "msg_1",
-        "type": "message",
-        "role": "assistant",
-        "model": "scripted",
-        "content": blocks,
-        "stop_reason": stop,
-        "stop_sequence": None,
-        "usage": {"input_tokens": 1, "output_tokens": 1},
-    }
-
-
-def stream(msg: dict) -> bytes:
-    out = sse("message_start", {"type": "message_start", "message": {**msg, "content": []}})
-    for i, block in enumerate(msg["content"]):
-        start = {**block, "text": ""} if block["type"] == "text" else {**block, "input": {}}
-        out += sse(
-            "content_block_start",
-            {"type": "content_block_start", "index": i, "content_block": start},
-        )
-        delta = (
-            {"type": "text_delta", "text": block["text"]}
-            if block["type"] == "text"
-            else {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}
-        )
-        out += sse(
-            "content_block_delta", {"type": "content_block_delta", "index": i, "delta": delta}
-        )
-        out += sse("content_block_stop", {"type": "content_block_stop", "index": i})
-    delta = {"stop_reason": msg["stop_reason"], "stop_sequence": None}
-    out += sse(
-        "message_delta", {"type": "message_delta", "delta": delta, "usage": {"output_tokens": 1}}
-    )
-    return out + sse("message_stop", {"type": "message_stop"})
-
-
-def tool_results(body: dict) -> list[str]:
-    found: list[str] = []
-    for m in body.get("messages", []):
-        content = m.get("content")
-        for block in content if isinstance(content, list) else []:
-            if block.get("type") == "tool_result":
-                inner = block.get("content")
-                found.append(inner if isinstance(inner, str) else json.dumps(inner))
-    return found
-
-
-def make_model(curl: str, recorded: list[str]) -> type[BaseHTTPRequestHandler]:
-    class Model(BaseHTTPRequestHandler):
-        """Scripted model: one Bash tool call, then ``done``."""
-
-        def do_POST(self) -> None:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-            if self.path.endswith("count_tokens"):
-                return self.reply(json.dumps({"input_tokens": 1}).encode(), "application/json")
-            msg = self.answer(body)
-            if body.get("stream"):
-                return self.reply(stream(msg), "text/event-stream")
-            self.reply(json.dumps(msg).encode(), "application/json")
-
-        def answer(self, body: dict) -> dict:
-            results = tool_results(body)
-            if results:
-                recorded.extend(results)
-                return message([{"type": "text", "text": "done"}], "end_turn")
-            if any(t.get("name") == "Bash" for t in body.get("tools") or []):
-                call = {
-                    "type": "tool_use",
-                    "id": "toolu_1",
-                    "name": "Bash",
-                    # the CLI's Bash timeout counts host sleep; the max keeps a sleep
-                    # mid-run from backgrounding curl (the outer run's timeout bounds it)
-                    "input": {
-                        "command": curl,
-                        "description": "probe the service",
-                        "timeout": 600000,
-                    },
-                }
-                return message([call], "tool_use")
-            return message([{"type": "text", "text": "ok"}], "end_turn")
-
-        def reply(self, data: bytes, ctype: str) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-
-        def log_message(self, *args: Any) -> None:
-            pass
-
-    return Model
-
-
 @pytest.fixture
 def service():
     server = serving(Service)
     yield server.server_address[1]
     server.shutdown()
     server.server_close()
-
-
-def _tail(data: bytes | None) -> str:
-    """The last 60 lines of a child's captured output."""
-    return "\n".join((data or b"").decode(errors="replace").splitlines()[-60:])
 
 
 def run_cli(
@@ -163,36 +54,9 @@ def run_cli(
     curl = (
         f"curl -s -o /dev/null -w '%{{http_code}}' --max-time {CURL_MAX_S} {url}; echo \" exit=$?\""
     )
-    recorded: list[str] = []
-    model = serving(make_model(curl, recorded))
     home = tmp / "home"
     home.mkdir(exist_ok=True)
-    path = tmp / "settings.json"
-    path.write_text(json.dumps(settings))
-    env = {
-        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-        "HOME": str(home),
-        "CLAUDE_CONFIG_DIR": str(home / ".claude"),
-        "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{model.server_address[1]}",
-        "ANTHROPIC_API_KEY": "test",
-        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    }
-    cmd = [str(CLI), "-p", "probe the service", "--settings", str(path), "--allowedTools", "Bash"]
-    cmd += ["--permission-mode", "dontAsk"]
-    cmd += ["--output-format", "json", "--max-turns", "3"]
-    try:
-        done = subprocess.run(
-            cmd, cwd=prepared.workdir, env=env, timeout=CLI_S, capture_output=True
-        )
-    except subprocess.TimeoutExpired as err:
-        pytest.fail(
-            f"the CLI ran past {CLI_S} s; stdout:\n{_tail(err.stdout)}"
-            f"\nstderr:\n{_tail(err.stderr)}"
-        )
-    finally:
-        model.shutdown()
-        model.server_close()
-    return done.returncode, recorded
+    return run_scripted(CliRun(settings, prepared.workdir, home, home / ".claude"), curl)
 
 
 @pytest.fixture
