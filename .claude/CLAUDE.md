@@ -45,8 +45,8 @@ A rule that exists only in a prompt is a wish.
 
 ## Never touch the real home directory
 
-- Tests and manual checks never read or write anything under the real
-  home directory (`~`), not only `~/.claude` and `~/.config`.
+- Never read or write anything under the real
+  home directory (`~`)
 - Tests and manual checks use a scratch `HOME` (`HOME=$(mktemp -d)`) or
   `CLAUDE_SKILLS_DIR`. Never use the real `~/.claude` or `~/.config`.
 - chezmoi pins `~/code/claude-skills` to a commit. A change ships as a commit
