@@ -64,9 +64,9 @@ command fails.
    with existing code, offer the onboarding sprint (`start --onboard`) first.
 4. **Cadence.** Ask every time: stop at the end of each sprint (`sprint`), or
    run until a blocker (`until-blocker`)? Under `until-blocker`, a sprint end
-   never stops the team: the PO must start the next sprint while the backlog
-   has ready stories, and the run ends only when nothing can move. A resume
-   keeps the cadence.
+   never stops the team: the PO must start the next sprint while the Product
+   Backlog has ready stories. The PO may report `done` or `blocked` only once
+   nothing in the Sprint Backlog can move. A resume keeps the cadence.
 5. **Start in the background:**
    `$AT start --cadence <c> --task "<the human's task, verbatim>"`
    (add `--onboard` for the onboarding sprint, `--resume` to continue).
@@ -140,11 +140,14 @@ command fails.
    `start_sprint` while stories are unfinished needs a reason. **A sprint
    ends only when every story in it is done, cancelled or reverted:** the
    runner refuses the PO's `sprint-end` note before then and names the
-   unfinished stories. When everything left is stuck, the runner lists the
-   ready backlog stories and the PO adds them with `add_to_sprint`, rather
-   than ending or waiting. The PO may `revert_story(story, reason)`: one
-   `revert(sN): <title>` commit, and the story goes back to the backlog
-   before tests. You get an `update` note naming the commits. The Board shows
+   unfinished stories. When nothing in the Sprint Backlog can move, the
+   runner hands the PO each story's stall reason and never offers Product
+   Backlog stories to refill it. After 3 such hand-overs with no PO action
+   on those stories, it sets the run `blocked` ("the Sprint Backlog is
+   stuck", with each reason) and posts it to you: relay it. While a
+   question is open it waits for your answer instead. The PO may
+   `revert_story(story, reason)`: one `revert(sN): <title>` commit, and the
+   story goes back to the Product Backlog before tests. You get an `update` note naming the commits. The Board shows
    `reverted (n×)`, and the review PR lists it under "Reverted". A second
    revert of the same story is a question for the human (`revert` / `keep`).
    Relay it like a cancel. When the human states an

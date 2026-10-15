@@ -2139,11 +2139,13 @@ The pass ends at the first step whose report matches a row of the
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
-been handed, each as a path to read; see "Liaison messages"), `ready_backlog`
-(s124: nothing in the sprint can move and the backlog has ready stories), `sprint_end` (every story
+been handed, each as a path to read; see "Liaison messages"),
+`sprint_backlog_stuck` (s156: nothing in the Sprint Backlog can move, no
+boundary is pending and no question is open; see "Backlog and sprints"),
+`sprint_end` (every story
 in the sprint is done, cancelled or reverted and the sprint's end boundary has finished; a
-`Review: …` line says what was pushed) and `stalled` (nothing can move; the
-reason for each story is listed, or the held boundary). A story's reason is
+`Review: …` line says what was pushed) and `stalled` (nothing can move because a
+boundary is held, which it names, or the sprint has no stories). A story's reason is
 its hold first (`held (…)`), then its undone dependencies in list order
 (`s2 at design: waiting on s1`), then its status. Gate bounces, `changes_requested` to a pipeline role, a
 gated role's malformed handoff and `returned` do **not** hand over. The
@@ -2173,24 +2175,28 @@ story.
   reads the inbox first, so an answer ends the wait within one poll, whether
   or not a PO session is running, and the PO gets it as a `human_message`
   hand-over. While it waits, `status_reason` lists each story and the
-  question ids it waits on (`waiting on answers: s40 waits on m42`). A
-  `stalled` hand-over never happens while a question is open. A
-  `ready_backlog` hand-over can (s124; see "Backlog and sprints").
+  question ids it waits on (`waiting on answers: s40 waits on m42`). Neither
+  `stalled` nor `sprint_backlog_stuck` is handed over while a question is open:
+  the question is already the report to the human (s156).
 - The run ends when a stop is requested, the run halts, the PO sets
   `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
   and the next pass finds only "sprint complete" or "nothing can move" without
   running a step. The PO's note (first line) becomes `status_reason`. A quiet
   end stores the hand-over's first line with status `idle`. A self re-pin also
   ends the loop, but the run goes on in the new process (see "Self re-pin").
-- Under `until-blocker` (s128), the run ends only when nothing in the backlog
-  can move. A sprint end with ready backlog stories hands over `next_sprint`
-  (the ready list and "start the next sprint now"). A stuck sprint hands over
-  `ready_backlog` on every idle pass, not once. Neither is quiet, so a PO turn
-  that starts or adds nothing gets them again. After 3 such hand-overs with no
-  `start_sprint` or `add_to_sprint`, the runner sets `blocked`
-  ("The PO did not start a sprint or add ready stories after 3 hand-overs; …")
-  and posts it. `notify_user` `done` and `blocked` are refused while ready
-  stories exist. A PR waiting for review or merge never holds the next sprint.
+  A stuck Sprint Backlog is never quiet: after 3 `sprint_backlog_stuck`
+  hand-overs the run ends `blocked` (see "Backlog and sprints").
+- Under `until-blocker` (s128, s156), a sprint end never ends the run while the
+  Product Backlog has ready stories. A sprint end with ready Product Backlog
+  stories hands over `next_sprint` (the ready list and "start the next sprint
+  now"). It is not quiet, so a PO turn that starts nothing gets it again. After
+  3 such hand-overs with no `start_sprint`, the runner sets `blocked` ("The PO
+  did not start a sprint after 3 next-sprint hand-overs; …") and posts it. A
+  stuck Sprint Backlog is reported, not refilled, under both cadences (see
+  "Backlog and sprints"). `notify_user` `done` and `blocked` are refused while
+  a Sprint Backlog story can move (`cadence until-blocker: Sprint Backlog
+  stories can still move (…)`), never because Product Backlog stories are
+  ready. A PR waiting for review or merge never holds the next sprint.
 - `start --resume` with no `--task` runs a router pass first. The PO gets a
   turn only when that pass hands over; its prompt then starts with the resume
   note. Exception: with interrupted steps pending, the PO gets the first
@@ -2273,8 +2279,8 @@ committed to, or `null` when it is in the backlog.
   its file and is refused if the files are bad (see "Story dependencies").
 - The `sprint-start` event carries `{"sprint", "goal", "stories"}`, plus
   `"reason"` when one was given.
-- `run_role` on a backlog story is refused: `story sN is in the backlog; add
-  it to a sprint`. The status refusals (done, blocked, round cap) come first.
+- `run_role` on a Product Backlog story is refused: `story sN is in the
+  Product Backlog; add it to a sprint` (s156). The status refusals (done, blocked, round cap) come first.
   `manager` and story-less steps are not affected.
 - A story is in at most one sprint. To carry it over, list it in the next
   `start_sprint`, which queues the Manager again.
@@ -2303,17 +2309,26 @@ committed to, or `null` when it is in the backlog.
   only then. `notify_user` with kind `sprint-end` is refused while any sprint
   story is unfinished: `sprint N can't end: s3 at implement, s5 at design
   unfinished. Finish them, revert_story(story, reason), or ask the human to
-  cancel them (request_cancel); add_to_sprint ready backlog stories to keep
-  working meanwhile`. Nothing is posted and the status stays.
-- **Ready backlog (s124).** When nothing in the open sprint can move, no
-  boundary is pending, and the backlog has ready stories (active, not held,
-  dependencies done), the runner hands over `ready_backlog`. It does this even
-  while a question is open. The lines are the stall reasons, then `Ready in
-  the backlog (dependencies done, not held):` with up to 5 `- sN: <title>`
-  lines (`- and N more`), and advice to `add_to_sprint` them. It is offered
-  once for each set of stuck and ready stories (`offered` in `state.json`), and
-  names no story, so it holds none. Unlike `stalled`, it is never quiet: a
-  PO turn that ends with it pending gets it rather than ending the run.
+  cancel them (request_cancel)`. Nothing is posted and the status stays.
+- **A stuck Sprint Backlog is reported, not refilled (s156; replaces s124's
+  ready backlog offer).** When the Sprint Backlog has unfinished stories,
+  none can move, no boundary is pending and no question is open, the runner
+  hands over `sprint_backlog_stuck`. Its lines are `Nothing in the Sprint
+  Backlog of sprint N can move. Each story and why:`, one `sN at <step>:
+  <why>` line per unfinished story, then the actions the PO may take on them
+  (`continue_story`, `release_story`, `run_role`, `pass_tests`,
+  `revert_story`, `request_cancel`, `request_story`, `ask_user`). It names
+  those stories and lists no Product Backlog story. It works the same under
+  both cadences and is never quiet, so a PO turn that changes nothing gets it
+  again. `stuck_asks` in `state.json` counts these hand-overs. A step, a PO
+  call to one of those tools (except `ask_user`) that is not refused, a
+  `start_sprint` or an `add_to_sprint` resets the count to 0. When the count
+  is 3, the runner hands over nothing. It sets the run `blocked` with
+  `Sprint N: the Sprint Backlog is stuck after 3 hand-overs with no PO action
+  on its stories: <each story line>; …` and posts the same text to the
+  liaison as a `blocked` note. `add_to_sprint` still works as a deliberate PO
+  action, but the runner never suggests it for a stuck sprint. An old
+  `state.json` holding `offered` loads, and the field is dropped.
 - `state.json` from before backlogs existed loads every story into the
   backlog. Step, rounds, status and commit are kept. On resume, the runner
   tells the PO that nothing can move, and the PO starts a sprint with the

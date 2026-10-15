@@ -52,3 +52,12 @@ team working by adding ready stories (s122's `add_to_sprint`).
   to cancel it.
 - `start_sprint` with unfinished stories still works with a reason (ADR-0055). Like
   s124, it never runs the end boundary for the old sprint.
+
+## Amended by s156 (2026-10-15)
+
+The "Ready backlog hand-over" decision is withdrawn. The human meant a stuck
+sprint to be reported, not refilled from the Product Backlog. `ready_backlog` and
+`RunState.offered` are gone. A stuck Sprint Backlog hands over
+`sprint_backlog_stuck` with each story's stall reason, and blocks the run after 3
+hand-overs with no PO action on its stories. While a question is open the run
+waits again. `END_REFUSED` no longer advises `add_to_sprint`. See ADR-0082.

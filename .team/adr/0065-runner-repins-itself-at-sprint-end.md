@@ -63,3 +63,14 @@ anyone stopping the runner.
   `UV_PROJECT_ENVIRONMENT` set, the exec fails and rolls back.
 - Amends ADR-0029 (the pin script keeps `.prev` and has `--rollback`, and the
   runner re-pins itself) and ADR-0027 (`run.runner_pin`).
+
+## Amended by s156 (2026-10-15)
+
+Rule 5 changes for a stuck sprint. The `ready_backlog` re-offer is gone. A stuck
+Sprint Backlog hands over `sprint_backlog_stuck` with each story's stall reason,
+under both cadences. Its own cap (`stuck_asks`, 3) sets `blocked` with "the
+Sprint Backlog is stuck" and posts it. Steps and the PO's story actions reset the
+count. `done` and `blocked` are refused only while a Sprint Backlog story can
+move, never because Product Backlog stories are ready. The `next_sprint`
+hand-over and its `keep_going_asks` cap stay; the cap text now names only
+`start_sprint`. See ADR-0082.
