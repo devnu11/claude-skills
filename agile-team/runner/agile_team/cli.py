@@ -437,14 +437,20 @@ def _prepared(
         return _report(moved)
     _recover(config, start)
     _require_preflight(config, place.home)
-    _reconcile(config)
-    runtime = make_runtime(place, query_fn or default_query())
-    runtime.report_load_faults()
-    _load_dependencies(runtime)
+    _record_cut_off_spend(config)
+    runtime = _load_runtime(place, query_fn)
     kept = runtime.state.cadence if start.mode is StartMode.RESUME else config.team.cadence
     runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
     repin.drop_unpinned(runtime)
+    return runtime
+
+
+def _load_runtime(place: Place, query_fn: QueryFn | None) -> Runtime:
+    """The run's runtime, its load faults reported and its story dependencies loaded."""
+    runtime = make_runtime(place, query_fn or default_query())
+    runtime.report_load_faults()
+    _load_dependencies(runtime)
     return runtime
 
 
@@ -488,7 +494,7 @@ def _recover(config: config_mod.Config, start: Start) -> None:
         print(f"agile-team start: {lead}; {saved}", file=sys.stderr)
 
 
-def _reconcile(config: config_mod.Config) -> None:
+def _record_cut_off_spend(config: config_mod.Config) -> None:
     """s10: ledger the spend a crash cut off, and say so on stderr."""
     for entry in reconcile.record_cut_off_spend(config.run_dir):
         print(reconcile.format_told_line(entry), file=sys.stderr)
