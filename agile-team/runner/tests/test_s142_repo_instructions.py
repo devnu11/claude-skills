@@ -12,7 +12,7 @@ from .test_dispatch import run
 from .test_roles import BUILTIN
 
 HEADING = "## Repo instructions"
-REPEAT = "(left out: @docs/a.md is already included above)"
+REPEAT = "(left out: @../docs/a.md is already included above)"
 
 
 def write(repo: Path, name: str, text: str) -> None:
@@ -51,7 +51,7 @@ def test_whitespace_file_adds_nothing(repo: Path) -> None:
 
 def test_inside_import_inlined_once(repo: Path) -> None:
     write(repo, "docs/a.md", "A-TEXT")
-    write(repo, ".claude/CLAUDE.md", "see @docs/a.md\n@docs/a.md\n")
+    write(repo, ".claude/CLAUDE.md", "see @../docs/a.md\n@../docs/a.md\n")
     prompt = prompt_for(repo)
     assert prompt.count("A-TEXT") == 1
     assert REPEAT in prompt
@@ -109,11 +109,11 @@ def test_home_instructions_are_never_read(repo: Path, monkeypatch: pytest.Monkey
 
 
 def test_no_settings_are_loaded(make_runtime, repo: Path) -> None:
-    write(repo, ".claude/settings.json", '{"hooks": {"Stop": []}}')
+    write(repo, ".claude/settings.json", '{"hooks": {"Stop": [{"command": "HOOK-CMD"}]}}')
     write(repo, ".claude/CLAUDE.md", "INSTR")
     q = FakeQuery()
     rt = make_runtime(q)
     run(rt, "architect")
     opts = q.calls[0]["options"]
     assert opts.setting_sources == []
-    assert "INSTR" in opts.system_prompt and "Stop" not in opts.system_prompt
+    assert "INSTR" in opts.system_prompt and "HOOK-CMD" not in opts.system_prompt
