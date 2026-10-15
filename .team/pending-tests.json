@@ -22,6 +22,7 @@
     "agile-team/runner/tests/test_s151_conflict.py::test_s151_devops_conflict_ac6_4_the_liaison_gets_the_conflict_notes_and_branch",
     "agile-team/runner/tests/test_s151_conflict.py::test_s151_devops_conflict_ac6_4_the_po_handover_names_the_branch_and_notes",
     "agile-team/runner/tests/test_s151_end.py::test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing",
-    "agile-team/runner/tests/test_s59_sync.py::test_s151_sprint_end_conflict_report_names_files_commit_subject_and_wakes_devops"
+    "agile-team/runner/tests/test_s59_sync.py::test_s151_sprint_end_conflict_report_names_files_commit_subject_and_wakes_devops",
+    "agile-team/runner/tests/test_s59_sync.py::test_sync_from_is_set_once_and_reused_after_continue"
   ]
 }
