@@ -58,9 +58,9 @@ from .boundary import (
     StepKind,
     big_pr_notes,
     fix_brief,
+    get_rebase_refusal,
     next_stage,
     own_entry,
-    rebase_refusal,
     setback,
 )
 from .ci import (
@@ -489,7 +489,7 @@ class BoundaryRunner:
 
     def _rebase(self, b: Boundary) -> None:
         """R6, R7: refuse unless the as-built push has green CI, else rebase onto the target."""
-        refusal = rebase_refusal(self._own(b))
+        refusal = get_rebase_refusal(self._own(b))
         if refusal:
             return self._refuse_rebase(b, refusal)
         if b.rebase_fix:

@@ -3112,7 +3112,7 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    during the wait, resume waits again. The sprint-end hand-over then says
    `Review: …` with the CI text.
 5. **rebase** (only after green): the stage first checks the gate in code
-   (`boundary.rebase_refusal`): the sprint's entry must have a CI read
+   (`boundary.get_rebase_refusal`): the sprint's entry must have a CI read
    that is green on the sha it pushed. If not, nothing runs: no fetch, no
    git call, no hash rewritten. The boundary holds `error` with a
    `refused` event (`the rebase waits for green CI on the team branch as

@@ -323,7 +323,7 @@ def test_ac4_1_the_rebase_is_refused_without_green_ci_on_the_pushed_sha(
 def test_ac4_1_the_stages_run_in_the_documented_order() -> None:
     order = [s.value for s in bd.STAGES]
     assert order == ["sync", "check", "push", "ci", "rebase", "push-rebased", "ci-rebased"]
-    assert bd.rebase_refusal(None) == bd.NO_AS_IS
+    assert bd.get_rebase_refusal(None) == bd.NO_AS_IS
 
 
 def test_ac4_2_there_is_no_review_stage_no_restack_and_no_cherry_pick(scene: Scene) -> None:
