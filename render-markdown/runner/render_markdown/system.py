@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -51,7 +52,8 @@ def finish(process: subprocess.Popen[str]) -> Finished:
     try:
         out, err = process.communicate(timeout=TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        STOPPERS.get(sys.platform, stop_group)(process)
+        with contextlib.suppress(ProcessLookupError):  # it may exit before the kill lands
+            STOPPERS.get(sys.platform, stop_group)(process)
         process.communicate()
         return TIMED_OUT
     return Finished(process.returncode, out or "", err or "")
