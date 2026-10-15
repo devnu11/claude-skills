@@ -192,5 +192,12 @@
     "agile-team/runner/tests/test_s138_texts.py::test_hold_names_who_acts",
     "agile-team/runner/tests/test_s138_texts.py::test_start_refusal_gives_only_the_humans_edit",
     "agile-team/runner/tests/test_s138_texts.py::test_exact_texts"
+  ],
+  "s144": [
+    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_left_out_with_note",
+    "agile-team/runner/tests/test_s142_repo_instructions.py::test_other_text_still_loads_beside_a_binary_import",
+    "agile-team/runner/tests/test_s142_repo_instructions.py::test_step_prompt_is_built_with_a_binary_import",
+    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_inside_an_imported_file",
+    "agile-team/runner/tests/test_s142_repo_instructions.py::test_binary_import_is_never_marked_seen"
   ]
 }
