@@ -200,10 +200,15 @@ def test_progress_keeps_the_idle_stop_away(beating: Job) -> None:
         assert watch.check() == ()
 
 
-def test_track_points_the_group_probes(beating: Job) -> None:
-    watch = RunWatch(beating)
+def test_track_points_the_group_probes_and_rebases(beating: Job) -> None:
+    clock = Clock(0.0)
+    watch = RunWatch(set_spec(beating, idle=60.0), clock)
+    beat(beating, "written as the run starts")
     watch.track(42)
     assert watch.context.pgid == 42
+    clock.now = 60.0
+    watch.check()
+    assert [t for t, _ in notices(beating)] == ["idle"]
 
 
 # ----- heartbeat ---------------------------------------------------------------------------
