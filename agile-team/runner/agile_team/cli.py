@@ -82,7 +82,11 @@ from .upstream import GhPrs, command_runner
 ANSWER_FIELDS = tuple(f.name for f in fields(onboard.Answers))
 
 
-START_REFUSED = "story files: {refusal}; fix depends_on in {folder}"
+START_REFUSED = (
+    "story files: {refusal}; story amend cannot change depends_on, so the human fixes it: "
+    "edit depends_on in the story's file in {folder}, git commit it, then agile-team start "
+    "again (agile-team accept-checkout first if start halts on the moved checkout)"
+)
 
 
 class CliError(Exception):

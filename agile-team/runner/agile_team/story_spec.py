@@ -72,7 +72,9 @@ PROBLEMS: dict[Problem, str] = {
 LINE = "{file}: {where}{problem}"
 STORY_FILE_HOLD = (
     "the story file must be fixed before acceptance:\n{refusal}\n"
-    "Edit the file; no state change is needed"
+    "Only the runner writes story files. If the config lost the environment, route the "
+    "fix to devops and continue_story once it is in; if the ACs are wrong, ask the human "
+    "with ask_user, and the liaison sends new ACs with story amend"
 )
 
 

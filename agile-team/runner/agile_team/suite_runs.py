@@ -22,7 +22,7 @@ SUITE_FAILED = "the test command failed on run {n} of {total}:\n{tail}"
 RUN_LINE = "run {n} of {total}: exit {code} in {seconds:.0f} s: {summary}"
 BAD_SUITE_RUNS = (
     "story {story}'s suite_runs must be a whole number from 1 to {most}, not {value!r}; "
-    "fix the story file's frontmatter"
+    "only the runner writes story files: ask the human with ask_user for a valid suite_runs"
 )
 BAD_FRONTMATTER = "story {story}'s frontmatter does not parse: {error}"
 SUMMARY = re.compile(r"\b\d+ (passed|failed|errors?)\b")
