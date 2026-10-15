@@ -1,1 +1,14 @@
-{}
+{
+  "s136": [
+    "agile-team/runner/tests/test_roles.py::test_product_owner_defaults_to_sonnet",
+    "agile-team/runner/tests/test_s136_docs.py::test_devops_no_longer_says_the_po_opens_one",
+    "agile-team/runner/tests/test_s136_docs.py::test_no_doc_mentions_open_story[role]",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_ci_bullets_request_a_story[**ci_failed**-**ci_infra**]",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_ci_bullets_request_a_story[**main_broken**-**ci_pending**]",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_po_description_says_it_schedules",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_po_file_has_no_open_story",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_po_file_says_it_schedules_and_requests[You never write a story]",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_po_file_says_it_schedules_and_requests[You never write or edit a story file]",
+    "agile-team/runner/tests/test_s136_docs.py::test_the_po_file_says_it_schedules_and_requests[request_story(summary, evidence)]"
+  ]
+}
