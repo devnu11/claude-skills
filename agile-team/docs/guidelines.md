@@ -180,7 +180,9 @@ rule, update in the same story:
   fixture swaps `system` for `FakeSystem`. Script files with `fake.put`,
   commands with `fake.reply`, and time with the fake clock. A unit test that
   reaches the real OS fails with "inject it, or move the test to
-  `tests/e2e/`". A test whose point is real git, a real process or real files
+  `tests/e2e/`", and one that requests `tmp_path`, `tmp_path_factory`,
+  `tmpdir` or `tmpdir_factory` is refused before its fixtures run (s154); use
+  the `scratch` or `repo` fixture instead. A test whose point is real git, a real process or real files
   belongs in `tests/e2e/`. Test helpers write through `system`, so one helper
   serves both worlds.
 - **A unit test runs in under 1 s** (s72; `timeout = 1` in `pyproject.toml`,

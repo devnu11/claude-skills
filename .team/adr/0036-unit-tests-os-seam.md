@@ -49,6 +49,25 @@ Unit tests were reaching the real OS directly: calling `Path` methods, `subproce
 
 **Docs:** `roles/unit-tester.md` (AC6 text on the seam), `reference/protocol.md` ("Unit tests touch no OS"), architecture and guidelines updated in P3.
 
+## Amended by s154 (2026-10-15)
+
+**What changed.** `RealOsCall` subclasses `pytest.fail.Exception` (pytest's
+`Failed`) instead of `BaseException` directly. A unit test that requests
+`tmp_path`, `tmp_path_factory`, `tmpdir` or `tmpdir_factory` is marked at
+collection and fails at setup with `os_guard.OS_FIXTURE_REFUSED` before any
+fixture runs.
+
+**Why.** pytest handles only `OutcomeException` and `Exception` as a test
+outcome. A bare `BaseException` raised inside pytest's own `tmp_path` fixture
+left a fixture with a finalizer and no cached result, so every later test in
+that xdist worker errored with `assert not self._finalizers`: one bad unit test
+failed 120 to 250 others and halted every story's gate. `Failed` is an
+outcome, so pytest cleans up; it is still not an `Exception`, so code under
+test still can't swallow it. The temp-dir fixtures always reach the OS, so
+refusing them by name before setup gives the advice without reaching it. A
+real collection error is not used, because pytest stops the whole session on
+one. Design: `agile-team/docs/design/s154.md` (G1–G3).
+
 ## References
 
 - Design: `agile-team/docs/design/s71.md` (Rules O1–O17, Phases, modules per phase)

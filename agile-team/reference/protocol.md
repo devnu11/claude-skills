@@ -1431,7 +1431,11 @@ results in their briefs instead:
 
 - The tests gate's `test` run and the implement gate's `coverage` run are
   kept per story, whatever the verdict, in `.team/run/results/<story>/<name>.json`
-  (exit code, the last 60 output lines, the HEAD they ran at, where they ran).
+  (exit code, the last 60 output lines, the HEAD they ran at, where they ran,
+  and, from the run's JUnit report, each failing or erroring test with its
+  first error lines; s154). A brief lists the first ten of those tests under
+  the run's output, and a gate that does not pass shows the same list on its
+  dashboard entry.
 - Before a quality-czar step the runner runs `lint` and `static` (when set),
   and `coverage` only when the kept run is missing or not at HEAD. That time
   is a runner chore on the heartbeat. The quality czar has no shell; it judges
@@ -1657,6 +1661,11 @@ The agile-team runner follows the rule itself (s71):
   `os.stat`). The message names the call and ends with
   `inject it, or move the test to tests/e2e/`. Tests under `tests/e2e/` run
   on the real OS.
+- The guard's error is a pytest outcome (like `pytest.fail`), so a hit inside
+  one of pytest's own fixtures fails that test only; the tests after it in
+  the worker are unaffected (s154). A unit test that requests `tmp_path`,
+  `tmp_path_factory`, `tmpdir` or `tmpdir_factory` is refused at setup,
+  before any fixture runs, with the same advice.
 - Ruff `TID251` (`banned-api` in `agile-team/runner/pyproject.toml`) bans
   direct OS calls (`subprocess`, `os.environ`, `time.sleep`,
   `ThreadingHTTPServer`, …) everywhere except `system.py`, `tests/e2e/`,
