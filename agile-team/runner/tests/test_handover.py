@@ -45,6 +45,7 @@ def test_trigger_values_are_snake_case() -> None:
         "ci_infra",
         "main_broken",
         "ci_pending",
+        "known_failures",
     ]
 
 
@@ -74,6 +75,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.CI_INFRA,
         T.MAIN_BROKEN,
         T.CI_PENDING,
+        T.KNOWN_FAILURES,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
