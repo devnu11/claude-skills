@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from render_markdown import system
 
 
@@ -42,3 +44,12 @@ def test_get_environment_is_a_copy() -> None:
     environment = system.get_environment()
     environment["RENDER_MARKDOWN_TEST"] = "1"
     assert "RENDER_MARKDOWN_TEST" not in system.get_environment()
+
+
+def test_a_program_past_the_time_limit_exits_124(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(system, "TIMEOUT_SECONDS", 0.2)
+    slow = [sys.executable, "-c", "import time; time.sleep(5)"]
+    assert system.run(slow).code == 124
+    assert system.run_into(slow, tmp_path / "out").code == 124

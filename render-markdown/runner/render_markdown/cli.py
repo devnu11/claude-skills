@@ -113,7 +113,7 @@ def send_and_trace(rendering: Rendering, job: Job) -> int:
     print(f"sent: job {sent.job_id} as {payload.format}")
     traced = trace_job(sent, Clock())
     print(describe_outcome(sent, traced))
-    return 0 if traced.outcome is Outcome.PRINTED else CHECK_FAILED
+    return 0 if traced.outcome in DELIVERED else CHECK_FAILED
 
 
 def describe_outcome(sent: Sent, traced: Traced) -> str:
@@ -123,6 +123,11 @@ def describe_outcome(sent: Sent, traced: Traced) -> str:
     lines = {
         Outcome.PRINTED: f"printed: {status and status.impressions} pages on {sent.printer}",
         Outcome.PRINTED_NOTHING: f"failed: job {sent.job_id} completed but printed 0 pages",
+        Outcome.COUNTED_BY_CUPS: (
+            f"completed: CUPS counted {status and status.impressions} pages for job "
+            f"{sent.job_id}; this printer's backend can't confirm paper came out"
+        ),
+        Outcome.UNTRACKED: f"unconfirmed: job {sent.job_id} sent; no ipptool to follow it",
         Outcome.FAILED: f"failed: job {sent.job_id} ended {state}",
         Outcome.UNCONFIRMED: f"unconfirmed: job {sent.job_id} is {state}; check the printer",
     }
@@ -152,6 +157,7 @@ def report_warnings(warnings: tuple[str, ...]) -> None:
         print(f"warning: {warning}")
 
 
+DELIVERED = frozenset({Outcome.PRINTED, Outcome.COUNTED_BY_CUPS})
 MODES: dict[Mode, Callable[[Rendering, Job], int]] = {
     Mode.SEND: send_and_trace,
     Mode.DRY_RUN: report_dry_run,

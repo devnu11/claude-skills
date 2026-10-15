@@ -32,6 +32,7 @@ def test_mermaid_loads_only_when_there_are_diagrams(tmp_path) -> None:
     with_diagrams = build_page(load_document(FIXTURES / "sample.md"), Paper.LETTER)
     assert f'<script src="{MERMAID_URL}">' in with_diagrams
     assert '"Mermaid diagram " + n + " could not be drawn: "' in with_diagrams
+    assert "suppressErrorRendering: true" in with_diagrams
     plain = tmp_path / "plain.md"
     plain.write_text("# Plain\n")
     assert "<script" not in build_page(load_document(plain), Paper.LETTER)

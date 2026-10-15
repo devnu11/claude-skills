@@ -39,6 +39,8 @@ def test_an_unknown_printer_size_falls_to_the_locale(
         ("en_GB", Paper.A4),
         ("zh-Hans_CN", Paper.A4),
         ("en_US@rg=dezzzz", Paper.A4),
+        ("en", Paper.A4),
+        ("en_150", Paper.A4),
     ],
 )
 def test_the_mac_region_picks_the_paper(

@@ -19,7 +19,7 @@ RM="uv run --frozen --quiet --project ~/.claude/skills/render-markdown/runner re
 |---|---|
 | `$RM open FILE.md` | Render and open in the default browser. Prints the HTML's path. |
 | `$RM pdf FILE.md [-o OUT.pdf] [--paper a4\|letter]` | Render to a PDF and check it. Prints the PDF and its page-1 preview PNG. |
-| `$RM print FILE.md [--printer NAME] [--sides two\|one] [--copies N] [--dry-run]` | Render, check, send, and follow the job until the printer reports pages. |
+| `$RM print FILE.md [--printer NAME] [--sides two\|one] [--copies N] [--paper a4\|letter] [--send raster\|pdf] [--dry-run]` | Render, check, send, and follow the job until the printer reports pages. `--send pdf` skips the local raster conversion. |
 
 `pdf` and `print` need Chrome 112 or later; `print` needs CUPS (macOS or Linux).
 
@@ -41,4 +41,6 @@ RM="uv run --frozen --quiet --project ~/.claude/skills/render-markdown/runner re
    read: report the problems, don't print it, and don't hand-patch the PDF.
 4. **Report one line:** the path, or `printed N pages on PRINTER`. Never say a
    job printed because `lp` gave a job id: only `printed:` from the command
-   means paper came out. Never paste the rendered content into the chat.
+   means paper came out. `completed:` means CUPS counted pages but the printer
+   can't confirm them: say that, and ask the human to check. Never paste the
+   rendered content into the chat.

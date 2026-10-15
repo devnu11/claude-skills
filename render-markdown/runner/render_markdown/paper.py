@@ -52,11 +52,11 @@ def read_locale_paper() -> Paper | None:
 
 
 def read_mac_region_paper() -> Paper | None:
-    """Letter for a US, Canadian or Mexican ``AppleLocale`` region, else A4."""
-    region = find_region(system.capture(["defaults", "read", "-g", "AppleLocale"]) or "")
-    if not region:
+    """Letter for a US, Canadian or Mexican ``AppleLocale`` region, else A4 (no region too)."""
+    locale = system.capture(["defaults", "read", "-g", "AppleLocale"])
+    if locale is None:
         return None
-    return Paper.LETTER if region in LETTER_REGIONS else Paper.A4
+    return Paper.LETTER if find_region(locale) in LETTER_REGIONS else Paper.A4
 
 
 def find_region(locale: str) -> str | None:

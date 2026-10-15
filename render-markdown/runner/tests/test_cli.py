@@ -136,6 +136,12 @@ def test_print_sends_follows_and_reports_pages(
         (Outcome.PRINTED_NOTHING, Status("completed", "none", 0), "completed but printed 0 pages"),
         (Outcome.FAILED, Status("aborted", "job-aborted", 0), "ended aborted (job-aborted)"),
         (Outcome.UNCONFIRMED, None, "is unknown; check the printer"),
+        (Outcome.UNTRACKED, None, "sent; no ipptool to follow it"),
+        (
+            Outcome.COUNTED_BY_CUPS,
+            Status("completed", "none", 2),
+            "CUPS counted 2 pages for job hp-9; this printer's backend can't confirm",
+        ),
     ],
 )
 def test_describe_outcome(outcome: Outcome, status: Status | None, line: str) -> None:
@@ -157,3 +163,13 @@ def test_runs_as_a_module() -> None:
         [sys.executable, "-m", "render_markdown", "--help"], capture_output=True, text=True
     )
     assert done.returncode == 0 and "open" in done.stdout and "print" in done.stdout
+
+
+def test_a_count_only_cups_made_still_exits_0(
+    fake: FakeSystem, rendered: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(printer, "PPD_DIR", Path("/nowhere"))
+    counted = Traced(Outcome.COUNTED_BY_CUPS, Status("completed", "none", 2))
+    monkeypatch.setattr(cli, "trace_job", lambda sent, clock: counted)
+    fake.answer("lp", "request id is hp-73 (1 file(s))\n")
+    assert cli.main(["print", str(SAMPLE), "--printer", "hp", "--paper", "a4"]) == 0

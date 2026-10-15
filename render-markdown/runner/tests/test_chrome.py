@@ -46,8 +46,8 @@ def test_windows_paths_expand_and_the_version_comes_from_the_folder(
     monkeypatch.setenv("ProgramFiles", str(tmp_path))
     candidate = "%ProgramFiles%/Google/Chrome/Application/chrome.exe"
     monkeypatch.setattr(chrome, "CANDIDATES", {"win32": (candidate,)})
-    fake.answer("chrome.exe", "", 0)
     assert find_chrome() == browser
+    assert fake.calls == []  # Windows Chrome has no --version: running it opens a window
 
 
 def test_an_old_chrome_is_refused(fake: FakeSystem, tmp_path: Path) -> None:
@@ -105,3 +105,12 @@ def test_print_to_pdf_flags(
     assert "--virtual-time-budget=15000" in argv
     assert any(arg.startswith("--user-data-dir=") for arg in argv)
     assert fake.environments[0]["HOME"] in next(a for a in argv if a.startswith("--user-data"))
+
+
+def test_version_runs_in_a_scratch_home(fake: FakeSystem, tmp_path: Path) -> None:
+    fake.environment[chrome.OVERRIDE] = str(make_browser(tmp_path))
+    fake.answer("chrome", "Chromium 130.0.1.2\n")
+    find_chrome()
+    home = fake.environments[0]["HOME"]
+    assert fake.calls[0][1] == "--version" and home != str(Path.home())
+    assert not Path(home).exists()

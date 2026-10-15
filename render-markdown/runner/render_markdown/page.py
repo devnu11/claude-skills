@@ -66,7 +66,7 @@ MERMAID_SCRIPT = """
 <script src="{url}"></script>
 <script>
 (async () => {{
-  mermaid.initialize({{ startOnLoad: false, theme: "neutral" }});
+  mermaid.initialize({{ startOnLoad: false, theme: "neutral", suppressErrorRendering: true }});
   for (const block of document.querySelectorAll("pre.mermaid")) {{
     const source = block.textContent, n = block.dataset.index;
     try {{
