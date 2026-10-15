@@ -124,25 +124,5 @@
     "agile-team/runner/tests/test_upstream.py::test_push_refuses_main_team_and_unprefixed_branches[teamsprint-1]",
     "agile-team/runner/tests/test_upstream.py::test_push_sends_the_sha_with_its_lease",
     "agile-team/runner/tests/test_upstream.py::test_push_with_an_empty_expectation_leases_the_absent_branch"
-  ],
-  "s152": [
-    "agile-team/runner/tests/test_fullcheck.py::test_failed_ids_is_empty_without_a_report",
-    "agile-team/runner/tests/test_fullcheck.py::test_failing_ids_is_empty_when_all_passed",
-    "agile-team/runner/tests/test_fullcheck.py::test_failing_ids_lists_failed_cases_then_names_of_checks_without_any",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_a_branch_already_on_the_target_is_left_alone",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_a_pinned_sync_from_still_rebases_when_not_behind",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_a_rebase_that_finds_nothing_to_do_says_current",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_a_start_conflict_holds_nothing_and_tells_the_liaison",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_a_start_sync_rebases_and_remaps_the_hashes",
-    "agile-team/runner/tests/test_s152_start.py::test_ac1_1_the_start_tables_map_outcomes_to_handlers",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_1_a_failing_end_check_still_asks_for_a_team_fix",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_1_a_failing_start_check_holds_nothing",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_1_the_check_tables_map_edges_to_handlers",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_2_a_check_without_failed_cases_is_named",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_2_the_done_event_records_the_failed_test_ids",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_2_the_note_counts_the_failures_and_goes_to_the_liaison",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_3_a_passing_start_check_raises_no_known_failures",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_3_known_failures_trigger_value",
-    "agile-team/runner/tests/test_s152_start.py::test_ac2_3_the_report_hands_the_failures_to_the_po"
   ]
 }
