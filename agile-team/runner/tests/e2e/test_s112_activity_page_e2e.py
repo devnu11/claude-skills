@@ -35,6 +35,13 @@ SAMPLES = {
         "question": None,
         "after": {"status": "active"},
     },
+    "runner-repin": {
+        "outcome": "pinned",
+        "sprint": 2,
+        "old": "abcdef1234",
+        "new": "1234567890",
+        "reason": BODY,
+    },
     "step-start": {"brief": BODY},
     "step-end": {"status": "done", "summary": BODY},
     "po-session": {"path": "p", "reasons": [BODY]},
@@ -431,7 +438,8 @@ def test_status_row_order_is_state_flag_budget_questions_notice() -> None:
     )
     kinds = ["· " + "", "manager due", 'class="budget"', "waiting on you", "md-notice"]
     row = out["row"]
-    assert len(row) == 5, row
+    assert len(row) == 6, row
+    kinds.insert(1, "pin ")
     for part, kind in zip(row, kinds, strict=True):
         assert kind in part, (kind, part)
 

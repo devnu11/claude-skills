@@ -31,6 +31,6 @@ def test_an_answer_wakes_the_router_and_the_po_gets_it(make_runtime, monkeypatch
     asyncio.run(run.run())
     assert slept == [5.0]
     assert seen == ["waiting on answers: s1 waits on m1"]
-    assert rt.state.status_reason is None
+    assert rt.state.status_reason == "Sprint 1 is complete: every story in it is done."
     assert 'The human answered m1 ("Which DB?"): sqlite' in script.po_prompts[1]
     assert ["human_message"] in [e.data["triggers"] for e in handover_events(rt)]

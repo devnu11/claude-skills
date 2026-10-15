@@ -221,7 +221,8 @@ def test_resume_after_limit_clears_status_and_is_not_refused(harness, configured
     assert seen["status_during"] == (state_mod.RunStatus.RUNNING, None)
     assert seen["refusal"] is None
     st = saved(configured)
-    assert (st.status, st.status_reason) == (state_mod.RunStatus.IDLE, None)
+    assert st.status is state_mod.RunStatus.IDLE
+    assert st.status_reason == "Nothing in sprint 0 can move."
 
 
 # (5) crash and SIGTERM
