@@ -15,6 +15,12 @@ These rules apply to every change in `agile-team/runner/`. The repo charter
   row.
 - Brief docstrings on public functions and classes. Comments inside a
   function only for pitfalls that are not obvious.
+- No code in the global scope (s56, ADR-0071). A module or script holds only
+  its docstring, imports, constant assignments, function and class
+  definitions, and an `if __name__ == "__main__":` guard that calls one entry
+  function (`main`, or `just_do_it` when `main` doesn't fit). Loops, `with`,
+  `try`, bare calls and other `if`s at the top level go into functions. This
+  applies to tests and scripts too.
 
 ## Refusals and side effects
 
