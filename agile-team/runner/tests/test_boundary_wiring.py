@@ -243,7 +243,7 @@ def brep(hold=None, **fields) -> dict:
 
 
 BOUNDARY_ROWS = [
-    (
+    pytest.param(
         brep(
             "sync_conflict",
             edge="end",
@@ -258,6 +258,7 @@ BOUNDARY_ROWS = [
         '"fix x" with 3 conflicting files: a (2): x.py, y.py; docs (1): z.md. The rebase was '
         "aborted and the team branch is unchanged. continue_boundary reruns the rebase; a "
         "conflict now goes to a DevOps step (s151)",
+        id="sync_conflict_s151",
     ),
     (
         brep("push_permission", branches=["team/sprint-1", "team/sprint-2"]),
@@ -282,7 +283,7 @@ BOUNDARY_ROWS = [
 
 
 @pytest.mark.parametrize(("report", "trigger", "line"), BOUNDARY_ROWS)
-def test_boundary_rows_match_and_format(report, trigger, line) -> None:
+def test_s151_boundary_rows_match_and_format(report, trigger, line) -> None:
     assert handover.triggers(report) == [trigger]
     assert handover.report_lines(report, None) == [line]
     assert "by hand" not in line
