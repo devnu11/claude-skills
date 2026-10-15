@@ -18,7 +18,9 @@ FIXTURE = Path(__file__).parent.parent / "agile_team/dashboard/fixtures/snapshot
 
 
 def builtin_names() -> list[str]:
-    return sorted(n for n in roles.load_dir(roles.BUILTIN_DIR) if n != "_shared")
+    return sorted(
+        n for n in roles.load_dir(roles.BUILTIN_DIR) if not n.startswith(roles.BASE_PREFIX)
+    )
 
 
 def stub_text() -> str:
