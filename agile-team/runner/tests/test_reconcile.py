@@ -101,7 +101,7 @@ def test_crash_mid_turn_is_ledgered_at_the_next_start(make_runtime, fake) -> Non
     assert len(lines) == 2 and {t.role for t in lines} == {"product-owner"}
     assert po_entries(run_dir) == []
     fake.clock += 60
-    written = reconcile.reconcile_ledger(run_dir)
+    written = reconcile.record_cut_off_spend(run_dir)
     got = po_entries(run_dir)
     assert len(got) == 1 and written == got
     assert got[0].story is None and got[0].turns == 2
@@ -113,10 +113,10 @@ def test_crash_mid_turn_is_ledgered_at_the_next_start(make_runtime, fake) -> Non
 def test_a_second_reconcile_writes_nothing(make_runtime, fake) -> None:
     run_dir = crash(make_runtime).config.run_dir
     fake.clock += 60
-    reconcile.reconcile_ledger(run_dir)
+    reconcile.record_cut_off_spend(run_dir)
     total = ledger_of(run_dir).total()
     fake.clock += 60
-    assert reconcile.reconcile_ledger(run_dir) == []
+    assert reconcile.record_cut_off_spend(run_dir) == []
     assert ledger_of(run_dir).total() == total
 
 
@@ -135,7 +135,7 @@ def test_the_next_start_ledgers_and_says_so(make_runtime, fake, capsys) -> None:
 
 def test_told_line_names_role_and_story() -> None:
     entry = Entry("developer-cli", OPUS, 1.234, "s7")
-    assert reconcile.told_line(entry) == (
+    assert reconcile.format_told_line(entry) == (
         "agile-team start: ledgered $1.23 for developer-cli on s7, "
         "cut off by the last run (estimated from turns.jsonl)"
     )
@@ -153,7 +153,7 @@ def test_turns_before_their_row_are_covered(scratch: Path) -> None:
         tline(11),
     )
     ledger_of(scratch).record(row("developer-cli", 5, "s7"))
-    written = reconcile.reconcile_ledger(scratch)
+    written = reconcile.record_cut_off_spend(scratch)
     assert [(e.role, e.story) for e in written] == [("product-owner", None)]
     assert len(ledger_of(scratch).entries()) == 2
 
@@ -161,14 +161,14 @@ def test_turns_before_their_row_are_covered(scratch: Path) -> None:
 def test_only_turns_after_the_latest_row_count(scratch: Path) -> None:
     put_turns(scratch, tline(1, cost_usd=1.0), tline(2, cost_usd=2.0), tline(8, cost_usd=4.0))
     ledger_of(scratch).record(row("product-owner", 5, cost=2.5))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.cost_usd == pytest.approx(4.0) and entry.turns == 1
 
 
 def test_a_turn_at_the_rows_time_is_covered(scratch: Path) -> None:
     put_turns(scratch, tline(5))
     ledger_of(scratch).record(row("product-owner", 5))
-    assert reconcile.reconcile_ledger(scratch) == []
+    assert reconcile.record_cut_off_spend(scratch) == []
 
 
 def test_a_role_step_gets_its_own_row(scratch: Path) -> None:
@@ -178,7 +178,7 @@ def test_a_role_step_gets_its_own_row(scratch: Path) -> None:
         tline(2),
         tline(3, role="developer-cli", story="s7", cost_usd=3.0),
     )
-    first, second = reconcile.reconcile_ledger(scratch)
+    first, second = reconcile.record_cut_off_spend(scratch)
     assert (first.role, first.story, first.cost_usd) == ("developer-cli", "s7", 5.0)
     assert (second.role, second.story, second.cost_usd) == ("product-owner", None, 1.0)
 
@@ -188,13 +188,13 @@ def test_same_role_other_story_is_a_separate_key(scratch: Path) -> None:
         scratch, tline(1, role="architect", story="s1"), tline(2, role="architect", story="s2")
     )
     ledger_of(scratch).record(row("architect", 5, "s1"))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.story == "s2"
 
 
 def test_rows_follow_the_first_uncovered_line(scratch: Path) -> None:
     put_turns(scratch, tline(1, role="b-role"), tline(2, role="a-role"), tline(3, role="b-role"))
-    assert [e.role for e in reconcile.reconcile_ledger(scratch)] == ["b-role", "a-role"]
+    assert [e.role for e in reconcile.record_cut_off_spend(scratch)] == ["b-role", "a-role"]
 
 
 # ----- how a key's turns are summed ---------------------------------------------------
@@ -202,7 +202,7 @@ def test_rows_follow_the_first_uncovered_line(scratch: Path) -> None:
 
 def test_null_cost_counts_zero(scratch: Path) -> None:
     put_turns(scratch, tline(1, cost_usd=None), tline(2, cost_usd=1.5))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.cost_usd == pytest.approx(1.5)
 
 
@@ -215,26 +215,26 @@ def test_turns_count_distinct_message_ids(scratch: Path) -> None:
         tline(4, message_id=None),
         tline(5, message_id="y"),
     )
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.turns == 4
 
 
 def test_model_is_the_last_lines(scratch: Path) -> None:
     put_turns(scratch, tline(1, model="claude-opus-4-1"), tline(2, model="claude-sonnet-4-5"))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.model == "claude-sonnet-4-5"
 
 
 def test_tokens_are_summed(scratch: Path) -> None:
     put_turns(scratch, tline(1, tokens=Tokens(1, 2, 3, 4)), tline(2, tokens=Tokens(10, 20, 30, 40)))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.tokens == Tokens(11, 22, 33, 44)
 
 
 def test_the_row_is_stamped_at_the_start(scratch: Path, fake) -> None:
     put_turns(scratch, tline(fake.clock - 5))
     fake.clock += 100
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.at == pytest.approx(fake.clock)
 
 
@@ -245,7 +245,7 @@ def test_bad_lines_are_skipped(scratch: Path) -> None:
     good = tline(1, cost_usd=2.0)
     torn = tline(2).line()[:30]
     put_turns(scratch, good, "", "   ", torn, "[1, 2]", "3", '{"at": 1}', "not json", tline(3))
-    (entry,) = reconcile.reconcile_ledger(scratch)
+    (entry,) = reconcile.record_cut_off_spend(scratch)
     assert entry.cost_usd == pytest.approx(3.0) and entry.turns == 2
 
 
@@ -256,13 +256,13 @@ def test_a_torn_last_line_is_skipped(scratch: Path) -> None:
 
 def test_missing_turns_file_reconciles_nothing(scratch: Path) -> None:
     assert reconcile.read_turns(scratch / TURNS) == []
-    assert reconcile.reconcile_ledger(scratch) == []
+    assert reconcile.record_cut_off_spend(scratch) == []
     assert not system.exists(scratch / LEDGER)
 
 
 def test_empty_turns_file_reconciles_nothing(scratch: Path) -> None:
     put_turns(scratch)
-    assert reconcile.reconcile_ledger(scratch) == []
+    assert reconcile.record_cut_off_spend(scratch) == []
 
 
 # ----- a live runner ------------------------------------------------------------------
@@ -272,7 +272,7 @@ def test_nothing_is_written_while_a_runner_is_alive(scratch: Path, monkeypatch) 
     put_turns(scratch, tline(1))
     system.write_text(scratch / state_mod.PID_FILE, "4242")
     monkeypatch.setattr(system, "kill", lambda pid, sig: None)
-    assert reconcile.reconcile_ledger(scratch) == []
+    assert reconcile.record_cut_off_spend(scratch) == []
     assert not system.exists(scratch / LEDGER)
 
 
@@ -283,7 +283,7 @@ def test_a_dead_runner_pid_does_not_stop_it(scratch: Path, monkeypatch) -> None:
     put_turns(scratch, tline(1))
     system.write_text(scratch / state_mod.PID_FILE, "4242")
     monkeypatch.setattr(system, "kill", gone)
-    assert len(reconcile.reconcile_ledger(scratch)) == 1
+    assert len(reconcile.record_cut_off_spend(scratch)) == 1
 
 
 # ----- the PO session's running total (RC7) -------------------------------------------
@@ -292,21 +292,21 @@ def test_a_dead_runner_pid_does_not_stop_it(scratch: Path, monkeypatch) -> None:
 def test_reconciled_po_cost_is_noted_in_the_state(scratch: Path) -> None:
     state_mod.save(scratch, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
     put_turns(scratch, tline(1, cost_usd=0.5), tline(2, cost_usd=0.25))
-    reconcile.reconcile_ledger(scratch)
+    reconcile.record_cut_off_spend(scratch)
     assert state_mod.load(scratch).po_cost == SessionCost("sess", 1.0, 0.75)
 
 
 def test_a_role_row_leaves_the_state_alone(scratch: Path) -> None:
     state_mod.save(scratch, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
     put_turns(scratch, tline(1, role="architect", story="s1"))
-    reconcile.reconcile_ledger(scratch)
+    reconcile.record_cut_off_spend(scratch)
     assert state_mod.load(scratch).po_cost == SessionCost("sess", 1.0)
 
 
 def test_without_a_baseline_the_state_is_not_rewritten(scratch: Path) -> None:
     state_mod.save(scratch, state_mod.RunState())
     put_turns(scratch, tline(1))
-    reconcile.reconcile_ledger(scratch)
+    reconcile.record_cut_off_spend(scratch)
     assert state_mod.load(scratch).po_cost is None
 
 
@@ -315,7 +315,7 @@ def test_the_resumed_query_ledgers_only_what_is_new(make_runtime) -> None:
     run_dir = rt.config.run_dir
     state_mod.save(run_dir, state_mod.RunState(po_cost=SessionCost("sess", 1.0)))
     put_turns(run_dir, tline(1, cost_usd=0.5))
-    reconcile.reconcile_ledger(run_dir)
+    reconcile.record_cut_off_spend(run_dir)
     rt.state = state_mod.load(run_dir)
     assert rt.state.po_cost == SessionCost("sess", 1.0, 0.5)
     rt.query_fn = Resumed(1.0 + 0.5 + 0.2)

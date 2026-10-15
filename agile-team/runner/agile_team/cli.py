@@ -490,8 +490,8 @@ def _recover(config: config_mod.Config, start: Start) -> None:
 
 def _reconcile(config: config_mod.Config) -> None:
     """s10: ledger the spend a crash cut off, and say so on stderr."""
-    for entry in reconcile.reconcile_ledger(config.run_dir):
-        print(reconcile.told_line(entry), file=sys.stderr)
+    for entry in reconcile.record_cut_off_spend(config.run_dir):
+        print(reconcile.format_told_line(entry), file=sys.stderr)
 
 
 def _require_preflight(config: config_mod.Config, home: Path) -> None:
