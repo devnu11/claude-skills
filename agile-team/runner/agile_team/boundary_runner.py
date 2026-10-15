@@ -371,7 +371,7 @@ class BoundaryRunner:
 
     def _record_known_failures(self, b: Boundary, report: CheckReport) -> None:
         """AC2.1, AC2.2: a failing start check holds nothing; its failing ids are recorded."""
-        ids, head = report.failing_ids(), self.runtime.git.head()
+        ids, head = report.failing_ids, self.runtime.git.head()
         text = self._format_known_failures(b, report)
         self._post(text)
         self._finish(
@@ -385,7 +385,7 @@ class BoundaryRunner:
 
     def _format_known_failures(self, b: Boundary, report: CheckReport) -> str:
         """The liaison's note: the failing ids and the 12-character start sha."""
-        ids = report.failing_ids()
+        ids = report.failing_ids
         return KNOWN_FAILURES_NOTE.format(
             sprint=b.sprint,
             count=len(ids),

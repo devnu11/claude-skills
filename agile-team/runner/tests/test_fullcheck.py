@@ -138,15 +138,15 @@ def test_failing_ids_lists_failed_cases_then_names_of_checks_without_any() -> No
             _result("e2e:cli", failed=("t.py::a",)),
         )
     )
-    assert report.failing_ids() == ["lint", "t.py::a", "t.py::b"]
+    assert report.failing_ids == ["lint", "t.py::a", "t.py::b"]
 
 
 def test_failing_ids_is_empty_when_all_passed() -> None:
-    assert CheckReport((_result("lint", why=""),)).failing_ids() == []
+    assert CheckReport((_result("lint", why=""),)).failing_ids == []
 
 
 def test_failed_ids_is_empty_without_a_report() -> None:
     from agile_team import test_reports
 
     run = test_reports.TestRun(1, "", None, {})
-    assert fullcheck._failed_ids(run) == ()
+    assert fullcheck._collect_failed_ids(run) == ()

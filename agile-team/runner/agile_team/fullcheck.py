@@ -61,7 +61,7 @@ class Judging:
         timed_out = run.code == TIMED_OUT
         why = TIMED_OUT_WHY if timed_out else JUDGES[check.judge](run, self)
         pending = pending_tests.counts_text(run.skipped, run.report or junit.Report())
-        failed = _failed_ids(run)
+        failed = _collect_failed_ids(run)
         return CheckResult(check, run.code, why, gates.tail(run.out), pending, failed)
 
 
@@ -95,6 +95,7 @@ class CheckReport:
         """The failed checks, one block each, blank-line separated."""
         return "\n\n".join(_failed_text(r) for r in self.results if not r.passed)
 
+    @property
     def failing_ids(self) -> list[str]:
         """The known failures: each failed check's failed test ids, or its name when it has none."""
         ids = (i for r in self.results if not r.passed for i in (r.failed or (r.check.name,)))
@@ -108,7 +109,7 @@ class CheckReport:
         ]
 
 
-def _failed_ids(run: test_reports.TestRun) -> tuple[str, ...]:
+def _collect_failed_ids(run: test_reports.TestRun) -> tuple[str, ...]:
     if run.report is None:
         return ()
     return tuple(c.id for c in run.report.failed())
