@@ -26,7 +26,7 @@ from typing import Any
 
 from .schema import fits
 
-Owner = dict[str, Any]
+type Owner = dict[str, Any]
 
 
 class LockError(RuntimeError):

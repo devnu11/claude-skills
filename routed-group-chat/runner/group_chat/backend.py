@@ -24,7 +24,7 @@ from claude_agent_sdk import (
     query,
 )
 
-QueryFn = Callable[..., AsyncIterator[Any]]
+type QueryFn = Callable[..., AsyncIterator[Any]]
 ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
