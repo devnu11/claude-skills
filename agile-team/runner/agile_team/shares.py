@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import functools
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -52,6 +54,17 @@ BRIEF_NOTES: dict[str, str] = {
     ),
     "customer-proxy": "Where an AC refers to one, judge the product against it.",
 }
+NOT_STRING = "path must be a string"
+OUTSIDE = "path {path} resolves to {resolved}; a shared file must sit directly in {design}"
+OUTSIDE_REPO = "a place outside the repo"
+BAD_REQUEST = "bad request file {file}: {problem}"
+NOT_JSON = "not JSON ({error})"
+NOT_OBJECT = "not a JSON object"
+MISSING_FIELD = "missing field '{field}'"
+WRONG_TYPE = "field '{field}' must be {word}"
+NOT_BASE64 = "field 'data' is not base64"
+HASH_MISMATCH = "field 'sha256' does not match the data"
+UNREADABLE_REQUEST = "cannot read it ({error})"
 UNPARSED = "the frontmatter does not parse, or its shared list is malformed"
 
 
@@ -132,6 +145,25 @@ def digest(data: bytes) -> str:
 
 
 @dataclass(frozen=True)
+class FieldKind:
+    """The types a request field accepts, and how a refusal names them."""
+
+    types: tuple[type, ...]
+    word: str
+
+
+STRING = FieldKind((str,), "a string")
+NUMBER = FieldKind((int, float), "a number")  # bool is refused explicitly
+REQUEST_FIELDS: dict[str, FieldKind] = {
+    "story": STRING,
+    "name": STRING,
+    "sha256": STRING,
+    "data": STRING,
+    "at": NUMBER,
+}
+
+
+@dataclass(frozen=True)
 class Share:
     """A file the liaison asks to share; ``id`` is empty until queued."""
 
@@ -158,15 +190,61 @@ class Share:
         )
 
     @classmethod
-    def from_json(cls, rid: str, text: str) -> Share | None:
-        """Read a request file, or None for bad JSON, shape, base64 or hash."""
-        try:
-            raw = json.loads(text)
-            data = base64.b64decode(raw["data"], validate=True)
-            share = cls(rid, raw["story"], raw["name"], data, float(raw["at"]))
-            return share if share.sha256() == raw["sha256"] else None
-        except (ValueError, TypeError, KeyError, binascii.Error):
-            return None
+    def from_json(cls, rid: str, text: str) -> Share | BadRequest:
+        """Read a request file, or a ``BadRequest`` naming the first problem (C4)."""
+        raw = _loaded(text)
+        if isinstance(raw, str):
+            return bad_request(rid, raw)
+        data = _decoded(raw)
+        if isinstance(data, str):
+            return bad_request(rid, data)
+        if digest(data) != raw["sha256"]:
+            return bad_request(rid, HASH_MISMATCH)
+        return cls(rid, raw["story"], raw["name"], data, float(raw["at"]))
+
+
+@dataclass(frozen=True)
+class BadRequest:
+    """A queued request file that failed validation; settled as refused, never applied."""
+
+    id: str
+    reason: str
+
+
+Request = Share | BadRequest
+
+
+def bad_request(rid: str, problem: str) -> BadRequest:
+    """A ``BadRequest`` for file ``rid``.json with ``problem``."""
+    reason = BAD_REQUEST.format(file=f"{rid}.json", problem=problem)
+    return BadRequest(rid, reason)
+
+
+def _field_problem(raw: dict[str, Any], field: str) -> str | None:
+    if field not in raw:
+        return MISSING_FIELD.format(field=field)
+    kind, value = REQUEST_FIELDS[field], raw[field]
+    if isinstance(value, kind.types) and type(value) is not bool:
+        return None
+    return WRONG_TYPE.format(field=field, word=kind.word)
+
+
+def _loaded(text: str) -> dict[str, Any] | str:
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as error:
+        return NOT_JSON.format(error=error.msg)
+    if not isinstance(raw, dict):
+        return NOT_OBJECT
+    problems = (_field_problem(raw, f) for f in REQUEST_FIELDS)
+    return next((p for p in problems if p), raw)
+
+
+def _decoded(raw: dict[str, Any]) -> bytes | str:
+    try:
+        return base64.b64decode(raw["data"], validate=True)
+    except (binascii.Error, ValueError):
+        return NOT_BASE64
 
 
 def _docs(docs_dir: str) -> str:
@@ -202,20 +280,45 @@ def data_refusal(data: bytes) -> str | None:
     return None
 
 
+def _as_written(path: str) -> str | None:
+    return path
+
+
 @dataclass(frozen=True)
 class Where:
-    """Where a list was read: the story file, and the folder its paths must be under."""
+    """Where a list was read: the story file, and the folder its paths must sit in."""
 
     file: str
-    design_dir: str  # "" accepts any path
+    design_dir: str  # "" accepts any path, unresolved
+    resolve: Callable[[str], str | None] = _as_written
+
+
+def resolved_path(repo: Path, path: str) -> str | None:
+    """``path`` resolved against ``repo`` as a repo-relative POSIX path, None outside it."""
+    root = system.resolve(repo)
+    full = system.resolve(repo / path)
+    return full.relative_to(root).as_posix() if full.is_relative_to(root) else None
+
+
+def _path_problem(path: Any, where: Where) -> str | None:
+    if not isinstance(path, str):
+        return NOT_STRING
+    if where.design_dir == "":
+        return None
+    resolved = where.resolve(path)
+    design = PurePosixPath(where.design_dir)
+    if resolved == path and PurePosixPath(path).parent == design:
+        return None
+    shown = OUTSIDE_REPO if resolved is None else resolved
+    return OUTSIDE.format(path=path, resolved=shown, design=where.design_dir)
 
 
 def _item_problem(item: Any, where: Where, seen: set[str]) -> str | None:
     if not isinstance(item, dict):
         return "not a mapping"
     path, sha = item.get("path"), item.get("sha256")
-    if not (isinstance(path, str) and path.startswith(where.design_dir)):
-        return f"path must be a string under {where.design_dir or 'the repo'}"
+    if problem := _path_problem(path, where):
+        return problem
     if not (isinstance(sha, str) and SHA256.match(sha)):
         return "sha256 must be 64 lowercase hex digits"
     return f"path {path} is listed twice" if path in seen else None
@@ -292,15 +395,19 @@ def _safe(made: str, parsed: tuple[dict[str, Any], str], files: tuple[SharedFile
     return rest == before and listed(Where("", ""), again[0]) == Listed(files)
 
 
-def _story_of(path: str) -> str:
-    return path.rsplit("/", 1)[-1].split("-", 1)[0]
+@dataclass(frozen=True)
+class Brief:
+    """Whose brief a section is for: the story and the role."""
+
+    story: str
+    role: str
 
 
-def brief_section(found: Listed, role: str) -> str:
+def brief_section(found: Listed, brief: Brief) -> str:
     """The ``## Shared files`` section of a role's brief (S9); empty when none applies."""
-    if not found.files or role not in BRIEF_NOTES:
+    if not found.files or brief.role not in BRIEF_NOTES:
         return ""
-    head = BRIEF_HEAD.format(story=_story_of(found.files[0].path), note=BRIEF_NOTES[role])
+    head = BRIEF_HEAD.format(story=brief.story, note=BRIEF_NOTES[brief.role])
     lines = (BRIEF_LINE.format(path=f.path, short=f.sha256[:SHORT]) for f in found.files)
     return head + "\n".join(lines)
 
@@ -314,7 +421,8 @@ def listed_of(config: Config, story: str) -> Listed:
         return Listed()
     if parsed is None:
         return Listed()
-    return listed(Where(file, f"{_docs(config.team.docs_dir)}/design/"), parsed[0])
+    resolve = functools.partial(resolved_path, config.repo)
+    return listed(Where(file, f"{_docs(config.team.docs_dir)}/design/", resolve), parsed[0])
 
 
 def _found(config: Config, path: str) -> str | None:

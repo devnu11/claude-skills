@@ -539,7 +539,7 @@ class Runtime:
         if plan.story is None:
             return
         found = shares.listed_of(self.config, plan.story.id)
-        if section := shares.brief_section(found, plan.role.name):
+        if section := shares.brief_section(found, shares.Brief(plan.story.id, plan.role.name)):
             plan.prompt += "\n\n" + section
 
     def _confine_git(self, plan: Plan) -> None:

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from . import shares, story_spec, system
 from .events import Event, EventKind
 from .relay import LIAISON_DIR
-from .shares import Refused, Share, SharedFile
+from .shares import BadRequest, Refused, Request, Share, SharedFile
 
 if TYPE_CHECKING:
     from .dispatch import Runtime
@@ -49,14 +49,13 @@ class Shares:
         finally:
             system.remove(draft)
 
-    def all(self) -> list[Share]:
-        """Every readable request, in number order."""
+    def all(self) -> list[Request]:
+        """Every numbered request, in number order; unreadable ones are bad requests."""
         if not system.is_dir(self.folder):
             return []
-        read = (self._read(f"f{n}", path) for n, path in sorted(self._numbered()))
-        return [s for s in read if s]
+        return [self._read(f"f{n}", path) for n, path in sorted(self._numbered())]
 
-    def pending(self, settled: Mapping[str, str]) -> list[Share]:
+    def pending(self, settled: Mapping[str, str]) -> list[Request]:
         """Requests whose ids are not in ``settled``."""
         return [s for s in self.all() if s.id not in settled]
 
@@ -65,11 +64,12 @@ class Shares:
         return [(int(m[1]), p) for m, p in matched if m]
 
     @staticmethod
-    def _read(rid: str, path: Path) -> Share | None:
+    def _read(rid: str, path: Path) -> Request:
         try:
             return Share.from_json(rid, system.read_text(path))
-        except OSError:
-            return None
+        except OSError as error:
+            problem = shares.UNREADABLE_REQUEST.format(error=error.strerror)
+            return shares.bad_request(rid, problem)
 
     def _publish(self, draft: Path, share: Share) -> Share:
         taken = [n for n, _ in self._numbered()]
@@ -117,8 +117,22 @@ class Sharer:
         """Settle every pending share in number order; wait while a boundary is open."""
         if self.runtime.state.boundary is not None:
             return
-        for share in Shares(self.runtime.config.run_dir).pending(self.runtime.state.shares):
-            self._settle(share)
+        for request in Shares(self.runtime.config.run_dir).pending(self.runtime.state.shares):
+            if isinstance(request, BadRequest):
+                self._refuse_bad(request)
+            else:
+                self._settle(request)
+
+    def _refuse_bad(self, bad: BadRequest) -> None:
+        data: dict[str, object] = {
+            "request": bad.id,
+            "path": None,
+            "sha256": None,
+            "commit": None,
+            "outcome": Outcome.REFUSED.value,
+            "reason": bad.reason,
+        }
+        self._note(bad.id, f"refused: {bad.reason}", Event(EventKind.SHARE, ROLE, None, data))
 
     def _settle(self, share: Share) -> None:
         config = self.runtime.config
@@ -161,12 +175,15 @@ class Sharer:
             return False
 
     def _record(self, share: Share, settled: Settled) -> None:
-        runtime = self.runtime
-        runtime.state.shares[share.id] = settled.state_text()
-        runtime.save()
-        runtime.events.emit(Event(EventKind.SHARE, ROLE, share.story, self._data(share, settled)))
+        event = Event(EventKind.SHARE, ROLE, share.story, self._data(share, settled))
+        self._note(share.id, settled.state_text(), event)
         if settled.outcome is Outcome.APPLIED:
             self._tell(share, settled.commit or "")
+
+    def _note(self, rid: str, text: str, event: Event) -> None:
+        self.runtime.state.shares[rid] = text
+        self.runtime.save()
+        self.runtime.events.emit(event)
 
     def _data(self, share: Share, settled: Settled) -> dict[str, object]:
         path = shares.target_of(self.runtime.config.team.docs_dir, share)
