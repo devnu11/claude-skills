@@ -158,6 +158,7 @@
     "agile-team/runner/tests/test_s152_start.py::test_ac2_3_the_report_hands_the_failures_to_the_po"
   ],
   "s154": [
+    "agile-team/runner/tests/test_s154_events.py",
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac1_real_os_call_is_a_pytest_failed_but_not_an_exception",
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac2_e2e_items_and_items_without_a_closure_are_not_refused",
     "agile-team/runner/tests/test_s154_guard.py::test_s154_round2_ac2_each_temp_dir_fixture_is_found[tmp_path]",
