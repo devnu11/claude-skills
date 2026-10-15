@@ -69,3 +69,10 @@ what the rebase changed.
   `state.json` drops them on load, and a saved boundary at `review` or
   `restack`, or with a `review_*` failure, loads at `push` with no failure.
 - The `rebase` stage's rules R1 to R11 (ADR-0041) are unchanged.
+
+## Amended by s152 (2026-10-15)
+
+The follow-up start rebase is ADR-0077: the start `sync` rebases the team
+branch onto the target. A start conflict is aborted and holds nothing, so a
+team branch that conflicts with main still waits for the human's hand
+rebase: its as-built PR gets no CI (`none`), and the end does not rebase.

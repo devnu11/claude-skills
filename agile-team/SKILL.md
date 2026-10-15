@@ -269,11 +269,19 @@ command fails.
    300 s) is killed along with everything it started, and the story
    bounces. The reason names the hung test, so a hanging test costs
    minutes and never stalls the run.
-   **Sprint boundaries.** The team rebases onto main **at sprint end
-   only** (s108). At each sprint start the runner fetches, reports how
-   far `origin/main` moved since the last sprint-end rebase, and runs the
-   full checks. It changes nothing: no rebase, no push, no PR edit. A
-   merge made mid-sprint waits for the next sprint end, unless it is
+   **Sprint boundaries.** The team branch is rebased onto main at both
+   edges, never within a sprint. At each sprint start (s152) the runner
+   fetches and rebases the team branch onto `origin/main` once more (the
+   team may have been stopped while main moved), remapping the recorded
+   hashes as at the end; a branch already on main is left alone. A start
+   conflict is aborted, holds nothing, and you get an `update`: the human
+   can rebase by hand. Then it runs the full checks. A failure holds
+   nothing: the failing test ids are the sprint's **known failures** (on
+   the start's `done` boundary event), you get an `update`, and the PO
+   asks you for a story for them (`request_story`). Write it and place it
+   with `story new --sprint current` (the top of this sprint) or later
+   (`next`, `backlog`, `--after`). No push or PR edit at the start. A
+   merge made mid-sprint waits for the next boundary, unless it is
    picked (below). **Picks** (s141): when the human needs a change on the
    team branch now (a commit or an `A..B` range, from main or from an open
    PR), fetch it first (the runner never fetches), then run `$AT pick

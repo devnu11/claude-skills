@@ -10,6 +10,8 @@
 
 **Amended by s151 (2026-10-15):** The END rebase now runs after the as-built push and only once that push's CI is green (`boundary.rebase_refusal`, ADR-0075). It is followed by a second push of the rebased branch to the same `<prefix><N>` and a second CI wait that never holds. With no green CI (no `gh`, no permission, no checks, or a red result settled by `record_ci_bug`) the sprint end does not rebase. R1 to R11 are unchanged.
 
+**Amended by s152 (2026-10-15):** R12 is reversed again in part: the START sync rebases too (ADR-0077), with the same `Upstream.rebase_onto` and the same remap, so a team stopped while main moved starts the sprint on it. A branch already on the target (nothing pinned, `behind() == 0`) runs no git rebase. A start conflict is aborted, holds nothing, and the sprint goes on from the unchanged branch. The END rebase and R1 to R11 are unchanged; hashes still never change within a sprint.
+
 **Date:** 2026-10-12  
 **Status:** Accepted (amended s108)  
 **Affected:** Runner git model; sprint boundaries; state tracking; review stack (moved to sprint end)

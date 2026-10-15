@@ -36,8 +36,8 @@ nothing is rebased) and `boundary.check`. A sprint end runs, in order:
 
 | Stage | What it does |
 |---|---|
-| `boundary.sync` | Fetch the target, record the team branch, record the sprint's own branch |
-| `boundary.check` | Run the full checks |
+| `boundary.sync` | Fetch the target and record the team branch; at a sprint start, rebase it onto the target (left alone when already on it; a conflict is aborted and holds nothing); at a sprint end, record the sprint's own branch |
+| `boundary.check` | Run the full checks; at a sprint start a failure holds nothing and its failing tests are recorded as known failures |
 | `boundary.push` | Push the team branch as it is to the sprint's branch and open or reuse its PR |
 | `boundary.ci-wait` | Wait for that push's CI and read failing logs; green is the gate for the rebase |
 | `boundary.rebase` | Rebase the team branch onto the target, only after green CI; a conflict goes to DevOps in a scratch worktree, and the runner's checks and full checks of its result run here |

@@ -4,15 +4,23 @@ The team works on its own branch (the **team branch**). At every sprint
 boundary the runner does the git work itself and checks that everything
 still works:
 
-- **Sprint start**: it fetches `origin` and tells you how far `main` moved
-  since the last sprint end, for example *"origin/main moved 3 commits since
-  the last sprint-end rebase; nothing changes until the next sprint end"*.
-  It changes nothing: no rebase, no merge, no push, no pull request. Then it
-  runs the full checks on the team branch. The sprint's stories move only
-  once they pass.
+- **Sprint start**: it fetches `origin` and rebases the team branch onto
+  `main` once more, because the team may have been stopped while you
+  merged something. A branch already on `main` is left alone. Every commit
+  hash the runner recorded is rewritten, as at the sprint end. If the
+  rebase conflicts, the runner aborts it, leaves the team branch as it
+  was, tells you, and the sprint goes on; rebase the team branch by hand
+  when you can, since until then the sprint's pull request conflicts with
+  `main` and gets no CI. There is no push and no pull request at the
+  start. Then it runs the full checks on the team branch. A failure
+  doesn't hold the sprint: the failing tests are recorded as the sprint's
+  **known failures**, the Product Owner asks the liaison for a story for
+  them, and the liaison writes it and puts it at the top of this sprint or
+  later.
 - **During the sprint**: nothing happens to your pull requests, and nothing
   is merged or rebased into the team branch. If you merge a pull request
-  mid-sprint, the runner brings it in at the next sprint end. If the team
+  mid-sprint, the runner brings it in at the next sprint end, or at the
+  next start if the team stopped in between. If the team
   needs a change sooner (a test fix, a rule, a commit from an open pull
   request), fetch it and run `agile-team pick <commit-or-A..B> --reason
   "<why>"`. The Product Owner accepts or denies it. To skip the Product

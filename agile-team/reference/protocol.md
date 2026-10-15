@@ -2089,6 +2089,7 @@ The pass ends at the first step whose report matches a row of the
 | `ci_infra` | a CI job ran no step, and still ran none after the runner's one re-run. The PR is NOT ready. The PO tells the human; `continue_boundary` reads the checks again once they re-ran it, or `record_ci_bug` records a story that changes the CI job; see the CI rule under **Ready.** |
 | `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO asks the liaison for a bug story for main (`request_story`) and records it with `record_ci_bug` once the runner has opened it: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
 | `ci_pending` | the CI checks were still running at `[gates] ci_timeout_s`; the line names them. The PR is NOT ready; `continue_boundary` waits again; see the CI rule under **Ready.** |
+| `known_failures` | the sprint start's full checks failed (s152); nothing is held and the sprint goes on. The line names the count, the ids, the team branch's sha and the failing output. Unless an open story already covers them, the PO asks the liaison for a story with `request_story`; the liaison writes it and places it at the top of this sprint or later |
 | `pick-request` | the human or the liaison asked for a pick (s141). The line names each commit with its subject and whether it is on `<remote>/<branch>` or not yet, the reason and who asked. The PO answers with `accept_pick(request)` or `deny_pick(request, reason)`. Until it does, the request stays pending; see "Picks (mid-sprint)". |
 | `pick-forced` | the human forced a pick and the runner applied it: the commits, the reason and the new sha12s. The PO plans around it; it can't be reverted. |
 | `pick-settled` | any other pick outcome: an accepted or own pick applied (with the new sha12s), or not picked (refused, or failed, nothing changed), or a conflict naming the files (the whole pick aborted, nothing changed). |
@@ -2921,19 +2922,49 @@ fetch failed, the sprint's entry is still recorded.)
 **Start** (opened by `start_sprint`, before any role runs, including the
 Manager):
 
-1. **sync**: fetch, record the team branch, and count how far
-   `<remote>/<branch>` moved past it (`git rev-list --count
-   HEAD..<remote>/<branch>`). It logs `pass` with `behind` and the note
-   `the team branch is current with <remote>/<branch>` or `<remote>/<branch>
-   moved N commits since the last sprint-end rebase; nothing changes until
-   the next sprint end`. It **changes nothing** (s108): no rebase, reset,
-   merge or checkout, no hash rewritten, no stack entry dropped, pushed or
-   retargeted, and no `gh` call. A moved main, or a PR merged mid-sprint,
-   waits for the next sprint end. A change the team needs sooner comes
-   in as a pick (see "Picks (mid-sprint)" below).
+1. **sync** (s152, ADR-0077): fetch, record the team branch, and rebase it
+   onto `<remote>/<branch>` once more, since the team may have been stopped
+   while main moved. A branch already on the target (`git rev-list --count
+   HEAD..<remote>/<branch>` is 0, and no `sync_from` is pinned) is left
+   alone: no git rebase runs, and the stage logs `current` with `behind: 0`
+   and the note `the team branch is current with <remote>/<branch>`.
+   Otherwise it pins `sync_from` and runs the same rebase as the end's
+   **rebase** stage, with the same remapping of every recorded hash (see
+   step 5 of the end: `rebased` with `sha` and `rewritten`, or `current`).
+   A pinned `sync_from` always rebases and remaps, so a crash after the
+   rebase is remapped on resume. A **conflict** is aborted, the team branch
+   is unchanged, and nothing is held: the stage logs `conflict` (`files`,
+   `commit`, `subject`, `note`), the liaison gets an `update` (`Sprint N
+   start: rebasing <team> onto <target> stopped at <commit> "<subject>"
+   with conflicts in: <files>. The rebase was aborted, <team> is unchanged
+   and the sprint goes on from it. The human can rebase <team> by hand;
+   until then the sprint end's PR conflicts with <target>, so it gets no
+   CI and the end does not rebase.`), and the boundary goes on to
+   **check**. A start conflict never goes to DevOps. Git stopping for
+   another reason, or a path only one side touched, holds `error` as at
+   the end. No stack entry is dropped, pushed or retargeted, and there is
+   no `gh` call. Within a sprint the team branch is still never rebased; a
+   change the team needs sooner comes in as a pick (see "Picks
+   (mid-sprint)" below).
 2. **check**: the full checks on the team branch (skipped when HEAD is the
    sha that last passed them). The start boundary then finishes; push, ci,
-   rebase, push-rebased and ci-rebased run only at a sprint end.
+   rebase, push-rebased and ci-rebased run only at a sprint end. A failure
+   at the start **holds nothing** (s152): no DevOps fix step, no setback,
+   no escalation, and `upstream.checked` is not set. The failing tests are
+   the sprint's **known failures**: for each failed check, the JUnit ids of
+   its failed cases (`tests/test_x.py::test_y`), or the check's name
+   (`lint`, `coverage`, `e2e:<env>`) when it has none. The boundary
+   finishes with one `done` event carrying `known_failures`, `sha`,
+   `reason` (the failed checks' text) and `checks`. They are on that event,
+   not on `sprint-start`, which `start_sprint` logs before the boundary
+   runs. The liaison gets an `update` (`Sprint N starts with K known
+   failures on <team> at <sha12>: <ids>. Nothing is held and the sprint
+   goes on; the PO asks you for a story for them (request_story).`), and
+   the PO gets the `known_failures` hand-over: unless an open story
+   already covers them, it asks the liaison for a story with
+   `request_story`, with the failing output as evidence. The liaison writes
+   it and places it with `story new --sprint current` (the top of this
+   sprint) or `next`, `backlog` or `--after <id>` (later).
 
 **End** (opened when the sprint is finished: every sprint story is done,
 cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run in this order:
@@ -3145,7 +3176,8 @@ whether the run exited 0 or pytest-cov's `fail_under` stopped it with no
 failing test. That is the same rule the implement gate uses
 (`gates.coverage_shortfall`, s68). A non-zero exit never passes.
 
-**Failures.** A failed full check becomes a **DevOps fix step**, whose
+**Failures.** At a sprint end (at a start they are known failures, see
+**Start** above), a failed full check becomes a **DevOps fix step**, whose
 brief quotes the output. It is fixed on the team branch. For that step
 DevOps may also write source, tests and e2e tests, and the runner commits
 it and checks again. (Since s151 there is no review branch to rebuild and
