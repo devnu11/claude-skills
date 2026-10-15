@@ -429,12 +429,25 @@ def cmd_stop(args: argparse.Namespace, kill: Kill = os.kill) -> int:
     return 0
 
 
+def by_sigterm(pid: int, kill: Kill) -> str:
+    """SIGTERM the supervisor: it unwinds the run at once."""
+    kill(pid, signal.SIGTERM)
+    return f"stop requested; supervisor {pid} signalled"
+
+
+def by_stop_file(pid: int, kill: Kill) -> str:
+    """Leave it to the stop file: on Windows any signal would terminate the supervisor."""
+    return f"stop requested; supervisor {pid} stops within {SLICE:g} s"
+
+
+SUPERVISOR_STOPS: dict[str, Callable[[int, Kill], str]] = {"win32": by_stop_file}
+
+
 def _signal_or_mark(job: Job, kill: Kill) -> str:
-    """SIGTERM a live supervisor; with none, mark the job stopped here."""
+    """Tell a live supervisor to stop; with none, mark the job stopped here."""
     pid = job.pid()
     if pid is not None:
-        kill(pid, signal.SIGTERM)
-        return f"stop requested; supervisor {pid} signalled"
+        return SUPERVISOR_STOPS.get(sys.platform, by_sigterm)(pid, kill)
     job.update(lambda st: st.mark(JobStatus.STOPPED, STOP_REASON))
     job.event("end", {"status": JobStatus.STOPPED, "reason": STOP_REASON})
     return f"job {job.name} stopped (no supervisor was running)"

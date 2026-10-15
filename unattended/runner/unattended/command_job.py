@@ -21,12 +21,12 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import process_group
 from .limits import (
     LIMIT_PATTERNS,
     NETWORK_PATTERNS,
@@ -106,11 +106,12 @@ class CommandRun:
             stdin=subprocess.DEVNULL,
             stdout=self.out,
             stderr=subprocess.STDOUT,
-            start_new_session=True,
+            **process_group.current().spawn,
         )
 
     def _wait(self, proc: subprocess.Popen[bytes], watch: RunWatch) -> int:
         while (code := exit_code(proc, watch.slice)) is None:
+            watch.check_stop()
             self._obey(watch.check(), proc)
         return code
 
@@ -147,14 +148,15 @@ def command_for(state: JobState) -> str:
 
 
 def end(proc: subprocess.Popen[bytes]) -> None:
-    """SIGTERM the command's process group if it still runs; SIGKILL it after a grace."""
+    """Stop the command's process group if it still runs; kill it after a grace."""
     if proc.poll() is not None:
         return
-    os.killpg(proc.pid, signal.SIGTERM)
+    group = process_group.current()
+    group.terminate(proc.pid)
     try:
         proc.wait(TERM_GRACE)
     except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
+        group.kill(proc.pid)
         proc.wait()
 
 

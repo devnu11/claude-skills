@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import awake, cli, notify
+from unattended import awake, cli, notify, store
 from unattended.auth import ENV_VAR
 from unattended.awake import SleepPolicy
 from unattended.prompt_job import PromptJob
@@ -607,3 +607,18 @@ def test_plain_wait_ignores_notices(tmp_path: Path, capsys: pytest.CaptureFixtur
 
 def test_notices_without_events(tmp_path: Path) -> None:
     assert cli.notices(make(tmp_path)) == []
+
+
+def test_stop_on_windows_leaves_it_to_the_stop_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(store, "ALIVE_PROBES", {"win32": lambda pid: True})
+    job = make(tmp_path, JobStatus.WAITING)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    sent: list[tuple[int, int]] = []
+    args = cli.build_parser().parse_args(["--home", str(tmp_path / "home"), "stop", "j"])
+    assert cli.cmd_stop(args, lambda pid, sig: sent.append((pid, sig))) == 0
+    assert sent == []
+    assert job.stop_requested()
+    assert "stops within 30 s" in capsys.readouterr().out

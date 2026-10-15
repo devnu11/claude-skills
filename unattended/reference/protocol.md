@@ -14,7 +14,7 @@ rewrite it).
 | `list` | Every job as JSON. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
-| `stop NAME` | Write the stop file and SIGTERM the supervisor. With no supervisor alive, mark the job stopped. |
+| `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
 | `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--hardstop D] [--idle-stop D] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
 | `extend NAME [--until T \| --for D] [--hardstop D] [--idle-stop D] [--max-resumes N] [--max-cost USD]` | Change the limits of a job that has not ended (`running` or `waiting`, with or without a live supervisor); logs `extend`. A running job's watch re-reads them within 30 s, so a deadline moved into the future returns the run to the open phase. A stop command already sent is not undone. An ended job is refused: use `resume`. |
 
@@ -78,7 +78,7 @@ unique within a home.
 | Platform | Probe |
 |---|---|
 | macOS, Linux | `os.kill(pid, 0)`: no such process means not alive; a permission error means alive. |
-| Windows | `OpenProcess` and then `GetExitCodeProcess` (`STILL_ACTIVE`) through `ctypes`. Access denied means alive. `os.kill` isn't used, because on Windows it terminates the process instead of probing it. CI runs these tests on `windows-latest`. |
+| Windows | `OpenProcess` and then `GetExitCodeProcess` (`STILL_ACTIVE`) through `ctypes`. Access denied means alive. `os.kill` isn't used, because on Windows it terminates the process instead of probing it. See [Windows](#windows). |
 
 ### Statuses
 
@@ -229,13 +229,17 @@ supervisor never waits on them.
 
 ## Windows
 
-Not supported in practice today. `alive()` checks the supervisor with
-`os.kill(pid, 0)`, which on Windows terminates the process instead (CPython
-calls `TerminateProcess` for any signal but the two console events), so
-`status`, `wait` and `stop` would kill the supervisor. Command jobs stop
-through POSIX process groups (`start_new_session`, `os.killpg`), so the hard
-stop and the `cpu` and `children` probes are POSIX only. The Windows
-notifier branch exists and is unit-tested, but has not run on Windows.
+Each platform difference is a table row, and CI runs the Windows rows on `windows-latest`:
+
+| What | macOS, Linux | Windows |
+|---|---|---|
+| Is the supervisor alive? (`store.ALIVE_PROBES`) | `os.kill(pid, 0)` | `OpenProcess` + `GetExitCodeProcess` through `ctypes`. `os.kill` would terminate the process. |
+| The command's group (`process_group.GROUPS`) | a new session (`start_new_session`) | a new process group (`CREATE_NEW_PROCESS_GROUP`) |
+| Graceful end of the command | SIGTERM to the group | CTRL_BREAK to the group. Without a shared console the event can't be sent, so the hard end follows after the grace. |
+| Hard end of the command | SIGKILL to the group | `taskkill /T /F /PID <pid>`: the process and every process it started |
+| `stop` (`cli.SUPERVISOR_STOPS`) | SIGTERM to the supervisor, which unwinds at once | the stop file only: the supervisor sees it within one slice (30 s), ends the command's group and marks the job stopped. Any signal would terminate the supervisor. |
+
+Still POSIX only: the `cpu` and `children` progress probes, which read `ps` by process group. The Windows notifier branch is unit-tested but hasn't run on Windows.
 
 ## Keeping awake
 

@@ -11,7 +11,7 @@ from unattended import command_job
 from unattended.command_job import CommandJob, RunOutput
 from unattended.limits import Bounds, Outcome, OutcomeKind
 from unattended.store import LOG_FILE, Job
-from unattended.watch import RunWatch
+from unattended.watch import RunWatch, StopRequested
 
 from .conftest import MakeJob, command_spec
 
@@ -262,3 +262,12 @@ def test_the_command_finds_its_heartbeat_path(make_job: MakeJob, workdir: Path) 
     job = make_job(command_spec(workdir, 'echo "$UNATTENDED_HEARTBEAT"'))
     CommandJob(job, os.environ).run_once(RunWatch(job))
     assert job.path(LOG_FILE).read_text().splitlines()[1] == str(job.path("heartbeat.json"))
+
+
+def test_a_stop_file_ends_the_run(make_job: MakeJob, workdir: Path) -> None:
+    job = make_job(command_spec(workdir, "sleep 30"))
+    job.request_stop()
+    started = time.monotonic()
+    with pytest.raises(StopRequested):
+        CommandJob(job, os.environ).run_once(RunWatch(job, time.time, 0.05))
+    assert time.monotonic() - started < 10
