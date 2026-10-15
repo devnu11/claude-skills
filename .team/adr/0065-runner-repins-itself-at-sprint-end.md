@@ -82,6 +82,6 @@ CLI refuses them, so every re-pin's `config check` failed and the rollback's
 exec exited 2, ending the run. The CLI's global options now always go before
 the subcommand: `agile-team --repo <repo> [--home <home>] config check` and
 `agile-team --repo <repo> [--home <home>] start --resume`. `repin.Pin` keeps
-the run's global options (`repin.global_argv`) and builds both commands from
+the run's global options (`repin.build_global_argv`) and builds both commands from
 them, so the config check also gets the run's key home. Tests parse every argv
 the re-pin builds with the real CLI parser. See `agile-team/docs/design/s158.md`.
