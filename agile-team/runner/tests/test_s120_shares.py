@@ -87,10 +87,11 @@ def test_binary_bytes_survive_the_round_trip() -> None:
     assert shares.Share.from_json("f2", share.to_json()).data == raw
 
 
-def test_a_tampered_sha256_reads_as_none() -> None:
+def test_a_tampered_sha256_is_a_bad_request() -> None:
     data = json.loads(shares.Share("f1", "s1", "m.html", BYTES).to_json())
     data["sha256"] = OTHER
-    assert shares.Share.from_json("f1", json.dumps(data)) is None
+    bad = shares.Share.from_json("f1", json.dumps(data))
+    assert isinstance(bad, shares.BadRequest)
 
 
 @pytest.mark.parametrize(
@@ -104,8 +105,8 @@ def test_a_tampered_sha256_reads_as_none() -> None:
         json.dumps({"story": "s1", "name": "n", "sha256": SHA, "data": "!!!", "at": 1}),
     ],
 )
-def test_bad_json_shape_or_base64_reads_as_none(text: str) -> None:
-    assert shares.Share.from_json("f1", text) is None
+def test_bad_json_shape_or_base64_is_a_bad_request(text: str) -> None:
+    assert isinstance(shares.Share.from_json("f1", text), shares.BadRequest)
 
 
 # ----- render and with_entry (S5) ---------------------------------------------------
@@ -267,7 +268,7 @@ def test_line_texts() -> None:
 
 def test_architect_and_proxy_get_their_section() -> None:
     listed = shares.Listed((entry(),))
-    arch = shares.brief_section(listed, "architect")
+    arch = shares.brief_section(listed, shares.Brief("s1", "architect"))
     assert arch.startswith("## Shared files\n\nThe liaison shared these files for s1.")
     assert "## Shared files" in arch
     assert "Read them; never edit them: acceptance checks each one's SHA-256." in arch
@@ -276,21 +277,23 @@ def test_architect_and_proxy_get_their_section() -> None:
         in arch
     )
     assert f"- `{DESIGN}s1-mock.html` (sha256 {SHA[:12]})" in arch
-    proxy = shares.brief_section(listed, "customer-proxy")
+    proxy = shares.brief_section(listed, shares.Brief("s1", "customer-proxy"))
     assert "Where an AC refers to one, judge the product against it." in proxy
 
 
-def test_the_section_names_the_story_from_the_path() -> None:
-    assert "for s1." in shares.brief_section(shares.Listed((entry(),)), "architect")
+def test_the_section_names_the_story_it_is_given() -> None:
+    assert "for s1." in shares.brief_section(
+        shares.Listed((entry(),)), shares.Brief("s1", "architect")
+    )
 
 
 @pytest.mark.parametrize("role", ["developer-cli", "code-reviewer", "product-owner", ""])
 def test_other_roles_get_no_section(role: str) -> None:
-    assert shares.brief_section(shares.Listed((entry(),)), role) == ""
+    assert shares.brief_section(shares.Listed((entry(),)), shares.Brief("s1", role)) == ""
 
 
 def test_no_files_means_no_section() -> None:
-    assert shares.brief_section(shares.Listed(), "architect") == ""
+    assert shares.brief_section(shares.Listed(), shares.Brief("s1", "architect")) == ""
 
 
 def test_brief_notes_cover_exactly_two_roles() -> None:
@@ -441,7 +444,8 @@ def test_all_skips_other_names_and_bad_files(configured: Path) -> None:
     Shares(run_dir).queue(shares.Share("", "s1", "m.html", BYTES))
     system.write_text(run_dir / "liaison" / "shares" / "notes.txt", "x")
     system.write_text(run_dir / "liaison" / "shares" / "f9.json", "garbage")
-    assert [s.id for s in Shares(run_dir).all()] == ["f1"]
+    got = Shares(run_dir).all()
+    assert [s.id for s in got] == ["f1", "f9"] and isinstance(got[1], shares.BadRequest)
 
 
 def test_queue_moves_on_when_the_number_is_taken(configured: Path, monkeypatch) -> None:
