@@ -18,6 +18,7 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `init … --reconfigure` | Re-run phase A; keeps every value already in the config and never overwrites the charter. A section under its old name is rewritten as `[[environment]]` (see "Acceptance environments"). |
 | `config check` | Validate config, every role's resolution and glob placeholders. Prints each warning as `warning: <text>` first (warnings never change the exit code), then the problems. Exit 1 on problems, else 0. |
 | `requirements check` | Parse and check every `<docs>/requirements/REQ-*.md` (s1). Print one JSON object: `problems` (one `{file}: {problem}` line each: a broken file, a `covers` ref to an unknown story or AC, a duplicate id), `coverage` (every story file that reads clean, in id order: each AC id → the active requirements covering it, `[]` when none) and `unreadable` (other story files → their problems). Exit 1 when `problems` is non-empty, else 0. Untraced ACs are not problems. See "Requirements". |
+| `requirements log` | Print the requirement change history as one JSON list, read from the `Requirement-Changed` git trailers of the commits that touched `<docs>/requirements/` (s2): `[{"id", "reason", "sha", "date"}]`, oldest commit first, `date` the author date in ISO 8601. `[]` when there are none. Exit 0; a git error exits 1. See "Requirements". |
 | `roles list` | JSON: each role's layers (built-in, global, repo: `replace`, `addendum` or `stub`) and its resolved model, provider, effort and write scope. |
 | `roles scaffold [--global]` | Write a commented stub for `_shared` and every enabled role that has no file yet, in `.team/roles/` (default) or the global dir. Never overwrites. |
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
@@ -1183,7 +1184,9 @@ Every role ends with:
 `status`: `done`, `changes_requested`, `blocked`, `failed`. The Architect
 adds `"developer": "<role>"` (a string or `null`) to name the developer
 specialisation a story needs; the runner uses it for the implement step (see
-"Routing"). `friction` is
+"Routing"). When it changes or retires a requirement it adds
+`"requirement_changes": {"REQ-003": "<why>"}` (a map of strings, or the
+handoff is malformed; see "Requirements"). `friction` is
 optional: what slowed the step down or would make it cheaper. It is logged on
 the step-end event for the Manager. A developer at `implement` may add
 `"dispute": {"test": "<test id, file path first>", "rule": "<design rule
@@ -1474,6 +1477,7 @@ the work first, inside the same conversation:
 | developer-* (at `implement`) | `suite`: the implement gate itself, the full suite with coverage |
 | unit-tester (at `tests`) | `red`: the tests gate itself (new tests fail; dispute and rework rules as at the gate) |
 | integration-tester (at `e2e`, with `acceptance` enabled) | `presentation`: every environment's presentation is complete (`PRESENTATION.md` exists and is not empty) |
+| architect | `requirements`: every changed or retired requirement file in the step has a reason in the handoff's `requirement_changes` (s2; the refusal says `explain change to REQ-003: add "requirement_changes": …`) |
 
 - Checks run only on a `done` handoff. Any other status (`changes_requested`
   with or without a `dispute`, `blocked`, `failed`) ends the step at once, with
@@ -1493,7 +1497,8 @@ the work first, inside the same conversation:
   ends "(the stop hook's run on this tree)").
 - Each refused check writes a `stop-check` event (`check`, `stage`, `attempt`,
   `of`, `seconds`, `text`). The checks are runner stages `stop.handoff`,
-  `stop.lint`, `stop.suite`, `stop.red` and `stop.presentation`, and their
+  `stop.lint`, `stop.suite`, `stop.red`, `stop.presentation` and
+  `stop.requirements`, and their
   open row and event carry `attempt: {n, of}`. On the Flow chart they are the
   role's after tool boxes: `label · ↻ runs · time · n refused`, and
   `▶ label · attempt n of 3` while running.
@@ -2803,8 +2808,64 @@ part; they cite the AC and requirement ids in their findings.
 
 **Dashboard.** The Requirements tab lists the files (it reads them
 leniently, so a broken file still shows). An exempt story's untraced AC reads
-`designed before s1` and is not a gap. Changes to requirements over time
-(`requirement-changed`) are s2.
+`designed before s1` and is not a gap. Each requirement's history on the tab
+comes from its `requirement-changed` events (below).
+
+### Requirement changes (s2, ADR-0083)
+
+**Classified from the diff.** When a step ends, the runner takes the
+`REQ-*.md` files in the requirements folder that the step changed in its
+write scope. In practice that means the architect's. `git diff
+--name-status --no-renames HEAD` (untracked files count as added) sorts
+them:
+
+| Change | When |
+|---|---|
+| `added` | the file is new |
+| `retired` | the file was removed, or its `status` became `retired` |
+| `changed` | any other edit, including retired → active |
+
+**Reasons.** The handoff gives one reason per changed or retired
+requirement: `"requirement_changes": {"REQ-003": "why"}`. Whitespace is
+collapsed to one line. An added requirement needs no reason, and one without
+a reason gets `new requirement`. The architect's `requirements` stop check
+refuses its `done` stop while a reason is missing. If the step still ends
+without one (another status, a malformed handoff, the stop allowed after 3
+refusals), each unexplained edit is **held back**. It is committed alone and
+reverted (`chore(team): architect's unexplained requirement edits, held
+back`), the same way the quarantine works. The step then counts as a bad
+handoff and bounces with a round:
+`explain change to REQ-003 (your edits are held back in <sha>; make them again and give each reason in the handoff's requirement_changes)`.
+Added and explained changes still land. A reason for a file the step didn't
+touch is ignored.
+
+**Trailers.** The step commit ends with one trailer block: a
+`Requirement-Changed: REQ-003: <why>` line per landed change, in id order,
+then `Co-Authored-By`. Git is the only record. `agile-team requirements log`
+prints it back (see "CLI").
+
+**Event.** Each landed change writes `requirement-changed` with the step's
+`role` and `story`, and data `{id, change, reason, sha}` (`change` is
+`added`, `changed` or `retired`; `sha` is the step commit). A held-back edit
+writes none.
+
+**Auto-accept.** For each changed or retired requirement, the runner takes
+the stories its `covers` names, before or after the change, except the
+step's own story:
+
+- an open story past the design step goes back to design, with no round
+  counted and its loop state cleared, the same reset a story amend gets. Its
+  next brief has the note `Back to design: <story>'s step changed
+  requirements this story traces (<sha12>): REQ-003 changed: <why>. …`;
+- a done story is listed in `affected_done_stories`;
+- a story at design or before, or a cancelled one, is left alone.
+
+**Report.** The step's report (`run_role`) gains `requirement_changes`
+(`[{id, change, reason}]`), `redesigned_stories`, `affected_done_stories`
+and `held_back`, each only when it is non-empty. A report with
+`affected_done_stories` hands over to the PO (`affected_done`). The PO then
+asks the liaison with `request_story` for a follow-up story that checks
+those stories against the changed requirements.
 
 ## Story dependencies
 

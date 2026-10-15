@@ -447,6 +447,16 @@ command fails.
   Customer Proxy cite REQ and AC ids. `agile-team requirements check` prints
   the problems and the AC coverage as JSON (exit 1 on problems), and the
   dashboard's Requirements tab shows the same files.
+- **Requirement changes carry a reason in git** (s2): the architect's
+  handoff gives `"requirement_changes": {"REQ-003": "why"}` for each changed
+  or retired requirement. The runner writes each reason into the step
+  commit as a `Requirement-Changed: REQ-003: <why>` trailer and logs a
+  `requirement-changed` event. It refuses the architect's stop while a
+  reason is missing. An edit that still has no reason is held back, and the
+  step bounces ("explain change to REQ-003"). Open stories past design that
+  trace the requirement go back to design without a round. Done ones are
+  reported as `affected_done_stories`, so the PO asks you for a follow-up
+  story. `agile-team requirements log` prints the history as JSON.
 - Only the runner runs the full suite and coverage. Roles get the results in
   their briefs (`## Runner results`), a full `pytest` or `--cov` run from a
   role's Bash is denied, and developers ask the runner for named tests

@@ -133,6 +133,7 @@ one line here. Older designs are the sections at the end of this file.
 | s157 House-rules gates every story: this repo's `.agile-team.toml` adds `house-rules check` to `static` (gates, quality, boundaries) and to `[toolchain.files] lint_files` (stop, via `--project "$PWD/house-rules/runner"`), and `fix` restores `.house-rules-baseline.json` from HEAD then runs `house-rules baseline` so the baseline only shrinks; Python-writing roles get the file in `write`; `.house-rules.toml` excludes `.team/run/**`; the only runner change is `owners.FINDINGS` skipping `warn`/`warning` lines (ADR-0081, REQ-111–114) | [design/s157.md](design/s157.md) |
 | s156 A stuck Sprint Backlog is reported, not refilled: `ready_backlog`/`_offer`/`offered` go; `Router._idle` hands over `sprint_backlog_stuck` (never quiet; each story's stall reason) and after 3 (`RunState.stuck_asks`, reset by a step, `po_tools.STUCK_RESETS` calls, `start_sprint`, `add_to_sprint`) sets `blocked` and posts it; `until-blocker` refuses `done`/`blocked` only while a Sprint Backlog story can move (`sprint_end.can_move`); `next_sprint` unchanged; PO-facing names and texts say Product Backlog or Sprint Backlog (ADR-0082, amends ADR-0057 and ADR-0065; REQ-115–121) | [design/s156.md](design/s156.md) |
 | s158 Bug: the self re-pin passed `--repo`/`--home` after the subcommand, so its `config check` and the exec always exited 2. `repin.build_global_argv` builds the global options, `repin.Pin` keeps them (`options`), and the check and `start --resume` exec put them before the subcommand; the check now gets `--home` too; tests parse each argv with `cli.build_parser()` (ADR-0065 amended, REQ-022, REQ-122) | [design/s158.md](design/s158.md) |
+| s2 Requirement change tracking: new `requirement_changes.py` sorts a step's in-scope `REQ-*.md` files from `git diff --name-status --no-renames` into added/changed/retired; the handoff's `requirement_changes` gives reasons; an unexplained changed/retired edit is held back (commit + revert) and the step bounces as a bad handoff ("explain change to REQ-003"), after the architect's new `requirements` stop check; reasons are `Requirement-Changed: <id>: <why>` trailers in the step commit's one trailer block (`with_trailer(message, trailers)`); one `requirement-changed` event each with `sha`; open stories past design that trace a changed/retired one go back via `Pipeline.redesign` (no round), done ones are `affected_done_stories` with an `affected_done` hand-over; `requirements log` prints the trailers as JSON (ADR-0083, REQ-123–129) | [design/s2.md](design/s2.md) |
 
 ## Components
 
@@ -1190,6 +1191,7 @@ contract changes, candidates for a hardening story):**
   `requirement-changed` event **is** the requirements log for the dashboard.
   Until s2 puts `sha` into that event's `data`, `history[].sha` is `""`. s2
   should add it there: one key, and the event keeps its other fields.
+  (s2's design does this, C7 in [design/s2.md](design/s2.md).)
 - Until s1 and s2 land, `requirements` is `[]` in this repo, and AC1 allows
   that.
 
