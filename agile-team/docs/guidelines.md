@@ -23,6 +23,22 @@ apply them.
   function (`main`, or `just_do_it` when `main` doesn't fit). Loops, `with`,
   `try`, bare calls and other `if`s at the top level go into functions. This
   applies to tests and scripts too.
+- SOLID and KISS. DRY, but AHA: don't build an abstraction until the second
+  real use shows its shape (s57).
+
+## Names (s57, ADR-0074)
+
+- Functions and methods are verbs (`get_boundary_fields`, `log_turn`,
+  `is_held`). Only an accessor `@property` is a noun. A plain getter with no
+  better verb is `get_<noun>`.
+- Whole words. No single letters or abbreviations (`b`, `rt`, `e`, `Out`).
+  An acronym is fine when it is better known than its expansion (PR, CI, SHA).
+- No alias-only variables. Write `self.runtime.state` rather than
+  `rt = self.runtime`. Keep a local only when it makes the code much easier
+  to read, and then give it a whole-word name
+  (`boundary = self.runtime.state.boundary`).
+- These rules are the reviewer's judgement, not an automatic check. A quality
+  pass never renames a name that a test uses.
 
 ## Refusals and side effects
 
@@ -96,6 +112,10 @@ rule, update in the same story:
   A test fails when the committed fixture differs from a fresh rebuild.
 - New event kinds go in `events.EventKind`; never reuse a kind for a
   different shape.
+- Build an event with its constructor in `event_factory`
+  (`build_<kind>_event`, pure, never emits), then emit it yourself with
+  `EventLog.emit`. A new kind gets a new constructor. Don't write a helper
+  that both builds and emits (s57, ADR-0074).
 - The dashboard never changes the run itself. `dashboard/snapshot.py` reads
   only the files `watched_files` lists (plus the role book). It never
   writes, never runs git and never reads key files. A new data source is a
