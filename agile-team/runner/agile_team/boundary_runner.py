@@ -5,7 +5,8 @@ The stages: sync, check, push as built, ci, rebase, push rebased, ci rebased.
 The router asks ``due`` for the next unit of work, runs a stage with ``step`` or
 a devops fix with ``run_role``, and calls ``after_fix`` when the fix is back.
 All git access goes through ``runtime.upstream`` and ``runtime.prs``; checks run
-through ``runtime.shell``. Only the start sync and the end's rebase stage rewrite the team branch, through ``Upstream``.
+through ``runtime.shell``. Only the start sync and the end's rebase stage rewrite the
+team branch, through ``Upstream``.
 """
 
 from __future__ import annotations
