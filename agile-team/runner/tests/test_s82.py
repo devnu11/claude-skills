@@ -13,7 +13,6 @@ from agile_team.config import Environment
 from agile_team.gates import READY, StoryState, Verdict
 from agile_team.presentation import Trial
 
-from .clock import about
 from .conftest import write_story
 from .fake_system import FAKE_REPO, Done, FakeSystem, Hang
 
@@ -44,7 +43,7 @@ def test_wait_constants() -> None:
 
 def test_wait_until_true_at_once_does_not_sleep(fake: FakeSystem) -> None:
     assert sandbox.wait_until(lambda: True, 5) is True
-    assert fake.slept == about([])
+    assert fake.slept == []
 
 
 def test_wait_until_true_on_the_third_check_sleeps_twice(fake: FakeSystem) -> None:
@@ -55,7 +54,7 @@ def test_wait_until_true_on_the_third_check_sleeps_twice(fake: FakeSystem) -> No
         return len(checks) == 3
 
     assert sandbox.wait_until(done, 5) is True
-    assert fake.slept == about([sandbox.POLL_EVERY_S, sandbox.POLL_EVERY_S])
+    assert fake.slept == [sandbox.POLL_EVERY_S, sandbox.POLL_EVERY_S]
 
 
 def test_wait_until_never_true_gives_up_at_the_deadline(fake: FakeSystem) -> None:

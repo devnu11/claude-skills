@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from agile_team import system
 
-from .clock import about
 from .fake_system import (
     FAKE_HOME,
     FAKE_IDS,
@@ -158,7 +157,7 @@ def test_expand_user_maps_tilde_to_the_fake_home() -> None:
 
 def test_sleep_advances_now_and_monotonic(fake: FakeSystem) -> None:
     system.sleep(2.5)
-    assert fake.slept == about([2.5])
+    assert fake.slept == [2.5]
     assert system.now() == START_CLOCK + 2.5
     assert system.monotonic() == START_CLOCK + 2.5
 
@@ -432,7 +431,7 @@ def test_async_sleep_advances_the_clock_and_records(fake: FakeSystem) -> None:
     import asyncio
 
     asyncio.run(system.async_sleep(4.0))
-    assert fake.slept == about([4.0])
+    assert fake.slept == [4.0]
     assert system.now() == START_CLOCK + 4.0
 
 
@@ -445,4 +444,4 @@ def test_on_sleep_callbacks_run_once_each_in_order(fake: FakeSystem) -> None:
     asyncio.run(system.async_sleep(1.0))
     system.sleep(1.0)
     assert seen == ["a", "b"]
-    assert fake.slept == about([1.0, 1.0, 1.0])
+    assert fake.slept == [1.0, 1.0, 1.0]

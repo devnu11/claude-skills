@@ -18,7 +18,6 @@ from agile_team.presentation import Check, Need, Recipe, Trial
 from agile_team.roles import Handoff
 from agile_team.sandbox import NotUp, Order, PortBusy, Preparer, Start
 
-from .clock import about
 from .conftest import FakeQuery, FakeRunner, present, write_story
 from .fake_system import FAKE_REPO, FIRST_CHILD_PID, START_CLOCK, Done, FakeSystem, Hang
 
@@ -214,7 +213,7 @@ def test_prepare_starts_the_service_and_waits_for_the_probe(
 
     monkeypatch.setattr(system, "spawn_logged", spying)
     p = preparer(probe).prepare(config, Order(DASHBOARD, present(config, "s4")))
-    assert probe.urls == [PROBE_URL] * 3 and fake.slept == about([sandbox.PROBE_EVERY_S] * 2)
+    assert probe.urls == [PROBE_URL] * 3 and fake.slept == [sandbox.PROBE_EVERY_S] * 2
     assert seen_copy == [True]
     (command,) = fake.commands
     assert "--host 127.0.0.1 --port 8799" in command.text

@@ -10,7 +10,6 @@ from agile_team.po_tools import Start, StartMode, Tools
 from agile_team.providers import Provider, Providers
 from agile_team.state import RunStatus
 
-from .clock import about
 from .conftest import FakeQuery, write_story
 from .fake_system import FakeSystem
 
@@ -171,7 +170,7 @@ def test_ask_notify_and_wait(make_runtime, fake: FakeSystem) -> None:
     q = call(t.ask_user({"text": "DB?", "stories": ["s1"]}))
     assert q == {"id": "m1", "blocks": ["s1"]}
     assert call(t.wait_for_answers({"ids": ["m1"]})) == {"m1": "sqlite"}
-    assert fake.slept == about([po_tools.POLL_S])
+    assert fake.slept == [po_tools.POLL_S]
     call(t.notify_user({"text": "progress"}))
     assert rt.state.status != "sprint-end"
     call(t.notify_user({"text": "review", "kind": "sprint-end"}))

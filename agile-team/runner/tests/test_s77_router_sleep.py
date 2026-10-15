@@ -4,7 +4,6 @@ import asyncio
 
 from agile_team.router import POLL_S, Router
 
-from .clock import about
 from .fake_system import FakeSystem
 from .test_s47 import waiting_rt
 
@@ -13,4 +12,4 @@ def test_a_wait_uses_the_default_sleep_for_one_poll(make_runtime, fake: FakeSyst
     rt = waiting_rt(make_runtime)
     fake.on_sleep = [lambda: rt.relay.answer("m1", "a")]
     asyncio.run(Router(rt).advance())
-    assert fake.slept == about([POLL_S])
+    assert fake.slept == [POLL_S]

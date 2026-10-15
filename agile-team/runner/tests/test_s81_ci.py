@@ -14,7 +14,6 @@ from agile_team.ci import Bucket, Check, CiResult, CiVerdict, CiWatch
 from agile_team.handover import Trigger as T
 from agile_team.upstream import GhPrs, NoPrs, PrMode, UpstreamError
 
-from .clock import about
 from .fake_system import FAKE_REPO, Done, FakeSystem, Hang
 
 G, R, P, N = CiVerdict.GREEN, CiVerdict.RED, CiVerdict.PENDING, CiVerdict.NONE
@@ -204,20 +203,20 @@ def test_green_on_first_look(fake: FakeSystem) -> None:
     assert r.verdict is G and r.pr == 14 and r.head == "abc" and r.url == "https://h/pull/14"
     assert [c[0] for c in prs.calls] == ["wait", "checks"]
     assert prs.calls[0][2] == 1800
-    assert fake.slept == about([])
+    assert fake.slept == []
 
 
 def test_checks_not_queued_yet_are_looked_for_again(fake: FakeSystem) -> None:
     prs = ScriptedPrs([[], [], [chk("pass")]])
     [r] = watch(prs).results([entry()])
     assert r.verdict is G
-    assert fake.slept == about([ci.CI_POLL_S, ci.CI_POLL_S])
+    assert fake.slept == [ci.CI_POLL_S, ci.CI_POLL_S]
 
 
 def test_pending_after_the_watch_ended_is_looked_at_again(fake: FakeSystem) -> None:
     prs = ScriptedPrs([[chk("pending")], [chk("pass")]])
     assert watch(prs).results([entry()])[0].verdict is G
-    assert fake.slept == about([ci.CI_POLL_S])
+    assert fake.slept == [ci.CI_POLL_S]
 
 
 def test_never_any_checks_is_bounded_and_none(fake: FakeSystem) -> None:
@@ -232,7 +231,7 @@ def test_timeout_reports_pending_without_looking_again(fake: FakeSystem) -> None
     [r] = watch(prs, 60).results([entry()])
     assert r.verdict is P and r.checks[0].name == "slow"
     assert [c[0] for c in prs.calls] == ["wait", "checks"]
-    assert fake.slept == about([])
+    assert fake.slept == []
 
 
 def test_the_watch_limit_is_the_time_left_under_one_deadline(fake: FakeSystem) -> None:
