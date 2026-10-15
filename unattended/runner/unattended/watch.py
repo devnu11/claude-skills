@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from .limits import Outcome, OutcomeKind, Phase, Stop, StopCause
+from .probes import Stamp
 from .store import Job, JobState
 
 SLICE = 30.0
@@ -77,6 +78,7 @@ class RunWatch:
     job: Job
     clock: Callable[[], float] = time.time
     slice: float = field(default_factory=lambda: SLICE)
+    spend: Stamp = field(default_factory=Stamp)
     halt: str | None = None
     acted: set[tuple[StopCause, Phase]] = field(default_factory=set)
 

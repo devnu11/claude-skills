@@ -4,15 +4,20 @@ The job inherits the user's Claude Code settings (permissions, hooks), so
 headless it may only do what those settings allow. The session id is saved to
 ``state.json`` from the first message that carries it, so a crash mid-run
 cannot lose it. The final result goes to ``output.md``.
+
+A watcher checks the run's ``RunWatch`` after each slice beside the query.
+A hard stop cancels the query; the SDK then ends its CLI subprocess. Prompt
+jobs have no stop command, so the graceful phase lets the run go on.
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+import anyio
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -23,8 +28,9 @@ from claude_agent_sdk import (
 )
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
+from .probes import Stamp
 from .store import OUTPUT_FILE, Job, JobState
-from .watch import RunWatch
+from .watch import RunWatch, Verdict
 
 SETTING_SOURCES: list[Any] = ["user", "project", "local"]
 # The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
@@ -74,14 +80,19 @@ def metrics_of(result: ResultMessage | None) -> Metrics:
 
 @dataclass
 class Drain:
-    """What a query has produced so far; saves the session id as soon as it appears."""
+    """What a query has produced so far; saves the session id as soon as it appears.
+
+    Each message ticks ``spend``: an agent that is thinking or spending is making progress.
+    """
 
     job: Job
     session_id: str | None
+    spend: Stamp = field(default_factory=Stamp)
     text: str = ""
     result: ResultMessage | None = None
 
     def note(self, message: Any) -> None:
+        self.spend.tick()
         self._save_session(session_of(message))
         self.text = text_of(message) or self.text
         if isinstance(message, ResultMessage):
@@ -132,6 +143,27 @@ def leaves(exc: BaseException) -> list[BaseException]:
 
 
 @dataclass(frozen=True)
+class Run:
+    """One run: the job's state when it started and what its query has produced."""
+
+    state: JobState
+    drain: Drain
+
+
+async def _watch(watch: RunWatch, scope: anyio.CancelScope) -> None:
+    """Check ``watch`` after each slice; cancel ``scope`` when it says to end the run.
+
+    An anyio cancel, not a bare ``asyncio`` task cancel: the SDK's transport
+    shields its subprocess cleanup only against anyio cancellation.
+    """
+    while True:
+        await anyio.sleep(watch.slice)
+        if Verdict.END in watch.check():
+            scope.cancel()
+            return
+
+
+@dataclass(frozen=True)
 class PromptJob:
     """Runs the job's prompt, or its resume prompt in the saved session."""
 
@@ -141,19 +173,27 @@ class PromptJob:
 
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
-        drain = Drain(self.job, state.session_id)
+        drain = Drain(self.job, state.session_id, watch.spend)
         try:
-            asyncio.run(self._drain(state, drain))
+            asyncio.run(self._watched(Run(state, drain), watch))
         except Exception as exc:
             return drain.failed(exc)
         finally:
             self._write_output(drain)
         return drain.finished()
 
-    async def _drain(self, state: JobState, drain: Drain) -> None:
-        options = options_for(state, self.env)
-        async for message in self.query_fn(prompt=prompt_for(state), options=options):
-            drain.note(message)
+    async def _watched(self, run: Run, watch: RunWatch) -> None:
+        """Drain the query beside a watcher; a hard stop cancels both, ending the run."""
+        with anyio.CancelScope() as scope:
+            async with anyio.create_task_group() as watcher:
+                watcher.start_soon(_watch, watch, scope)
+                await self._drain(run)
+                watcher.cancel_scope.cancel()
+
+    async def _drain(self, run: Run) -> None:
+        options = options_for(run.state, self.env)
+        async for message in self.query_fn(prompt=prompt_for(run.state), options=options):
+            run.drain.note(message)
 
     def _write_output(self, drain: Drain) -> None:
         if drain.output:
