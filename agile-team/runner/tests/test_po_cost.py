@@ -81,8 +81,24 @@ def test_own_cost(stored: SessionCost, resumed, reported: float, own: float) -> 
     assert stored.own_cost(resumed, reported) == pytest.approx(own)
 
 
+@pytest.mark.parametrize(
+    ("done", "resumed", "reported", "own"),
+    [
+        (0.3, "s", 1.5, 0.2),  # s10: already ledgered from turns.jsonl
+        (0.8, "s", 1.5, 0.0),  # capped at the delta
+        (0.3, "u", 0.9, 0.9),  # other session ignores it
+        (0.3, "s", 0.2, 0.2),  # restart ignores it
+    ],
+)
+def test_own_cost_after_a_reconcile(done: float, resumed, reported: float, own: float) -> None:
+    base = 5.0 if reported < 1.0 and resumed == "s" else 1.0
+    stored = SessionCost("s", base, done)
+    assert stored.own_cost(resumed, reported) == pytest.approx(own)
+
+
 def test_session_cost_defaults() -> None:
     assert (SessionCost().session, SessionCost().reported) == (None, 0.0)
+    assert SessionCost().reconciled == 0.0
 
 
 # ----- Ledger.last_cost ---------------------------------------------------------------
