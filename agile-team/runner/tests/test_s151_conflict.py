@@ -75,8 +75,8 @@ class Scratch:
 
 
 @pytest.fixture
-def scratch(monkeypatch, tmp_path) -> Scratch:
-    return Scratch(monkeypatch, tmp_path)
+def scratch(monkeypatch, env: Env) -> Scratch:
+    return Scratch(monkeypatch, env.rt.config.run_dir / sr.REBASE_DIR)
 
 
 def conflicted(env: Env, scratch: Scratch) -> bd.Boundary:
