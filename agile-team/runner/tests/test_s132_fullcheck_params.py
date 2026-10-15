@@ -21,42 +21,49 @@ def test_every_function_has_at_most_two_parameters():
     own = [f for _, f in funcs if f.__module__ == "agile_team.fullcheck"]
     assert own
     for func in own:
-        assert len(inspect.signature(func).parameters) <= 2, func.__name__
+        count = len(inspect.signature(func).parameters)
+        assert count <= 2, f"{func.__name__} has {count} parameters"
 
 
 def test_result_takes_check_and_run():
     params = list(inspect.signature(Judging.result).parameters)
     assert params == ["self", "check", "run"]
+    assert len(params) == 3
 
 
 def test_module_result_is_gone():
     assert not hasattr(fullcheck, "_result")
+    assert hasattr(Judging, "result")
 
 
 def test_plain_passing_run():
     result = _judging().result(FullCheck("a", "a"), TestRun(0, "ok", None, {}))
-    assert (result.why, result.code, result.tail, result.pending) == ("", 0, "ok", "")
+    assert (result.why, result.code) == ("", 0)
+    assert (result.tail, result.pending) == ("ok", "")
 
 
 def test_timed_out_for_both_judges():
     run = TestRun(TIMED_OUT, "", None, {})
     for judge in Judge:
         result = _judging().result(FullCheck("a", "a", judge), run)
-        assert result.why == TIMED_OUT_WHY
+        assert result.why == TIMED_OUT_WHY, judge
+        assert result.code == TIMED_OUT
 
 
 def test_coverage_below_required():
     run = TestRun(0, "TOTAL 10 5 50%", None, {})
     result = _judging().result(FullCheck("a", "a", Judge.COVERAGE), run)
     assert result.why == "coverage 50.0% is below 95.0%"
+    assert result.code == 0
 
 
 def test_exit_failure_text():
     result = _judging().result(FullCheck("a", "a"), TestRun(2, "bad", None, {}))
-    assert result.why == "exit 2"
+    assert (result.why, result.code, result.tail) == ("exit 2", 2, "bad")
 
 
 def test_pending_counts_from_skipped():
     run = TestRun(0, "ok", None, {"s1": ("t::a",)})
     result = _judging().result(FullCheck("a", "a"), run)
     assert result.pending == "pending (s1): 1"
+    assert result.why == ""
