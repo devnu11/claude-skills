@@ -859,6 +859,15 @@ fix = "uv run --directory {root} ruff check --fix --exit-zero --quiet {files} &&
 lint_files = "uv run --directory {root} ruff check --quiet {files}"   # non-zero: the stop is refused
 lintable = ["*.py"]            # which changed files are linted
 # {root}: the [[toolchain.targeted]] root holding the files ("." without one); {files}: quoted, relative to it
+# The templates run under sh from the repo root, so "$PWD" is the repo root even
+# when a command changes directory itself. This repo (s157, ADR-0081) adds
+# house-rules: lint_files ends with `&& uv run --frozen --quiet --directory {root}
+# --project "$PWD/house-rules/runner" house-rules check {files}`, and fix ends with
+# `; git restore --source=HEAD --staged --worktree -- .house-rules-baseline.json
+# && uv run --frozen --quiet --project house-rules/runner house-rules baseline`,
+# so a step's commit holds the committed baseline shrunk by what it fixed and
+# never a new entry. `static` ends with `house-rules check` over the whole repo,
+# so gates, the quality step and both boundary checks run it.
 
 [toolchain.report]             # optional; JUnit reports and pending tests (s125). Unset keys come from the preset
 option = "--junitxml={file} -o junit_family=xunit1"   # {file}: the report path; empty turns reporting off
@@ -1880,7 +1889,8 @@ gate routes.
   (pytest `FAILED`/`ERROR` lines, jest `FAIL` lines) and lint findings
   from each configured `lint` and `static` command that fails (ruff,
   flake8, mypy, eslint `path:line:` lines, ruff's `-->` lines,
-  `Would reformat:`). Findings for the same path and source make one item,
+  `Would reformat:`). A `path:line:` line whose message starts with `warn`
+  or `warning` is advice and never an item (s157). Findings for the same path and source make one item,
   with at most 40 output lines. Its printed path is matched against
   `git ls-files` (the exact path, else every tracked path ending
   `/<path>`). If all matches have one owner, that role owns the item.
