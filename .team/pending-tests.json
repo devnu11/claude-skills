@@ -128,7 +128,10 @@
     "agile-team/runner/tests/test_upstream.py::test_push_refuses_main_team_and_unprefixed_branches[main]",
     "agile-team/runner/tests/test_upstream.py::test_push_refuses_main_team_and_unprefixed_branches[teamsprint-1]",
     "agile-team/runner/tests/test_upstream.py::test_push_sends_the_sha_with_its_lease",
-    "agile-team/runner/tests/test_upstream.py::test_push_with_an_empty_expectation_leases_the_absent_branch"
+    "agile-team/runner/tests/test_upstream.py::test_push_with_an_empty_expectation_leases_the_absent_branch",
+    "agile-team/runner/tests/test_handover.py::test_table_rows_are_in_design_order",
+    "agile-team/runner/tests/test_handover.py::test_trigger_values_are_snake_case",
+    "agile-team/runner/tests/test_s59_sync.py::test_sync_from_is_set_once_and_reused_after_continue"
   ],
   "s152": [
     "agile-team/runner/tests/test_fullcheck.py::test_failed_ids_is_empty_without_a_report",
