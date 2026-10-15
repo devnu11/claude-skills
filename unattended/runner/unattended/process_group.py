@@ -1,14 +1,14 @@
 """The command's process group, per platform: how to start one and how to end it.
 
 On macOS and Linux the command gets a new session, and its group is signalled
-(SIGTERM, then SIGKILL). On Windows it gets a new process group: a graceful
-stop sends CTRL_BREAK to the group, and the hard stop runs ``taskkill /T /F``
-on its process tree.
+(SIGTERM, then SIGKILL). On Windows it gets a new process group, ended at once
+with ``taskkill /T /F`` on its process tree. A graceful end there is the job's
+``--stop-command``: a CTRL_BREAK can end the leader first, and ``taskkill /T``
+then can't find the children it left.
 """
 
 from __future__ import annotations
 
-import contextlib
 import os
 import signal
 import subprocess
@@ -44,19 +44,12 @@ def by_session() -> Group:
 
 
 def by_process_group() -> Group:
-    """A Windows process group: CTRL_BREAK to it, then ``taskkill`` on its tree."""
+    """A Windows process group, ended by ``taskkill`` on its tree while its leader lives."""
     return Group(
         {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP},  # type: ignore[attr-defined]
-        send_break,
+        kill_tree,
         kill_tree,
     )
-
-
-def send_break(pid: int) -> None:
-    """CTRL_BREAK to the group led by ``pid``."""
-    # The event needs a console the group shares; without one, kill_tree ends it after the grace
-    with contextlib.suppress(OSError):
-        os.kill(pid, signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
 
 
 def kill_tree(pid: int) -> None:

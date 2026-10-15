@@ -235,8 +235,8 @@ Each platform difference is a table row, and CI runs the Windows rows on `window
 |---|---|---|
 | Is the supervisor alive? (`store.ALIVE_PROBES`) | `os.kill(pid, 0)` | `OpenProcess` + `GetExitCodeProcess` through `ctypes`. `os.kill` would terminate the process. |
 | The command's group (`process_group.GROUPS`) | a new session (`start_new_session`) | a new process group (`CREATE_NEW_PROCESS_GROUP`) |
-| Graceful end of the command | SIGTERM to the group | CTRL_BREAK to the group. Without a shared console the event can't be sent, so the hard end follows after the grace. |
-| Hard end of the command | SIGKILL to the group | `taskkill /T /F /PID <pid>`: the process and every process it started |
+| Graceful end of the command | SIGTERM to the group | none from the runner: use the job's `--stop-command`. A CTRL_BREAK can end the group's leader first, and `taskkill /T` then can't find the children it left (CI caught this). |
+| Hard end of the command | SIGKILL to the group, after a 30 s grace | `taskkill /T /F /PID <pid>` at once: the process and every process it started |
 | `stop` (`cli.SUPERVISOR_STOPS`) | SIGTERM to the supervisor, which unwinds at once | the stop file only: the supervisor sees it within one slice (30 s), ends the command's group and marks the job stopped. Any signal would terminate the supervisor. |
 
 Still POSIX only: the `cpu` and `children` progress probes, which read `ps` by process group. The Windows notifier branch is unit-tested but hasn't run on Windows.
