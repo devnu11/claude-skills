@@ -286,7 +286,7 @@ class BoundaryRunner:
         """S2: the rebase was aborted; tell the liaison and go on, holding nothing."""
         text = self._start_conflict_text(b, result)
         self._post(text)
-        data = _conflict_data(result)
+        data = _describe_conflict(result)
         self._emit(b, Out.CONFLICT, note=text, subject=result.subject, **data)
         self._unpin(b)
         self._advance(b)
@@ -310,11 +310,11 @@ class BoundaryRunner:
         if own is None:
             text = NOTHING_NEW.format(sprint=b.sprint)
             return self._finish(b, text, note=text)
-        self._supersede(b, own)
+        self._drop_superseded(b, own)
         self._emit(b, Out.PASS, note=f"sprint {b.sprint} is the sprint PR")
         self._advance(b)
 
-    def _supersede(self, b: Boundary, own: StackEntry) -> None:
+    def _drop_superseded(self, b: Boundary, own: StackEntry) -> None:
         """R2: older entries leave the stack; their open PRs are named in the own entry."""
         for old in [e for e in self.stack if e is not own]:
             self.stack.remove(old)
@@ -365,14 +365,14 @@ class BoundaryRunner:
         self._advance(b)
         self._repin_due(b, head)
 
-    def _team_fix(self, b: Boundary, report: CheckReport) -> None:
+    def _fail_team_check(self, b: Boundary, report: CheckReport) -> None:
         failure = Failure(Stage.CHECK, FixCase.TEAM_CHECK, report.reason())
         self._fail(b, failure, checks=report.summary())
 
-    def _known_failures(self, b: Boundary, report: CheckReport) -> None:
+    def _record_known_failures(self, b: Boundary, report: CheckReport) -> None:
         """AC2.1, AC2.2: a failing start check holds nothing; its failing ids are recorded."""
         ids, head = report.failing_ids(), self.runtime.git.head()
-        text = self._known_failures_text(b, report)
+        text = self._format_known_failures(b, report)
         self._post(text)
         self._finish(
             b,
@@ -383,7 +383,7 @@ class BoundaryRunner:
             checks=report.summary(),
         )
 
-    def _known_failures_text(self, b: Boundary, report: CheckReport) -> str:
+    def _format_known_failures(self, b: Boundary, report: CheckReport) -> str:
         """The liaison's note: the failing ids and the 12-character start sha."""
         ids = report.failing_ids()
         return KNOWN_FAILURES_NOTE.format(
@@ -473,11 +473,12 @@ class BoundaryRunner:
     def _finish_local(self, b: Boundary, why: str) -> None:
         """R4: no gh or no permission; the branch is checked, nothing is pushed or rebased."""
         branch = self._own(b).branch  # type: ignore[union-attr]
-        text = LOCAL_REPORT.format(sprint=b.sprint, branch=branch, why=why) + self._not_rebased()
+        text = LOCAL_REPORT.format(sprint=b.sprint, branch=branch, why=why) + self._not_rebased_note
         self._post(text)
         self._finish(b, text, ci=CiVerdict.NONE, note=why)
 
-    def _not_rebased(self) -> str:
+    @property
+    def _not_rebased_note(self) -> str:
         return NOT_REBASED.format(target=self.target)
 
     # ----- rebase
@@ -493,7 +494,7 @@ class BoundaryRunner:
         if refusal:
             return self._refuse_rebase(b, refusal)
         if b.rebase_fix:
-            return self._adopt(b)
+            return self._apply_rebase_fix(b)
         self._fetch()
         self._pin_sync_from(b)
         result = self.remote.rebase_onto(b.sync_from)
@@ -510,13 +511,13 @@ class BoundaryRunner:
         b.sync_from = self.runtime.git.head()
         self.runtime.save()
 
-    def _scratch(self, b: Boundary) -> ScratchRebase:
+    def _get_scratch(self, b: Boundary) -> ScratchRebase:
         path = self.runtime.config.run_dir / REBASE_DIR
         return ScratchRebase(self.remote, path, REBASE_BRANCH.format(sprint=b.sprint))
 
     def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
         """R13: stop the same rebase in a scratch worktree and wake DevOps; hold nothing."""
-        scratch = self._scratch(b)
+        scratch = self._get_scratch(b)
         scratch.prepare(b.sync_from)
         b.failure = Failure(
             Stage.REBASE,
@@ -528,21 +529,21 @@ class BoundaryRunner:
             subject=result.subject,
             worktree=str(scratch.path),
         )
-        data = _conflict_data(result)
+        data = _describe_conflict(result)
         self._emit(b, Out.CONFLICT, subject=result.subject, branch=scratch.branch, **data)
 
-    def _adopt(self, b: Boundary) -> None:
+    def _apply_rebase_fix(self, b: Boundary) -> None:
         """R16: move the team branch to DevOps's result, or hold with the first reason."""
-        why = self._adopt_refusal(b)
+        why = self._get_rebase_fix_refusal(b)
         if why:
             return self._hold_conflict(b, why)
         self._move_to_fix(b)
 
-    def _adopt_refusal(self, b: Boundary) -> str:
+    def _get_rebase_fix_refusal(self, b: Boundary) -> str:
         fix = b.rebase_fix
         if fix.status != "done":  # type: ignore[union-attr]
             return FIX_NOT_DONE.format(status=fix.status)  # type: ignore[union-attr]
-        scratch = self._scratch(b)
+        scratch = self._get_scratch(b)
         return scratch.find_refusal(b.sync_from) or self._checks_refusal(scratch)
 
     def _checks_refusal(self, scratch: ScratchRebase) -> str:
@@ -552,16 +553,16 @@ class BoundaryRunner:
         return CHECKS_FAILED.format(path=scratch.path, reason=report.reason())
 
     def _move_to_fix(self, b: Boundary) -> None:
-        scratch = self._scratch(b)
+        scratch = self._get_scratch(b)
         try:
             result = self.remote.move_team_branch(b.sync_from, scratch.head)
         except UpstreamError:
-            self._forget_fix(b, scratch)
+            self._drop_rebase_fix(b, scratch)
             raise
-        self._forget_fix(b, scratch)
+        self._drop_rebase_fix(b, scratch)
         self._settle_rebase(b, result)
 
-    def _forget_fix(self, b: Boundary, scratch: ScratchRebase) -> None:
+    def _drop_rebase_fix(self, b: Boundary, scratch: ScratchRebase) -> None:
         """Drop the scratch and the fix; a moved team branch must rebase afresh (R16, R17)."""
         scratch.drop()
         b.rebase_fix = None
@@ -610,7 +611,7 @@ class BoundaryRunner:
         """R8: push the rebased head with the lease on the as-built sha; nothing if unchanged."""
         own, head = self._own(b), self.runtime.git.head()
         if head == own.pushed:  # type: ignore[union-attr]
-            return self._unchanged(b, own)  # type: ignore[arg-type]
+            return self._report_unchanged(b, own)  # type: ignore[arg-type]
         own.head = head  # type: ignore[union-attr]
         rejected = self._push_branch(own)  # type: ignore[arg-type]
         if rejected is not None:
@@ -618,10 +619,10 @@ class BoundaryRunner:
         self._report_rebased(b, own)  # type: ignore[arg-type]
         self._advance(b)
 
-    def _unchanged(self, b: Boundary, own: StackEntry) -> None:
+    def _report_unchanged(self, b: Boundary, own: StackEntry) -> None:
         note = REBASE_UNCHANGED.format(branch=own.branch, sha=own.pushed)
         self._emit(b, Out.PASS, note=note)
-        self._ready(b, [own.ci] if own.ci else [])
+        self._finish_green(b, [own.ci] if own.ci else [])
 
     def _report_rebased(self, b: Boundary, own: StackEntry) -> None:
         fields = {"sprint": b.sprint, "pr": own.pr, "target": self.target}
@@ -650,7 +651,7 @@ class BoundaryRunner:
         self._emit(b, Out.PASS, ci=CiVerdict.GREEN, **_ci_fields(results))
         self._advance(b)
 
-    def _ready(self, b: Boundary, results: list[CiResult]) -> None:
+    def _finish_green(self, b: Boundary, results: list[CiResult]) -> None:
         text = self._with_big(green_report(b.sprint, results))
         self._finish(b, text, ci=CiVerdict.GREEN, **_ci_fields(results))
 
@@ -690,25 +691,25 @@ class BoundaryRunner:
     def _ci_none(self, b: Boundary, results: list[CiResult]) -> None:
         why = NO_CHECKS_WHY if results else NO_OPEN_PR_WHY
         prs = prs_text(results) or self._own(b).branch  # type: ignore[union-attr]
-        text = CI_NONE_REPORT.format(sprint=b.sprint, prs=prs, why=why) + self._not_rebased()
+        text = CI_NONE_REPORT.format(sprint=b.sprint, prs=prs, why=why) + self._not_rebased_note
         text = self._with_big(text)
         self._post(text)
         self._finish(b, text, ci=CiVerdict.NONE, note=why, **_ci_fields(results))
 
     # ----- ci rebased
 
-    def _ci_rebased(self, b: Boundary) -> None:
+    def _check_rebased_ci(self, b: Boundary) -> None:
         """R9: only green is ready; every other verdict is reported, never held."""
         results = self._read_ci(b)
         REBASED_OUTCOMES[overall(results)](self, b, results)
 
-    def _rebased_infra(self, b: Boundary, results: list[CiResult]) -> None:
+    def _handle_rebased_infra(self, b: Boundary, results: list[CiResult]) -> None:
         due = rerun_due(self._watched(b))
         if not due:
-            return self._rebased_not_green(b, results)
+            return self._report_rebased_not_green(b, results)
         self._rerun(b, due)
 
-    def _rebased_not_green(self, b: Boundary, results: list[CiResult]) -> None:
+    def _report_rebased_not_green(self, b: Boundary, results: list[CiResult]) -> None:
         verdict, own = overall(results), self._own(b)
         fields = {"sprint": b.sprint, "as_is": own.as_is, "verdict": verdict}  # type: ignore[union-attr]
         fields |= {"target": self.target, **_ci_fields(results)}
@@ -729,7 +730,7 @@ class BoundaryRunner:
             "target": self.watch.target,
             "prs": prs_text(hit),
         }
-        text = report.format(**fields) + self._not_rebased()
+        text = report.format(**fields) + self._not_rebased_note
         self._finish(b, text, ci=verdict, story=story, note=text)  # type: ignore[arg-type]
         self.runtime.save()
 
@@ -784,7 +785,7 @@ class BoundaryRunner:
         )
 
 
-def _conflict_data(result: Rebase) -> dict[str, Any]:
+def _describe_conflict(result: Rebase) -> dict[str, Any]:
     """The conflicting files and the short commit of a stopped rebase."""
     return {"files": list(result.files), "commit": result.commit[:12]}
 
@@ -811,12 +812,12 @@ SETTLED = {
     BoundaryHold.MAIN_BROKEN: (CiVerdict.MAIN, CI_MAIN_REPORT),
 }
 REBASED_OUTCOMES = {
-    CiVerdict.GREEN: BoundaryRunner._ready,
-    CiVerdict.INFRA: BoundaryRunner._rebased_infra,
-    CiVerdict.RED: BoundaryRunner._rebased_not_green,
-    CiVerdict.MAIN: BoundaryRunner._rebased_not_green,
-    CiVerdict.PENDING: BoundaryRunner._rebased_not_green,
-    CiVerdict.NONE: BoundaryRunner._rebased_not_green,
+    CiVerdict.GREEN: BoundaryRunner._finish_green,
+    CiVerdict.INFRA: BoundaryRunner._handle_rebased_infra,
+    CiVerdict.RED: BoundaryRunner._report_rebased_not_green,
+    CiVerdict.MAIN: BoundaryRunner._report_rebased_not_green,
+    CiVerdict.PENDING: BoundaryRunner._report_rebased_not_green,
+    CiVerdict.NONE: BoundaryRunner._report_rebased_not_green,
 }
 STAGE_RUNNERS = {
     Stage.SYNC: BoundaryRunner._sync,
@@ -825,7 +826,7 @@ STAGE_RUNNERS = {
     Stage.CI: BoundaryRunner._ci,
     Stage.REBASE: BoundaryRunner._rebase,
     Stage.PUSH_REBASED: BoundaryRunner._push_rebased,
-    Stage.CI_REBASED: BoundaryRunner._ci_rebased,
+    Stage.CI_REBASED: BoundaryRunner._check_rebased_ci,
 }
 AFTER_REBASE = {
     SyncOutcome.CONFLICT: BoundaryRunner._rebase_conflict,
@@ -837,5 +838,8 @@ START_REBASES = {
     SyncOutcome.CURRENT: BoundaryRunner._rebase_current,
     SyncOutcome.REBASED: BoundaryRunner._settle_rebase,
 }
-CHECK_FAILURES = {Edge.START: BoundaryRunner._known_failures, Edge.END: BoundaryRunner._team_fix}
+CHECK_FAILURES = {
+    Edge.START: BoundaryRunner._record_known_failures,
+    Edge.END: BoundaryRunner._fail_team_check,
+}
 SYNCS = {Edge.START: BoundaryRunner._start_sync, Edge.END: BoundaryRunner._end_sync}
