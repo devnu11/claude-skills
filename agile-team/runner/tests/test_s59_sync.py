@@ -3,7 +3,7 @@
 import pytest
 from agile_team import boundary as bd
 from agile_team import rewrite
-from agile_team.boundary import BoundaryHold, Edge, Stage
+from agile_team.boundary import BoundaryHold, Edge, Stage, StepKind
 from agile_team.boundary_runner import STAGE_RUNNERS, SYNCS, BoundaryRunner
 from agile_team.ci import CiResult, CiVerdict
 from agile_team.upstream import Rebase, SyncOutcome, UpstreamError
@@ -68,18 +68,20 @@ def test_start_only_reports_and_the_rebase_is_its_own_stage() -> None:
     assert SYNCS[Edge.END] is BoundaryRunner._end_sync
 
 
-def test_a_conflict_reports_files_commit_and_subject_and_holds(
+def test_a_conflict_reports_files_commit_and_subject_and_wakes_devops(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     install(env, monkeypatch, CONFLICT)
     env.open(Edge.END, stage=Stage.REBASE)
     [report] = env.drive()
     data = report["boundary"]
-    assert env.rt.state.boundary.hold is BoundaryHold.SYNC_CONFLICT
+    assert env.rt.state.boundary.hold is None
+    assert data["outcome"] == "conflict" and not data.get("hold")
     assert data["files"] == ["a/x.py", "b.py"]
     assert data["commit"] == FAILED[:12] and len(data["commit"]) == 12
     assert data["subject"] == "fix the thing"
-    assert env.rt.state.boundary.failure is None
+    assert data["outcome"] != "held" and env.rt.state.boundary.failure is not None
+    assert env.br.due().kind is StepKind.REBASE_FIX
 
 
 def test_a_conflict_remaps_and_records_nothing(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
