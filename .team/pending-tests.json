@@ -1,1 +1,18 @@
-{}
+{
+  "s135": [
+    "agile-team/runner/tests/test_po_tools.py::test_continue_story_refusals_change_nothing",
+    "agile-team/runner/tests/test_po_tools.py::test_set_developer_refusals_change_nothing[args0-unknown story 's9'; ask the liaison for it with request_story]",
+    "agile-team/runner/tests/test_po_tools.py::test_start_sprint_refusals_have_no_side_effects[args2-unknown stories: s9, s7; ask the liaison for them with request_story]",
+    "agile-team/runner/tests/test_s111_ci_class.py::test_ci_class_hand_over_lines[ci_failed-ci_failed-words0]",
+    "agile-team/runner/tests/test_s111_ci_class.py::test_the_refusal_says_to_request_or_route_a_fix",
+    "agile-team/runner/tests/test_s113_po_turn.py::test_the_tables_are_data",
+    "agile-team/runner/tests/test_s115.py::test_missing_without_story_holds",
+    "agile-team/runner/tests/test_s125_pending_tests.py::test_the_registry_is_listed_as_runner_only",
+    "agile-team/runner/tests/test_s135_intake.py",
+    "agile-team/runner/tests/test_s135_po.py",
+    "agile-team/runner/tests/test_s135_story_cli.py",
+    "agile-team/runner/tests/test_s30.py::test_unknown_story_is_refused",
+    "agile-team/runner/tests/test_s64_environment.py::test_no_schema_mentions_the_environment_table",
+    "agile-team/runner/tests/test_s94_story_spec.py::test_problems_text_table_is_exact"
+  ]
+}
