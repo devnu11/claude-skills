@@ -3,6 +3,7 @@
 import ast
 from pathlib import Path
 
+import pytest
 from agile_team.roles import RoleBook
 
 DEFINITIONS = (
@@ -84,7 +85,9 @@ def test_other_main_guards_are_not_the_guard() -> None:
     assert stray_statements(ast.parse('if __name__ != "__main__":\n    pass\n'))
 
 
-def test_code_reviewer_checklist_names_the_rule() -> None:
+@pytest.mark.parametrize(
+    "text", ["## Checklist", "top level", 'if __name__ == "__main__":', "just_do_it"]
+)
+def test_code_reviewer_checklist_names_the_rule(text: str) -> None:
     body = RoleBook.for_repo(Path("/none"), {}).resolve("code-reviewer").body
-    for text in ("## Checklist", "top level", 'if __name__ == "__main__":', "just_do_it"):
-        assert text in body
+    assert text in body, f"code-reviewer role lacks {text!r}"
