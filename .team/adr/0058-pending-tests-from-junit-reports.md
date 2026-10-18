@@ -73,3 +73,13 @@ pending test ids, taken from a structured report, not from the text output.
   is a real failure.
 - `.gitignore` for `artifacts = "ignored"` gains `!.team/pending-tests.json`,
   so the registry is always committed and is part of the review PR.
+
+## Amended by s159 (2026-10-18): retired
+
+Pending tests are gone. Each story is built on its own branch and lands only
+when its tests and CI are green (ADR-0084), so a story's red tests never
+reach the branch others build on. The registry, the `pending-tests` command,
+its CI step and path filter, the onboarding gitignore line, the skip options
+and the red-first tests gate are removed. A tests step whose new tests
+already pass hands off `done` like any other. The JUnit reports stay, for the
+failing tests' first error lines (ADR-0080).

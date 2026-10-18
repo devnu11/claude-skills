@@ -70,3 +70,13 @@ When a step settles cleanly (whether it reused the edits or not), the offer is c
 - Story: `.team/stories/s9.md`
 - Design: `agile-team/docs/design/s9.md` (rules I1–I15, modules, test checklist, exact strings)
 - Related: ADR-0007 (halt handling in s8), s8 (SIGTERM and limit classification)
+
+## Amended by s159 (2026-10-18)
+
+The commit-and-revert salvage no longer applies to story steps. A story step
+runs in its own worktree (ADR-0084), so an interrupted one is recorded as
+`StoryState.in_flight` with its session, and its worktree is left as it is.
+On `start --resume` the step is marked `stopped`, and the next step on the
+story continues in that worktree with the saved session. Storyless steps
+still run in the main checkout and keep this salvage, and so does the
+run-level `in_flight`.

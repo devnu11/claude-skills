@@ -76,3 +76,18 @@ The follow-up start rebase is ADR-0077: the start `sync` rebases the team
 branch onto the target. A start conflict is aborted and holds nothing, so a
 team branch that conflicts with main still waits for the human's hand
 rebase: its as-built PR gets no CI (`none`), and the end does not rebase.
+
+## Amended by s159 (2026-10-18)
+
+The sprint branch is now built from story merges (ADR-0084). The sprint
+start creates `<prefix><N>` and its stack entry, and each landing pushes it.
+Its PR is a draft from the first landing on. The as-built push and its green
+CI still gate the end. The rebase is replaced by a **replay**: the
+first-parent line is replayed onto main, each story re-merged, and the
+result goes to a new branch `<prefix><N>-r<k>` with a ready PR. It is no
+longer force-pushed to the same PR, because no push may replace history.
+The entry keeps the as-built record (`as_is_branch`, `as_is`, `as_is_pr`),
+and the old draft PR is closed with a link. main moves only by
+fast-forward, which the reports give as a command instead of "Rebase and
+merge". End stages are `sync, check, push, ci, replay, push-replayed,
+ci-replayed`.

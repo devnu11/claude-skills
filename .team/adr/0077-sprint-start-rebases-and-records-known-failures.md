@@ -73,3 +73,15 @@ top of the sprint or later. A failure must never halt the run.
   every start.
 - `START_NOTES` and the "nothing changes until the next sprint end" note
   go.
+
+## Amended by s159 (2026-10-18)
+
+The start `sync` replays (ADR-0084) instead of rebasing: story merges are
+kept, and the remap pairs commits story by story. When the newest stack
+entry's PR is still open, the replay is pushed to that entry's next
+`<prefix><N>-r<k+1>` with a ready PR, under the push permission. Otherwise
+it stays local. The start gains an `open` stage. It creates the new sprint's
+remote branch and stack entry, and replays each carried, unlanded story onto
+the new head on its own `-r<k>` branch. A carried story's conflict becomes
+that story's rebase step, and the boundary goes on. The known-failures rule
+is unchanged.

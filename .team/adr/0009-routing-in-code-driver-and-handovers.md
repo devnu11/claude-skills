@@ -73,3 +73,12 @@ Separate mechanical routing from judgement with a two-layer architecture:
 - Implementation: `agile-team/runner/agile_team/` modules `router.py` (new), `handover.py` (new), `po_tools.py` (driver loop), `dispatch.py` (note_step, effects), `gates.py` (PreviousStep dataclass), `state.py` (scribe_due, delivered), `roles.py` (developer field); built-in roles `roles/product-owner.md` (Sonnet, judgement only), `roles/architect.md` (developer field docs)
 - Tests: `tests/unit/test_router.py`, `tests/unit/test_handover.py`, `tests/unit/test_po_tools.py`, `tests/unit/test_dispatch.py`, `tests/unit/test_gates.py` (PreviousStep, scribe_due), `tests/unit/test_state.py` (delivered, scribe_due, previous)
 - Review: `.team/reviews/s19.md` (D1 blocking defect: done stories with holds were not scribed; fixed; no defects in round 2)
+
+## Amended by s159 (2026-10-18)
+
+Routing stays in code, but the driver changes. A `scheduler.Scheduler`
+replaces the PO-turn/router-pass alternation. It starts one task per story
+in parallel and queues every hand-over for the PO, one turn at a time. The
+router keeps its pickers and briefs, and now lists every startable work
+instead of running one. Each `Trigger` has a scope (`STORY` or `RUN`) in
+`handover.SCOPES`. See ADR-0085.
