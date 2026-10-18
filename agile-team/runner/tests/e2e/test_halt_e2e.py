@@ -136,7 +136,7 @@ def test_po_limit_exact_reason_everywhere(harness, configured: Path, capsys) -> 
     start, _ = harness
     assert start(Raiser(sdk_limit_error()), "--task", "t") == 75
     st = saved(configured)
-    assert (st.status, st.status_reason) == (state_mod.RunStatus.BLOCKED, REASON)
+    assert (st.status, st.status_reason) == (state_mod.RunStatus.LIMIT, REASON)
     assert st.po_session == "po-sess"
     note = notes(configured)[-1]
     assert (note.kind, note.text) == ("blocked", f"{REASON}; {ADVICE}")
@@ -190,7 +190,7 @@ def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> 
     story = saved(configured).stories["s1"]
     assert (story.step, story.rounds) == (holder[0].pipeline.first(), 0)
     st = saved(configured)
-    assert (st.status, st.status_reason) == (state_mod.RunStatus.BLOCKED, REASON)
+    assert (st.status, st.status_reason) == (state_mod.RunStatus.LIMIT, REASON)
     assert [n.kind for n in notes(configured)] == ["blocked"]
     assert capsys.readouterr().err == f"agile-team start: {REASON}; {ADVICE}\n"
 
@@ -201,7 +201,7 @@ def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> 
 def test_resume_after_limit_clears_status_and_is_not_refused(harness, configured: Path) -> None:
     start, holder = harness
     assert start(Raiser(sdk_limit_error()), "--task", "t") == 75
-    assert saved(configured).status is state_mod.RunStatus.BLOCKED
+    assert saved(configured).status is state_mod.RunStatus.LIMIT
     seen: dict[str, Any] = {}
 
     class ResumedPo:
@@ -281,5 +281,5 @@ def test_status_shows_reason_after_limit(harness, configured: Path, capsys) -> N
     capsys.readouterr()
     assert cli.main(["--repo", str(configured), "status"]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert (report["status"], report["status_reason"]) == ("blocked", REASON)
+    assert (report["status"], report["status_reason"]) == ("limit", REASON)
     assert report["running"] is False

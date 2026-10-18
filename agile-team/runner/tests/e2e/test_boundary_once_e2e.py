@@ -7,7 +7,6 @@ from pathlib import Path
 from agile_team import config as cfg
 from agile_team.commands import CommandShell
 from agile_team.fullcheck import Judging, full_checks, run_checks
-from agile_team.pending_tests import Registry
 
 
 def boundary(tmp_path: Path, body: str, code: int) -> tuple[list[dict], list[str]]:
@@ -18,7 +17,7 @@ def boundary(tmp_path: Path, body: str, code: int) -> tuple[list[dict], list[str
         "test": f"echo test >> {log}; exit 0",
         "coverage": f"echo cov >> {log}; printf '%b\\n' '{body}'; exit {code}",
     }
-    report = run_checks(full_checks(c, Registry()), Judging(CommandShell(tmp_path, 20.0).run, 95.0))
+    report = run_checks(full_checks(c), Judging(CommandShell(tmp_path, 20.0).run, 95.0))
     return report.summary(), (log.read_text().split() if log.exists() else [])
 
 

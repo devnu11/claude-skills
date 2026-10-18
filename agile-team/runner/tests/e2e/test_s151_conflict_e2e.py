@@ -55,7 +55,7 @@ def test_ac6_1_a_conflict_aborts_leaves_the_team_branch_and_hands_it_to_devops(
 ) -> None:
     built = conflicting(scene)
     b = scene.boundary
-    assert b.hold is None and b.stage is Stage.REBASE
+    assert b.hold is None and b.stage is Stage.REPLAY
     assert scene.head() == built and git(scene.repo, "status", "--porcelain").strip() == ""
     assert not (scene.repo / ".git" / "rebase-merge").exists()
     assert b.failure.case is FixCase.REBASE_CONFLICT and b.failure.files == ["shared.txt"]
@@ -97,7 +97,8 @@ def test_ac6_3_a_clean_result_moves_the_team_branch_remaps_and_continues(scene: 
     assert scene.head() != built and scene.rt.state.stories["s1"].commit == scene.head()
     assert git(scene.repo, "merge-base", "--is-ancestor", "origin/main", "HEAD") == ""
     assert (scene.repo / "shared.txt").read_text() == "both sides\n"
-    assert scene.remote_branch() == scene.head() and scene.own.as_is == built
+    replayed = git(scene.origin, "rev-parse", "refs/heads/team/sprint-1-r1").strip()
+    assert replayed == scene.head() and scene.own.as_is == built
     assert scene.boundary is None
     assert not worktree(scene).exists()
     assert SCRATCH_BRANCH not in git(scene.repo, "branch", "--list")
