@@ -10,10 +10,10 @@ from typing import Any
 import pytest
 from agile_team import dispatch, gates, handover, roles, state, system
 from agile_team.config import PIPELINE_STEPS
-from agile_team.dispatch import REWORK_BRIEF, Runtime, StepRequest
+from agile_team.dispatch import Runtime, StepRequest
 from agile_team.gates import OpenDispute, StoryState, StoryStatus, Verdict
 from agile_team.loops import Setback
-from agile_team.roles import Dispute, Handoff, HandoffError, TestClaim
+from agile_team.roles import Dispute, Handoff, HandoffError
 
 from .conftest import FakeQuery, FakeRunner, handoff
 from .pipeline_helpers import add_story
@@ -22,8 +22,6 @@ STEPS = list(PIPELINE_STEPS)
 SHA = "abc1234"
 SHA2 = "def5678"
 ANCESTOR = "git merge-base --is-ancestor {sha} HEAD"
-RED = {"T": (1, "FAILED")}
-FIRST_PASS = "tests pass before implementation; write a failing test"
 ADVANCE_LAST = "story s1 is at {step}, its last step; advance cannot mark it done"
 
 
@@ -43,8 +41,8 @@ def landed(*shas: str) -> dict[str, tuple[int, str]]:
     return {ANCESTOR.format(sha=s): (0, "") for s in shas}
 
 
-def done(claim=None) -> Handoff:
-    return Handoff("done", summary="s", tests=claim)
+def done() -> Handoff:
+    return Handoff("done", summary="s")
 
 
 # ----- K1 ------------------------------------------------------------------
@@ -163,35 +161,11 @@ def settle(st, h, results=None):
     return out, runner
 
 
-def test_green_with_claim_passes_on_recorded_commit() -> None:
+def test_a_done_tests_step_passes_whatever_the_recorded_commits() -> None:
     st = story(code_commits=[SHA])
-    out, _ = settle(st, done(TestClaim.CONFIRMED), landed(SHA))
-    assert out.verdict is Verdict.PASS and out.reason == gates.REWORK_PASS.format(claim="confirmed")
-    assert st.step == "implement"
-
-
-def test_green_without_claim_bounces_on_recorded_commit() -> None:
-    st = story(code_commits=[SHA])
-    out, _ = settle(st, done(), landed(SHA))
-    assert out.verdict is Verdict.BOUNCE and out.reason == gates.REWORK_UNCLAIMED
-
-
-def test_red_passes_on_recorded_commit() -> None:
-    st = story(code_commits=[SHA])
-    out, _ = settle(st, done(), {**landed(SHA), **RED})
-    assert out.verdict is Verdict.PASS
-
-
-def test_first_pass_when_commit_not_in_branch() -> None:
-    st = story(code_commits=[SHA])
-    out, _ = settle(st, done(TestClaim.CONFIRMED), {ANCESTOR.format(sha=SHA): (128, "")})
-    assert out.verdict is Verdict.BOUNCE and out.reason == FIRST_PASS
-
-
-def test_first_pass_with_no_commits() -> None:
-    out, runner = settle(story(), done())
-    assert out.reason == FIRST_PASS
-    assert not any("merge-base" in c for c in runner.calls)
+    out, runner = settle(st, done(), {ANCESTOR.format(sha=SHA): (128, "")})
+    assert out.verdict is Verdict.PASS and st.step == "implement"
+    assert runner.calls == []
 
 
 def test_open_dispute_wins_and_runs_no_ancestor_command() -> None:
@@ -204,24 +178,17 @@ def test_open_dispute_wins_and_runs_no_ancestor_command() -> None:
     assert not any("merge-base" in c for c in runner.calls)
 
 
-def test_reworked_flag() -> None:
-    p, _ = pipeline(landed(SHA))
-    assert p.reworked(story(code_commits=[SHA])) is True
-    assert p.reworked(story("design", code_commits=[SHA])) is False
-    assert p.reworked(story(implemented=1, dispute=OpenDispute("t", "r", "x"))) is False
-
-
 # ----- AC1 end to end ---------------------------------------------------------
 
 
-def test_s40_route_dispute_cleared_by_fault_then_confirmed_passes(make_runtime) -> None:
+def test_s40_route_dispute_cleared_by_fault_then_done_passes(make_runtime) -> None:
     rt = make_runtime(FakeQuery(handoff(summary="ok", fault="unit-tester")), FakeRunner())
     st = repeated_story(rt)
     st.code_commits = [SHA]
     st.dispute = OpenDispute("t::a", "W6", "why", "tests/t.py", "h")
     run_step(rt, "manager")
     assert st.dispute is None and st.step == "tests" and st.implemented == 0
-    rt.query_fn.text = handoff(tests="confirmed", summary="green")
+    rt.query_fn.text = handoff(summary="green")
     report = run_step(rt, "unit-tester")
     assert report["gate"]["verdict"] is Verdict.PASS
     assert st.step == "implement" and st.implemented == 0
@@ -236,28 +203,6 @@ def prompt_at(make_runtime, step, results=None, role="unit-tester", **kw) -> str
     add_story(rt, step=step, **kw)
     run_step(rt, role)
     return rt.query_fn.calls[0]["prompt"]
-
-
-def test_brief_on_recorded_commit_in_branch(make_runtime) -> None:
-    assert REWORK_BRIEF in prompt_at(make_runtime, "tests", landed(SHA), code_commits=[SHA])
-
-
-def test_no_brief_when_commit_not_in_branch(make_runtime) -> None:
-    p = prompt_at(make_runtime, "tests", {ANCESTOR.format(sha=SHA): (128, "")}, code_commits=[SHA])
-    assert REWORK_BRIEF not in p
-
-
-def test_no_brief_without_commits_or_at_other_step_or_with_dispute(make_runtime) -> None:
-    assert REWORK_BRIEF not in prompt_at(make_runtime, "tests")
-    other = prompt_at(make_runtime, "design", landed(SHA), "architect", code_commits=[SHA])
-    assert REWORK_BRIEF not in other
-    d = OpenDispute("t::a", "W6", "why", "abc")
-    p = prompt_at(make_runtime, "tests", landed(SHA), code_commits=[SHA], dispute=d)
-    assert REWORK_BRIEF not in p
-
-
-def test_brief_with_implemented_still_shows(make_runtime) -> None:
-    assert REWORK_BRIEF in prompt_at(make_runtime, "tests", implemented=1)
 
 
 # ----- K6 ----------------------------------------------------------------------

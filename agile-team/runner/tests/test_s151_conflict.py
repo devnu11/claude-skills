@@ -85,7 +85,7 @@ def scratch(monkeypatch, env: Env) -> Scratch:
 
 def conflicted(env: Env, scratch: Scratch) -> bd.Boundary:
     """Sprint 1 at the rebase stage with green as-built CI, and main conflicting."""
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     stub_rebase(env, CONFLICT)
     env.br.step()
@@ -105,7 +105,7 @@ def test_s151_devops_conflict_ac6_1_a_conflict_holds_nothing_and_prepares_the_sc
 ) -> None:
     """Pins s151/AC6.1 (slice 2): the DevOps conflict path."""
     b = conflicted(env, scratch)
-    assert b.hold is None and b.stage is Stage.REBASE
+    assert b.hold is None and b.stage is Stage.REPLAY
     assert ("prepare", AS_BUILT) in scratch.calls
     assert b.sync_from == AS_BUILT and env.rt.git.head() == AS_BUILT
 
@@ -116,7 +116,7 @@ def test_s151_devops_conflict_ac6_1_the_failure_names_the_commit_files_and_scrat
     """Pins s151/AC6.1 (slice 2): the DevOps conflict path."""
     b = conflicted(env, scratch)
     f = b.failure
-    assert (f.stage, f.case) == (Stage.REBASE, FixCase.REBASE_CONFLICT)
+    assert (f.stage, f.case) == (Stage.REPLAY, FixCase.REBASE_CONFLICT)
     assert (f.branch, f.files, f.commit, f.subject) == (
         BRANCH,
         ["a.py", "b.py"],
@@ -277,7 +277,7 @@ def test_s151_devops_conflict_ac6_3_hashes_are_remapped_and_the_next_stage_is_pu
     resolved(env, scratch)
     env.br.step()
     b = env.rt.state.boundary
-    assert story.commit == MOVED[OLD_COMMIT] and b.stage is Stage.PUSH_REBASED
+    assert story.commit == MOVED[OLD_COMMIT] and b.stage is Stage.PUSH_REPLAYED
     assert last(env)["outcome"] == "rebased" and b.sync_from == "" and b.rebase_fix is None
     assert b.hold is None
 
@@ -396,7 +396,7 @@ def test_s151_devops_conflict_ac6_4_a_failed_devops_step_holds_rebase_conflict(
     fixed(env, scratch, "failed", "the two edits contradict")
     env.br.step()
     b = env.rt.state.boundary
-    assert b.hold is BoundaryHold.REBASE_CONFLICT and b.stage is Stage.REBASE
+    assert b.hold is BoundaryHold.REBASE_CONFLICT and b.stage is Stage.REPLAY
     data = last(env)
     assert data["outcome"] == "conflict" and data["branch"] == BRANCH
     assert data["notes"] == "the two edits contradict"

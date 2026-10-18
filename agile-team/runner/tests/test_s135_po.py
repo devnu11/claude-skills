@@ -62,7 +62,7 @@ def test_every_role_is_refused_the_story_files(repo: Path, tool) -> None:
 
 def test_story_files_are_runner_files() -> None:
     assert guard.STORY_FILES == ".team/stories/**"
-    assert guard.RUNNER_FILES == (guard.pending_tests.REGISTRY, guard.STORY_FILES)
+    assert guard.RUNNER_FILES == (guard.STORY_FILES,)
 
 
 def test_a_story_file_in_a_steps_tree_is_out_of_scope(repo: Path, fake) -> None:

@@ -1,4 +1,4 @@
-"""s24: tests gate on reworked stories (G1-G7) and holds on done stories (G8, G9)."""
+"""s24: the tests step has no command gate (s159 G2), `implemented`, holds on done stories."""
 
 import asyncio
 import json
@@ -6,20 +6,14 @@ import json
 import pytest
 from agile_team import gates, roles, state, system
 from agile_team.config import PIPELINE_STEPS
-from agile_team.dispatch import REWORK_BRIEF, StepRequest
+from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState, StoryStatus, Verdict
-from agile_team.roles import Handoff, HandoffError, TestClaim
+from agile_team.roles import Handoff
 
 from .conftest import FakeQuery, FakeRunner, handoff
 
 STEPS = list(PIPELINE_STEPS)
-RED = {"T": (1, "FAILED")}
 COVERED = {"C": (0, "TOTAL 100%")}
-UNCLAIMED = (
-    "tests pass on code from an earlier pass; write a failing test, "
-    'or hand off "tests": "changed" or "tests": "confirmed"'
-)
-FIRST_PASS = "tests pass before implementation; write a failing test"
 
 
 def story(step: str = "tests", **kw) -> StoryState:
@@ -40,28 +34,21 @@ def settle(st, h, results=None, **kw):
     return out, runner
 
 
-def done(claim=None) -> Handoff:
-    return Handoff("done", summary="s", tests=claim)
+def done() -> Handoff:
+    return Handoff("done", summary="s")
 
 
-# ----- G3 ----------------------------------------------------------------------
+# ----- G3: a `tests` key is ignored ----------------------------------------------
 
 
-def test_claims_parse() -> None:
-    assert roles.parse_handoff(handoff("done", tests="changed")).tests is TestClaim.CHANGED
-    assert roles.parse_handoff(handoff("done", tests="confirmed")).tests is TestClaim.CONFIRMED
-    assert roles.parse_handoff(handoff("done")).tests is None
-
-
-@pytest.mark.parametrize("bad", ["yes", "", 1])
-def test_bad_claims_are_malformed(bad) -> None:
-    with pytest.raises(HandoffError) as e:
-        roles.parse_handoff(handoff("done", tests=bad))
-    assert "handoff tests must be one of ('changed', 'confirmed')" in str(e.value)
+@pytest.mark.parametrize("value", ["changed", "confirmed", "yes", "", 1])
+def test_a_tests_key_is_ignored(value) -> None:
+    got = roles.parse_handoff(handoff("done", tests=value))
+    assert got.status == "done" and not hasattr(got, "tests")
 
 
 def test_report_has_no_tests_key() -> None:
-    assert "tests" not in roles.handoff_report(done(TestClaim.CHANGED))
+    assert "tests" not in roles.handoff_report(done())
 
 
 # ----- G1 ----------------------------------------------------------------------
@@ -94,56 +81,30 @@ def test_last_step_implement_counts_and_finishes() -> None:
     assert (st.implemented, st.status) == (1, StoryStatus.DONE)
 
 
-# ----- G4-G6 -------------------------------------------------------------------
+# ----- G4-G6: the tests step runs no command ------------------------------------
 
 
-def test_rework_red_passes_to_implement() -> None:
-    st = story(implemented=1)
-    out, _ = settle(st, done(), RED)
-    assert (out.verdict, out.reason, st.step) == (Verdict.PASS, "", "implement")
-
-
-@pytest.mark.parametrize("claim", [TestClaim.CHANGED, TestClaim.CONFIRMED])
-def test_rework_green_with_claim_passes(claim) -> None:
-    st = story(implemented=1)
-    out, runner = settle(st, done(claim))
-    assert out.verdict is Verdict.PASS
-    assert out.reason == f"tests pass on code from an earlier pass; tests {claim}"
-    assert (st.step, runner.calls) == ("implement", ["T"])
-
-
-def test_rework_green_without_claim_bounces() -> None:
-    st = story(implemented=1)
+@pytest.mark.parametrize("implemented", [0, 1])
+def test_a_done_tests_step_passes_to_implement_without_running_anything(implemented) -> None:
+    st = story(implemented=implemented)
     out, runner = settle(st, done())
-    assert (out.verdict, out.reason) == (Verdict.BOUNCE, UNCLAIMED)
-    assert (st.step, st.rounds, runner.calls) == ("tests", 1, ["T"])
+    assert (out.verdict, out.reason, st.step) == (Verdict.PASS, "", "implement")
+    assert runner.calls == []
 
 
-def test_first_pass_ignores_claim() -> None:
+def test_changes_requested_on_tests_still_returns_to_design() -> None:
     st = story()
-    out, _ = settle(st, done(TestClaim.CHANGED))
-    assert (out.verdict, out.reason, st.step) == (Verdict.BOUNCE, FIRST_PASS, "tests")
-
-
-def test_first_pass_changes_requested_still_runs_tests_red() -> None:
-    st = story()
-    out, runner = settle(st, Handoff("changes_requested", summary="x", next_role="architect"))
-    assert runner.calls == ["T"] and out.reason == FIRST_PASS
-
-
-def test_open_dispute_wins_over_rework() -> None:
-    st = story(implemented=1, dispute=gates.OpenDispute("t::a", "W6", "why", "abc"))
-    p, runner = pipeline({"git diff --quiet abc HEAD -- t": (1, "")})
-    out = p.evaluate(st, done(TestClaim.CHANGED))
-    assert out.verdict is Verdict.PASS
-    assert "T" not in runner.calls
-
-
-def test_rework_changes_requested_skips_the_suite() -> None:
-    st = story(implemented=1)
     out, runner = settle(st, Handoff("changes_requested", summary="x", next_role="architect"))
     assert (st.step, st.rounds, runner.calls) == ("design", 1, [])
     assert out.verdict is Verdict.BOUNCE
+
+
+def test_open_dispute_still_wins_on_the_tests_step() -> None:
+    st = story(implemented=1, dispute=gates.OpenDispute("t::a", "W6", "why", "abc"))
+    p, runner = pipeline({"git diff --quiet abc HEAD -- t": (1, "")})
+    out = p.evaluate(st, done())
+    assert out.verdict is Verdict.PASS
+    assert "T" not in runner.calls
 
 
 # ----- G2 ----------------------------------------------------------------------
@@ -181,21 +142,15 @@ def prompt_at(make_runtime, step, role="unit-tester", **kw) -> str:
     return rt.query_fn.calls[0]["prompt"]
 
 
-def test_rework_brief_shows_on_reworked_tests(make_runtime) -> None:
+def test_no_rework_brief_on_reworked_tests(make_runtime) -> None:
     p = prompt_at(make_runtime, "tests", implemented=1)
-    assert REWORK_BRIEF in p
-    assert p.index("Story s1: Add todo") < p.index(REWORK_BRIEF)
+    assert "Story s1: Add todo" in p and "earlier pass" not in p
 
 
-def test_no_rework_brief_on_first_pass_or_other_step(make_runtime) -> None:
-    assert REWORK_BRIEF not in prompt_at(make_runtime, "tests")
-    assert REWORK_BRIEF not in prompt_at(make_runtime, "design", "architect", implemented=1)
-
-
-def test_dispute_replaces_rework_brief(make_runtime) -> None:
+def test_a_dispute_brief_shows_on_the_tests_step(make_runtime) -> None:
     d = gates.OpenDispute("t::a", "W6", "why", "abc")
     p = prompt_at(make_runtime, "tests", implemented=1, dispute=d)
-    assert REWORK_BRIEF not in p and "Test dispute" in p
+    assert "Test dispute" in p
 
 
 # ----- G8, G9 ------------------------------------------------------------------

@@ -123,9 +123,9 @@ def test_count_is_the_commits_from_the_target_to_the_head(fake: FakeSystem) -> N
 
 
 def test_refused_push_text() -> None:
-    assert up.REFUSED_PUSH.format(branch="main", prefix="team/sprint-") == (
-        "refusing to push main: only review branches (team/sprint-*) are pushed"
-    )
+    assert up.REFUSED_PUSH.format(
+        branch="main", prefix="team/sprint-", story_prefix="team/story-"
+    ) == ("refusing to push main: only review branches (team/sprint-* or team/story-*) are pushed")
 
 
 # ----- Prs ------------------------------------------------------------------

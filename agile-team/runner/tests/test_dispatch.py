@@ -208,7 +208,8 @@ def test_customer_proxy_runs_in_sandbox(make_runtime, configured: Path) -> None:
     assert opts.cwd.endswith(".team/run/customer/cli")
     assert '"denyRead"' in opts.settings
     assert "How the customer reaches the product" in q.calls[0]["prompt"]
-    assert report["gate"]["story_status"] is StoryStatus.DONE
+    assert report["gate"]["story_status"] is StoryStatus.ACTIVE
+    assert rt.state.stories["s1"].step == "land"
 
 
 LOCAL = Providers({"local": Provider("local", "http://localhost:11434")})

@@ -1,7 +1,4 @@
-"""s125: the diff the pending check reads (P10, D1, D2), leaving early (P14), serving (P16).
-
-The real ``git diff`` of a tmp repo is the e2e test's; here ``Git`` runs on the fake system.
-"""
+"""s125: the git diff pins (P10) and serving (P16). The pending registry is gone (s159 G1)."""
 
 from __future__ import annotations
 
@@ -10,26 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from agile_team import gates, pending_tests, stages, test_reports
+from agile_team import gates, stages
 from agile_team.boundary import StepKind
 from agile_team.dispatch import Plan, Runtime, StepRequest
-from agile_team.gates import StoryStatus
 from agile_team.git_ops import Git
-from agile_team.pending_tests import WHOLE, Registry
 from agile_team.stop_checks import StopChecks
 
-from .fake_system import FAKE_REPO, Done, FakeSystem
+from .fake_system import FAKE_REPO, FakeSystem
 from .pipeline_helpers import add_story
-from .s125_helpers import NEW_FAIL
-from .test_s124_sprint_end import revert, setup
-from .test_story_admin import clerk, requested
-
-ENTRY = Registry({"s1": (NEW_FAIL,)})
-PENDING_SUBJECT = "chore(s1): pending tests"
-FILE = "agile-team/runner/tests/test_a.py"
 
 
-# ---- P10: the diff and the files it names ---------------------------------------------------
+@pytest.fixture(autouse=True)
+def tracked(configured: Path, fake: FakeSystem) -> None:
+    fake.track()
 
 
 def test_the_diff_pins_its_prefixes_and_quoting_whatever_the_humans_git_config(
@@ -40,128 +30,6 @@ def test_the_diff_pins_its_prefixes_and_quoting_whatever_the_humans_git_config(
     assert argv[1:3] == ("-c", "core.quotePath=false")
     assert "--src-prefix=a/" in argv and "--dst-prefix=b/" in argv
     assert "-U0" in argv and argv[-1] == "base1"
-
-
-def test_changed_for_reads_the_diff_and_the_untracked_files(fake: FakeSystem) -> None:
-    diff = f"diff --git a/{FILE} b/{FILE}\n--- a/{FILE}\n+++ b/{FILE}\n@@ -3 +3,2 @@\n"
-    fake.reply(("git", "diff"), Done(0, diff))
-    fake.reply(("git", "ls-files"), Done(0, "tests/new.py\0"))
-    got = test_reports.changed_for(Git(FAKE_REPO))("base1")
-    assert got == {FILE: (range(3, 5),), "tests/new.py": (WHOLE,)}
-
-
-def test_changed_for_an_empty_base_reads_nothing(fake: FakeSystem) -> None:
-    assert test_reports.changed_for(Git(FAKE_REPO))("") == {}
-    assert fake.commands == []
-
-
-DELETED = f"""\
-diff --git a/{FILE} b/{FILE}
---- a/{FILE}
-+++ b/{FILE}
-@@ -5 +5 @@ def test_a():
--    x = 1
-+    x = 2
-diff --git a/gone.py b/gone.py
-deleted file mode 100644
---- a/gone.py
-+++ /dev/null
-@@ -1,2 +0,0 @@
--def test_g():
--    pass
-"""
-
-
-def test_a_deleted_file_owns_no_hunk_and_the_previous_file_is_not_credited() -> None:
-    got = pending_tests.changed_lines(DELETED, [])
-    assert got == {FILE: (range(5, 6),)}
-
-
-def test_a_path_with_a_space_loses_the_trailing_tab_git_adds() -> None:
-    # git ends the +++ line of a path holding a space with a tab (D5)
-    diff = "--- a/tests/my test.py\t\n+++ b/tests/my test.py\t\n@@ -1 +1,2 @@\n"
-    assert pending_tests.changed_lines(diff, []) == {"tests/my test.py": (range(1, 3),)}
-
-
-def test_every_kind_of_change_in_one_git_diff() -> None:
-    diff = (
-        "diff --git a/tests/t.py b/tests/t.py\n--- a/tests/t.py\n+++ b/tests/t.py\n"
-        "@@ -0,0 +1,3 @@\n@@ -9 +11 @@\n@@ -20,2 +22,0 @@\n"
-        "diff --git a/gone.py b/gone.py\n--- a/gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n"
-    )
-    got = pending_tests.changed_lines(diff, ["tests/new.py"])
-    assert got == {
-        "tests/t.py": (range(1, 4), range(11, 12), range(22, 24)),
-        "tests/new.py": (WHOLE,),
-    }
-
-
-def test_a_file_named_with_a_non_b_prefix_owns_no_hunk() -> None:
-    diff = f"+++ w/{FILE}\n@@ -1 +1 @@\n"
-    assert pending_tests.changed_lines(diff, []) == {}
-
-
-# ---- P14: leaving early ---------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def tracked(configured: Path, fake: FakeSystem) -> None:
-    fake.track()
-    fake.reply(("git", "remote", "get-url"), Done(2))
-
-
-def subjects(fake: FakeSystem) -> list[str]:
-    return [c.subject() for c in fake.tree.commits]
-
-
-def test_a_cancelled_story_drops_its_entry_in_one_pending_commit(
-    make_runtime: Callable[..., Runtime], fake: FakeSystem
-) -> None:
-    rt = make_runtime()
-    story = requested(rt)
-    pending_tests.write(rt.config.repo, ENTRY)
-    rt.relay.answer("m1", "cancel")
-    before = subjects(fake)
-    assert clerk(rt).settle() == ["s1"]
-    assert pending_tests.read(rt.config.repo) == Registry()
-    new = subjects(fake)[len(before) :]
-    assert [s for s in new if s.startswith(PENDING_SUBJECT)] == [PENDING_SUBJECT]
-    assert story.status is StoryStatus.CANCELLED
-
-
-def test_a_cancel_of_a_story_with_no_entry_makes_no_pending_commit(
-    make_runtime: Callable[..., Runtime], fake: FakeSystem
-) -> None:
-    rt = make_runtime()
-    requested(rt)
-    rt.relay.answer("m1", "cancel")
-    clerk(rt).settle()
-    assert not [s for s in subjects(fake) if s.startswith(PENDING_SUBJECT)]
-
-
-def test_a_kept_story_keeps_its_entry(make_runtime: Callable[..., Runtime]) -> None:
-    rt = make_runtime()
-    requested(rt)
-    pending_tests.write(rt.config.repo, ENTRY)
-    rt.relay.answer("m1", "keep")
-    clerk(rt).settle()
-    assert pending_tests.read(rt.config.repo) == ENTRY
-
-
-def test_a_reverted_story_drops_its_entry_in_one_pending_commit(
-    make_runtime: Callable[..., Runtime], fake: FakeSystem
-) -> None:
-    rt, tools = setup(make_runtime)
-    pending_tests.write(rt.config.repo, Registry({"s1": (NEW_FAIL,), "s2": ("x::y",)}))
-    rt.git.commit([pending_tests.REGISTRY], "seed")
-    rt.record_checkout()
-    before = len(fake.tree.commits)
-    out = revert(tools)
-    assert out["status"] == "reverted"
-    assert pending_tests.read(rt.config.repo) == Registry({"s2": ("x::y",)})
-    new = subjects(fake)[before:]
-    pending = [s for s in new if s.startswith(PENDING_SUBJECT)]
-    assert pending == [PENDING_SUBJECT]
 
 
 # ---- P16: serving ---------------------------------------------------------------------------

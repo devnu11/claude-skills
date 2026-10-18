@@ -147,7 +147,7 @@ def test_checks_for_orders_every_role_then_the_role_row() -> None:
 
 
 def test_table_rows() -> None:
-    assert STOP_CHECKS["unit-tester"] == (StopCheck.RED,)
+    assert "unit-tester" not in STOP_CHECKS
     assert STOP_CHECKS["integration-tester"] == (StopCheck.PRESENTATION,)
     assert MAX_REFUSALS == 3
     assert stop_checks.SPECS[StopCheck.SUITE].step == "implement"
@@ -357,16 +357,14 @@ def test_no_proof_before_any_run(rig: Callable[..., Rig]) -> None:
 # ----- other roles (AC4, SC9, SC10) -----
 
 
-def test_unit_tester_green_suite_is_refused(rig: Callable[..., Rig]) -> None:
+@pytest.mark.parametrize(
+    "suite", [(1, "FAILED tests/test_x.py::test_x\n1 failed"), (0, "2 passed")]
+)
+def test_unit_tester_is_never_refused_for_the_suite_result(
+    rig: Callable[..., Rig], suite: tuple[int, str]
+) -> None:
     r = rig(role="unit-tester", step="tests")
-    r.script.red = (0, "2 passed")
-    assert gates.GREEN_TOO_EARLY in r.stop()["reason"]
-    stage_names = [e.data["stage"] for e in r.events(EventKind.RUNNER_STAGE)]
-    assert "stop.red" in stage_names
-
-
-def test_unit_tester_red_suite_is_allowed(rig: Callable[..., Rig]) -> None:
-    r = rig(role="unit-tester", step="tests")
+    r.script.red = suite
     assert r.stop() == {}
     assert r.hook.reused() is None
 
@@ -548,7 +546,6 @@ def test_stop_stages_are_after_step_rows() -> None:
             stages.Name.STOP_HANDOFF,
             stages.Name.STOP_LINT,
             stages.Name.STOP_SUITE,
-            stages.Name.STOP_RED,
             stages.Name.STOP_PRESENTATION,
             stages.Name.STOP_REQUIREMENTS,
         ]
@@ -556,7 +553,7 @@ def test_stop_stages_are_after_step_rows() -> None:
     rows = [stages.STAGES[n] for n in names]
     assert all(r.when == stages.When.AFTER and r.attach == stages.Attach.STEP for r in rows)
     labels = [r.label for r in rows]
-    assert len(set(labels)) == 6 and all(len(x) <= 24 for x in labels)
+    assert len(set(labels)) == 5 and all(len(x) <= 24 for x in labels)
     assert stages.reserved("stop.anything")
 
 
@@ -659,13 +656,18 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
     [
         ("agile_team/roles/_shared.md", "## Stop checks"),
         ("agile_team/roles/developer.md", "## Your stop check"),
-        ("agile_team/roles/unit-tester.md", "stop runs the tests gate"),
         ("agile_team/roles/integration-tester.md", "presentation is complete"),
     ],
 )
 def test_role_files_say_what_the_stop_checks(rel: str, needle: str) -> None:
     path = Path(stop_checks.__file__).parent.parent / rel
     assert needle in system.read_text(path)
+
+
+@pytest.mark.parametrize("needle", ["pending-tests", "Pending tests", '"tests": "changed"'])
+def test_the_unit_tester_role_file_has_no_red_first_rule_or_tests_claim(needle: str) -> None:
+    path = Path(stop_checks.__file__).parent / "roles/unit-tester.md"
+    assert needle not in system.read_text(path)
 
 
 def test_protocol_documents_stop_checks() -> None:

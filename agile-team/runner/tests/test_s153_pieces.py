@@ -29,7 +29,7 @@ sr = _Late()
 
 def conflict(**kw) -> bd.Failure:
     fields = {"files": ["a.py", "b.py"], "commit": "c" * 12, "subject": "Edit a", **kw}
-    return bd.Failure(Stage.REBASE, FixCase.REBASE_CONFLICT, "the output", **fields)
+    return bd.Failure(Stage.REPLAY, FixCase.REBASE_CONFLICT, "the output", **fields)
 
 
 def stored(boundary: bd.Boundary) -> dict:
@@ -140,7 +140,7 @@ def test_s153_the_rebase_fix_scope_confines_writes_and_git_to_the_worktree(env: 
 
 
 def test_p1_a_sprint_end_conflict_goes_to_devops_and_holds_nothing(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
     env.br.step()

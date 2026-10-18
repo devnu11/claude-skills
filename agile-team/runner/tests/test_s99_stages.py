@@ -35,8 +35,6 @@ EXPECTED = [
     "quality.coverage",
     "checkout.guard",
     "checkout.verify",
-    "gate.tests-red",
-    "gate.tests-rework",
     "gate.tests+coverage",
     "gate.suite-runs",
     "gate.dispute-output",
@@ -47,15 +45,16 @@ EXPECTED = [
     "boundary.check",
     "boundary.push",
     "boundary.ci-wait",
-    "boundary.rebase",
-    "boundary.push-rebased",
-    "boundary.ci-rebased",
+    "boundary.open",
+    "boundary.replay",
+    "boundary.push-replayed",
+    "boundary.ci-replayed",
+    "story.land",
     "runner-tool.run_tests",
     "runner-tool.run_new_tests",
     "stop.handoff",
     "stop.lint",
     "stop.suite",
-    "stop.red",
     "stop.presentation",
     "stop.requirements",
 ]
@@ -89,17 +88,22 @@ def runs(log: stage_log.StageLog) -> list:
 def test_table_has_every_name_in_order() -> None:
     assert set(stages.STAGES) == set(NAME)
     assert [str(n) for n in stages.STAGES] == EXPECTED
-    ends = [n for n in EXPECTED if n.startswith("boundary.")]
-    assert ends[-3:] == ["boundary.rebase", "boundary.push-rebased", "boundary.ci-rebased"]
+    for replay in ("boundary.replay", "boundary.push-replayed", "boundary.ci-replayed"):
+        assert replay in EXPECTED
     for key, row in stages.STAGES.items():
         assert row.name == key and stages.STAGE_NAME.fullmatch(row.name)
         assert isinstance(row.when, stages.When) and isinstance(row.attach, stages.Attach)
         assert row.description
 
 
-def test_only_runner_tools_use_during() -> None:
+def test_only_runner_tools_and_the_land_use_during() -> None:
     during = {n for n, s in stages.STAGES.items() if s.when == stages.When.DURING}
-    assert during == {NAME.RUN_TESTS, NAME.RUN_NEW_TESTS}
+    assert during == {NAME.RUN_TESTS, NAME.RUN_NEW_TESTS, NAME.STORY_LAND}
+
+
+def test_the_land_stage_attaches_to_a_story_with_the_label_land() -> None:
+    row = stages.STAGES[NAME.STORY_LAND]
+    assert (row.label, row.attach) == ("land", stages.Attach.STORY)
 
 
 def test_boundary_rows_attach_to_boundary() -> None:
@@ -404,7 +408,7 @@ def test_tools_command_prints_both_lists(configured: Path, capsys) -> None:
     assert cli.main(["--repo", str(configured), "tools"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert [r["name"] for r in out["built_in"]] == EXPECTED
-    assert "boundary.ci-rebased" in [r["name"] for r in out["built_in"]]
+    assert "boundary.ci-replayed" in [r["name"] for r in out["built_in"]]
     assert list(out["built_in"][0]) == ["name", "label", "description", "when", "attach"]
     assert out["repo"] == [{"name": "x.y", "description": "D", "command": "C", "label": ""}]
 

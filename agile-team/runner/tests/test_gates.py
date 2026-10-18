@@ -62,7 +62,7 @@ def test_advance_through_pipeline_to_done() -> None:
     s, p = story(), pipeline()
     for _ in STEPS:
         p.advance(s, gates.Outcome(Verdict.PASS))
-    assert s.status is StoryStatus.DONE and s.step == "acceptance"
+    assert s.status is StoryStatus.DONE and s.step == STEPS[-1] == "land"
 
 
 def test_bounce_counts_rounds_and_caps() -> None:
@@ -113,12 +113,15 @@ def test_parse_coverage(out, pct) -> None:
     assert gates.parse_coverage(out) == pct
 
 
-def test_tests_red_gate() -> None:
-    passed = pipeline({"T": (1, "")}).evaluate(story("tests"), Handoff("done"))
-    assert passed.verdict is Verdict.PASS
-    out = pipeline({"T": (0, "")}).evaluate(story("tests"), Handoff("done"))
-    assert out.verdict is Verdict.BOUNCE and out.bounce_to == "tests"
-    assert "failing test" in out.reason
+def test_the_tests_step_has_no_command_gate() -> None:
+    """s159 G2: a done tests step passes whether the suite is red or green, and runs nothing."""
+    for results in ({"T": (1, "")}, {"T": (0, "")}):
+        runner = FakeRunner(results)
+        p = gates.Pipeline(
+            list(STEPS), 3, gates.Checks({"test": "T", "coverage": "C"}, 95.0, runner)
+        )
+        assert p.evaluate(story("tests"), Handoff("done")).verdict is Verdict.PASS
+        assert runner.calls == []
 
 
 def test_green_gate() -> None:
