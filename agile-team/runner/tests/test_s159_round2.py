@@ -116,7 +116,11 @@ def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> 
         return fn(*args)
 
     monkeypatch.setattr(system, "in_thread", in_thread)
-    monkeypatch.setattr(story_ci.StoryPusher, "after_step", lambda self, s: None)
+
+    def after_step(self, s) -> None:
+        return None
+
+    monkeypatch.setattr(story_ci.StoryPusher, "after_step", after_step)
     rt.worktree_of = story.id
     plan = SimpleNamespace(story=story)
     asyncio.run(rt.apply_settled(plan, {"status": "done"}))
