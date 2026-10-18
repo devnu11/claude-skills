@@ -89,6 +89,7 @@ class Scheduler:
         self.turns = 0
         self.told_permission = False
         self.result = StepResult("", 0.0)
+        runtime.main_lock = self.main_lock
         self.lander = Lander(runtime, self.main_lock)
         self.ci_poll = StoryCiPoll(runtime)
         self.followed_at = float("-inf")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from . import system
 from .boundary import SUPERSEDED_BY, Permission, PrMode, StackEntry, find_current_entry
 from .ci import Bucket, Check, CiResult, CiVerdict, check_lines, verdict_of
 from .events import Event, EventKind
@@ -40,14 +41,26 @@ class StoryPusher:
     ) -> str | None:
         """Push the story's worktree head when it moved; the refusal text, or ``None``."""
         entry, head = find_sprint_entry(self.runtime), story.worktree_head
-        if not (story.branch and head and head != story.pushed) or not self._confirm_ready(entry):
+        if not self._can_push(story, entry) or not self._open_sprint_branch(entry):  # type: ignore[arg-type]
             return None
         refused = self.runtime.upstream.push(Lease(story.branch, story.pushed, head))  # type: ignore[union-attr]
-        if refused is not None:
-            return refused
-        story.pushed = head
-        self._open_draft(story, entry)  # type: ignore[arg-type]
-        return None
+        if refused is None:
+            story.pushed = head
+            self._open_draft(story, entry)  # type: ignore[arg-type]
+        return refused
+
+    async def push_off_loop(self, story: StoryState) -> str | None:
+        """C6: like ``after_step``, but ``push`` and ``create`` run in threads and every write
+        to the run state stays on the loop thread; the refusal text, or ``None``."""
+        rt, entry, head = self.runtime, find_sprint_entry(self.runtime), story.worktree_head
+        if not self._can_push(story, entry) or not await self._open_sprint_branch_off(entry):  # type: ignore[arg-type]
+            return None
+        lease = Lease(story.branch, story.pushed, head)
+        refused = await system.in_thread(rt.upstream.push, lease)  # type: ignore[union-attr]
+        if refused is None:
+            story.pushed = head
+            await self._open_draft_off(story, entry)  # type: ignore[arg-type]
+        return refused
 
     def push_replayed(self, story: StoryState, old_pr: int | None) -> str | None:
         """R8, S3: push the replayed branch, open its draft PR, close the old one with a link."""
@@ -56,29 +69,48 @@ class StoryPusher:
             self._close(old_pr, story)
         return refused
 
-    def _confirm_ready(self, entry: StackEntry | None) -> bool:
-        """P1, P3: pushing needs permission yes, a PR service and a sprint branch."""
+    def _can_push(self, story: StoryState, entry: StackEntry | None) -> bool:
+        """P1, P3: the head moved, and permission, a PR service and a sprint branch allow a push."""
         rt = self.runtime
+        if not (story.branch and story.worktree_head and story.worktree_head != story.pushed):
+            return False
         if entry is None or rt.prs.missing() or rt.state.upstream.push is Permission.NO:
             return False
         if rt.state.upstream.push is Permission.UNASKED:
             rt.state.permission_asked = True
             return False
-        return bool(entry.pushed) or self._open_sprint_branch(entry)
+        return True
 
     def _open_sprint_branch(self, entry: StackEntry) -> bool:
         """The sprint branch must exist on the remote before a story PR can target it."""
-        if entry.head and self.runtime.upstream.push(Lease(entry.branch, "", entry.head)) is None:  # type: ignore[union-attr]
-            entry.pushed = entry.head
+        if not entry.pushed and entry.head:
+            lease = Lease(entry.branch, "", entry.head)
+            if self.runtime.upstream.push(lease) is None:  # type: ignore[union-attr]
+                entry.pushed = entry.head
         return bool(entry.pushed)
 
-    def _open_draft(self, story: StoryState, entry: StackEntry) -> None:
-        if story.pr is not None:
-            return
+    async def _open_sprint_branch_off(self, entry: StackEntry) -> bool:
+        """``_open_sprint_branch`` with the push in a thread; one story opens it, the rest wait."""
+        async with self.runtime.sprint_push_lock:
+            if not entry.pushed and entry.head:
+                lease = Lease(entry.branch, "", entry.head)
+                if await system.in_thread(self.runtime.upstream.push, lease) is None:  # type: ignore[union-attr]
+                    entry.pushed = entry.head
+        return bool(entry.pushed)
+
+    def _build_spec(self, story: StoryState, entry: StackEntry) -> PrSpec:
         title = f"{story.id}: {story.title}"
         body = STORY_PR_BODY.format(id=story.id, branch=entry.branch)
-        spec = PrSpec(story.branch, entry.branch, title, body, PrMode.DRAFT)
-        story.pr = self.runtime.prs.create(spec).number
+        return PrSpec(story.branch, entry.branch, title, body, PrMode.DRAFT)
+
+    def _open_draft(self, story: StoryState, entry: StackEntry) -> None:
+        if story.pr is None:
+            story.pr = self.runtime.prs.create(self._build_spec(story, entry)).number
+
+    async def _open_draft_off(self, story: StoryState, entry: StackEntry) -> None:
+        if story.pr is None:
+            made = await system.in_thread(self.runtime.prs.create, self._build_spec(story, entry))
+            story.pr = made.number
 
     def _close(self, old_pr: int, story: StoryState) -> None:
         note = SUPERSEDED_BY.format(target=story.branch, url=f"#{story.pr}")
