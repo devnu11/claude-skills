@@ -31,15 +31,15 @@ def hanging_suite(tmp_path: Path) -> str:
     return f"{sys.executable} -m pytest {opts} test_hang.py"
 
 
-def test_real_pytest_hang_is_killed_named_and_bounces_tests_gate(tmp_path: Path) -> None:
+def test_real_pytest_hang_is_killed_named_and_bounces_the_gate(tmp_path: Path) -> None:
     run = CommandShell(tmp_path, 3.0).run
     limit = clock.Deadline(25)
     code, out = run(hanging_suite(tmp_path))
     assert code == TIMED_OUT
     assert not limit.passed()  # the hang sleeps 30 s; only a kill ends it sooner
     assert "test_hang.py::test_hangs" in out
-    outcome = gates.Checks({"test": hanging_suite(tmp_path)}, 95.0, run).tests_red()
-    assert outcome.verdict == gates.Verdict.BOUNCE
+    outcome = gates.timed_out(code, out)
+    assert outcome is not None and outcome.verdict == gates.Verdict.BOUNCE
     assert outcome.reason.startswith("the command did not finish in time:")
 
 

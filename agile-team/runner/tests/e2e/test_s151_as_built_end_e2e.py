@@ -234,25 +234,26 @@ def test_ac3_1_after_green_the_team_branch_is_rebased_onto_the_target(scene: Sce
     assert any(o["outcome"] == "rebased" for o in scene.outcomes())
 
 
-def test_ac3_2_the_rebased_branch_goes_to_the_same_branch_and_keeps_the_as_built_sha(
+def test_ac3_2_the_replayed_branch_goes_to_a_new_r1_branch_and_the_as_built_one_stays(
     scene: Scene,
 ) -> None:
     built = team_work(scene)
     scene.main_moves()
     scene.open_end()
-    scene.run_to(Stage.PUSH_REBASED)
+    scene.run_to(Stage.PUSH_REPLAYED)
     scene.drive()
-    assert scene.remote_branch() == scene.head() != built
-    assert scene.own.as_is == built
-    assert len([c for c in scene.prs.calls if c[0] == "create"]) == 1
-    assert any("rebased onto" in n and built[:7] in n for n in scene.notes())
+    assert scene.remote_branch() == built  # R5: the as-built branch is kept
+    replayed = git(scene.origin, "rev-parse", f"refs/heads/{BRANCH}-r1").strip()
+    assert replayed == scene.head() != built
+    assert scene.own.as_is == built and scene.own.replays == 1
+    assert len([c for c in scene.prs.calls if c[0] == "create"]) == 2
 
 
 def test_ac3_2_a_remote_moved_since_the_as_built_push_holds_push_rejected(scene: Scene) -> None:
     team_work(scene)
     scene.main_moves()
     scene.open_end()
-    scene.run_to(Stage.PUSH_REBASED)
+    scene.run_to(Stage.PUSH_REPLAYED)
     scene.commit(scene.other, "x.txt", "x\n", "someone pushes")
     git(scene.other, "push", "-q", "-f", "origin", f"HEAD:refs/heads/{BRANCH}")
     scene.br.step()
@@ -274,7 +275,7 @@ def test_ac3_3_a_red_rebased_ci_is_reported_and_does_not_hold(scene: Scene) -> N
     team_work(scene)
     scene.main_moves()
     scene.open_end()
-    scene.run_to(Stage.CI_REBASED)
+    scene.run_to(Stage.CI_REPLAYED)
     scene.prs.check_list = list(FAIL)
     scene.drive()
     assert scene.boundary is None and scene.rt.state.boundary is None
@@ -311,7 +312,7 @@ def test_ac4_1_the_rebase_is_refused_without_green_ci_on_the_pushed_sha(
         "other": CiResult(1, "u", "f" * 40, CiVerdict.GREEN, list(PASS)),
     }
     scene.own.ci = states[ci]
-    scene.boundary.stage = Stage.REBASE
+    scene.boundary.stage = Stage.REPLAY
     calls: list[str] = []
     scene.rt.upstream.rebase_onto = lambda old: calls.append(old)
     scene.br.step()
@@ -321,8 +322,8 @@ def test_ac4_1_the_rebase_is_refused_without_green_ci_on_the_pushed_sha(
 
 
 def test_ac4_1_the_stages_run_in_the_documented_order() -> None:
-    order = [s.value for s in bd.STAGES]
-    assert order == ["sync", "check", "push", "ci", "rebase", "push-rebased", "ci-rebased"]
+    order = [s.value for s in bd.EDGE_STAGES[Edge.END]]
+    assert order == ["sync", "check", "push", "ci", "replay", "push-replayed", "ci-replayed"]
     assert bd.get_rebase_refusal(None) == bd.NO_AS_IS
 
 
