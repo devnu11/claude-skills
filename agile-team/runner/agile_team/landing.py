@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import fullcheck, stages, story_rebase, story_spec, system
+from . import fullcheck, stages, story_rebase, story_spec, system, test_reports
 from .boundary import (
     SPRINT_BRANCH_DIVERGED,
     Permission,
@@ -363,7 +363,11 @@ class Lander:
         rt, path = self.runtime, self.scratch_path
         config = rt.config.at_worktree(path)
         judging = fullcheck.Judging(rt.shell(path), rt.pipeline.checks.required_coverage())
-        report = await self.run_off(fullcheck.run_checks, fullcheck.full_checks(config), judging)
+        report = await self.run_off(
+            fullcheck.run_checks,
+            fullcheck.full_checks(config, test_reports.LANDING_FOLDER),
+            judging,
+        )
         await self.clear_tree()
         if report.passed:
             return None

@@ -157,12 +157,10 @@ def _toolchain_check(
     return make
 
 
-def full_checks(config: Config) -> list[FullCheck]:
+def full_checks(config: Config, folder: str = test_reports.FOLDER) -> list[FullCheck]:
     """Toolchain checks that are set (``test`` only without ``coverage``), then each e2e command."""
     commands = config.toolchain.commands
-    reporting = test_reports.Reporting(
-        config.toolchain.report, config.run_dir / test_reports.FOLDER
-    )
+    reporting = test_reports.Reporting(config.toolchain.report, config.run_dir / folder)
     make = _toolchain_check(config, reporting)
     chosen = [make(n, j) for n, j in TOOLCHAIN_CHECKS if _wanted(n, commands)]
     e2e = [FullCheck(f"e2e:{d.name}", d.e2e) for d in config.environments if d.e2e]

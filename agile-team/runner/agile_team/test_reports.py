@@ -16,6 +16,8 @@ from .commands import CommandRunner
 from .config import PLACEHOLDER, ReportOptions
 
 FOLDER = "reports"  # under the run directory
+LANDING_FOLDER = "reports-landing"  # N11b: siblings, so one user never empties another's
+STORY_FOLDER = "reports-story"  # one folder per story gate inside
 APPENDED = " {report}"
 
 
