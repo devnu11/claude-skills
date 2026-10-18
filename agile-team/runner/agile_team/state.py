@@ -291,7 +291,13 @@ def _boundary(data: dict[str, Any] | None) -> Boundary | None:
     stage = LEGACY_STAGES.get(data.get("stage", ""), data.get("stage", "sync"))
     fix = _load_rebase_fix(data.get("rebase_fix"))
     loaded = {"failure": failure, "streak": streak, "hold": hold, "stage": stage}
-    return Boundary(**{**data, **loaded, "rebase_fix": fix})
+    replay = data.get("replay") or _read_legacy_replay(data.get("sync_from", ""))
+    return Boundary(**{**data, **loaded, "rebase_fix": fix, "replay": replay})
+
+
+def _read_legacy_replay(sync_from: str) -> dict[str, Any] | None:
+    """R1: a boundary saved with only ``sync_from`` resumes as a replay from that head."""
+    return {"old_head": sync_from, "base": "", "target": ""} if sync_from else None
 
 
 def _load_rebase_fix(data: dict[str, Any] | None) -> RebaseFix | None:

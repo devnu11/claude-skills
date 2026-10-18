@@ -416,6 +416,7 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         pipeline=make_pipeline(config),
         prs=GhPrs(command_runner(place.repo)),
         shell=functools.partial(shell_runner, limit_s=config.gates.command_timeout_s),
+        pipeline_for=make_pipeline,
     )
 
 
@@ -460,6 +461,7 @@ def _prepared(
     _require_preflight(config, place.home)
     _record_cut_off_spend(config)
     runtime = _load_runtime(place, query_fn)
+    _recover_stories(runtime, start)
     kept = runtime.state.cadence if start.mode is StartMode.RESUME else config.team.cadence
     runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
@@ -470,6 +472,7 @@ def _prepared(
 def _load_runtime(place: Place, query_fn: QueryFn | None) -> Runtime:
     """The run's runtime, its load faults reported and its story dependencies loaded."""
     runtime = make_runtime(place, query_fn or default_query())
+    runtime.pulse.unattended = _find_heartbeat()
     runtime.report_load_faults()
     _load_dependencies(runtime)
     return runtime
@@ -488,6 +491,12 @@ def _repin_or(code: int, runtime: Runtime, pin: repin.Pin) -> int:
     pin.repin(marker)
 
 
+def _find_heartbeat() -> Path | None:
+    """I5: the file the unattended tool watches, named by ``$UNATTENDED_HEARTBEAT``."""
+    named = system.environ().get(UNATTENDED_HEARTBEAT)
+    return Path(named) if named else None
+
+
 def _load_dependencies(runtime: Runtime) -> None:
     """Load story dependencies from the files; a bad list stops the start (s86 DP3)."""
     if refusal := runtime.load_dependencies():
@@ -500,6 +509,7 @@ def _record_task(state: state_mod.RunState, start: Start) -> None:
         state.task = start.task
 
 
+UNATTENDED_HEARTBEAT = "UNATTENDED_HEARTBEAT"
 RECOVERED_LEADS: dict[Cause, str] = {Cause.KILLED: "the last run was killed"}
 RECOVERED_LEAD = "the last run halted ({cause}) before its edits were saved"
 
@@ -513,6 +523,13 @@ def _recover(config: config_mod.Config, start: Start) -> None:
         lead = RECOVERED_LEADS.get(found.cause) or RECOVERED_LEAD.format(cause=found.cause)
         saved = f"{found.label}'s edits are saved in {found.sha} (reverted)"
         print(f"agile-team start: {lead}; {saved}", file=sys.stderr)
+
+
+def _recover_stories(runtime: Runtime, start: Start) -> None:
+    """I2, I3: on ``--resume`` prune stale worktrees and mark each cut-off story step stopped."""
+    if start.mode is StartMode.RESUME:
+        kind = runtime.state.halt_kind
+        runtime.recover_stories(Cause(kind) if kind else Cause.KILLED)
 
 
 def _record_cut_off_spend(config: config_mod.Config) -> None:
@@ -809,6 +826,8 @@ def cmd_stop(args: argparse.Namespace) -> int:
 def cmd_accept_checkout(args: argparse.Namespace) -> int:
     """Keep the current branch and HEAD as the checkout the runner expects (s61)."""
     config = _load_config(repo_of(args))
+    if args.story and state_mod.runner_alive(config.run_dir):
+        return _queue_worktree_accept(config, args.story)
     if state_mod.runner_alive(config.run_dir):
         raise CliError("the runner is running; stop it first")
     try:
@@ -816,6 +835,13 @@ def cmd_accept_checkout(args: argparse.Namespace) -> int:
     except checkout.CheckoutError as exc:
         raise CliError(str(exc)) from exc
     print(f"accepted checkout {record.text()}")
+    return 0
+
+
+def _queue_worktree_accept(config: config_mod.Config, story: str) -> int:
+    """B6: queue the request for the running scheduler to apply between steps."""
+    request = checkout.CheckoutRequests(config).publish(story)
+    print(f"queued {request}: the runner keeps {story}'s worktree as it is")
     return 0
 
 
@@ -942,7 +968,8 @@ COMMANDS = (
             WATCH_ARGS),
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
     Command("accept-checkout", "keep the current branch and HEAD after a checkout halt",
-            cmd_accept_checkout),
+            cmd_accept_checkout,
+            ((("--story",), {"help": "keep this story's worktree as it is (runner may run)"}),)),
     Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)",
             cmd_dashboard, DASHBOARD_ARGS),
 )  # fmt: skip

@@ -11,7 +11,7 @@
   --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
   --accent: #2a78d6;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #8a63d2;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-ink: #006300;
   --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
@@ -24,7 +24,7 @@
     --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
     --accent: #3987e5;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #a98be0;
     --good-ink: #0ca30c;
     --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
     --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
@@ -36,7 +36,7 @@
   --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
   --accent: #3987e5;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #a98be0;
   --good-ink: #0ca30c;
   --run1: #2e9d5b; --run2: #8b5cf6; --run3: #e0901f; --pass: #2e9d5b; --warn: #c9b22c; --skip: #8c939d; --pending: #6b7fd7; --fail: var(--critical);
   --flow-forward: var(--s2); --flow-model: var(--s1); --flow-tools: var(--s4);
@@ -2028,6 +2028,15 @@ function backlogGroups(view) {
   };
 }
 
+/** AC9.1: the story's branch, its landing, its CI and whether a step runs for it now. */
+function branchPills(s) {
+  return [
+    s.branch ? cardPill(s.branch.replace(/^team\//, ""), { tone: "", dot: false, title: s.branch }) : "",
+    s.landed ? cardPill(`landed ${s.landed.slice(0, 7)}`, { tone: "good", dot: false }) : "",
+    s.story_ci ? cardPill(`CI ${s.story_ci.verdict} (${s.story_ci.source})`, { tone: s.story_ci.verdict === "green" ? "good" : "warning", dot: false, title: s.story_ci.sha }) : "",
+  ].join("");
+}
+
 const revertPill = (s) => s.reverts ? cardPill(`reverted (${s.reverts}×)`, { tone: "warning", dot: false }) : "";
 
 function storyLabel(story) {
@@ -2473,6 +2482,8 @@ function storyCard(view, s, act) {
   const covered = coverage(view).filter((c) => c.story.id === s.id);
   const flags = [
     working ? cardPill(`▶ ${act.role}`, { tone: "accent" }) : "",
+    s.running && !working ? cardPill("▶ running", { tone: "accent" }) : "",
+    branchPills(s),
     revertPill(s),
     s.wait ? cardPill(`⏸ ${s.wait.reason}`, { tone: WAIT_TONE[s.wait.reason] ?? "warning", title: s.wait.title }) : "",
   ].join("");
@@ -2551,7 +2562,7 @@ function ledgerTotals(view, key) { return totalsBy(view.ledger, key); }
 
 /** Time pieces of finished agent steps (TM2). */
 const stepPieces = (view) => view.steps.filter(finished).filter((s) => s.role !== PO).map((s) => ({
-  role: s.role, story: s.story, model: s.model, version: versionOf(s.recorded_model), count: "steps", parts: { work: s.seconds ?? 0 }, wall: s.clock === "wall",
+  role: s.role, story: s.story, model: s.model, version: versionOf(s.recorded_model), count: "steps", parts: { [s.resumed ? "resumed" : "work"]: s.seconds ?? 0 }, wall: s.clock === "wall",
 }));
 
 /** Time pieces of runner stages, except those inside a step (TM2). */
@@ -2580,7 +2591,7 @@ function timeBy(pieces, key) {
   return out;
 }
 
-const newTimeTotal = () => ({ steps: 0, runs: 0, turns: 0, wall: 0, seconds: 0, parts: { work: 0, runner: 0, model: 0, tools: 0, waiting: 0 } });
+const newTimeTotal = () => ({ steps: 0, runs: 0, turns: 0, wall: 0, seconds: 0, parts: { work: 0, resumed: 0, runner: 0, model: 0, tools: 0, waiting: 0 } });
 
 /** Adds one time piece into a total. */
 function addPiece(t, p) {
@@ -2711,7 +2722,7 @@ function timeLegend() {
 }
 
 const TIME_PARTS = [
-  ["work", "Agent steps", "--s2"], ["runner", "Runner stages", "--s3"],
+  ["work", "Agent steps", "--s2"], ["resumed", "Resumed steps", "--s5"], ["runner", "Runner stages", "--s3"],
   ["model", "PO model", "--s1"], ["tools", "PO tools", "--s4"],
   ["waiting", "PO waiting on a step", "--ink-2"],
 ];

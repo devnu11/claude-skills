@@ -56,10 +56,10 @@ def pair(old: Sequence[Stamped], new: Listing) -> dict[str, str]:
     return moved
 
 
-ReplayLine = tuple[str, str, tuple[str, ...]]  # (sha, subject, parents)
+type ReplayLine = tuple[str, str, tuple[str, ...]]  # (sha, subject, parents)
 
 
-def _story_commits(lines: Sequence[ReplayLine]) -> dict[str, list[ReplayLine]]:
+def _find_story_commits(lines: Sequence[ReplayLine]) -> dict[str, list[ReplayLine]]:
     """Each merge's story commits (``M^1..M^2`` inside ``lines``), by merge sha, oldest first."""
     index = {line[0]: line for line in lines}
     claimed: set[str] = set()
@@ -80,7 +80,7 @@ def _walk(sha: str, seen: tuple[Mapping[str, ReplayLine], set[str]]) -> list[Rep
     return [*below, index[sha]]
 
 
-def _pair_by_subject(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dict[str, str]:
+def _match_subjects(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dict[str, str]:
     """Old sha to new sha, matching subjects in order."""
     moved: dict[str, str] = {}
     cursor = 0
@@ -92,16 +92,19 @@ def _pair_by_subject(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> di
     return moved
 
 
-def pair_replay(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dict[str, str]:
+def pair_replay(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    old: Sequence[ReplayLine],
+    new: Sequence[ReplayLine],
+) -> dict[str, str]:
     """R4: pair a replay's commits story by story, merges by ``merge(<id>)``, plain by subject."""
-    old_stories, new_stories = _story_commits(old), _story_commits(new)
+    old_stories, new_stories = _find_story_commits(old), _find_story_commits(new)
     new_merges = _merges_by_id(new)
-    moved = _pair_by_subject(_plain(old, old_stories), _plain(new, new_stories))
+    moved = _match_subjects(_filter_plain(old, old_stories), _filter_plain(new, new_stories))
     for story_id, merge in _merges_by_id(old).items():
         if story_id in new_merges:
             twin = new_merges[story_id]
             moved[merge[0]] = twin[0]
-            moved |= _pair_by_subject(old_stories[merge[0]], new_stories[twin[0]])
+            moved |= _match_subjects(old_stories[merge[0]], new_stories[twin[0]])
     return moved
 
 
@@ -114,7 +117,7 @@ def _merges_by_id(lines: Sequence[ReplayLine]) -> dict[str, ReplayLine]:
     return found
 
 
-def _plain(
+def _filter_plain(
     lines: Sequence[ReplayLine], stories: Mapping[str, list[ReplayLine]]
 ) -> list[ReplayLine]:
     inside = {c[0] for commits in stories.values() for c in commits}
@@ -144,7 +147,9 @@ def _swap(obj: object, attr: str, moved: Mapping[str, str]) -> int:
 
 
 def _story(story: StoryState, moved: Mapping[str, str]) -> int:
-    count = _swap(story, "commit", moved)
+    count = _swap(story, "commit", moved) + _swap(story, "base_sha", moved)
+    count += _swap(story.landed, "merge", moved) if story.landed else 0
+    count += sum(_swap(e, "merge", moved) + _swap(e, "revert", moved) for e in story.reverted)
     count += _remap_all(story.code_commits, moved) + _remap_all(story.file_commits, moved)
     return count + _interruptions([story.interrupted] if story.interrupted else [], moved)
 

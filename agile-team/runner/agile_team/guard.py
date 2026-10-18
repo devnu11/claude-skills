@@ -327,10 +327,20 @@ def deny(reason: str) -> dict[str, Any]:
     }
 
 
-def pre_tool_hook(scope: Scope) -> Hook:
-    """An SDK PreToolUse hook bound to ``scope``."""
+@dataclass
+class StopFlag:
+    """C8: set when a step's story is cancelled; the next tool call is the safe point."""
+
+    requested: bool = False
+    reason: str = ""
+
+
+def pre_tool_hook(scope: Scope, stop: StopFlag | None = None) -> Hook:
+    """An SDK PreToolUse hook bound to ``scope``; a set ``stop`` ends the step at the next call."""
 
     async def hook(input_data: dict[str, Any], _tool_use_id: str | None, _ctx: Any) -> dict:
+        if stop is not None and stop.requested:
+            return {"continue_": False, "stopReason": stop.reason, **deny(stop.reason)}
         call = ToolCall(input_data.get("tool_name", ""), input_data.get("tool_input", {}))
         reason = check_tool_use(scope, call)
         return deny(reason) if reason else {}

@@ -258,7 +258,11 @@
      "name": "manual",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s2",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s5",
@@ -298,7 +302,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s5",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s3",
@@ -349,7 +357,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s3",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s4",
@@ -400,7 +412,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s4",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s7",
@@ -446,7 +462,11 @@
      "name": "web",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s7",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s6",
@@ -498,7 +518,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s6",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s1",
@@ -546,7 +570,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s1",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   },
   {
    "id": "s8",
@@ -586,7 +614,11 @@
      "name": "cli",
      "verdict": ""
     }
-   ]
+   ],
+   "branch": "team/story-s8",
+   "landed": null,
+   "story_ci": null,
+   "running": false
   }
  ],
  "requirements": [
@@ -3228,6 +3260,7 @@
    "ended_at": 1791452188.1,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 411.6,
    "clock": "wall",
    "slept": 0.0,
@@ -3241,6 +3274,7 @@
    "ended_at": 1791452620.3,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 183.7,
    "clock": "awake",
    "slept": 120.0,
@@ -3254,6 +3288,7 @@
    "ended_at": 1791453754.2,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 377.8,
    "clock": "awake",
    "slept": 0,
@@ -3267,6 +3302,7 @@
    "ended_at": 1791454539.2,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 216.7,
    "clock": "awake",
    "slept": 0.0,
@@ -3280,6 +3316,7 @@
    "ended_at": 1791455320.9,
    "status": "done",
    "model": "haiku",
+   "resumed": false,
    "seconds": 400.6,
    "clock": "awake",
    "slept": 0.0,
@@ -3293,6 +3330,7 @@
    "ended_at": 1791456149.6,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 479.9,
    "clock": "awake",
    "slept": 0,
@@ -3306,6 +3344,7 @@
    "ended_at": 1791456696.3,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 137.7,
    "clock": "awake",
    "slept": 0.0,
@@ -3319,6 +3358,7 @@
    "ended_at": 1791457572.1,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 317.3,
    "clock": "awake",
    "slept": 0,
@@ -3332,6 +3372,7 @@
    "ended_at": 1791458273.1,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 201.3,
    "clock": "awake",
    "slept": 0,
@@ -3345,6 +3386,7 @@
    "ended_at": 1791459117.1,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 92.1,
    "clock": "awake",
    "slept": 0,
@@ -3358,6 +3400,7 @@
    "ended_at": 1791460618.8,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 487.8,
    "clock": "awake",
    "slept": 0,
@@ -3371,6 +3414,7 @@
    "ended_at": 1791461087.9,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 124.4,
    "clock": "awake",
    "slept": 0.0,
@@ -3384,6 +3428,7 @@
    "ended_at": 1791462078.2,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 397.1,
    "clock": "awake",
    "slept": 0.0,
@@ -3397,6 +3442,7 @@
    "ended_at": 1791462803.8,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 472.3,
    "clock": "awake",
    "slept": 0,
@@ -3410,6 +3456,7 @@
    "ended_at": 1791463825.0,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 441.9,
    "clock": "awake",
    "slept": 0.0,
@@ -3423,6 +3470,7 @@
    "ended_at": 1791464976.5,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 553.2,
    "clock": "awake",
    "slept": 0.0,
@@ -3436,6 +3484,7 @@
    "ended_at": 1791466264.0,
    "status": "done",
    "model": "haiku",
+   "resumed": false,
    "seconds": 524.9,
    "clock": "awake",
    "slept": 0.0,
@@ -3449,6 +3498,7 @@
    "ended_at": 1791466594.3,
    "status": "changes_requested",
    "model": "opus",
+   "resumed": false,
    "seconds": 104.2,
    "clock": "awake",
    "slept": 0.0,
@@ -3462,6 +3512,7 @@
    "ended_at": 1791467982.9,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 577.0,
    "clock": "awake",
    "slept": 0,
@@ -3475,6 +3526,7 @@
    "ended_at": 1791469009.0,
    "status": "blocked",
    "model": "opus",
+   "resumed": false,
    "seconds": 334.6,
    "clock": "awake",
    "slept": 0,
@@ -3488,6 +3540,7 @@
    "ended_at": 1791470270.8,
    "status": "done",
    "model": "sonnet",
+   "resumed": false,
    "seconds": 572.9,
    "clock": "awake",
    "slept": 0,
@@ -3501,6 +3554,7 @@
    "ended_at": 1791471226.3,
    "status": "done",
    "model": "haiku",
+   "resumed": false,
    "seconds": 393.9,
    "clock": "awake",
    "slept": 0,
@@ -3514,6 +3568,7 @@
    "ended_at": 1791472300.0,
    "status": "done",
    "model": "opus",
+   "resumed": false,
    "seconds": 413.9,
    "clock": "awake",
    "slept": 0.0,
@@ -3527,6 +3582,7 @@
    "ended_at": 1791472830.0,
    "status": "interrupted",
    "model": "claude-sonnet-4-5-20250929",
+   "resumed": false,
    "seconds": 190.0,
    "clock": "wall",
    "slept": 0.0,
@@ -3540,6 +3596,7 @@
    "ended_at": null,
    "status": null,
    "model": "sonnet",
+   "resumed": false,
    "seconds": null,
    "clock": "wall",
    "slept": 0.0,
@@ -4679,6 +4736,36 @@
      "fail_at": 4,
      "pending": 3
     }
+   }
+  ],
+  "steps": [
+   {
+    "role": "developer-cli",
+    "story": "s3",
+    "step": "implement",
+    "started_at": 1791472960.0,
+    "turn": 14,
+    "model": "claude-sonnet-4-5-20250929",
+    "configured_model": "sonnet",
+    "last_turn_at": 1791473127.9,
+    "tool": {
+     "name": "Bash",
+     "started_at": 1791473120.0
+    },
+    "tokens": {
+     "input": 190,
+     "output": 19430,
+     "cache_read": 2066577,
+     "cache_creation": 43906
+    },
+    "cost_usd": 1.0767,
+    "rate": [
+     640.0,
+     910.0,
+     1020.0,
+     860.0,
+     780.0
+    ]
    }
   ]
  },

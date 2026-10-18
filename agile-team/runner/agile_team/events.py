@@ -8,12 +8,14 @@ stay in the outbox and inbox; the dashboard merges them in by time.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from . import system
+from .run_writer import RunWriter
 
 EVENTS = "events.jsonl"
 INTERRUPTED = "interrupted"  # step-end status of a step cut short (s44)
@@ -54,6 +56,9 @@ class EventKind(StrEnum):
     TESTS_RUN = "tests-run"
     RUNNER_STAGE = "runner-stage"
     STOP_CHECK = "stop-check"
+    STORY_BRANCH = "story-branch"
+    STORY_LANDED = "story-landed"
+    STORY_CI = "story-ci"
 
 
 @dataclass
@@ -74,15 +79,24 @@ class EventLog:
 
     path: Path
     _count: int | None = field(default=None, repr=False)
+    writer: RunWriter = field(default_factory=RunWriter, repr=False, compare=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def emit(self, event: Event) -> Event:
-        self._count = self._next_number()
-        event.id, event.at = f"e{self._count}", event.at or system.now()
-        system.make_dirs(self.path.parent)
-        system.append_text(self.path, json.dumps(asdict(event)) + "\n")
+        """Give the event its id and time now; the writer appends its line (thread-safe)."""
+        with self._lock:
+            self._count = self._next_number()
+            event.id, event.at = f"e{self._count}", event.at or system.now()
+            line = json.dumps(asdict(event)) + "\n"
+            self.writer.submit(lambda: self._append(line))
         return event
 
+    def _append(self, line: str) -> None:
+        system.make_dirs(self.path.parent)
+        system.append_text(self.path, line)
+
     def events(self) -> list[Event]:
+        self.writer.flush()
         if not system.is_file(self.path):
             return []
         lines = system.read_text(self.path).splitlines()

@@ -26,7 +26,7 @@ class Headroom(NamedTuple):
     ceiling: float
 
 
-def _fresh(entries: list[Entry], who: Who) -> list[float]:
+def _list_fresh(entries: list[Entry], who: Who) -> list[float]:
     role, model, _floor = who
     return [
         e.cost_usd
@@ -35,9 +35,12 @@ def _fresh(entries: list[Entry], who: Who) -> list[float]:
     ]
 
 
-def reserve(entries: list[Entry], who: Who) -> float:
+def reserve(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    entries: list[Entry],
+    who: Who,
+) -> float:
     """``max(mean + 3 sigma, floor)`` over fresh entries; the floor under five of them."""
-    costs = _fresh(entries, who)
+    costs = _list_fresh(entries, who)
     floor = who[2]
     if len(costs) < RESERVE_MIN_STEPS:
         return floor

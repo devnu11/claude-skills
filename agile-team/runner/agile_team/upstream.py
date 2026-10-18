@@ -163,7 +163,10 @@ class Prs(Protocol):
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
 
-    def sha_checks(self, sha: str) -> list[Check]:
+    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        sha: str,
+    ) -> list[Check]:
         """The check runs on commit ``sha``."""
 
     def close(self, pr: int, note: str) -> None:
@@ -235,7 +238,10 @@ class NoPrs:
     def main_checks(self, branch: str) -> list[Check]:
         raise UpstreamError(self.why)
 
-    def sha_checks(self, sha: str) -> list[Check]:
+    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        sha: str,
+    ) -> list[Check]:
         raise UpstreamError(self.why)
 
     def close(self, pr: int, note: str) -> None:
@@ -310,7 +316,10 @@ class GhPrs:
         """The latest check runs on ``branch``'s head commit."""
         return self.sha_checks(branch)
 
-    def sha_checks(self, sha: str) -> list[Check]:
+    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        sha: str,
+    ) -> list[Check]:
         """The check runs on commit ``sha`` (or a branch name)."""
         out = self._gh("api", f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100")
         return [_run_check(r) for r in json.loads(out)["check_runs"]]
@@ -416,6 +425,25 @@ class Upstream:
         self._check_kept(Spans(start, old, target_sha))
         return self._build_rebased(old, after, target_sha)
 
+    def confirm_kept(self, spans: Spans) -> None:
+        """Raise ``UpstreamError`` when a replay changed paths only one side touched (R2)."""
+        lost = self.find_lost_paths(spans)
+        if lost:
+            text = SYNC_LOST.format(
+                team=self.git.branch(), target=self.target, paths=", ".join(lost)
+            )
+            raise UpstreamError(text)
+
+    def has_story_merges(self, old: str) -> bool:
+        """True when the first-parent line ``target..old`` holds a story merge commit (R1)."""
+        span = f"{self.target}..{old}"
+        return bool(self.git.attempt("rev-list", "--first-parent", "--merges", span)[1].strip())
+
+    def reset_team_branch(self, old: str, sha: str) -> None:
+        """Move the team branch to ``sha`` while it is still at ``old`` (R3)."""
+        self._refuse_moved(old)
+        self.git.run("reset", "--keep", sha)
+
     def find_upstreamed(self, old: str) -> frozenset[str]:
         """The shas of ``target..old`` whose patch is already in the target."""
         out = self.git.run("cherry", self.target, old)
@@ -498,12 +526,18 @@ class Upstream:
         code, out = self.git.attempt(*argv, self.settings.remote, f":{ref}")
         return None if code == 0 else out
 
-    def remote_head(self, branch: str) -> str:
+    def remote_head(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        branch: str,
+    ) -> str:
         """The sha of ``branch`` on the remote; ``""`` when it is absent."""
         out = self.git.attempt("ls-remote", self.settings.remote, f"refs/heads/{branch}")[1]
         return out.split()[0] if out.split() else ""
 
-    def fast_forward(self, sha: str) -> bool:
+    def fast_forward(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        sha: str,
+    ) -> bool:
         """Fast-forward the checked-out branch to ``sha``; False when it can't."""
         return self.git.attempt("merge", "--ff-only", sha)[0] == 0
 

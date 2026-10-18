@@ -393,7 +393,12 @@ def _product_backlog_refusal(story: StoryState) -> str | None:
     return f"story {story.id} is in the Product Backlog; add it to a sprint"
 
 
+LAND_IS_RUNNERS = "story {id} is at land; the runner lands it"
+
+
 def _step_refusal(role: str, story: StoryState) -> str | None:
+    if story.step == "land":
+        return LAND_IS_RUNNERS.format(id=story.id)
     if role_fits_step(role, story.step):
         return None
     return f"story {story.id} is at step {story.step!r}, which needs {STEP_ROLES[story.step]}"

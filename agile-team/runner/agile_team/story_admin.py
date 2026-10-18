@@ -156,10 +156,19 @@ def _commits(story: StoryState) -> int:
     return len({story.commit, *story.code_commits} - {None})
 
 
-def code_refusal(case: Case) -> str | None:
-    """Refuse a cancel request for a story with commits when the reason skips its code."""
+LANDING_REFUSAL = "story {story} is landing; wait for land to end"
+
+
+def find_landing_refusal(case: Case) -> str | None:
+    """E5: a story at ``land`` can't be cancelled until its land ends."""
     story = _story(case)
-    if not (priority.started(story) or story.code_commits):
+    return LANDING_REFUSAL.format(story=case.story_id) if story.step == "land" else None
+
+
+def code_refusal(case: Case) -> str | None:
+    """Refuse a cancel request for a landed story when the reason skips its code (E5)."""
+    story = _story(case)
+    if story.landed is None:
         return None
     if any(w in case.reason.lower() for w in CODE_WORDS):
         return None
@@ -224,7 +233,11 @@ TOOLS: dict[Act, Tool] = {
         (asked_refusal, manager_refusal, nothing_refusal), no_note, release, "released", "release"
     ),
     Act.REQUEST_CANCEL: Tool(
-        (pending_refusal, code_refusal), cancel_note, request, "cancel requested", "cancel"
+        (pending_refusal, find_landing_refusal, code_refusal),
+        cancel_note,
+        request,
+        "cancel requested",
+        "cancel",
     ),
 }
 
@@ -343,6 +356,8 @@ class Clerk:
         assert asked is not None
         before, decided = facts(story), decision(settled.answer.text)
         OUTCOMES[decided](self.runtime.state, settled)
+        if story.status is StoryStatus.CANCELLED:
+            self.runtime.release_cancelled(story)
         data = {
             "tool": "answer",
             "reason": asked.reason,

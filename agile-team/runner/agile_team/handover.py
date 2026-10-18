@@ -129,6 +129,15 @@ def _is_waiting(what: str) -> Callable[[dict], bool]:
     return lambda r: _boundary(r).get("waiting") == what
 
 
+def _land_ci(report: dict) -> str | None:
+    """The landing CI verdict a land step's report carries (the story-report form of s159)."""
+    return (report.get("land") or {}).get("ci")
+
+
+def _make_hold_or_landing(hold: str, verdict: str) -> Callable[[dict], bool]:
+    return lambda r: _boundary(r).get("hold") == hold or _land_ci(r) == verdict
+
+
 def _faulted(report: dict, kind: str) -> bool:
     fault = _fault(report)
     return fault.get("applied") is True and fault.get("kind") == kind
@@ -291,8 +300,8 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.CI_GREEN,
         lambda r: _boundary(r).get("ci") == "green",
-        '{story}: sprint {sprint}\'s CI passed: {prs} is ready to merge ("Rebase and merge"). '
-        "Tell the human.",
+        "{story}: sprint {sprint}'s CI passed: {prs} is ready to merge by fast-forward only "
+        "(never a rebase or squash merge). Tell the human.",
     ),
     Rule(
         Trigger.CI_FAILED,
@@ -306,7 +315,7 @@ HANDOVERS: tuple[Rule, ...] = (
     ),
     Rule(
         Trigger.CI_INFRA,
-        _held("ci_infra"),
+        _make_hold_or_landing("ci_infra", "infra"),
         "{story}: sprint {sprint}'s CI job never ran a step on {prs}, and the runner's "
         "one re-run did not run either; the PR is NOT ready:\n{checks}\nTell the human (GitHub "
         "may have no runner for it). continue_boundary reads the checks again once they re-ran "
@@ -324,7 +333,7 @@ HANDOVERS: tuple[Rule, ...] = (
     ),
     Rule(
         Trigger.CI_PENDING,
-        _held("ci_pending"),
+        _make_hold_or_landing("ci_pending", "pending"),
         "{story}: sprint {sprint}'s PR {prs} is NOT ready: {boundary_reason}:\n{checks}\n"
         "Tell the human, then continue_boundary to wait again",
     ),
@@ -395,12 +404,12 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
     fields |= _find_requirement_fields(report)
-    fields |= _ruling_fields(report)
+    fields |= _read_ruling_fields(report)
     fields |= _land_fields(report)
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
 
 
-def _ruling_fields(report: dict) -> dict[str, str]:
+def _read_ruling_fields(report: dict) -> dict[str, str]:
     """The gate, ruling and fault text fields of a report."""
     ruling, fault = report.get("ruling") or {}, _fault(report)
     pairs = {

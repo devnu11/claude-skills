@@ -140,6 +140,7 @@ class Span:
     ended_at: float | None = None
     status: str | None = None
     model: str | None = None
+    resumed: bool = False
     seconds: float | None = None
     clock: str | None = None
     slept: float | None = None
@@ -186,6 +187,7 @@ class Pairing:
             seconds=timing.seconds,
             clock=timing.clock,
             slept=timing.slept,
+            resumed=bool(data.get("resumed")),
         )
 
     def _timing(self, index: int, end: dict) -> Timing:

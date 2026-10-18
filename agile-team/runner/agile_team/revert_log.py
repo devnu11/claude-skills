@@ -37,6 +37,7 @@ class RevertEntry:
     commits: list[str]
     revert: str
     record: str = ""
+    merge: str = ""
 
 
 def short(sha: str) -> str:

@@ -18,6 +18,7 @@ from claude_agent_sdk import ResultError, create_sdk_mcp_server, tool
 from . import (
     backlog,
     handover,
+    kept_sessions,
     live,
     po_session,
     priority,
@@ -25,6 +26,7 @@ from . import (
     salvage,
     sprint_end,
     story_admin,
+    switchover,
     system,
     threads,
 )
@@ -37,6 +39,7 @@ from .boundary import (
     Edge,
     Permission,
     held_text,  # noqa: F401  (re-exported)
+    own_entry,
 )
 from .boundary_runner import BoundaryRunner, boundary_event
 from .checkout import CheckoutChanged
@@ -53,8 +56,9 @@ from .dispatch import (
     refused,
 )
 from .events import Event, EventKind
-from .gates import StoryState, StoryStatus, continue_refusal, role_fits_step
+from .gates import FINISHED, StoryState, StoryStatus, continue_refusal, role_fits_step
 from .ledger import Entry, SessionCost, budget_status
+from .po_desk import TurnSnapshot
 from .po_session import RenewPath
 from .priority import Change, Placement, Priority, Pull, Reorder
 from .providers import DEFAULT as DEFAULT_PROVIDER
@@ -73,6 +77,7 @@ from .sprint_add import (  # noqa: F401  (re-exported)
 from .stage_log import place_of
 from .state import ModelOverride, RunStatus
 from .story_admin import Act, Clerk
+from .workspaces import Workspaces
 
 SERVER = "team"
 POLL_S = 5.0
@@ -147,7 +152,7 @@ STUCK_RESETS = frozenset(
     }
 )
 REASON_CUT = 200
-STATUS_KINDS = {"sprint-end", "done", "blocked"}
+STATUS_KINDS = {"sprint-end", "done"}
 RESTART_NEEDS_REASON = (
     "sprint {sprint} still has unfinished stories ({ids}); use add_to_sprint to add work, "
     "or give a reason for starting a new sprint"
@@ -176,6 +181,9 @@ UNKNOWN_BUG = (
 DONE_BUG = "story {story} is done; open a new story for the failing CI"
 NOT_HELD = "the sprint {sprint} {edge} boundary is not held; the runner is on it"
 PERMISSION_REFUSAL = 'answer must be "yes" or "no"'
+RUNNING_STORY = "story {story} has a step running; wait for it"
+LAND_NOT_MOVABLE = "story {id} is landing; it can't leave the sprint until land ends"
+SWITCH_REFUSED = "story branches can't start yet:\n{lines}"
 AFTER_REVIEW = frozenset({BoundaryHold.ESCALATED, BoundaryHold.REVIEWED})
 
 
@@ -237,6 +245,7 @@ class Tools:
 
     runtime: Runtime
     touched: Touched = field(default_factory=lambda: Touched())
+    snapshot: TurnSnapshot | None = None
 
     def __post_init__(self) -> None:
         """Hook for subclasses to observe a freshly built set of tools."""
@@ -247,11 +256,24 @@ class Tools:
 
         async def call(args: dict[str, Any]) -> dict[str, Any]:
             self.touched.note(name, args)
+            ids = named_stories(name, args)
+            if moved := self._find_move(ids):
+                return text_result(refused(moved))
             result = await method(args)
             self._note_reset(name, result)
+            self._accept(ids)
             return result
 
         return call
+
+    def _find_move(self, ids: list[str]) -> str | None:
+        """C9: the refusal for a story that changed since the turn began, else ``None``."""
+        return self.snapshot.moved(ids, self.runtime.state) if self.snapshot else None
+
+    def _accept(self, ids: list[str]) -> None:
+        """C9: the PO's own change to a story never refuses its later calls."""
+        if self.snapshot:
+            self.snapshot.refresh(ids, self.runtime.state)
 
     def _note_reset(self, name: str, result: dict[str, Any]) -> None:
         """S5: a tool that acted on a Sprint Backlog story clears the stuck count."""
@@ -261,7 +283,14 @@ class Tools:
 
     async def run_role(self, args: dict[str, Any]) -> dict[str, Any]:
         request = StepRequest(args["role"], args["brief"], args.get("story") or None)
-        return text_result(await self.runtime.run_role(request))
+        running = self.runtime.flags.running
+        if request.story_id in running:
+            return text_result(refused(RUNNING_STORY.format(story=request.story_id)))
+        running.add(request.story_id or "")
+        try:
+            return text_result(await self.runtime.run_role(request))
+        finally:
+            running.discard(request.story_id or "")
 
     async def request_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Ask the liaison for a story; the runner opens it and tells the PO its id (s135)."""
@@ -289,8 +318,10 @@ class Tools:
         ids = list(dict.fromkeys(args.get("stories") or []))
         sprint = Sprint(args.get("goal", ""), ids, args.get("reason") or "")
         reason = self._sprint_refusal(sprint) or self.runtime.load_dependencies()
+        reason = reason or self._find_leaving_refusal(ids) or self._switch_refusal(ids)
         if reason:
             return text_result(refused(reason))
+        self._release_leavers(ids)
         self._begin_sprint(sprint)
         state = self.runtime.state
         return text_result(
@@ -313,6 +344,25 @@ class Tools:
         return text_result(
             {"status": "added", "sprint": state.sprint, "stories": ids, "order": order}
         )
+
+    def _find_leaving_refusal(self, ids: list[str]) -> str | None:
+        """E5: a story at land can't leave the sprint until its land ends."""
+        state = self.runtime.state
+        here = [s for s in state.stories.values() if s.sprint == state.sprint]
+        stuck = [s.id for s in here if s.step == "land" and s.id not in ids]
+        stuck = [i for i in stuck if state.stories[i].status not in FINISHED]
+        return LAND_NOT_MOVABLE.format(id=stuck[0]) if stuck else None
+
+    def _switch_refusal(self, ids: list[str]) -> str | None:
+        """W1: the first sprint after the upgrade switches to story branches, or says why not."""
+        state = self.runtime.state
+        if state.story_branches:
+            return None
+        found = switchover.refusals(switchover.read_facts(self.runtime, ids))
+        if found:
+            return SWITCH_REFUSED.format(lines="\n".join(f"- {line}" for line in found))
+        state.story_branches = True
+        return None
 
     def _restart_refusal(self, reason: str) -> str | None:
         state = self.runtime.state
@@ -362,6 +412,18 @@ class Tools:
         self.runtime.events.emit(Event(EventKind.SPRINT_START, PO, None, data))
         order = self.runtime.priority().with_first(ids, state.stories.values())
         self._reorder(Reorder(Change.SPRINT, order, None, why, pull))
+
+    def _release_leavers(self, ids: list[str]) -> None:
+        """E1: a story that leaves the sprint gives up its worktree and keeps its branch."""
+        rt = self.runtime
+        space = Workspaces(rt.git, rt.config)
+        for story in rt.state.stories.values():
+            if story.worktree_head and story.id not in ids and story.status not in FINISHED:
+                space.remove(story.id)
+                story.worktree_head = ""
+                data = {"action": "removed", "branch": story.branch, "base_sha": story.base_sha}
+                data["replays"] = story.replays
+                rt.events.emit(Event(EventKind.STORY_BRANCH, PO, story.id, data))
 
     async def prioritise(self, args: dict[str, Any]) -> dict[str, Any]:
         """Set the order the team works in."""
@@ -438,7 +500,7 @@ class Tools:
         b = self.runtime.state.boundary
         if b is None or b.hold is None:
             return text_result(refused(self._not_held(b)))
-        if b.hold is BoundaryHold.CI_FAILED:
+        if b.hold is BoundaryHold.CI_FAILED and not self._check_moved_on(b):
             return text_result(refused(self._ours_refusal(b)))
         if b.hold in AFTER_REVIEW:
             b.streak, b.rounds, b.escalated = [], 0, None
@@ -448,6 +510,11 @@ class Tools:
         boundary_event(self.runtime, b, BoundaryOutcome.CONTINUED, note=b.note)
         self.runtime.save()
         return text_result({"status": "continued", "stage": b.stage})
+
+    def _check_moved_on(self, b: Boundary) -> bool:
+        """R9: a CI failure is released once the sprint branch moved past the head that failed."""
+        own = own_entry(self.runtime.state.upstream.stack, b.sprint)
+        return bool(own and own.ci and own.pushed != own.ci.head)
 
     def _ours_refusal(self, b: Boundary) -> str:
         results = [e.ci for e in self.runtime.state.upstream.stack if e.ci]
@@ -496,9 +563,10 @@ class Tools:
         if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime):
             return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
-        if kind in STATUS_KINDS:
+        if kind in STATUS_KINDS or kind == "blocked":
             reason = args["text"].splitlines()[0][:REASON_CUT] if args["text"] else None
-            self.runtime.state.mark(RunStatus(kind), reason)
+            status = RunStatus(kind) if kind in STATUS_KINDS else RunStatus.RUNNING
+            self.runtime.state.mark(status, reason)  # I4: waiting on the human ends nothing
             self.runtime.save()
         return text_result({"id": msg.id})
 
@@ -642,6 +710,8 @@ class Tools:
         )
         state.unreviewed.append(role)
         state.manager_due.append(f"review model override for {role}")
+        for story in state.stories.values():
+            kept_sessions.drop_role(story, role)
         self.runtime.save()
         self.runtime.events.emit(Event(EventKind.OVERRIDE, PO, None, dict(args)))
 
@@ -879,8 +949,10 @@ def po_plan(runtime: Runtime, turn: PoTurn) -> Plan:
 
 
 async def run_po(runtime: Runtime, start: Start) -> StepResult:
-    """Drive the run: PO turns for judgement, router passes for the pipeline."""
-    return await PoRun(runtime, start).run()
+    """Drive the run: PO turns for judgement, the scheduler's tasks for the pipeline."""
+    from .scheduler import Scheduler
+
+    return await Scheduler(runtime, start).run()
 
 
 @dataclass
@@ -1012,7 +1084,7 @@ class PoRun:
     async def _turn(self, turn: PoTurn) -> StepResult:
         if self.runtime.halted_by or self.runtime.checkout_moved():
             return StepResult("", 0.0)
-        tools = Tools(self.runtime)
+        tools = Tools(self.runtime, snapshot=TurnSnapshot.take(self.runtime.state))
         plan = plan_for(tools, turn)
         raw = await self._query(plan, tools.touched)
         result = self.runtime.priced(plan, self._own_cost(turn, raw))

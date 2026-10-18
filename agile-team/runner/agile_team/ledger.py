@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import system
+from .run_writer import RunWriter
 
 LEDGER = "ledger.jsonl"
 USAGE_KEYS = {
@@ -150,12 +151,18 @@ class Ledger:
     """JSONL ledger at ``path``."""
 
     path: Path
+    writer: RunWriter = field(default_factory=RunWriter, repr=False, compare=False)
 
     def record(self, entry: Entry) -> None:
+        """Stamp the entry now; the writer appends its line (thread-safe)."""
         if not entry.at:
             entry.at = system.now()
+        line = json.dumps(asdict(entry)) + "\n"
+        self.writer.submit(lambda: self._append(line))
+
+    def _append(self, line: str) -> None:
         system.make_dirs(self.path.parent)
-        system.append_text(self.path, json.dumps(asdict(entry)) + "\n")
+        system.append_text(self.path, line)
 
     def entries(self) -> list[Entry]:
         """Entries with the PO overcount corrected (K4)."""
@@ -167,6 +174,7 @@ class Ledger:
         return sum(e.cost_usd for e in raw) - sum(e.cost_usd for e in corrected(raw))
 
     def _raw(self) -> list[Entry]:
+        self.writer.flush()
         if not system.is_file(self.path):
             return []
         lines = system.read_text(self.path).splitlines()

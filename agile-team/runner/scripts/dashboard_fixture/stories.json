@@ -59,7 +59,11 @@
     "name": "manual",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s2",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s5",
@@ -99,7 +103,11 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s5",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s3",
@@ -150,7 +158,11 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s3",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s4",
@@ -201,7 +213,11 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s4",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s7",
@@ -247,7 +263,11 @@
     "name": "web",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s7",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s6",
@@ -299,7 +319,11 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s6",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s1",
@@ -347,7 +371,11 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s1",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  },
  {
   "id": "s8",
@@ -387,6 +415,10 @@
     "name": "cli",
     "verdict": ""
    }
-  ]
+  ],
+  "branch": "team/story-s8",
+  "landed": null,
+  "story_ci": null,
+  "running": false
  }
 ]

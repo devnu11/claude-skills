@@ -22,6 +22,7 @@ from .boundary import (
     CHECKS_FAILED,
     CI_RED_HELD,
     CLOSED_NOTE,
+    FF_COMMAND,
     FIX_KINDS,
     FIX_NOT_DONE,
     FIX_ROLE,
@@ -37,9 +38,11 @@ from .boundary import (
     REBASED_NOT_GREEN,
     REBASED_PUSHED_REPORT,
     SKIPPED_REPORT,
+    SPRINT_BRANCH_DIVERGED,
     SPRINT_TITLE,
     START_CONFLICT,
     START_CURRENT,
+    SUPERSEDED_BY,
     SUPERSEDED_NOTE,
     SUPERSEDES_LINE,
     Boundary,
@@ -53,6 +56,7 @@ from .boundary import (
     Permission,
     PrMode,
     RebaseFix,
+    ReplayProgress,
     StackEntry,
     Stage,
     StepKind,
@@ -88,15 +92,25 @@ from .ci import (
 from .ci_triage import rerun_key
 from .events import Event, EventKind
 from .fullcheck import CheckReport, Judging, full_checks, run_checks
+from .gates import FINISHED, StoryState
+from .halt import Halt, HaltKind
 from .relay import Note
+from .replay import Replayer, ReplayResult, ReplaySpec
 from .scratch_rebase import REBASE_BRANCH, REBASE_DIR, ScratchRebase
-from .upstream import Lease, Pr, PrSpec, PrState, Rebase, SyncOutcome, Upstream
+from .scratch_replay import REPLAY_BRANCH, REPLAY_DIR, ScratchReplay
+from .upstream import Lease, Pr, PrSpec, PrState, Rebase, Spans, SyncOutcome, Upstream
 
 if TYPE_CHECKING:
     from .dispatch import Runtime
 
 Out = BoundaryOutcome
 FETCH_PREFIX = "git fetch "
+REPLAY_STOPPED = (
+    "replaying {commit} stopped (story {story}); the conflict is in the replay worktree"
+)
+PUSH_NOT_OPENED = "pushing {branch} was not done: {why}; it is pushed with the first landing"
+FOLLOW_HOLDS = frozenset({BoundaryHold.CI_FAILED, BoundaryHold.CI_INFRA, BoundaryHold.CI_PENDING})
+OPEN_MODES = frozenset({PrMode.DRAFT, PrMode.READY})
 
 
 def fetch_failed(why: str) -> bool:
@@ -184,6 +198,30 @@ class BoundaryRunner:
             return False
         state.boundary = Boundary(Edge.END, state.sprint)
         return True
+
+    def follow_remote(self) -> None:
+        """R9: a CI hold follows a sprint branch someone else moved on the remote."""
+        b = self.runtime.state.boundary
+        own = self._own(b) if b is not None else None
+        if own is None or b.hold not in FOLLOW_HOLDS:  # type: ignore[union-attr]
+            return
+        remote = self.remote.remote_head(own.branch)
+        if remote and remote != own.pushed:
+            self._follow(b, own, remote)  # type: ignore[arg-type]
+
+    def _follow(self, b: Boundary, own: StackEntry, remote: str) -> None:
+        """Fetch and fast-forward to ``remote``, back into CI; a divergence halts as drift."""
+        self.remote.git.attempt("fetch", self.remote.settings.remote, own.branch)
+        if not self.remote.fast_forward(remote):
+            fields = {"branch": own.branch, "remote": self.remote.settings.remote}
+            text = SPRINT_BRANCH_DIVERGED.format(**fields, remote_sha=remote, pushed=own.pushed)
+            self.runtime.halt_run(Halt(HaltKind.CHECKOUT, text))
+            return
+        self.runtime.record_checkout()
+        own.head = own.pushed = remote
+        b.stage, b.hold = Stage.CI, None
+        self._emit(b, Out.FOLLOWED, sha=remote)
+        self.runtime.save()
 
     def step(self) -> dict[str, Any]:
         """Run the current stage once, as a chore on the heartbeat."""
@@ -279,7 +317,7 @@ class BoundaryRunner:
         if not b.sync_from and self.remote.behind() == 0:
             return self._start_current(b)
         self._pin_sync_from(b)
-        result = self.remote.rebase_onto(b.sync_from)
+        result = self._make_replay(b)
         START_REBASES[result.outcome](self, b, result)
 
     def _start_current(self, b: Boundary) -> None:
@@ -292,6 +330,7 @@ class BoundaryRunner:
         self._post(text)
         data = _describe_conflict(result)
         self._emit(b, Out.CONFLICT, note=text, subject=result.subject, **data)
+        self._drop_replay_tree(b)
         self._unpin(b)
         self._advance(b)
 
@@ -309,9 +348,11 @@ class BoundaryRunner:
         return own_entry(self.stack, b.sprint)
 
     def _end_sync(self, b: Boundary) -> None:
-        self._add_entry(b)
+        """AC2.17: the sprint's own entry was made at its start; make it only when it is missing."""
+        if self._own(b) is None:
+            self._add_entry(b)
         own = self._own(b)
-        if own is None:
+        if own is None or own.head == own.start:
             text = NOTHING_NEW.format(sprint=b.sprint)
             return self._finish(b, text, note=text)
         self._drop_superseded(b, own)
@@ -440,10 +481,13 @@ class BoundaryRunner:
 
     def _await_permission(self, b: Boundary, own: StackEntry) -> None:
         """P1: ask once; the push waits (nothing is held) until the answer."""
+        self._emit(b, Out.HELD, **self._ask_push(own))
+
+    def _ask_push(self, entry: StackEntry) -> dict[str, Any]:
+        """P1: the data that raises the push_permission hand-over, the first time only."""
         state = self.runtime.state
         asked, state.permission_asked = state.permission_asked, True
-        extra = {} if asked else {"waiting": "push_permission", "branches": [own.branch]}
-        self._emit(b, Out.HELD, **extra)
+        return {} if asked else {"waiting": "push_permission", "branches": [entry.branch]}
 
     def _push_as_is(self, b: Boundary, own: StackEntry) -> None:
         """R3: push the team branch as it is, then open or reuse the sprint PR."""
@@ -451,8 +495,9 @@ class BoundaryRunner:
         rejected = self._push_branch(own)
         if rejected is not None:
             return self._reject(b, own, rejected)
-        own.as_is = own.pushed
+        own.as_is, own.as_is_branch = own.pushed, own.branch
         self._open_pr(own)
+        own.as_is_pr = own.pr
         self._report_pushed(b, own)
         self._advance(b)
 
@@ -508,7 +553,7 @@ class BoundaryRunner:
             return self._apply_rebase_fix(b)
         self._fetch()
         self._pin_sync_from(b)
-        result = self.remote.rebase_onto(b.sync_from)
+        result = self._make_replay(b)
         AFTER_REBASE[result.outcome](self, b, result)
 
     _rebase = _replay
@@ -522,14 +567,116 @@ class BoundaryRunner:
         if b.sync_from:
             return
         b.sync_from = self.runtime.git.head()
+        b.replay = ReplayProgress(b.sync_from, "", "")
         self.runtime.save()
+
+    def _make_replay(self, b: Boundary) -> Rebase:
+        """R1: replay a line with story merges in the replay worktree, else rebase it plainly."""
+        resumed = b.replay is not None and b.replay.merges
+        if not resumed and not self.remote.has_story_merges(b.sync_from):
+            return self.remote.rebase_onto(b.sync_from)
+        progress = self._set_progress(b)
+        if progress.base == progress.target:
+            return Rebase(SyncOutcome.CURRENT)  # the target is already under the line
+        spec, replayer = self._build_replayer(b, progress)
+        return self._finish_replay(b, (spec, replayer), replayer.run(spec, progress))
+
+    def _set_progress(self, b: Boundary) -> ReplayProgress:
+        """The pinned progress, with the line's base and target filled in once."""
+        progress = b.replay or ReplayProgress(b.sync_from, "", "")
+        if not progress.merges:
+            main = self.remote.git
+            progress.target = main.run("rev-parse", self.target).strip()
+            progress.base = main.run("merge-base", progress.old_head, self.target).strip()
+            progress.merges, b.replay = True, progress
+            self.runtime.save()
+        return progress
+
+    def _build_replayer(self, b: Boundary, progress: ReplayProgress) -> tuple[ReplaySpec, Replayer]:
+        branch = REPLAY_BRANCH.format(sprint=b.sprint)
+        spec = ReplaySpec(progress.base, progress.old_head, progress.target, branch)
+        path = self.runtime.config.run_dir / REPLAY_DIR
+        return spec, Replayer(self.remote.git, path, self.runtime.save)
+
+    def _finish_replay(
+        self, b: Boundary, tools: tuple[ReplaySpec, Replayer], result: ReplayResult
+    ) -> Rebase:
+        """A stopped replay is a conflict; a finished one keeps every path and moves the team."""
+        spec, replayer = tools
+        if result.outcome is SyncOutcome.CONFLICT:
+            return Rebase(
+                SyncOutcome.CONFLICT,
+                "",
+                result.files,
+                result.commit,
+                result.subject,
+                output=REPLAY_STOPPED.format(story=result.story or "none", commit=result.commit),
+            )
+        self.remote.confirm_kept(Spans(b.sync_from, b.sync_from, spec.target, head=result.tip))
+        self.remote.reset_team_branch(b.sync_from, result.tip)
+        replayer.remove()
+        return Rebase(SyncOutcome.REBASED, result.tip, moved=result.moved)
+
+    def _drop_replay_tree(self, b: Boundary) -> None:
+        """Remove a stopped replay's worktree: a start conflict is aborted, not handed on."""
+        if b.replay is not None and b.replay.merges:
+            self._build_replayer(b, b.replay)[1].remove()
 
     def _get_scratch(self, b: Boundary) -> ScratchRebase:
         path = self.runtime.config.run_dir / REBASE_DIR
         return ScratchRebase(self.remote, path, REBASE_BRANCH.format(sprint=b.sprint))
 
+    def _find_replay_scratch(self, b: Boundary) -> ScratchReplay:
+        path = self.runtime.config.run_dir / REPLAY_DIR
+        return ScratchReplay(self.remote.git, path, REPLAY_BRANCH.format(sprint=b.sprint))
+
+    @property
+    def _is_replaying(self) -> bool:
+        b = self.runtime.state.boundary
+        return b is not None and b.replay is not None and b.replay.merges
+
+    def _stop_replay(self, b: Boundary, result: Rebase) -> None:
+        """R2: the replay stopped in its worktree on the scratch branch; wake DevOps."""
+        scratch, story = self._find_replay_scratch(b), b.replay.story  # type: ignore[union-attr]
+        b.failure = Failure(
+            Stage.REPLAY,
+            FixCase.REBASE_CONFLICT,
+            result.output,
+            branch=scratch.branch,
+            files=list(result.files),
+            commit=result.commit,
+            subject=result.subject,
+            worktree=str(scratch.path),
+            story=story,
+        )
+        data = _describe_conflict(result)
+        self._emit(b, Out.CONFLICT, subject=result.subject, branch=scratch.branch, **data)
+
+    def _continue_replay(self, b: Boundary) -> None:
+        """R2: DevOps resolved the stopped commit; replay the rest, check it, then move the team."""
+        progress = b.replay
+        tools = self._build_replayer(b, progress)  # type: ignore[arg-type]
+        spec, replayer = tools
+        if replayer.is_stopped(spec, progress):  # type: ignore[arg-type]
+            replayer.settle_stopped(spec, progress)  # type: ignore[arg-type]
+        found = replayer.run(spec, progress)  # type: ignore[arg-type]
+        why = self._check_replayed(replayer, found)
+        if why:
+            return self._hold_conflict(b, why)
+        b.rebase_fix = None
+        result = self._finish_replay(b, tools, found)
+        AFTER_REBASE[result.outcome](self, b, result)
+
+    def _check_replayed(self, replayer: Replayer, found: ReplayResult) -> str:
+        """The full checks on a finished replay's tip, in its worktree; why they failed, or ''."""
+        if found.outcome is not SyncOutcome.REBASED:
+            return ""
+        return self._checks_refusal(replayer)
+
     def _rebase_conflict(self, b: Boundary, result: Rebase) -> None:
         """R13: stop the same rebase in a scratch worktree and wake DevOps; hold nothing."""
+        if self._is_replaying:
+            return self._stop_replay(b, result)
         scratch = self._get_scratch(b)
         scratch.prepare(b.sync_from)
         b.failure = Failure(
@@ -556,16 +703,20 @@ class BoundaryRunner:
         fix = b.rebase_fix
         if fix.status != "done":  # type: ignore[union-attr]
             return FIX_NOT_DONE.format(status=fix.status)  # type: ignore[union-attr]
+        if self._is_replaying:
+            return self._find_replay_scratch(b).find_refusal(b.replay)  # type: ignore[arg-type]
         scratch = self._get_scratch(b)
         return scratch.find_refusal(b.sync_from) or self._checks_refusal(scratch)
 
-    def _checks_refusal(self, scratch: ScratchRebase) -> str:
+    def _checks_refusal(self, scratch: ScratchRebase | Replayer) -> str:
         report = self._run_checks(scratch.path)
         if report.passed:
             return ""
         return CHECKS_FAILED.format(path=scratch.path, reason=report.reason())
 
     def _move_to_fix(self, b: Boundary) -> None:
+        if self._is_replaying:
+            return self._continue_replay(b)
         scratch = self._get_scratch(b)
         try:
             result = self.remote.move_team_branch(b.sync_from, scratch.head)
@@ -579,7 +730,7 @@ class BoundaryRunner:
         """Drop the scratch and the fix; a moved team branch must rebase afresh (R16, R17)."""
         scratch.drop()
         b.rebase_fix = None
-        b.sync_from = ""
+        b.sync_from, b.replay = "", None
         self.runtime.save()
 
     def _hold_conflict(self, b: Boundary, why: str) -> None:
@@ -607,7 +758,7 @@ class BoundaryRunner:
         self._advance(b)
 
     def _unpin(self, b: Boundary) -> None:
-        b.sync_from = ""
+        b.sync_from, b.replay = "", None
         self.runtime.save()
 
     def _settle_rebase(self, b: Boundary, result: Rebase) -> None:
@@ -615,34 +766,121 @@ class BoundaryRunner:
         self.runtime.record_checkout()
         self.runtime.save()
         self._emit(b, Out.REBASED, sha=result.sha, rewritten=count)
+        b.replayed = True
         self._unpin(b)
         self._advance(b)
 
     def _open(self, b: Boundary) -> None:
-        """R7: the start's last stage; the sprint's own entry is made when the sprint ends."""
-        self._advance(b)
+        """R7 (AC2.17): the sprint's own entry and remote branch, then the carried stories."""
+        head = self.runtime.git.head()
+        entry = self._own(b) or self._begin_entry(b, head)
+        asked = self._push_opened(entry)
+        carried = self._run_carried(head)
+        self._finish(b, branch=entry.branch, sha=entry.pushed, replayed=carried, **asked)
+
+    def _begin_entry(self, b: Boundary, head: str) -> StackEntry:
+        state = self.runtime.state
+        branch = f"{self.runtime.config.upstream.prefix}{b.sprint}"
+        title = SPRINT_TITLE.format(sprint=b.sprint, goal=state.goal)
+        ids = [s.id for s in state.stories.values() if s.sprint == b.sprint]
+        entry = StackEntry(b.sprint, branch, head, head, title, ids, head=head)
+        self.stack.append(entry)
+        return entry
+
+    def _push_opened(self, entry: StackEntry) -> dict[str, Any]:
+        """Create the remote branch at the start head (P1: deferred while permission is unasked)."""
+        if self.runtime.prs.missing() or self.mine.push is Permission.NO:
+            return {}
+        if self.mine.push is Permission.UNASKED:
+            return self._ask_push(entry)
+        refused = self.remote.push(Lease(entry.branch, "", entry.head))
+        entry.pushed = entry.head if refused is None else entry.pushed
+        if refused is not None:
+            self._post(PUSH_NOT_OPENED.format(branch=entry.branch, why=refused))
+        return {}
+
+    def _run_carried(self, head: str) -> list[str]:
+        """R8: rebase each carried story's branch onto the new sprint head."""
+        from .replay import StoryReplay
+        from .story_ci import StoryPusher
+
+        rt = self.runtime
+        carried = [s for s in rt.state.stories.values() if self._is_carried(s, head)]
+        for story in carried:
+            old_pr = story.pr
+            if StoryReplay(rt).run(story, head).outcome is SyncOutcome.REBASED:
+                StoryPusher(rt).push_replayed(story, old_pr)
+        return [s.id for s in carried]
+
+    def _is_carried(self, story: StoryState, head: str) -> bool:
+        """A story of this sprint, not yet landed, whose branch was forked from an older head."""
+        mine = story.sprint == self.runtime.state.sprint and story.landed is None
+        return (
+            mine and bool(story.branch) and story.base_sha != head and story.status not in FINISHED
+        )
 
     # ----- push replayed
 
     def _push_replayed(self, b: Boundary) -> None:
-        """R8: push the rebased head with the lease on the as-built sha; nothing if unchanged."""
+        """R5: push the replayed head to the next ``-r<k>`` branch; nothing if it did not change."""
         if b.edge is Edge.START:
-            return self._advance(b)
+            return self._push_start_replay(b)
         own, head = self._own(b), self.runtime.git.head()
         if head == own.pushed:  # type: ignore[union-attr]
             return self._report_unchanged(b, own)  # type: ignore[arg-type]
-        own.head = head  # type: ignore[union-attr]
-        rejected = self._push_branch(own)  # type: ignore[arg-type]
+        rejected = self._push_replay_branch(own, head)  # type: ignore[arg-type]
         if rejected is not None:
             return self._reject(b, own, rejected)  # type: ignore[arg-type]
         self._report_rebased(b, own)  # type: ignore[arg-type]
         self._advance(b)
+
+    def _push_start_replay(self, b: Boundary) -> None:
+        """R7: after a start replay, push the newest open PR's next ``-r<k>`` branch (under P1)."""
+        newest = self.stack[-1] if self.stack else None
+        due = b.replayed and newest is not None and newest.mode in OPEN_MODES and newest.pr
+        if not due or self.mine.push is not Permission.YES or self.runtime.prs.missing():
+            return self._advance(b)
+        rejected = self._push_replay_branch(newest, self.runtime.git.head())  # type: ignore[arg-type]
+        if rejected is not None:
+            self._post(PUSH_NOT_OPENED.format(branch=newest.branch, why=rejected))  # type: ignore[union-attr]
+        self._advance(b)
+
+    def _push_replay_branch(self, own: StackEntry, head: str) -> str | None:
+        """R5: push ``head`` as a new branch with a ready PR; the old PR is closed with a link."""
+        k = own.replays + 1
+        branch = f"{self.runtime.config.upstream.prefix}{own.sprint}-r{k}"
+        refused = self.remote.push(Lease(branch, "", head))
+        if refused is not None:
+            return refused
+        old_pr = own.pr
+        own.branch, own.replays, own.head, own.pushed = branch, k, head, head
+        own.commits = self.remote.count(head)
+        self._open_replay_pr(own)
+        if old_pr:
+            note = SUPERSEDED_BY.format(target=self.target, url=own.url)
+            self.runtime.prs.close(old_pr, note)
+        return None
+
+    def _make_ready(self, own: StackEntry) -> None:
+        """The replay changed nothing, so the draft sprint PR itself becomes the ready one."""
+        if own.mode is not PrMode.DRAFT or own.pr is None:
+            return
+        pr = Pr(own.pr, own.url, PrState.OPEN, True, own.base)
+        self.runtime.prs.edit(pr, self.make_spec(own, PrMode.READY))
+        own.mode = PrMode.READY
+
+    def _open_replay_pr(self, own: StackEntry) -> None:
+        """A ready PR from the replay branch; always a new one (no look-up)."""
+        spec = self.make_spec(own, PrMode.READY)
+        pr = self.runtime.prs.create(spec)
+        own.pr, own.url, own.base, own.mode = pr.number, pr.url, spec.base, spec.mode
 
     _push_rebased = _push_replayed
 
     def _report_unchanged(self, b: Boundary, own: StackEntry) -> None:
         note = REBASE_UNCHANGED.format(branch=own.branch, sha=own.pushed)
         self._emit(b, Out.PASS, note=note)
+        self._make_ready(own)
         self._finish_green(b, [own.ci] if own.ci else [])
 
     def _report_rebased(self, b: Boundary, own: StackEntry) -> None:
@@ -655,7 +893,7 @@ class BoundaryRunner:
 
     def _watched(self, b: Boundary) -> list[StackEntry]:
         own = self._own(b)
-        return [own] if own and own.mode is PrMode.READY and own.pr else []
+        return [own] if own and own.mode in OPEN_MODES and own.pr else []
 
     def _read_ci(self, b: Boundary) -> list[CiResult]:
         watched = self._watched(b)
@@ -674,7 +912,16 @@ class BoundaryRunner:
 
     def _finish_green(self, b: Boundary, results: list[CiResult]) -> None:
         text = self._with_big(green_report(b.sprint, results))
-        self._finish(b, text, ci=CiVerdict.GREEN, **_ci_fields(results))
+        self._finish(b, self._add_ff(text), ci=CiVerdict.GREEN, **_ci_fields(results))
+
+    def _add_ff(self, text: str) -> str:
+        """R6: ``text`` and the fast-forward command that lands the sprint's PR (never a rebase)."""
+        own = self._own(self.runtime.state.boundary)  # type: ignore[arg-type]
+        if own is None:
+            return text
+        settings = self.runtime.config.upstream
+        ff = FF_COMMAND.format(remote=settings.remote, sha=own.pushed, target=settings.branch)
+        return f"{text}\n{ff}"
 
     def _ci_red(self, b: Boundary, results: list[CiResult]) -> None:
         self._hold(b, BoundaryHold.CI_FAILED, Out.HELD, ci=CiVerdict.RED, **_ci_fields(results))
@@ -758,8 +1005,10 @@ class BoundaryRunner:
         self.runtime.save()
 
     def _open_pr(self, entry: StackEntry) -> None:
-        """Find the sprint PR; create it, edit it when it differs, or leave a closed one."""
-        prs, spec = self.runtime.prs, self._spec(entry)
+        """Keep the sprint PR the landings opened; else find it, create it, edit it or leave it."""
+        if entry.pr is not None:
+            return
+        prs, spec = self.runtime.prs, self.make_spec(entry)
         pr = prs.find(entry.branch)
         if pr is None:
             pr = prs.create(spec)
@@ -780,9 +1029,10 @@ class BoundaryRunner:
         note = CLOSED_NOTE.format(pr=number, sprint=entry.sprint, state=str(state).lower())
         self._emit(self.runtime.state.boundary, Out.CURRENT, note=note)  # type: ignore[arg-type]
 
-    def _spec(self, entry: StackEntry) -> PrSpec:
+    def make_spec(self, entry: StackEntry, mode: PrMode = PrMode.READY) -> PrSpec:
+        """The pull request the entry should have, ready or draft."""
         base = self.runtime.config.upstream.branch
-        return PrSpec(entry.branch, base, entry.title, self._body(entry), PrMode.READY)
+        return PrSpec(entry.branch, base, entry.title, self._body(entry), mode)
 
     def _reverted_lines(self, entry: StackEntry) -> list[str]:
         stories = self.runtime.state.stories
@@ -804,7 +1054,9 @@ class BoundaryRunner:
             reverted=revert_log.pr_section(self._reverted_lines(entry)),
             supersedes=supersedes,
             team=self.mine.team_branch,
-            target=self.target,
+            target=self.runtime.config.upstream.branch,
+            remote=self.runtime.config.upstream.remote,
+            sha=f"{self.runtime.config.upstream.remote}/{entry.branch}",
         )
 
 

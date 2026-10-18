@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from . import priority, revert_log, story_admin, story_spec, system
+from . import kept_sessions, priority, revert_log, story_admin, story_spec, system
 from .dispatch import Runtime, refused
 from .events import Event, EventKind
 from .gates import CHECKPOINT_STEPS, FINISHED, StoryState
@@ -19,6 +19,7 @@ from .git_ops import GitError
 from .holds import HoldKind, PoHold
 from .relay import Answer, Note
 from .revert_log import RevertEntry
+from .workspaces import Workspaces
 
 NOTHING_TO_REVERT = "story {story} has no commits to revert"
 DEPENDED_ON = "started stories depend on {story}: {ids}; revert them first, or keep {story}"
@@ -32,6 +33,7 @@ REVERT_QUESTION = (
 )
 UNCLEAR_REVERT = 'the answer to {question} was neither "revert" nor "keep": {answer}'
 REVERT_FAILED = "the human said revert to {question}, but the revert failed: {why}"
+BRANCH_DROPPED = "(branch dropped)"
 REVERT_SUBJECT = "revert({story}): {title}"
 REVERT_BODY = "Reverts {commits}.\n\nReason: {reason}"
 RECORD_SUBJECT = "chore({story}): record the revert in the story file"
@@ -118,6 +120,7 @@ def reverted_story(story: StoryState, back: Back) -> StoryState:
         story.title,
         back.step,
         developer=story.developer,
+        replays=story.replays,
         po_developer=story.po_developer,
         depends_on=story.depends_on,
         file_commits=story.file_commits,
@@ -216,12 +219,15 @@ class Reverter:
 
     def unfit(self, story: StoryState) -> str | None:
         """R1 (7)-(9): no commits, depended on, or the first commit is off the branch."""
-        if story.commit is None:
+        branched = story.landed is not None or bool(story.branch)
+        if story.commit is None and not branched:
             return NOTHING_TO_REVERT.format(story=story.id)
         ids = dependents(self.runtime.state.stories, story.id)
         if ids:
             return DEPENDED_ON.format(story=story.id, ids=", ".join(ids))
-        if not self.runtime.git.is_ancestor(story.commit):
+        if branched:
+            return None
+        if not self.runtime.git.is_ancestor(story.commit):  # type: ignore[arg-type]
             return NOT_ON_BRANCH.format(story=story.id, sha=revert_log.short(story.commit))
         return None
 
@@ -242,7 +248,11 @@ class Reverter:
         }
 
     def revert(self, story: StoryState, call: Call) -> dict[str, Any]:
-        """R4: revert the story's commits, record it and reset it."""
+        """R4, E2, E3: drop an unlanded branch, land a revert of a landed story, else revert."""
+        if story.landed is not None:
+            return self._queue_landing(story, call)
+        if story.branch:
+            return self._drop_branch(story, call)
         if not self.runtime.git.is_clean():
             self.runtime.settle_po()
         try:
@@ -252,6 +262,41 @@ class Reverter:
         entry = RevertEntry(_today(), self.runtime.state.sprint, call.reason.strip(), shas, revert)
         entry.record = self._record(story, entry)
         self.runtime.record_checkout()
+        return self._done(story, entry, call)
+
+    def _queue_landing(self, story: StoryState, call: Call) -> dict[str, Any]:
+        """E3: a landed story is reverted by a landing of its own; it runs under the land queue."""
+        self.runtime.revert_queue.append(call)
+        return {"status": "landing", "story": story.id, "step": story.step}
+
+    def finish_landing(self, story: StoryState, call: Call, merge: str) -> dict[str, Any]:
+        """E3: the revert landed: record it, clear the landing and reset the story."""
+        assert story.landed is not None
+        entry = RevertEntry(
+            _today(), self.runtime.state.sprint, call.reason.strip(), [story.landed.merge], merge
+        )
+        entry.merge = story.landed.merge
+        story.landed = None
+        entry.record = self._record(story, entry)
+        self.runtime.record_checkout()
+        return self._done(story, entry, call)
+
+    def _drop_branch(self, story: StoryState, call: Call) -> dict[str, Any]:
+        """E2: an unlanded story loses its worktree and branch record; no commit is made."""
+        rt = self.runtime
+        Workspaces(rt.git, rt.config).remove(story.id)
+        dropped = story.branch
+        for name in ("branch", "base_sha", "pushed", "worktree_head"):
+            setattr(story, name, "")
+        story.pr = None
+        kept_sessions.drop_all(story)
+        data = {"action": "dropped", "branch": dropped, "base_sha": "", "replays": story.replays}
+        rt.events.emit(Event(EventKind.STORY_BRANCH, None, story.id, data))
+        entry = RevertEntry(
+            _today(), rt.state.sprint, call.reason.strip(), [dropped], BRANCH_DROPPED
+        )
+        entry.record = self._record(story, entry)
+        rt.record_checkout()
         return self._done(story, entry, call)
 
     def _done(self, story: StoryState, entry: RevertEntry, call: Call) -> dict[str, Any]:
@@ -280,6 +325,8 @@ class Reverter:
         config = self.runtime.config
         file = story_spec.file_of(config, story.id)
         path = config.repo / file
+        if not system.exists(path):
+            return ""
         system.write_text(path, revert_log.with_entry(system.read_text(path), entry))
         return self.runtime.git.commit([file], RECORD_SUBJECT.format(story=story.id))
 
