@@ -94,11 +94,20 @@ class StoryCiPoll:
 
     def poll(self, story: StoryState, now: float) -> StoryCi | None:
         """Record and return a new settled result for the story's pushed head, else ``None``."""
+        if not self.claim_due(story, now):
+            return None
+        return self.settle(story, self.read_checks(story))
+
+    def claim_due(self, story: StoryState, now: float) -> bool:
+        """True, and the read time noted, when the story's head is due a read (loop thread)."""
         last = self._read_at.get(story.id)
         if not self.can_poll(story) or (last is not None and now - last < STORY_CI_POLL_S):
-            return None
+            return False
         self._read_at[story.id] = now
-        checks = self._read_checks(story)
+        return True
+
+    def settle(self, story: StoryState, checks: list[Check]) -> StoryCi | None:
+        """Record the checks once all are in (loop thread); the new result, else ``None``."""
         if not checks or any(c.bucket is Bucket.PENDING for c in checks):
             return None
         return self._record(story, checks)
@@ -109,8 +118,8 @@ class StoryCiPoll:
             bool(story.pushed) and story.status not in FINISHED and not self.runtime.prs.missing()
         )
 
-    def _read_checks(self, story: StoryState) -> list[Check]:
-        """The head's checks; a failing ``gh`` is "no result", never a crash (AC8.3)."""
+    def read_checks(self, story: StoryState) -> list[Check]:
+        """The head's checks, safe in a worker thread; a failing ``gh`` is "no result" (AC8.3)."""
         try:
             return self.runtime.prs.sha_checks(story.pushed)  # type: ignore[arg-type]
         except UpstreamError:

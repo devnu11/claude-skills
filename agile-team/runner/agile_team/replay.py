@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +16,7 @@ from . import rewrite, story_rebase, system
 from .boundary import ReplayProgress
 from .events import Event, EventKind
 from .git_ops import Git
+from .relay import Note
 from .story_branches import StoryRebase, merge_id, story_branch
 from .upstream import SCRATCH_REBASE_ARGV, SyncOutcome
 from .workspaces import Workspaces
@@ -25,8 +25,12 @@ if TYPE_CHECKING:
     from .dispatch import Runtime
     from .gates import StoryState
 
-NOTHING_TO_STASH = "No local changes to save"
+KEPT_STASH = (
+    "The cut-off step's edits did not apply onto the new sprint head. They are kept in stash "
+    "commit {sha}; apply them with `git stash apply {sha}` in the story's worktree."
+)
 STASH_MESSAGE = "agile-team-replay"
+STASH_REF = ("rev-parse", "-q", "--verify", "refs/stash")
 LOG_LINE = "%H%x1f%s%x1f%P"
 
 
@@ -176,11 +180,13 @@ class Replayer:
         return ReplayResult(SyncOutcome.REBASED, progress.tip, dict(progress.moved))
 
 
-class Stash(StrEnum):
-    """Whether a cut-off step's edits were stashed."""
+@dataclass(frozen=True)
+class Stash:
+    """A cut-off step's stashed edits: whether any were saved, and the stash commit."""
 
-    SAVED = "saved"
-    NONE = "none"
+    story_id: str
+    saved: bool = False
+    sha: str = ""
 
 
 class StoryReplay:
@@ -205,17 +211,24 @@ class StoryReplay:
         return self.take_over(story, queued)
 
     def save_edits(self, tree: Git, story: StoryState) -> Stash:
-        """Stash a cut-off step's edits so the rebase starts clean; whether anything was saved."""
+        """Stash a cut-off step's edits so the rebase starts clean; what was saved."""
         if story.in_flight is None:
-            return Stash.NONE
-        saved = tree.run("stash", "push", "--include-untracked", "-m", STASH_MESSAGE)
-        # refs/stash is shared: never pop another story's
-        return Stash.NONE if NOTHING_TO_STASH in saved else Stash.SAVED
+            return Stash(story.id)
+        before = tree.attempt(*STASH_REF)
+        tree.run("stash", "push", "--include-untracked", "-m", STASH_MESSAGE)
+        after = tree.attempt(*STASH_REF)
+        # refs/stash is shared and git's message is localised: compare the ref, never pop another's
+        unchanged = after == before and bool(after[1].strip())
+        return Stash(story.id, after[0] == 0 and not unchanged, after[1].strip())
 
     def restore_edits(self, tree: Git, stashed: Stash) -> None:
-        """Put this story's stashed edits back; a pop that conflicts keeps the stash."""
-        if stashed is Stash.SAVED and tree.attempt("stash", "pop")[0] != 0:
+        """Put this story's stashed edits back; a pop that conflicts keeps the stash and says so."""
+        if stashed.saved and tree.attempt("stash", "pop")[0] != 0:
             tree.attempt("reset", "--hard")
+            tree.attempt("clean", "-fd")  # the failed pop may leave its untracked files behind
+            self.runtime.relay.post(
+                Note("update", KEPT_STASH.format(sha=stashed.sha), [stashed.story_id])
+            )
 
     def restore_after(self, tree: Git, stashed: Stash, result: ReplayResult) -> ReplayResult:
         """D5: a conflict leaves the old branch checked out; its edits come back before the step."""

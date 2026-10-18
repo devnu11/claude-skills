@@ -246,9 +246,20 @@ class Scheduler:
         started = self.start_revert()
         self.hurry = self.router.boundaries.open_end() or self.hurry
         for work in self.router.works(self.busy_keys):
+            if self.is_held_by_boundary(work):
+                continue
             started = self.start_one(work) or started
         if not started and not self.tasks and self.po_task is None:
             self.check_idle()
+
+    def is_held_by_boundary(self, work: Work) -> bool:
+        """C7, N4: a due boundary starts nothing new but the Manager's review."""
+        return work.kind is not StepKind.BOUNDARY and work.role != MANAGER and self.is_boundary_due
+
+    @property
+    def is_boundary_due(self) -> bool:
+        """A boundary stage is due (it waits for the running tasks to end)."""
+        return self.router.boundaries.due() is not None
 
     def start_one(self, work: Work) -> bool:
         """Start ``work`` if it may; otherwise say why on the heartbeat."""
@@ -430,18 +441,11 @@ class Scheduler:
         """C7: a boundary stage runs once only the Manager's review (or nothing) is running."""
         if any(key != MANAGER_KEY for key in self.tasks):
             return False
-        self.tasks[BOUNDARY_KEY] = asyncio.create_task(
-            self.run_boundary_stage(work), name=BOUNDARY_KEY
-        )
-        return True
-
-    async def run_boundary_stage(self, work: Work) -> None:
-        """One boundary stage in a worker thread, under the main lock (C6, D2, D3)."""
-        async with self.main_lock:
-            report = await self.runtime.writer.run_off_loop(self.router.boundaries.step)
+        report = self.router.boundaries.step()
         self.steps += 1
         self.hurry = True
         self.report_back(work, {"role": work.role, **report})
+        return True
 
     def follow_boundary(self) -> None:
         """R9: a CI hold follows a remote head that moved, at most once per beat."""
@@ -513,17 +517,18 @@ class Scheduler:
             self.check_task(self.ci_task)
 
     async def run_ci_poll(self) -> None:
-        """Read the PRs' CI in a worker thread; the hand-overs are queued back on the loop."""
+        """Read the PRs' CI in worker threads; record and hand over on the loop (C6)."""
         now = system.monotonic()
         stories = list(self.runtime.state.stories.values())
-        found = await self.runtime.writer.run_off_loop(lambda: self.read_story_ci(stories, now))
-        for story, result in found:
-            self.queue_story_ci(story, result)
+        due = [s for s in stories if self.ci_poll.claim_due(s, now)]
+        for story in due:
+            checks = await system.in_thread(self.ci_poll.read_checks, story)
+            self.record_story_ci(story, self.ci_poll.settle(story, checks))
 
-    def read_story_ci(self, stories: list[StoryState], now: float) -> list[tuple[StoryState, Any]]:
-        """The stories whose PR CI just settled red."""
-        polled = ((s, self.ci_poll.poll(s, now)) for s in stories)
-        return [(s, f) for s, f in polled if f is not None and f.verdict == CiVerdict.RED]
+    def record_story_ci(self, story: StoryState, found: Any) -> None:
+        """A red result for the story's head is handed over; anything else holds nothing."""
+        if found is not None and found.verdict == CiVerdict.RED:
+            self.queue_story_ci(story, found)
 
     def queue_story_ci(self, story: StoryState, found: Any) -> None:
         report = {"story_ci": {"verdict": "red", "sha": found.sha, "checks": [found.verdict]}}
