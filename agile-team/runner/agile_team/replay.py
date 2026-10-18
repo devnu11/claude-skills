@@ -223,7 +223,7 @@ class StoryReplay:
 
     def restore_edits(self, tree: Git, stashed: Stash) -> None:
         """Put this story's stashed edits back; a pop that conflicts keeps the stash and says so."""
-        ref = self.stash_ref(tree, stashed) if stashed.saved else ""
+        ref = self.find_stash_ref(tree, stashed) if stashed.saved else ""
         if ref and tree.attempt("stash", "pop", ref)[0] != 0:
             tree.attempt("reset", "--hard")
             tree.attempt("clean", "-fd")  # the failed pop may leave its untracked files behind
@@ -231,8 +231,10 @@ class StoryReplay:
                 Note("update", KEPT_STASH.format(sha=stashed.sha), [stashed.story_id])
             )
 
-    def stash_ref(self, tree: Git, stashed: Stash) -> str:
+    def find_stash_ref(self, tree: Git, stashed: Stash) -> str:
         """N7: the ``stash@{n}`` entry of this story's stash commit, else ``""`` (it is gone)."""
+        if not stashed.sha:
+            return "stash@{0}"  # no sha was recorded: the top entry is all there is to name
         out = tree.attempt("stash", "list", "--format=%H")[1].split()
         return f"stash@{{{out.index(stashed.sha)}}}" if stashed.sha in out else ""
 
