@@ -153,6 +153,7 @@ def _history_lines(story: StoryState) -> list[str]:
         lines.append(f"- Previous step: {prev.role} reported {prev.status}{said}")
     if prev and prev.verdict in SENT_BACK_LINES:
         lines.append(SENT_BACK_LINES[prev.verdict].format(reason=prev.reason))
+    lines += [f"- From the runner: {story.runner_note}"] if story.runner_note else []
     return lines + ([f"- From the PO: {story.note}"] if story.note else [])
 
 

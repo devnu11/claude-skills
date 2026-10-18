@@ -1033,6 +1033,7 @@ class Runtime:
         if plan.story:
             plan.story.interrupted = None
             plan.story.in_flight = None
+            plan.story.runner_note = ""
         self.save()
 
     def note_step(self, story: StoryState, report: dict[str, Any]) -> None:
