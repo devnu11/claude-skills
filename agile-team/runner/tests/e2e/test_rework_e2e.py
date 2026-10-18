@@ -12,6 +12,7 @@ from agile_team.po_tools import Tools
 from ..conftest import git, handoff
 from ..pipeline_helpers import Script, add_story, drive, step_roles
 
+
 class GreenGit:
     """Gate commands: git runs for real; the suite is always green."""
 
