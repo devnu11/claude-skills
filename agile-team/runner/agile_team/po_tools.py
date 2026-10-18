@@ -483,10 +483,7 @@ class Tools:
             return text_result(refused(PERMISSION_REFUSAL))
         state = self.runtime.state
         state.upstream.push = Permission(answer)
-        b = state.boundary
-        if b and b.hold is BoundaryHold.PUSH_PERMISSION:
-            b.hold = None
-        boundary_event(self.runtime, b, BoundaryOutcome.PERMISSION, answer=answer)
+        boundary_event(self.runtime, state.boundary, BoundaryOutcome.PERMISSION, answer=answer)
         self.runtime.save()
         return text_result({"status": "set", "answer": answer})
 

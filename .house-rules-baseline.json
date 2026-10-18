@@ -52,7 +52,7 @@
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._error::verb-name": 1,
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._hold::parameters": 4,
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._pin_sync_from::verb-name": 1,
-    "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._rebase::verb-name": 1,
+    "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._replay::verb-name": 1,
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._rebase_conflict::verb-name": 1,
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._rebase_current::verb-name": 1,
     "agile-team/runner/agile_team/boundary_runner.py::BoundaryRunner._repin_due::verb-name": 1,

@@ -1708,7 +1708,7 @@
    "sprint": 10,
    "stage": "push",
    "outcome": "held",
-   "hold": "push_permission",
+   "waiting": "push_permission",
    "branches": [
     "team/sprint-9",
     "team/sprint-10"
