@@ -156,7 +156,7 @@ def test_s154_round2_ac3_report_failures_maps_failed_and_errored_ids_in_order() 
 
 
 def red_run(report: junit.Report | None) -> TestRun:
-    return TestRun(1, "out", report, {})
+    return TestRun(1, "out", report)
 
 
 def two_failures() -> junit.Report:
