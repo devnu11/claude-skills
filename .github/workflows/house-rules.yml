@@ -2,8 +2,12 @@ name: house-rules
 
 on:
   push:
-    branches: [main]
+    branches: [main, "team/**"]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
