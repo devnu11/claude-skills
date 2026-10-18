@@ -55,6 +55,49 @@ class Trigger(StrEnum):
     MAIN_BROKEN = "main_broken"
     CI_PENDING = "ci_pending"
     KNOWN_FAILURES = "known_failures"
+    STORY_CI_RED = "story_ci_red"
+    WORKTREE_DRIFT = "worktree_drift"
+    LAND_BOUNCED = "land_bounced"
+
+
+class Scope(StrEnum):
+    """Whether a hand-over holds one story or pauses new starts run-wide (s159 H1)."""
+
+    STORY = "story"
+    RUN = "run"
+
+
+RUN_WIDE = frozenset(
+    {
+        "ERROR",
+        "BOUNDARY_ERROR",
+        "BOUNDARY_ESCALATED",
+        "SYNC_CONFLICT",
+        "REBASE_CONFLICT",
+        "PUSH_REJECTED",
+        "CI_FAILED",
+        "MAIN_BROKEN",
+        "CI_GREEN",
+        "SPRINT_END",
+        "NEXT_SPRINT",
+        "STALLED",
+        "SPRINT_BACKLOG_STUCK",
+    }
+)
+SCOPES: dict[Trigger, Scope] = {
+    t: Scope.RUN if t.name in RUN_WIDE else Scope.STORY for t in Trigger
+}
+
+
+class ScopeTableError(Exception):
+    """A trigger has no scope."""
+
+
+def check_scopes() -> None:
+    """Raise ``ScopeTableError`` naming any trigger missing from ``SCOPES``."""
+    missing = [t.value for t in Trigger if t not in SCOPES]
+    if missing:
+        raise ScopeTableError("triggers without a scope: " + ", ".join(missing))
 
 
 @dataclass(frozen=True)
@@ -286,6 +329,25 @@ HANDOVERS: tuple[Rule, ...] = (
         lambda r: bool(_boundary(r).get("known_failures")),
         KNOWN_LINE,
     ),
+    Rule(
+        Trigger.STORY_CI_RED,
+        lambda r: (r.get("story_ci") or {}).get("verdict") == "red",
+        "{story}: CI failed on its PR at {ci_sha}: {ci_checks}. Nothing is held; the story "
+        "lands only on green landing CI. Brief its developer if it needs a fix.",
+    ),
+    Rule(
+        Trigger.WORKTREE_DRIFT,
+        lambda r: bool((r.get("drift") or {}).get("files")),
+        "{story}: its worktree {drift_path} changed outside the team: {drift_files}. The story "
+        "waits. Tell the human; agile-team accept-checkout --story {story} keeps the worktree "
+        "as it is.",
+    ),
+    Rule(
+        Trigger.LAND_BOUNCED,
+        lambda r: bool((r.get("land") or {}).get("conflict")),
+        "{story}: landing stopped on a merge conflict in {land_files}; {land_role} rebases it "
+        "onto the sprint head, then land runs again.",
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -337,7 +399,23 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields["fault"] = str(fault.get("fault") or "")
     fields["fault_reason"] = str(fault.get("reason") or "")
     fields["fault_why"] = str(fault.get("why") or "")
+    fields |= _land_fields(report)
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
+
+
+def _land_fields(report: dict) -> dict[str, str]:
+    """The text fields of the story CI, drift and land-conflict rows (only those present)."""
+    ci, drift, land = (report.get(k) or {} for k in ("story_ci", "drift", "land"))
+    conflict = land.get("conflict") or {}
+    fields = {
+        "ci_sha": ci.get("sha"),
+        "ci_checks": "; ".join(ci.get("checks") or []) if ci else None,
+        "drift_path": drift.get("path"),
+        "drift_files": ", ".join(drift.get("files") or []) if drift else None,
+        "land_files": ", ".join(conflict.get("files") or []) if conflict else None,
+        "land_role": conflict.get("role"),
+    }
+    return {k: str(v) for k, v in fields.items() if v is not None}
 
 
 BOUNDARY_TEXT = (
@@ -427,6 +505,15 @@ def _board_entry(story: Any) -> str:
     if story.hold:
         return f"{entry} held"
     return entry if story.status is StoryStatus.ACTIVE else f"{entry} {story.status}"
+
+
+def merge(passes: list[Pass]) -> Pass:
+    """One pass holding the kinds, lines and stories of ``passes``, in arrival order."""
+    if len(passes) == 1:
+        return passes[0]
+    kinds = list(dict.fromkeys(k for p in passes for k in p.kinds))
+    stories = list(dict.fromkeys(s for p in passes for s in p.stories))
+    return Pass(kinds, [x for p in passes for x in p.lines], stories, sum(p.steps for p in passes))
 
 
 def board(state: RunState) -> str:

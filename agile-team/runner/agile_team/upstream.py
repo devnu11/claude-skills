@@ -22,11 +22,21 @@ from .commands import TIMED_OUT
 from .config import UpstreamSettings
 from .git_ops import Git, GitError
 from .rewrite import Listing, Stamped, pair, parse_listing
+from .story_branches import LAND_SUFFIX
 
 NO_GH = "gh is not installed"
 GH_LOGGED_OUT = "gh is not logged in"
 NO_PR_SERVICE = "no pull request service is configured"
-REFUSED_PUSH = "refusing to push {branch}: only review branches ({prefix}*) are pushed"
+REFUSED_PUSH = (
+    "refusing to push {branch}: only review branches ({prefix}* or {story_prefix}*) are pushed"
+)
+NOT_FAST_FORWARD = (
+    "refusing to push {sha} to {branch}: it does not descend from the recorded {expect}; "
+    "nothing was sent"
+)
+REFUSED_DELETE = (
+    "refusing to delete {branch}: only landing branches ({story_prefix}*-land) are deleted"
+)
 REBASE_FLAGS = (
     "-c",
     "rebase.updateRefs=false",
@@ -153,6 +163,12 @@ class Prs(Protocol):
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
 
+    def sha_checks(self, sha: str) -> list[Check]:
+        """The check runs on commit ``sha``."""
+
+    def close(self, pr: int, note: str) -> None:
+        """Close pull request ``pr`` with a comment."""
+
     def rerun(self, link: str) -> None:
         """Re-run the Actions job at ``link``: a new attempt on the same commit."""
 
@@ -217,6 +233,12 @@ class NoPrs:
         raise UpstreamError(self.why)
 
     def main_checks(self, branch: str) -> list[Check]:
+        raise UpstreamError(self.why)
+
+    def sha_checks(self, sha: str) -> list[Check]:
+        raise UpstreamError(self.why)
+
+    def close(self, pr: int, note: str) -> None:
         raise UpstreamError(self.why)
 
     def rerun(self, link: str) -> None:
@@ -286,8 +308,16 @@ class GhPrs:
 
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
-        out = self._gh("api", f"repos/{{owner}}/{{repo}}/commits/{branch}/check-runs?per_page=100")
+        return self.sha_checks(branch)
+
+    def sha_checks(self, sha: str) -> list[Check]:
+        """The check runs on commit ``sha`` (or a branch name)."""
+        out = self._gh("api", f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100")
         return [_run_check(r) for r in json.loads(out)["check_runs"]]
+
+    def close(self, pr: int, note: str) -> None:
+        """Close the pull request with ``note`` as its comment."""
+        self._gh("pr", "close", str(pr), "--comment", note)
 
     def rerun(self, link: str) -> None:
         """Re-run the Actions job at ``link``: a new attempt on the same commit."""
@@ -445,14 +475,46 @@ class Upstream:
         return {n for n in out.splitlines() if n}
 
     def push(self, lease: Lease) -> str | None:
-        """Push a review branch with its lease; ``None`` when pushed, else git's output."""
+        """Push a review branch with its lease; ``None`` when pushed, else the refusal (P2)."""
         self._guard(lease.branch)
+        if lease.expect and not self.is_ancestor(lease.expect, lease.sha):
+            return NOT_FAST_FORWARD.format(sha=lease.sha, branch=lease.branch, expect=lease.expect)
         ref = f"refs/heads/{lease.branch}"
         argv = ["push", "--porcelain", "--no-verify", f"--force-with-lease={ref}:{lease.expect}"]
         code, out = self.git.attempt(*argv, self.settings.remote, f"{lease.sha}:{ref}")
         return None if code == 0 else out
 
+    def is_ancestor(self, older: str, newer: str) -> bool:
+        """True when ``older`` is an ancestor of ``newer``."""
+        return self.git.attempt("merge-base", "--is-ancestor", older, newer)[0] == 0
+
+    def delete(self, lease: Lease) -> str | None:
+        """Delete a landing branch with its lease (P5); the refusal or git's output on failure."""
+        story_prefix = self.settings.story_prefix
+        if not (lease.branch.startswith(story_prefix) and lease.branch.endswith(LAND_SUFFIX)):
+            return REFUSED_DELETE.format(branch=lease.branch, story_prefix=story_prefix)
+        ref = f"refs/heads/{lease.branch}"
+        argv = ["push", "--porcelain", "--no-verify", f"--force-with-lease={ref}:{lease.expect}"]
+        code, out = self.git.attempt(*argv, self.settings.remote, f":{ref}")
+        return None if code == 0 else out
+
+    def remote_head(self, branch: str) -> str:
+        """The sha of ``branch`` on the remote; ``""`` when it is absent."""
+        out = self.git.attempt("ls-remote", self.settings.remote, f"refs/heads/{branch}")[1]
+        return out.split()[0] if out.split() else ""
+
+    def fast_forward(self, sha: str) -> bool:
+        """Fast-forward the checked-out branch to ``sha``; False when it can't."""
+        return self.git.attempt("merge", "--ff-only", sha)[0] == 0
+
     def _guard(self, branch: str) -> None:
         protected = {self.settings.branch, self.git.branch()}
-        if branch in protected or not branch.startswith(self.settings.prefix):
-            raise UpstreamError(REFUSED_PUSH.format(branch=branch, prefix=self.settings.prefix))
+        prefixes = (self.settings.prefix, self.settings.story_prefix)
+        if branch in protected or not branch.startswith(prefixes):
+            raise UpstreamError(
+                REFUSED_PUSH.format(
+                    branch=branch,
+                    prefix=self.settings.prefix,
+                    story_prefix=self.settings.story_prefix,
+                )
+            )

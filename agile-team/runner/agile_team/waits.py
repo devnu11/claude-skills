@@ -23,6 +23,12 @@ class WaitReason(StrEnum):
     PO_HOLD = "PO hold"
     CANCEL_REQUESTED = "cancel requested"
     REVERT_REQUESTED = "revert requested"
+    LAND_QUEUE = "land_queue"
+    PERMISSION = "permission"
+    LANDING_CI = "landing_ci"
+    WORKTREE_DRIFT = "worktree_drift"
+    OPEN_CAP = "open_cap"
+    RESERVE = "reserve"
 
 
 TITLED = frozenset({WaitReason.PO_HOLD, WaitReason.CANCEL_REQUESTED, WaitReason.REVERT_REQUESTED})

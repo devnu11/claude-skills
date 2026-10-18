@@ -152,18 +152,6 @@ class Dispute:
     reason: str = ""
 
 
-class TestClaim(StrEnum):
-    """What the unit-tester says it did to the tests of a reworked story."""
-
-    __test__ = False  # not a pytest class
-
-    CHANGED = "changed"
-    CONFIRMED = "confirmed"
-
-
-TEST_CLAIMS = tuple(map(str, TestClaim))
-
-
 @dataclass
 class Handoff:
     """The fixed summary every role ends with; the runner parses it for gates."""
@@ -178,7 +166,6 @@ class Handoff:
     followups: dict[str, str] = field(default_factory=dict)
     developer: str | None = None
     dispute: Dispute | None = None
-    tests: TestClaim | None = None
     fault: str | None = None
     ruling_reason: str = ""
     asserts: str = ""
@@ -492,16 +479,11 @@ HANDOFF_RULES: tuple[tuple[Callable[[dict[str, Any]], bool], str], ...] = (
         lambda d: not d.get("failed_acs") or d.get("status") == "changes_requested",
         "failed_acs needs status changes_requested",
     ),
-    (lambda d: d.get("tests") in (None, *TEST_CLAIMS), f"tests must be one of {TEST_CLAIMS}"),
     (
         lambda d: d.get("fault") is None or _text(d.get("fault")),
         'fault must be a role name or "runner"',
     ),
 )
-
-
-def _claim(value: str | None) -> TestClaim | None:
-    return None if value is None else TestClaim(value)
 
 
 def _ac_ids(value: Any) -> bool:
@@ -545,7 +527,6 @@ def _handoff_from(data: Any) -> Handoff:
         followups=dict(data.get("followups", {})),
         developer=data.get("developer") or None,
         dispute=_dispute_from(data, str(data.get("summary", ""))),
-        tests=_claim(data.get("tests")),
         fault=data.get("fault"),
         ruling_reason=data.get("ruling_reason") or str(data.get("summary", "")),
         asserts=data.get("asserts", ""),

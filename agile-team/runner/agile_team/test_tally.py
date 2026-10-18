@@ -21,7 +21,6 @@ class Tally:
     total: int | None = None
     points: tuple[int, ...] = ()
     fail_at: int | None = None
-    pending: int = 0
 
     def ran(self) -> int:
         """Tests reported so far (each is in exactly one count)."""
@@ -47,7 +46,6 @@ class Tally:
             "total": self.total,
             "points": list(self.points),
             "fail_at": self.fail_at,
-            "pending": self.pending,
         }
 
 
@@ -68,20 +66,6 @@ def _is_record(data: object) -> bool:
     session = data.get("session")
     counts = all(_is_count(data.get(key)) for key in COUNTS)
     return isinstance(session, str) and bool(session) and counts and _is_total(data.get("total"))
-
-
-def pending_record(n: int) -> str:
-    """The line a built run tells the tally: how many pending ids it skipped (s125 P18)."""
-    return json.dumps({"pending": n})
-
-
-def _pending_of(text: str) -> int | None:
-    try:
-        data = json.loads(text)
-    except ValueError:
-        return None
-    found = data.get("pending") if isinstance(data, dict) else None
-    return found if _is_count(found) else None
 
 
 def record_of(text: str) -> dict[str, Any] | None:
@@ -108,12 +92,10 @@ def _with_fail_at(tally: Tally) -> Tally:
 
 def read(tally: Tally, text: str) -> Tally:
     """Fold one record into ``tally``; anything else changes nothing."""
-    if (pending := _pending_of(text)) is not None:
-        return replace(tally, pending=pending)
     record = record_of(text)
     if record is None:
         return tally
-    fresh = Tally(session=record["session"], pending=tally.pending)
+    fresh = Tally(session=record["session"])
     base = tally if record["session"] == tally.session else fresh
     counts = {key: record[key] for key in (*COUNTS, "total")}
     return _with_fail_at(_with_point(replace(base, **counts)))

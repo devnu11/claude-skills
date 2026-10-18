@@ -88,6 +88,8 @@ class Entry:
     at: float = 0.0
     tokens: Tokens = field(default_factory=Tokens)
     turns: int = 0
+    resumed: bool = False
+    estimated: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Entry:

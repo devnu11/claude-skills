@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import halt, handover, loops, pending_tests, repin, revert_log, rewrite, stages
+from . import halt, handover, loops, repin, revert_log, rewrite, stages
 from .boundary import (
     BOUNDARY_DUE,
     BOUNDARY_ROLE,
@@ -349,7 +349,7 @@ class BoundaryRunner:
     def _run_checks(self, path: Path) -> CheckReport:
         required = self.runtime.pipeline.checks.required_coverage()
         judging = Judging(self.runtime.shell(path), required)
-        return run_checks(full_checks(self.runtime.config, pending_tests.read(path)), judging)
+        return run_checks(full_checks(self.runtime.config), judging)
 
     def _check(self, b: Boundary) -> None:
         head = self.runtime.git.head()
@@ -520,7 +520,7 @@ class BoundaryRunner:
         scratch = self._get_scratch(b)
         scratch.prepare(b.sync_from)
         b.failure = Failure(
-            Stage.REBASE,
+            Stage.REPLAY,
             FixCase.REBASE_CONFLICT,
             result.output,
             branch=scratch.branch,
@@ -824,9 +824,9 @@ STAGE_RUNNERS = {
     Stage.CHECK: BoundaryRunner._check,
     Stage.PUSH: BoundaryRunner._push,
     Stage.CI: BoundaryRunner._ci,
-    Stage.REBASE: BoundaryRunner._rebase,
-    Stage.PUSH_REBASED: BoundaryRunner._push_rebased,
-    Stage.CI_REBASED: BoundaryRunner._check_rebased_ci,
+    Stage.REPLAY: BoundaryRunner._rebase,
+    Stage.PUSH_REPLAYED: BoundaryRunner._push_rebased,
+    Stage.CI_REPLAYED: BoundaryRunner._check_rebased_ci,
 }
 AFTER_REBASE = {
     SyncOutcome.CONFLICT: BoundaryRunner._rebase_conflict,
