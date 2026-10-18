@@ -38,7 +38,7 @@ def test_a_descendant_push_carries_the_lease_r1(fake: FakeSystem) -> None:
     assert upstream_for().push(Lease(STORY, OLD, NEW)) is None
     [argv] = issued(fake, "push")
     assert f"--force-with-lease=refs/heads/{STORY}:{OLD}" in argv
-    assert any("is-ancestor" in c.argv for c in fake.commands)
+    assert any("--is-ancestor" in c.argv for c in fake.commands)
 
 
 def test_a_non_descendant_is_refused_before_any_push_r1(fake: FakeSystem) -> None:
@@ -54,7 +54,7 @@ def test_a_new_branch_skips_the_ancestor_check_r1(fake: FakeSystem) -> None:
     """s159 spec: a new branch skips the ancestor check."""
     on_team(fake)
     assert upstream_for().push(Lease(STORY, "", NEW)) is None
-    assert not any("is-ancestor" in c.argv for c in fake.commands)
+    assert not any("--is-ancestor" in c.argv for c in fake.commands)
 
 
 def test_guard_accepts_both_prefixes_r1(fake: FakeSystem) -> None:
@@ -85,7 +85,7 @@ def test_delete_sends_a_leased_delete_and_skips_ancestry_r1(fake: FakeSystem) ->
     [argv] = issued(fake, "push")
     assert f":refs/heads/{LAND}" in argv
     assert f"--force-with-lease=refs/heads/{LAND}:{NEW}" in argv
-    assert not any("is-ancestor" in c.argv for c in fake.commands)
+    assert not any("--is-ancestor" in c.argv for c in fake.commands)
 
 
 @pytest.mark.parametrize("branch", [STORY, "team/sprint-1", "main", "team/story-s1-land-x"])
