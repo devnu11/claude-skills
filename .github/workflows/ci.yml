@@ -5,15 +5,12 @@ on:
     branches: [main, "team/**"]
   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 permissions:
   contents: read
 
 jobs:
   lint:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +20,7 @@ jobs:
           shellcheck -s sh install.sh tests/*.sh
 
   test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     # ubuntu's sh is dash, macOS's is bash in POSIX mode: two different shells.
     strategy:
       fail-fast: false

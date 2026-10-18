@@ -7,16 +7,13 @@ on:
   pull_request:
     paths: ["agile-team/**", ".github/workflows/agile-team.yml", ".team/pending-tests.json", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 defaults:
   run:
     working-directory: agile-team/runner
 
 jobs:
   test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

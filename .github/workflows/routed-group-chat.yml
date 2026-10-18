@@ -7,16 +7,13 @@ on:
   pull_request:
     paths: ["routed-group-chat/**", ".github/workflows/routed-group-chat.yml"]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 defaults:
   run:
     working-directory: routed-group-chat/runner
 
 jobs:
   test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
