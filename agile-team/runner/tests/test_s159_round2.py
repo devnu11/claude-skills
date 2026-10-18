@@ -108,7 +108,6 @@ def test_before_the_switch_the_manager_step_holds_the_lock_r2(make_runtime) -> N
 def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> None:
     rt, _ = scheduler(make_runtime)
     story = a_story()
-    rt.worktree_of = None
     calls: list[str] = []
 
     async def in_thread(fn, *args):
