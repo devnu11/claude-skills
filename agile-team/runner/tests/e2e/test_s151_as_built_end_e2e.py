@@ -249,13 +249,14 @@ def test_ac3_2_the_replayed_branch_goes_to_a_new_r1_branch_and_the_as_built_one_
     assert len([c for c in scene.prs.calls if c[0] == "create"]) == 2
 
 
-def test_ac3_2_a_remote_moved_since_the_as_built_push_holds_push_rejected(scene: Scene) -> None:
+def test_ac3_2_a_replay_branch_taken_on_the_remote_holds_push_rejected(scene: Scene) -> None:
+    """s159 R5: the replay push is a creation, so an existing `-r1` branch rejects it."""
     team_work(scene)
     scene.main_moves()
     scene.open_end()
     scene.run_to(Stage.PUSH_REPLAYED)
     scene.commit(scene.other, "x.txt", "x\n", "someone pushes")
-    git(scene.other, "push", "-q", "-f", "origin", f"HEAD:refs/heads/{BRANCH}")
+    git(scene.other, "push", "-q", "-f", "origin", f"HEAD:refs/heads/{BRANCH}-r1")
     scene.br.step()
     assert scene.boundary.hold is BoundaryHold.PUSH_REJECTED
 

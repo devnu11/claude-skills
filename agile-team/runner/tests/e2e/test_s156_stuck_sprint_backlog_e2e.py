@@ -46,16 +46,16 @@ def test_ac1_stuck_sprint_backlog_gives_reasons_not_product_backlog(make_runtime
 
 
 def test_ac2_ac5_blocks_after_three_and_add_to_sprint_still_works(make_runtime, capsys) -> None:
-    """s156/AC2, AC5: block with the reason after 3 hand-overs; add_to_sprint is deliberate."""
+    """s156/AC2, AC5: wait with the reason after 3 hand-overs (I4); add_to_sprint is deliberate."""
     rt = stuck(make_runtime)
     for _ in range(3):
         assert Router(rt)._idle().kinds == [Trigger.SPRINT_BACKLOG_STUCK]
     assert Router(rt)._idle().kinds == []
-    assert rt.state.status is RunStatus.BLOCKED
+    assert rt.state.status is RunStatus.RUNNING  # s159 I4: waiting on the human ends nothing
     assert "the Sprint Backlog is stuck" in rt.state.status_reason
     assert rt.relay.messages()[-1].kind == "blocked"
     assert cli.main(["--repo", str(rt.config.repo), "status"]) == 0
-    assert json.loads(capsys.readouterr().out)["status"] == "blocked"
+    assert json.loads(capsys.readouterr().out)["status"] != "blocked"  # s159 I4
     out = call(Tools(rt).add_to_sprint({"stories": ["s3"], "reason": "deliberate"}))
     assert out.get("status") != "refused" and rt.state.stories["s3"].sprint == 1
 
