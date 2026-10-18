@@ -4,7 +4,7 @@
 # environment_kind  likely acceptance environment kind; [<name>.web] markers in package.json upgrade it to "web"
 # commands  test / coverage / lint / static; coverage must print a total percentage
 # files     fix / lint_files templates ({root}, {files}) and lintable globs, for the stop hook's lint check (s126)
-# report    JUnit option ({file}) and skip templates ({id}) for pending tests (s125)
+# report    JUnit option ({file}) and skip templates ({id})
 # globs     source / tests / e2e / ci, repo-relative, gitignore-style
 
 [python]
