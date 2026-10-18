@@ -25,5 +25,8 @@
  ],
  "acceptance": [
   "customer-proxy"
+ ],
+ "land": [
+  "runner"
  ]
 }

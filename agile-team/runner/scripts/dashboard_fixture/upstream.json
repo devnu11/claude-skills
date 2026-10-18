@@ -8,7 +8,7 @@
   "edge": "end",
   "sprint": 10,
   "stage": "push",
-  "hold": "push_permission",
+  "hold": null,
   "failure": null,
   "rounds": 0
  },

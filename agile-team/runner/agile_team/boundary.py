@@ -142,6 +142,7 @@ class Stage(StrEnum):
     CHECK = "check"
     PUSH = "push"
     CI = "ci"
+    OPEN = "open"
     REPLAY = "replay"
     PUSH_REPLAYED = "push-replayed"
     CI_REPLAYED = "ci-replayed"
@@ -164,7 +165,6 @@ class BoundaryHold(StrEnum):
     REBASE_CONFLICT = "rebase_conflict"
     ESCALATED = "escalated"
     REVIEWED = "reviewed"
-    PUSH_PERMISSION = "push_permission"
     PUSH_REJECTED = "push_rejected"
     CI_FAILED = "ci_failed"
     CI_INFRA = "ci_infra"
@@ -194,6 +194,8 @@ class BoundaryOutcome(StrEnum):
     PERMISSION = "permission"
     SUPERSEDED = "superseded"
     REFUSED = "refused"
+    FOLLOWED = "followed"
+    OPENED = "opened"
 
 
 class FixCase(StrEnum):
@@ -228,16 +230,18 @@ PR_KIND = {
 }
 
 
-STAGES = (
-    Stage.SYNC,
-    Stage.CHECK,
-    Stage.PUSH,
-    Stage.CI,
-    Stage.REPLAY,
-    Stage.PUSH_REPLAYED,
-    Stage.CI_REPLAYED,
-)
-END_ONLY = frozenset(STAGES[2:])
+EDGE_STAGES = {
+    Edge.START: (Stage.SYNC, Stage.CHECK, Stage.PUSH_REPLAYED, Stage.OPEN),
+    Edge.END: (
+        Stage.SYNC,
+        Stage.CHECK,
+        Stage.PUSH,
+        Stage.CI,
+        Stage.REPLAY,
+        Stage.PUSH_REPLAYED,
+        Stage.CI_REPLAYED,
+    ),
+}
 LEGACY_STAGES = {
     "review": Stage.PUSH,
     "restack": Stage.PUSH,
@@ -397,10 +401,10 @@ class FixContext:
 
 
 def next_stage(b: Boundary) -> Stage | None:
-    """The stage after ``b.stage`` (skipping end-only ones at a start), or ``None``."""
-    skip = END_ONLY if b.edge is Edge.START else frozenset()
-    later = STAGES[STAGES.index(b.stage) + 1 :]
-    return next((s for s in later if s not in skip), None)
+    """The stage after ``b.stage`` on its edge, or ``None``."""
+    order = EDGE_STAGES[b.edge]
+    later = order[order.index(b.stage) + 1 :] if b.stage in order else ()
+    return later[0] if later else None
 
 
 def setback(b: Boundary, failure: Failure) -> Setback:

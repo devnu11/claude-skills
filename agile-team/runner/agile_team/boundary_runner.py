@@ -167,11 +167,15 @@ class BoundaryRunner:
     def due(self) -> Due | None:
         """The next boundary work: a stage, a devops fix, or nothing while held."""
         b = self.runtime.state.boundary
-        if b is None or b.hold:
+        if b is None or b.hold or self._is_awaiting_permission(b):
             return None
         if b.failure is None:
             return Due(StepKind.BOUNDARY, BOUNDARY_ROLE, "")
         return Due(FIX_KINDS[b.failure.case], FIX_ROLE, fix_brief(b, self._context(b)))
+
+    def _is_awaiting_permission(self, b: Boundary) -> bool:
+        asked = self.runtime.state.permission_asked
+        return asked and b.stage is Stage.PUSH and self.mine.push is Permission.UNASKED
 
     def open_end(self) -> bool:
         """Open the end boundary when the sprint is finished (E1) and it has not run."""
@@ -429,10 +433,17 @@ class BoundaryRunner:
             return self._finish_local(b, why)
         own = self._own(b)
         if self.mine.push is Permission.UNASKED:
-            return self._hold(b, BoundaryHold.PUSH_PERMISSION, Out.HELD, branches=[own.branch])  # type: ignore[union-attr]
+            return self._await_permission(b, own)  # type: ignore[arg-type]
         if self.mine.push is Permission.NO:
             return self._finish_local(b, NOT_PERMITTED)
         self._push_as_is(b, own)  # type: ignore[arg-type]
+
+    def _await_permission(self, b: Boundary, own: StackEntry) -> None:
+        """P1: ask once; the push waits (nothing is held) until the answer."""
+        state = self.runtime.state
+        asked, state.permission_asked = state.permission_asked, True
+        extra = {} if asked else {"waiting": "push_permission", "branches": [own.branch]}
+        self._emit(b, Out.HELD, **extra)
 
     def _push_as_is(self, b: Boundary, own: StackEntry) -> None:
         """R3: push the team branch as it is, then open or reuse the sprint PR."""
@@ -488,7 +499,7 @@ class BoundaryRunner:
         if why:
             raise UpstreamError(why)
 
-    def _rebase(self, b: Boundary) -> None:
+    def _replay(self, b: Boundary) -> None:
         """R6, R7: refuse unless the as-built push has green CI, else rebase onto the target."""
         refusal = get_rebase_refusal(self._own(b))
         if refusal:
@@ -499,6 +510,8 @@ class BoundaryRunner:
         self._pin_sync_from(b)
         result = self.remote.rebase_onto(b.sync_from)
         AFTER_REBASE[result.outcome](self, b, result)
+
+    _rebase = _replay
 
     def _refuse_rebase(self, b: Boundary, reason: str) -> None:
         b.stage = Stage.CI
@@ -605,10 +618,16 @@ class BoundaryRunner:
         self._unpin(b)
         self._advance(b)
 
-    # ----- push rebased
+    def _open(self, b: Boundary) -> None:
+        """R7: the start's last stage; the sprint's own entry is made when the sprint ends."""
+        self._advance(b)
 
-    def _push_rebased(self, b: Boundary) -> None:
+    # ----- push replayed
+
+    def _push_replayed(self, b: Boundary) -> None:
         """R8: push the rebased head with the lease on the as-built sha; nothing if unchanged."""
+        if b.edge is Edge.START:
+            return self._advance(b)
         own, head = self._own(b), self.runtime.git.head()
         if head == own.pushed:  # type: ignore[union-attr]
             return self._report_unchanged(b, own)  # type: ignore[arg-type]
@@ -618,6 +637,8 @@ class BoundaryRunner:
             return self._reject(b, own, rejected)  # type: ignore[arg-type]
         self._report_rebased(b, own)  # type: ignore[arg-type]
         self._advance(b)
+
+    _push_rebased = _push_replayed
 
     def _report_unchanged(self, b: Boundary, own: StackEntry) -> None:
         note = REBASE_UNCHANGED.format(branch=own.branch, sha=own.pushed)
@@ -698,10 +719,12 @@ class BoundaryRunner:
 
     # ----- ci rebased
 
-    def _check_rebased_ci(self, b: Boundary) -> None:
+    def _check_replayed_ci(self, b: Boundary) -> None:
         """R9: only green is ready; every other verdict is reported, never held."""
         results = self._read_ci(b)
         REBASED_OUTCOMES[overall(results)](self, b, results)
+
+    _check_rebased_ci = _check_replayed_ci
 
     def _handle_rebased_infra(self, b: Boundary, results: list[CiResult]) -> None:
         due = rerun_due(self._watched(b))
@@ -824,9 +847,10 @@ STAGE_RUNNERS = {
     Stage.CHECK: BoundaryRunner._check,
     Stage.PUSH: BoundaryRunner._push,
     Stage.CI: BoundaryRunner._ci,
-    Stage.REPLAY: BoundaryRunner._rebase,
-    Stage.PUSH_REPLAYED: BoundaryRunner._push_rebased,
-    Stage.CI_REPLAYED: BoundaryRunner._check_rebased_ci,
+    Stage.OPEN: BoundaryRunner._open,
+    Stage.REPLAY: BoundaryRunner._replay,
+    Stage.PUSH_REPLAYED: BoundaryRunner._push_replayed,
+    Stage.CI_REPLAYED: BoundaryRunner._check_replayed_ci,
 }
 AFTER_REBASE = {
     SyncOutcome.CONFLICT: BoundaryRunner._rebase_conflict,

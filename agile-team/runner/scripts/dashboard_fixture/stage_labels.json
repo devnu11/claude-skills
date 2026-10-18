@@ -6,8 +6,6 @@
  "quality.coverage": "coverage report",
  "checkout.guard": "checkout guard",
  "checkout.verify": "checkout verify",
- "gate.tests-red": "pytest: new tests red",
- "gate.tests-rework": "pytest: rework",
  "gate.tests+coverage": "pytest + coverage",
  "gate.suite-runs": "pytest: repeat runs",
  "gate.dispute-output": "pytest: disputed test",
@@ -17,9 +15,6 @@
  "boundary.sync": "boundary sync",
  "boundary.check": "boundary check",
  "boundary.push": "review PR + push",
- "boundary.rebase": "rebase onto target",
- "boundary.push-rebased": "push rebased",
- "boundary.ci-rebased": "CI wait (rebased)",
  "boundary.ci-wait": "CI wait",
  "runner-tool.run_tests": "pytest: named tests",
  "runner-tool.run_new_tests": "pytest: new test files",
@@ -27,7 +22,11 @@
  "stop.handoff": "stop: handoff parses",
  "stop.lint": "stop: lint fix + check",
  "stop.suite": "stop: suite + coverage",
- "stop.red": "stop: new tests red",
  "stop.presentation": "stop: presentation",
- "stop.requirements": "stop: requirements"
+ "stop.requirements": "stop: requirements",
+ "boundary.open": "open sprint branch",
+ "boundary.replay": "replay onto target",
+ "boundary.push-replayed": "push replayed",
+ "boundary.ci-replayed": "CI wait (replayed)",
+ "story.land": "land"
 }

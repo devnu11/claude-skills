@@ -36,7 +36,8 @@
   "review",
   "design-review",
   "e2e",
-  "acceptance"
+  "acceptance",
+  "land"
  ],
  "step_roles": {
   "design": [
@@ -65,6 +66,9 @@
   ],
   "acceptance": [
    "customer-proxy"
+  ],
+  "land": [
+   "runner"
   ]
  },
  "stage_descriptions": {
@@ -76,8 +80,6 @@
   "checkout.guard": "Check the branch and HEAD are the team's before the next step",
   "checkout.verify": "Check the branch and HEAD did not move during the step",
   "deploy.preview": "Deploy the branch to the preview site",
-  "gate.tests-red": "Tests gate: the full suite must fail, so the story's new tests are red before any code",
-  "gate.tests-rework": "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",
   "gate.tests+coverage": "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",
   "gate.suite-runs": "The full suite again, the story's suite_runs times in a row, after its suite step's gate passes",
   "gate.dispute-output": "The full suite, to show a disputed test's output",
@@ -87,18 +89,19 @@
   "boundary.sync": "Fetch the target and record the team branch; at a sprint end, add the sprint to the review stack",
   "boundary.check": "Lint, static analysis, the full suite with coverage, once, and each environment's e2e, on the team branch",
   "boundary.push": "Push the review branches and open or update their pull requests",
-  "boundary.rebase": "Rebase the team branch onto the target, only after green CI (sprint end only)",
-  "boundary.push-rebased": "Force-push the rebased team branch to the same sprint branch, so its PR keeps both pushes",
-  "boundary.ci-rebased": "Wait for the rebased branch's CI and record it; a red result is reported, never held",
   "boundary.ci-wait": "Wait for the pull requests' CI checks and read failing logs",
   "runner-tool.run_tests": "Only the tests a developer named, run for that developer",
   "runner-tool.run_new_tests": "Only the story's new test files, run for a developer",
   "stop.handoff": "Stop check: the step's handoff block parses",
   "stop.lint": "Stop check: fix the step's changed files with the toolchain's fixers, then lint them",
   "stop.suite": "Stop check: the implement gate's suite and coverage, before the developer may stop",
-  "stop.red": "Stop check: the tests gate, before the unit-tester may stop",
   "stop.presentation": "Stop check: the story's presentation is complete, before the integration-tester may stop",
-  "stop.requirements": "Stop check: every changed or retired requirement has a reason in the handoff, before the architect may stop"
+  "stop.requirements": "Stop check: every changed or retired requirement has a reason in the handoff, before the architect may stop",
+  "boundary.open": "At a sprint start, create the sprint's remote branch at the start head and open its entry",
+  "boundary.replay": "Replay the team branch onto the target story by story, only after green CI (sprint end only)",
+  "boundary.push-replayed": "Push the replayed team branch to the next replay branch and open a ready PR from it",
+  "boundary.ci-replayed": "Wait for the replayed branch's CI and record it; a red result is reported, never held",
+  "story.land": "Land a story: merge it into the sprint branch, run the full checks and the landing CI"
  },
  "stage_labels": {
   "env.prepare": "env prepare",
@@ -108,8 +111,6 @@
   "quality.coverage": "coverage report",
   "checkout.guard": "checkout guard",
   "checkout.verify": "checkout verify",
-  "gate.tests-red": "pytest: new tests red",
-  "gate.tests-rework": "pytest: rework",
   "gate.tests+coverage": "pytest + coverage",
   "gate.suite-runs": "pytest: repeat runs",
   "gate.dispute-output": "pytest: disputed test",
@@ -119,9 +120,6 @@
   "boundary.sync": "boundary sync",
   "boundary.check": "boundary check",
   "boundary.push": "review PR + push",
-  "boundary.rebase": "rebase onto target",
-  "boundary.push-rebased": "push rebased",
-  "boundary.ci-rebased": "CI wait (rebased)",
   "boundary.ci-wait": "CI wait",
   "runner-tool.run_tests": "pytest: named tests",
   "runner-tool.run_new_tests": "pytest: new test files",
@@ -129,9 +127,13 @@
   "stop.handoff": "stop: handoff parses",
   "stop.lint": "stop: lint fix + check",
   "stop.suite": "stop: suite + coverage",
-  "stop.red": "stop: new tests red",
   "stop.presentation": "stop: presentation",
-  "stop.requirements": "stop: requirements"
+  "stop.requirements": "stop: requirements",
+  "boundary.open": "open sprint branch",
+  "boundary.replay": "replay onto target",
+  "boundary.push-replayed": "push replayed",
+  "boundary.ci-replayed": "CI wait (replayed)",
+  "story.land": "land"
  },
  "roles": [
   {
@@ -2424,7 +2426,7 @@
     "sprint": 10,
     "stage": "push",
     "outcome": "held",
-    "hold": "push_permission",
+    "waiting": "push_permission",
     "branches": [
      "team/sprint-9",
      "team/sprint-10"
@@ -2812,7 +2814,9 @@
     "cache_read": 91196,
     "cache_creation": 8985
    },
-   "turns": 36
+   "turns": 36,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791452188.1,
@@ -2826,7 +2830,9 @@
     "cache_read": 121975,
     "cache_creation": 8843
    },
-   "turns": 18
+   "turns": 18,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791452620.3,
@@ -2840,7 +2846,9 @@
     "cache_read": 236872,
     "cache_creation": 39188
    },
-   "turns": 10
+   "turns": 10,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791453754.2,
@@ -2854,7 +2862,9 @@
     "cache_read": 114440,
     "cache_creation": 21212
    },
-   "turns": 33
+   "turns": 33,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791454539.2,
@@ -2868,7 +2878,9 @@
     "cache_read": 102919,
     "cache_creation": 26208
    },
-   "turns": 35
+   "turns": 35,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791455320.9,
@@ -2882,7 +2894,9 @@
     "cache_read": 63094,
     "cache_creation": 13814
    },
-   "turns": 35
+   "turns": 35,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791456149.6,
@@ -2896,7 +2910,9 @@
     "cache_read": 167849,
     "cache_creation": 39640
    },
-   "turns": 35
+   "turns": 35,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791456696.3,
@@ -2910,7 +2926,9 @@
     "cache_read": 98199,
     "cache_creation": 40859
    },
-   "turns": 23
+   "turns": 23,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791457572.1,
@@ -2924,7 +2942,9 @@
     "cache_read": 88580,
     "cache_creation": 23991
    },
-   "turns": 26
+   "turns": 26,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791458273.1,
@@ -2938,7 +2958,9 @@
     "cache_read": 95705,
     "cache_creation": 23585
    },
-   "turns": 35
+   "turns": 35,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791458885.1,
@@ -2952,7 +2974,9 @@
     "cache_read": 132192,
     "cache_creation": 8205
    },
-   "turns": 15
+   "turns": 15,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791459117.1,
@@ -2966,7 +2990,9 @@
     "cache_read": 238575,
     "cache_creation": 48405
    },
-   "turns": 36
+   "turns": 36,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791460618.8,
@@ -2980,7 +3006,9 @@
     "cache_read": 94933,
     "cache_creation": 14782
    },
-   "turns": 10
+   "turns": 10,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791461087.9,
@@ -2994,7 +3022,9 @@
     "cache_read": 175215,
     "cache_creation": 17787
    },
-   "turns": 4
+   "turns": 4,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791461278.0,
@@ -3008,7 +3038,9 @@
     "cache_read": 125969,
     "cache_creation": 10525
    },
-   "turns": 20
+   "turns": 20,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791462078.2,
@@ -3022,7 +3054,9 @@
     "cache_read": 216659,
     "cache_creation": 49245
    },
-   "turns": 34
+   "turns": 34,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791462803.8,
@@ -3036,7 +3070,9 @@
     "cache_read": 136887,
     "cache_creation": 16777
    },
-   "turns": 17
+   "turns": 17,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791463825.0,
@@ -3050,7 +3086,9 @@
     "cache_read": 163465,
     "cache_creation": 37859
    },
-   "turns": 9
+   "turns": 9,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791464976.5,
@@ -3064,7 +3102,9 @@
     "cache_read": 231638,
     "cache_creation": 33091
    },
-   "turns": 18
+   "turns": 18,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791466264.0,
@@ -3078,7 +3118,9 @@
     "cache_read": 143582,
     "cache_creation": 11854
    },
-   "turns": 37
+   "turns": 37,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791466594.3,
@@ -3092,7 +3134,9 @@
     "cache_read": 273906,
     "cache_creation": 48521
    },
-   "turns": 32
+   "turns": 32,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791467982.9,
@@ -3106,7 +3150,9 @@
     "cache_read": 143516,
     "cache_creation": 22688
    },
-   "turns": 17
+   "turns": 17,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791469009.0,
@@ -3120,7 +3166,9 @@
     "cache_read": 103737,
     "cache_creation": 38459
    },
-   "turns": 28
+   "turns": 28,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791469505.4,
@@ -3134,7 +3182,9 @@
     "cache_read": 172463,
     "cache_creation": 20271
    },
-   "turns": 33
+   "turns": 33,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791470270.8,
@@ -3148,7 +3198,9 @@
     "cache_read": 115570,
     "cache_creation": 21139
    },
-   "turns": 33
+   "turns": 33,
+   "resumed": false,
+   "estimated": false
   },
   {
    "at": 1791471226.3,
@@ -3162,7 +3214,9 @@
     "cache_read": 61827,
     "cache_creation": 17320
    },
-   "turns": 5
+   "turns": 5,
+   "resumed": false,
+   "estimated": false
   }
  ],
  "steps": [
@@ -3797,7 +3851,7 @@
    "edge": "end",
    "sprint": 10,
    "stage": "push",
-   "hold": "push_permission",
+   "hold": null,
    "failure": null,
    "rounds": 0
   },

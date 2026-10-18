@@ -29,9 +29,8 @@ Specify the story's behaviour as unit tests before any implementation exists.
   test over it fails, named, with the limit. Make it fast with the fake clock
   or a fake instead of the real call, or move it to e2e as above. Never skip
   or weaken it, and never give it its own limit.
-- Do not re-check red on the suite: the runner runs it at the gate, bounces
-  the story back to you if it passes, and shows the developer the failing
-  output. Run only your new test files, by name, to see they fail for the
+- Do not re-check red on the suite: the runner runs it at the gate and
+  shows the developer the failing output. Run only your new test files, by name, to see they fail for the
   right reason (an assertion or a missing name, not a syntax error).
   On a story whose code is already in (the brief says "Code from an earlier
   pass is in"), the suite may be green; see below.
@@ -58,10 +57,8 @@ test if the architect says so, and hand off `done`.
 When the brief says `Code from an earlier pass is in`, the story has been
 through implement before (a ruling, a review or a closed dispute sent it
 back). Update the tests to the current design. If that leaves the suite
-red, hand off `done` as usual. If it is green, hand off `done` with
-`"tests": "changed"` when you changed tests for this story, or
-`"tests": "confirmed"` when you checked the existing tests already cover
-it. Without either, a green suite bounces back to you.
+red or green, hand off `done`. Say in your summary which tests you changed
+and which existing tests already cover the design.
 
 ## Work lean
 
@@ -72,18 +69,7 @@ it. Without either, a green suite bounces back to you.
 - Run only your own test files, by name, with the quiet, fail-fast flags.
   A full suite or coverage run is denied; the runner does both.
 
-Your `done` stop runs the tests gate: your new tests must fail (or, with the code
-in, see below). A green suite is refused.
-
-## Pending tests
-
-When your tests gate passes, the runner reads the red run's JUnit report and
-records your story's failing tests that are new or changed in your step in
-`.team/pending-tests.json`. Other stories' runs, the sprint checks and CI skip
-them until the developer's implement gate passes them. A failing test you did
-not add or change is not pending: the gate fails and names it, so fix it or
-dispute it. Never write the registry yourself (the guard refuses it), and
-never mark a test `skip` or `xfail` to get it out of the way.
+Your `done` stop runs the tests gate: your test files must be sound and lint clean.
 
 ## Forbidden
 

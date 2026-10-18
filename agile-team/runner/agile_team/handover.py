@@ -125,6 +125,10 @@ def _held(hold: str) -> Callable[[dict], bool]:
     return lambda r: _boundary(r).get("hold") == hold
 
 
+def _is_waiting(what: str) -> Callable[[dict], bool]:
+    return lambda r: _boundary(r).get("waiting") == what
+
+
 def _faulted(report: dict, kind: str) -> bool:
     fault = _fault(report)
     return fault.get("applied") is True and fault.get("kind") == kind
@@ -259,7 +263,7 @@ HANDOVERS: tuple[Rule, ...] = (
     ),
     Rule(
         Trigger.PUSH_PERMISSION,
-        _held("push_permission"),
+        _is_waiting("push_permission"),
         "{story}: sprint {sprint}'s review branches are built and checked: {branches}. Ask the "
         "human once: may the team push review branches and open or update pull requests? Then "
         'set_push_permission with "yes" or "no"; it applies to every later sprint',
@@ -391,16 +395,23 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields = {name: str(report.get(name) or "") for name in FIELDS}
     fields["questions"] = "; ".join(report.get("open_questions") or [])
     fields |= _find_requirement_fields(report)
-    ruling = report.get("ruling") or {}
-    fields["gate_reason"] = str(_gate(report).get("reason") or "")
-    fields["ruling"] = str(ruling.get("ruling") or "")
-    fields["ruling_why"] = str(ruling.get("why") or "")
-    fault = _fault(report)
-    fields["fault"] = str(fault.get("fault") or "")
-    fields["fault_reason"] = str(fault.get("reason") or "")
-    fields["fault_why"] = str(fault.get("why") or "")
+    fields |= _ruling_fields(report)
     fields |= _land_fields(report)
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
+
+
+def _ruling_fields(report: dict) -> dict[str, str]:
+    """The gate, ruling and fault text fields of a report."""
+    ruling, fault = report.get("ruling") or {}, _fault(report)
+    pairs = {
+        "gate_reason": _gate(report).get("reason"),
+        "ruling": ruling.get("ruling"),
+        "ruling_why": ruling.get("why"),
+        "fault": fault.get("fault"),
+        "fault_reason": fault.get("reason"),
+        "fault_why": fault.get("why"),
+    }
+    return {k: str(v or "") for k, v in pairs.items()}
 
 
 def _land_fields(report: dict) -> dict[str, str]:
