@@ -110,7 +110,7 @@ def test_reserve_ignores_resumed_estimated_and_other_roles_r1() -> None:
 def test_start_refusal_at_the_edge_r1() -> None:
     """s159 spec: start refusal at the edge."""
     assert br.start_refusal(br.Headroom(8.0, 10.0), [1.0, 1.0]) is not None
-    assert br.start_refusal(br.Headroom(8.0, 10.0), [1.0]) is not None
+    assert br.start_refusal(br.Headroom(8.0, 10.0), [1.0]) is None
     assert br.start_refusal(br.Headroom(7.9, 10.0), [1.0, 1.0]) is None
     assert br.start_refusal(br.Headroom(0.0, 10.0), []) is None
 
