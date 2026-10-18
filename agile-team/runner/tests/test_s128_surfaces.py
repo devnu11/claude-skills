@@ -63,6 +63,7 @@ def test_a_stuck_sprint_blocks_after_the_cap_with_the_blocked_text(
     notes = [m for m in rt.relay.messages() if m.kind == "blocked"]  # I4: it waits, not BLOCKED
     assert [n.text for n in notes] == [notes[0].text], [n.text for n in notes]
     assert notes[0].text.startswith("Sprint 1: the Sprint Backlog is stuck after 3")
+    assert len(notes) == 1
 
 
 # ----- P12: the snapshot and the page ---------------------------------------------------------

@@ -288,6 +288,8 @@ def test_the_waiting_run_posts_the_stuck_note_once_i4(make_runtime, cadence: str
     for _ in range(sprint_end.SPRINT_STUCK_CAP + 3):
         Router(rt)._idle()
     assert len([m for m in rt.relay.messages() if m.kind == "blocked"]) == 1
+    assert rt.state.status == RunStatus.RUNNING
+    assert (rt.state.status_reason or "").startswith("Sprint 1: the Sprint Backlog is stuck")
 
 
 # ----- AC4 ---------------------------------------------------------------------------------
