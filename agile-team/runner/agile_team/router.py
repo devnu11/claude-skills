@@ -522,8 +522,11 @@ class Router:
 
     def _block(self, text: str) -> Pass:
         """Post text to the liaison and wait on the human (I4); the run stays running."""
-        self.runtime.state.mark(RunStatus.RUNNING, text)
-        self.runtime.relay.post(Note("blocked", text, []))
+        state = self.runtime.state
+        sent = self.runtime.relay.messages()
+        if not sent or (sent[-1].kind, sent[-1].text) != ("blocked", text):
+            self.runtime.relay.post(Note("blocked", text, []))  # polling repeats; post once
+        state.mark(RunStatus.RUNNING, text)
         self.runtime.save()
         return Pass([], [], [])
 
