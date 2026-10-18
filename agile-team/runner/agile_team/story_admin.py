@@ -327,7 +327,6 @@ class Clerk:
         question = rt.relay.post(note).id if note else None
         reason = case.reason.strip()
         row.effect(story, Change(reason, question))
-        self._release_pending(story)
         rt.save()
         data = {"tool": str(case.act), "reason": reason, "question": question}
         self._emit(PO_ROLE, story, data | {"before": before, "after": facts(story)})
@@ -344,7 +343,6 @@ class Clerk:
         assert asked is not None
         before, decided = facts(story), decision(settled.answer.text)
         OUTCOMES[decided](self.runtime.state, settled)
-        self._release_pending(story)
         data = {
             "tool": "answer",
             "reason": asked.reason,
