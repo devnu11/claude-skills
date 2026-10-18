@@ -15,6 +15,7 @@ import copy
 import json
 import tomllib
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
+from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -220,6 +221,7 @@ class Plan:
     brief: str = ""
     on_session: Callable[[str], None] | None = None
     cancel: guard.StopFlag = field(default_factory=guard.StopFlag)
+    gated: Outcome | None = None
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -446,6 +448,8 @@ class Runtime:
     writer: RunWriter = field(default_factory=RunWriter)
     flags: RunFlags = field(default_factory=RunFlags)
     worktree_of: str | None = None
+    main_lock: asyncio.Lock | None = None
+    sprint_push_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     main_git: Git | None = None
     revert_queue: list[Any] = field(default_factory=list)
     events: EventLog = field(init=False)
@@ -1133,12 +1137,36 @@ class Runtime:
         return {"role": plan.role.name, "status": "stopped", "reason": plan.cancel.reason}
 
     async def settle_work(self, plan: Plan, result: StepResult) -> dict[str, Any]:
-        """The blocking half of a step's end: handoff, tree, quarantine, commit and gate.
+        """A step's end: handoff, tree, quarantine, commit and gate (C6, R3).
 
-        It runs on the loop thread: every state change stays with the one writer (C6), so a
-        long gate delays the other stories' tasks but never races them.
+        Under story branches the gate's commands run in a thread while the loop serves the other
+        tasks; every state change stays on the loop thread. The Manager settles under the main
+        lock, since its commit lands in the main checkout.
         """
-        return self.settle(plan, result)
+        async with self.settle_lock(plan):
+            if self.worktree_of is None or plan.story is None:
+                return self.settle(plan, result)
+            report, parsed = self._settle_head(plan, result)
+            await self._pregate(plan, parsed)
+            return self._settle_tail(plan, parsed, report)
+
+    def settle_lock(self, plan: Plan) -> AbstractAsyncContextManager[Any]:
+        """R3: the main lock around the Manager's settle once story branches are on."""
+        if plan.role.name == MANAGER and self.state.story_branches and self.main_lock:
+            return self.main_lock
+        return nullcontext()
+
+    async def _pregate(self, plan: Plan, parsed: Handoff | HandoffError) -> None:
+        """R1b: run the gate's commands in a thread; ``gate`` then uses the verdict."""
+        parsed = _settled(plan, parsed)
+        if isinstance(parsed, HandoffError) or plan.role.name == MANAGER:
+            return
+        if plan.kind in KIND_EFFECTS or plan.story is None:
+            return
+        effect = STORY_EFFECTS.get(plan.role.name)
+        if effect:
+            effect(plan.story, parsed)
+        plan.gated = await system.in_thread(self._evaluate, plan, parsed)
 
     async def apply_settled(self, plan: Plan, settled: dict[str, Any]) -> dict[str, Any]:
         """P4: after a story step, push its branch with its PR (a short call on the loop thread)."""
@@ -1147,7 +1175,7 @@ class Runtime:
             return settled
         from .story_ci import StoryPusher
 
-        refused_push = await system.in_thread(StoryPusher(self).after_step, story)
+        refused_push = await StoryPusher(self).push_off_loop(story)
         if refused_push:
             text = PUSH_REFUSED.format(branch=story.branch, why=refused_push)
             self.relay.post(Note("update", text, [story.id]))
@@ -1314,6 +1342,12 @@ class Runtime:
             return self._settle(plan, result)
 
     def _settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
+        report, parsed = self._settle_head(plan, result)
+        return self._settle_tail(plan, parsed, report)
+
+    def _settle_head(
+        self, plan: Plan, result: StepResult
+    ) -> tuple[dict[str, Any], Handoff | HandoffError]:
         plan.text = result.text
         self.record_cost(plan, result)
         self._keep_session(plan, result)
@@ -1322,6 +1356,11 @@ class Runtime:
         report |= self.settle_tree(plan)
         parsed = _check_explained(parsed, plan)
         self._emit_step_end(plan, parsed, result, report["commit"])
+        return report, parsed
+
+    def _settle_tail(
+        self, plan: Plan, parsed: Handoff | HandoffError, report: dict[str, Any]
+    ) -> dict[str, Any]:
         report |= self._apply(plan, parsed)
         self._land(plan)
         return report
@@ -1390,7 +1429,9 @@ class Runtime:
         if plan.kind in KIND_EFFECTS:
             return KIND_EFFECTS[plan.kind](self, plan, handoff)
         effect = STORY_EFFECTS.get(plan.role.name)
-        if effect and plan.story:
+        if (
+            effect and plan.story and getattr(plan, "gated", None) is None
+        ):  # a pregate already applied it
             effect(plan.story, handoff)
         return {"gate": self.gate(plan, handoff)} if plan.story else {}
 
@@ -1587,7 +1628,7 @@ class Runtime:
     def gate(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """Evaluate the step's gate, commit its pass record, then advance the story (s131)."""
         self.verify_checkout()
-        outcome = self._evaluate(plan, handoff)
+        outcome = getattr(plan, "gated", None) or self._evaluate(plan, handoff)
         record = self._pass_record(plan, handoff) if outcome.verdict is Verdict.PASS else Recorded()
         return self._advance_and_log(plan, record.failure or outcome) | record.fields
 
