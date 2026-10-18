@@ -1147,7 +1147,7 @@ class Runtime:
             return settled
         from .story_ci import StoryPusher
 
-        refused_push = StoryPusher(self).after_step(story)
+        refused_push = await system.in_thread(StoryPusher(self).after_step, story)
         if refused_push:
             text = PUSH_REFUSED.format(branch=story.branch, why=refused_push)
             self.relay.post(Note("update", text, [story.id]))
