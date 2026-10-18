@@ -117,14 +117,18 @@ def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> 
 
     monkeypatch.setattr(system, "in_thread", in_thread)
 
-    def after_step(self, s) -> None:
-        return None
+    pushed: list[str] = []
 
-    monkeypatch.setattr(story_ci.StoryPusher, "after_step", after_step)
+    async def push_off_loop(self, s) -> None:
+        pushed.append(s.id)
+
+    monkeypatch.setattr(story_ci.StoryPusher, "push_off_loop", push_off_loop)
     rt.worktree_of = story.id
     plan = SimpleNamespace(story=story)
     asyncio.run(rt.apply_settled(plan, {"status": "done"}))
-    assert calls == ["after_step"]
+    # C6: the loop thread runs the push flow; only its commands go through in_thread
+    assert pushed == [story.id]
+    assert "after_step" not in calls
 
 
 # ---------- N6: the recorded sha is the sha that was read ----------
