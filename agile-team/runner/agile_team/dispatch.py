@@ -58,6 +58,7 @@ from . import (
     story_rebase,
     story_spec,
     system,
+    test_reports,
 )
 from . import owners as owners_mod
 from . import results as results_mod
@@ -496,14 +497,20 @@ class Runtime:
         view = copy.copy(self)
         view.config = self.config.at_worktree(path)
         view.git = Git(path, self.git.options)
-        view.pipeline = self.pipeline_for(view.config)  # type: ignore[misc]
+        view.pipeline = self._own_pipeline(view.config, story)
         view.step_meter, view.worktree_of = None, story.id
         view.main_git = self.main
         view.stage_log = copy.copy(self.stage_log)
         view.pipeline.checks.stages = view.stage_log.open
-        reporting = view.pipeline.checks.reporting  # N11: gates run in parallel threads
-        view.pipeline.checks.reporting = replace(reporting, folder=reporting.folder / story.id)
         return view
+
+    def _own_pipeline(self, config: Config, story: StoryState) -> Pipeline:
+        """N11, N15: a copy of the pipeline whose gate writes reports in the story's own folder."""
+        pipeline = copy.copy(self.pipeline_for(config))  # type: ignore[misc]
+        pipeline.checks = copy.copy(pipeline.checks)
+        folder = pipeline.checks.reporting.folder.parent / test_reports.STORY_FOLDER / story.id
+        pipeline.checks.reporting = replace(pipeline.checks.reporting, folder=folder)
+        return pipeline
 
     def emit(self, kind: EventKind, plan: Plan | None = None, /, **data: Any) -> Event:
         """Log an event, attributed to ``plan``'s role and story when given."""
@@ -1153,11 +1160,28 @@ class Runtime:
     async def _settle_uncut(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         """N12: a cancel waits for the settle to finish, so a step is never half settled."""
         task = asyncio.ensure_future(self._settle_threaded(plan, result))
-        try:
-            return await asyncio.shield(task)
-        except asyncio.CancelledError:
-            await asyncio.gather(task, return_exceptions=True)
-            raise
+        cancelled = await self._wait_uncut(task)
+        if cancelled:
+            await self._push_after_cancel(plan, task)
+            raise asyncio.CancelledError
+        return task.result()
+
+    async def _wait_uncut(self, task: asyncio.Future[Any]) -> bool:
+        """N14: wait until ``task`` is done, whatever cancels us; whether we were cancelled."""
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.wait({task})
+            except asyncio.CancelledError:
+                cancelled = True  # a second cancel must not reach the settle
+        return cancelled
+
+    async def _push_after_cancel(self, plan: Plan, task: asyncio.Future[Any]) -> None:
+        """N14: a cancelled step still pushes its commit; a settle error is raised, not lost."""
+        if task.exception() is None:
+            await self.apply_settled(plan, task.result())
+        else:
+            raise task.exception()  # type: ignore[misc]
 
     async def _settle_threaded(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         what = f"settling {salvage.label(plan.role.name, plan.story.id if plan.story else None)}"
