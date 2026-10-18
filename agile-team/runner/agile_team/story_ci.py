@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 from .boundary import SUPERSEDED_BY, Permission, PrMode, StackEntry, find_current_entry
 from .ci import Bucket, Check, CiResult, CiVerdict, check_lines, verdict_of
 from .events import Event, EventKind
-from .gates import StoryState
+from .gates import FINISHED, StoryState
 from .landing import STORY_PR_BODY
 from .story_branches import StoryCi
-from .upstream import Lease, PrSpec
+from .upstream import Lease, PrSpec, UpstreamError
 
 if TYPE_CHECKING:
     from .dispatch import Runtime
@@ -95,13 +95,26 @@ class StoryCiPoll:
     def poll(self, story: StoryState, now: float) -> StoryCi | None:
         """Record and return a new settled result for the story's pushed head, else ``None``."""
         last = self._read_at.get(story.id)
-        if not story.pushed or (last is not None and now - last < STORY_CI_POLL_S):
+        if not self.can_poll(story) or (last is not None and now - last < STORY_CI_POLL_S):
             return None
         self._read_at[story.id] = now
-        checks = self.runtime.prs.sha_checks(story.pushed)
+        checks = self._read_checks(story)
         if not checks or any(c.bucket is Bucket.PENDING for c in checks):
             return None
         return self._record(story, checks)
+
+    def can_poll(self, story: StoryState) -> bool:
+        """An open story with a pushed head, and a PR service to ask (D4)."""
+        return (
+            bool(story.pushed) and story.status not in FINISHED and not self.runtime.prs.missing()
+        )
+
+    def _read_checks(self, story: StoryState) -> list[Check]:
+        """The head's checks; a failing ``gh`` is "no result", never a crash (AC8.3)."""
+        try:
+            return self.runtime.prs.sha_checks(story.pushed)  # type: ignore[arg-type]
+        except UpstreamError:
+            return []
 
     def _record(self, story: StoryState, checks: list[Check]) -> StoryCi | None:
         found = StoryCi(story.pushed, str(verdict_of(checks)), "pr")

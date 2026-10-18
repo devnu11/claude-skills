@@ -325,10 +325,12 @@ class Router:
 
     @property
     def _offered(self) -> list[Work | None]:
-        manager = self._manager_work()
-        if manager is not None:
-            return [self._boundary_work(), manager]
-        return [self._boundary_work(), self._repeat_work(), *self._story_offers]
+        return [
+            self._boundary_work(),
+            self._manager_work(),
+            self._repeat_work(),
+            *self._story_offers,
+        ]
 
     @property
     def _story_offers(self) -> list[Work | None]:

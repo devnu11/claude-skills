@@ -21,6 +21,7 @@ class RunWriter:
         self._thread: int | None = None
         self._queue: list[Write] = []
         self._lock = threading.Lock()
+        self._lent: set[int] = set()
         self.wake: asyncio.Event | None = None
 
     def bind(self, loop: asyncio.AbstractEventLoop, task: asyncio.Task) -> None:
@@ -28,6 +29,23 @@ class RunWriter:
         self._loop = loop
         self._thread = threading.get_ident()
         self.wake = asyncio.Event()
+
+    async def run_off_loop[T](self, work: Callable[[], T]) -> T:
+        """Run long ``work`` in a worker thread while the loop serves the others (C6, D2).
+
+        The awaiting task is the work's owner: its saves are queued for the scheduler task, so
+        the thread may call ``Runtime.save``. Any other worker thread is still refused.
+        """
+
+        def run_lent() -> T:
+            ident = threading.get_ident()
+            self._lent.add(ident)
+            try:
+                return work()
+            finally:
+                self._lent.discard(ident)
+
+        return await asyncio.to_thread(run_lent)
 
     def release(self) -> None:
         """Write what is queued, then write directly again."""
@@ -73,5 +91,6 @@ class RunWriter:
 
     def check_owner(self) -> None:
         """Raise ``WrongWriter`` off the loop thread."""
-        if self._thread is not None and threading.get_ident() != self._thread:
+        here = threading.get_ident()
+        if self._thread is not None and here != self._thread and here not in self._lent:
             raise WrongWriter("run files are written by the scheduler task only")
