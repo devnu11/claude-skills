@@ -300,7 +300,7 @@ def test_the_first_push_asks_for_permission_and_pushes_nothing(env: Env, fake: F
     env.drive()
     assert b.hold is None and env.rt.state.permission_asked
     assert env.events()[-1].data["outcome"] == "held"
-    assert env.events()[-1].data["waiting"] == "push_permission"
+    assert env.events()[-1].data.get("waiting") == "push_permission"
     assert env.br.due() is None
     assert env.prs.calls == [] and pushes(fake) == []
 
