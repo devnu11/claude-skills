@@ -1084,7 +1084,7 @@ class PoRun:
         return PoTurn(lead + told + handover.prompt(found, state), state.po_session)
 
     async def _turn(self, turn: PoTurn) -> StepResult:
-        if await self.is_turn_refused():
+        if self.is_turn_refused:
             return StepResult("", 0.0)
         tools = Tools(self.runtime, snapshot=TurnSnapshot.take(self.runtime.state))
         plan = plan_for(tools, turn)
@@ -1095,10 +1095,13 @@ class PoRun:
         self._record(plan.role.model, result)
         return result
 
-    async def is_turn_refused(self) -> bool:
-        """The run halted, or the checkout moved (read under the main lock, D3)."""
-        async with self.main_lock:
-            return bool(self.runtime.halted_by or self.runtime.checkout_moved())
+    @property
+    def is_turn_refused(self) -> bool:
+        """The run halted, or the checkout moved. The drift check waits out a holder of the
+        main lock, which records its own checkout move (N2)."""
+        if self.runtime.halted_by:
+            return True
+        return not self.main_lock.locked() and self.runtime.checkout_moved()
 
     def _own_cost(self, turn: PoTurn, raw: StepResult) -> StepResult:
         """``raw`` with only this query's cost; remembers the session's running total."""

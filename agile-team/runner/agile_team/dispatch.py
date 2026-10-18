@@ -1135,19 +1135,19 @@ class Runtime:
     async def settle_work(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         """The blocking half of a step's end: handoff, tree, quarantine, commit and gate.
 
-        It runs in a worker thread (C6, D2), so a long gate never stops the other stories'
-        tasks, the PO turn or the heartbeat; its saves are queued for the scheduler task.
+        It runs on the loop thread: every state change stays with the one writer (C6), so a
+        long gate delays the other stories' tasks but never races them.
         """
-        return await self.writer.run_off_loop(lambda: self.settle(plan, result))
+        return self.settle(plan, result)
 
     async def apply_settled(self, plan: Plan, settled: dict[str, Any]) -> dict[str, Any]:
-        """P4: after a story step, push its branch with its PR (in a worker thread)."""
+        """P4: after a story step, push its branch with its PR (a short call on the loop thread)."""
         story = plan.story
         if story is None or self.worktree_of is None:
             return settled
         from .story_ci import StoryPusher
 
-        refused_push = await self.writer.run_off_loop(lambda: StoryPusher(self).after_step(story))
+        refused_push = StoryPusher(self).after_step(story)
         if refused_push:
             text = PUSH_REFUSED.format(branch=story.branch, why=refused_push)
             self.relay.post(Note("update", text, [story.id]))
