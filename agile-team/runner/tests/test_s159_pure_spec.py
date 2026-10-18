@@ -17,32 +17,32 @@ switchover = Lazy("agile_team.switchover")
 # ---------- story_branches (section 3) ----------
 
 
-def test_story_branch_names_the_replay_only_after_a_replay() -> None:
+def test_story_branch_names_the_replay_only_after_a_replay_r1() -> None:
     """s159 spec: story branch names the replay only after a replay."""
     assert sb.story_branch("team/story-", "s1", 0) == "team/story-s1"
     assert sb.story_branch("team/story-", "s1", 2) == "team/story-s1-r2"
 
 
-def test_landing_branch_has_the_land_suffix() -> None:
+def test_landing_branch_has_the_land_suffix_r1() -> None:
     """s159 spec: landing branch has the land suffix."""
     assert sb.landing_branch("team/story-", "s1") == "team/story-s1-land"
     assert sb.LAND_SUFFIX == "-land"
 
 
-def test_merge_subject_round_trips_through_merge_id() -> None:
+def test_merge_subject_round_trips_through_merge_id_r1() -> None:
     """s159 spec: merge subject round trips through merge id."""
     subject = sb.merge_subject("s159", "Story branches")
     assert subject == "merge(s159): Story branches"
     assert sb.merge_id(subject) == "s159"
 
 
-def test_merge_id_is_none_for_other_subjects() -> None:
+def test_merge_id_is_none_for_other_subjects_r1() -> None:
     """s159 spec: merge id is none for other subjects."""
     assert sb.merge_id("fix(s1): thing") is None
     assert sb.merge_id("") is None
 
 
-def test_data_classes_default() -> None:
+def test_data_classes_default_r1() -> None:
     """s159 spec: data classes default."""
     assert sb.Landed("m").pushed == "" and sb.Landed("m").pr is None
     kept = sb.KeptSession("sid", "opus", "high", "anthropic")
@@ -52,7 +52,7 @@ def test_data_classes_default() -> None:
     assert rebase.role == "devops"
 
 
-def test_story_state_has_the_new_fields_defaulted() -> None:
+def test_story_state_has_the_new_fields_defaulted_r1() -> None:
     """s159 spec: story state has the new fields defaulted."""
     story = StoryState(id="s1", title="t", step="design")
     assert (story.branch, story.base_sha, story.replays, story.pushed) == ("", "", 0, "")
@@ -68,18 +68,18 @@ def entry(cost: float, role="developer", model="opus", **kw) -> Entry:
     return Entry(role=role, model=model, cost_usd=cost, **kw)
 
 
-def test_min_steps_is_five() -> None:
+def test_min_steps_is_five_r1() -> None:
     """s159 spec: min steps is five."""
     assert br.RESERVE_MIN_STEPS == 5
 
 
-def test_reserve_is_the_floor_with_fewer_than_five_entries() -> None:
+def test_reserve_is_the_floor_with_fewer_than_five_entries_r1() -> None:
     """s159 spec: reserve is the floor with fewer than five entries."""
     entries = [entry(10.0) for _ in range(4)]
     assert br.reserve(entries, br.Who("developer", "opus", 1.0)) == 1.0
 
 
-def test_reserve_is_mean_plus_three_sigma() -> None:
+def test_reserve_is_mean_plus_three_sigma_r1() -> None:
     """s159 spec: reserve is mean plus three sigma."""
     entries = [entry(c) for c in (2.0, 4.0, 2.0, 4.0, 3.0)]
     mean = 3.0
@@ -89,13 +89,13 @@ def test_reserve_is_mean_plus_three_sigma() -> None:
     assert got > mean
 
 
-def test_reserve_never_falls_below_the_floor() -> None:
+def test_reserve_never_falls_below_the_floor_r1() -> None:
     """s159 spec: reserve never falls below the floor."""
     entries = [entry(0.1) for _ in range(6)]
     assert br.reserve(entries, br.Who("developer", "opus", 1.0)) == 1.0
 
 
-def test_reserve_ignores_resumed_estimated_and_other_roles() -> None:
+def test_reserve_ignores_resumed_estimated_and_other_roles_r1() -> None:
     """s159 spec: reserve ignores resumed estimated and other roles."""
     noise = [
         entry(50.0, resumed=True),
@@ -107,7 +107,7 @@ def test_reserve_ignores_resumed_estimated_and_other_roles() -> None:
     assert br.reserve(noise + fresh, br.Who("developer", "opus", 2.0)) == 2.0
 
 
-def test_start_refusal_at_the_edge() -> None:
+def test_start_refusal_at_the_edge_r1() -> None:
     """s159 spec: start refusal at the edge."""
     assert br.start_refusal(br.Headroom(8.0, 10.0), [1.0, 1.0]) is not None
     assert br.start_refusal(br.Headroom(8.0, 10.0), [1.0]) is not None
@@ -129,23 +129,23 @@ def story_with_session() -> StoryState:
     return story
 
 
-def test_resume_when_model_effort_and_provider_match() -> None:
+def test_resume_when_model_effort_and_provider_match_r1() -> None:
     """s159 spec: resume when model effort and provider match."""
     assert ks.resume_of(story_with_session(), role()) == "sid"
 
 
 @pytest.mark.parametrize("kw", [{"model": "haiku"}, {"effort": "low"}, {"provider": "other"}])
-def test_no_resume_when_anything_differs(kw) -> None:
+def test_no_resume_when_anything_differs_r1(kw) -> None:
     """s159 spec: no resume when anything differs."""
     assert ks.resume_of(story_with_session(), role(**kw)) is None
 
 
-def test_no_resume_without_a_kept_session() -> None:
+def test_no_resume_without_a_kept_session_r1() -> None:
     """s159 spec: no resume without a kept session."""
     assert ks.resume_of(StoryState(id="s1", title="t", step="x"), role()) is None
 
 
-def test_drop_all_and_drop_role() -> None:
+def test_drop_all_and_drop_role_r1() -> None:
     """s159 spec: drop all and drop role."""
     story = story_with_session()
     ks.drop_role(story, "developer")
@@ -158,12 +158,12 @@ def test_drop_all_and_drop_role() -> None:
 @pytest.mark.parametrize(
     "text", ["prompt is too long", "context window exceeded", "Context length limit"]
 )
-def test_context_exceeded_patterns(text) -> None:
+def test_context_exceeded_patterns_r1(text) -> None:
     """s159 spec: context exceeded patterns."""
     assert ks.context_exceeded(text)
 
 
-def test_context_not_exceeded_for_other_errors() -> None:
+def test_context_not_exceeded_for_other_errors_r1() -> None:
     """s159 spec: context not exceeded for other errors."""
     assert not ks.context_exceeded("connection reset")
     assert ks.CONTEXT_PATTERNS
@@ -177,19 +177,19 @@ def facts(**kw) -> switchover.SwitchFacts:
     return switchover.SwitchFacts(**{**base, **kw})
 
 
-def test_a_clean_switch_has_no_refusals() -> None:
+def test_a_clean_switch_has_no_refusals_r1() -> None:
     """s159 spec: a clean switch has no refusals."""
     assert switchover.refusals(facts()) == []
 
 
-def test_every_reason_is_listed_together() -> None:
+def test_every_reason_is_listed_together_r1() -> None:
     """s159 spec: every reason is listed together."""
     got = switchover.refusals(facts(past_design=["s1"], pending_ids=["s2"], stack=1, ahead=3))
     assert len(got) == 4
     assert "s1" in got[0] and "s2" in got[1]
 
 
-def test_each_reason_alone() -> None:
+def test_each_reason_alone_r1() -> None:
     """s159 spec: each reason alone."""
     assert len(switchover.refusals(facts(past_design=["s1"]))) == 1
     assert len(switchover.refusals(facts(pending_ids=["s1"]))) == 1
@@ -197,7 +197,7 @@ def test_each_reason_alone() -> None:
     assert len(switchover.refusals(facts(ahead=1))) == 1
 
 
-def test_story_state_new_records_start_empty() -> None:
+def test_story_state_new_records_start_empty_r1() -> None:
     """s159 section 3: the new containers are per story and empty."""
     story = StoryState(id="s1", title="t", step="design")
     assert story.drift == [] and story.land_reran == [] and story.sessions == {}

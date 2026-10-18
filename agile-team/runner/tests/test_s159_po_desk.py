@@ -10,12 +10,12 @@ def pass_of(kind: ho.Trigger, line: str, story: str) -> ho.Pass:
     return ho.Pass([kind], [line], [story])
 
 
-def test_an_empty_desk_has_nothing_to_take() -> None:
+def test_an_empty_desk_has_nothing_to_take_r1() -> None:
     desk = pd.PoDesk()
     assert desk.take() is None and not desk.busy
 
 
-def test_a_turn_takes_every_queued_pass_merged() -> None:
+def test_a_turn_takes_every_queued_pass_merged_r1() -> None:
     desk = pd.PoDesk()
     desk.queue(pass_of(ho.Trigger.STORY_CI_RED, "a", "s1"))
     desk.queue(pass_of(ho.Trigger.LAND_BOUNCED, "b", "s2"))
@@ -24,7 +24,7 @@ def test_a_turn_takes_every_queued_pass_merged() -> None:
     assert desk.busy
 
 
-def test_passes_stay_queued_until_the_turn_is_done() -> None:
+def test_passes_stay_queued_until_the_turn_is_done_r1() -> None:
     desk = pd.PoDesk()
     desk.queue(pass_of(ho.Trigger.STORY_CI_RED, "a", "s1"))
     desk.take()
@@ -32,7 +32,7 @@ def test_passes_stay_queued_until_the_turn_is_done() -> None:
     assert again is not None and again.lines == ["a"]
 
 
-def test_passes_arriving_during_a_turn_wait_for_the_next() -> None:
+def test_passes_arriving_during_a_turn_wait_for_the_next_r1() -> None:
     desk = pd.PoDesk()
     desk.queue(pass_of(ho.Trigger.STORY_CI_RED, "a", "s1"))
     desk.take()
@@ -52,13 +52,13 @@ def state_with(*ids: str) -> RunState:
     return state
 
 
-def test_a_snapshot_sees_no_move_when_nothing_changed() -> None:
+def test_a_snapshot_sees_no_move_when_nothing_changed_r1() -> None:
     state = state_with("s1", "s2")
     snap = pd.TurnSnapshot.take(state)
     assert snap.moved(["s1", "s2"], state) is None
 
 
-def test_a_moved_story_is_refused_with_its_new_state() -> None:
+def test_a_moved_story_is_refused_with_its_new_state_r1() -> None:
     state = state_with("s1")
     snap = pd.TurnSnapshot.take(state)
     state.stories["s1"].step = "land"
@@ -66,14 +66,14 @@ def test_a_moved_story_is_refused_with_its_new_state() -> None:
     assert text is not None and text.startswith("story s1 moved since your turn began")
 
 
-def test_a_story_not_named_may_move() -> None:
+def test_a_story_not_named_may_move_r1() -> None:
     state = state_with("s1", "s2")
     snap = pd.TurnSnapshot.take(state)
     state.stories["s2"].rounds = 3
     assert snap.moved(["s1"], state) is None
 
 
-def test_refresh_accepts_the_pos_own_change() -> None:
+def test_refresh_accepts_the_pos_own_change_r1() -> None:
     state = state_with("s1")
     snap = pd.TurnSnapshot.take(state)
     state.stories["s1"].rounds = 1
@@ -82,6 +82,6 @@ def test_refresh_accepts_the_pos_own_change() -> None:
     assert snap.moved(["s1"], state) is None
 
 
-def test_the_mark_covers_the_documented_fields() -> None:
+def test_the_mark_covers_the_documented_fields_r1() -> None:
     mark = pd.Mark("implement", "active", None, None, 0, False)
     assert mark.landed is False

@@ -6,19 +6,19 @@ import pytest
 from agile_team import run_writer as rw
 
 
-def test_unbound_submit_writes_at_once() -> None:
+def test_unbound_submit_writes_at_once_r1() -> None:
     writer = rw.RunWriter()
     done: list[int] = []
     writer.submit(lambda: done.append(1))
     assert done == [1]
 
 
-def test_unbound_apply_runs_and_returns() -> None:
+def test_unbound_apply_runs_and_returns_r1() -> None:
     writer = rw.RunWriter()
     assert asyncio.run(writer.apply(lambda: 42)) == 42
 
 
-def test_bound_submit_waits_for_drain() -> None:
+def test_bound_submit_waits_for_drain_r1() -> None:
     async def scenario() -> list[int]:
         writer = rw.RunWriter()
         done: list[int] = []
@@ -31,7 +31,7 @@ def test_bound_submit_waits_for_drain() -> None:
     assert asyncio.run(scenario()) == [1]
 
 
-def test_drain_of_nothing_is_zero() -> None:
+def test_drain_of_nothing_is_zero_r1() -> None:
     async def scenario() -> int:
         writer = rw.RunWriter()
         writer.bind(asyncio.get_running_loop(), asyncio.current_task())
@@ -40,7 +40,7 @@ def test_drain_of_nothing_is_zero() -> None:
     assert asyncio.run(scenario()) == 0
 
 
-def test_check_owner_passes_on_the_loop_thread() -> None:
+def test_check_owner_passes_on_the_loop_thread_r1() -> None:
     async def scenario() -> None:
         writer = rw.RunWriter()
         writer.bind(asyncio.get_running_loop(), asyncio.current_task())
@@ -49,7 +49,7 @@ def test_check_owner_passes_on_the_loop_thread() -> None:
     asyncio.run(scenario())
 
 
-def test_check_owner_raises_off_the_loop_thread() -> None:
+def test_check_owner_raises_off_the_loop_thread_r1() -> None:
     async def scenario() -> None:
         writer = rw.RunWriter()
         writer.bind(asyncio.get_running_loop(), asyncio.current_task())
