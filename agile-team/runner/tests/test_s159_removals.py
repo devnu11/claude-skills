@@ -1,40 +1,76 @@
-"""s159 G1/G2: the pending-tests registry and the red-first gate are gone."""
+"""s159 G1/G2/AC4.x: pending tests and the red-first gate are gone; land is the runner's."""
 
-from __future__ import annotations
+import importlib
 
-from agile_team import cli, onboard, roles, stages
+import pytest
+from agile_team import cli, gates, halt, roles, stages, state, waits
+from agile_team import onboard as onboard_mod
+from agile_team.ledger import Entry
 
 
-def test_pending_tests_command_is_unknown() -> None:
-    """s159 spec: pending tests command is unknown (s159 red)."""
-    assert "pending-tests" not in [c.name for c in cli.COMMANDS]
+def test_the_registry_module_is_gone() -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agile_team.pending_tests")
+
+
+def test_the_pending_tests_command_is_gone() -> None:
+    assert "pending-tests" not in {c.name for c in cli.COMMANDS}
+    assert not hasattr(cli, "PENDING_ARGS")
 
 
 def test_onboarding_writes_no_pending_line() -> None:
-    """s159 spec: onboarding writes no pending line (s159 red)."""
-    assert "!.team/pending-tests.json" not in onboard.gitignore_lines("ignored")
-    assert onboard.RUN_IGNORE in onboard.gitignore_lines("ignored")
+    texts = [str(v) for k, v in vars(onboard_mod).items() if not k.startswith("__")]
+    lists = [x for v in vars(onboard_mod).values() if isinstance(v, (list, tuple)) for x in v]
+    assert not [t for t in texts + [str(x) for x in lists] if "pending-tests" in t]
 
 
-def test_red_stages_are_gone() -> None:
-    """s159 spec: red stages are gone (s159 red)."""
-    names = {m.name for m in stages.Name}
-    assert not names & {"GATE_TESTS_RED", "GATE_TESTS_REWORK", "STOP_RED"}
+def test_the_red_stages_are_gone() -> None:
+    names = {n.value for n in stages.Name}
+    assert not names & {"gate.tests-red", "gate.tests-rework", "stop.red"}
+    assert not {"boundary.rebase", "boundary.push-rebased", "boundary.ci-rebased"} & names
+    assert {"story.land", "boundary.open", "boundary.replay"} <= names
+    assert {"boundary.push-replayed", "boundary.ci-replayed"} <= names
+    assert "story" in stages.NAMESPACES
 
 
-def test_land_stage_exists() -> None:
-    """s159 spec: land stage exists (s159 red)."""
-    assert stages.Name.STORY_LAND.value == "story.land"
-
-
-def test_test_claim_is_gone() -> None:
-    """s159 spec: test claim is gone (s159 red)."""
+def test_the_red_gate_pieces_are_gone() -> None:
+    for name in ["REWORK_UNCLAIMED", "REWORK_PASS", "GREEN_TOO_EARLY", "NOT_PENDING"]:
+        assert not hasattr(gates, name), name
     assert not hasattr(roles, "TestClaim")
 
 
-def test_a_handoff_with_a_tests_key_still_parses() -> None:
-    """s159 spec: a handoff with a tests key still parses (s159 red)."""
+def test_a_handoff_with_a_tests_key_parses_and_ignores_it() -> None:
     text = '```handoff\n{"status": "done", "summary": "s", "tests": "changed"}\n```'
-    handoff = roles.parse_handoff(text)
-    assert handoff.status == "done"
-    assert not hasattr(handoff, "tests")
+    parsed = roles.parse_handoff(text)
+    assert parsed.status == "done"
+    assert not hasattr(parsed, "tests")
+
+
+def test_land_belongs_to_the_runner() -> None:
+    assert gates.STEP_ROLES["land"] == "runner"
+    assert "land" in gates.CHECKPOINT_STEPS
+
+
+def test_the_limit_status_halts_with_exit_75() -> None:
+    assert state.RunStatus.LIMIT == "limit"
+    assert state.RunState(status=state.RunStatus.LIMIT).halted()
+    rule = halt.HALTS[halt.HaltKind.LIMIT]
+    assert (rule.status, rule.note_kind, rule.exit_code) == (state.RunStatus.LIMIT, "blocked", 75)
+
+
+def test_ledger_entry_new_fields_default_false() -> None:
+    e = Entry(role="developer", model="opus", cost_usd=1.0)
+    assert e.resumed is False and e.estimated is False
+    assert Entry.from_dict({"role": "r", "model": "m", "cost_usd": 1.0, "resumed": True}).resumed
+
+
+def test_new_wait_reasons() -> None:
+    values = {w.value for w in waits.WaitReason}
+    assert {
+        "land_queue",
+        "permission",
+        "landing_ci",
+        "worktree_drift",
+        "open_cap",
+        "reserve",
+    } <= values

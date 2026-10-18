@@ -110,3 +110,9 @@ def test_texts() -> None:
     """s159 spec: texts."""
     assert up.NOT_FAST_FORWARD.startswith("refusing to push")
     assert up.REFUSED_DELETE.startswith("refusing to delete")
+
+
+def test_refused_texts_name_the_prefixes() -> None:
+    """s159 B7: the push refusal names both prefixes."""
+    assert "{story_prefix}" in up.REFUSED_PUSH and "{prefix}" in up.REFUSED_PUSH
+    assert "{story_prefix}" in up.REFUSED_DELETE
