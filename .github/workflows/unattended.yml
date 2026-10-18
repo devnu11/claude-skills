@@ -7,16 +7,13 @@ on:
   pull_request:
     paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 defaults:
   run:
     working-directory: unattended/runner
 
 jobs:
   test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -41,6 +38,7 @@ jobs:
 
   # The Windows paths (the liveness probe, the process group) on a real Windows.
   windows-probe:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

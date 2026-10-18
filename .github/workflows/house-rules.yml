@@ -5,12 +5,9 @@ on:
     branches: [main, "team/**"]
   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 jobs:
   test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -33,6 +30,7 @@ jobs:
 
   # The repo's own Python against the rules and the committed baseline.
   check:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'team/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
