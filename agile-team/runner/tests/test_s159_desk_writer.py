@@ -19,6 +19,7 @@ rw = Lazy("agile_team.run_writer")
 
 
 def test_unbound_writer_writes_at_once() -> None:
+    """s159 spec, red: unbound writer writes at once."""
     seen: list[str] = []
     writer = rw.RunWriter()
     writer.submit(lambda: seen.append("a"))
@@ -26,6 +27,8 @@ def test_unbound_writer_writes_at_once() -> None:
 
 
 def test_bound_writer_holds_until_drained() -> None:
+    """s159 spec, red: bound writer holds until drained."""
+
     async def go() -> list[str]:
         seen: list[str] = []
         writer = rw.RunWriter()
@@ -39,6 +42,8 @@ def test_bound_writer_holds_until_drained() -> None:
 
 
 def test_apply_runs_the_change_and_returns_its_result() -> None:
+    """s159 spec, red: apply runs the change and returns its result."""
+
     async def go() -> int:
         writer = rw.RunWriter()
         loop = asyncio.get_running_loop()
@@ -52,10 +57,13 @@ def test_apply_runs_the_change_and_returns_its_result() -> None:
 
 
 def test_apply_unbound_runs_directly() -> None:
+    """s159 spec, red: apply unbound runs directly."""
     assert asyncio.run(rw.RunWriter().apply(lambda: 3)) == 3
 
 
 def test_check_owner_refuses_a_worker_thread() -> None:
+    """s159 spec, red: check owner refuses a worker thread."""
+
     async def go() -> None:
         writer = rw.RunWriter()
         writer.bind(asyncio.get_running_loop(), asyncio.current_task())
@@ -74,11 +82,13 @@ def p(kind: Trigger, line: str, story: str) -> Pass:
 
 
 def test_desk_takes_nothing_when_empty() -> None:
+    """s159 spec, red: desk takes nothing when empty."""
     desk = po_desk.PoDesk()
     assert desk.take() is None and not desk.busy
 
 
 def test_desk_merges_queued_passes_into_one_turn() -> None:
+    """s159 spec, red: desk merges queued passes into one turn."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     desk.queue(p(Trigger.WORKTREE_DRIFT, "b", "s2"))
@@ -87,6 +97,7 @@ def test_desk_merges_queued_passes_into_one_turn() -> None:
 
 
 def test_a_pass_stays_until_the_turn_is_done() -> None:
+    """s159 spec, red: a pass stays until the turn is done."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     assert desk.take() is not None
@@ -98,6 +109,7 @@ def test_a_pass_stays_until_the_turn_is_done() -> None:
 
 
 def test_passes_arriving_during_a_turn_wait_for_the_next() -> None:
+    """s159 spec, red: passes arriving during a turn wait for the next."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     desk.take()
@@ -117,12 +129,14 @@ def state_with(*stories: StoryState) -> RunState:
 
 
 def test_snapshot_marks_cover_every_story() -> None:
+    """s159 spec, red: snapshot marks cover every story."""
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
     assert snap.moved(["s1"], state_with(s)) is None
 
 
 def test_snapshot_refuses_a_story_that_moved() -> None:
+    """s159 spec, red: snapshot refuses a story that moved."""
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
     s.step = "acceptance"
@@ -131,6 +145,7 @@ def test_snapshot_refuses_a_story_that_moved() -> None:
 
 
 def test_refresh_lets_the_po_follow_its_own_change() -> None:
+    """s159 spec, red: refresh lets the po follow its own change."""
     s = StoryState(id="s1", title="t", step="implement")
     state = state_with(s)
     snap = po_desk.TurnSnapshot.take(state)
@@ -140,6 +155,7 @@ def test_refresh_lets_the_po_follow_its_own_change() -> None:
 
 
 def test_unnamed_stories_are_not_checked() -> None:
+    """s159 spec, red: unnamed stories are not checked."""
     a = StoryState(id="s1", title="t", step="implement")
     b = StoryState(id="s2", title="t", step="implement")
     state = state_with(a, b)
@@ -152,12 +168,14 @@ def test_unnamed_stories_are_not_checked() -> None:
 
 
 def test_pair_replay_pairs_plain_commits_by_subject_in_order() -> None:
+    """s159 spec, red: pair replay pairs plain commits by subject in order."""
     old = [("o1", "one", ()), ("o2", "two", ("o1",))]
     new = [("n1", "one", ()), ("n2", "two", ("n1",))]
     assert rewrite.pair_replay(old, new) == {"o1": "n1", "o2": "n2"}
 
 
 def test_pair_replay_pairs_story_commits_and_the_merge_by_id() -> None:
+    """s159 spec, red: pair replay pairs story commits and the merge by id."""
     old = [
         ("a1", "feat s1", ("base",)),
         ("m1", "merge(s1): T", ("base", "a1")),
@@ -171,4 +189,5 @@ def test_pair_replay_pairs_story_commits_and_the_merge_by_id() -> None:
 
 
 def test_pair_replay_empty() -> None:
+    """s159 spec, red: pair replay empty."""
     assert rewrite.pair_replay([], []) == {}

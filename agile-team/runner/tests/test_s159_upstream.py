@@ -33,6 +33,7 @@ def on_team(fake: FakeSystem) -> None:
 
 
 def test_a_descendant_push_carries_the_lease(fake: FakeSystem) -> None:
+    """s159 spec, red: a descendant push carries the lease."""
     on_team(fake)
     assert upstream_for().push(Lease(STORY, OLD, NEW)) is None
     [argv] = issued(fake, "push")
@@ -41,6 +42,7 @@ def test_a_descendant_push_carries_the_lease(fake: FakeSystem) -> None:
 
 
 def test_a_non_descendant_is_refused_before_any_push(fake: FakeSystem) -> None:
+    """s159 spec, red: a non descendant is refused before any push."""
     on_team(fake)
     fake.reply(("merge-base", "--is-ancestor"), Done(1))
     out = upstream_for().push(Lease(STORY, OLD, NEW))
@@ -49,12 +51,14 @@ def test_a_non_descendant_is_refused_before_any_push(fake: FakeSystem) -> None:
 
 
 def test_a_new_branch_skips_the_ancestor_check(fake: FakeSystem) -> None:
+    """s159 spec, red: a new branch skips the ancestor check."""
     on_team(fake)
     assert upstream_for().push(Lease(STORY, "", NEW)) is None
     assert not any("is-ancestor" in c.argv for c in fake.commands)
 
 
 def test_guard_accepts_both_prefixes(fake: FakeSystem) -> None:
+    """s159 spec, red: guard accepts both prefixes."""
     on_team(fake)
     assert upstream_for().push(Lease("team/sprint-1", "", NEW)) is None
     assert upstream_for().push(Lease(STORY, "", NEW)) is None
@@ -62,17 +66,20 @@ def test_guard_accepts_both_prefixes(fake: FakeSystem) -> None:
 
 @pytest.mark.parametrize("branch", ["main", "agile-team", "feature/x", "team/storys-1"])
 def test_guard_refuses_others(fake: FakeSystem, branch: str) -> None:
+    """s159 spec, red: guard refuses others."""
     on_team(fake)
     with pytest.raises(UpstreamError, match="refusing to push"):
         upstream_for().push(Lease(branch, "", NEW))
 
 
 def test_refusal_text_names_both_prefixes() -> None:
+    """s159 spec, red: refusal text names both prefixes."""
     text = up.REFUSED_PUSH.format(branch="x", prefix="team/sprint-", story_prefix="team/story-")
     assert "team/sprint-*" in text and "team/story-*" in text
 
 
 def test_delete_sends_a_leased_delete_and_skips_ancestry(fake: FakeSystem) -> None:
+    """s159 spec, red: delete sends a leased delete and skips ancestry."""
     on_team(fake)
     assert upstream_for().delete(Lease(LAND, NEW, "")) is None
     [argv] = issued(fake, "push")
@@ -83,6 +90,7 @@ def test_delete_sends_a_leased_delete_and_skips_ancestry(fake: FakeSystem) -> No
 
 @pytest.mark.parametrize("branch", [STORY, "team/sprint-1", "main", "team/story-s1-land-x"])
 def test_delete_refuses_anything_but_landing_branches(fake: FakeSystem, branch: str) -> None:
+    """s159 spec, red: delete refuses anything but landing branches."""
     on_team(fake)
     out = upstream_for().delete(Lease(branch, NEW, ""))
     assert out == up.REFUSED_DELETE.format(branch=branch, story_prefix="team/story-")
@@ -90,6 +98,7 @@ def test_delete_refuses_anything_but_landing_branches(fake: FakeSystem, branch: 
 
 
 def test_no_prs_cannot_close_or_read_shas() -> None:
+    """s159 spec, red: no prs cannot close or read shas."""
     prs = NoPrs("no gh")
     with pytest.raises(UpstreamError, match="no gh"):
         prs.close(1, "note")
@@ -98,5 +107,6 @@ def test_no_prs_cannot_close_or_read_shas() -> None:
 
 
 def test_texts() -> None:
+    """s159 spec, red: texts."""
     assert up.NOT_FAST_FORWARD.startswith("refusing to push")
     assert up.REFUSED_DELETE.startswith("refusing to delete")
