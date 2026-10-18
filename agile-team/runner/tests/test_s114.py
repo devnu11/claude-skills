@@ -77,7 +77,7 @@ def test_routing_constants_have_no_scribe() -> None:
 
 def test_router_has_no_scribe_picker() -> None:
     names = [p.__name__ for p in router.Router.PICKERS]
-    assert names == ["_boundary_work", "_manager_work", "_repeat_work", "_story_work"]
+    assert names == ["_boundary_work", "_manager_work", "_repeat_work", "_land_work", "_story_work"]
     assert not hasattr(router, "BRIEF_HEADINGS")
     assert not hasattr(router.Router, "_scribe_work")
 

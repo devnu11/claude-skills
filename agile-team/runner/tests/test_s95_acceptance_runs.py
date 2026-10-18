@@ -52,7 +52,7 @@ def test_both_pass_forwards() -> None:
     assert out.verdict is Verdict.PASS
     assert out.reason == "acceptance passed in every environment: cli, dashboard"
     p.advance(story, out)
-    assert story.status is gates.StoryStatus.DONE
+    assert story.step == "land" and story.status is gates.StoryStatus.ACTIVE
 
 
 def test_a_failure_in_the_first_still_runs_the_second_and_one_bounce_lists_both() -> None:

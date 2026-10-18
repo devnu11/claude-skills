@@ -112,11 +112,9 @@ def test_set_push_permission_refuses_anything_but_yes_or_no(make_runtime) -> Non
 
 
 @pytest.mark.parametrize("answer", ["yes", "no"])
-def test_set_push_permission_records_the_answer_and_releases_the_hold(make_runtime, answer) -> None:
+def test_set_push_permission_records_the_answer_and_holds_nothing(make_runtime, answer) -> None:
     rt = make_runtime()
-    rt.state.boundary = bd.Boundary(
-        Edge.END, 2, stage=Stage.PUSH, hold=BoundaryHold.PUSH_PERMISSION
-    )
+    rt.state.boundary = bd.Boundary(Edge.END, 2, stage=Stage.PUSH)
     call(Tools(rt).set_push_permission({"answer": answer}))
     assert rt.state.upstream.push == answer and rt.state.boundary.hold is None
     event = rt.events.events()[-1]
@@ -244,7 +242,7 @@ def brep(hold=None, **fields) -> dict:
 
 BOUNDARY_ROWS = [
     (
-        brep("push_permission", branches=["team/sprint-1", "team/sprint-2"]),
+        brep(None, waiting="push_permission", branches=["team/sprint-1", "team/sprint-2"]),
         T.PUSH_PERMISSION,
         "run: sprint 2's review branches are built and checked: team/sprint-1, team/sprint-2. Ask the human "  # noqa: E501
         "once: may the team push review branches and open or update pull requests? Then "

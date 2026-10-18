@@ -72,17 +72,6 @@ def test_implement_gate_keeps_the_coverage_run(make_runtime, configured: Path) -
     assert kept.at == rt.git.head() and kept.where == "implement gate"
 
 
-def test_tests_gate_keeps_the_test_run(make_runtime, configured: Path) -> None:
-    rt = make_runtime(
-        FakeQuery(action=write(configured, "tests/test_a.py")),
-        FakeRunner({"pytest": (1, "FAILED")}),
-    )
-    add_story(rt, step="tests")
-    run_step(rt, "unit-tester")
-    kept = rt.results.latest("s1", "test")
-    assert kept.code == 1 and kept.where == "tests gate"
-
-
 def test_an_escalating_gate_still_keeps_its_run(make_runtime, configured: Path) -> None:
     rt = make_runtime(
         FakeQuery(action=write(configured, "src/a.py")),

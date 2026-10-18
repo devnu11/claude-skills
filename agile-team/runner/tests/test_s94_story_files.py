@@ -108,7 +108,7 @@ def test_continue_story_then_a_fixed_file_runs_the_proxy(make_runtime) -> None:
     call(Tools(rt).continue_story({"story": "s1"}))
     assert story.hold is None
     report = run(rt, "customer-proxy", story="s1")
-    assert len(q.calls) == 1 and report["gate"]["story_status"] is StoryStatus.DONE
+    assert len(q.calls) == 1 and report["gate"]["now_at"] == "land"
 
 
 def test_an_edited_environment_between_e2e_and_acceptance_is_used(make_runtime) -> None:

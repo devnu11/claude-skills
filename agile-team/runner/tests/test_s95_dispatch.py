@@ -77,7 +77,7 @@ def test_each_step_prepares_only_its_environment_and_lists_only_its_acs(make_run
     second = rt.query_fn.calls[1]["prompt"]
     assert "acceptance environment api" in second and "- AC2:" in second
     assert "- AC1:" not in criteria(second)
-    assert story.status is StoryStatus.DONE
+    assert story.step == "land" and story.status is StoryStatus.ACTIVE
 
 
 def test_a_requirement_covering_the_other_environments_ac_is_not_in_the_criteria(
@@ -160,7 +160,7 @@ def test_a_rework_runs_both_environments_again(make_runtime) -> None:
     step(rt)
     step(rt)
     assert [o.environment.name for o in orders] == ["cli", "api", "cli", "api"]
-    assert story.status is StoryStatus.DONE
+    assert story.step == "land" and story.status is StoryStatus.ACTIVE
 
 
 def test_the_brief_after_a_next_verdict_has_no_previous_step_line(make_runtime) -> None:
