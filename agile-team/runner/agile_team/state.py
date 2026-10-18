@@ -33,6 +33,7 @@ from .providers import DEFAULT as DEFAULT_PROVIDER
 from .revert_log import RevertEntry
 from .roles import RETIRED_ROLES
 from .salvage import RUN_ENDING, Cause, InFlight, Interruption
+from .story_branches import KeptSession, Landed, StoryCi, StoryRebase
 
 STATE_FILE = "state.json"
 STOP_FILE = "stop"
@@ -59,6 +60,7 @@ class RunStatus(StrEnum):
     STOPPED = "stopped"
     INTERRUPTED = "interrupted"
     CHECKOUT_CHANGED = "checkout-changed"
+    LIMIT = "limit"
 
 
 @dataclass
@@ -100,6 +102,10 @@ class RunState:
     sprint: int = 0
     po_session: str | None = None
     status: RunStatus = RunStatus.IDLE
+    story_branches: bool = False
+    land_queue: list[str] = field(default_factory=list)
+    permission_asked: bool = False
+    checkout_requests: dict[str, str] = field(default_factory=dict)
     stories: dict[str, StoryState] = field(default_factory=dict)
     overrides: dict[str, ModelOverride] = field(default_factory=dict)
     unreviewed: list[str] = field(default_factory=list)
@@ -143,7 +149,7 @@ class RunState:
 
     def halted(self) -> bool:
         """``done``/``blocked``/``checkout-changed`` always halt; ``sprint-end`` only on sprints."""
-        if self.status in (RunStatus.DONE, RunStatus.BLOCKED, RunStatus.CHECKOUT_CHANGED):
+        if self.status in HALTING:
             return True
         return self.status is RunStatus.SPRINT_END and self.cadence == "sprint"
 
@@ -226,7 +232,14 @@ NESTED = {
     "dispute": load_dispute,
     "interrupted": Interruption,
     "po_hold": PoHold,
+    "landed": Landed,
+    "in_flight": InFlight,
+    "ci": StoryCi,
+    "rebase": StoryRebase,
 }
+HALTING = frozenset(
+    {RunStatus.DONE, RunStatus.BLOCKED, RunStatus.CHECKOUT_CHANGED, RunStatus.LIMIT}
+)
 
 
 RUN_DROPPED = frozenset({"scribe_due", "offered"})
@@ -263,6 +276,7 @@ def _story(data: dict[str, Any]) -> StoryState:
         "fixed": [FixRecord(**r) for r in data.get("fixed", [])],
         "tried": [acceptance.load_tried(t) for t in data.get("tried", [])],
         "reverted": [RevertEntry(**r) for r in data.get("reverted", [])],
+        "sessions": {k: KeptSession(**v) for k, v in data.get("sessions", {}).items()},
     }
     return StoryState(**{**data, "status": status, **extra, **nested, **setbacks})
 

@@ -64,6 +64,7 @@ class InFlight:
     role: str
     story: str | None
     brief: str
+    session: str = ""
 
 
 PO_TURN = InFlight("product-owner", None, "the PO's own turn")

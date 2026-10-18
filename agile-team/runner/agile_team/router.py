@@ -15,7 +15,15 @@ from .boundary_runner import BoundaryRunner
 from .config import Config
 from .dispatch import FIX_KINDS_SET as FIX_STEPS
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest
-from .gates import FINISHED, STEP_ROLES, StoryState, StoryStatus, role_fits_step
+from .gates import (
+    FINISHED,
+    STEP_ROLES,
+    Outcome,
+    StoryState,
+    StoryStatus,
+    Verdict,
+    role_fits_step,
+)
 from .handover import Pass, Trigger
 from .loops import Rule
 from .relay import WAITING_HEAD, Answer, Note, Told
@@ -276,6 +284,15 @@ class Router:
         free = story.po_hold is None and story.id not in rt.relay.blocked_stories()
         return in_sprint and waiting and free
 
+    def _land_work(self) -> Work | None:
+        """Pass the stories at ``land``: with no story branches yet their commits are landed."""
+        rt = self.runtime
+        landing = [s for s in rt.state.stories.values() if s.step == "land" and self._movable(s)]
+        for story in landing:
+            rt.pipeline.advance(story, Outcome(Verdict.PASS, "landed"))
+            rt.save()
+        return None
+
     def _story_work(self) -> Work | None:
         story = self._first_ranked(self._movable)
         if story is None:
@@ -297,6 +314,7 @@ class Router:
         _boundary_work,
         _manager_work,
         _repeat_work,
+        _land_work,
         _story_work,
     )
 

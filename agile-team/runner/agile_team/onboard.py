@@ -148,7 +148,6 @@ def gitignore_lines(artifacts: str) -> list[str]:
             ".team/*",
             "!.team/roles/",
             "!.team/CLAUDE.md",
-            "!.team/pending-tests.json",
         ]
     return [RUN_IGNORE]
 

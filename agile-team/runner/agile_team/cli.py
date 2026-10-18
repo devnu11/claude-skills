@@ -23,10 +23,10 @@ from . import (
     checkout,
     gates,
     halt,
+    handover,
     keys,
     onboard,
     opinions,
-    pending_tests,
     presentation,
     reconcile,
     recovery,
@@ -364,13 +364,8 @@ ROLE_ACTIONS: dict[str, Callable[[argparse.Namespace], int]] = {
 
 
 def reporting_of(config: config_mod.Config) -> test_reports.Reporting:
-    """How the repo's test runs write reports and read the pending-tests registry."""
-    return test_reports.Reporting(
-        config.toolchain.report,
-        config.run_dir / test_reports.FOLDER,
-        functools.partial(pending_tests.read, config.repo),
-        test_reports.changed_for(Git(config.repo)),
-    )
+    """How the repo's test runs write reports."""
+    return test_reports.Reporting(config.toolchain.report, config.run_dir / test_reports.FOLDER)
 
 
 def make_pipeline(config: config_mod.Config) -> gates.Pipeline:
@@ -800,15 +795,6 @@ def cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_pending_tests(args: argparse.Namespace) -> int:
-    """Print the skip options of every pending test id under ``--root`` (s125 P19)."""
-    config = _load_config(repo_of(args))
-    registry = pending_tests.read(config.repo)
-    ids = tuple(i for story_ids in registry.entries.values() for i in story_ids)
-    print(test_reports.skip_line(config.toolchain.report, test_reports.Under(args.root, ids)))
-    return 0
-
-
 def cmd_stop(args: argparse.Namespace) -> int:
     """Ask the runner to stop after its step; ``--now`` also signals it."""
     pid = _request_stop(repo_of(args)) / state_mod.PID_FILE
@@ -909,9 +895,6 @@ WATCH_ARGS: tuple[Arg, ...] = (
     (("--timeout",), {"dest": "timeout_s", "type": float, "default": None,
                       "help": "print a heartbeat line after this many seconds"}),
 )  # fmt: skip
-PENDING_ARGS: tuple[Arg, ...] = (
-    (("--root",), {"default": "", "help": "repo-relative directory pytest runs in"}),
-)  # fmt: skip
 STORY_ARGS: tuple[Arg, ...] = (
     (("action",), {"choices": [a.value for a in Action]}),
     (("target",), {"nargs": "+", "help": "new: <file.md>; amend: <id> <file.md>"}),
@@ -960,8 +943,6 @@ COMMANDS = (
     Command("stop", "stop after the current step", cmd_stop, STOP_ARGS),
     Command("accept-checkout", "keep the current branch and HEAD after a checkout halt",
             cmd_accept_checkout),
-    Command("pending-tests", "print the skip options for the pending test ids", cmd_pending_tests,
-            PENDING_ARGS),
     Command("dashboard", "serve the read-only live dashboard (blocks; run in the background)",
             cmd_dashboard, DASHBOARD_ARGS),
 )  # fmt: skip
@@ -988,6 +969,7 @@ def _add_args(parser: argparse.ArgumentParser, args: tuple[Arg, ...]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    handover.check_scopes()
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)

@@ -23,7 +23,6 @@ from . import (
     junit,
     loops,
     ops_review,
-    pending_tests,
     revert_log,
     shares,
     stages,
@@ -39,10 +38,10 @@ from .holds import PoHold
 from .loops import Author, Fault, Rule, Setback
 from .ops_review import ToolingRow
 from .owners import Fix, FixRecord, Item, Owners, Source, Split
-from .pending_tests import PendingSet, RedAsk, RegistryError
 from .results import Ran, result_tail
-from .roles import Dispute, Handoff, TestClaim
-from .salvage import Interruption
+from .roles import Dispute, Handoff
+from .salvage import InFlight, Interruption
+from .story_branches import KeptSession, Landed, StoryCi, StoryRebase
 from .test_reports import TestRun
 
 STEP_ROLES = {
@@ -55,8 +54,9 @@ STEP_ROLES = {
     "design-review": "architect",
     "e2e": "integration-tester",
     "acceptance": "customer-proxy",
+    "land": "runner",
 }
-CHECKPOINT_STEPS = frozenset({ops_review.STEP})  # reached only by passing the step before
+CHECKPOINT_STEPS = frozenset({ops_review.STEP, "land"})  # reached only by passing the step before
 ROUTABLE_STEPS = tuple(s for s in STEP_ROLES if s not in CHECKPOINT_STEPS)
 UNGATED_ROLES = frozenset({"manager"})
 STORYLESS_ROLES = frozenset({"architect", "devops", "unit-tester", "manager"})
@@ -71,12 +71,6 @@ FIX_NEEDS_STORY = "a gate fix needs a story"
 FIX_NONE = "story {id} has no gate fix queued"
 FIX_ROLE = "story {id}'s next gate fix is for {role}"
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%")
-
-REWORK_UNCLAIMED = (
-    "tests pass on code from an earlier pass; write a failing test, "
-    'or hand off "tests": "changed" or "tests": "confirmed"'
-)
-REWORK_PASS = "tests pass on code from an earlier pass; tests {claim}"
 
 UNTRACKED = (
     "dispute rejected: {file} (from {test}) is not a tracked file at the repo root, "
@@ -99,24 +93,10 @@ PASS_TESTS_RED = "the suite is red; pass_tests needs a green suite. {reason}"
 
 TIMED_OUT_BOUNCE = "the command did not finish in time:\n{tail}"
 REUSED = "{reason} (the stop hook's run on this tree)"
-GREEN_TOO_EARLY = "tests pass before implementation; write a failing test"
 REPORT_MISSING = (
     "the test command wrote no report in {folder}; "
     "check [toolchain.report] and the {{report}} placeholders:\n{tail}"
 )
-NOT_PENDING = (
-    "these tests fail but are not new or changed in this step, "
-    "so they are not pending: {ids}\n{tail}"
-)
-UNREPORTED_FAILURE = (
-    "the test command failed (exit {code}) but its report names no failing test:\n{tail}"
-)
-PENDING_SET = "{count} pending test(s) for {story}"
-PENDING_FAIL = "pending tests of {story} still fail: {ids}"
-PENDING_LEFT = "{count} pending test(s) of {story} pass"
-PENDING_GONE = "no longer in the suite, dropped from pending: {ids}"
-REGISTRY_BAD = "{file} is not valid ({error}); only the runner writes it"
-SKIPPED_NOTE = "skipped {counts}"
 
 
 class StoryStatus(StrEnum):
@@ -286,6 +266,19 @@ class StoryState:
     reverted: list[revert_log.RevertEntry] = field(default_factory=list)
     revert_owed: list[str] = field(default_factory=list)
     trace: Trace = Trace.CHECKED
+    branch: str = ""
+    base_sha: str = ""
+    replays: int = 0
+    pushed: str = ""
+    pr: int | None = None
+    landed: Landed | None = None
+    worktree_head: str = ""
+    drift: list[str] = field(default_factory=list)
+    in_flight: InFlight | None = None
+    sessions: dict[str, KeptSession] = field(default_factory=dict)
+    ci: StoryCi | None = None
+    land_reran: list[str] = field(default_factory=list)
+    rebase: StoryRebase | None = None
 
 
 @dataclass
@@ -303,7 +296,6 @@ class Outcome:
     fixes: list[Fix] = field(default_factory=list)
     output: str = field(default="", repr=False)
     tried: acceptance.Tried | None = None
-    pending: PendingSet | None = None
     report: junit.Report | None = field(default=None, repr=False)
 
 
@@ -626,14 +618,12 @@ class Checks:
             return _ran(name, *self.run(self.commands[name]))
 
     def _test_run(self, name: str) -> TestRun:
-        """Run the ``test`` or ``coverage`` command; with reporting on, skip others' pending ids."""
+        """Run the ``test`` or ``coverage`` command, writing a report when reporting is on."""
         if not self.reporting.options.on:
             code, out = self.run(self.commands[name])
-            return TestRun(code, out, None, {})
-        registry = self.reporting.registry()
-        ask = test_reports.Ask(self.reporting, registry.others(self.serving.story))
-        built = test_reports.build(self.commands[name], ask)
-        return replace(test_reports.run(built, self.run), own=registry.of(self.serving.story))
+            return TestRun(code, out, None)
+        built = test_reports.build(self.commands[name], self.reporting)
+        return test_reports.run(built, self.run)
 
     def listing(self) -> str:
         """Every tracked path, or ``""`` when git fails."""
@@ -647,61 +637,9 @@ class Checks:
             ran = [self.run(command) for command in configured]
         return [out for code, out in ran if code not in (0, TIMED_OUT)]
 
-    def tests_red(self) -> Outcome:
-        """The tests gate: the new tests must fail."""
-        with self.stages(stages.Name.GATE_TESTS_RED):
-            return self._red()
-
-    def _red(self) -> Outcome:
-        run = self._test_run("test")
-        return self._finished(self._red_outcome(run), run, "test")
-
     def _finished(self, outcome: Outcome, run: TestRun, name: str) -> Outcome:
-        """``outcome`` with the run it was judged on, its report and the skipped-ids note."""
-        noted = _noted(outcome, run)
-        return replace(noted, ran=_test_ran(name, run), report=run.report)
-
-    def _red_outcome(self, run: TestRun) -> Outcome:
-        if timeout := timed_out(run.code, run.out):
-            return timeout
-        if self.reporting.options.on:
-            return self._reported_red(run)
-        return _red_by_exit(run.code)
-
-    def _reported_red(self, run: TestRun) -> Outcome:
-        """The red run judged from its report: new failing ids become pending (P8)."""
-        if run.report is None:
-            folder = self.reporting.folder
-            reason = REPORT_MISSING.format(folder=folder, tail=tail(run.out))
-            return Outcome(Verdict.BOUNCE, reason, "tests")
-        ask = RedAsk(self.reporting.changed(self.serving.base), run.own)
-        split = pending_tests.split_red(run.report, ask)
-        if split.real:
-            ids = ", ".join(sorted(split.real))
-            return Outcome(Verdict.BOUNCE, NOT_PENDING.format(ids=ids, tail=tail(run.out)), "tests")
-        return self._pending_or_green(run, split.pending)
-
-    def _pending_or_green(self, run: TestRun, pending: tuple[str, ...]) -> Outcome:
-        story = self.serving.story
-        if pending:
-            reason = PENDING_SET.format(count=len(pending), story=story)
-            return Outcome(Verdict.PASS, reason, pending=PendingSet(story, tuple(sorted(pending))))
-        if run.code != 0:
-            reason = UNREPORTED_FAILURE.format(code=run.code, tail=tail(run.out))
-            return Outcome(Verdict.BOUNCE, reason, "tests")
-        return Outcome(Verdict.BOUNCE, GREEN_TOO_EARLY)
-
-    def tests_reworked(self, claim: TestClaim | None) -> Outcome:
-        """Red passes; green passes only with a tests claim (code from an earlier pass)."""
-        with self.stages(stages.Name.GATE_TESTS_REWORK):
-            red = self._red()
-        if not red.reason.startswith(GREEN_TOO_EARLY):
-            return red
-        if claim is None:
-            return _with_ran(Outcome(Verdict.BOUNCE, REWORK_UNCLAIMED), red.ran)
-        passed = Outcome(Verdict.PASS, REWORK_PASS.format(claim=claim))
-        cleared = replace(passed, pending=PendingSet(self.serving.story, ()), report=red.report)
-        return _with_ran(cleared, red.ran)
+        """``outcome`` with the run it was judged on and its report."""
+        return replace(outcome, ran=_test_ran(name, run), report=run.report)
 
     def green(self) -> Outcome:
         """Pass when the test command exits 0, else bounce with its output tail."""
@@ -710,8 +648,8 @@ class Checks:
         if timeout := timed_out(run.code, run.out):
             return timeout
         if run.code != 0:
-            return _noted(Outcome(Verdict.BOUNCE, TESTS_FAIL.format(tail=tail(run.out))), run)
-        return _noted(Outcome(Verdict.PASS), run)
+            return Outcome(Verdict.BOUNCE, TESTS_FAIL.format(tail=tail(run.out)))
+        return Outcome(Verdict.PASS)
 
     def tests_green_and_covered(self) -> Outcome:
         """One coverage run proves green and gives the total (s68 C1-C5)."""
@@ -721,37 +659,7 @@ class Checks:
         with self.stages(stages.Name.GATE_TESTS_COVERAGE):
             run = self._test_run("coverage")
         covered = self._finished(self._covered_outcome(run.code, run.out), run, "coverage")
-        covered = covered if run.code == TIMED_OUT else replace(covered, output=run.out)
-        return self._leaving(covered, run)
-
-    def _leaving(self, outcome: Outcome, run: TestRun) -> Outcome:
-        """The story's own pending ids must all pass for the gate to pass (P12)."""
-        if not run.own or not self.reporting.options.on:
-            return outcome
-        if run.report is None:
-            return _report_missing(outcome, self.reporting.folder, run)
-        left = pending_tests.leaving(run.report, run.own)
-        if left.failing:
-            return self._still_failing(outcome, left)
-        return self._cleared(outcome, run.own, left)
-
-    def _still_failing(self, outcome: Outcome, left: pending_tests.Leaving) -> Outcome:
-        text = PENDING_FAIL.format(story=self.serving.story, ids=", ".join(sorted(left.failing)))
-        bounced = outcome.verdict is not Verdict.PASS
-        reason = f"{outcome.reason}\n{text}" if bounced else text
-        return replace(outcome, verdict=Verdict.BOUNCE, reason=reason, pending=None)
-
-    def _cleared(
-        self, outcome: Outcome, own: tuple[str, ...], left: pending_tests.Leaving
-    ) -> Outcome:
-        if outcome.verdict is not Verdict.PASS:
-            return outcome
-        story = self.serving.story
-        notes = [PENDING_LEFT.format(count=len(own) - len(left.missing), story=story)]
-        if left.missing:
-            notes.append(PENDING_GONE.format(ids=", ".join(sorted(left.missing))))
-        reason = "; ".join(filter(None, [outcome.reason, *notes]))
-        return replace(outcome, reason=reason, pending=PendingSet(story, ()))
+        return covered if run.code == TIMED_OUT else replace(covered, output=run.out)
 
     def _covered_outcome(self, code: int, out: str) -> Outcome:
         if timeout := timed_out(code, out):
@@ -816,30 +724,6 @@ def _suite_outcome(first: Outcome, runs: list[suite_runs.SuiteRun]) -> Outcome:
     return replace(bounce, ran=first.ran, extra_ran=extra)
 
 
-def _red_by_exit(code: int) -> Outcome:
-    """The red run judged by its exit code alone (reporting off)."""
-    if code != 0:
-        return Outcome(Verdict.PASS)
-    return Outcome(Verdict.BOUNCE, GREEN_TOO_EARLY)
-
-
-def _report_missing(outcome: Outcome, folder: Path, run: TestRun) -> Outcome:
-    """A passing run that wrote no report bounces; a failing one keeps its own reason."""
-    if outcome.verdict is not Verdict.PASS:
-        return outcome
-    reason = REPORT_MISSING.format(folder=folder, tail=tail(run.out))
-    return replace(outcome, verdict=Verdict.BOUNCE, reason=reason, pending=None)
-
-
-def _noted(outcome: Outcome, run: TestRun) -> Outcome:
-    """Add the count of pending ids the run skipped to the reason (P17)."""
-    counts = pending_tests.counts_text(run.skipped, run.report or junit.Report())
-    if not counts:
-        return outcome
-    reason = "; ".join(filter(None, [outcome.reason, SKIPPED_NOTE.format(counts=counts)]))
-    return replace(outcome, reason=reason)
-
-
 def _ran(name: str, code: int, out: str) -> Ran:
     return Ran(name, code, result_tail(out))
 
@@ -852,11 +736,6 @@ def _read_failures(run: TestRun) -> dict[str, str]:
 def _test_ran(name: str, run: TestRun) -> Ran:
     """A test command's Ran: code, output tail and failures."""
     return Ran(name, run.code, result_tail(run.out), failures=_read_failures(run))
-
-
-def _with_ran(outcome: Outcome, ran: Ran | None) -> Outcome:
-    """``outcome`` carrying the run it was judged on (B1)."""
-    return replace(outcome, ran=ran)
 
 
 @dataclass
@@ -883,13 +762,6 @@ class Pipeline:
 
     def evaluate(self, story: StoryState, handoff: Handoff) -> Outcome:
         """Gate result for the step a role just finished on ``story``."""
-        try:
-            return self._evaluate(story, handoff)
-        except RegistryError as error:
-            reason = REGISTRY_BAD.format(file=pending_tests.REGISTRY, error=error)
-            return Outcome(Verdict.HOLD, reason)
-
-    def _evaluate(self, story: StoryState, handoff: Handoff) -> Outcome:
         if handoff.status in STOPPED_HANDOFFS:
             reason = f"role reported {handoff.status}: {handoff.summary}"
             return Outcome(Verdict.HOLD, reason, author=Author.ROLE)
@@ -914,17 +786,11 @@ class Pipeline:
         """The gate a `done` at the story's step runs, or None."""
         if story.step == "tests" and story.dispute:
             return self._dispute_gate(story, handoff)
-        if self.reworked(story):
-            return self._rework_gate(handoff)
         return (
             self._command_gate(story.step)
             or self._done_gate(story, handoff)
             or self._design_gate(story, handoff)
         )
-
-    def reworked(self, story: StoryState) -> bool:
-        """A story back at tests with its code already in and no dispute open."""
-        return story.step == "tests" and story.dispute is None and self.checks.code_in(story)
 
     def _raises_dispute(self, story: StoryState, handoff: Handoff) -> bool:
         return bool(handoff.dispute) and story.step == "implement" and "tests" in self.steps
@@ -951,12 +817,6 @@ class Pipeline:
         if handoff.status != "done":
             return None
         return lambda: self.checks.dispute_settled(story.dispute)
-
-    def _rework_gate(self, handoff: Handoff) -> Callable[[], Outcome] | None:
-        """On a reworked story a ``done`` at tests may be green if the tester says why."""
-        if handoff.status != "done":
-            return None
-        return lambda: self.checks.tests_reworked(handoff.tests)
 
     def _verdict(self, story: StoryState, handoff: Handoff) -> Outcome:
         if story.step == "acceptance" and (kept := self._shares_kept(story)):
@@ -1038,8 +898,7 @@ class Pipeline:
         return Outcome(Verdict.BOUNCE, reason, target, author=Author.ROLE)
 
     def _command_gate(self, step: str) -> Callable[[], Outcome] | None:
-        gates = {"tests": self.checks.tests_red, "implement": self.checks.tests_green_and_covered}
-        return gates.get(step)
+        return self.checks.tests_green_and_covered if step == "implement" else None
 
     def _done_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
         """The e2e presentation check, which applies only to a ``done`` handoff."""

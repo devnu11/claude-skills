@@ -38,7 +38,6 @@ class StopCheck(StrEnum):
     HANDOFF = "handoff"
     LINT = "lint"
     SUITE = "suite"
-    RED = "red"
     PRESENTATION = "presentation"
     REQUIREMENTS = "requirements"
 
@@ -55,14 +54,12 @@ SPECS: dict[StopCheck, Spec] = {
     StopCheck.HANDOFF: Spec(stages.Name.STOP_HANDOFF),
     StopCheck.LINT: Spec(stages.Name.STOP_LINT),
     StopCheck.SUITE: Spec(stages.Name.STOP_SUITE, "implement"),
-    StopCheck.RED: Spec(stages.Name.STOP_RED, "tests"),
     StopCheck.PRESENTATION: Spec(stages.Name.STOP_PRESENTATION, "e2e"),
     StopCheck.REQUIREMENTS: Spec(stages.Name.STOP_REQUIREMENTS),
 }
 EVERY_ROLE: tuple[StopCheck, ...] = (StopCheck.HANDOFF, StopCheck.LINT)
 STOP_CHECKS: dict[str, tuple[StopCheck, ...]] = {
     "developer": (StopCheck.SUITE,),
-    "unit-tester": (StopCheck.RED,),
     "integration-tester": (StopCheck.PRESENTATION,),
     "architect": (StopCheck.REQUIREMENTS,),
 }
@@ -299,12 +296,6 @@ class StopChecks:
             return suite_text(outcome, split.own)
         return None
 
-    def _red(self, handoff: Handoff) -> str | None:
-        outcome = self._gated(stages.Name.STOP_RED, handoff)
-        if outcome.verdict is Verdict.PASS or _timed_out(outcome):
-            return None
-        return outcome.reason
-
     def _presentation(self, _handoff: Handoff) -> str | None:
         checks = self.runtime.pipeline.checks
         if "acceptance" not in self.runtime.pipeline.steps:
@@ -330,7 +321,6 @@ class StopChecks:
 RUNNERS: dict[StopCheck, Callable[[StopChecks, Handoff], str | None]] = {
     StopCheck.LINT: StopChecks._lint,
     StopCheck.SUITE: StopChecks._suite,
-    StopCheck.RED: StopChecks._red,
     StopCheck.PRESENTATION: StopChecks._presentation,
     StopCheck.REQUIREMENTS: StopChecks._check_requirements,
 }

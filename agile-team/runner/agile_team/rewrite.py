@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .story_branches import merge_id
+
 if TYPE_CHECKING:
     from .gates import StoryState
     from .salvage import Interruption
@@ -52,6 +54,71 @@ def pair(old: Sequence[Stamped], new: Listing) -> dict[str, str]:
             cursor += 1
         moved[commit.sha] = last
     return moved
+
+
+ReplayLine = tuple[str, str, tuple[str, ...]]  # (sha, subject, parents)
+
+
+def _story_commits(lines: Sequence[ReplayLine]) -> dict[str, list[ReplayLine]]:
+    """Each merge's story commits (``M^1..M^2`` inside ``lines``), by merge sha, oldest first."""
+    index = {line[0]: line for line in lines}
+    claimed: set[str] = set()
+    found: dict[str, list[ReplayLine]] = {}
+    for sha, _subject, parents in lines:
+        if len(parents) == 2:
+            found[sha] = _walk(parents[1], (index, claimed))
+    return found
+
+
+def _walk(sha: str, seen: tuple[Mapping[str, ReplayLine], set[str]]) -> list[ReplayLine]:
+    """The unclaimed non-merge commits reachable from ``sha`` inside the listing, oldest first."""
+    index, claimed = seen
+    if sha not in index or sha in claimed or len(index[sha][2]) > 1:
+        return []
+    claimed.add(sha)
+    below = [c for parent in index[sha][2] for c in _walk(parent, seen)]
+    return [*below, index[sha]]
+
+
+def _pair_by_subject(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dict[str, str]:
+    """Old sha to new sha, matching subjects in order."""
+    moved: dict[str, str] = {}
+    cursor = 0
+    for sha, subject, _parents in old:
+        ahead = next((i for i in range(cursor, len(new)) if new[i][1] == subject), None)
+        if ahead is not None:
+            moved[sha] = new[ahead][0]
+            cursor = ahead + 1
+    return moved
+
+
+def pair_replay(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dict[str, str]:
+    """R4: pair a replay's commits story by story, merges by ``merge(<id>)``, plain by subject."""
+    old_stories, new_stories = _story_commits(old), _story_commits(new)
+    new_merges = _merges_by_id(new)
+    moved = _pair_by_subject(_plain(old, old_stories), _plain(new, new_stories))
+    for story_id, merge in _merges_by_id(old).items():
+        if story_id in new_merges:
+            twin = new_merges[story_id]
+            moved[merge[0]] = twin[0]
+            moved |= _pair_by_subject(old_stories[merge[0]], new_stories[twin[0]])
+    return moved
+
+
+def _merges_by_id(lines: Sequence[ReplayLine]) -> dict[str, ReplayLine]:
+    found = {}
+    for line in lines:
+        story_id = merge_id(line[1])
+        if story_id and len(line[2]) == 2:
+            found[story_id] = line
+    return found
+
+
+def _plain(
+    lines: Sequence[ReplayLine], stories: Mapping[str, list[ReplayLine]]
+) -> list[ReplayLine]:
+    inside = {c[0] for commits in stories.values() for c in commits}
+    return [line for line in lines if line[0] not in inside and line[0] not in stories]
 
 
 def _moved(sha: str | None, moved: Mapping[str, str]) -> str | None:

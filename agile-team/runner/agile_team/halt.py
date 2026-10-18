@@ -48,7 +48,7 @@ class HaltRule:
 
 
 HALTS: dict[HaltKind, HaltRule] = {
-    HaltKind.LIMIT: HaltRule(RunStatus.BLOCKED, "blocked", 75, f"{RESUME} after the reset"),
+    HaltKind.LIMIT: HaltRule(RunStatus.LIMIT, "blocked", 75, f"{RESUME} after the reset"),
     HaltKind.CRASH: HaltRule(
         RunStatus.FAILED, "failed", 70, f"details in .team/run/{CRASH_LOG}; {RESUME} to continue"
     ),

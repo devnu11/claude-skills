@@ -11,7 +11,7 @@ import re
 import shlex
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -42,9 +42,11 @@ PIPELINE_STEPS = (
     "design-review",
     "e2e",
     "acceptance",
+    "land",
 )
+LAST = ""  # an ALWAYS_STEPS anchor meaning the end of the pipeline
 # (step, the step it follows): built-in steps the config cannot remove (s115 P2)
-ALWAYS_STEPS: tuple[tuple[str, str], ...] = (("ops-review", "design"),)
+ALWAYS_STEPS: tuple[tuple[str, str], ...] = (("ops-review", "design"), ("land", LAST))
 TOOLCHAIN_COMMANDS = ("test", "coverage", "lint", "static")
 TEST_COMMANDS = ("test", "coverage")
 PLACEHOLDER = re.compile(r"\{report(?::(?P<root>[^{}]*))?\}")
@@ -160,12 +162,18 @@ DEFAULT_CI_TIMEOUT_S = 1800.0
 DEFAULT_STOP_BUDGET_S = 1800.0
 
 
+def _insert_at(steps: list[str], anchor: str) -> int:
+    if anchor == LAST:
+        return len(steps)
+    return steps.index(anchor) + 1 if anchor in steps else 0
+
+
 def pipeline_steps(listed: list[str]) -> list[str]:
     """The run's steps: ``listed`` with each ALWAYS_STEPS step right after its anchor, or first."""
     always = {step for step, _ in ALWAYS_STEPS}
     steps = [s for s in listed if s not in always]
     for step, anchor in ALWAYS_STEPS:
-        steps.insert(steps.index(anchor) + 1 if anchor in steps else 0, step)
+        steps.insert(_insert_at(steps, anchor), step)
     return steps
 
 
@@ -218,6 +226,7 @@ class UpstreamSettings:
     remote: str = "origin"
     branch: str = "main"
     prefix: str = "team/sprint-"
+    story_prefix: str = "team/story-"
 
 
 @dataclass
@@ -231,6 +240,8 @@ class Team:
     budget_usd: float = 20.0
     manager_every_pct: int = 25
     auth: str = API_KEY_AUTH
+    max_open_stories: int = 5
+    step_reserve_usd: float = 1.0
 
 
 @dataclass
@@ -282,10 +293,15 @@ class Config:
     roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, Provider] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    run_home: Path | None = None
 
     @property
     def run_dir(self) -> Path:
-        return self.repo / RUN_DIR
+        return (self.run_home or self.repo) / RUN_DIR
+
+    def at_worktree(self, path: Path) -> Config:
+        """This config seen from a story's worktree; ``run_dir`` stays the main checkout's."""
+        return replace(self, repo=path, run_home=self.run_home or self.repo)
 
     @property
     def stories_dir(self) -> Path:
@@ -468,6 +484,14 @@ TEAM_RULES: tuple[Rule, ...] = (
     ),
     (lambda t: t.budget_usd > 0, "team.budget_usd must be positive"),
     (lambda t: 0 < t.manager_every_pct <= 100, "team.manager_every_pct must be in 1..100"),
+    (
+        lambda t: type(t.max_open_stories) is int and t.max_open_stories >= 1,
+        "team.max_open_stories must be an integer of at least 1",
+    ),
+    (
+        lambda t: 0 <= t.step_reserve_usd < t.budget_usd,
+        "team.step_reserve_usd must be at least 0 and below team.budget_usd",
+    ),
 )
 TOOLCHAIN_RULES: tuple[Rule, ...] = (
     (lambda t: bool(t.commands.get("test")), "toolchain.test is not set"),
@@ -506,11 +530,27 @@ HEALTH_RULES: tuple[Rule, ...] = (
     ),
 )
 SAFE_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
+
+
+def _prefixes_apart(u: UpstreamSettings) -> bool:
+    one, other = u.prefix, u.story_prefix
+    return not (one.startswith(other) or other.startswith(one))
+
+
 UPSTREAM_RULES: tuple[Rule, ...] = (
     (lambda u: not u.remote or bool(u.branch), "upstream.branch must be set"),
     (
         lambda u: bool(SAFE_BRANCH.fullmatch(u.prefix)),
         "upstream.prefix must be a branch name prefix",
+    ),
+    (
+        lambda u: bool(SAFE_BRANCH.fullmatch(u.story_prefix)),
+        "upstream.story_prefix must be a branch name prefix",
+    ),
+    (
+        _prefixes_apart,
+        "upstream.story_prefix must differ from upstream.prefix, "
+        "and neither may start with the other",
     ),
 )
 ENVIRONMENT_RULES: tuple[Rule, ...] = (

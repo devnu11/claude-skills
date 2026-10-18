@@ -142,9 +142,9 @@ class Stage(StrEnum):
     CHECK = "check"
     PUSH = "push"
     CI = "ci"
-    REBASE = "rebase"
-    PUSH_REBASED = "push-rebased"
-    CI_REBASED = "ci-rebased"
+    REPLAY = "replay"
+    PUSH_REPLAYED = "push-replayed"
+    CI_REPLAYED = "ci-replayed"
 
 
 class StepKind(StrEnum):
@@ -233,12 +233,18 @@ STAGES = (
     Stage.CHECK,
     Stage.PUSH,
     Stage.CI,
-    Stage.REBASE,
-    Stage.PUSH_REBASED,
-    Stage.CI_REBASED,
+    Stage.REPLAY,
+    Stage.PUSH_REPLAYED,
+    Stage.CI_REPLAYED,
 )
 END_ONLY = frozenset(STAGES[2:])
-LEGACY_STAGES = {"review": Stage.PUSH, "restack": Stage.PUSH}
+LEGACY_STAGES = {
+    "review": Stage.PUSH,
+    "restack": Stage.PUSH,
+    "rebase": Stage.REPLAY,
+    "push-rebased": Stage.PUSH_REPLAYED,
+    "ci-rebased": Stage.CI_REPLAYED,
+}
 CI_BUG_HOLDS = frozenset({BoundaryHold.CI_FAILED, BoundaryHold.CI_INFRA, BoundaryHold.MAIN_BROKEN})
 STALL_HINTS = {
     BoundaryHold.CI_FAILED: "open a bug story and record it with record_ci_bug(story)",

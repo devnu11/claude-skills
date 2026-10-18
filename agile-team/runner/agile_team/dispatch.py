@@ -39,7 +39,6 @@ from . import (
     live,
     loops,
     ops_review,
-    pending_tests,
     presentation,
     recovery,
     requirement_changes,
@@ -92,7 +91,6 @@ from .insights import (
 from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
 from .loops import Author, Setback
 from .owners import Fix, FixRecord, Owners, Writer
-from .pending_tests import PendingSet
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
@@ -113,17 +111,9 @@ from .state import RunState
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
 
 DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
-REWORK_BRIEF = (
-    "Code from an earlier pass is in, so the suite may already be green. "
-    'If it is once the tests are right, say so in your handoff: "tests": "changed" '
-    '(you changed tests for this story) or "tests": "confirmed" '
-    "(you checked the existing tests already cover it)."
-)
 GATE_CHORE = "gate: {step} on {story}"
 RECORD_FAILED = "the {step} record was not committed: {error}"
 QUALITY_CHORE = "quality checks for {story}"
-PENDING_SUBJECT = "chore({story}): pending tests"
-PENDING_WHERE = {"implement": "implement gate"}
 PROXY = "customer-proxy"
 INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
@@ -686,7 +676,7 @@ class Runtime:
 
     def user_prompt(self, plan: Plan) -> str:
         parts = [plan.prompt]
-        parts.extend(_story_lines(plan.story, self._rework_lines(plan.story)))
+        parts.extend(_story_lines(plan.story, []))
         if plan.story:
             found = self.results.shown(plan.story.id, plan.story.step)
             parts.append(results_mod.section(found))
@@ -701,10 +691,6 @@ class Runtime:
         if plan.role.name in story.revert_owed or story.step == revert_log.DESIGN_STEP:
             return revert_log.brief_section(story.reverted, story.step)
         return ""
-
-    def _rework_lines(self, story: StoryState | None) -> list[str]:
-        """The rework brief exactly when the tests gate would treat the story as reworked."""
-        return [REWORK_BRIEF] if story and self.pipeline.reworked(story) else []
 
     def _manager_context(self, story: StoryState | None = None) -> str:
         overrides = {r: vars(self.state.overrides[r]) for r in self.state.unreviewed}
@@ -1225,7 +1211,6 @@ class Runtime:
         """Evaluate the step's gate, commit its pass record, then advance the story (s131)."""
         self.verify_checkout()
         outcome = self._evaluate(plan, handoff)
-        self._apply_pending(plan, outcome)
         record = self._pass_record(plan, handoff) if outcome.verdict is Verdict.PASS else Recorded()
         return self._advance_and_log(plan, record.failure or outcome) | record.fields
 
@@ -1278,25 +1263,6 @@ class Runtime:
         facts = ops_review.facts(self.config, story_spec.read(self.config, story.id))
         plan.prompt += f"\n\n{ops_review.brief_section(facts)}".rstrip()
 
-    def _apply_pending(self, plan: Plan, outcome: Outcome) -> None:
-        """A passing gate's pending change is committed before the story advances (P13)."""
-        if outcome.verdict is Verdict.PASS and outcome.pending is not None:
-            step = plan.story.step
-            self.set_pending(outcome.pending, PENDING_WHERE.get(step, f"{step} step"))
-
-    def set_pending(self, change: PendingSet, where: str = "") -> str | None:
-        """Apply ``change`` to the registry in its own commit; its sha, or None when unchanged."""
-        repo = self.config.repo
-        registry = pending_tests.read(repo)
-        changed = registry.with_ids(change)
-        if changed.text() == registry.text():
-            return None
-        pending_tests.write(repo, changed)
-        subject = PENDING_SUBJECT.format(story=change.story) + (f" ({where})" if where else "")
-        sha = self.git.commit([pending_tests.REGISTRY], subject)
-        self.record_checkout()
-        return sha
-
     def served(self, plan: Plan) -> Pipeline:
         """The pipeline whose test runs are made for ``plan``'s story (P16)."""
         story = plan.story
@@ -1314,7 +1280,12 @@ class Runtime:
 
     def owners(self, story: StoryState) -> Owners:
         """Who may write what, in pipeline order, for this story (R2)."""
-        rows = [(step, self._writer_role(story, step)) for step in self.pipeline.steps]
+        runner_owned = {s for s, role in STEP_ROLES.items() if role == "runner"}
+        rows = [
+            (step, self._writer_role(story, step))
+            for step in self.pipeline.steps
+            if step not in runner_owned
+        ]
         return Owners(
             _writers(rows, lambda role: tuple(self.scope_for(self.resolve(role)).write)),
             story.step,

@@ -46,8 +46,6 @@ class Name(StrEnum):
     QUALITY_COVERAGE = "quality.coverage"
     CHECKOUT_GUARD = "checkout.guard"
     CHECKOUT_VERIFY = "checkout.verify"
-    GATE_TESTS_RED = "gate.tests-red"
-    GATE_TESTS_REWORK = "gate.tests-rework"
     GATE_TESTS_COVERAGE = "gate.tests+coverage"
     GATE_SUITE_RUNS = "gate.suite-runs"
     GATE_DISPUTE = "gate.dispute-output"
@@ -57,16 +55,17 @@ class Name(StrEnum):
     BOUNDARY_SYNC = "boundary.sync"
     BOUNDARY_CHECK = "boundary.check"
     BOUNDARY_PUSH = "boundary.push"
-    BOUNDARY_REBASE = "boundary.rebase"
-    BOUNDARY_PUSH_REBASED = "boundary.push-rebased"
-    BOUNDARY_CI_REBASED = "boundary.ci-rebased"
+    BOUNDARY_OPEN = "boundary.open"
+    BOUNDARY_REPLAY = "boundary.replay"
+    BOUNDARY_PUSH_REPLAYED = "boundary.push-replayed"
+    BOUNDARY_CI_REPLAYED = "boundary.ci-replayed"
+    STORY_LAND = "story.land"
     BOUNDARY_CI_WAIT = "boundary.ci-wait"
     RUN_TESTS = "runner-tool.run_tests"
     RUN_NEW_TESTS = "runner-tool.run_new_tests"
     STOP_HANDOFF = "stop.handoff"
     STOP_LINT = "stop.lint"
     STOP_SUITE = "stop.suite"
-    STOP_RED = "stop.red"
     STOP_PRESENTATION = "stop.presentation"
     STOP_REQUIREMENTS = "stop.requirements"
 
@@ -110,11 +109,6 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
     (Name.QUALITY_COVERAGE, B, STEP, "coverage report", "The full suite with coverage, for the quality step's report"),  # noqa: E501
     (Name.CHECKOUT_GUARD, B, STEP, "checkout guard", "Check the branch and HEAD are the team's before the next step"),  # noqa: E501
     (Name.CHECKOUT_VERIFY, A, STEP, "checkout verify", "Check the branch and HEAD did not move during the step"),  # noqa: E501
-    (Name.GATE_TESTS_RED, A, STEP, "pytest: new tests red", "Tests gate: the full suite must fail, so the story's new tests are red before any code"),  # noqa: E501
-    (
-        Name.GATE_TESTS_REWORK, A, STEP, "pytest: rework",
-        "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",
-    ),
     (
         Name.GATE_TESTS_COVERAGE, A, STEP, "pytest + coverage",
         "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",  # noqa: E501,
@@ -150,23 +144,30 @@ _ROWS: tuple[tuple[Name, When, Attach, str, str], ...] = (
         "Wait for the as-built push's CI and read failing logs; green is the gate for the rebase",
     ),
     (
-        Name.BOUNDARY_REBASE, A, BOUND, "rebase onto target",
-        "Rebase the team branch onto the target, only after green CI (sprint end only)",
+        Name.BOUNDARY_OPEN, B, BOUND, "open sprint branch",
+        "At a sprint start, create the sprint's remote branch at the start head and open its entry",
     ),
     (
-        Name.BOUNDARY_PUSH_REBASED, A, BOUND, "push rebased",
-        "Force-push the rebased team branch to the same sprint branch, so its PR keeps both pushes",
+        Name.BOUNDARY_REPLAY, A, BOUND, "replay onto target",
+        "Replay the team branch onto the target story by story, only after green CI (sprint end only)",  # noqa: E501
     ),
     (
-        Name.BOUNDARY_CI_REBASED, A, BOUND, "CI wait (rebased)",
-        "Wait for the rebased branch's CI and record it; a red result is reported, never held",
+        Name.BOUNDARY_PUSH_REPLAYED, A, BOUND, "push replayed",
+        "Push the replayed team branch to the next replay branch and open a ready PR from it",
+    ),
+    (
+        Name.BOUNDARY_CI_REPLAYED, A, BOUND, "CI wait (replayed)",
+        "Wait for the replayed branch's CI and record it; a red result is reported, never held",
+    ),
+    (
+        Name.STORY_LAND, D, STORY, "land",
+        "Land a story: merge it into the sprint branch, run the full checks and the landing CI",
     ),
     (Name.RUN_TESTS, D, STEP, "pytest: named tests", "Only the tests a developer named, run for that developer"),  # noqa: E501
     (Name.RUN_NEW_TESTS, D, STEP, "pytest: new test files", "Only the story's new test files, run for a developer"),  # noqa: E501
     (Name.STOP_HANDOFF, A, STEP, "stop: handoff parses", "Stop check: the step's handoff block parses"),  # noqa: E501
     (Name.STOP_LINT, A, STEP, "stop: lint fix + check", "Stop check: fix the step's changed files with the toolchain's fixers, then lint them"),  # noqa: E501
     (Name.STOP_SUITE, A, STEP, "stop: suite + coverage", "Stop check: the implement gate's suite and coverage, before the developer may stop"),  # noqa: E501
-    (Name.STOP_RED, A, STEP, "stop: new tests red", "Stop check: the tests gate, before the unit-tester may stop"),  # noqa: E501
     (Name.STOP_PRESENTATION, A, STEP, "stop: presentation", "Stop check: the story's presentation is complete, before the integration-tester may stop"),  # noqa: E501
     (Name.STOP_REQUIREMENTS, A, STEP, "stop: requirements", "Stop check: every changed or retired requirement has a reason in the handoff, before the architect may stop"),  # noqa: E501
 )  # fmt: skip
@@ -186,9 +187,10 @@ BOUNDARY: dict[str, Name] = {
     "check": Name.BOUNDARY_CHECK,
     "push": Name.BOUNDARY_PUSH,
     "ci": Name.BOUNDARY_CI_WAIT,
-    "rebase": Name.BOUNDARY_REBASE,
-    "push-rebased": Name.BOUNDARY_PUSH_REBASED,
-    "ci-rebased": Name.BOUNDARY_CI_REBASED,
+    "open": Name.BOUNDARY_OPEN,
+    "replay": Name.BOUNDARY_REPLAY,
+    "push-replayed": Name.BOUNDARY_PUSH_REPLAYED,
+    "ci-replayed": Name.BOUNDARY_CI_REPLAYED,
 }
 RUNNER_TOOL: dict[str, Name] = {
     "run_tests": Name.RUN_TESTS,
