@@ -52,18 +52,18 @@ def test_step_registered() -> None:
     assert gates.STEP_ROLES["ops-review"] == "devops"
     names = list(config_mod.PIPELINE_STEPS)
     assert names.index("ops-review") == names.index("design") + 1
-    assert frozenset({"ops-review"}) == gates.CHECKPOINT_STEPS
+    assert frozenset({"ops-review", "land"}) == gates.CHECKPOINT_STEPS
     assert "ops-review" not in gates.ROUTABLE_STEPS
 
 
 @pytest.mark.parametrize(
     ("listed", "expected"),
     [
-        (["design", "tests", "implement"], ["design", "ops-review", "tests", "implement"]),
-        (["design", "tests", "ops-review"], ["design", "ops-review", "tests"]),
-        (["ops-review", "design", "tests"], ["design", "ops-review", "tests"]),
-        (["tests", "implement"], ["ops-review", "tests", "implement"]),
-        ([], ["ops-review"]),
+        (["design", "tests", "implement"], ["design", "ops-review", "tests", "implement", "land"]),
+        (["design", "tests", "ops-review"], ["design", "ops-review", "tests", "land"]),
+        (["ops-review", "design", "tests"], ["design", "ops-review", "tests", "land"]),
+        (["tests", "implement"], ["ops-review", "tests", "implement", "land"]),
+        ([], ["ops-review", "land"]),
     ],
 )
 def test_pipeline_steps(listed, expected) -> None:
@@ -72,7 +72,7 @@ def test_pipeline_steps(listed, expected) -> None:
 
 def test_gates_pipeline_property_leaves_steps() -> None:
     g = config_mod.Gates(steps=["design", "tests"])
-    assert g.pipeline == ["design", "ops-review", "tests"]
+    assert g.pipeline == ["design", "ops-review", "tests", "land"]
     assert g.steps == ["design", "tests"]
 
 

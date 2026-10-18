@@ -334,7 +334,7 @@ def test_empty_run_files(config: cfg.Config, scratch: Path) -> None:
     assert snap["run"]["sprint"] == 0
     assert snap["run"]["task"] == ""
     assert snap["run"]["manager_due"] == []
-    assert snap["pipeline"] == ["design", "ops-review", "tests", "implement"]
+    assert snap["pipeline"] == ["design", "ops-review", "tests", "implement", "land"]
     assert snap["roles"]
 
 
@@ -772,7 +772,7 @@ def test_fixture_upstream_section_has_a_two_entry_stack_and_boundary_events() ->
     fixture = json.loads(FIXTURE_TEXT)
     section = fixture["upstream"]
     assert [e["mode"] for e in section["stack"]] == ["ready", "none"]
-    assert section["stack"][1]["pr"] is None and section["boundary"]["hold"] == "push_permission"
+    assert section["stack"][1]["pr"] is None and section["boundary"]["hold"] is None
     events = [e["data"] for e in fixture["events"] if e["kind"] == "boundary"]
     assert {(d["stage"], d["outcome"]) for d in events} >= {
         ("sync", "pass"), ("check", "fail"), ("check", "pass"), ("review", "built"), ("push", "held"),  # noqa: E501
@@ -802,7 +802,7 @@ def test_build_rereads_budget_and_round_cap(config: cfg.Config, scratch: Path) -
 def test_build_rereads_pipeline(config: cfg.Config, scratch: Path) -> None:
     book = book_for(config, scratch)
     rewrite_config(config, ["design", "implement"], 20.0, 3)
-    assert snapshot.build(config, book)["pipeline"] == ["design", "ops-review", "implement"]
+    assert snapshot.build(config, book)["pipeline"] == ["design", "ops-review", "implement", "land"]
 
 
 @pytest.mark.parametrize("content", [None, "budget_usd = ", "[team\n"])

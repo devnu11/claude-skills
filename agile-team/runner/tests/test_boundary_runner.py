@@ -170,7 +170,7 @@ def test_team_check_pass_records_head_and_a_second_check_is_skipped(env: Env) ->
     env.open(Edge.END, stage=Stage.CHECK)
     env.drive()
     assert len(env.runner.calls) == calls
-    assert env.events()[-2].data["note"] == f"already checked at {head}"
+    assert env.events()[-1].data["note"] == f"already checked at {head}"
 
 
 def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> None:
@@ -298,8 +298,10 @@ def posted(env: Env) -> list[str]:
 def test_the_first_push_asks_for_permission_and_pushes_nothing(env: Env, fake: FakeSystem) -> None:
     b = at_push(env, entry(1))
     env.drive()
-    assert b.hold is BoundaryHold.PUSH_PERMISSION
+    assert b.hold is None and env.rt.state.permission_asked
     assert env.events()[-1].data["outcome"] == "held"
+    assert env.events()[-1].data["waiting"] == "push_permission"
+    assert env.br.due() is None
     assert env.prs.calls == [] and pushes(fake) == []
 
 

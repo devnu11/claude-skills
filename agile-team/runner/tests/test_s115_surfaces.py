@@ -36,13 +36,13 @@ def test_the_snapshot_step_roles_name_devops_for_ops_review(config, scratch) -> 
 def test_a_config_without_ops_review_still_gets_it(config, scratch) -> None:  # noqa: F811
     rewrite_config(config, ["design", "tests", "implement"], 20.0, 3)
     pipeline = snapshot.build(config, book_for(config, scratch))["pipeline"]
-    assert pipeline == ["design", "ops-review", "tests", "implement"]
+    assert pipeline == ["design", "ops-review", "tests", "implement", "land"]
 
 
 def test_a_config_listing_it_elsewhere_gets_it_once_after_design(config, scratch) -> None:  # noqa: F811
     rewrite_config(config, ["design", "tests", "ops-review", "implement"], 20.0, 3)
     pipeline = snapshot.build(config, book_for(config, scratch))["pipeline"]
-    assert pipeline == ["design", "ops-review", "tests", "implement"]
+    assert pipeline == ["design", "ops-review", "tests", "implement", "land"]
 
 
 def test_make_pipeline_runs_the_built_pipeline(configured: Path) -> None:
@@ -50,4 +50,4 @@ def test_make_pipeline_runs_the_built_pipeline(configured: Path) -> None:
     text = tomli_w.dumps({"gates": {"steps": ["design", "tests"]}})
     system.write_text(conf.repo / cfg.CONFIG_NAME, text)
     steps = cli.make_pipeline(cfg.load(configured)).steps
-    assert list(steps) == ["design", "ops-review", "tests"]
+    assert list(steps) == ["design", "ops-review", "tests", "land"]

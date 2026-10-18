@@ -266,11 +266,11 @@ def test_the_empty_tally_is_not_counted() -> None:
 def test_as_dict_has_the_heartbeat_keys_in_order() -> None:
     tally = fold(rec(passed=3, warned=1, skipped=2, failed=4, total=20))
     assert list(tally.as_dict()) == [
-        "passed", "warned", "skipped", "failed", "total", "points", "fail_at", "pending",
+        "passed", "warned", "skipped", "failed", "total", "points", "fail_at",
     ]  # fmt: skip
     assert tally.as_dict() == {
         "passed": 3, "warned": 1, "skipped": 2, "failed": 4, "total": 20,
-        "points": [50], "fail_at": 0, "pending": 0,
+        "points": [50], "fail_at": 0,
     }  # fmt: skip
 
 

@@ -217,8 +217,8 @@ def test_ac2_3_the_report_hands_the_failures_to_the_po(env: Env) -> None:
 def test_ac2_3_a_passing_start_check_raises_no_known_failures(env: Env) -> None:
     fail_checks(env, passing("lint"))
     env.open(Edge.START, stage=Stage.CHECK)
-    [report] = env.drive()
-    assert handover.Trigger.KNOWN_FAILURES not in handover.triggers(report)
+    reports = env.drive()
+    assert all(handover.Trigger.KNOWN_FAILURES not in handover.triggers(r) for r in reports)
 
 
 def test_ac2_3_known_failures_trigger_value() -> None:

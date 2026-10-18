@@ -14,8 +14,6 @@ R12 = {
     "quality.lint": "Lint the whole repo before the quality step",
     "quality.static": "Static analysis of the whole repo before the quality step",
     "quality.coverage": "The full suite with coverage, for the quality step's report",
-    "gate.tests-red": "Tests gate: the full suite must fail, so the story's new tests are red before any code",  # noqa: E501
-    "gate.tests-rework": "Tests gate on a reworked story: the full suite may be red, or green with a tests claim",  # noqa: E501
     "gate.tests+coverage": "Implement gate: the full suite with coverage, once; every test must pass and coverage must meet the threshold",  # noqa: E501
     "gate.suite-runs": "The full suite again, the story's suite_runs times in a row, after its suite step's gate passes",  # noqa: E501
     "gate.dispute-output": "The full suite, to show a disputed test's output",

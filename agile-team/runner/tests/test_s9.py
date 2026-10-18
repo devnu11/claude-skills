@@ -493,7 +493,7 @@ def test_halt_survives_git_failure(make_runtime, monkeypatch) -> None:
 
     monkeypatch.setattr(Git, "commit", boom)
     rt.halt_run(halt.Halt(halt.HaltKind.LIMIT, LIMIT_REASON))
-    assert rt.state.status is RunStatus.BLOCKED and not rt.git.is_clean()
+    assert rt.state.status is RunStatus.LIMIT and not rt.git.is_clean()
     assert rt.state.interrupted == [] and "GitError" in crash_log(rt)
     assert notes(rt)[0].text.endswith("after the reset")
 
