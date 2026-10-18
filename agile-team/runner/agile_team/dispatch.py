@@ -501,6 +501,8 @@ class Runtime:
         view.main_git = self.main
         view.stage_log = copy.copy(self.stage_log)
         view.pipeline.checks.stages = view.stage_log.open
+        reporting = view.pipeline.checks.reporting  # N11: gates run in parallel threads
+        view.pipeline.checks.reporting = replace(reporting, folder=reporting.folder / story.id)
         return view
 
     def emit(self, kind: EventKind, plan: Plan | None = None, /, **data: Any) -> Event:
@@ -1146,8 +1148,23 @@ class Runtime:
         async with self.settle_lock(plan):
             if self.worktree_of is None or plan.story is None:
                 return self.settle(plan, result)
+            return await self._settle_uncut(plan, result)
+
+    async def _settle_uncut(self, plan: Plan, result: StepResult) -> dict[str, Any]:
+        """N12: a cancel waits for the settle to finish, so a step is never half settled."""
+        task = asyncio.ensure_future(self._settle_threaded(plan, result))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await asyncio.gather(task, return_exceptions=True)
+            raise
+
+    async def _settle_threaded(self, plan: Plan, result: StepResult) -> dict[str, Any]:
+        what = f"settling {salvage.label(plan.role.name, plan.story.id if plan.story else None)}"
+        with self.pulse.doing(what):  # N13
             report, parsed = self._settle_head(plan, result)
-            await self._pregate(plan, parsed)
+        await self._run_pregate(plan, parsed)
+        with self.pulse.doing(what):
             return self._settle_tail(plan, parsed, report)
 
     def settle_lock(self, plan: Plan) -> AbstractAsyncContextManager[Any]:
@@ -1156,12 +1173,12 @@ class Runtime:
             return self.main_lock
         return nullcontext()
 
-    async def _pregate(self, plan: Plan, parsed: Handoff | HandoffError) -> None:
+    async def _run_pregate(self, plan: Plan, parsed: Handoff | HandoffError) -> None:
         """R1b: run the gate's commands in a thread; ``gate`` then uses the verdict."""
         parsed = _settled(plan, parsed)
         if isinstance(parsed, HandoffError) or plan.role.name == MANAGER:
             return
-        if plan.kind in KIND_EFFECTS or plan.story is None:
+        if plan.kind in KIND_EFFECTS:
             return
         effect = STORY_EFFECTS.get(plan.role.name)
         if effect:

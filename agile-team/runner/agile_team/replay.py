@@ -29,6 +29,10 @@ KEPT_STASH = (
     "The cut-off step's edits did not apply onto the new sprint head. They are kept in stash "
     "commit {sha}; apply them with `git stash apply {sha}` in the story's worktree."
 )
+GONE_STASH = (
+    "The cut-off step's saved edits are gone: stash commit {sha} is no longer in the stash list, "
+    "so they could not be put back. The step resumes without them."
+)
 STASH_MESSAGE = "agile-team-replay"
 STASH_REF = ("rev-parse", "-q", "--verify", "refs/stash")
 LOG_LINE = "%H%x1f%s%x1f%P"
@@ -222,14 +226,21 @@ class StoryReplay:
         return Stash(story.id, after[0] == 0 and not unchanged, after[1].strip())
 
     def restore_edits(self, tree: Git, stashed: Stash) -> None:
-        """Put this story's stashed edits back; a pop that conflicts keeps the stash and says so."""
-        ref = self.find_stash_ref(tree, stashed) if stashed.saved else ""
-        if ref and tree.attempt("stash", "pop", ref)[0] != 0:
+        """Put this story's stashed edits back; a lost or conflicting stash is kept and said."""
+        if not stashed.saved:
+            return
+        ref = self.find_stash_ref(tree, stashed)
+        if not ref:
+            self.tell(stashed, GONE_STASH)
+        elif tree.attempt("stash", "pop", ref)[0] != 0:
             tree.attempt("reset", "--hard")
             tree.attempt("clean", "-fd")  # the failed pop may leave its untracked files behind
-            self.runtime.relay.post(
-                Note("update", KEPT_STASH.format(sha=stashed.sha), [stashed.story_id])
-            )
+            self.tell(stashed, KEPT_STASH)
+
+    def tell(self, stashed: Stash, text: str) -> None:
+        """Post ``text`` (with the stash sha filled in) to the PO about the stash's story."""
+        note = Note("update", text.format(sha=stashed.sha), [stashed.story_id])
+        self.runtime.relay.post(note)
 
     def find_stash_ref(self, tree: Git, stashed: Stash) -> str:
         """N7: the ``stash@{n}`` entry of this story's stash commit, else ``""`` (it is gone)."""
