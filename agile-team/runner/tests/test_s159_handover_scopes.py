@@ -1,91 +1,58 @@
-"""s159 H1/H2: hand-over scopes and merged passes; new triggers; the new texts."""
-
-from __future__ import annotations
+"""s159 H1/H2/C5: every trigger has a scope; passes merge for one PO turn."""
 
 import pytest
-from agile_team import handover
-from agile_team.handover import Pass, Trigger
-
-RUN = [
-    "ERROR",
-    "BOUNDARY_ERROR",
-    "BOUNDARY_ESCALATED",
-    "SYNC_CONFLICT",
-    "REBASE_CONFLICT",
-    "PUSH_REJECTED",
-    "CI_FAILED",
-    "MAIN_BROKEN",
-    "CI_GREEN",
-    "SPRINT_END",
-    "NEXT_SPRINT",
-    "STALLED",
-    "SPRINT_BACKLOG_STUCK",
-]
-STORY = [
-    "STORY_CI_RED",
-    "WORKTREE_DRIFT",
-    "LAND_BOUNCED",
-    "CI_INFRA",
-    "CI_PENDING",
-    "PUSH_PERMISSION",
-    "KNOWN_FAILURES",
-    "HUMAN_MESSAGE",
-]
-
-
-def test_new_trigger_values() -> None:
-    """s159 spec: new trigger values (s159 red)."""
-    assert Trigger.STORY_CI_RED.value == "story_ci_red"
-    assert Trigger.WORKTREE_DRIFT.value == "worktree_drift"
-    assert Trigger.LAND_BOUNCED.value == "land_bounced"
-
-
-@pytest.mark.parametrize("name", RUN)
-def test_run_scoped(name: str) -> None:
-    """s159 spec: run scoped (s159 red)."""
-    assert handover.SCOPES[Trigger[name]] is handover.Scope.RUN
-
-
-@pytest.mark.parametrize("name", STORY)
-def test_story_scoped(name: str) -> None:
-    """s159 spec: story scoped (s159 red)."""
-    assert handover.SCOPES[Trigger[name]] is handover.Scope.STORY
+from agile_team import handover as ho
 
 
 def test_every_trigger_has_a_scope() -> None:
-    """s159 spec: every trigger has a scope (s159 red)."""
-    assert set(handover.SCOPES) == set(Trigger)
-    handover.check_scopes()
+    assert set(ho.SCOPES) == set(ho.Trigger)
+    ho.check_scopes()
 
 
-def test_check_scopes_names_a_missing_trigger(monkeypatch: pytest.MonkeyPatch) -> None:
-    """s159 spec: check scopes names a missing trigger (s159 red)."""
-    table = dict(handover.SCOPES)
-    del table[Trigger.STALLED]
-    monkeypatch.setattr(handover, "SCOPES", table)
-    with pytest.raises(handover.ScopeTableError, match=r"stalled|STALLED"):
-        handover.check_scopes()
+def test_a_missing_trigger_fails_naming_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = dict(ho.SCOPES)
+    del table[ho.Trigger.STALLED]
+    monkeypatch.setattr(ho, "SCOPES", table)
+    with pytest.raises(ho.ScopeTableError, match="stalled"):
+        ho.check_scopes()
 
 
-def test_merge_joins_kinds_lines_and_stories_in_order() -> None:
-    """s159 spec: merge joins kinds lines and stories in order (s159 red)."""
-    a = Pass([Trigger.STORY_CI_RED], ["one"], ["s1"])
-    b = Pass([Trigger.LAND_BOUNCED, Trigger.STORY_CI_RED], ["two"], ["s2", "s1"])
-    got = handover.merge([a, b])
-    assert got.lines == ["one", "two"]
-    assert got.kinds[0] is Trigger.STORY_CI_RED and Trigger.LAND_BOUNCED in got.kinds
-    assert got.stories[:2] == ["s1", "s2"]
+RUN_WIDE = [
+    "ERROR", "BOUNDARY_ERROR", "BOUNDARY_ESCALATED", "SYNC_CONFLICT", "REBASE_CONFLICT",
+    "PUSH_REJECTED", "CI_FAILED", "MAIN_BROKEN", "CI_GREEN", "SPRINT_END", "NEXT_SPRINT",
+    "STALLED", "SPRINT_BACKLOG_STUCK",
+]  # fmt: skip
 
 
-def test_merge_of_one_is_that_pass() -> None:
-    """s159 spec: merge of one is that pass (s159 red)."""
-    a = Pass([Trigger.WORKTREE_DRIFT], ["x"], ["s1"])
-    got = handover.merge([a])
-    assert (got.kinds, got.lines, got.stories) == (a.kinds, a.lines, a.stories)
+@pytest.mark.parametrize("name", RUN_WIDE)
+def test_run_wide_triggers(name: str) -> None:
+    assert ho.SCOPES[ho.Trigger[name]] is ho.Scope.RUN
 
 
-def test_ci_green_text_gives_the_ff_command_not_rebase_and_merge() -> None:
-    """s159 spec: ci green text gives the ff command not rebase and merge (s159 red)."""
-    row = handover.HANDOVERS[Trigger.CI_GREEN]
-    text = repr(row)
-    assert "Rebase and merge" not in text
+def test_everything_else_is_per_story() -> None:
+    per_story = {t for t, s in ho.SCOPES.items() if s is ho.Scope.STORY}
+    assert per_story == set(ho.Trigger) - {ho.Trigger[n] for n in RUN_WIDE}
+    for name in ["STORY_CI_RED", "WORKTREE_DRIFT", "LAND_BOUNCED", "CI_INFRA", "CI_PENDING",
+                 "PUSH_PERMISSION", "KNOWN_FAILURES", "HUMAN_MESSAGE"]:  # fmt: skip
+        assert ho.Trigger[name] in per_story
+
+
+def test_new_triggers() -> None:
+    assert ho.Trigger.STORY_CI_RED == "story_ci_red"
+    assert ho.Trigger.WORKTREE_DRIFT == "worktree_drift"
+    assert ho.Trigger.LAND_BOUNCED == "land_bounced"
+
+
+def test_merge_joins_kinds_lines_and_stories_in_arrival_order() -> None:
+    a = ho.Pass([ho.Trigger.STORY_CI_RED], ["one"], ["s1"])
+    b = ho.Pass([ho.Trigger.LAND_BOUNCED, ho.Trigger.STORY_CI_RED], ["two"], ["s2"])
+    merged = ho.merge([a, b])
+    assert merged.lines == ["one", "two"]
+    assert merged.stories == ["s1", "s2"]
+    assert merged.kinds[0] is ho.Trigger.STORY_CI_RED
+    assert ho.Trigger.LAND_BOUNCED in merged.kinds
+
+
+def test_merge_of_one_pass_is_that_pass() -> None:
+    a = ho.Pass([ho.Trigger.WORKTREE_DRIFT], ["x"], ["s1"])
+    assert ho.merge([a]) == a

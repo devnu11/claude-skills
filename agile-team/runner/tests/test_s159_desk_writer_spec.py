@@ -191,3 +191,10 @@ def test_pair_replay_pairs_story_commits_and_the_merge_by_id() -> None:
 def test_pair_replay_empty() -> None:
     """s159 spec: pair replay empty."""
     assert rewrite.pair_replay([], []) == {}
+
+
+def test_pair_replay_of_unrelated_lines_pairs_nothing() -> None:
+    """s159 R4: commits with no matching subject pair with nothing."""
+    old = [("o1", "feat: a", ("p",))]
+    new = [("n1", "feat: b", ("q",))]
+    assert "o1" not in rewrite.pair_replay(old, new)

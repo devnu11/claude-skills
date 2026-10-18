@@ -195,3 +195,9 @@ def test_each_reason_alone() -> None:
     assert len(switchover.refusals(facts(pending_ids=["s1"]))) == 1
     assert len(switchover.refusals(facts(stack=2))) == 1
     assert len(switchover.refusals(facts(ahead=1))) == 1
+
+
+def test_story_state_new_records_start_empty() -> None:
+    """s159 section 3: the new containers are per story and empty."""
+    story = StoryState(id="s1", title="t", step="design")
+    assert story.drift == [] and story.land_reran == [] and story.sessions == {}
