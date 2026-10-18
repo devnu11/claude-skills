@@ -1,1 +1,11 @@
-{}
+{
+  "s159": [
+    "agile-team/runner/tests/test_s159_round2.py::test_a_due_boundarys_own_devops_fix_is_not_held_n5",
+    "agile-team/runner/tests/test_s159_round2.py::test_restore_keeps_the_stash_when_its_entry_is_gone_n7",
+    "agile-team/runner/tests/test_s159_round2.py::test_restore_pops_the_entry_named_by_the_sha_not_the_top_n7",
+    "agile-team/runner/tests/test_s159_round2.py::test_start_work_starts_the_boundary_fix_and_not_the_story_step_n5",
+    "agile-team/runner/tests/test_s159_round2.py::test_story_ci_records_the_sha_it_read_not_a_newer_head_n6",
+    "agile-team/runner/tests/test_s159_round2.py::test_the_story_push_runs_through_in_thread_r1",
+    "agile-team/runner/tests/test_s159_round2.py::test_with_story_branches_the_manager_step_does_not_hold_the_lock_r2"
+  ]
+}
