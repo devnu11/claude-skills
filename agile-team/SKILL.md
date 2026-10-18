@@ -474,8 +474,12 @@ command fails.
   before. A handoff that is not `done` (a dispute, `blocked`) is never held
   back. A step that runs longer than it used to may just be running its stop
   checks, so it is not stuck.
-- A failing test the unit-tester did not add or change fails the tests gate.
-  A story's red tests stay on its own story branch (s159). A repo that
+- A story's new red tests are pending (s125) from its tests gate until its
+  implement gate passes them. The runner records them, from the red run's
+  JUnit report, in `.team/pending-tests.json`, which only the runner writes.
+  Other stories' runs, the sprint checks and CI (`agile-team pending-tests`)
+  skip them, so a suite with a story mid-pipeline stays green. A failing test
+  the unit-tester did not add or change fails the tests gate. A repo that
   chains test runs with `&&` needs a `{report:<root>}` in each link, or only
   the last link is read. That is a config change for DevOps.
 - The runner's own work is named stages (s99): each gate, quality check,
