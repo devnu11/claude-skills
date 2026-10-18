@@ -16,6 +16,7 @@ from typing import Any
 
 from . import budget_reserve, dependencies, handover, system
 from .boundary import Permission, StepKind
+from .ci import CiVerdict
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest, StepResult
 from .gates import FINISHED, Outcome, StoryState, Verdict
 from .halt import crash_halt
@@ -75,7 +76,7 @@ class Scheduler:
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.running: dict[str, Work] = {}
         self.limited = False
-        self.main_lock = asyncio.Lock()
+        self.main_lock = self.po.main_lock
         self.paused_by: str | None = None
         self.po_task: asyncio.Task[None] | None = None
         self.opening: PoTurn | None = None
@@ -88,6 +89,7 @@ class Scheduler:
         self.lander = Lander(runtime, self.main_lock)
         self.ci_poll = StoryCiPoll(runtime)
         self.followed_at = float("-inf")
+        self.ci_task: asyncio.Task[None] | None = None
 
     # ----- the run
 
@@ -344,10 +346,16 @@ class Scheduler:
             return await self.land(work)
         story = work.story
         request = StepRequest(work.role, work.brief, story.id if story else None, work.kind)
-        if work.role == MANAGER or story is None:
+        if self.uses_main_checkout(work, request):
             async with self.main_lock:
                 return await self.runtime.run_role(request)
         return await self.runtime.run_role(request)
+
+    def uses_main_checkout(self, work: Work, request: StepRequest) -> bool:
+        """D3: a Manager or storyless step, or a story step with no worktree, owns the checkout."""
+        if work.role == MANAGER or work.story is None:
+            return True
+        return not self.runtime.uses_worktree(request, work.story)
 
     async def land(self, work: Work) -> dict[str, Any]:
         """L1 to L12: land the story; its verdict goes through the gate like a role's."""
@@ -422,11 +430,18 @@ class Scheduler:
         """C7: a boundary stage runs once only the Manager's review (or nothing) is running."""
         if any(key != MANAGER_KEY for key in self.tasks):
             return False
-        report = self.router.boundaries.step()
+        self.tasks[BOUNDARY_KEY] = asyncio.create_task(
+            self.run_boundary_stage(work), name=BOUNDARY_KEY
+        )
+        return True
+
+    async def run_boundary_stage(self, work: Work) -> None:
+        """One boundary stage in a worker thread, under the main lock (C6, D2, D3)."""
+        async with self.main_lock:
+            report = await self.runtime.writer.run_off_loop(self.router.boundaries.step)
         self.steps += 1
         self.hurry = True
         self.report_back(work, {"role": work.role, **report})
-        return True
 
     def follow_boundary(self) -> None:
         """R9: a CI hold follows a remote head that moved, at most once per beat."""
@@ -488,11 +503,27 @@ class Scheduler:
 
     def poll_story_ci(self) -> None:
         """SC1, SC2: read each open story's PR CI; a red one hands over and holds nothing."""
+        if self.ci_task is None or self.ci_task.done():
+            self.check_ci_task()
+            self.ci_task = asyncio.create_task(self.run_ci_poll(), name="story-ci")
+
+    def check_ci_task(self) -> None:
+        """Re-raise what the last poll raised (D4: a failing ``gh`` never gets this far)."""
+        if self.ci_task is not None:
+            self.check_task(self.ci_task)
+
+    async def run_ci_poll(self) -> None:
+        """Read the PRs' CI in a worker thread; the hand-overs are queued back on the loop."""
         now = system.monotonic()
-        for story in list(self.runtime.state.stories.values()):
-            found = self.ci_poll.poll(story, now)
-            if found is not None and found.verdict != "green":
-                self.queue_story_ci(story, found)
+        stories = list(self.runtime.state.stories.values())
+        found = await self.runtime.writer.run_off_loop(lambda: self.read_story_ci(stories, now))
+        for story, result in found:
+            self.queue_story_ci(story, result)
+
+    def read_story_ci(self, stories: list[StoryState], now: float) -> list[tuple[StoryState, Any]]:
+        """The stories whose PR CI just settled red."""
+        polled = ((s, self.ci_poll.poll(s, now)) for s in stories)
+        return [(s, f) for s, f in polled if f is not None and f.verdict == CiVerdict.RED]
 
     def queue_story_ci(self, story: StoryState, found: Any) -> None:
         report = {"story_ci": {"verdict": "red", "sha": found.sha, "checks": [found.verdict]}}

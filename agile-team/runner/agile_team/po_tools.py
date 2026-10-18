@@ -6,6 +6,7 @@ every other role runs as a fresh query inside ``run_role``.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from collections.abc import Awaitable, Callable
@@ -963,6 +964,7 @@ class PoRun:
     start: Start
     router: Router = field(init=False)
     ended_by: str | None = field(default=None, init=False)
+    main_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     RENEWERS: ClassVar[dict[RenewPath, Callable[[PoRun, PoTurn], Awaitable[PoTurn]]]] = {}
 
     def __post_init__(self) -> None:
@@ -1082,15 +1084,21 @@ class PoRun:
         return PoTurn(lead + told + handover.prompt(found, state), state.po_session)
 
     async def _turn(self, turn: PoTurn) -> StepResult:
-        if self.runtime.halted_by or self.runtime.checkout_moved():
+        if await self.is_turn_refused():
             return StepResult("", 0.0)
         tools = Tools(self.runtime, snapshot=TurnSnapshot.take(self.runtime.state))
         plan = plan_for(tools, turn)
         raw = await self._query(plan, tools.touched)
         result = self.runtime.priced(plan, self._own_cost(turn, raw))
-        self._settle()
+        async with self.main_lock:  # D3: a land or a story step may own the checkout
+            self._settle()
         self._record(plan.role.model, result)
         return result
+
+    async def is_turn_refused(self) -> bool:
+        """The run halted, or the checkout moved (read under the main lock, D3)."""
+        async with self.main_lock:
+            return bool(self.runtime.halted_by or self.runtime.checkout_moved())
 
     def _own_cost(self, turn: PoTurn, raw: StepResult) -> StepResult:
         """``raw`` with only this query's cost; remembers the session's running total."""

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from .dispatch import Runtime
     from .gates import StoryState
 
+NOTHING_TO_STASH = "No local changes to save"
 STASH_MESSAGE = "agile-team-replay"
 LOG_LINE = "%H%x1f%s%x1f%P"
 
@@ -174,6 +176,13 @@ class Replayer:
         return ReplayResult(SyncOutcome.REBASED, progress.tip, dict(progress.moved))
 
 
+class Stash(StrEnum):
+    """Whether a cut-off step's edits were stashed."""
+
+    SAVED = "saved"
+    NONE = "none"
+
+
 class StoryReplay:
     """R8: rebases a carried story's branch onto the new sprint head, on a new ``-r<k>`` branch."""
 
@@ -185,25 +194,33 @@ class StoryReplay:
         rt = self.runtime
         tree = Git(Workspaces(rt.git, rt.config).ensure(story, head))
         old = story.branch
-        self.save_edits(tree, story)
+        stashed = self.save_edits(tree, story)
         prefix = rt.config.upstream.story_prefix
         branch = story_branch(prefix, story.id, story.replays + 1)
         queued = StoryRebase(head, story.base_sha, old, branch, [], "")
         tree.run("checkout", "-b", branch)
         if tree.attempt(*SCRATCH_REBASE_ARGV, "--onto", head, story.base_sha)[0] != 0:
-            return self.queue_rebase(tree, story, queued)
-        self.restore_edits(tree, story)
+            return self.restore_after(tree, stashed, self.queue_rebase(tree, story, queued))
+        self.restore_edits(tree, stashed)
         return self.take_over(story, queued)
 
-    def save_edits(self, tree: Git, story: StoryState) -> None:
-        """Stash a cut-off step's edits so the rebase starts clean."""
-        if story.in_flight is not None:
-            tree.run("stash", "push", "--include-untracked", "-m", STASH_MESSAGE)
+    def save_edits(self, tree: Git, story: StoryState) -> Stash:
+        """Stash a cut-off step's edits so the rebase starts clean; whether anything was saved."""
+        if story.in_flight is None:
+            return Stash.NONE
+        saved = tree.run("stash", "push", "--include-untracked", "-m", STASH_MESSAGE)
+        # refs/stash is shared: never pop another story's
+        return Stash.NONE if NOTHING_TO_STASH in saved else Stash.SAVED
 
-    def restore_edits(self, tree: Git, story: StoryState) -> None:
-        """Put the stashed edits back."""
-        if story.in_flight is not None:
-            tree.run("stash", "pop")
+    def restore_edits(self, tree: Git, stashed: Stash) -> None:
+        """Put this story's stashed edits back; a pop that conflicts keeps the stash."""
+        if stashed is Stash.SAVED and tree.attempt("stash", "pop")[0] != 0:
+            tree.attempt("reset", "--hard")
+
+    def restore_after(self, tree: Git, stashed: Stash, result: ReplayResult) -> ReplayResult:
+        """D5: a conflict leaves the old branch checked out; its edits come back before the step."""
+        self.restore_edits(tree, stashed)
+        return result
 
     def queue_rebase(self, tree: Git, story: StoryState, queued: StoryRebase) -> ReplayResult:
         """Abort the stopped rebase and queue it as the story's next step, with no round."""
