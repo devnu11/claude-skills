@@ -19,7 +19,7 @@ rw = Lazy("agile_team.run_writer")
 
 
 def test_unbound_writer_writes_at_once() -> None:
-    """s159 rule: unbound writer writes at once."""
+    """s159 spec: unbound writer writes at once."""
     seen: list[str] = []
     writer = rw.RunWriter()
     writer.submit(lambda: seen.append("a"))
@@ -27,7 +27,7 @@ def test_unbound_writer_writes_at_once() -> None:
 
 
 def test_bound_writer_holds_until_drained() -> None:
-    """s159 rule: bound writer holds until drained."""
+    """s159 spec: bound writer holds until drained."""
 
     async def go() -> list[str]:
         seen: list[str] = []
@@ -42,7 +42,7 @@ def test_bound_writer_holds_until_drained() -> None:
 
 
 def test_apply_runs_the_change_and_returns_its_result() -> None:
-    """s159 rule: apply runs the change and returns its result."""
+    """s159 spec: apply runs the change and returns its result."""
 
     async def go() -> int:
         writer = rw.RunWriter()
@@ -57,12 +57,12 @@ def test_apply_runs_the_change_and_returns_its_result() -> None:
 
 
 def test_apply_unbound_runs_directly() -> None:
-    """s159 rule: apply unbound runs directly."""
+    """s159 spec: apply unbound runs directly."""
     assert asyncio.run(rw.RunWriter().apply(lambda: 3)) == 3
 
 
 def test_check_owner_refuses_a_worker_thread() -> None:
-    """s159 rule: check owner refuses a worker thread."""
+    """s159 spec: check owner refuses a worker thread."""
 
     async def go() -> None:
         writer = rw.RunWriter()
@@ -82,13 +82,13 @@ def p(kind: Trigger, line: str, story: str) -> Pass:
 
 
 def test_desk_takes_nothing_when_empty() -> None:
-    """s159 rule: desk takes nothing when empty."""
+    """s159 spec: desk takes nothing when empty."""
     desk = po_desk.PoDesk()
     assert desk.take() is None and not desk.busy
 
 
 def test_desk_merges_queued_passes_into_one_turn() -> None:
-    """s159 rule: desk merges queued passes into one turn."""
+    """s159 spec: desk merges queued passes into one turn."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     desk.queue(p(Trigger.WORKTREE_DRIFT, "b", "s2"))
@@ -97,7 +97,7 @@ def test_desk_merges_queued_passes_into_one_turn() -> None:
 
 
 def test_a_pass_stays_until_the_turn_is_done() -> None:
-    """s159 rule: a pass stays until the turn is done."""
+    """s159 spec: a pass stays until the turn is done."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     assert desk.take() is not None
@@ -109,7 +109,7 @@ def test_a_pass_stays_until_the_turn_is_done() -> None:
 
 
 def test_passes_arriving_during_a_turn_wait_for_the_next() -> None:
-    """s159 rule: passes arriving during a turn wait for the next."""
+    """s159 spec: passes arriving during a turn wait for the next."""
     desk = po_desk.PoDesk()
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     desk.take()
@@ -129,14 +129,14 @@ def state_with(*stories: StoryState) -> RunState:
 
 
 def test_snapshot_marks_cover_every_story() -> None:
-    """s159 rule: snapshot marks cover every story."""
+    """s159 spec: snapshot marks cover every story."""
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
     assert snap.moved(["s1"], state_with(s)) is None
 
 
 def test_snapshot_refuses_a_story_that_moved() -> None:
-    """s159 rule: snapshot refuses a story that moved."""
+    """s159 spec: snapshot refuses a story that moved."""
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
     s.step = "acceptance"
@@ -145,7 +145,7 @@ def test_snapshot_refuses_a_story_that_moved() -> None:
 
 
 def test_refresh_lets_the_po_follow_its_own_change() -> None:
-    """s159 rule: refresh lets the po follow its own change."""
+    """s159 spec: refresh lets the po follow its own change."""
     s = StoryState(id="s1", title="t", step="implement")
     state = state_with(s)
     snap = po_desk.TurnSnapshot.take(state)
@@ -155,7 +155,7 @@ def test_refresh_lets_the_po_follow_its_own_change() -> None:
 
 
 def test_unnamed_stories_are_not_checked() -> None:
-    """s159 rule: unnamed stories are not checked."""
+    """s159 spec: unnamed stories are not checked."""
     a = StoryState(id="s1", title="t", step="implement")
     b = StoryState(id="s2", title="t", step="implement")
     state = state_with(a, b)
@@ -168,14 +168,14 @@ def test_unnamed_stories_are_not_checked() -> None:
 
 
 def test_pair_replay_pairs_plain_commits_by_subject_in_order() -> None:
-    """s159 rule: pair replay pairs plain commits by subject in order."""
+    """s159 spec: pair replay pairs plain commits by subject in order."""
     old = [("o1", "one", ()), ("o2", "two", ("o1",))]
     new = [("n1", "one", ()), ("n2", "two", ("n1",))]
     assert rewrite.pair_replay(old, new) == {"o1": "n1", "o2": "n2"}
 
 
 def test_pair_replay_pairs_story_commits_and_the_merge_by_id() -> None:
-    """s159 rule: pair replay pairs story commits and the merge by id."""
+    """s159 spec: pair replay pairs story commits and the merge by id."""
     old = [
         ("a1", "feat s1", ("base",)),
         ("m1", "merge(s1): T", ("base", "a1")),
@@ -189,5 +189,5 @@ def test_pair_replay_pairs_story_commits_and_the_merge_by_id() -> None:
 
 
 def test_pair_replay_empty() -> None:
-    """s159 rule: pair replay empty."""
+    """s159 spec: pair replay empty."""
     assert rewrite.pair_replay([], []) == {}
