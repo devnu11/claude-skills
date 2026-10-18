@@ -199,6 +199,7 @@ def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSy
         "step",
         "calls",
         "stages",
+        "steps",  # s159 I5: one view per open step
     ]
 
 

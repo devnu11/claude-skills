@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 from agile_team import boundary as bd
-from agile_team.boundary import BoundaryHold, Edge, Stage
+from agile_team.boundary import BoundaryHold, Edge, FixCase, Stage
+from agile_team.ci import CiResult, CiVerdict
 from agile_team.upstream import PrMode, PrState, Rebase, SyncOutcome
 
 from .fake_system import FAKE_HEAD, Done, FakeSystem
@@ -14,16 +13,10 @@ from .s29_helpers import FakePrs
 from .test_boundary_runner import NEW, OLD, Env, entry, pushes
 
 
-@dataclass
-class ClosingPrs(FakePrs):
-    def close(self, pr: int, note: str) -> None:
-        self.calls.append(("close", pr, note))
-
-
 @pytest.fixture
 def cenv(make_runtime) -> Env:
     env = Env(make_runtime)
-    env.prs = ClosingPrs()
+    env.prs = FakePrs()
     env.rt.prs = env.prs
     env.rt.state.upstream.team_branch = "main"
     return env
@@ -42,13 +35,11 @@ def test_the_ff_command_is_the_landing_text_r6() -> None:
 
 
 def test_no_text_tells_the_human_to_rebase_and_merge_r6() -> None:
-    from pathlib import Path
-
     from agile_team import ci, handover
 
-    texts = [v for v in vars(bd).values() if isinstance(v, str)] + [ci.CI_GREEN_REPORT]
+    modules = (bd, ci, handover)
+    texts = [v for m in modules for v in vars(m).values() if isinstance(v, str)]
     assert not [t for t in texts if "Rebase and merge" in t]
-    assert "Rebase and merge" not in Path(handover.__file__).read_text()
 
 
 def test_superseded_by_text_r5() -> None:
@@ -151,6 +142,7 @@ def test_a_replay_conflict_pins_progress_and_holds_for_devops_r2(
 ) -> None:
     own = entry(1)
     own.pushed = own.as_is = own.head
+    own.ci = CiResult(5, "https://h/5", own.head, CiVerdict.GREEN, [])
     at(cenv, Stage.REPLAY, own)
     cenv.rt.upstream.rebase_onto = lambda old: Rebase(
         SyncOutcome.CONFLICT, files=("a.py",), commit="c1", subject="s"
@@ -158,7 +150,8 @@ def test_a_replay_conflict_pins_progress_and_holds_for_devops_r2(
     cenv.drive()
     b = cenv.rt.state.boundary
     assert b.replay is not None and b.replay.old_head
-    assert b.rebase_fix is not None or b.hold is BoundaryHold.REBASE_CONFLICT
+    assert b.failure is not None and b.failure.case is FixCase.REBASE_CONFLICT
+    assert b.stage is Stage.REPLAY and b.failure.files == ["a.py"]
 
 
 # ---------- follow_remote (R9) ----------

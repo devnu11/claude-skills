@@ -498,7 +498,16 @@ def test_hold_and_cancel_are_refused_while_a_revert_question_waits(make_runtime)
 
 
 def prompt(rt, role: str, sid: str = "s1") -> str:
+    """The brief of a planned step; planning changes nothing (s159: told at take-off)."""
     return rt.user_prompt(rt.plan(StepRequest(role, "go", sid)))
+
+
+def prompt_and_take_off(rt, role: str, sid: str = "s1") -> str:
+    """The brief of a step that then takes off, which is when the role has been told the note."""
+    plan = rt.plan(StepRequest(role, "go", sid))
+    text = rt.user_prompt(plan)
+    asyncio.run(rt.take_off(plan))
+    return text
 
 
 def test_owed_roles_get_the_note_once(make_runtime) -> None:
@@ -508,7 +517,9 @@ def test_owed_roles_get_the_note_once(make_runtime) -> None:
     revert(t)
     s = rt.state.stories["s1"]
     assert s.revert_owed == ["architect", "unit-tester"]
-    text = prompt(rt, "architect")
+    assert "## Reverted" in prompt(rt, "architect")
+    assert s.revert_owed == ["architect", "unit-tester"]  # s159: planning does not consume it
+    text = prompt_and_take_off(rt, "architect")
     assert "## Reverted" in text and "went the wrong way" in text
     assert revert_log.REDESIGN_LINE.format(count=1) in text
     assert s.revert_owed == ["unit-tester"]
@@ -534,7 +545,7 @@ def test_after_the_note_a_later_step_has_none(make_runtime) -> None:
     revert(t)
     s = rt.state.stories["s1"]
     s.step = "tests"
-    assert "This story was reverted 1×" in prompt(rt, "unit-tester")  # noqa: RUF001
+    assert "This story was reverted 1×" in prompt_and_take_off(rt, "unit-tester")  # noqa: RUF001
     assert "This story was reverted" not in prompt(rt, "unit-tester")
 
 

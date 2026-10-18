@@ -126,13 +126,13 @@ def test_no_checks_finish_as_none_and_never_call_it_ready(env: Env) -> None:
     assert not unsaid_ready(env)
 
 
-def test_no_non_draft_pr_finishes_as_none(env: Env) -> None:
+def test_a_draft_pr_is_watched_like_a_ready_one_r5(env: Env) -> None:
     at_ci(env, GREEN)
     env.rt.state.upstream.stack[0].mode = PrMode.DRAFT
     env.drive()
     up = env.rt.state.upstream
-    assert done_event(env)["ci"] == "none"
-    assert ci.NO_OPEN_PR_WHY in up.report and ci.READY_PHRASE not in up.report
+    assert done_event(env)["ci"] == "green"  # s159 R5: the draft is watched, no longer "none"
+    assert ci.NO_OPEN_PR_WHY not in up.report
 
 
 @pytest.mark.parametrize("why", ["no", "gh"])

@@ -12,6 +12,7 @@ from agile_team.gates import FINISHED, StoryState, StoryStatus
 from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
 from agile_team.state import RunState
+from agile_team.story_branches import Landed
 
 from . import story_setup
 from .conftest import write_story
@@ -146,13 +147,17 @@ def test_refusal_release_checks() -> None:
 
 
 def test_refusal_code_unsaid_for_stories_with_commits() -> None:
-    story = StoryState("s1", "t", "design", commit="abc", code_commits=["abc", "def"])
+    story = StoryState(
+        "s1", "t", "design", commit="abc", code_commits=["abc", "def"], landed=Landed("m" * 40)
+    )  # s159 E5: the rule applies only to a landed story
     want = sa.CODE_UNSAID.format(story="s1", count=2)
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "out of scope")) == want
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "its CODE stays")) is None
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, story, "one Commit reverted")) is None
     plain = StoryState("s2", "t", "design")
     assert sa.refusal(case(sa.Act.REQUEST_CANCEL, plain, "out of scope")) is None
+    unlanded = StoryState("s3", "t", "design", commit="abc", code_commits=["abc"])
+    assert sa.refusal(case(sa.Act.REQUEST_CANCEL, unlanded, "out of scope")) is None  # E5
 
 
 def test_facts_shape() -> None:
@@ -305,7 +310,11 @@ def test_request_cancel_posts_one_question_and_holds(make_runtime) -> None:
 def test_request_cancel_code_rule(make_runtime) -> None:
     rt = make_runtime()
     story = open_story(rt)
-    story.commit, story.code_commits = "abc", ["abc"]
+    story.commit, story.code_commits, story.landed = (
+        "abc",
+        ["abc"],
+        Landed("m" * 40),
+    )  # E5: landed only
     out = clerk(rt).run(sa.Act.REQUEST_CANCEL, {"story": "s1", "reason": "out of scope"})
     assert out["reason"] == sa.CODE_UNSAID.format(story="s1", count=1)
     assert outbox(rt) == [] and story.po_hold is None

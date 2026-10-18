@@ -32,6 +32,8 @@ def test_enum_values() -> None:
         "team-fix",
         "rebase-fix",
         "gate-fix",
+        "land",
+        "story-rebase",
     }
     assert "rebase_conflict" in [e.value for e in b.BoundaryHold]
     assert [e.value for e in b.BoundaryHold if e.value != "rebase_conflict"] == [
@@ -306,7 +308,8 @@ def test_s151_texts_are_exact() -> None:
     assert "nothing is rebased" in b.CI_RED_HELD
     assert "rebased onto {target} only once it is green" in b.PUSHED_REPORT
     assert b.SUPERSEDES_LINE.startswith("Holds the commits of earlier sprint PRs {prs}")
-    assert 'Merge with "Rebase and merge".' in b.PR_BODY
+    assert "Merge it by fast-forward only: " + b.FF_COMMAND in b.PR_BODY  # R6
+    assert "Rebase and merge" not in b.PR_BODY
     assert "{supersedes}" in b.PR_BODY and "{stories}" in b.PR_BODY
 
 
