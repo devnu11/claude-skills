@@ -32,7 +32,7 @@ def on_team(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
 
 
-def test_a_descendant_push_carries_the_lease(fake: FakeSystem) -> None:
+def test_a_descendant_push_carries_the_lease_r1(fake: FakeSystem) -> None:
     """s159 spec: a descendant push carries the lease."""
     on_team(fake)
     assert upstream_for().push(Lease(STORY, OLD, NEW)) is None
@@ -41,7 +41,7 @@ def test_a_descendant_push_carries_the_lease(fake: FakeSystem) -> None:
     assert any("is-ancestor" in c.argv for c in fake.commands)
 
 
-def test_a_non_descendant_is_refused_before_any_push(fake: FakeSystem) -> None:
+def test_a_non_descendant_is_refused_before_any_push_r1(fake: FakeSystem) -> None:
     """s159 spec: a non descendant is refused before any push."""
     on_team(fake)
     fake.reply(("merge-base", "--is-ancestor"), Done(1))
@@ -50,14 +50,14 @@ def test_a_non_descendant_is_refused_before_any_push(fake: FakeSystem) -> None:
     assert not issued(fake, "push")
 
 
-def test_a_new_branch_skips_the_ancestor_check(fake: FakeSystem) -> None:
+def test_a_new_branch_skips_the_ancestor_check_r1(fake: FakeSystem) -> None:
     """s159 spec: a new branch skips the ancestor check."""
     on_team(fake)
     assert upstream_for().push(Lease(STORY, "", NEW)) is None
     assert not any("is-ancestor" in c.argv for c in fake.commands)
 
 
-def test_guard_accepts_both_prefixes(fake: FakeSystem) -> None:
+def test_guard_accepts_both_prefixes_r1(fake: FakeSystem) -> None:
     """s159 spec: guard accepts both prefixes."""
     on_team(fake)
     assert upstream_for().push(Lease("team/sprint-1", "", NEW)) is None
@@ -65,20 +65,20 @@ def test_guard_accepts_both_prefixes(fake: FakeSystem) -> None:
 
 
 @pytest.mark.parametrize("branch", ["main", "agile-team", "feature/x", "team/storys-1"])
-def test_guard_refuses_others(fake: FakeSystem, branch: str) -> None:
+def test_guard_refuses_others_r1(fake: FakeSystem, branch: str) -> None:
     """s159 spec: guard refuses others."""
     on_team(fake)
     with pytest.raises(UpstreamError, match="refusing to push"):
         upstream_for().push(Lease(branch, "", NEW))
 
 
-def test_refusal_text_names_both_prefixes() -> None:
+def test_refusal_text_names_both_prefixes_r1() -> None:
     """s159 spec: refusal text names both prefixes."""
     text = up.REFUSED_PUSH.format(branch="x", prefix="team/sprint-", story_prefix="team/story-")
     assert "team/sprint-*" in text and "team/story-*" in text
 
 
-def test_delete_sends_a_leased_delete_and_skips_ancestry(fake: FakeSystem) -> None:
+def test_delete_sends_a_leased_delete_and_skips_ancestry_r1(fake: FakeSystem) -> None:
     """s159 spec: delete sends a leased delete and skips ancestry."""
     on_team(fake)
     assert upstream_for().delete(Lease(LAND, NEW, "")) is None
@@ -89,7 +89,7 @@ def test_delete_sends_a_leased_delete_and_skips_ancestry(fake: FakeSystem) -> No
 
 
 @pytest.mark.parametrize("branch", [STORY, "team/sprint-1", "main", "team/story-s1-land-x"])
-def test_delete_refuses_anything_but_landing_branches(fake: FakeSystem, branch: str) -> None:
+def test_delete_refuses_anything_but_landing_branches_r1(fake: FakeSystem, branch: str) -> None:
     """s159 spec: delete refuses anything but landing branches."""
     on_team(fake)
     out = upstream_for().delete(Lease(branch, NEW, ""))
@@ -97,7 +97,7 @@ def test_delete_refuses_anything_but_landing_branches(fake: FakeSystem, branch: 
     assert not issued(fake, "push")
 
 
-def test_no_prs_cannot_close_or_read_shas() -> None:
+def test_no_prs_cannot_close_or_read_shas_r1() -> None:
     """s159 spec: no prs cannot close or read shas."""
     prs = NoPrs("no gh")
     with pytest.raises(UpstreamError, match="no gh"):
@@ -106,13 +106,13 @@ def test_no_prs_cannot_close_or_read_shas() -> None:
         prs.sha_checks(NEW)
 
 
-def test_texts() -> None:
+def test_texts_r1() -> None:
     """s159 spec: texts."""
     assert up.NOT_FAST_FORWARD.startswith("refusing to push")
     assert up.REFUSED_DELETE.startswith("refusing to delete")
 
 
-def test_refused_texts_name_the_prefixes() -> None:
+def test_refused_texts_name_the_prefixes_r1() -> None:
     """s159 B7: the push refusal names both prefixes."""
     assert "{story_prefix}" in up.REFUSED_PUSH and "{prefix}" in up.REFUSED_PUSH
     assert "{story_prefix}" in up.REFUSED_DELETE

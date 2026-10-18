@@ -28,7 +28,7 @@ def on_team(fake: FakeSystem) -> None:
     fake.reply(("git", "symbolic-ref"), Done(0, "agile-team\n"))
 
 
-def test_a_non_descendant_expectation_is_refused_and_nothing_is_sent(fake: FakeSystem) -> None:
+def test_a_non_descendant_expectation_is_refused_and_nothing_is_sent_r1(fake: FakeSystem) -> None:
     on_team(fake)
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(1))
     out = upstream_for().push(Lease("team/sprint-1", OLD, NEW))
@@ -36,7 +36,7 @@ def test_a_non_descendant_expectation_is_refused_and_nothing_is_sent(fake: FakeS
     assert not issued(fake, "push")
 
 
-def test_a_descendant_pushes_with_its_expected_sha(fake: FakeSystem) -> None:
+def test_a_descendant_pushes_with_its_expected_sha_r1(fake: FakeSystem) -> None:
     on_team(fake)
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(0))
     assert upstream_for().push(Lease("team/sprint-1", OLD, NEW)) is None
@@ -47,14 +47,14 @@ def test_a_descendant_pushes_with_its_expected_sha(fake: FakeSystem) -> None:
     assert "--force" not in argv and "--force-with-lease" not in argv
 
 
-def test_a_creation_skips_the_ancestor_check(fake: FakeSystem) -> None:
+def test_a_creation_skips_the_ancestor_check_r1(fake: FakeSystem) -> None:
     on_team(fake)
     assert upstream_for().push(Lease("team/sprint-1", "", NEW)) is None
     assert not issued(fake, "merge-base", "--is-ancestor")
     assert issued(fake, "push")
 
 
-def test_is_ancestor_reads_the_exit_code(fake: FakeSystem) -> None:
+def test_is_ancestor_reads_the_exit_code_r1(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(1))
     assert upstream_for().is_ancestor(OLD, NEW) is False
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(0))
@@ -62,27 +62,27 @@ def test_is_ancestor_reads_the_exit_code(fake: FakeSystem) -> None:
 
 
 @pytest.mark.parametrize("branch", ["team/story-s1", "team/story-s1-r2", "team/sprint-3-r1"])
-def test_the_guard_accepts_either_prefix(fake: FakeSystem, branch: str) -> None:
+def test_the_guard_accepts_either_prefix_r1(fake: FakeSystem, branch: str) -> None:
     on_team(fake)
     assert upstream_for().push(Lease(branch, "", NEW)) is None
 
 
 @pytest.mark.parametrize("branch", ["main", "agile-team", "feature/x"])
-def test_the_guard_still_refuses_main_team_and_others(fake: FakeSystem, branch: str) -> None:
+def test_the_guard_still_refuses_main_team_and_others_r1(fake: FakeSystem, branch: str) -> None:
     on_team(fake)
     with pytest.raises(UpstreamError, match="refusing to push"):
         upstream_for().push(Lease(branch, "", NEW))
     assert not issued(fake, "push")
 
 
-def test_the_refusal_names_both_prefixes(fake: FakeSystem) -> None:
+def test_the_refusal_names_both_prefixes_r1(fake: FakeSystem) -> None:
     on_team(fake)
     with pytest.raises(UpstreamError) as raised:
         upstream_for().push(Lease("main", "", NEW))
     assert "team/sprint-*" in str(raised.value) and "team/story-*" in str(raised.value)
 
 
-def test_delete_sends_the_leased_delete(fake: FakeSystem) -> None:
+def test_delete_sends_the_leased_delete_r1(fake: FakeSystem) -> None:
     on_team(fake)
     assert upstream_for().delete(Lease("team/story-s1-land", NEW, "")) is None
     [argv] = issued(fake, "push")
@@ -94,24 +94,24 @@ def test_delete_sends_the_leased_delete(fake: FakeSystem) -> None:
 @pytest.mark.parametrize(
     "branch", ["team/story-s1", "team/sprint-1", "main", "team/story-s1-r1", "other-land"]
 )
-def test_delete_refuses_anything_but_a_landing_branch(fake: FakeSystem, branch: str) -> None:
+def test_delete_refuses_anything_but_a_landing_branch_r1(fake: FakeSystem, branch: str) -> None:
     on_team(fake)
     out = upstream_for().delete(Lease(branch, NEW, ""))
     assert out == up.REFUSED_DELETE.format(branch=branch, story_prefix="team/story-")
     assert not issued(fake, "push")
 
 
-def test_remote_head_reads_ls_remote(fake: FakeSystem) -> None:
+def test_remote_head_reads_ls_remote_r1(fake: FakeSystem) -> None:
     fake.reply(("git", "ls-remote"), Done(0, f"{NEW}\trefs/heads/team/sprint-1\n"))
     assert upstream_for().remote_head("team/sprint-1") == NEW
 
 
-def test_remote_head_of_an_absent_branch_is_empty(fake: FakeSystem) -> None:
+def test_remote_head_of_an_absent_branch_is_empty_r1(fake: FakeSystem) -> None:
     fake.reply(("git", "ls-remote"), Done(0, ""))
     assert upstream_for().remote_head("team/sprint-1") == ""
 
 
-def test_fast_forward_is_a_ff_only_merge(fake: FakeSystem) -> None:
+def test_fast_forward_is_a_ff_only_merge_r1(fake: FakeSystem) -> None:
     assert upstream_for().fast_forward(NEW) is True
     [argv] = issued(fake, "merge", "--ff-only")
     assert argv[-1] == NEW
@@ -119,7 +119,7 @@ def test_fast_forward_is_a_ff_only_merge(fake: FakeSystem) -> None:
     assert upstream_for().fast_forward(NEW) is False
 
 
-def test_no_prs_refuses_close_and_sha_checks() -> None:
+def test_no_prs_refuses_close_and_sha_checks_r1() -> None:
     prs = up.NoPrs("no gh")
     with pytest.raises(UpstreamError, match="no gh"):
         prs.close(3, "note")
@@ -127,7 +127,7 @@ def test_no_prs_refuses_close_and_sha_checks() -> None:
         prs.sha_checks(NEW)
 
 
-def test_gh_close_comments_on_the_pr() -> None:
+def test_gh_close_comments_on_the_pr_r1() -> None:
     calls: list[list[str]] = []
 
     def run(argv: list[str]) -> tuple[int, str]:
