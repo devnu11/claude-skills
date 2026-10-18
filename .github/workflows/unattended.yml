@@ -3,9 +3,9 @@ name: unattended runner
 on:
   push:
     branches: [main, "team/**"]
-    paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
+    paths: ["unattended/**", ".github/workflows/unattended.yml"]
   pull_request:
-    paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
+    paths: ["unattended/**", ".github/workflows/unattended.yml"]
 
 defaults:
   run:
@@ -30,11 +30,8 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      # Skip the tests that are pending in .team/pending-tests.json (s125):
-      # written red by the tests step, they go green with their story.
-      - run: |
-          skips="$(uv run --locked --directory ../../agile-team/runner agile-team --repo ../.. pending-tests --root unattended/runner)"
-          PYTEST_ADDOPTS="$skips" uv run --locked pytest --cov
+      # No pending-test skips (s159): a story's red tests live only on its branch.
+      - run: uv run --locked pytest --cov
 
   # The Windows paths (the liveness probe, the process group) on a real Windows.
   windows-probe:

@@ -3,9 +3,9 @@ name: agile-team runner
 on:
   push:
     branches: [main, "team/**"]
-    paths: ["agile-team/**", ".github/workflows/agile-team.yml", ".team/pending-tests.json", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
   pull_request:
-    paths: ["agile-team/**", ".github/workflows/agile-team.yml", ".team/pending-tests.json", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
+    paths: ["agile-team/**", ".github/workflows/agile-team.yml", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
 
 defaults:
   run:
@@ -29,8 +29,5 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      # Skip the tests that are pending in .team/pending-tests.json (s125):
-      # written red by the tests step, they go green with their story.
-      - run: |
-          skips="$(uv run --locked agile-team --repo ../.. pending-tests --root agile-team/runner)"
-          PYTEST_ADDOPTS="$skips" uv run --locked pytest -n auto --cov
+      # No pending-test skips (s159): a story's red tests live only on its branch.
+      - run: uv run --locked pytest -n auto --cov
