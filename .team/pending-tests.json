@@ -1,7 +1,1 @@
-{
-  "s159": [
-    "agile-team/runner/tests/test_s128_surfaces.py::test_a_stuck_sprint_blocks_after_the_cap_with_the_blocked_text",
-    "agile-team/runner/tests/test_s156_stuck_sprint_backlog.py::test_the_waiting_run_posts_the_stuck_note_once_i4[sprint]",
-    "agile-team/runner/tests/test_s156_stuck_sprint_backlog.py::test_the_waiting_run_posts_the_stuck_note_once_i4[until-blocker]"
-  ]
-}
+{}
