@@ -143,7 +143,7 @@ def test_crash_and_sigterm_classification(exc, kind: str, reason: str) -> None:
 def test_halt_table_values() -> None:
     rules = {k: (r.status, r.note_kind, r.exit_code) for k, r in halt.HALTS.items()}
     assert rules == {
-        halt.HaltKind.LIMIT: (RunStatus.BLOCKED, "blocked", 75),
+        halt.HaltKind.LIMIT: (RunStatus.LIMIT, "blocked", 75),
         halt.HaltKind.CRASH: (RunStatus.FAILED, "failed", 70),
         halt.HaltKind.SIGTERM: (RunStatus.STOPPED, "stopped", 143),
         halt.HaltKind.BUDGET: (RunStatus.BLOCKED, "blocked", 77),
@@ -175,7 +175,7 @@ def test_po_limit_stops_cleanly(make_runtime, capsys) -> None:
     rt = make_runtime(RaisingQuery(limit_error()))
     assert run_cli(rt) == 75
     saved = state_mod.load(rt.config.run_dir)
-    assert (saved.status, saved.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (saved.status, saved.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
     assert saved.po_session == "po-sess"
     last = notes(rt)[-1]
     assert (last.kind, last.text) == ("blocked", f"{LIMIT_REASON}; {RESUME_ADVICE}")
@@ -235,9 +235,9 @@ def test_role_limit_returns_halted_report(make_runtime) -> None:
     report = asyncio.run(rt.run_role(StepRequest("architect", "b")))
     assert report["status"] == "halted" and report["role"] == "architect"
     assert report["reason"] == LIMIT_REASON
-    assert (rt.state.status, rt.state.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (rt.state.status, rt.state.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
     saved = state_mod.load(rt.config.run_dir)
-    assert (saved.status, saved.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (saved.status, saved.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
     assert [(m.kind, m.text) for m in notes(rt)] == [
         ("blocked", f"{LIMIT_REASON}; {RESUME_ADVICE}")
     ]
@@ -248,7 +248,7 @@ def test_role_limit_leaves_later_steps_refused(make_runtime) -> None:
     rt = make_runtime(RaisingQuery(limit_error()))
     asyncio.run(rt.run_role(StepRequest("architect", "b")))
     again = asyncio.run(rt.run_role(StepRequest("architect", "b")))
-    assert again["reason"] == f"the run is blocked ({LIMIT_REASON}); end your turn"
+    assert again["reason"] == f"the run is limit ({LIMIT_REASON}); end your turn"
 
 
 def test_refusal_without_reason_is_unchanged(make_runtime) -> None:
@@ -277,7 +277,7 @@ def test_role_limit_through_the_po_reaches_exit_75(make_runtime, capsys) -> None
     assert "PO text" in out.out and out.err == LIMIT_LINE
     assert po.reports[0]["status"] == "halted"
     saved = state_mod.load(rt.config.run_dir)
-    assert (saved.status, saved.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (saved.status, saved.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
     assert [m.kind for m in notes(rt)] == ["blocked"]
 
 
@@ -289,7 +289,7 @@ def test_role_limit_then_po_limit_posts_one_note(make_runtime, capsys) -> None:
     assert run_cli(rt) == 75
     assert [m.kind for m in notes(rt)] == ["blocked"]
     assert capsys.readouterr().err == LIMIT_LINE
-    assert state_mod.load(rt.config.run_dir).status is RunStatus.BLOCKED
+    assert state_mod.load(rt.config.run_dir).status is RunStatus.LIMIT
 
 
 def test_first_halt_wins(make_runtime) -> None:
@@ -299,7 +299,7 @@ def test_first_halt_wins(make_runtime) -> None:
     rt.state.status = RunStatus.IDLE
     again = rt.halt_run(halt.Halt(halt.HaltKind.CRASH, "crashed: X"))
     assert again is first and rt.halted_by is first
-    assert (rt.state.status, rt.state.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (rt.state.status, rt.state.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
     assert len(notes(rt)) == 1
 
 
@@ -341,7 +341,7 @@ def test_po_halt_during_run_survives_record(make_runtime) -> None:
     rt = make_runtime(Router(po, RaisingQuery(limit_error())))
     holder.append(rt)
     asyncio.run(po_tools.run_po(rt, Start("t")))
-    assert (rt.state.status, rt.state.status_reason) == (RunStatus.BLOCKED, LIMIT_REASON)
+    assert (rt.state.status, rt.state.status_reason) == (RunStatus.LIMIT, LIMIT_REASON)
 
 
 # ----- state and status (AC5) ----------------------------------------------------

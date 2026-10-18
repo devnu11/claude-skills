@@ -6,7 +6,6 @@ import pytest
 from agile_team import boundary, cli, fullcheck, gates, stages, system
 from agile_team.fullcheck import FullCheck, Judge, Judging, full_checks, run_checks
 from agile_team.gates import Verdict
-from agile_team.pending_tests import Registry
 
 from .conftest import FakeRunner
 from .test_fullcheck import config_with
@@ -21,7 +20,7 @@ PROTOCOL = Path(cli.__file__).parents[2] / "reference" / "protocol.md"
 
 
 def names(scratch: Path, commands: dict) -> list[str]:
-    return [f.name for f in full_checks(config_with(scratch, commands), Registry())]
+    return [f.name for f in full_checks(config_with(scratch, commands))]
 
 
 def cov(output: str, code: int = 0, required: float = 95.0) -> fullcheck.CheckReport:
@@ -34,7 +33,7 @@ def cov(output: str, code: int = 0, required: float = 95.0) -> fullcheck.CheckRe
 
 def test_coverage_set_drops_the_test_check_and_runs_the_command_once(scratch: Path) -> None:
     c = config_with(scratch, {"lint": "l", "test": "t", "coverage": "cov"})
-    checks = full_checks(c, Registry())
+    checks = full_checks(c)
     assert [f.name for f in checks] == ["lint", "coverage"]
     runner = FakeRunner({"cov": (0, "TOTAL 96%")})
     report = run_checks(checks, Judging(runner, 95.0))

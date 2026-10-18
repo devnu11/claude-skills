@@ -253,20 +253,6 @@ def made(results=None) -> gates.Checks:
     return gates.Checks({"test": "T", "coverage": "C"}, 95.0, FakeRunner(results))
 
 
-def test_tests_red_carries_the_run() -> None:
-    red = made({"T": (1, "FAILED")}).tests_red()
-    assert red.verdict is gates.Verdict.PASS and red.ran == Ran("test", 1, "FAILED")
-    green = made({"T": (0, "ok")}).tests_red()
-    assert green.verdict is gates.Verdict.BOUNCE and green.ran == Ran("test", 0, "ok")
-    slow = made({"T": (124, "slow")}).tests_red()
-    assert slow.ran == Ran("test", 124, "slow")
-
-
-def test_reworked_carries_the_run() -> None:
-    out = made({"T": (0, "ok")}).tests_reworked(None)
-    assert out.ran == Ran("test", 0, "ok")
-
-
 @pytest.mark.parametrize(
     ("result", "code"),
     [((0, "TOTAL 99%"), 0), ((0, "TOTAL 50%"), 0), ((1, "1 failed\nTOTAL 80%"), 1)],

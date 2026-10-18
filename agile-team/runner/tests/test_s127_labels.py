@@ -19,8 +19,6 @@ LB2 = {
     "quality.coverage": "coverage report",
     "checkout.guard": "checkout guard",
     "checkout.verify": "checkout verify",
-    "gate.tests-red": "pytest: new tests red",
-    "gate.tests-rework": "pytest: rework",
     "gate.tests+coverage": "pytest + coverage",
     "gate.suite-runs": "pytest: repeat runs",
     "gate.dispute-output": "pytest: disputed test",
@@ -31,15 +29,16 @@ LB2 = {
     "boundary.check": "boundary check",
     "boundary.push": "push as built + PR",
     "boundary.ci-wait": "CI wait",
-    "boundary.rebase": "rebase onto target",
-    "boundary.push-rebased": "push rebased",
-    "boundary.ci-rebased": "CI wait (rebased)",
+    "boundary.open": "open sprint branch",
+    "boundary.replay": "replay onto target",
+    "boundary.push-replayed": "push replayed",
+    "boundary.ci-replayed": "CI wait (replayed)",
+    "story.land": "land",
     "runner-tool.run_tests": "pytest: named tests",
     "runner-tool.run_new_tests": "pytest: new test files",
     "stop.handoff": "stop: handoff parses",
     "stop.lint": "stop: lint fix + check",
     "stop.suite": "stop: suite + coverage",
-    "stop.red": "stop: new tests red",
     "stop.presentation": "stop: presentation",
     "stop.requirements": "stop: requirements",
 }
@@ -78,6 +77,7 @@ def test_the_checker_catches_a_missing_a_long_and_a_repeated_label() -> None:
 def test_the_table_covers_every_stage_and_no_other() -> None:
     assert set(LB2) == set(built_in())
     assert "boundary.review" not in LB2 and "boundary.restack" not in LB2
+    assert not {"boundary.rebase", "stop.red", "gate.tests-red"} & set(LB2)
 
 
 @pytest.mark.parametrize(("name", "label"), list(LB2.items()))

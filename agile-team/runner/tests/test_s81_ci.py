@@ -362,8 +362,9 @@ def test_ci_timeout_must_be_positive(bad: int) -> None:
 def test_stage_ci_follows_push() -> None:
     from agile_team import boundary as bd
 
-    assert bd.STAGES[-1] is bd.Stage.CI_REBASED and bd.STAGES[3] is bd.Stage.CI
-    assert bd.Stage.CI in bd.END_ONLY
+    end = bd.EDGE_STAGES[bd.Edge.END]
+    assert end[-1] is bd.Stage.CI_REPLAYED and end[3] is bd.Stage.CI
+    assert bd.Stage.CI not in bd.EDGE_STAGES[bd.Edge.START]
     assert bd.BoundaryHold.CI_FAILED == "ci_failed"
     assert bd.BoundaryHold.CI_PENDING == "ci_pending"
     assert bd.UpstreamState().ci_bug == ""

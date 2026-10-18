@@ -67,7 +67,7 @@ def test_the_boundary_text_fields_include_commit_and_subject(name: str) -> None:
 
 
 def test_s151_a_rebase_fix_round_trips_with_its_conflict() -> None:
-    conflict = bd.Failure(bd.Stage.REBASE, bd.FixCase.REBASE_CONFLICT, "out", files=["a.py"])
+    conflict = bd.Failure(bd.Stage.REPLAY, bd.FixCase.REBASE_CONFLICT, "out", files=["a.py"])
     st = RunState(sprint=1)
     st.boundary = bd.Boundary(bd.Edge.END, 1, rebase_fix=bd.RebaseFix(conflict, "done", "n"))
     fix = RunState.from_json(st.to_json()).boundary.rebase_fix

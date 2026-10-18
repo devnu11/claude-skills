@@ -136,7 +136,7 @@ def test_ac2_1_green_advances_to_rebase_and_finishes_nothing(env: Env) -> None:
     env.prs.check_list = GREEN
     b = env.rt.state.boundary
     env.br.step()
-    assert b.stage is Stage.REBASE and env.rt.state.boundary is b and b.hold is None
+    assert b.stage is Stage.REPLAY and env.rt.state.boundary is b and b.hold is None
     assert e.ci.verdict is CiVerdict.GREEN and e.ci.head == AS_BUILT
     assert last(env)["outcome"] == "pass" and last(env)["ci"] == "green"
     assert ci.READY_PHRASE not in env.rt.state.upstream.report
@@ -155,7 +155,7 @@ def test_ac2_1_pending_holds_and_nothing_is_rebased_until_green(env: Env) -> Non
     env.prs.check_list, env.prs.wait_checks = GREEN, lambda n, s: True
     call(Tools(env.rt).continue_boundary({"note": ""}))
     env.br.step()
-    assert b.stage is Stage.REBASE
+    assert b.stage is Stage.REPLAY
 
 
 # ----- AC2.2: red holds, is reported to the PO and the liaison ---------------------
@@ -207,7 +207,7 @@ def test_ac2_2_a_draft_pr_finishes_not_rebased(env: Env) -> None:
 
 
 def test_ac3_1_the_rebase_remaps_the_recorded_hashes(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     story = env.rt.state.stories["s1"]
     story.commit = "old1" + "0" * 36
@@ -217,11 +217,11 @@ def test_ac3_1_the_rebase_remaps_the_recorded_hashes(env: Env) -> None:
     b = env.rt.state.boundary
     env.br.step()
     assert stub.olds == [AS_BUILT] and story.commit == "new1" + "0" * 36
-    assert last(env)["outcome"] == "rebased" and b.stage is Stage.PUSH_REBASED
+    assert last(env)["outcome"] == "rebased" and b.stage is Stage.PUSH_REPLAYED
 
 
 def test_ac3_1_as_is_pushed_and_ci_are_never_remapped(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.REBASED, sha=REBASED, moved={AS_BUILT: REBASED}))
     env.br.step()
@@ -230,13 +230,13 @@ def test_ac3_1_as_is_pushed_and_ci_are_never_remapped(env: Env) -> None:
 
 def test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing(env: Env) -> None:
     """Pins s151/AC6.1 (slice 2): a rebase conflict wakes DevOps and sets no hold."""
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     stub_rebase(env, Rebase(SyncOutcome.CONFLICT, files=("a.py",), commit="c" * 40, subject="s"))
     env.br.step()
     b = env.rt.state.boundary
     assert b.hold is None and b.failure.case is bd.FixCase.REBASE_CONFLICT
-    assert b.failure.stage is bd.Stage.REBASE and b.sync_from
+    assert b.failure.stage is bd.Stage.REPLAY and b.sync_from
     assert b.failure.files == ["a.py"]
     assert env.br.due().kind is bd.StepKind.REBASE_FIX
 
@@ -245,7 +245,7 @@ def test_s151_ac3_1_rebase_conflict_wakes_devops_and_holds_nothing(env: Env) -> 
 
 
 def at_push_rebased(env: Env) -> bd.StackEntry:
-    e = at(env, Stage.PUSH_REBASED)
+    e = at(env, Stage.PUSH_REPLAYED)
     green_read(e)
     head_is(env, REBASED)
     return e
@@ -262,7 +262,7 @@ def test_ac3_2_the_rebased_head_is_pushed_with_the_lease_on_the_as_built_sha(
     assert f"--force-with-lease=refs/heads/team/sprint-1:{AS_BUILT}" in argv
     assert argv[-1] == f"{REBASED}:refs/heads/team/sprint-1"
     assert (e.head, e.pushed, e.as_is, e.commits) == (REBASED, REBASED, AS_BUILT, 3)
-    assert b.stage is Stage.CI_REBASED and last(env)["outcome"] == "pushed"
+    assert b.stage is Stage.CI_REPLAYED and last(env)["outcome"] == "pushed"
     assert [c for c in env.prs.calls if c[0] in ("create", "edit")] == []
 
 
@@ -278,14 +278,14 @@ def test_ac3_2_a_moved_remote_is_refused_and_held(env: Env, fake: FakeSystem) ->
     fake.reply(("git", "push"), Done(1, "! [rejected] (stale info)"))
     b = env.rt.state.boundary
     env.br.step()
-    assert b.hold is BoundaryHold.PUSH_REJECTED and b.stage is Stage.PUSH_REBASED
+    assert b.hold is BoundaryHold.PUSH_REJECTED and b.stage is Stage.PUSH_REPLAYED
     assert last(env)["reason"] == "! [rejected] (stale info)"
 
 
 def test_ac3_2_a_current_rebase_pushes_nothing_and_finishes_green(
     env: Env, fake: FakeSystem
 ) -> None:
-    e = at(env, Stage.PUSH_REBASED)
+    e = at(env, Stage.PUSH_REPLAYED)
     green_read(e)
     env.br.step()
     assert pushes(fake) == [] and env.rt.state.boundary is None
@@ -299,7 +299,7 @@ def test_ac3_2_a_current_rebase_pushes_nothing_and_finishes_green(
 
 
 def at_ci_rebased(env: Env, checks: list[Check]) -> bd.StackEntry:
-    e = at(env, Stage.CI_REBASED)
+    e = at(env, Stage.CI_REPLAYED)
     e.head = e.pushed = REBASED
     head_is(env, REBASED)
     env.prs.check_list = checks
@@ -354,7 +354,7 @@ def refused_at_rebase(env: Env, fake: FakeSystem) -> tuple[Rebases, dict]:
 
 
 def test_ac4_1_no_ci_read_refuses_the_rebase(env: Env, fake: FakeSystem) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     e.ci = None
     stub, data = refused_at_rebase(env, fake)
     assert stub.olds == [] and data["outcome"] == "refused"
@@ -364,14 +364,14 @@ def test_ac4_1_no_ci_read_refuses_the_rebase(env: Env, fake: FakeSystem) -> None
 
 
 def test_ac4_1_red_refuses_the_rebase(env: Env, fake: FakeSystem) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     e.ci = CiResult(5, "u", AS_BUILT, CiVerdict.RED)
     stub, data = refused_at_rebase(env, fake)
     assert stub.olds == [] and "red" in data["reason"]
 
 
 def test_ac4_1_green_on_another_sha_refuses_the_rebase(env: Env, fake: FakeSystem) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e, head="f" * 40)
     stub, data = refused_at_rebase(env, fake)
     assert stub.olds == [] and data["outcome"] == "refused"
@@ -379,13 +379,13 @@ def test_ac4_1_green_on_another_sha_refuses_the_rebase(env: Env, fake: FakeSyste
 
 def test_ac4_1_no_entry_refuses_with_no_as_is(env: Env, fake: FakeSystem) -> None:
     env.rt.state.upstream.stack = []
-    env.open(Edge.END, stage=Stage.REBASE)
+    env.open(Edge.END, stage=Stage.REPLAY)
     stub, data = refused_at_rebase(env, fake)
     assert stub.olds == [] and data["reason"] == bd.NO_AS_IS
 
 
 def test_ac4_1_a_refusal_changes_no_recorded_hash(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     e.ci = None
     story = env.rt.state.stories["s1"]
     story.commit = "c1" * 20
@@ -395,18 +395,18 @@ def test_ac4_1_a_refusal_changes_no_recorded_hash(env: Env) -> None:
 
 
 def test_ac4_1_continue_after_a_refusal_reruns_the_ci_stage(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     e.ci = None
     stub_rebase(env)
     env.prs.check_list = GREEN
     env.br.step()
     call(Tools(env.rt).continue_boundary({"note": ""}))
     env.br.step()
-    assert env.rt.state.boundary.stage is Stage.REBASE and e.ci.verdict is CiVerdict.GREEN
+    assert env.rt.state.boundary.stage is Stage.REPLAY and e.ci.verdict is CiVerdict.GREEN
 
 
 def test_ac4_1_the_rebase_runs_after_green_at_the_pushed_head(env: Env) -> None:
-    e = at(env, Stage.REBASE)
+    e = at(env, Stage.REPLAY)
     green_read(e)
     stub = stub_rebase(env)
     env.br.step()

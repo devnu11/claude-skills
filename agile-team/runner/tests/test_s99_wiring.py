@@ -82,18 +82,6 @@ def test_a_step_without_a_story_leaves_the_event_unplaced(make_runtime) -> None:
     assert event["story"] is None and event["step"] is None
 
 
-def test_the_tests_gate_is_tests_red(make_runtime) -> None:
-    rt = checks_runtime(make_runtime, {"pytest": (1, "F")})
-    rt.pipeline.checks.tests_red()
-    assert names(rt) == ["gate.tests-red"]
-
-
-def test_a_reworked_tests_gate_is_one_rework_event_and_no_red_event(make_runtime) -> None:
-    rt = checks_runtime(make_runtime, {"pytest": (1, "F")})
-    rt.pipeline.checks.tests_reworked(None)
-    assert names(rt) == ["gate.tests-rework"]
-
-
 def test_the_quality_commands_are_before_stages(make_runtime) -> None:
     rt = checks_runtime(make_runtime)
     for command in ("lint", "static", "coverage"):

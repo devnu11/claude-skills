@@ -367,9 +367,10 @@ def test_tests_red_is_not_called_while_a_dispute_is_open() -> None:
     assert "T" not in p.checks.run.calls
 
 
-def test_tests_red_still_gates_without_a_dispute() -> None:
+def test_the_tests_step_passes_without_a_dispute_and_runs_nothing() -> None:
     p = pipeline({"T": (0, "")})
-    assert p.evaluate(story("tests"), Handoff("done")).verdict is Verdict.BOUNCE
+    assert p.evaluate(story("tests"), Handoff("done")).verdict is Verdict.PASS
+    assert p.checks.run.calls == []
 
 
 def test_done_on_a_confirmed_dispute_passes_without_a_check() -> None:

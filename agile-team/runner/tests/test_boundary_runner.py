@@ -184,7 +184,6 @@ def test_failed_check_sets_failure_and_asks_devops_for_a_team_fix(env: Env) -> N
         "name": "lint",
         "passed": False,
         "why": "exit 1",
-        "pending": "",
     }
     due = env.br.due()
     assert (due.kind, due.role) == (StepKind.TEAM_FIX, "devops")

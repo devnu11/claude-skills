@@ -210,9 +210,15 @@ def test_every_role_gets_the_step_heading(make_runtime) -> None:
 # ----- picking work (R2, R13) ------------------------------------------------------
 
 
-def test_pickers_is_boundary_manager_repeat_story() -> None:
+def test_pickers_is_boundary_manager_repeat_land_story() -> None:
     names = [p.__name__ for p in Router.PICKERS]
-    assert names == ["_boundary_work", "_manager_work", "_repeat_work", "_story_work"]
+    assert names == [
+        "_boundary_work",
+        "_manager_work",
+        "_repeat_work",
+        "_land_work",
+        "_story_work",
+    ]
 
 
 def test_manager_comes_first_and_runs_story_less(make_runtime) -> None:
@@ -769,7 +775,7 @@ def test_a_limit_in_a_router_step_halts_without_another_po_turn(make_runtime, ca
     add_story(rt)
     result = drive(rt)
     assert len(script.po_prompts) == 1 and rt.halted_by is not None
-    assert rt.state.status is RunStatus.BLOCKED
+    assert rt.state.status is RunStatus.LIMIT
     assert handover_events(rt) == []
     assert cli._finish(rt, result) == 75
 
@@ -803,16 +809,6 @@ def test_a_story_revised_after_implement_runs_on_without_a_handover(make_runtime
     assert roles[:4] == ["architect", "unit-tester", "developer", "code-reviewer"]
     assert st.status is StoryStatus.DONE and st.rounds == 0
     assert len(handover_events(rt)) == 1  # only the sprint end
-
-
-def test_an_unclaimed_rework_bounces_once_with_the_reason(make_runtime) -> None:
-    claim = '```handoff\n{"status": "done", "summary": "ok", "tests": "changed"}\n```'
-    script, rt, st = reworked(make_runtime, [None, claim])
-    drive(rt)
-    assert step_roles(rt)[:4] == ["architect", "unit-tester", "unit-tester", "developer"]
-    retry = script.prompts["unit-tester"][1]
-    assert "- Sent back to this step: tests pass on code from an earlier pass" in retry
-    assert st.status is StoryStatus.DONE and len(handover_events(rt)) == 1
 
 
 # ----- s29: sprint boundaries (U1, U2, U3, U22, U23) -----------------------------

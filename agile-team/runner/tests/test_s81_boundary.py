@@ -154,11 +154,12 @@ def test_no_permission_or_no_gh_is_local_with_ci_none(env: Env, fake: FakeSystem
     assert env.rt.state.boundary is None and ci.READY_PHRASE not in env.rt.state.upstream.report
 
 
-def test_start_never_reaches_ci_and_push_is_followed_by_ci_then_rebase() -> None:
-    """START ends after CHECK; END runs PUSH, CI, REBASE, PUSH_REBASED, CI_REBASED."""
-    assert bd.next_stage(bd.Boundary(Edge.START, 1, stage=Stage.CHECK)) is None
+def test_start_never_reaches_ci_and_push_is_followed_by_ci_then_replay() -> None:
+    """START never runs PUSH or CI; END runs PUSH, CI, REPLAY, PUSH_REPLAYED, CI_REPLAYED."""
+    assert bd.next_stage(bd.Boundary(Edge.START, 1, stage=Stage.CHECK)) is Stage.PUSH_REPLAYED
+    assert Stage.CI not in bd.EDGE_STAGES[Edge.START]
     assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.PUSH)) is Stage.CI
-    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.CI)) is Stage.REBASE
+    assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.CI)) is Stage.REPLAY
 
 
 def test_a_pr_service_error_holds_as_error(env: Env) -> None:

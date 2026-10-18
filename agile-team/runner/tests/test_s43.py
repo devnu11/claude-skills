@@ -17,7 +17,7 @@ from agile_team.commands import (
     hung_test,
     shell_runner,
 )
-from agile_team.gates import TIMED_OUT_BOUNCE, TestClaim, Verdict
+from agile_team.gates import Verdict
 from agile_team.guard import WAIT_DENIED, Scope
 from agile_team.roles import Handoff
 
@@ -161,30 +161,10 @@ TIMEOUT_OUT = "partial\nthe reason"
 TIMEOUT = {"T": (124, TIMEOUT_OUT)}
 
 
-def test_tests_red_bounces_on_a_timeout() -> None:
-    out = checks(TIMEOUT).tests_red()
-    assert out.verdict is Verdict.BOUNCE
-    assert out.reason == TIMED_OUT_BOUNCE.format(tail=gates.tail(TIMEOUT_OUT))
-    assert out.reason.startswith("the command did not finish in time:")
-
-
 def test_timed_out_helper() -> None:
     assert gates.timed_out(1, "x") is None
     assert gates.timed_out(0, "x") is None
     assert gates.timed_out(124, "x").verdict is Verdict.BOUNCE
-
-
-def test_tests_reworked_timeout_is_not_rescued_by_a_claim() -> None:
-    for claim in (None, TestClaim.CHANGED, TestClaim.CONFIRMED):
-        out = checks(TIMEOUT).tests_reworked(claim)
-        assert out.verdict is Verdict.BOUNCE
-        assert out.reason.startswith("the command did not finish in time:")
-
-
-def test_tests_reworked_green_and_red_unchanged() -> None:
-    assert checks({"T": (0, "")}).tests_reworked(TestClaim.CHANGED).verdict is Verdict.PASS
-    assert checks({"T": (1, "")}).tests_reworked(None).verdict is Verdict.PASS
-    assert checks({"T": (0, "")}).tests_reworked(None).verdict is Verdict.BOUNCE
 
 
 def test_green_timeout_is_not_tests_fail() -> None:
@@ -199,11 +179,9 @@ def test_coverage_timeout_is_not_unreadable_total() -> None:
     assert "did not finish in time" in out.reason and "could not read" not in out.reason
 
 
-@pytest.mark.parametrize("step", ["implement", "tests"])
-def test_pipeline_bounces_a_timeout_at_the_step(step: str) -> None:
-    script = {"C": TIMEOUT["T"]} if step == "implement" else TIMEOUT
-    out = pipeline(script).evaluate(story(step), Handoff("done"))
-    assert out.verdict is Verdict.BOUNCE and out.bounce_to == step
+def test_pipeline_bounces_a_timeout_at_implement() -> None:
+    out = pipeline({"C": TIMEOUT["T"]}).evaluate(story("implement"), Handoff("done"))
+    assert out.verdict is Verdict.BOUNCE and out.bounce_to == "implement"
     assert "did not finish in time" in out.reason
 
 

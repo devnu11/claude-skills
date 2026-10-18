@@ -16,15 +16,16 @@ def failure(**kw) -> b.Failure:
 
 def test_enum_values() -> None:
     assert [e.value for e in b.Edge] == ["start", "end"]
-    assert [e.value for e in b.Stage] == [
+    assert {e.value for e in b.Stage} == {
         "sync",
         "check",
         "push",
         "ci",
-        "rebase",
-        "push-rebased",
-        "ci-rebased",
-    ]
+        "open",
+        "replay",
+        "push-replayed",
+        "ci-replayed",
+    }
     assert {e.value for e in b.StepKind} == {
         "role",
         "boundary",
@@ -37,7 +38,6 @@ def test_enum_values() -> None:
         "sync_conflict",
         "escalated",
         "reviewed",
-        "push_permission",
         "push_rejected",
         "ci_failed",
         "ci_infra",
@@ -52,7 +52,7 @@ def test_enum_values() -> None:
     assert {e.value for e in b.BoundaryOutcome} == {
         "skipped", "current", "rebased", "conflict", "pass", "fail", "escalate", "held",
         "pushed", "local", "error", "done", "continued", "permission", "rerun", "superseded",
-        "refused",
+        "refused", "followed", "opened",
     }  # fmt: skip
 
 
@@ -84,26 +84,53 @@ def test_next_stage_end_goes_through_every_stage() -> None:
         b.Stage.CHECK,
         b.Stage.PUSH,
         b.Stage.CI,
-        b.Stage.REBASE,
-        b.Stage.PUSH_REBASED,
-        b.Stage.CI_REBASED,
+        b.Stage.REPLAY,
+        b.Stage.PUSH_REPLAYED,
+        b.Stage.CI_REPLAYED,
     ]
 
 
-def test_next_stage_start_skips_every_end_only_stage() -> None:
-    bd = b.Boundary(b.Edge.START, 1, stage=b.Stage.CHECK)
-    assert b.next_stage(bd) is None
-    bd.stage = b.Stage.SYNC
-    assert b.next_stage(bd) is b.Stage.CHECK
+def test_next_stage_start_runs_check_push_replayed_and_open() -> None:
+    """R5: a start runs sync, check, push-replayed, open; the end-only stages are skipped."""
+    bd = b.Boundary(b.Edge.START, 1)
+    seen = []
+    while (nxt := b.next_stage(bd)) is not None:
+        seen.append(nxt)
+        bd.stage = nxt
+    assert seen == [b.Stage.CHECK, b.Stage.PUSH_REPLAYED, b.Stage.OPEN]
+
+
+def test_edge_stages_table() -> None:
+    assert b.EDGE_STAGES == {
+        b.Edge.START: (b.Stage.SYNC, b.Stage.CHECK, b.Stage.PUSH_REPLAYED, b.Stage.OPEN),
+        b.Edge.END: (
+            b.Stage.SYNC,
+            b.Stage.CHECK,
+            b.Stage.PUSH,
+            b.Stage.CI,
+            b.Stage.REPLAY,
+            b.Stage.PUSH_REPLAYED,
+            b.Stage.CI_REPLAYED,
+        ),
+    }
+
+
+def test_legacy_stage_names_map_to_the_replay_stages() -> None:
+    assert b.LEGACY_STAGES["rebase"] is b.Stage.REPLAY
+    assert b.LEGACY_STAGES["push-rebased"] is b.Stage.PUSH_REPLAYED
+    assert b.LEGACY_STAGES["ci-rebased"] is b.Stage.CI_REPLAYED
 
 
 def test_stage_order_is_the_gate_order() -> None:
-    """AC4.1: the rebase comes after the as-built push and its CI."""
-    order = list(b.STAGES)
-    assert order.index(b.Stage.PUSH) < order.index(b.Stage.CI) < order.index(b.Stage.REBASE)
-    assert order.index(b.Stage.REBASE) < order.index(b.Stage.PUSH_REBASED)
-    assert order.index(b.Stage.PUSH_REBASED) < order.index(b.Stage.CI_REBASED)
-    assert (b.Stage.PUSH_REBASED.value, b.Stage.CI_REBASED.value) == ("push-rebased", "ci-rebased")
+    """AC4.1: the replay comes after the as-built push and its CI."""
+    order = list(b.EDGE_STAGES[b.Edge.END])
+    assert order.index(b.Stage.PUSH) < order.index(b.Stage.CI) < order.index(b.Stage.REPLAY)
+    assert order.index(b.Stage.REPLAY) < order.index(b.Stage.PUSH_REPLAYED)
+    assert order.index(b.Stage.PUSH_REPLAYED) < order.index(b.Stage.CI_REPLAYED)
+    assert (b.Stage.PUSH_REPLAYED.value, b.Stage.CI_REPLAYED.value) == (
+        "push-replayed",
+        "ci-replayed",
+    )
 
 
 def test_fix_kinds_table() -> None:
@@ -112,8 +139,6 @@ def test_fix_kinds_table() -> None:
         b.FixCase.REBASE_CONFLICT: b.StepKind.REBASE_FIX,
     }
     assert set(b.FIX_LINES) == {b.FixCase.TEAM_CHECK, b.FixCase.REBASE_CONFLICT}
-    assert frozenset(b.STAGES[2:]) == b.END_ONLY
-    assert b.Stage.SYNC not in b.END_ONLY and b.Stage.CHECK not in b.END_ONLY
 
 
 def test_setback_key_uses_edge_stage_and_normalised_reason() -> None:
@@ -286,7 +311,13 @@ def test_s151_texts_are_exact() -> None:
 
 
 def test_legacy_tables() -> None:
-    assert b.LEGACY_STAGES == {"review": b.Stage.PUSH, "restack": b.Stage.PUSH}
+    assert b.LEGACY_STAGES == {
+        "review": b.Stage.PUSH,
+        "restack": b.Stage.PUSH,
+        "rebase": b.Stage.REPLAY,
+        "push-rebased": b.Stage.PUSH_REPLAYED,
+        "ci-rebased": b.Stage.CI_REPLAYED,
+    }
     assert frozenset({"review_check", "review_conflict"}) == b.RETIRED_CASES
     assert b.RETIRED_ENTRY_KEYS == ("checked", "check")
     assert b.RETIRED_BOUNDARY_KEYS == ("restack",)

@@ -65,44 +65,56 @@ def test_no_stack_entry_is_dropped_at_start(env: Env, fake: FakeSystem) -> None:
 # ----- stages ----------------------------------------------------------------
 
 
-def test_the_stage_order_is_push_ci_rebase_push_rebased_ci_rebased() -> None:
-    assert bd.STAGES == (
+def test_the_end_stage_order_is_push_ci_replay_push_replayed_ci_replayed() -> None:
+    assert bd.EDGE_STAGES[Edge.END] == (
         Stage.SYNC,
         Stage.CHECK,
         Stage.PUSH,
         Stage.CI,
-        Stage.REBASE,
-        Stage.PUSH_REBASED,
-        Stage.CI_REBASED,
+        Stage.REPLAY,
+        Stage.PUSH_REPLAYED,
+        Stage.CI_REPLAYED,
+    )
+
+
+def test_the_start_stage_order_is_sync_check_push_replayed_open() -> None:
+    assert bd.EDGE_STAGES[Edge.START] == (
+        Stage.SYNC,
+        Stage.CHECK,
+        Stage.PUSH_REPLAYED,
+        Stage.OPEN,
     )
 
 
 def test_the_end_only_stages_are_skipped_at_start() -> None:
-    assert set(bd.STAGES[2:]) == bd.END_ONLY
     b = bd.Boundary(Edge.START, 1, stage=Stage.CHECK)
-    assert bd.next_stage(b) is None
+    assert bd.next_stage(b) is Stage.PUSH_REPLAYED
+    assert bd.next_stage(bd.Boundary(Edge.START, 1, stage=Stage.OPEN)) is None
 
 
-def test_the_end_edge_runs_the_five_end_stages_in_order() -> None:
-    assert [bd.STAGES[i] for i in range(2, 7)] == [
+def test_the_end_edge_runs_the_end_stages_in_order() -> None:
+    assert list(bd.EDGE_STAGES[Edge.END][2:]) == [
         Stage.PUSH,
         Stage.CI,
-        Stage.REBASE,
-        Stage.PUSH_REBASED,
-        Stage.CI_REBASED,
+        Stage.REPLAY,
+        Stage.PUSH_REPLAYED,
+        Stage.CI_REPLAYED,
     ]
     assert bd.next_stage(bd.Boundary(Edge.END, 1, stage=Stage.CHECK)) is Stage.PUSH
 
 
 def test_every_stage_has_a_runner_and_a_stage_row() -> None:
     assert set(br.STAGE_RUNNERS) == set(bd.Stage)
-    assert br.STAGE_RUNNERS[Stage.PUSH_REBASED] is br.BoundaryRunner._push_rebased
-    assert br.STAGE_RUNNERS[Stage.CI_REBASED] is br.BoundaryRunner._check_rebased_ci
+    assert br.STAGE_RUNNERS[Stage.OPEN] is br.BoundaryRunner._open
+    assert br.STAGE_RUNNERS[Stage.REPLAY] is br.BoundaryRunner._replay
+    assert br.STAGE_RUNNERS[Stage.PUSH_REPLAYED] is br.BoundaryRunner._push_replayed
+    assert br.STAGE_RUNNERS[Stage.CI_REPLAYED] is br.BoundaryRunner._check_replayed_ci
     for stage in bd.Stage:
         assert stages.BOUNDARY[stage.value] in stages.STAGES
-    assert stages.BOUNDARY["rebase"] is stages.Name.BOUNDARY_REBASE
-    assert stages.BOUNDARY["push-rebased"] is stages.Name.BOUNDARY_PUSH_REBASED
-    assert stages.BOUNDARY["ci-rebased"] is stages.Name.BOUNDARY_CI_REBASED
+    assert stages.BOUNDARY["replay"] is stages.Name.BOUNDARY_REPLAY
+    assert stages.BOUNDARY["push-replayed"] is stages.Name.BOUNDARY_PUSH_REPLAYED
+    assert stages.BOUNDARY["ci-replayed"] is stages.Name.BOUNDARY_CI_REPLAYED
+    assert stages.BOUNDARY["open"] is stages.Name.BOUNDARY_OPEN
 
 
 def test_the_removed_follow_names_are_gone() -> None:
