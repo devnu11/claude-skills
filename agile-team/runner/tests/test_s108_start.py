@@ -59,7 +59,8 @@ def test_no_stack_entry_is_dropped_at_start(env: Env, fake: FakeSystem) -> None:
     env.open(Edge.START)
     env.drive()
     assert "merged" not in env.outcomes()
-    assert [e.sprint for e in env.rt.state.upstream.stack] == [9, 10]
+    # R7: the start's open stage adds this sprint's entry; the earlier ones stay
+    assert [e.sprint for e in env.rt.state.upstream.stack] == [9, 10, 1]
 
 
 # ----- stages ----------------------------------------------------------------

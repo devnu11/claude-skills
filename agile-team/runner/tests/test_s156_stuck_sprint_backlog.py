@@ -127,7 +127,7 @@ def test_ac2_three_hand_overs_then_the_run_is_blocked(make_runtime, cadence: str
         assert rt.state.stuck_asks == count
     last = Router(rt)._idle()
     assert (last.kinds, last.lines, last.stories) == ([], [], [])
-    assert rt.state.status is RunStatus.BLOCKED
+    assert rt.state.status is RunStatus.RUNNING  # I4: it waits on the human
     assert "the Sprint Backlog is stuck" in rt.state.status_reason
     assert "s4 at design: waiting on s9" in rt.state.status_reason
     assert sprint_end.SPRINT_STUCK_CAP == 3
@@ -281,6 +281,15 @@ def test_ac3_one_can_move_rule(make_runtime) -> None:
     assert sprint_end.keep_going_refusal(rt.state, set()) is None
 
 
+@pytest.mark.parametrize("cadence", ["sprint", UB])
+def test_the_waiting_run_posts_the_stuck_note_once_i4(make_runtime, cadence: str) -> None:
+    """AC11.3: the run keeps polling while it waits, so the same note must not repeat each poll."""
+    rt = stuck_sprint(make_runtime, cadence)
+    for _ in range(sprint_end.SPRINT_STUCK_CAP + 3):
+        Router(rt)._idle()
+    assert len([m for m in rt.relay.messages() if m.kind == "blocked"]) == 1
+
+
 # ----- AC4 ---------------------------------------------------------------------------------
 
 
@@ -300,7 +309,7 @@ def test_ac4_the_next_sprint_hand_over_lists_ready_product_backlog_stories(make_
     for _ in range(2):
         assert Router(rt)._idle().kinds == [Trigger.NEXT_SPRINT]
     assert Router(rt)._idle().kinds == []
-    assert rt.state.status is RunStatus.BLOCKED
+    assert rt.state.status is RunStatus.RUNNING  # I4: it waits on the human
     ids = sprint_end.ids_text(["s3", "s4", "s5", "s6", "s7", "s8"])
     assert rt.state.status_reason == sprint_end.KEEP_GOING_STUCK.format(count=3, ids=ids)
 

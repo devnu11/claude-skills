@@ -44,7 +44,8 @@ def load(data: dict) -> RunState:
 
 def test_s153_the_new_enum_members_and_values() -> None:
     assert StepKind.REBASE_FIX.value == "rebase-fix"
-    assert list(StepKind)[-1] is StepKind.REBASE_FIX
+    kinds = list(StepKind)  # s159 appends LAND and STORY_REBASE after it
+    assert kinds[kinds.index(StepKind.REBASE_FIX) + 1 :] == [StepKind.LAND, StepKind.STORY_REBASE]
     assert FixCase.REBASE_CONFLICT.value == "rebase_conflict"
     assert BoundaryHold.REBASE_CONFLICT.value == "rebase_conflict"
     holds = list(BoundaryHold)

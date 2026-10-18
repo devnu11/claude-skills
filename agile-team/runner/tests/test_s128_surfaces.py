@@ -35,7 +35,7 @@ def test_a_status_note_stores_its_first_line(make_runtime, kind: str) -> None:
     )
     out = call(Tools(rt).notify_user({"kind": kind, "text": "Need the API key.\nmore"}))
     assert "id" in out
-    assert rt.state.status is RunStatus(kind)
+    assert rt.state.status is (RunStatus.RUNNING if kind == "blocked" else RunStatus(kind))  # I4
     assert rt.state.status_reason == "Need the API key."
 
 
@@ -60,8 +60,9 @@ def test_a_stuck_sprint_blocks_after_the_cap_with_the_blocked_text(
     add_story(rt).po_hold = PoHold(HoldKind.HOLD, "r")
     rt.state.cadence = "sprint"
     drive(rt)
-    assert rt.state.status is RunStatus.BLOCKED
-    assert rt.state.status_reason.startswith("Sprint 1: the Sprint Backlog is stuck after 3")
+    notes = [m for m in rt.relay.messages() if m.kind == "blocked"]  # I4: it waits, not BLOCKED
+    assert [n.text for n in notes] == [notes[0].text], [n.text for n in notes]
+    assert notes[0].text.startswith("Sprint 1: the Sprint Backlog is stuck after 3")
 
 
 # ----- P12: the snapshot and the page ---------------------------------------------------------

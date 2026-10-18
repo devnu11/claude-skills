@@ -113,7 +113,7 @@ def test_a_turn_that_starts_no_sprint_gets_the_hand_over_again_up_to_the_cap(mak
     last = Router(rt)._idle()
     text = sprint_end.KEEP_GOING_STUCK.format(count=3, ids="s3")
     assert (last.kinds, last.lines, last.stories) == ([], [], [])
-    assert rt.state.status is RunStatus.BLOCKED and rt.state.status_reason == text
+    assert rt.state.status is RunStatus.RUNNING and rt.state.status_reason == text  # I4
     [note] = rt.relay.messages()
     assert (note.kind, note.text) == ("blocked", text)
     assert json.loads(rt.state.to_json())["keep_going_asks"] == 3
@@ -174,7 +174,8 @@ def test_done_and_blocked_are_accepted_when_nothing_in_the_sprint_moves(
     rt = ended_sprint(make_runtime)
     del rt.state.stories["s3"]
     assert "id" in call(Tools(rt).notify_user({"kind": kind, "text": "bye"}))
-    assert rt.state.status is RunStatus(kind)
+    want = RunStatus.DONE if kind == "done" else RunStatus.RUNNING  # I4: blocked only waits
+    assert rt.state.status is want
 
 
 @pytest.mark.parametrize("kind", ["done", "blocked"])
@@ -193,15 +194,18 @@ def test_the_refusals_are_wired_to_the_kinds() -> None:
 
 def test_start_sprint_ignores_an_open_unmerged_pr(make_runtime) -> None:
     rt = make_runtime()
+    rt.state.story_branches = True  # the switch (W1) is not what this test is about
     t = Tools(rt)
     open_stories(t, "s1", "s2")
-    assert call(t.start_sprint({"goal": "G", "stories": ["s1"]}))["sprint"] == 1
+    first = call(t.start_sprint({"goal": "G", "stories": ["s1"]}))
+    assert first.get("sprint") == 1, first
     rt.state.boundary = None
     rt.state.stories["s1"].status = StoryStatus.DONE
     rt.state.upstream.stack = [
         StackEntry(1, "team/s1", "a" * 40, "b" * 40, pr=7, url="http://pr/7", mode=PrMode.DRAFT)
     ]
-    assert call(t.start_sprint({"goal": "two", "stories": ["s2"]}))["sprint"] == 2
+    second = call(t.start_sprint({"goal": "two", "stories": ["s2"]}))
+    assert second.get("sprint") == 2, second
 
 
 # ----- K1: a resume keeps the cadence ---------------------------------------------------------

@@ -7,6 +7,7 @@ import json
 import pytest
 from agile_team import acceptance, reverts, rewrite, system
 from agile_team import boundary as bd
+from agile_team import state as state_mod
 from agile_team.events import EventKind
 from agile_team.gates import StoryState, StoryStatus, Trace
 from agile_team.revert_log import RevertEntry
@@ -16,6 +17,7 @@ from agile_team.story_intake import INTAKE_HOLDS, Intake, StoryQueue
 
 from .fake_system import Done
 from .story_setup import Opening, opened
+from .test_snapshot import build, make_config
 
 DRAFT = (
     '---\ntitle: "Add   todo"\nacceptance:\n'
@@ -613,10 +615,6 @@ def test_story_commits_never_picks_the_file_commit() -> None:
 
 
 def test_the_snapshot_lists_the_file_commit_first(scratch) -> None:
-    from agile_team import state as state_mod
-
-    from .test_snapshot import build, make_config
-
     config = make_config(scratch / "repo")
     story = StoryState("s1", "t", "design", commit="c1", code_commits=["c2"], file_commits=["f1"])
     state_mod.save(config.run_dir, RunState(stories={"s1": story}))

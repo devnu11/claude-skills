@@ -121,11 +121,39 @@ def handover_events(rt: Runtime) -> list[Any]:
     return [e for e in rt.events.events() if e.kind == "handover"]
 
 
-def drive(rt: Runtime, task: str = "go") -> Any:
-    """Run the whole driver once from a kickoff."""
-    from agile_team import po_tools
+IDLE_POLLS = 3
 
-    return asyncio.run(po_tools.run_po(rt, Start(task)))
+
+def stop_when_idle(original: Any) -> Any:
+    """A ``Scheduler.wait_for_change`` that stops the run when nothing is running (s159 I4).
+
+    A run waiting on the human no longer ends by itself; a test stands in for the
+    human's ``stop`` the moment the scheduler has nothing left to wait for.
+    """
+
+    idle = []
+
+    async def wait(self: Any) -> None:
+        if self.tasks or self.po_task is not None:
+            idle.clear()
+            return await original(self)
+        idle.append(1)  # a poll that finds nothing running; three in a row are a wait on the human
+        if len(idle) >= IDLE_POLLS:
+            self.runtime.stop_requested = lambda: True
+
+    return wait
+
+
+def drive(rt: Runtime, task: str = "go") -> Any:
+    """Run the whole driver once from a kickoff; it stops when it would wait on the human."""
+    from unittest import mock
+
+    from agile_team import po_tools
+    from agile_team.scheduler import Scheduler
+
+    idle = stop_when_idle(Scheduler.wait_for_change)
+    with mock.patch.object(Scheduler, "wait_for_change", idle):
+        return asyncio.run(po_tools.run_po(rt, Start(task)))
 
 
 def ask_and_answer(rt: Runtime, text: str = "Which DB?", stories=("s1",), answer="sqlite") -> str:

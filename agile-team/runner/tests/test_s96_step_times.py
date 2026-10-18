@@ -37,6 +37,7 @@ def test_a_pair_gives_rounded_seconds_status_model_and_start_time() -> None:
         "status": "done",
         "clock": "wall",
         "slept": about(0.0),
+        "resumed": False,  # s159 K4: a resumed step is told apart from a fresh one
     }
 
 

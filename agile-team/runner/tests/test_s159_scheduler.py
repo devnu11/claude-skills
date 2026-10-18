@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 from agile_team import gates, router
-from agile_team.boundary import StepKind
+from agile_team.boundary import Permission, StepKind
 from agile_team.gates import Outcome, StoryState, StoryStatus, Verdict
 from agile_team.po_tools import Start
 from agile_team.router import Work
@@ -76,6 +76,7 @@ def test_only_the_head_of_the_land_queue_lands_l2(make_runtime) -> None:
     a, b = story("s1", "land"), story("s2", "land")
     rt, s = scheduler(make_runtime, a, b)
     rt.state.land_queue = ["s1", "s2"]
+    rt.state.upstream.push = Permission.YES
     assert s.can_start(work(a, StepKind.LAND)) is None
     assert "s1" in s.can_start(work(b, StepKind.LAND))
 

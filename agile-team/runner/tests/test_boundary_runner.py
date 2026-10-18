@@ -459,7 +459,7 @@ def test_the_pr_body_names_the_superseded_prs(env: Env) -> None:
     env.open(Edge.END)
     env.drive()
     [(_, spec)] = [c for c in env.prs.calls if c[0] == "create"]
-    assert "#12, #13" in spec.body and "Rebase and merge" in spec.body
+    assert "#12, #13" in spec.body and "Merge it by fast-forward only" in spec.body
 
 
 def test_open_end_when_the_sprint_is_complete(env: Env) -> None:

@@ -461,6 +461,7 @@ def test_recording_the_bug_ends_blocked_by_main_and_the_next_sprint_starts(env: 
     assert up.report.startswith("Sprint 1 ended, CI blocked by main")
     assert ci.READY_PHRASE not in up.report and last(env)["ci"] == "main"
     assert stack_entry(env).pr == 5 and stack_entry(env).ci.verdict is CiVerdict.MAIN
+    env.rt.state.story_branches = True  # the switch (W1) is not what this test is about
     started = call(Tools(env.rt).start_sprint({"goal": "g", "stories": ["s2"]}))
     assert started.get("status") != "refused" and up.ci_bug == ""
 

@@ -194,13 +194,12 @@ def test_ac2_2_no_checks_finish_not_rebased(env: Env) -> None:
     assert stub.olds == []
 
 
-def test_ac2_2_a_draft_pr_finishes_not_rebased(env: Env) -> None:
+def test_ac2_2_a_draft_pr_is_watched_and_replayed_r5(env: Env) -> None:
     e = at(env, Stage.CI)
     e.mode = PrMode.DRAFT
     stub = stub_rebase(env)
     env.drive()
-    assert last(env)["ci"] == "none" and stub.olds == []
-    assert env.rt.state.upstream.report.endswith(bd.NOT_REBASED.format(target=TARGET))
+    assert last(env)["ci"] == "green" and stub.olds  # s159 R5: a draft finishes like a ready PR
 
 
 # ----- AC3.1: after green, rebase onto the target and remap -------------------------
@@ -259,18 +258,21 @@ def test_ac3_2_the_rebased_head_is_pushed_with_the_lease_on_the_as_built_sha(
     b = env.rt.state.boundary
     env.br.step()
     [argv] = pushes(fake)
-    assert f"--force-with-lease=refs/heads/team/sprint-1:{AS_BUILT}" in argv
-    assert argv[-1] == f"{REBASED}:refs/heads/team/sprint-1"
+    # s159 R5: the replayed tip is a creation on the next -r<k> branch, never a force-push
+    assert "--force-with-lease=refs/heads/team/sprint-1-r1:" in argv
+    assert argv[-1] == f"{REBASED}:refs/heads/team/sprint-1-r1"
     assert (e.head, e.pushed, e.as_is, e.commits) == (REBASED, REBASED, AS_BUILT, 3)
+    assert e.branch == "team/sprint-1-r1" and e.replays == 1
     assert b.stage is Stage.CI_REPLAYED and last(env)["outcome"] == "pushed"
-    assert [c for c in env.prs.calls if c[0] in ("create", "edit")] == []
+    assert [c[0] for c in env.prs.calls if c[0] in ("create", "edit")] == ["create"]
 
 
 def test_ac3_2_the_liaison_hears_that_the_pr_holds_both_pushes(env: Env) -> None:
-    at_push_rebased(env)
+    e = at_push_rebased(env)
     env.br.step()
     [text] = [t for t in posted(env) if "now holds the team branch rebased" in t]
-    assert "#5" in text and REBASED[:7] in text and AS_BUILT[:7] in text
+    assert e.pr != 5 and f"#{e.pr}" in text  # s159 R5: the replay opens a new ready PR
+    assert REBASED[:7] in text and AS_BUILT[:7] in text
 
 
 def test_ac3_2_a_moved_remote_is_refused_and_held(env: Env, fake: FakeSystem) -> None:

@@ -62,6 +62,9 @@ class FakePrs:
         self.prs[spec.branch] = pr
         return pr
 
+    def close(self, pr: int, note: str) -> None:
+        self.calls.append(("close", pr, note))
+
     def edit(self, pr: Pr, spec: PrSpec) -> None:
         self.calls.append(("edit", pr.number, spec))
         self.prs[spec.branch] = Pr(
