@@ -12,6 +12,7 @@ from agile_team.po_tools import Tools
 from ..conftest import git, handoff
 from ..pipeline_helpers import Script, add_story, drive, step_roles
 
+
 class GreenGit:
     """Gate commands: git runs for real; the suite is always green."""
 
@@ -42,7 +43,7 @@ def ruled_back(rt):
 
 
 def test_ruled_back_story_finishes_with_a_plain_done_tests_step(make_runtime, configured) -> None:
-    """AC4.2: revise_design -> design -> tests (plain done, no claim) -> implement -> review -> done."""
+    """AC4.2: revise_design -> design -> tests (plain done) -> implement -> review -> done."""
     _, rt = build_rt(make_runtime, configured, {"unit-tester": [handoff("done")]})
     story = ruled_back(rt)
     drive(rt)

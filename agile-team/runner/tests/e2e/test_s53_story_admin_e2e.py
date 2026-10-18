@@ -44,6 +44,7 @@ def test_hold_cancel_request_and_release_end_to_end(make_runtime) -> None:
     assert len(questions) == 1 and questions[0].stories == ["s3"]
     out = asyncio.run(Tools(rt).release_story({"story": "s2", "reason": "s1 done"}))
     assert "released" in json.dumps(out)
+    del rt.stop_requested  # the idle stop of the first drive is not the human's stop
     drive(rt)
     assert rt.state.stories["s2"].status is StoryStatus.DONE
     snap = json.loads(json.dumps(snapshot.build(rt.config, rt.book)))

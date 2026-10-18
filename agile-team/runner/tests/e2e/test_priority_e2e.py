@@ -32,7 +32,11 @@ def test_pipeline_runs_stories_in_the_order_the_po_set(make_runtime) -> None:
     for sid in ("s1", "s2", "s3"):
         add_story(rt, sid)
     drive(rt)
-    assert first_steps(rt) == ["s3", "s1", "s2"]
+    # s159: stories run side by side, so s1 may start before the PO's turn sets the order;
+    # what the order still decides is that the prioritised s3 starts before the unranked s2.
+    assert rt.state.order == ["s3", "s1", "s2"]
+    order = first_steps(rt)
+    assert sorted(order) == ["s1", "s2", "s3"] and order.index("s3") < order.index("s2")
     assert all(s.status is StoryStatus.DONE for s in rt.state.stories.values())
     kinds = [e.kind for e in rt.events.events()]
     assert kinds.count("priority") == 1

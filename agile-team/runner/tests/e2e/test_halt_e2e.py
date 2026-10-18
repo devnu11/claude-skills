@@ -56,12 +56,14 @@ class RoleWritesThenLimit:
         self.repo = repo
 
     def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
-        return self._gen()
+        return self._gen(Path(options.cwd))
 
-    async def _gen(self) -> AsyncIterator[Any]:
-        (self.repo / "docs").mkdir(exist_ok=True)
-        (self.repo / "docs" / "design.md").write_text("partial design\n")
-        (self.repo / "src" / "oops.py").write_text("y = 2\n")
+    async def _gen(self, cwd: Path) -> AsyncIterator[Any]:
+        """Write where the step runs: the story's worktree (s159 B1), not the main checkout."""
+        (cwd / "docs").mkdir(exist_ok=True)
+        (cwd / "docs" / "design.md").write_text("partial design\n")
+        (cwd / "src").mkdir(exist_ok=True)
+        (cwd / "src" / "oops.py").write_text("y = 2\n")
         yield AssistantMessage(content=[TextBlock(text="working")], model="m")
         raise sdk_limit_error()
 
@@ -172,19 +174,20 @@ def test_real_sdk_error_str_ends_with_exit_code_but_reason_does_not() -> None:
 # (3) a halted role step leaves its partial edits alone
 
 
-def test_halted_role_step_saves_its_edits(harness, configured: Path, capsys) -> None:
+def test_halted_role_step_keeps_its_edits_in_the_worktree(harness, configured: Path, capsys):
+    """s159 I1: a cut-off story step leaves its worktree as it is; nothing is committed."""
     start, holder = harness
     po = PoRunsRole(holder)
     write_story(config_mod.load(configured), "s1", "cli")  # open_story needs the file (s94)
     head = git(configured, "rev-parse", "HEAD")
     assert start(Router(po, RoleWritesThenLimit(configured)), "--task", "t") == 75
     assert po.reports[0]["status"] == "halted"
-    assert git(configured, "rev-list", "--count", f"{head.strip()}..HEAD").strip() == "2"
+    assert git(configured, "rev-list", "--count", f"{head.strip()}..HEAD").strip() == "0"
     assert git(configured, "status", "--porcelain").strip() == ""
-    saved_sha = git(configured, "rev-parse", "HEAD~1").strip()
-    files = git(configured, "show", "--name-only", "--format=", saved_sha).split()
-    assert "docs/design.md" in files and "src/oops.py" in files
-    assert "partial design" in git(configured, "show", f"{saved_sha}:docs/design.md")
+    worktree = configured / ".team" / "run" / "worktrees" / "s1"
+    dirty = git(worktree, "status", "--porcelain")
+    assert "docs/" in dirty and "src/oops.py" in dirty
+    assert (worktree / "docs" / "design.md").read_text() == "partial design\n"
     events = holder[0].events.events()
     assert not [e for e in events if e.kind == EventKind.QUARANTINE]
     story = saved(configured).stories["s1"]
@@ -217,7 +220,8 @@ def test_resume_after_limit_clears_status_and_is_not_refused(harness, configured
 
     assert start(ResumedPo(), "--resume") == 0
     assert seen["resume"] == "po-sess"
-    assert seen["status_during"] == (state_mod.RunStatus.RUNNING, None)
+    status, reason = seen["status_during"]
+    assert status is state_mod.RunStatus.RUNNING and not reason  # cleared: None or empty
     assert seen["refusal"] is None
     st = saved(configured)
     assert st.status is state_mod.RunStatus.IDLE
