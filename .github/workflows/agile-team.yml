@@ -2,10 +2,14 @@ name: agile-team runner
 
 on:
   push:
-    branches: [main]
+    branches: [main, "team/**"]
     paths: ["agile-team/**", ".github/workflows/agile-team.yml", ".team/pending-tests.json", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
   pull_request:
     paths: ["agile-team/**", ".github/workflows/agile-team.yml", ".team/pending-tests.json", "unattended/SKILL.md", "unattended/reference/**", "README.md", ".github/workflows/unattended.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 defaults:
   run:

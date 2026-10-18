@@ -2,10 +2,14 @@ name: unattended runner
 
 on:
   push:
-    branches: [main]
+    branches: [main, "team/**"]
     paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
   pull_request:
     paths: ["unattended/**", ".github/workflows/unattended.yml", ".team/pending-tests.json"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 defaults:
   run:
