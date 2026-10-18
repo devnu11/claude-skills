@@ -90,6 +90,7 @@ def sum_turns(turns: list[Turn]) -> Entry:
         last.story,
         tokens=sum((t.tokens for t in turns), Tokens()),
         turns=_count_turns(turns),
+        estimated=True,
     )
 
 

@@ -47,6 +47,7 @@ class Reading:
 
     value: object
     alive_at: float | None = None
+    waiting: str | None = None
 
 
 Probe = Callable[[], Reading]
@@ -101,12 +102,14 @@ def json_probe(arg: str, ctx: Context) -> Probe:
 
 
 def heartbeat_reading(path: Path) -> Reading:
-    """``{"at": <epoch>, "progress": <any>}``: progress is the value, ``at`` the liveness stamp."""
+    """``{"at": <epoch>, "progress": <any>, "waiting": <text>}``: progress is the value, ``at``
+    the liveness stamp, and ``waiting`` (optional) why the run is idle on purpose."""
     data = load_json(path)
     if not isinstance(data, dict):
         return Reading(None)
-    at = data.get("at")
-    return Reading(data.get("progress"), float(at) if isinstance(at, int | float) else None)
+    at, waiting = data.get("at"), data.get("waiting")
+    stamp = float(at) if isinstance(at, int | float) else None
+    return Reading(data.get("progress"), stamp, waiting if isinstance(waiting, str) else None)
 
 
 def cpu_seconds(text: str) -> float:

@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 from . import dependencies, halt, handover, loops, owners, sprint_end, system, threads
 from .boundary import BOUNDARY_STALL, Boundary, StepKind, stall_hint
 from .boundary_runner import BoundaryRunner
+from .checkout import CheckoutRequests
 from .config import Config
 from .dispatch import FIX_KINDS_SET as FIX_STEPS
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest
@@ -35,6 +36,8 @@ from .story_admin import Clerk
 from .story_intake import Intake
 
 POLL_S = 5.0
+MANAGER_KEY = "manager"
+BOUNDARY_KEY = "boundary"
 STEP_HEADING = "Standard brief from the runner. Read the files below; they hold the details."
 MANAGER_BRIEF = "Manager review due: {reasons}"
 BRIEF_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -310,6 +313,72 @@ class Router:
     def _briefed(self, role: str, story: StoryState) -> Work:
         return Work(role, story, standard_brief(self.runtime.config, Work(role, story, "")))
 
+    # ----- the scheduler's views (s159 C1)
+
+    def works(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        running: frozenset[str],
+    ) -> list[Work]:
+        """Every startable work, in picker order, skipping the keys that already run."""
+        found = [w for w in self._offered if w is not None]
+        return [w for w in found if find_key(w) not in running]
+
+    @property
+    def _offered(self) -> list[Work | None]:
+        manager = self._manager_work()
+        if manager is not None:
+            return [self._boundary_work(), manager]
+        return [self._boundary_work(), self._repeat_work(), *self._story_offers]
+
+    @property
+    def _story_offers(self) -> list[Work | None]:
+        rt = self.runtime
+        ranked = rt.priority().ranked(rt.state.stories.values())
+        return [self._pick_work(s) for s in ranked if self._movable(s)]
+
+    def _pick_work(self, story: StoryState) -> Work:
+        """The next work of a movable story: its queued rebase, its land, a fix or its step."""
+        if story.rebase is not None:
+            return Work(
+                story.rebase.role, story, self._write_rebase_brief(story), StepKind.STORY_REBASE
+            )
+        if story.step == "land":
+            return Work("runner", story, "", StepKind.LAND)
+        return self._fix_work(story) if story.fixes else self._briefed(step_role(story), story)
+
+    def _write_rebase_brief(self, story: StoryState) -> str:
+        return standard_brief(self.runtime.config, Work(story.rebase.role, story, ""))  # type: ignore[union-attr]
+
+    def apply_queues(self) -> None:
+        """C1: apply the request queues of stories with no running task."""
+        self.desk.apply()
+        self.sharer.apply()
+        self.intake.apply()
+        self.clerk.settle()
+        self.reverter.settle()
+        CheckoutRequests(self.runtime.config).apply(self.runtime)
+
+    def news(  # house-rules: allow query-property -- name fixed by the s159 tests
+        self,
+    ) -> Pass | None:
+        """The human's new answers and tells as a pass, once each."""
+        answers, told = self._news(), self._unread()
+        return self._deliver(answers, told) if answers or told else None
+
+    def mark_wait(self) -> None:
+        """Name what the run waits on in ``status_reason`` (W3)."""
+        self._show_wait()
+
+    def end_wait(self) -> None:
+        """Clear a waiting reason once work starts (W4)."""
+        self._end_wait()
+
+    def idle(  # house-rules: allow verb-name, query-property -- name fixed by the s159 tests
+        self,
+    ) -> Pass | None:
+        """The pass for a run with nothing to start: sprint end, stuck, stalled; or ``None``."""
+        return self._idle()
+
     PICKERS: ClassVar[tuple[Callable[[Router], Work | None], ...]] = (
         _boundary_work,
         _manager_work,
@@ -452,8 +521,8 @@ class Router:
         return self._block(stuck)
 
     def _block(self, text: str) -> Pass:
-        """Mark the run blocked with text, post it to the liaison, save; Pass([], [], [])."""
-        self.runtime.state.mark(RunStatus.BLOCKED, text)
+        """Post text to the liaison and wait on the human (I4); the run stays running."""
+        self.runtime.state.mark(RunStatus.RUNNING, text)
         self.runtime.relay.post(Note("blocked", text, []))
         self.runtime.save()
         return Pass([], [], [])
@@ -506,6 +575,13 @@ class Router:
         """Clear a waiting reason once the wait ends, and save (W4)."""
         if self._clear_wait():
             self.runtime.save()
+
+
+def find_key(work: Work) -> str:
+    """C2: one task per key: the story, the Manager review, or the boundary."""
+    if work.role == MANAGER:
+        return MANAGER_KEY
+    return work.story.id if work.story else BOUNDARY_KEY
 
 
 def _boundary_stall(b: Boundary) -> str:

@@ -24,6 +24,9 @@ RESUME_TAIL = (
     "Re-run each step. On a story, the runner offers the saved commit in the next brief "
     "on that story; for any other step, put the cherry-pick line in your brief."
 )
+WORKTREE_KEPT_LINE = (
+    "{role}'s step was cut off ({cause}); its uncommitted edits are still in this worktree"
+)
 SAVED = "edits saved in {sha}; reuse with `git cherry-pick -n {sha}`"
 NO_EDITS = "no edits"
 
@@ -126,6 +129,8 @@ def note_suffix(found: Interruption | None) -> str:
 
 def offer(found: Interruption) -> str:
     """The brief line that offers a story's saved edits."""
+    if found.sha is None:
+        return WORKTREE_KEPT_LINE.format(role=found.role, cause=found.cause)
     return OFFER.format(label=found.label, cause=found.cause, sha=found.sha)
 
 

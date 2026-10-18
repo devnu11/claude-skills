@@ -82,5 +82,35 @@
     "pending": 3
    }
   }
+ ],
+ "steps": [
+  {
+   "role": "developer-cli",
+   "story": "s3",
+   "step": "implement",
+   "started_at": 1791472960.0,
+   "turn": 14,
+   "model": "claude-sonnet-4-5-20250929",
+   "configured_model": "sonnet",
+   "last_turn_at": 1791473127.9,
+   "tool": {
+    "name": "Bash",
+    "started_at": 1791473120.0
+   },
+   "tokens": {
+    "input": 190,
+    "output": 19430,
+    "cache_read": 2066577,
+    "cache_creation": 43906
+   },
+   "cost_usd": 1.0767,
+   "rate": [
+    640.0,
+    910.0,
+    1020.0,
+    860.0,
+    780.0
+   ]
+  }
  ]
 }

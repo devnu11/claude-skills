@@ -52,13 +52,20 @@ class StoryRebase:
     role: str
 
 
-def story_branch(prefix: str, story_id: str, replays: int) -> str:
+def story_branch(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    prefix: str,
+    story_id: str,
+    replays: int,
+) -> str:
     """The story's branch name; replays add ``-r<k>``."""
     name = f"{prefix}{story_id}"
     return name + REPLAY_SUFFIX.format(k=replays) if replays else name
 
 
-def landing_branch(prefix: str, story_id: str) -> str:
+def landing_branch(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    prefix: str,
+    story_id: str,
+) -> str:
     """The short-lived branch a landing is pushed to for CI."""
     return f"{prefix}{story_id}{LAND_SUFFIX}"
 

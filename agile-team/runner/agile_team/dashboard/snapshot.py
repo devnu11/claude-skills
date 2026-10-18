@@ -319,7 +319,29 @@ def _environment_keys(files: RunFiles, story: Any) -> dict[str, Any]:
     return {"environment": ", ".join(names), "environments": marks}
 
 
-def _story(files: RunFiles, story: Any) -> dict:
+def _find_running(files: RunFiles) -> frozenset[str]:
+    """AC9.1: the stories with an open step in the heartbeat's ``steps``."""
+    beat = live.read_heartbeat(files.config.run_dir) or {}
+    steps = beat.get("steps") or ([beat["step"]] if beat.get("step") else [])
+    return frozenset(s["story"] for s in steps if isinstance(s, dict) and s.get("story"))
+
+
+def _find_landed(story: Any) -> str | None:
+    """The merge sha, once the story is done (it lands only with its pass at ``land``)."""
+    done = str(story.status) == "done"
+    return story.landed.merge if done and story.landed else None
+
+
+def _read_branch_keys(story: Any, running: frozenset[str]) -> dict[str, Any]:
+    return {
+        "branch": story.branch,
+        "landed": _find_landed(story),
+        "story_ci": asdict(story.ci) if story.ci else None,
+        "running": story.id in running,
+    }
+
+
+def _story(files: RunFiles, story: Any, running: frozenset[str] = frozenset()) -> dict:
     return {
         "id": story.id,
         "title": story.title,
@@ -346,6 +368,7 @@ def _story(files: RunFiles, story: Any) -> dict:
         "files": story_files.existing(files.config, story.id),
         "label": backlog.label(story),
         **_dependency_keys(files, story),
+        **_read_branch_keys(story, running),
     }
 
 
@@ -376,7 +399,8 @@ def _reorders(files: RunFiles) -> list[dict]:
 
 def _stories(files: RunFiles) -> list[dict]:
     ranked = _priority(files).ranked(files.state.stories.values())
-    return [_story(files, story) for story in ranked]
+    running = _find_running(files)
+    return [_story(files, story, running) for story in ranked]
 
 
 def _history(events: list[dict]) -> dict[str, list[dict]]:
@@ -576,7 +600,9 @@ def _heartbeat(files: RunFiles) -> dict[str, Any] | None:
 
 
 def _health(files: RunFiles) -> dict[str, Any]:
-    verdict = health.judge(health.Vitals.read(files.config, health.Clock(files.now, files.mono)))
+    verdict = health.check_steps(
+        health.Vitals.read(files.config, health.Clock(files.now, files.mono))
+    )
     return {"level": str(verdict.level), "reason": verdict.reason, "model_note": verdict.model_note}
 
 

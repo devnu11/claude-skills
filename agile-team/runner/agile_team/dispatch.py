@@ -10,6 +10,8 @@ changes a role was not allowed to make.
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import json
 import tomllib
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
@@ -35,6 +37,7 @@ from . import (
     guard,
     halt,
     handover,
+    kept_sessions,
     keys,
     live,
     loops,
@@ -51,6 +54,7 @@ from . import (
     shares,
     stages,
     stop_checks,
+    story_rebase,
     story_spec,
     system,
 )
@@ -64,6 +68,7 @@ from .commands import CommandRunner, shell_runner
 from .config import CONFIG_NAME, ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, Config, Environment
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
+    FINISHED,
     ROUTED_COMMANDS,
     STEP_ROLES,
     UNGATED_ROLES,
@@ -88,7 +93,7 @@ from .insights import (
     long_running_roles,
     spend_by_role,
 )
-from .ledger import PO_ROLE, Budget, Entry, Ledger, Tokens, budget_status
+from .ledger import PO_ROLE, Budget, Entry, Ledger, SessionCost, Tokens, budget_status
 from .loops import Author, Setback
 from .owners import Fix, FixRecord, Owners, Writer
 from .priority import SOURCE_ROLES, Priority, Reorder
@@ -105,10 +110,13 @@ from .roles import (
     parse_handoff,
     scope_note,
 )
+from .run_writer import RunWriter
 from .salvage import Cause, Interruption
 from .stage_log import StageLog, place_of
 from .state import RunState
+from .story_branches import KeptSession
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
+from .workspaces import Workspaces
 
 DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
 GATE_CHORE = "gate: {step} on {story}"
@@ -121,6 +129,8 @@ MANAGER = "manager"
 ARCHITECT = "architect"
 GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
 SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD, Verdict.ROUTE})
+PUSH_REFUSED = "pushing {branch} was refused (push_rejected): {why}; nothing was sent"
+STORY_CANCELLED = "story {id} was cancelled; the step stops here"
 FAULT_MISSING = 'story {id} repeated a setback; name its fault: "fault": a role or "runner"'
 FAULT_UNKNOWN = 'unknown fault {fault!r}; name a role or "runner"'
 RUNNER_FAULT_NOTE = (
@@ -133,7 +143,7 @@ DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool
 BOUNDARY_UNGATED = frozenset({MANAGER})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX})
 REBASE_FIX_ENV = {"GIT_EDITOR": "true"}
-BARE_KINDS = frozenset({StepKind.GATE_FIX})
+BARE_KINDS = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
 
@@ -207,6 +217,9 @@ class Plan:
     base: str = ""
     reasons: dict[str, str] = field(default_factory=dict)
     unexplained: str = ""
+    brief: str = ""
+    on_session: Callable[[str], None] | None = None
+    cancel: guard.StopFlag = field(default_factory=guard.StopFlag)
 
     @property
     def options(self) -> ClaudeAgentOptions:
@@ -242,6 +255,8 @@ class StepResult:
     tokens: Tokens = field(default_factory=Tokens)
     turns: int = 0
     compacted_from: int | None = None
+    resumed: bool = False
+    reported: float = 0.0
 
 
 ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
@@ -256,7 +271,8 @@ def _hooks(plan: Plan, pre_tool: Any) -> dict[str, list[HookMatcher]]:
 
 def build_options(plan: Plan) -> ClaudeAgentOptions:
     """SDK options for one step: no user or project settings leak in."""
-    role, launch, hook = plan.role, plan.launch, guard.pre_tool_hook(plan.scope)
+    role, launch = plan.role, plan.launch
+    hook = guard.pre_tool_hook(plan.scope, plan.cancel)
     return ClaudeAgentOptions(
         system_prompt=launch.system_prompt,
         model=role.model,
@@ -284,10 +300,13 @@ class _Drain:
     compacted_from: int | None = None
     meter: live.Meter | None = None
     said: Said | None = None
+    on_session: Callable[[str], None] | None = None
 
     def take(self, message: Any) -> None:
         if self.meter:
             self.meter.take(message)
+        if self.on_session and _is_init(message):
+            self.on_session(str(message.data.get("session_id", "")))
         self.last_text = _text_of(message) or self.last_text
         if self.said:
             self.said.text = self.last_text
@@ -308,6 +327,10 @@ class _Drain:
         )
 
 
+def _is_init(message: Any) -> bool:
+    return isinstance(message, SystemMessage) and message.subtype == "init"
+
+
 def _is_boundary(message: Any) -> bool:
     return isinstance(message, SystemMessage) and message.subtype == "compact_boundary"
 
@@ -316,6 +339,7 @@ async def collect(query_fn: QueryFn, plan: Plan) -> StepResult:
     """Drain a query; keep the final text, cost, tokens, session id and compaction."""
     # tests pass bare plans
     drain = _Drain(meter=getattr(plan, "meter", None), said=getattr(plan, "said", None))
+    drain.on_session = getattr(plan, "on_session", None)
     async for message in query_fn(prompt=plan.prompt, options=plan.options):
         drain.take(message)
     return drain.step_result()
@@ -389,6 +413,17 @@ def _halt_text(state: RunState) -> str:
 
 
 @dataclass
+class RunFlags:
+    """The run's halt flags, shared by the runtime and every story view of it (B3)."""
+
+    halted_by: Halt | None = None
+    running: set[str] = field(default_factory=set)
+    save_pending: bool = False
+    stops: dict[str, guard.StopFlag] = field(default_factory=dict)
+    limited: Halt | None = None
+
+
+@dataclass
 class Runtime:
     """The live run: config, roles, git, ledger, relay, state and pipeline."""
 
@@ -407,8 +442,13 @@ class Runtime:
     upstream: Upstream | None = None
     prs: Prs = field(default_factory=lambda: NoPrs(NO_PR_SERVICE))
     shell: Callable[[Path], CommandRunner] = shell_runner
+    pipeline_for: Callable[[Config], Pipeline] | None = None
+    writer: RunWriter = field(default_factory=RunWriter)
+    flags: RunFlags = field(default_factory=RunFlags)
+    worktree_of: str | None = None
+    main_git: Git | None = None
+    revert_queue: list[Any] = field(default_factory=list)
     events: EventLog = field(init=False)
-    halted_by: Halt | None = field(default=None, init=False)
     pulse: live.Pulse = field(init=False)
     stage_log: StageLog = field(init=False)
     results: results_mod.Results = field(init=False)
@@ -422,6 +462,42 @@ class Runtime:
         self.results = results_mod.Results(self.config.run_dir)
         if self.upstream is None:
             self.upstream = Upstream(self.git, self.config.upstream)
+        if self.pipeline_for is None:
+            self.pipeline_for = self._get_pipeline
+        self.events.writer = self.ledger.writer = self.writer
+
+    @property
+    def main(self) -> Git:
+        """Git in the main checkout, also from a story's view."""
+        return self.main_git or self.git
+
+    def _get_pipeline(self, config: Config) -> Pipeline:
+        return self.pipeline
+
+    @property
+    def halted_by(self) -> Halt | None:
+        """The run's first halt, shared with every story view."""
+        return self.flags.halted_by
+
+    @halted_by.setter
+    def halted_by(self, found: Halt | None) -> None:
+        self.flags.halted_by = found
+
+    def at(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        story: StoryState,
+    ) -> Runtime:
+        """B3: the run seen from one story's worktree; every run file stays shared."""
+        path = Workspaces(self.git, self.config).path_of(story.id)
+        view = copy.copy(self)
+        view.config = self.config.at_worktree(path)
+        view.git = Git(path, self.git.options)
+        view.pipeline = self.pipeline_for(view.config)  # type: ignore[misc]
+        view.step_meter, view.worktree_of = None, story.id
+        view.main_git = self.main
+        view.stage_log = copy.copy(self.stage_log)
+        view.pipeline.checks.stages = view.stage_log.open
+        return view
 
     def emit(self, kind: EventKind, plan: Plan | None = None, /, **data: Any) -> Event:
         """Log an event, attributed to ``plan``'s role and story when given."""
@@ -430,6 +506,15 @@ class Runtime:
         return self.events.emit(Event(kind, role, story, data))
 
     def save(self) -> None:
+        """Submit a coalesced save of ``state.json`` to the writer (C6)."""
+        self.writer.check_owner()
+        if self.flags.save_pending:
+            return
+        self.flags.save_pending = True
+        self.writer.submit(self._write_state)
+
+    def _write_state(self) -> None:
+        self.flags.save_pending = False
         state_mod.save(self.config.run_dir, self.state)
 
     def report_load_faults(self) -> None:
@@ -501,11 +586,12 @@ class Runtime:
         role = self.resolve(request.role)
         story = self.state.stories.get(request.story_id or "")
         plan = Plan(role, self.scope_for(role), story, request.brief, kind=request.kind)
+        plan.brief = request.brief
         if story:
             plan.base = self.git.head()
         try:
             self._set_up(plan, request.kind)
-            return self._told_revert(self.finish(plan))
+            return self.finish(plan)
         except Exception:
             plan.stop()
             raise
@@ -604,11 +690,24 @@ class Runtime:
 
     def _set_rebase_fix_scope(self, plan: Plan) -> None:
         """A rebase fix may write only the scratch worktree, and its git is confined there."""
-        worktree = self.config.run_dir / scratch_rebase.REBASE_DIR
+        failure = self.state.boundary.failure if self.state.boundary else None
+        stopped = Path(failure.worktree) if failure and failure.worktree else None
+        worktree = stopped or self.config.run_dir / scratch_rebase.REBASE_DIR
         rel = worktree.relative_to(self.config.repo).as_posix()
         plan.scope.write = [f"{rel}/**"]
         self._set_git_workspace(plan, worktree)
         plan.launch.env = {**plan.launch.env, **REBASE_FIX_ENV}
+
+    def _set_story_rebase_scope(self, plan: Plan) -> None:
+        """S2: the rebase step writes only the conflicting files, in the story's worktree."""
+        rebase = plan.story.rebase  # type: ignore[union-attr]
+        plan.scope.write = list(rebase.files)
+        story_rebase.prepare(self.git, rebase)
+        plan.launch.env = {**(plan.launch.env or self.env), **REBASE_FIX_ENV}
+        lines = story_rebase.STORY_REBASE_LINES
+        values = {"id": plan.story.id, "files": ", ".join(rebase.files)}  # type: ignore[union-attr]
+        values |= {"onto": rebase.onto, "base": rebase.base, "branch": rebase.branch}
+        plan.prompt += "\n\n" + "\n\n".join(line.format(**values) for line in lines)
 
     def _lay_out_presentation(self, plan: Plan) -> None:
         with self.stage_log.open(stages.Name.PRESENTATION_LAYOUT):
@@ -672,7 +771,14 @@ class Runtime:
         plan.launch.system_prompt = self.book.system_prompt(plan.role, note)
         plan.launch.env = {**(plan.launch.env or self.env), **self.providers.env_for(plan.role)}
         plan.launch.settings = with_secret_denials(plan.launch.settings, self.secrets)
+        plan.launch.resume = plan.launch.resume or self._find_kept_session(plan)
         return plan
+
+    def _find_kept_session(self, plan: Plan) -> str | None:
+        """K1: the story's kept session of this role, when nothing about the role changed."""
+        if plan.story is None or plan.prepared is not None:
+            return None
+        return kept_sessions.resume_of(plan.story, plan.role)
 
     def user_prompt(self, plan: Plan) -> str:
         parts = [plan.prompt]
@@ -737,6 +843,29 @@ class Runtime:
         reason = self.refusal(request)
         if reason:
             return refused(reason)
+        story = self.state.stories.get(request.story_id or "")
+        if self.uses_worktree(request, story):
+            return await self.run_in_worktree(request, story)  # type: ignore[arg-type]
+        return await self.run_here(request)
+
+    def uses_worktree(self, request: StepRequest, story: StoryState | None) -> bool:
+        """B3: with story branches on, a story's role step runs in the story's worktree."""
+        on = self.state.story_branches and self.worktree_of is None
+        return bool(on and story is not None and request.kind in WORKTREE_KINDS)
+
+    async def run_in_worktree(self, request: StepRequest, story: StoryState) -> dict[str, Any]:
+        """Make the story's branch and worktree, then run the step in a view of the run."""
+        refused_report = await self.writer.apply(lambda: self.prepare_story(story))
+        if refused_report is not None:
+            return refused_report
+        self.flags.running.add(story.id)
+        try:
+            return await self.at(story).run_here(request)
+        finally:
+            self.flags.running.discard(story.id)
+
+    async def run_here(self, request: StepRequest) -> dict[str, Any]:
+        """Run the step in this runtime's checkout; log any crash."""
         try:
             report = await self._placed_step(request)
         except CheckoutChanged as moved:
@@ -747,6 +876,53 @@ class Runtime:
         self.enforce_ceiling()
         return report
 
+    @property
+    def sprint_head(self) -> str:
+        """The sprint branch's head: the sprint entry's, else the main checkout's."""
+        entry = boundary.find_current_entry(self.state.upstream.stack, self.state.sprint)
+        return entry.head if entry and entry.head else self.git.head()
+
+    def prepare_story(self, story: StoryState) -> dict[str, Any] | None:
+        """B1, B5: give the story its branch and worktree; a refusal report if it drifted."""
+        space = Workspaces(self.git, self.config)
+        path = space.path_of(story.id)
+        if story.worktree_head and system.is_dir(path):
+            drift = checkout.check_worktree(Git(path, self.git.options), story)
+            if drift is not None:
+                return self._report_drift(story, space.changed_files(story.id), path)
+        self._make_workspace(story, space)
+        return None
+
+    def _make_workspace(self, story: StoryState, space: Workspaces) -> None:
+        """B1: fork the branch at the sprint head, or rebuild the worktree of a kept branch."""
+        action = "rebuilt" if story.branch else "created"
+        head = self.sprint_head
+        if story.branch and not story.worktree_head and story.base_sha != head:
+            return self._run_returning_replay(story, head)
+        space.ensure(story, head)
+        data = {"action": action, "branch": story.branch, "base_sha": story.base_sha}
+        self.events.emit(
+            Event(EventKind.STORY_BRANCH, None, story.id, data | {"replays": story.replays})
+        )
+        self.save()
+
+    def _run_returning_replay(self, story: StoryState, head: str) -> None:
+        """A kept branch starts again on an older base: replay it onto the sprint head (R8)."""
+        from .replay import StoryReplay
+        from .story_ci import StoryPusher
+
+        old_pr = story.pr
+        if StoryReplay(self).run(story, head).outcome.value == "rebased":
+            StoryPusher(self).push_replayed(story, old_pr)
+        self.save()
+
+    def _report_drift(self, story: StoryState, files: list[str], path: Path) -> dict[str, Any]:
+        """B5: the worktree changed outside the team; the story holds and names the files."""
+        story.drift = files
+        self.save()
+        reason = f"story {story.id}'s worktree {path} changed outside the team: {', '.join(files)}"
+        return {**refused(reason), "drift": {"path": str(path), "files": files}}
+
     async def _placed_step(self, request: StepRequest) -> dict[str, Any]:
         """Run the step with its stages attached to the requested story and step."""
         story = self.state.stories.get(request.story_id or "")
@@ -755,7 +931,8 @@ class Runtime:
 
     async def _run_step(self, request: StepRequest) -> dict[str, Any]:
         """Settle the PO, return an unpresented request or run the planned step, then note it."""
-        self.settle_po()
+        if self.worktree_of is None:
+            self.settle_po()
         report = (
             self._unready(request)
             or self._unpresented(request)
@@ -776,17 +953,37 @@ class Runtime:
             return self._not_up(request, exc)
         except sandbox.SandboxError as exc:
             return refused(str(exc))
-        self._take_off(plan, request.brief)
+        await self.take_off(plan)
         return await self._run_planned(plan)
 
-    def _take_off(self, plan: Plan, brief: str) -> None:
-        """Announce the step and record it as in flight."""
+    async def take_off(self, plan: Plan) -> None:
+        """Announce the step and record it as in flight (applied by the writer)."""
+        await self.writer.apply(lambda: self._take_off(plan))
+
+    def _take_off(self, plan: Plan) -> None:
+        self._told_revert(plan)
+        if plan.story is not None:
+            self.flags.stops[plan.story.id] = plan.cancel
         step = plan.story.step if plan.story else None
-        self.emit(EventKind.STEP_START, plan, brief=brief, step=step, **self.pulse.clocks())
-        story = plan.story.id if plan.story else None
-        self.state.in_flight = salvage.InFlight(plan.role.name, story, brief)
+        self.emit(EventKind.STEP_START, plan, brief=plan.brief, step=step, **self.pulse.clocks())
+        plan.on_session = lambda sid: self._keep_init_session(plan, sid)
+        flying = salvage.InFlight(plan.role.name, plan.story.id if plan.story else None, plan.brief)
+        self._mark_in_flight(plan, flying)
         plan.meter = self.step_meter = self.pulse.open(self.who(plan))
         self.save()
+
+    def _mark_in_flight(self, plan: Plan, flying: salvage.InFlight) -> None:
+        """I1: a story step in its worktree records itself on the story; any other on the run."""
+        if self.worktree_of is not None and plan.story is not None:
+            plan.story.in_flight = flying
+        else:
+            self.state.in_flight = flying
+
+    def _keep_init_session(self, plan: Plan, session: str) -> None:
+        """I1: the session id arrives with the SDK's init message; keep it with the step."""
+        story = plan.story
+        if story is not None and story.in_flight is not None and session:
+            story.in_flight = replace(story.in_flight, session=session)
 
     def who(self, plan: Plan) -> live.Who:
         """What the live meter measures for ``plan``."""
@@ -816,6 +1013,7 @@ class Runtime:
         self.state.in_flight = None
         if plan.story:
             plan.story.interrupted = None
+            plan.story.in_flight = None
         self.save()
 
     def note_step(self, story: StoryState, report: dict[str, Any]) -> None:
@@ -854,18 +1052,125 @@ class Runtime:
 
     async def _run_planned(self, plan: Plan) -> dict[str, Any]:
         try:
-            return self.settle(plan, await self._execute(plan))
+            result = await self._execute(plan)
+            if plan.cancel.requested:
+                return self._end_stopped(plan)
+            settled = await self.settle_work(plan, result)
+            return await self.apply_settled(plan, settled)
+        except asyncio.CancelledError:
+            if self.worktree_of is not None:
+                self.save_interrupted(Cause.SIGTERM)
+            raise
         except Exception as exc:
             return self._step_failed(plan, exc)
+
+    def stop_step(self, story_id: str, reason: str) -> bool:
+        """C8: ask the story's running step to end at its next tool call; True if one runs."""
+        flag = self.flags.stops.get(story_id)
+        if flag is None or story_id not in self.flags.running:
+            return False
+        flag.requested, flag.reason = True, reason
+        return True
+
+    def release_cancelled(self, story: StoryState) -> None:
+        """E1, C8: a cancelled story's step stops at a safe point; its worktree goes."""
+        if not self.stop_step(story.id, STORY_CANCELLED.format(id=story.id)):
+            self.drop_worktree(story)
+
+    def drop_worktree(self, story: StoryState) -> None:
+        """E1: remove the worktree and keep the branch."""
+        if story.worktree_head:
+            Workspaces(self.main, self.config).remove(story.id)
+            story.worktree_head = ""
+            self.save()
+
+    def recover_stories(self, cause: Cause) -> None:
+        """I2, I3: on a resume, prune stale worktrees and mark each cut-off story step stopped."""
+        pinned = self.state.boundary is not None and self.state.boundary.replay is not None
+        kept = {s.id for s in self.state.stories.values() if s.in_flight}
+        Workspaces(self.main, self.config).prune_stale(
+            frozenset(kept | ({"replay"} if pinned else set()))
+        )
+        for story in self.state.stories.values():
+            if story.in_flight is not None:
+                self._resume_story(story, cause)
+        self.save()
+
+    def _resume_story(self, story: StoryState, cause: Cause) -> None:
+        """I2: the cut-off step ends as stopped, its session is kept, its worktree is offered."""
+        flying = story.in_flight
+        assert flying is not None
+        if not self._has_ended(story, flying.role):
+            data = {"status": "stopped", "interrupted": str(cause)}
+            self.events.emit(Event(EventKind.STEP_END, flying.role, story.id, data))
+        role = self.resolve(flying.role)
+        if flying.session:
+            kept = KeptSession(flying.session, role.model, role.effort, role.provider)
+            story.sessions[flying.role] = kept
+        story.interrupted = Interruption(cause, flying.role, story.id, flying.brief, None)
+        story.in_flight = None
+
+    def _has_ended(self, story: StoryState, role: str) -> bool:
+        """True when the latest step of ``role`` on the story has a step-end."""
+        for event in reversed(self.events.events()):
+            marks = event.kind in (EventKind.STEP_START, EventKind.STEP_END)
+            if event.role == role and event.story == story.id and marks:
+                return event.kind is EventKind.STEP_END
+        return True
+
+    def _end_stopped(self, plan: Plan) -> dict[str, Any]:
+        """C8: a cancelled story's step ends here: no commit and no gate."""
+        self.flags.stops.pop(plan.story.id, None)  # type: ignore[union-attr]
+        self._end_meter()
+        self._land(plan)
+        self.drop_worktree(plan.story)  # type: ignore[arg-type]
+        return {"role": plan.role.name, "status": "stopped", "reason": plan.cancel.reason}
+
+    async def settle_work(self, plan: Plan, result: StepResult) -> dict[str, Any]:
+        """The blocking half of a step's end: handoff, tree, quarantine, commit and gate.
+
+        It runs on the loop thread: every state change stays with the one writer (C6), so a
+        long gate delays the other stories' tasks but never races them.
+        """
+        return self.settle(plan, result)
+
+    async def apply_settled(self, plan: Plan, settled: dict[str, Any]) -> dict[str, Any]:
+        """P4: after a story step, push its branch with its PR (a short call on the loop thread)."""
+        story = plan.story
+        if story is None or self.worktree_of is None:
+            return settled
+        from .story_ci import StoryPusher
+
+        refused_push = StoryPusher(self).after_step(story)
+        if refused_push:
+            text = PUSH_REFUSED.format(branch=story.branch, why=refused_push)
+            self.relay.post(Note("update", text, [story.id]))
+        self.save()
+        return settled
 
     def _step_failed(self, plan: Plan, exc: Exception) -> dict[str, Any]:
         """A limit halts the run (logged here); any other error is saved and re-raised."""
         found = halt.limit_halt(exc)
+        self._drop_overfull_session(plan, exc)
         if found is None:
             self.save_interrupted(Cause.ERROR)
             raise exc
         halt.log_traceback(self.config.run_dir, exc)
-        return halted_report(plan.role.name, self.halt_run(found))
+        return halted_report(plan.role.name, self._stop_for_limit(plan, found))
+
+    def _drop_overfull_session(self, plan: Plan, exc: Exception) -> None:
+        """K3: a resumed query that fails on the context limit loses its kept session."""
+        if plan.story and plan.launch.resume and kept_sessions.context_exceeded(str(exc)):
+            kept_sessions.drop_role(plan.story, plan.role.name)
+            self.save()
+
+    def _stop_for_limit(self, plan: Plan, found: Halt) -> Halt:
+        """I6: a story step cut off by the usage limit fails alone; the scheduler halts the run."""
+        if self.worktree_of is None:
+            return self.halt_run(found)
+        self.save_interrupted(Cause.LIMIT)
+        self.flags.limited = found
+        return found
 
     def priority(self) -> Priority:
         """The story ranking: the PO's order and pulls over this run's stories."""
@@ -924,6 +1229,8 @@ class Runtime:
         the cause is kept for ``start --resume`` (s62 R1).
         """
         self._close_interrupted(cause)
+        if self.worktree_of is not None:
+            return None  # I1: a story step keeps its worktree; nothing is committed
         if checkout.check(self.git, self.state.checkout) is not None:
             self.state.unsaved = cause
             return None
@@ -947,6 +1254,8 @@ class Runtime:
 
     def verify_checkout(self) -> None:
         """``checkout_moved``, raising ``CheckoutChanged`` with the halt when it halted."""
+        if self.worktree_of is not None:
+            return
         with self.stage_log.open(stages.Name.CHECKOUT_VERIFY):
             moved = self.drift_halt()
         if moved is not None:
@@ -954,15 +1263,34 @@ class Runtime:
 
     def record_checkout(self) -> None:
         """K1: expect the live branch and HEAD; call only after the runner's own git writes."""
+        if self.worktree_of is not None:
+            self.state.stories[self.worktree_of].worktree_head = self.git.head()
+            return self.save()
         self.state.checkout = checkout.recorded(self.git)
+        self._follow_sprint_head()
         self.save()
+
+    def _follow_sprint_head(self) -> None:
+        """AC1.3: the sprint's stack entry follows the main checkout's HEAD."""
+        entry = boundary.own_entry(self.state.upstream.stack, self.state.sprint)
+        if entry is not None:
+            entry.head = self.state.checkout.head  # type: ignore[union-attr]
 
     async def _execute(self, plan: Plan) -> StepResult:
         try:
             result = await collect(self.query_fn, plan)
         finally:
             plan.stop()
-        return self.priced(plan, result)
+        return self.priced(plan, self._own_cost(plan, result))
+
+    def _own_cost(self, plan: Plan, result: StepResult) -> StepResult:
+        """K4: a resumed step is billed its session's delta; the running total is kept."""
+        kept = plan.story.sessions.get(plan.role.name) if plan.story else None
+        resume = plan.launch.resume
+        if kept is None or resume is None or kept.session != resume:
+            return result
+        own = SessionCost(kept.session, kept.reported).own_cost(resume, result.cost)
+        return replace(result, cost=own, resumed=True, reported=result.cost)
 
     def priced(self, plan: Plan, result: StepResult) -> StepResult:
         """``result`` with the cost its role's provider bills."""
@@ -982,6 +1310,7 @@ class Runtime:
     def _settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         plan.text = result.text
         self.record_cost(plan, result)
+        self._keep_session(plan, result)
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
         report |= self.settle_tree(plan)
@@ -990,6 +1319,15 @@ class Runtime:
         report |= self._apply(plan, parsed)
         self._land(plan)
         return report
+
+    def _keep_session(self, plan: Plan, result: StepResult) -> None:
+        """K1: remember the role's session on the story for its next step."""
+        if plan.story is None or result.session_id is None or plan.prepared is not None:
+            return
+        reported = result.reported or result.cost
+        role = plan.role
+        kept = KeptSession(result.session_id, role.model, role.effort, role.provider, reported)
+        plan.story.sessions[role.name] = kept
 
     def _emit_step_end(
         self, plan: Plan, parsed: Handoff | HandoffError, result: StepResult, commit: str | None
@@ -1006,6 +1344,8 @@ class Runtime:
             cost_usd=cost,
             commit=commit,
             turns=result.turns,
+            resumed=result.resumed,
+            cache_write=result.tokens.cache_creation,
             model=meter.reading.model if meter else None,
             **live.time_split(meter),
             **self.pulse.clocks(),
@@ -1058,6 +1398,31 @@ class Runtime:
             return report
         return report | {"gate": self._advance_and_log(plan, outcome)}
 
+    def _apply_rebase(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
+        """S3: adopt the rebased branch when the role's result checks out; else bounce a round."""
+        story, rebase = plan.story, plan.story.rebase  # type: ignore[union-attr]
+        why = self._find_rebase_refusal(plan, handoff)
+        if why:
+            outcome = Outcome(Verdict.BOUNCE, why, story.step, author=Author.ROLE)  # type: ignore[union-attr]
+            return {"gate": self._advance_and_log(plan, outcome)}
+        self._take_rebase(story, rebase)  # type: ignore[arg-type]
+        return {"rebased": {"branch": story.branch, "onto": rebase.onto}}  # type: ignore[union-attr]
+
+    def _find_rebase_refusal(self, plan: Plan, handoff: Handoff) -> str | None:
+        if handoff.status != "done":
+            return f"role reported {handoff.status}: {handoff.summary}"
+        return story_rebase.refusal(self.git, plan.story.rebase)  # type: ignore[union-attr,arg-type]
+
+    def _take_rebase(self, story: StoryState, rebase: Any) -> None:
+        """S3: the story takes the rebased branch, remaps its shas and pushes it."""
+        from .replay import StoryReplay
+        from .story_ci import StoryPusher
+
+        old_pr = story.pr
+        StoryReplay(self).take_over(story, rebase)
+        story.rebase = None
+        StoryPusher(self).push_replayed(story, old_pr)
+
     def _record_fix(self, plan: Plan, handoff: Handoff, fix: Fix) -> dict[str, Any]:
         story = plan.story
         diff = self.git.run("diff", f"{plan.commit}^", plan.commit) if plan.commit else ""
@@ -1100,7 +1465,13 @@ class Runtime:
         story_id = plan.story.id if plan.story else None
         role = plan.role
         entry = Entry(
-            role.name, role.model, cost, story_id, tokens=result.tokens, turns=result.turns
+            role.name,
+            role.model,
+            cost,
+            story_id,
+            tokens=result.tokens,
+            turns=result.turns,
+            resumed=result.resumed,
         )
         self.ledger.record(entry)
         budget = Budget(self.config.team.budget_usd, self.config.team.manager_every_pct)
@@ -1315,7 +1686,7 @@ class Runtime:
         self._keep_runs(story, outcome)
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
-        self.pipeline.advance(story, outcome)
+        self._advance_story(story, step, outcome)
         self._queue_done_renewal(story)
         result = {
             "step": step,
@@ -1334,6 +1705,16 @@ class Runtime:
             loops.after_pass(story.run, step) if outcome.verdict is Verdict.PASS else story.run
         )
         return result
+
+    def _advance_story(self, story: StoryState, step: str, outcome: Outcome) -> None:
+        """Move the story by the outcome; then K2 and L2: sessions end when it finishes or goes
+        back, and a story at land joins the land queue."""
+        self.pipeline.advance(story, outcome)
+        sent_back = outcome.verdict in (Verdict.BOUNCE, Verdict.RETURN) and story.step != step
+        if sent_back or story.status in FINISHED:
+            kept_sessions.drop_all(story)
+        if story.step == "land" and story.id not in self.state.land_queue:
+            self.state.land_queue.append(story.id)
 
     def apply_manager(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """A Manager step clears the review queue and rules on the story; reports the ruling."""
@@ -1408,6 +1789,15 @@ class Runtime:
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
 
 
+def find_rebase_refusal(role: str, story: StoryState | None) -> str | None:
+    """S1: only the role a queued story rebase names may run it, on its story."""
+    if story is None or story.rebase is None:
+        return "no story rebase is queued"
+    if role != story.rebase.role:
+        return f"story {story.id}'s rebase belongs to {story.rebase.role}"
+    return None
+
+
 def _names_fault(plan: Plan, handoff: Handoff) -> bool:
     """The fault path applies: a fault is named or the story repeated a setback."""
     return bool(handoff.fault or (plan.story and plan.story.repeated is not None))
@@ -1454,7 +1844,9 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 FIX_SETUPS = {
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
     StepKind.REBASE_FIX: Runtime._set_rebase_fix_scope,
+    StepKind.STORY_REBASE: Runtime._set_story_rebase_scope,
 }
+WORKTREE_KINDS = frozenset({StepKind.ROLE, StepKind.GATE_FIX, StepKind.STORY_REBASE})
 
 
 def _story_lines(story: StoryState | None, rework: list[str]) -> list[str]:
@@ -1629,5 +2021,8 @@ def fix_outcome(story: StoryState, handoff: Handoff) -> Outcome | None:
     return make(story, handoff) if make else None
 
 
-STORY_REFUSALS = {StepKind.GATE_FIX: fix_refusal}
-KIND_EFFECTS = {StepKind.GATE_FIX: Runtime._fix_effects}
+STORY_REFUSALS = {StepKind.GATE_FIX: fix_refusal, StepKind.STORY_REBASE: find_rebase_refusal}
+KIND_EFFECTS = {
+    StepKind.GATE_FIX: Runtime._fix_effects,
+    StepKind.STORY_REBASE: Runtime._apply_rebase,
+}

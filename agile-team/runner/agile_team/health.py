@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -300,6 +300,14 @@ def judge(vitals: Vitals) -> Health:
     return Health(worst, words, model_note(vitals.step))
 
 
+def check_steps(vitals: Vitals) -> Health:
+    """I5: judge each open step of the heartbeat's ``steps`` and report the worst verdict."""
+    beat = vitals.beat or {}
+    steps = [s for s in beat.get("steps") or [] if isinstance(s, dict)]
+    views = [replace(vitals, beat={**beat, "step": s}) for s in steps] or [vitals]
+    return max((judge(v) for v in views), key=lambda h: RANK[h.level])
+
+
 def current(config: Config) -> Health:
     """The verdict for the run as it is now."""
-    return judge(Vitals.read(config, Clock.read()))
+    return check_steps(Vitals.read(config, Clock.read()))

@@ -7,16 +7,25 @@ with the record; a difference is a ``checkout`` halt and the tree is left alone.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from . import state as state_mod
 from . import system
+from .config import Config
 from .events import EVENTS, Event, EventKind, EventLog
+from .gates import StoryState
 from .git_ops import Git
 from .halt import Halt, HaltKind
+from .numbered_queue import NumberedQueue
 from .relay import Note, Relay
 from .state import CheckoutRecord, RunState, RunStatus
+from .workspaces import Workspaces
+
+if TYPE_CHECKING:
+    from .dispatch import Runtime
 
 CHECKOUT_HEAD = "checkout changed: "
 REASON = CHECKOUT_HEAD + "expected {expected}; found {found}; last HEAD move: {move}"
@@ -115,6 +124,11 @@ def check(git: Git, expected: CheckoutRecord | None) -> Drift | None:
     return None if matches(expected, found) else Drift(expected, found, last_move(git))
 
 
+def check_worktree(git: Git, story: StoryState) -> Drift | None:
+    """B5: ``None`` when the story's worktree is on its branch at the recorded head."""
+    return check(git, CheckoutRecord(story.branch, story.worktree_head))
+
+
 def recorded(git: Git) -> CheckoutRecord:
     """The live branch and HEAD as a record; callers have checked the checkout (K1)."""
     return CheckoutRecord(git.branch() or "", git.head())
@@ -178,3 +192,43 @@ class Guard:
     def _log_accepted(self, old: CheckoutRecord | None, new: CheckoutRecord) -> None:
         data = {"action": "accepted", "from": asdict(old) if old else None, "to": asdict(new)}
         EventLog(self.run_dir / EVENTS).emit(Event(EventKind.CHECKOUT, data=data))
+
+
+CHECKOUTS = "checkouts"
+
+
+@dataclass(frozen=True)
+class CheckoutRequests:
+    """B6: ``accept-checkout --story`` requests, queued while the runner runs."""
+
+    config: Config
+
+    @property
+    def numbered(self) -> NumberedQueue:
+        """The numbered request files."""
+        return NumberedQueue(self.config.run_dir / CHECKOUTS, "c", ".json")
+
+    def publish(self, story_id: str) -> str:
+        """Queue a request for ``story_id``; the request's id."""
+        return self.numbered.publish(json.dumps({"story": story_id})).id
+
+    def apply(self, runtime: Runtime) -> list[str]:
+        """Accept every queued worktree: record its head, clear its drift and hold."""
+        accepted = []
+        for entry in self.numbered.entries():
+            story_id = self._accept(runtime, json.loads(system.read_text(entry.path)))
+            system.remove(entry.path)
+            accepted += [story_id] if story_id else []
+        return accepted
+
+    def _accept(self, runtime: Runtime, request: dict[str, Any]) -> str | None:
+        story = runtime.state.stories.get(request.get("story", ""))
+        if story is None:
+            return None
+        tree = Workspaces(runtime.git, runtime.config).path_of(story.id)
+        story.worktree_head = Git(tree).head()
+        story.drift, story.hold = [], None
+        data = {"action": "accepted", "story": story.id, "to": story.worktree_head}
+        runtime.events.emit(Event(EventKind.CHECKOUT, story=story.id, data=data))
+        runtime.save()
+        return story.id

@@ -45,7 +45,10 @@ FAILING_LINE: tuple[re.Pattern[str], ...] = (
     re.compile(r"--- FAIL: "),
     re.compile(r"\b[1-9]\d* (?:failed|errors?)\b"),
 )
-CI_GREEN_REPORT = 'Sprint {sprint}\'s CI passed on {prs}: ready to merge with "Rebase and merge".'
+CI_GREEN_REPORT = (
+    "Sprint {sprint}'s CI passed on {prs}: ready to merge by fast-forward only, never by a "
+    "rebase or squash merge."
+)
 CI_RED_REPORT = (
     "Sprint {sprint}: checks failed on {prs}, story {story} opened. "
     "The PR is NOT ready; do not merge it."
@@ -365,11 +368,7 @@ class CiWatch:
         return CiResult(entry.pr or 0, entry.url, entry.head, verdict_of(checks), checks)
 
     def _triaged(self, check: Check, head: str) -> Check:
-        """The check with its failing lines, its job's commit, its kind and failing step."""
-        job = self.prs.job(check.link) if job_of(check.link) else None
-        kind = kind_of(Seen(check.bucket, job), head)
-        step = failing_step(job) if kind in (CheckKind.OURS, CheckKind.INFRA) else ""
-        return replace(self._with_lines(check), kind=kind, step=step, head=job.head if job else "")
+        return classify_check(self.prs, check, head)
 
     def _against_main(self, checks: list[Check], look: Look) -> list[Check]:
         """Checks that fail on main too become ``main``; main is read once, when needed."""
@@ -399,8 +398,43 @@ class CiWatch:
         left = deadline - system.monotonic()
         return left > 0 and self.prs.wait_checks(number, left)
 
-    def _with_lines(self, check: Check) -> Check:
-        """A failing check with its failing lines; others unchanged."""
-        if check.bucket not in FAILING or job_of(check.link) is None:
-            return check
-        return replace(check, lines=failing_lines(self.prs.failed_log(check.link)))
+
+def classify_check(prs: Prs, check: Check, head: str) -> Check:
+    """The check with its failing lines, its job's commit, its kind and failing step."""
+    job = prs.job(check.link) if job_of(check.link) else None
+    kind = kind_of(Seen(check.bucket, job), head)
+    step = failing_step(job) if kind in (CheckKind.OURS, CheckKind.INFRA) else ""
+    return replace(_add_lines(prs, check), kind=kind, step=step, head=job.head if job else "")
+
+
+def _add_lines(prs: Prs, check: Check) -> Check:
+    """A failing check with its failing lines; others unchanged."""
+    if check.bucket not in FAILING or job_of(check.link) is None:
+        return check
+    return replace(check, lines=failing_lines(prs.failed_log(check.link)))
+
+
+def _is_settled(checks: list[Check]) -> bool:
+    return bool(checks) and all(c.bucket is not Bucket.PENDING for c in checks)
+
+
+@dataclass(frozen=True)
+class ShaWatch:
+    """L8: waits for the checks of one commit (a landing head) with no pull request."""
+
+    prs: Prs
+    limit_s: float
+
+    async def result(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        sha: str,
+        reran: list[str],
+    ) -> CiResult:
+        """Poll the commit's checks until they settle or the deadline passes, then triage them."""
+        deadline = system.monotonic() + self.limit_s
+        checks = await system.in_thread(self.prs.sha_checks, sha)
+        while not _is_settled(checks) and system.monotonic() < deadline:
+            await system.async_sleep(CI_POLL_S)
+            checks = await system.in_thread(self.prs.sha_checks, sha)
+        triaged = [await system.in_thread(classify_check, self.prs, c, sha) for c in checks]
+        return CiResult(0, "", sha, verdict_of(triaged), triaged)

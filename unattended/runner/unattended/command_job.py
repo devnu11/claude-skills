@@ -55,6 +55,8 @@ HALT_LINE = re.compile(
 )
 STATUS_FILE = Path(".team/run/state.json")
 BLOCKED = "blocked"
+LIMIT = "limit"
+RESET_STATUSES = (BLOCKED, LIMIT)
 
 
 @dataclass(frozen=True)
@@ -178,12 +180,12 @@ def halt_reason(output: RunOutput) -> str | None:
 
 
 def status_reason(output: RunOutput) -> str | None:
-    """agile-team's ``status_reason`` when its state.json in cwd says ``blocked``, or None."""
+    """agile-team's ``status_reason`` when its state.json in cwd says ``blocked`` or ``limit``."""
     try:
         data = json.loads((output.cwd / STATUS_FILE).read_text())
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or data.get("status") != BLOCKED:
+    if not isinstance(data, dict) or data.get("status") not in RESET_STATUSES:
         return None
     reason = data.get("status_reason")
     return reason if isinstance(reason, str) and reason else None

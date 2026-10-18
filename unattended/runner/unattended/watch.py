@@ -62,6 +62,7 @@ class View:
     now: float
     moved_at: float
     alive_at: float | None = None
+    waiting: str | None = None
 
     @property
     def idle_for(self) -> float:
@@ -128,6 +129,7 @@ class Liveness:
     moved_at: float
     last: list[object] = field(default_factory=list)
     alive_at: float | None = None
+    waiting: str | None = None
 
     def sample(self, now: float) -> None:
         """Read every probe; a changed value moves ``moved_at`` to ``now``."""
@@ -136,6 +138,7 @@ class Liveness:
         if values != self.last:
             self.last, self.moved_at = values, now
         self.alive_at = stalest(readings)
+        self.waiting = next((r.waiting for r in readings if r.waiting), None)
 
     def rebase(self) -> None:
         """Take the current readings as the starting point, without counting them as progress."""
@@ -162,6 +165,7 @@ class RunWatch:
     acted: set[tuple[StopCause, Phase]] = field(default_factory=set)
     raised: set[Trigger] = field(default_factory=set)
     idle_stop: Stop | None = None
+    waited_at: float | None = None
     context: Context = field(init=False)
     liveness: Liveness = field(init=False)
 
@@ -200,8 +204,10 @@ class RunWatch:
         """What the runner must do now; empty to keep waiting."""
         now = self.clock()
         self.liveness.sample(now)
-        view = View(self.job.load(), now, self.liveness.moved_at, self.liveness.alive_at)
+        live = self.liveness
+        view = View(self.job.load(), now, live.moved_at, live.alive_at, live.waiting)
         self._raise_notices(view)
+        self._raise_waiting(view)
         self._start_idle_stop(view)
         return self._walk(view)
 
@@ -222,8 +228,18 @@ class RunWatch:
             self._notice(trigger, found[trigger])
         self.raised = set(found)
 
+    def _raise_waiting(self, view: View) -> None:
+        """I7: one ``waiting`` notice per wait; again only after the run's progress moved."""
+        if view.waiting is None:
+            return
+        if self.waited_at != view.moved_at:
+            self.waited_at = view.moved_at
+            self._notice(Trigger.WAITING, view.waiting)
+
     def _start_idle_stop(self, view: View) -> None:
         bounds = view.state.bounds
+        if view.waiting is not None:
+            return
         if self.idle_stop or bounds.idle_stop is None or view.quiet_for < bounds.idle_stop:
             return
         self.idle_stop = Stop(StopCause.IDLE, view.now, bounds.hardstop or 0.0, bounds.idle_stop)

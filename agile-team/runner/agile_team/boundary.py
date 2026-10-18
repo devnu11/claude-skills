@@ -27,6 +27,12 @@ FETCH_FAILED = "git fetch {remote} failed: {error}"
 NO_TARGET = "{target} does not exist"
 DETACHED = "the repo is on a detached HEAD; check out the team branch"
 NOTHING_NEW = "sprint {sprint} added no commit since the last sprint end; nothing to push or rebase"
+SPRINT_BRANCH_DIVERGED = (
+    "the sprint branch {branch} on {remote} is at {remote_sha}, which does not descend from the "
+    "runner's {pushed}; nothing was pushed"
+)
+SUPERSEDED_BY = "Replayed onto {target} as {url}; this PR is superseded."
+FF_COMMAND = "git push {remote} {sha}:{target}"
 SUPERSEDED_NOTE = (
     "sprint {old}'s PR #{pr} is superseded: sprint {sprint}'s branch holds its commits"
 )
@@ -65,9 +71,8 @@ REBASED_NOT_GREEN = (
 NOT_REBASED = " The team branch is not rebased onto {target}: the rebase waits for green CI."
 REBASE_MERGE_LIMIT = 100
 BIG_PR_NOTE = (
-    "PR #{pr} ({branch}) has {commits} commits, more than the {limit} GitHub allows for "
-    '"Rebase and merge". Merge it by fast-forward: '
-    "git fetch {remote} && git push {remote} {remote}/{branch}:{target}"
+    "PR #{pr} ({branch}) has {commits} commits, more than the {limit} GitHub merges in one "
+    "step. Merge it by fast-forward: git fetch {remote} && " + FF_COMMAND
 )
 LOCAL_REPORT = (
     "Sprint {sprint}'s branch {branch} is checked but not pushed ({why}). No CI result exists."
@@ -104,8 +109,8 @@ REBASE_FIX_HELD = (
 OUTPUT_BLOCK = "Output:\n```\n{output}\n```"
 PR_BODY = (
     "Sprint {sprint} of the agile team.\n\n{stories}\n\n{reverted}{supersedes}"
-    "The team branch {team} as built and tested, then, once its CI passed, rebased onto "
-    '{target}; both pushes are in this PR\'s history. Merge with "Rebase and merge".'
+    "The team branch {team} as built and tested, then, once its CI passed, replayed onto "
+    "{target}. Merge it by fast-forward only: " + FF_COMMAND
 )
 RETIRED_CASES = frozenset({"review_check", "review_conflict"})
 RETIRED_ENTRY_KEYS = ("checked", "check")
@@ -113,7 +118,7 @@ RETIRED_BOUNDARY_KEYS = ("restack",)
 
 
 def big_pr_notes(stack: list[StackEntry], upstream: UpstreamSettings) -> list[str]:
-    """One fast-forward note per entry with more commits than "Rebase and merge" allows."""
+    """One fast-forward note per entry with more commits than the PR merge limit."""
     return [
         BIG_PR_NOTE.format(
             pr=e.pr,
@@ -121,6 +126,7 @@ def big_pr_notes(stack: list[StackEntry], upstream: UpstreamSettings) -> list[st
             commits=e.commits,
             limit=REBASE_MERGE_LIMIT,
             remote=upstream.remote,
+            sha=f"{upstream.remote}/{e.branch}",
             target=upstream.branch,
         )
         for e in stack
@@ -156,6 +162,8 @@ class StepKind(StrEnum):
     TEAM_FIX = "team-fix"
     GATE_FIX = "gate-fix"
     REBASE_FIX = "rebase-fix"
+    LAND = "land"
+    STORY_REBASE = "story-rebase"
 
 
 class BoundaryHold(StrEnum):
@@ -303,6 +311,7 @@ class Failure:
     commit: str = ""
     subject: str = ""
     worktree: str = ""
+    story: str = ""
 
     def __post_init__(self) -> None:
         self.stage, self.case = Stage(self.stage), FixCase(self.case)
@@ -315,6 +324,20 @@ class RebaseFix:
     conflict: Failure  # the REBASE_CONFLICT failure the step was given
     status: str  # the DevOps handoff's status
     notes: str  # the DevOps handoff's summary
+
+
+@dataclass
+class ReplayProgress:
+    """R1: where a replay stands, so a crash or a conflict resumes at the right commit."""
+
+    old_head: str
+    base: str
+    target: str
+    done: int = 0
+    tip: str = ""
+    story: str = ""
+    moved: dict[str, str] = field(default_factory=dict)
+    merges: bool = False
 
 
 @dataclass
@@ -332,9 +355,13 @@ class Boundary:
     note: str = ""
     sync_from: str = ""
     rebase_fix: RebaseFix | None = None
+    replay: ReplayProgress | None = None
+    replayed: bool = False
 
     def __post_init__(self) -> None:
         self.edge, self.stage = Edge(self.edge), Stage(self.stage)
+        if isinstance(self.replay, dict):
+            self.replay = ReplayProgress(**self.replay)
         self.hold = BoundaryHold(self.hold) if self.hold else None
 
 
@@ -360,6 +387,9 @@ class StackEntry:
     reran: list[str] = field(default_factory=list)
     as_is: str = ""
     supersedes: list[int] = field(default_factory=list)
+    as_is_branch: str = ""
+    as_is_pr: int | None = None
+    replays: int = 0
 
     def __post_init__(self) -> None:
         self.mode = PrMode(self.mode)
@@ -479,6 +509,11 @@ def stall_hint(hold: BoundaryHold | None) -> str:
 def own_entry(stack: list[StackEntry], sprint: int) -> StackEntry | None:
     """The stack entry of ``sprint``, or ``None``."""
     return next((e for e in stack if e.sprint == sprint), None)
+
+
+def find_current_entry(stack: list[StackEntry], sprint: int) -> StackEntry | None:
+    """The sprint's own stack entry, else the newest one, else ``None``."""
+    return own_entry(stack, sprint) or (stack[-1] if stack else None)
 
 
 def get_rebase_refusal(entry: StackEntry | None) -> str:

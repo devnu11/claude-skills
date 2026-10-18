@@ -31,10 +31,17 @@ class PoDesk:
             return None
         return handover.merge(self._queued[: self._taken])
 
-    def done(self) -> None:
+    def done(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+    ) -> None:
         """Drop the passes the finished turn took."""
         del self._queued[: self._taken]
         self._taken = 0
+
+    @property
+    def is_empty(self) -> bool:
+        """True when no pass is queued or taken."""
+        return not self._queued
 
     @property
     def busy(self) -> bool:
@@ -53,7 +60,8 @@ class Mark:
     rounds: int
     landed: bool
 
-    def text(self) -> str:
+    @property
+    def line(self) -> str:
         """The mark as one line for a refusal."""
         held = f", held {self.hold}" if self.hold else ""
         return f"at {self.step} ({self.status}, round {self.rounds}{held})"
@@ -78,12 +86,16 @@ class TurnSnapshot:
         """Snapshot every story in ``state``."""
         return cls({i: mark_of(s) for i, s in state.stories.items()})
 
-    def moved(self, ids: list[str], state: RunState) -> str | None:
+    def moved(  # house-rules: allow verb-name -- name fixed by the s159 tests
+        self,
+        ids: list[str],
+        state: RunState,
+    ) -> str | None:
         """The refusal text for the first named story that moved since the snapshot."""
         for story_id in ids:
             live = state.stories.get(story_id)
             if live is not None and self.marks.get(story_id) not in (None, mark_of(live)):
-                return STORY_MOVED.format(id=story_id, now=mark_of(live).text())
+                return STORY_MOVED.format(id=story_id, now=mark_of(live).line)
         return None
 
     def refresh(self, ids: list[str], state: RunState) -> None:

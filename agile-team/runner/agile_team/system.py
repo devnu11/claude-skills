@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import NamedTuple, NoReturn
+from typing import Any, NamedTuple, NoReturn
 
 __all__ = [
     "append_text",
@@ -41,6 +41,7 @@ __all__ = [
     "home",
     "hostname",
     "http_get",
+    "in_thread",
     "is_dir",
     "is_file",
     "kill",
@@ -71,6 +72,7 @@ __all__ = [
     "spawn_logged",
     "spawn_piped",
     "stat",
+    "temp_dir",
     "token",
     "wait_event",
     "which",
@@ -384,6 +386,20 @@ def listen_http(address: tuple[str, int], handler: type[BaseHTTPRequestHandler])
 async def async_sleep(seconds: float) -> None:
     """Wait for ``seconds`` without blocking the event loop."""
     await asyncio.sleep(seconds)
+
+
+async def in_thread(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    fn: Callable[..., Any],
+    *args: Any,
+) -> Any:
+    """Run ``fn(*args)`` in a worker thread and return its result (s159 C6)."""
+    return await asyncio.to_thread(fn, *args)
+
+
+def temp_dir(  # house-rules: allow verb-name -- name fixed by the s159 tests
+) -> Path:
+    """The system's temporary directory, the only place the runner writes outside the repo."""
+    return Path(tempfile.gettempdir())
 
 
 def which(name: str) -> str | None:

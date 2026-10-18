@@ -6,7 +6,7 @@ import asyncio
 import threading
 from collections.abc import Callable
 
-Write = Callable[[], object]
+type Write = Callable[[], object]
 
 
 class WrongWriter(Exception):
@@ -21,11 +21,18 @@ class RunWriter:
         self._thread: int | None = None
         self._queue: list[Write] = []
         self._lock = threading.Lock()
+        self.wake: asyncio.Event | None = None
 
     def bind(self, loop: asyncio.AbstractEventLoop, task: asyncio.Task) -> None:
         """Make ``task`` on ``loop`` the writer."""
         self._loop = loop
         self._thread = threading.get_ident()
+        self.wake = asyncio.Event()
+
+    def release(self) -> None:
+        """Write what is queued, then write directly again."""
+        self.drain()
+        self._loop, self._thread, self.wake = None, None, None
 
     def submit(self, write: Write) -> None:
         """Queue a write (thread-safe), or run it at once when unbound."""
@@ -34,17 +41,20 @@ class RunWriter:
             return
         with self._lock:
             self._queue.append(write)
-        self._loop.call_soon_threadsafe(lambda: None)  # wakes the loop for the next drain
+        self._loop.call_soon_threadsafe(self._wake)  # wakes the scheduler for the next drain
 
     async def apply[T](self, change: Callable[[], T]) -> T:
-        """Run ``change`` on the writer and return its result."""
-        if self._loop is None:
-            return change()
-        done: asyncio.Future[T] = self._loop.create_future()
-        self.submit(lambda: _settle(done, change))
-        return await done
+        """Run ``change`` as the writer and return its result.
 
-    def drain(self) -> int:
+        Every caller is a task on the loop thread, and nothing else runs between two awaits, so
+        the change is atomic with respect to the other tasks.
+        """
+        self.flush()
+        return change()
+
+    def drain(  # house-rules: allow query-property -- name fixed by the s159 tests
+        self,
+    ) -> int:
         """Run every queued write; the scheduler task only."""
         with self._lock:
             queued, self._queue = self._queue, []
@@ -52,14 +62,16 @@ class RunWriter:
             write()
         return len(queued)
 
+    def flush(self) -> None:
+        """Make queued writes visible to a reader on the loop thread."""
+        if self._loop is not None and threading.get_ident() == self._thread:
+            self.drain()
+
+    def _wake(self) -> None:
+        if self.wake is not None:
+            self.wake.set()
+
     def check_owner(self) -> None:
         """Raise ``WrongWriter`` off the loop thread."""
         if self._thread is not None and threading.get_ident() != self._thread:
             raise WrongWriter("run files are written by the scheduler task only")
-
-
-def _settle[T](done: asyncio.Future[T], change: Callable[[], T]) -> None:
-    try:
-        done.set_result(change())
-    except Exception as error:
-        done.set_exception(error)

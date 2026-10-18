@@ -15,7 +15,7 @@ from claude_agent_sdk import AssistantMessage, ToolResultBlock, ToolUseBlock, Us
 
 from . import halt, rates, system, tool_calls
 from .dashboard.step_times import Mark, Platform, platform_of
-from .events import INTERRUPTED, Event, EventKind
+from .events import EVENTS, INTERRUPTED, Event, EventKind
 from .ledger import Tokens
 from .providers import Billing
 from .salvage import STOP_REASONS, Cause
@@ -341,6 +341,8 @@ class Pulse:
     _reported: bool = field(init=False, default=False)
     _stop: threading.Event = field(init=False, default_factory=threading.Event)
     _thread: threading.Thread | None = field(init=False, default=None)
+    _waiting: str | None = field(init=False, default=None)
+    unattended: Path | None = None
 
     def __post_init__(self) -> None:
         self.started_at = self._last_beat = system.now()
@@ -484,6 +486,13 @@ class Pulse:
         """Write the heartbeat again now (s118 R7)."""
         self.write()
 
+    def set_waiting(self, reason: str | None) -> None:
+        """I5: say what the idle scheduler waits for; ``None`` when it waits for nothing."""
+        with self._lock:
+            changed, self._waiting = self._waiting != reason, reason
+        if changed:
+            self.write()
+
     def write(self) -> None:
         """Write the heartbeat atomically; a failed write is retried by the next beat (H4)."""
         with self._lock:
@@ -494,6 +503,18 @@ class Pulse:
                 system.replace(tmp, self.run_dir / HEARTBEAT)
             except OSError:
                 pass  # the next beat retries; a heartbeat must never crash the runner
+            self._write_unattended()
+
+    def _write_unattended(self) -> None:
+        """I5: the file the unattended tool watches: ``at``, ``progress`` and ``waiting``."""
+        if self.unattended is None:
+            return
+        with suppress(OSError):
+            events = self.run_dir / EVENTS
+            size = system.stat(events).size if system.exists(events) else 0
+            data = {"at": system.now(), "progress": size}
+            extra = {"waiting": self._waiting} if self._waiting else {}
+            system.write_text(self.unattended, json.dumps(data | extra))
 
     def _open_calls(self) -> list[dict]:
         """Every open call of every open meter, the outer meter first (N11)."""
@@ -503,6 +524,7 @@ class Pulse:
         """The H1 dict as of now; call with the lock held."""
         live = not self._ended
         step = self._open[-1].reading.view() if live and self._open else None
+        steps = [m.reading.view() for m in self._open] if live else []
         return {
             "version": HEARTBEAT_VERSION,
             "pid": system.pid(),
@@ -515,4 +537,5 @@ class Pulse:
             "step": step,
             "calls": self._open_calls() if live else [],
             "stages": list(self._stages) if live else [],
+            "steps": steps,
         }
