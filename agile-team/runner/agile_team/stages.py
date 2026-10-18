@@ -288,10 +288,3 @@ def note(command: str, code: int) -> None:
     run = _OPEN.get()
     if run:
         run.note(command, code)
-
-
-def hear(text: str) -> None:
-    """Tell the innermost open stage's listeners a line; nothing when none is open."""
-    run = _OPEN.get()
-    if run:
-        run.hear(text)

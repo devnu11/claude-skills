@@ -238,9 +238,12 @@ class StoryReplay:
             self.tell(stashed, KEPT_STASH)
 
     def tell(self, stashed: Stash, text: str) -> None:
-        """Post ``text`` (with the stash sha filled in) to the PO about the stash's story."""
-        note = Note("update", text.format(sha=stashed.sha), [stashed.story_id])
-        self.runtime.relay.post(note)
+        """Tell the PO and the story's next brief ``text`` (stash sha filled in)."""
+        said = text.format(sha=stashed.sha)
+        self.runtime.relay.post(Note("update", said, [stashed.story_id]))
+        story = self.runtime.state.stories.get(stashed.story_id)
+        if story:
+            story.runner_note = said  # N8: the next brief says it too
 
     def find_stash_ref(self, tree: Git, stashed: Stash) -> str:
         """N7: the ``stash@{n}`` entry of this story's stash commit, else ``""`` (it is gone)."""

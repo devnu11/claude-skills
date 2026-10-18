@@ -246,6 +246,7 @@ class StoryState:
     hold: str | None = None
     po_hold: PoHold | None = None
     note: str = ""
+    runner_note: str = ""  # N8: what the runner says of a replay, until the next step lands
     previous: PreviousStep | None = None
     dispute: OpenDispute | None = None
     disputes: int = 0

@@ -1217,7 +1217,6 @@
     "agile-team/runner/agile_team/stages.py::Stage.as_dict::query-property": 1,
     "agile-team/runner/agile_team/stages.py::current::verb-name": 1,
     "agile-team/runner/agile_team/stages.py::entered::verb-name": 1,
-    "agile-team/runner/agile_team/stages.py::hear::verb-name": 1,
     "agile-team/runner/agile_team/stages.py::opened::verb-name": 1,
     "agile-team/runner/agile_team/stages.py::reserved::verb-name": 1,
     "agile-team/runner/agile_team/stages.py::unlogged::verb-name": 1,
