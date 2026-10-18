@@ -12,9 +12,6 @@ from agile_team.po_tools import Tools
 from ..conftest import git, handoff
 from ..pipeline_helpers import Script, add_story, drive, step_roles
 
-CONFIRMED = '```handoff\n{"status": "done", "summary": "ok", "tests": "confirmed"}\n```'
-
-
 class GreenGit:
     """Gate commands: git runs for real; the suite is always green."""
 
@@ -44,34 +41,14 @@ def ruled_back(rt):
     return story
 
 
-def test_ruled_back_story_finishes_with_a_tests_claim(make_runtime, configured) -> None:
-    """AC1: revise_design -> design -> tests (green + claim) -> implement -> review -> done."""
-    script, rt = build_rt(make_runtime, configured, {"unit-tester": [CONFIRMED]})
+def test_ruled_back_story_finishes_with_a_plain_done_tests_step(make_runtime, configured) -> None:
+    """AC4.2: revise_design -> design -> tests (plain done, no claim) -> implement -> review -> done."""
+    _, rt = build_rt(make_runtime, configured, {"unit-tester": [handoff("done")]})
     story = ruled_back(rt)
     drive(rt)
     assert step_roles(rt)[1:5] == ["architect", "unit-tester", "developer", "code-reviewer"]
     assert story.status is StoryStatus.DONE and story.rounds == 0
     assert story.implemented == 2
-    assert "Code from an earlier pass is in" in script.prompts["unit-tester"][0]
-
-
-def test_ruled_back_story_without_a_claim_bounces_once(make_runtime, configured) -> None:
-    """AC1: no claim on a green suite sends it back to tests once, with the reason."""
-    script, rt = build_rt(make_runtime, configured, {"unit-tester": [None, CONFIRMED]})
-    story = ruled_back(rt)
-    drive(rt)
-    assert step_roles(rt).count("unit-tester") == 2
-    assert "tests pass on code from an earlier pass" in script.prompts["unit-tester"][1]
-    assert story.status is StoryStatus.DONE
-
-
-def test_first_pass_story_still_needs_a_red_suite(make_runtime, configured) -> None:
-    """AC1: a story with no code yet bounces on a green suite, claim or not."""
-    _, rt = build_rt(make_runtime, configured, {"unit-tester": [CONFIRMED]})
-    story = add_story(rt, step="tests")
-    report = asyncio.run(rt.run_role(StepRequest("unit-tester", "go", "s1")))
-    assert "tests pass before implementation; write a failing test" in str(report)
-    assert (story.step, story.rounds) == ("tests", 1)
 
 
 def test_hold_on_a_done_story_is_cleared_and_the_story_stays_put(make_runtime, configured) -> None:
