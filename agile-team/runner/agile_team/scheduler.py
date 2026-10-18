@@ -64,6 +64,9 @@ def make_runner_plan(story: StoryState) -> SimpleNamespace:
     return SimpleNamespace(role=SimpleNamespace(name="runner"), story=story)
 
 
+BOUNDARY_FIXES = (StepKind.TEAM_FIX, StepKind.REBASE_FIX)
+
+
 class Scheduler:
     """Runs the pipeline's tasks and the PO's turns until the run ends."""
 
@@ -254,7 +257,9 @@ class Scheduler:
 
     def is_held_by_boundary(self, work: Work) -> bool:
         """C7, N4: a due boundary starts nothing new but the Manager's review."""
-        return work.kind is not StepKind.BOUNDARY and work.role != MANAGER and self.is_boundary_due
+        if work.kind in BOUNDARY_FIXES or work.kind is StepKind.BOUNDARY or work.role == MANAGER:
+            return False
+        return self.is_boundary_due
 
     @property
     def is_boundary_due(self) -> bool:
@@ -364,6 +369,8 @@ class Scheduler:
 
     def uses_main_checkout(self, work: Work, request: StepRequest) -> bool:
         """D3: a Manager or storyless step, or a story step with no worktree, owns the checkout."""
+        if work.role == MANAGER and self.runtime.state.story_branches:
+            return False  # R2: the Manager reads; story branches leave the checkout alone
         if work.role == MANAGER or work.story is None:
             return True
         return not self.runtime.uses_worktree(request, work.story)
@@ -522,8 +529,9 @@ class Scheduler:
         stories = list(self.runtime.state.stories.values())
         due = [s for s in stories if self.ci_poll.claim_due(s, now)]
         for story in due:
+            sha = story.pushed
             checks = await system.in_thread(self.ci_poll.read_checks, story)
-            self.record_story_ci(story, self.ci_poll.settle(story, checks))
+            self.record_story_ci(story, self.ci_poll.settle(story, checks, sha))
 
     def record_story_ci(self, story: StoryState, found: Any) -> None:
         """A red result for the story's head is handed over; anything else holds nothing."""

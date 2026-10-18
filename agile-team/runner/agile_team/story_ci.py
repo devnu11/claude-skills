@@ -96,7 +96,8 @@ class StoryCiPoll:
         """Record and return a new settled result for the story's pushed head, else ``None``."""
         if not self.claim_due(story, now):
             return None
-        return self.settle(story, self.read_checks(story))
+        sha = story.pushed
+        return self.settle(story, self.read_checks(story), sha)
 
     def claim_due(self, story: StoryState, now: float) -> bool:
         """True, and the read time noted, when the story's head is due a read (loop thread)."""
@@ -106,11 +107,11 @@ class StoryCiPoll:
         self._read_at[story.id] = now
         return True
 
-    def settle(self, story: StoryState, checks: list[Check]) -> StoryCi | None:
+    def settle(self, story: StoryState, checks: list[Check], sha: str = "") -> StoryCi | None:
         """Record the checks once all are in (loop thread); the new result, else ``None``."""
         if not checks or any(c.bucket is Bucket.PENDING for c in checks):
             return None
-        return self._record(story, checks)
+        return self._record(story, checks, sha or story.pushed)
 
     def can_poll(self, story: StoryState) -> bool:
         """An open story with a pushed head, and a PR service to ask (D4)."""
@@ -125,8 +126,8 @@ class StoryCiPoll:
         except UpstreamError:
             return []
 
-    def _record(self, story: StoryState, checks: list[Check]) -> StoryCi | None:
-        found = StoryCi(story.pushed, str(verdict_of(checks)), "pr")
+    def _record(self, story: StoryState, checks: list[Check], sha: str) -> StoryCi | None:
+        found = StoryCi(sha, str(verdict_of(checks)), "pr")
         if found == story.ci:
             return None
         story.ci = found
