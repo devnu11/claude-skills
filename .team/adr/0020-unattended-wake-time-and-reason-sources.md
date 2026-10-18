@@ -99,3 +99,11 @@ Legacy state.json files with no `wake_on` key load the field as `None` (L1).
 - Design: `agile-team/docs/design/s37.md` (rules N1–N2, R1–R3, S1, L1; modules and test checklist)
 - Review: `.team/reviews/s37.md` (round 1, no defects, shipped)
 - Related: ADR-0013 (service liveness), ADR-0007 (halt handling), s26 (service lifecycle)
+
+## Amended by s159 (2026-10-18)
+
+agile-team's usage limit now has its own status, `limit`. The reset reason
+is read from `state.json` when its status is `limit`, and still when it is
+`blocked`, which older runners send. A heartbeat may carry `waiting`. Such a
+run posts one `waiting` notice, re-posted only after progress, and is never
+idle-stopped. See ADR-0087.

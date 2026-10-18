@@ -74,3 +74,12 @@ Documentation:
 - `reference/protocol.md`: Run statuses (blocked, failed, stopped), exit codes, crash.log location
 - `SKILL.md`: Step 9 tells the liaison to check `status`, the outbox note, and `crash.log`
 - Built-in `roles/product-owner.md`: Step 5 tells the PO not to make more tool calls on `halted`
+
+## Amended by s159 (2026-10-18)
+
+`HALTS[HaltKind.LIMIT]` now sets the new `RunStatus.LIMIT` instead of
+`blocked`, and `halted()` includes it. The exit code (75) and the note kind
+(`blocked`) are unchanged. With parallel steps, a limit no longer halts at
+the first failing step. Each step that hits it fails alone and is kept as
+interrupted, nothing new starts, and the scheduler calls `halt_run` once no
+task is running. `blocked` is left for the budget halt. See ADR-0087.

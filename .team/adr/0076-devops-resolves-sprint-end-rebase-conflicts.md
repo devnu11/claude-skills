@@ -93,3 +93,15 @@ Two cases the decision left open, settled by the s151 code review:
 - **A crashed DevOps step.** A step with no handoff (no `summary`) counts
   as status `error` with empty notes, so it holds `rebase_conflict` with
   notes `none`. It never crashes the runner.
+
+## Amended by s159 (2026-10-18)
+
+The scratch rebase becomes the **scratch replay** (`scratch_replay.py`,
+`.team/run/replay`). The replay always runs in that worktree, so a conflict
+is handed to DevOps there as it stands, with no redo. The brief names the
+story whose commits stopped. The runner's check drops the `HAS_MERGES`
+refusal, because a replay is made of merges. Instead it compares the stopped
+story's commits by subject and in order, and then the replay goes on from
+the next commit. A later conflict is a new DevOps step. A landing conflict
+and a carried story's conflict use a separate story rebase step (ADR-0084),
+which goes to DevOps only when every conflicting file is DevOps-owned.
