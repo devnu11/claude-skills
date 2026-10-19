@@ -43,3 +43,30 @@ but every command and git call blocks.
   `Outcome`.
 - Boundary stages still run on the scheduler task, so a long boundary CI
   wait pauses PO tool calls. Nothing else runs during a boundary anyway.
+  (Changed by s163, below.)
+
+## Amended by s163 (2026-10-19)
+
+The sprint-49 review found that a landing held the main lock through its CI
+wait, which stalled tells, answers and storyless steps, while a resumed
+landing moved the checkout with no lock at all. It also found that a
+boundary stage blocked the event loop, and that the PO's `run_role` started a
+storyless step without the lock. Design: `agile-team/docs/design/s163.md`
+(K1 to K6, B1 to B8).
+
+- **Decision 5 narrows.** The main lock is held only while git moves the main
+  checkout: a landing's on-head check, sprint push, fast-forward and
+  checkout record; a boundary's sync and replay; a follow's fast-forward;
+  storyless steps; PO settles and story-admin commits. A landing's merge,
+  checks and CI wait run without it.
+- **One rule for who owns the checkout.** `Runtime.uses_main_checkout` and
+  `Runtime.lock_for` decide for the scheduler and for the PO's `run_role`
+  alike.
+- **Boundary stages are tasks.** A stage runs as a coroutine under
+  `BOUNDARY_KEY`. Its checks, CI wait, git and `gh` calls run in worker
+  threads, which get values or copies and never touch `RunState`. A
+  checkpoint from inside a worker (the replay's progress) goes through
+  `RunWriter.call_from_thread`. The request queues wait while a stage runs,
+  and PO turns, story CI polls and the writer go on. `step()` stays a sync
+  wrapper for the CLI and the tests.
+

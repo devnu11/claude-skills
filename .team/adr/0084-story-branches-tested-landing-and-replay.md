@@ -61,3 +61,28 @@ and no push may ever replace history.
   green full checks alone (local mode). Nothing is pushed.
 - Story branches are never deleted by the runner. They pile up until the
   human prunes them.
+
+## Amended by s163 (2026-10-19)
+
+The sprint-49 review found that a held landing could resume and push a merge
+made on an older sprint head, which halted the run as drift, and that the
+switch-over refused a sprint that main had taken by rebase. Design:
+`agile-team/docs/design/s163.md`.
+
+- **The landing order** (decision 2) is now ADR-0088's: the PO's order, then
+  smallest first, with reverts in the same queue.
+- **A landing never pushes a stale merge.** A pushed landing resumes only
+  while its merge's first parent is still the sprint head. Otherwise, and
+  after any refused sprint push, it gives up the merge (its record is
+  cleared and the landing branch deleted) and merges afresh when its turn
+  comes. A refused push lands again when the remote descends from the
+  runner's `pushed` record. It halts as drift only when the remote doesn't,
+  or when the main checkout can't fast-forward to it.
+- **Records match the remote.** `pushed` is set right after a successful
+  sprint push, before the checkout moves. After a followed remote, `head`
+  and `pushed` both equal the remote head.
+- **The stack keeps only what main lacks.** Every `start_sprint` drops stack
+  entries whose head main contains, or whose commits main has as
+  patch-equivalent copies (`git cherry`). The one-time switch counts "ahead"
+  with the same `git cherry` rule, so no hand edit of the state is needed.
+
