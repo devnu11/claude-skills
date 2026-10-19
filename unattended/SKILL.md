@@ -47,7 +47,9 @@ Every flag, the job files, limit detection and the command contract are in
    It prints the job as JSON and returns; the supervisor runs detached.
 3. **Get notified:** run `$UN wait NAME --until-notice` with
    `run_in_background`. You are re-invoked on the job's end and on any notice
-   (ended early, idle, hung, deadline stop, idle stop, limit reached). Tell
+   (ended early, idle, hung, waiting, deadline stop, idle stop, limit
+   reached). `waiting` means the job waits on purpose, e.g. agile-team
+   waiting on the human's answer; an idle stop never fires then. Tell
    the human what the notice says, then wait again. Notices also reach the
    OS notification centre (`--notify CMD` replaces it, `--notify none`
    turns it off).

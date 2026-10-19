@@ -198,6 +198,11 @@ environment, and unattended always reads it as a `heartbeat:` probe.
 - **Hung:** a file written once whose `at` is then older than `--idle`
   posts a `hung` notice; idle or hung for `--idle-stop` starts the idle
   stop. A job that never writes the file is not hung.
+- **Waiting:** a job that is idle on purpose (agile-team waiting on the
+  human, s159) adds `"waiting": "<why>"` to the file and keeps `at` fresh.
+  While `waiting` is set, the idle stop never starts, and one `waiting`
+  notice is posted per wait. It is posted again only after `progress`
+  moved. A non-string `waiting` is ignored.
 - The file is removed before each run, so a resume does not start hung.
 
 ## Notices
@@ -207,6 +212,7 @@ environment, and unattended always reads it as a `heartbeat:` probe.
 | `ended-early` | the job ends `done` or `failed` before its deadline, or it has no deadline |
 | `idle` | no probe has moved for `--idle`; once, re-armed when progress resumes |
 | `hung` | the heartbeat is stale; once, re-armed when it is fresh |
+| `waiting` | the heartbeat says the job waits on purpose (`is waiting: <why>`); once per wait, again only after progress moved |
 | `deadline` | the deadline's graceful or hard phase acted |
 | `idle-stop` | the idle stop's graceful or hard phase acted |
 | `limit-reached` | the bounds ended the job |
@@ -304,7 +310,8 @@ to the local one, and the next occurrence after now is used.
   sources that gives one:
   1. the last `agile-team start: <reason>; run `agile-team start --resume``
      line in the last 50 output lines, taken as is;
-  2. `.team/run/state.json` in `--cwd`, when its `status` is `blocked`: its
+  2. `.team/run/state.json` in `--cwd`, when its `status` is `limit`
+     (agile-team since s159) or `blocked` (older runs): its
      `status_reason`;
   3. the last 50 output lines, matched against the limit patterns. A bare
      `resets <time>` counts only when the time is readable (`resets 7pm`),
