@@ -326,6 +326,7 @@ class Failure:
     subject: str = ""
     worktree: str = ""
     story: str = ""
+    plain_rebase: bool = False  # the whole team branch rebased, not a stopped replay
 
     def __post_init__(self) -> None:
         self.stage, self.case = Stage(self.stage), FixCase(self.case)
@@ -481,12 +482,8 @@ def fix_brief(b: Boundary, context: FixContext) -> str:
 
 
 def _fix_lines(failure: Failure) -> tuple[str, ...]:
-    """R2: a rebase conflict at the replay stage gets the replay text; else the case's.
-
-    Both a stopped replay and the plain team-branch rebase fail at `Stage.REPLAY`, so
-    both get `REPLAY_FIX_LINES`.
-    """
-    if failure.case is FixCase.REBASE_CONFLICT and failure.stage is Stage.REPLAY:
+    """R2: a replay-stage conflict gets the replay text, unless it is a plain rebase."""
+    if failure.case is FixCase.REBASE_CONFLICT and not failure.plain_rebase:
         return REPLAY_FIX_LINES
     return FIX_LINES[failure.case]
 
