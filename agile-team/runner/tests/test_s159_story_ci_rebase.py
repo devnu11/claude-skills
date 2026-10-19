@@ -204,6 +204,13 @@ def test_prepare_branches_then_rebases_onto_the_new_base_s2(fake: FakeSystem) ->
     assert REBASE.onto in rebase and REBASE.base in rebase
 
 
+def test_prepare_on_the_rebase_branch_does_nothing_ac2_13(fake: FakeSystem) -> None:
+    """AC2.13: re-entering with the rebase branch checked out starts nothing again."""
+    fake.reply(("symbolic-ref",), Done(0, REBASE.branch + "\n"))
+    story_rebase.prepare(Git(FAKE_REPO), REBASE)
+    assert not [a for a in argvs(fake) if "checkout" in a or "rebase" in a]
+
+
 def clean(fake: FakeSystem) -> None:
     fake.reply(("symbolic-ref",), Done(0, REBASE.branch + "\n"))
     fake.reply(("status", "--porcelain"), Done(0, ""))

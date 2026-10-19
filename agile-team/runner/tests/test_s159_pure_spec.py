@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from agile_team import system
 from agile_team.gates import StoryState
 from agile_team.ledger import Entry
 from agile_team.roles import ResolvedRole
 
+from .fake_system import FAKE_REPO
 from .lazy import Lazy
 
 br = Lazy("agile_team.budget_reserve")
@@ -201,3 +203,22 @@ def test_story_state_new_records_start_empty_r1() -> None:
     """s159 section 3: the new containers are per story and empty."""
     story = StoryState(id="s1", title="t", step="design")
     assert story.drift == [] and story.land_reran == [] and story.sessions == {}
+
+
+def test_read_pending_lists_the_ids_with_failing_tests_ac10_1(fake) -> None:
+    """AC10.1: the ids with pending tests, sorted; empty lists do not count."""
+    repo = FAKE_REPO
+    system.make_dirs(repo / ".team")
+    system.write_text(repo / switchover.PENDING_FILE, '{"s9": ["t"], "s2": ["a"], "s5": []}')
+    assert switchover.read_pending(repo) == ["s2", "s9"]
+
+
+def test_read_pending_is_empty_without_a_usable_file_ac10_1(fake) -> None:
+    """AC10.1: no file, bad JSON or a non-object means no pending ids."""
+    repo = FAKE_REPO
+    assert switchover.read_pending(repo) == []
+    system.make_dirs(repo / ".team")
+    system.write_text(repo / switchover.PENDING_FILE, "{nope")
+    assert switchover.read_pending(repo) == []
+    system.write_text(repo / switchover.PENDING_FILE, '["s1"]')
+    assert switchover.read_pending(repo) == []

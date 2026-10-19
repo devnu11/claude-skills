@@ -56,6 +56,17 @@ def test_ensure_keeps_an_existing_branch_and_rebuilds_the_worktree_b1(fake: Fake
     assert story.base_sha == "b" * 40
 
 
+def test_ensure_resumes_an_existing_worktree_without_adding_one_ac1_1(fake: FakeSystem) -> None:
+    """AC1.1/AC11.2: a branch and a worktree already there are reused, not recreated."""
+    system.make_dirs(RUN / "worktrees" / "s1")
+    story = StoryState(id="s1", title="t", step="design", branch="team/story-s1", base_sha="b" * 40)
+    path = make().ensure(story, HEAD)
+    assert path == RUN / "worktrees" / "s1"
+    assert not has(fake, "worktree", "add")
+    assert not [a for a in argvs(fake) if "branch" in a and "team/story-s1" in a]
+    assert story.base_sha == "b" * 40
+
+
 def test_remove_drops_the_worktree_but_not_the_branch_e1(fake: FakeSystem) -> None:
     make().remove("s1")
     assert has(fake, "worktree", "remove")
@@ -94,3 +105,12 @@ def test_prune_stale_removes_land_and_replay_dirs_i3(fake: FakeSystem) -> None:
 def test_at_worktree_keeps_the_main_run_dir_b3() -> None:
     cfg = Config(repo=FAKE_REPO).at_worktree(Path("/wt"))
     assert cfg.repo == Path("/wt") and cfg.run_dir == RUN
+
+
+def test_prune_stale_keeps_the_scratch_dirs_named_in_keep_i3(fake: FakeSystem) -> None:
+    system.make_dirs(RUN / "land")
+    system.make_dirs(RUN / "replay")
+    make().prune_stale(frozenset({"land"}))
+    removed = [a for a in argvs(fake) if "worktree" in a and "remove" in a]
+    assert not any(str(RUN / "land") in a for a in removed)
+    assert any(str(RUN / "replay") in a for a in removed)
