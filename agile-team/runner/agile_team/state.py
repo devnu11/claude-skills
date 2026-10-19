@@ -103,7 +103,8 @@ class RunState:
     po_session: str | None = None
     status: RunStatus = RunStatus.IDLE
     story_branches: bool = False
-    land_queue: list[str] = field(default_factory=list)
+    landing_order: list[str] = field(default_factory=list)
+    landing: str = ""
     permission_asked: bool = False
     checkout_requests: dict[str, str] = field(default_factory=dict)
     stories: dict[str, StoryState] = field(default_factory=dict)
@@ -242,7 +243,7 @@ HALTING = frozenset(
 )
 
 
-RUN_DROPPED = frozenset({"scribe_due", "offered"})
+RUN_DROPPED = frozenset({"scribe_due", "offered", "land_queue"})
 STORY_DROPPED = frozenset({"environment", OLD_ENVIRONMENT_NAME})
 PAST_IMPLEMENT = frozenset(PIPELINE_STEPS[PIPELINE_STEPS.index("implement") + 1 :])
 

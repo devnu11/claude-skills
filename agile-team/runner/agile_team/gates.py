@@ -19,6 +19,7 @@ from typing import Any
 
 from . import (
     acceptance,
+    design_files,
     fingerprint,
     junit,
     loops,
@@ -280,6 +281,7 @@ class StoryState:
     ci: StoryCi | None = None
     land_reran: list[str] = field(default_factory=list)
     rebase: StoryRebase | None = None
+    overlap_with: list[str] = field(default_factory=list)  # F5: the stories the overlap hold awaits
 
 
 @dataclass
@@ -298,6 +300,7 @@ class Outcome:
     output: str = field(default="", repr=False)
     tried: acceptance.Tried | None = None
     report: junit.Report | None = field(default=None, repr=False)
+    overlap: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -336,10 +339,27 @@ CONTINUE_BLOCKED = (
 )
 
 
+FILES_MISSING = (
+    "{file} has no ## Files section: list the files this story changes under it, "
+    "one path or glob per line"
+)
+OVERLAP_CONTINUE = (
+    "story {id} is held as overlap with {ids}; it goes on when they land, or release_story "
+    "lifts it with a reason"
+)
+
+
+def is_overlap_hold(story: StoryState) -> bool:
+    """True when ``story`` is held as overlap (s163 F5); other names may share the hold."""
+    return "overlap" in (story.hold or "").split(", ")
+
+
 def continue_refusal(story: StoryState) -> str | None:
     """Why ``continue_story`` may not release ``story``, or ``None``."""
     if story.status is StoryStatus.BLOCKED:
         return CONTINUE_BLOCKED.format(id=story.id)
+    if is_overlap_hold(story):
+        return OVERLAP_CONTINUE.format(id=story.id, ids=", ".join(story.overlap_with))
     return None
 
 
@@ -537,6 +557,7 @@ class Checks:
             *self._revert_reasons(story),
             *self._trace_reasons(story),
             *self._shared_reasons(story),
+            *self._files_reasons(story),
         ]
         if not reasons:
             return Outcome(Verdict.PASS)
@@ -555,6 +576,14 @@ class Checks:
         file = self.design_file(story.id)
         named = self.shares(story.id).listed.unnamed(self.read(file) or "")
         return [shares.UNNAMED.format(file=file, path=path) for path in named]
+
+    def _files_reasons(  # house-rules: allow verb-name -- name fixed by the s163 design
+        self, story: StoryState
+    ) -> list[str]:
+        file = self.design_file(story.id)
+        if design_files.parse_files(self.read(file) or ""):
+            return []
+        return [FILES_MISSING.format(file=file)]
 
     def presented(self, story: StoryState) -> Outcome:
         """Bounce on missing files; otherwise the liveness check decides."""
@@ -912,13 +941,9 @@ class Pipeline:
         return (lambda: self.checks.presented(story)) if applies else None
 
     def _design_gate(self, story: StoryState, handoff: Handoff) -> Callable[[], Outcome] | None:
-        """The revert and trace checks for a ``done`` design (R9, s1 T10)."""
-        gated = bool(story.reverted) or story.trace is Trace.CHECKED or self._has_shares(story)
-        applies = story.step == "design" and handoff.status == "done" and gated
+        """The revert, trace, share and Files checks for a ``done`` design (R9, s1 T10, F2)."""
+        applies = story.step == "design" and handoff.status == "done"
         return (lambda: self.checks.designed(story)) if applies else None
-
-    def _has_shares(self, story: StoryState) -> bool:
-        return bool(self.checks.shares(story.id).listed.files)
 
     def unpresented(self, story: StoryState) -> Outcome | None:
         """A return to e2e when the Proxy would start without a presentation."""
