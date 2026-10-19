@@ -323,6 +323,13 @@ def read_or_designed(repo: Path, path: str) -> str | None:
     return DESIGN_WITH_FILES if text is None and "/design/" in path else text
 
 
+def name_files(checks: gates.Checks) -> gates.Checks:
+    """Give ``checks`` a design that names its files, so the F2 design gate passes."""
+    checks.design_file = lambda story: f"docs/design/{story}.md"
+    checks.read = lambda path: DESIGN_WITH_FILES
+    return checks
+
+
 @pytest.fixture
 def make_runtime(configured: Path) -> Callable[..., Runtime]:
     """Build a Runtime on ``configured`` with injectable query and command runner."""
