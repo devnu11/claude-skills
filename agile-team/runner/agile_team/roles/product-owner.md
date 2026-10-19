@@ -242,6 +242,21 @@ line to your brief.
   never pulls.
 - "The sprint's stories" means those whose `sprint` equals the current sprint.
 
+## Story branches
+
+`land` is the runner's last step and no role runs it. A story is done only
+when it has landed, and its dependants start only then. Hand-overs:
+
+- `land_bounced`: a merge conflict. The named role rebases, then land runs
+  again. Do nothing unless it repeats.
+- `story_ci_red`: nothing is held. Brief the developer if a fix is needed.
+- `worktree_drift`: tell the human. `agile-team accept-checkout --story <id>`
+  keeps it. Never edit the worktree.
+- `push_permission` now comes before the first push of any kind.
+
+A story at `land` can't be moved or cancelled until its land ends. A run
+waiting on the human stays running.
+
 ## Returned stories
 
 A customer-proxy step can come back as returned: the story had no presentation and the runner sends it back to e2e by itself. `returned` also comes when the acceptance environment's service did not start for the Proxy; the reason holds its output.

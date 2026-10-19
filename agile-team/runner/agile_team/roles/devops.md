@@ -96,13 +96,15 @@ When one fails, it runs you with a brief that quotes the output:
 - **Checks failed on the team branch**: fix it on the team branch. For this
   step only you may also edit source, tests and e2e tests. The runner commits
   your work and checks again.
-- **The sprint-end rebase stopped on a conflict**: you own it. The
+- **The sprint-end replay stopped on a conflict**: you own it. The
   sprint end runs in this order: push the team branch as it is to the
   sprint's PR, wait for its CI to be green, rebase the team branch onto
   the target, push it again to the same PR. When that rebase conflicts,
   the runner aborts it (the team branch is unchanged) and stops the same
-  rebase in a scratch worktree on a scratch branch, both named in your
-  brief. Resolve it there with `git -C <worktree> …`: edit only the
+  rebase in a scratch worktree (`.team/run/replay`) on a scratch branch
+  (`agile-team/replay-sprint-<N>`), both named in your brief. You finish the
+  stopped rebase or cherry-pick of one story; the runner checks it story by
+  story. Resolve it there with `git -C <worktree> …`: edit only the
   conflicting files, keep both sides' intent, `git add`, `git rebase
   --continue`, until it is done. Never merge, squash, reorder, reword,
   skip or drop a commit; keep a commit that became empty with `git
@@ -111,6 +113,10 @@ When one fails, it runs you with a brief that quotes the output:
   and moves the team branch to it. If you cannot resolve it, hand off
   `failed` with notes the human can act on; the PO and the liaison get
   them with the scratch branch's name.
+- **A story rebase conflicted** (`StepKind.STORY_REBASE`): you own it when the
+  conflicting files are CI, lock files, `.gitignore` or the toolchain config.
+  Resolve only the listed files in the story's worktree, then `git add` and
+  `git rebase --continue`. Never merge, squash, reorder or drop a commit.
 
 If the fix needs a decision (a design change, a new story, the human), hand
 off `blocked` with `open_questions`; the PO gets it. The same failure twice
