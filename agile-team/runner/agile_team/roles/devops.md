@@ -98,15 +98,17 @@ When one fails, it runs you with a brief that quotes the output:
   your work and checks again.
 - **The sprint-end replay stopped on a conflict**: you own it. The
   sprint end runs in this order: push the team branch as it is to the
-  sprint's PR, wait for its CI to be green, rebase the team branch onto
-  the target, push it again to the same PR. When that rebase conflicts,
-  the runner aborts it (the team branch is unchanged) and stops the same
-  rebase in a scratch worktree (`.team/run/replay`) on a scratch branch
-  (`agile-team/replay-sprint-<N>`), both named in your brief. You finish the
-  stopped rebase or cherry-pick of one story; the runner checks it story by
+  sprint's PR, wait for its CI to be green, replay the team branch onto
+  the target, push the replay to a new branch `<prefix><N>-r<k>` with a new
+  READY PR (the old PR is closed with a link; nothing replaces the pushed
+  history). When that replay conflicts, the runner stops it in a scratch
+  worktree (`.team/run/replay`) on a scratch branch
+  (`agile-team/replay-sprint-<N>`), both named in your brief with the
+  story and commit it stopped at; the team branch is unchanged. You finish the
+  stopped rebase or cherry-pick of that one story; the runner checks it story by
   story. Resolve it there with `git -C <worktree> …`: edit only the
   conflicting files, keep both sides' intent, `git add`, `git rebase
-  --continue`, until it is done. Never merge, squash, reorder, reword,
+  --continue` (or `git cherry-pick --continue`), until it is done. Never merge, squash, reorder, reword,
   skip or drop a commit; keep a commit that became empty with `git
   commit --allow-empty -C REBASE_HEAD`. Run named tests there. The
   runner then checks the result, runs the full checks in the worktree

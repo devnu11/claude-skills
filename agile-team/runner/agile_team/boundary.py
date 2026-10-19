@@ -297,6 +297,19 @@ FIX_LINES = {
         "cannot resolve it, hand off failed with notes the human can act on.",
     ),
 }
+REPLAY_FIX_LINES = (
+    'Replaying the team branch {team} onto the target stopped at {commit} "{subject}" '
+    "(story {story}) with conflicts in: {files}. The replay is stopped, not aborted, in the "
+    "scratch worktree {worktree}, on the branch {branch}; {team} is unchanged.",
+    "Resolve it there and only there (run git as `git -C {worktree} ...`): edit only the "
+    "conflicting files, keep both sides' intent, `git add` them and run `git rebase "
+    "--continue` (or `git cherry-pick --continue` when a cherry-pick stopped) until it is "
+    "done. Never merge, squash, reorder, reword, skip or drop a commit; keep a commit that "
+    "became empty with `git commit --allow-empty -C REBASE_HEAD`. Run named tests in "
+    "{worktree}. The runner then checks story {story}'s commits, goes on with the replay, runs "
+    "the full checks in {worktree} and moves {team} to {branch} only if they pass. If you "
+    "cannot resolve it, hand off failed with notes the human can act on.",
+)
 
 
 @dataclass
@@ -460,14 +473,22 @@ def fix_brief(b: Boundary, context: FixContext) -> str:
     assert failure is not None
     heading = FIX_HEADING.format(sprint=b.sprint, edge=b.edge.value, stage=failure.stage.value)
     values = {**asdict(context), **_failure_values(failure)}
-    lines = [line.format(**values) for line in FIX_LINES[failure.case]]
+    lines = [line.format(**values) for line in _fix_lines(failure)]
     parts = [heading, *lines, OUTPUT_BLOCK.format(output=failure.reason)]
     note = f"\n\nFrom the PO: {b.note}" if b.note else ""
     return "\n\n".join(parts) + note
 
 
+def _fix_lines(failure: Failure) -> tuple[str, ...]:
+    """R2: a replay stopped inside a story has its own text; else the case's."""
+    if failure.case is FixCase.REBASE_CONFLICT and failure.story:
+        return REPLAY_FIX_LINES
+    return FIX_LINES[failure.case]
+
+
 def _failure_values(failure: Failure) -> dict[str, str]:
     return {
+        "story": failure.story,
         "branch": failure.branch,
         "commit": failure.commit,
         "subject": failure.subject,
