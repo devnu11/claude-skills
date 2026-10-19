@@ -3498,7 +3498,11 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    with none of them a merge. No path only one side touched may change. If
    all pass, the replay goes on from the next commit (re-making the story
    merge first when it stopped inside a story). A new conflict is a new
-   DevOps step, under the boundary's rounds. Otherwise it holds
+   DevOps step, under the boundary's rounds. A sprint whose line holds no
+   story merge (one run before the switch to story branches) is still
+   rebased as in s151. Its conflict stops in `.team/run/rebase` on
+   `agile-team/rebase-sprint-<N>`, and the brief gives s151's rebase text.
+   On either path, if DevOps can't resolve it or a check fails, it holds
    `rebase_conflict`: the PO's handover and an `update` to the liaison
    carry the conflict, the reason, DevOps's notes and the scratch branch,
    which is kept. `continue_boundary(note)` starts a new DevOps step with
