@@ -23,7 +23,7 @@ def test_count_unpicked_counts_plus_lines(fake: FakeSystem) -> None:
     cherry(fake, f"+ {'a' * 40}\n- {'b' * 40}\n+ {'d' * 40}\n")
     assert upstream().count_unpicked("HEAD") == 2
     [argv] = [c.argv for c in fake.commands if "cherry" in c.argv]
-    assert argv[-2:] == [upstream().target, "HEAD"]
+    assert tuple(argv[-2:]) == (upstream().target, "HEAD")
 
 
 def test_count_unpicked_of_all_rebased_copies_is_zero(fake: FakeSystem) -> None:
