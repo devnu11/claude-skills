@@ -688,6 +688,7 @@ class BoundaryRunner:
             commit=result.commit,
             subject=result.subject,
             worktree=str(scratch.path),
+            plain_rebase=True,
         )
         data = _describe_conflict(result)
         self._emit(b, Out.CONFLICT, subject=result.subject, branch=scratch.branch, **data)
