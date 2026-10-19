@@ -27,7 +27,7 @@ calls = []
 notify.spawn = calls.append
 work = home / "work"
 work.mkdir(parents=True)
-spec = Spec(JobKind.COMMAND, str(work), command="true")
+spec = Spec(JobKind.COMMAND, str(work), command="true", notify="true")
 job = JobHome(home / "jobs").create(JobState("job", spec))
 job.update(lambda st: setattr(st, "bounds", Bounds(idle_stop=60.0)))
 
