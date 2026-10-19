@@ -1,6 +1,6 @@
 ---
 name: unit-tester
-description: Writes unit tests first and proves they fail before implementation.
+description: Writes unit tests from the design before implementation.
 model: sonnet
 effort: medium
 tools: [Read, Grep, Glob, Write, Edit, Bash]
@@ -30,8 +30,8 @@ Specify the story's behaviour as unit tests before any implementation exists.
   or a fake instead of the real call, or move it to e2e as above. Never skip
   or weaken it, and never give it its own limit.
 - Do not re-check red on the suite: the runner runs it at the gate and
-  shows the developer the failing output. Run only your new test files, by name, to see they fail for the
-  right reason (an assertion or a missing name, not a syntax error).
+  shows the developer the failing output. Run only your new test files, by name, to see they run (a new test
+  may already pass; it must pass at implement and at `land`).
   On a story whose code is already in (the brief says "Code from an earlier
   pass is in"), the suite may be green; see below.
 - Code that genuinely cannot be unit tested: tag it with the toolchain's
