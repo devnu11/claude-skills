@@ -24,7 +24,6 @@ team works on this runner itself, it runs on a pinned copy instead (see
 | `start --task T [--cadence C] [--onboard] [--resume]` | Preflight, then run the team in the foreground (the liaison backgrounds it): the runner drives the pipeline and calls the PO for judgement (see "Routing"). With `--resume`, `--task` is optional and reaches the PO as "New from the human", and the run keeps its stored cadence unless `--cadence` is given. Exit codes: see "Run status and stops". |
 | `status` | JSON: run `status` and `status_reason` (why the runner stopped, what a waiting run waits on, or `null`), current `sprint`, stories with their pipeline step, `sprint` (`null` = backlog) and routing fields (`hold`, `developer`, `previous`; see "Routing"), open questions, spend, the pending sprint `boundary` (or `null`), `upstream` (the sprint's PR; see "Sprint boundaries"), `checkout` (the branch and HEAD the runner expects, or `null`; see "Checkout guard"), `queued_messages` (ids of `tell` messages the PO has not been handed yet, e.g. `["t3"]`), `queued_shares` (ids of `share` requests the runner has not applied yet), `shares` (each settled share id → `applied <commit>`, `unchanged` or `refused: <why>`), `queued_stories` (ids of `story` requests the runner has not settled yet, e.g. `["q2"]`) and `story_requests` (each settled story request id → `opened <id> <sha12>; <placed>`, `amended <id> <sha12>` or `refused: <why>`; see "Stories from the liaison"), `queued_picks` (ids of pick requests the runner has not received yet, e.g. `["p1"]`), `pending_picks` (ids of pick requests waiting on the PO's `accept_pick` or `deny_pick`) and `picks` (each received pick id → `{status, sprint, shas, why, revert}`, `status` one of `pending`, `accepted`, `denied`, `applied`, `refused`, `conflict`, `failed`, `reverted`; see "Picks (mid-sprint)"). |
 | `tools` | JSON `{"built_in": [...], "repo": [...]}` (s99): `built_in` is the runner's stage table in order, each `{"name", "label", "description", "when", "attach"}`; `repo` is the config's `[[tool]]` rows in file order, each `{"name", "description", "command", "label"}` (`label` since s127, `""` when not given). Exit 1 with the `[[tool]]` refusal when the config is broken. See "Runner stages". |
-| `pending-tests [--root R]` | Print, on one line, the skip options (`[toolchain.report]` `deselect`/`ignore`) for every pending test id under `R` (default: all), made relative to `R` and shell-quoted, for `PYTEST_ADDOPTS` in CI (s125). An empty registry prints an empty line. See "Pending tests". |
 | `answer ID TEXT` | Answer PO question `ID`. |
 | `tell SOURCE` | Queue a message for the PO. `SOURCE` is a file, or `-` for stdin; the text never goes on a command line. Stored as `.team/run/liaison/messages/t<N>.md`; prints `queued t<N> for the PO: <path>`. Works in any run state (running, waiting, halted, stopped). Exit 1 on an empty text (`the message is empty`) or an unreadable file. See "Liaison messages". |
 | `share SOURCE --story ID` | The liaison shares a file (a mock, a spec) with the team for story `ID` (s120). Queues `.team/run/liaison/shares/f<N>.json` (the name, the bytes and their SHA-256) and prints `queued f<N>: <docs>/design/<ID>-<name> (sha256 <12 hex>); the runner commits it between steps`. Writes nothing else. Works in any run state, and a stopped run applies it on the next `start`. Checked in order, first refusal wins and nothing is written (exit 1): a bad id or no `.team/stories/<ID>.md` (`no story 's9'…`), a name that is not letters, digits, `.`, `_`, `-` (≤ 100, no stdin), an unreadable file, an empty file, a file over 5 MiB. See "Shared files". |
@@ -793,9 +792,7 @@ pytest, the open stage row's `tests` (`passed`, `warned`, `skipped`,
 collected total. Pass is a passed test, Warn a test that recorded a
 warning, Skip a skipped, xfailed or xpassed test, and Fail a failed or
 erroring one. They are drawn as a bar, with a caption such as `273 Pass +
-32 Warn + 4 Skip + 9 Fail / 506 Total` (zero categories left out), then
-` · 3 Pending` when the runner skipped pending tests (s125; `pending`, sent
-by the runner, not the plugin, and not part of the total or the bar), and a
+32 Warn + 4 Skip + 9 Fail / 506 Total` (zero categories left out), and a
 `% complete` sparkline (reports received / total) that turns red at the
 first failure. The counts come from the runner's pytest plugin
 (`agile_team_tally`). Inside an open stage, `CommandShell` adds the plugin
@@ -870,10 +867,9 @@ lintable = ["*.py"]            # which changed files are linted
 # never a new entry. `static` ends with `house-rules check` over the whole repo,
 # so gates, the quality step and both boundary checks run it.
 
-[toolchain.report]             # optional; JUnit reports and pending tests (s125). Unset keys come from the preset
+[toolchain.report]             # optional; JUnit reports (s125). Unset keys come from the preset
 option = "--junitxml={file} -o junit_family=xunit1"   # {file}: the report path; empty turns reporting off
-deselect = "--deselect={id}"   # skips a pending test id ({id}: relative to the placeholder's root)
-ignore = "--ignore={id}"       # skips a pending file id (a file that failed to collect)
+# `deselect` and `ignore` still load (presets set them) but nothing uses them since s159.
 # In `test` and `coverage`, put `{report:<root>}` where each pytest's options go,
 # one per link of a `&&` chain (<root>: the repo-relative dir pytest runs in).
 # A command with none gets ` {report}` (root "") at its end. This repo uses
@@ -1192,9 +1188,8 @@ the step-end event for the Manager. A developer at `implement` may add
 `"dispute": {"test": "<test id, file path first>", "rule": "<design rule
 id>", "reason": "…"}` with status `changes_requested` when a test contradicts
 the design (see "Test disputes"). A dispute without `test` and `rule`, or
-with another status, is a malformed handoff. The unit-tester may add
-`"tests": "changed"` or `"tests": "confirmed"` when a story is back at
-`tests` with its code in (see "Back at tests with the code in"). A role on
+with another status, is a malformed handoff. A `tests` key, which s46 used for
+`changed`/`confirmed` claims, is ignored since s159. A role on
 a gate fix step may add `"asserts": "<AC or design rule>"` when its fix
 changes what a test asserts (see "Gate fix steps"); a non-string `asserts`
 is a malformed handoff. The Customer Proxy adds `"failed_acs": ["AC2", …]`
@@ -1367,9 +1362,9 @@ source or tests. Diagnosis goes to the architect, reviewer or devops.
 design (architect; gate on `done`: every AC of a story designed from s1 on is
 covered by an active requirement, see "Requirements"; a reverted story's
 design has its After revert section) → ops-review (devops; always runs, see "Ops review") →
-tests (unit-tester; gate: test command **fails**, and
-with a JUnit report only through the step's new or changed tests, which
-become pending: see "Pending tests"; or see "Back at tests with the code in") →
+tests (unit-tester; no command gate since s159: new tests may already
+pass, and they must pass at implement and at `land`; an open dispute has
+its own gate, see "Test disputes") →
 implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 `.team/baseline.json` coverage when old debt keeps the total lower; the gate
 runs the suite **once**, through the `coverage` command only: a zero exit
@@ -1497,66 +1492,27 @@ the work first, inside the same conversation:
   ends "(the stop hook's run on this tree)").
 - Each refused check writes a `stop-check` event (`check`, `stage`, `attempt`,
   `of`, `seconds`, `text`). The checks are runner stages `stop.handoff`,
-  `stop.lint`, `stop.suite`, `stop.red`, `stop.presentation` and
+  `stop.lint`, `stop.suite`, `stop.presentation` and
   `stop.requirements`, and their
   open row and event carry `attempt: {n, of}`. On the Flow chart they are the
   role's after tool boxes: `label · ↻ runs · time · n refused`, and
   `▶ label · attempt n of 3` while running.
 
-### Pending tests (s125)
-
-A story's new tests are red from its tests gate until its implement gate. In
-that window they are **pending**: every other run skips them, so other
-stories' gates, the sprint checks and CI stay green.
+### Test reports (s125)
 
 - **Reports.** Every gate and full-check run of `test` or `coverage` writes
   JUnit XML (`[toolchain.report] option`, one file per `{report:<root>}`
-  placeholder, under `.team/run/reports/`). The runner reads pass and fail
-  per test from the report, never from the text. The text is still kept for
-  the briefs. Named runs (`run_tests`) write no report and skip nothing. A
-  stack with no `option` (node, rust presets) keeps the old exit-code gates,
-  and nothing is ever pending.
-- **Ids.** An id is a repo-relative pytest node id
-  (`agile-team/runner/tests/test_x.py::TestY::test_z[a]`). A file that fails
-  to collect (for example, it imports a module that does not exist yet) is a
-  file id, `agile-team/runner/tests/test_new.py`. A test id is skipped with
-  `deselect`, a file id with `ignore`.
-- **The registry.** `.team/pending-tests.json` is `{"<story>": ["<id>", …]}`.
-  Only the runner writes it: an agent's write is refused (`may not write …;
-  only the runner writes it`), and a Bash edit is quarantined. Each change is
-  its own commit, made by the runner right after the gate that caused it and
-  before the next step starts: `chore(<story>): pending tests (tests step)`
-  after a tests gate, `chore(<story>): pending tests (implement gate)` after
-  an implement gate. A cancel or a revert drops the entry in a commit with no
-  suffix, `chore(<story>): pending tests`. A registry that does not parse
-  holds the gate.
-- **Tests gate.** From the red run's report, the story's pending ids are the
-  failed ids that are new or changed in the step's diff (the lines from a
-  test's line up to the next test's line meet a changed hunk, or a file id's
-  file changed), plus any that were already the story's. Any other failing
-  test is a real failure, and the gate fails: `these tests fail but are not
-  new or changed in this step, so they are not pending: …`. With no pending
-  id, the gate fails as before (`GREEN_TOO_EARLY`).
-- **Implement gate.** The story's own pending ids run. Every other story's are
-  skipped. The gate passes only when the suite passes as before and every own
-  id **passed** in the report: a skip does not count, and a file id needs all
-  its tests passed. Then the ids leave the registry. Otherwise the gate fails
-  with `pending tests of sN still fail: …`. Own ids missing from a passing
-  run (renamed or deleted) are dropped, and the reason says so.
-- **Afterwards.** The story's tests run like any other (review, quality,
-  rework), and a failure fails as usual. A cancel or a revert drops the
-  story's entry.
-- **Who skips what.** A run for a story skips the other stories' pending ids.
-  The boundary's full checks skip them all. A gate's reason, and a full
-  check's `pending` field, count them as `pending (sN): k` (ids skipped and
-  absent from the report). The Flow chart's running test tool shows
-  `· N Pending` after the total.
-- **CI.** `agile-team pending-tests --root <root>` prints the skip options.
-  DevOps passes them as `PYTEST_ADDOPTS`, and lists `.team/pending-tests.json`
-  in the workflow's `paths`, so the review PR is green with a story
-  mid-pipeline. The registry is committed (`artifacts = "ignored"` keeps it
-  through `!.team/pending-tests.json`).
-- Agents still never mark a test `skip` or `xfail`. Only the registry skips.
+  placeholder). Full checks write under `.team/run/reports/`, the landing
+  checks under `.team/run/reports-landing/`, and each story's gates under
+  `.team/run/reports-story/<id>/`, all in the main checkout's run directory.
+  Failing tests are read from the report. The text is still kept for the
+  briefs. Named runs (`run_tests`) write no report. A stack with no `option`
+  (node, rust presets) keeps the exit-code gates.
+- **Ids.** A test id is a repo-relative pytest node id
+  (`agile-team/runner/tests/test_x.py::TestY::test_z[a]`).
+- s125's pending tests (`.team/pending-tests.json`, the `pending-tests`
+  command, the red tests gate) were removed by s159.
+- Agents never mark a test `skip` or `xfail`.
 
 ### Runner stages (s99)
 
@@ -1788,30 +1744,13 @@ Each story counts how often it has passed the implement gate
 runner makes for a developer step on it (`code_commits`, whatever the
 step's outcome). The story's **code is in** when `implemented > 0`, or when
 one of those commits is in the branch (`git merge-base --is-ancestor <sha>
-HEAD`). A ruling, a review or a closed dispute can send a story back to
-`tests` after its code is in, and a developer can commit code and then
-dispute a test (s46). Its suite may then be green already. In that case,
-with no dispute open and a `done` handoff:
-
-- A red suite passes, as on a first pass.
-- A green suite passes when the handoff says `"tests": "changed"` (the
-  unit-tester changed tests for the story) or `"tests": "confirmed"` (it
-  checked that the existing tests already cover it). The gate reason is
-  `tests pass on code from an earlier pass; tests <claim>`.
-- A green suite without a claim bounces back to `tests` with a round:
-  `tests pass on code from an earlier pass; write a failing test, or hand
-  off "tests": "changed" or "tests": "confirmed"`.
-- A `changes_requested` goes where its `next_role` points, as with an open
-  dispute.
-
-The unit-tester's prompt says `Code from an earlier pass is in…` while this
-applies. On a first pass (`implemented` is 0 and no recorded developer
-commit is in the branch) the gate still needs a red suite, and a claim is
-ignored. A `state.json` written before s46 loads `code_commits` as `[]`; a
-story stranded that way is moved on by the Manager's `advance` ruling. An open dispute's own gate (below) takes
-precedence. Any other value of `tests` is a malformed handoff. A
-`state.json` written before s24 loads `implemented` as 1 for stories past
-`implement` and as 0 for the rest.
+HEAD`). The Manager sees these facts for a repeated setback (see
+"Repeated setbacks"). The tests step has no red-tests gate since s159, so a story
+back at `tests` with its code in goes on with a `done` handoff whether the
+suite is red or green; the `changed`/`confirmed` claims are gone. An open
+dispute's own gate (below) still applies. A `state.json` written before s46
+loads `code_commits` as `[]`, and one written before s24 loads
+`implemented` as 1 for stories past `implement` and as 0 for the rest.
 
 ### Test disputes
 
@@ -1839,7 +1778,7 @@ block"):
    dispute was raised; otherwise it bounces and counts a round, with a
    reason naming the test id, the file and the baseline hash. Confirming
    moves the story to `design`, counts a round and marks the dispute
-   `confirmed`. The red-tests gate does not run while a dispute is open.
+   `confirmed`.
 4. The architect rules on a confirmed dispute (it keeps the rule or changes
    the design) and hands off `done`. Back at `tests`, a `done` then passes
    whether or not the test changed, and the story goes on to `implement`.
@@ -1902,8 +1841,8 @@ gate routes.
   Otherwise the item stays with the step's role. A timed-out run is not
   routed.
 - **Kept at implement.** A failing test in a unit-test file stays with the
-  developer (the unit-tester's red tests are the developer's to make
-  green). A lint finding counts only in a file the story touched (`files`,
+  developer (the unit-tester's tests are the developer's to make
+  pass). A lint finding counts only in a file the story touched (`files`,
   every path a step committed on the story). Lint never fails the gate by
   itself: a lint item the developer owns is left to the quality step.
 - **Verdict.** With no foreign items, the gate verdict is unchanged. With
@@ -3516,8 +3455,7 @@ This applies only when the runner runs from `.team/run/runner-pin`
   (so it can read and rewrite its own report) and `<docs>/customer/`; its
   Bash may not name a forbidden root, `..`, or repo paths outside the
   sandbox. The Integration Tester may also write `.team/run/presentation/**`.
-- Runner-only files: `.team/pending-tests.json` (s125) and every story file,
-  `.team/stories/**` (s135). The hook refuses any role's Write/Edit/NotebookEdit
+- Runner-only files: every story file, `.team/stories/**` (s135). The hook refuses any role's Write/Edit/NotebookEdit
   there, whatever its write globs say (`<role> may not write <path>; only the
   runner writes it`), and a step's Bash change there is quarantined.
 - Before any Bash check, for every role, the hook joins line continuations
