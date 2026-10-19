@@ -420,12 +420,12 @@ class Scheduler:
         story = self.runtime.state.stories.get(call.story_id)
         if story is None or story.landed is None:
             return False
+        self.landings.begin_revert(story.id)
         self.tasks[REVERT_KEY] = asyncio.create_task(self.run_revert(story, call), name=REVERT_KEY)
         return True
 
     async def run_revert(self, story: StoryState, call: Call) -> None:
         """Land the revert; on green record it and reset the story, else tell why."""
-        self.landings.begin(story.id)
         report = await self.lander.land_revert(story, call.reason)
         self.landings.finish(story.id)
         if report.get("gate", {}).get("verdict") == Verdict.PASS:

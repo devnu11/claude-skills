@@ -64,6 +64,7 @@ class LandingQueue:
     def __init__(self, runtime: Runtime) -> None:
         self.runtime = runtime
         self.sizes: dict[tuple[str, ...], int] = {}
+        self.reverting = ""
 
     def waiting(  # house-rules: allow query-property, verb-name -- name fixed by the s163 design
         self,
@@ -106,16 +107,24 @@ class LandingQueue:
     def _is_live(self, story_id: str) -> bool:
         story = self.runtime.state.stories.get(story_id)
         queued = any(call.story_id == story_id for call in self.runtime.revert_queue)
-        return queued or (story is not None and story.step == "land")
+        running = story_id == self.reverting
+        return queued or running or (story is not None and story.step == "land")
 
     def begin(self, story_id: str) -> None:
         """The story is landing now."""
         self.runtime.state.landing = story_id
         self.runtime.save()
 
+    def begin_revert(self, story_id: str) -> None:
+        """The story's landing revert is running: it holds the landing slot (Q1, Q5)."""
+        self.reverting = story_id
+        self.begin(story_id)
+
     def finish(self, story_id: str) -> None:
         """Q4: the story leaves the queue and loses its place and its cached size."""
         state = self.runtime.state
+        if self.reverting == story_id:
+            self.reverting = ""
         if state.landing == story_id:
             state.landing = ""
         state.landing_order = [i for i in state.landing_order if i != story_id]
