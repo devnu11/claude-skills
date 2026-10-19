@@ -481,7 +481,11 @@ def fix_brief(b: Boundary, context: FixContext) -> str:
 
 
 def _fix_lines(failure: Failure) -> tuple[str, ...]:
-    """R2: a replay stopped inside a story has its own text; else the case's."""
+    """R2: a rebase conflict at the replay stage gets the replay text; else the case's.
+
+    Both a stopped replay and the plain team-branch rebase fail at `Stage.REPLAY`, so
+    both get `REPLAY_FIX_LINES`.
+    """
     if failure.case is FixCase.REBASE_CONFLICT and failure.stage is Stage.REPLAY:
         return REPLAY_FIX_LINES
     return FIX_LINES[failure.case]
