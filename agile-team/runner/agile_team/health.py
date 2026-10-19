@@ -38,7 +38,13 @@ class Runner(StrEnum):
 
 
 HALTED = frozenset(
-    {RunStatus.BLOCKED, RunStatus.FAILED, RunStatus.STOPPED, RunStatus.CHECKOUT_CHANGED}
+    {
+        RunStatus.BLOCKED,
+        RunStatus.FAILED,
+        RunStatus.STOPPED,
+        RunStatus.CHECKOUT_CHANGED,
+        RunStatus.LIMIT,
+    }
 )
 
 
