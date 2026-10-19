@@ -549,6 +549,9 @@ def test_after_the_note_a_later_step_has_none(make_runtime) -> None:
     assert "This story was reverted" not in prompt(rt, "unit-tester")
 
 
+FILES = "\n## Files\n\n- src/a.py\n"
+
+
 def test_design_gate_needs_the_after_revert_section(make_runtime) -> None:
     from agile_team.roles import Handoff
 
@@ -557,12 +560,12 @@ def test_design_gate_needs_the_after_revert_section(make_runtime) -> None:
     s.step = "design"
     s.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", [FIRST], REVERT_SHA)]
     rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
-    rt.pipeline.checks.read = lambda path: "# s1\n\nnothing\n"
+    rt.pipeline.checks.read = lambda path: "# s1\n\nnothing\n" + FILES
     out = rt.pipeline.evaluate(s, Handoff("done"))
     assert out.verdict is gates.Verdict.BOUNCE and out.bounce_to == "design"
     assert out.reason == gates.REDESIGN_MISSING.format(id="s1", count=1, file="docs/design/s1.md")
     assert out.author is gates.Author.ROLE
-    rt.pipeline.checks.read = lambda path: "# s1\n\n## After revert 1\n\nchanges\n"
+    rt.pipeline.checks.read = lambda path: "# s1\n\n## After revert 1\n\nchanges\n" + FILES
     assert rt.pipeline.evaluate(s, Handoff("done")).verdict is gates.Verdict.PASS
 
 
@@ -572,7 +575,7 @@ def test_design_gate_ignores_a_story_never_reverted(make_runtime) -> None:
     rt, _ = setup(make_runtime)
     s = rt.state.stories["s1"]
     s.step = "design"
-    rt.pipeline.checks.read = lambda path: "# s1\n"
+    rt.pipeline.checks.read = lambda path: "# s1\n" + FILES
     assert rt.pipeline.evaluate(s, Handoff("done")).verdict is gates.Verdict.PASS
 
 

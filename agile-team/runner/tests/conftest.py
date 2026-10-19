@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import tomli_w
 from agile_team import config as config_mod
-from agile_team import gates, system
+from agile_team import gates, revert_log, system
 from agile_team.dispatch import Runtime
 from agile_team.git_ops import Git, GitError
 from agile_team.ledger import Ledger
@@ -314,6 +314,15 @@ class FakeRunner:
         return self.results.get(command, (0, ""))
 
 
+DESIGN_WITH_FILES = "## Files\n\n- src/a.py\n"
+
+
+def read_or_designed(repo: Path, path: str) -> str | None:
+    """Read a repo file; a design that does not exist yet reads as one that names its files (F2)."""
+    text = gates.read_repo_file(repo, path)
+    return DESIGN_WITH_FILES if text is None and "/design/" in path else text
+
+
 @pytest.fixture
 def make_runtime(configured: Path) -> Callable[..., Runtime]:
     """Build a Runtime on ``configured`` with injectable query and command runner."""
@@ -329,7 +338,8 @@ def make_runtime(configured: Path) -> Callable[..., Runtime]:
             config.gates.coverage,
             runner or FakeRunner(),
             presentation=partial(presentation.missing, config),
-            read=partial(gates.read_repo_file, configured),
+            read=partial(read_or_designed, configured),
+            design_file=partial(revert_log.design_file, config.team.docs_dir),
         )
         pipeline = gates.Pipeline(list(config.gates.steps), config.gates.round_cap, checks)
         return Runtime(
