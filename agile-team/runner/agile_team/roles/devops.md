@@ -110,7 +110,8 @@ When one fails, it runs you with a brief that quotes the output:
   conflicting files, keep both sides' intent, `git add`, `git rebase
   --continue` (or `git cherry-pick --continue`), until it is done. Never merge, squash, reorder, reword,
   skip or drop a commit; keep a commit that became empty with `git
-  commit --allow-empty -C REBASE_HEAD`. Run named tests there. The
+  commit --allow-empty -C REBASE_HEAD` (`CHERRY_PICK_HEAD` after a
+  cherry-pick). Run named tests there. The
   runner then checks the result, runs the full checks in the worktree
   and moves the team branch to it. If you cannot resolve it, hand off
   `failed` with notes the human can act on; the PO and the liaison get
@@ -118,7 +119,7 @@ When one fails, it runs you with a brief that quotes the output:
 - **A story rebase conflicted** (`StepKind.STORY_REBASE`): you own it when the
   conflicting files are CI, lock files, `.gitignore` or the toolchain config.
   Resolve only the listed files in the story's worktree, then `git add` and
-  `git rebase --continue`. Never merge, squash, reorder or drop a commit.
+  `git rebase --continue`. Never merge, squash, reorder, reword, skip or drop a commit.
 
 If the fix needs a decision (a design change, a new story, the human), hand
 off `blocked` with `open_questions`; the PO gets it. The same failure twice

@@ -298,15 +298,16 @@ FIX_LINES = {
     ),
 }
 REPLAY_FIX_LINES = (
-    'Replaying the team branch {team} onto the target stopped at {commit} "{subject}" '
-    "(story {story}) with conflicts in: {files}. The replay is stopped, not aborted, in the "
+    'Replaying the team branch {team} onto the target {target} stopped at {commit} "{subject}" '
+    "{story_note}with conflicts in: {files}. The replay is stopped, not aborted, in the "
     "scratch worktree {worktree}, on the branch {branch}; {team} is unchanged.",
     "Resolve it there and only there (run git as `git -C {worktree} ...`): edit only the "
     "conflicting files, keep both sides' intent, `git add` them and run `git rebase "
     "--continue` (or `git cherry-pick --continue` when a cherry-pick stopped) until it is "
     "done. Never merge, squash, reorder, reword, skip or drop a commit; keep a commit that "
-    "became empty with `git commit --allow-empty -C REBASE_HEAD`. Run named tests in "
-    "{worktree}. The runner then checks story {story}'s commits, goes on with the replay, runs "
+    "became empty with `git commit --allow-empty -C REBASE_HEAD` (`CHERRY_PICK_HEAD` after a "
+    "cherry-pick). Run named tests in "
+    "{worktree}. The runner then checks the replayed commits, goes on with the replay, runs "
     "the full checks in {worktree} and moves {team} to {branch} only if they pass. If you "
     "cannot resolve it, hand off failed with notes the human can act on.",
 )
@@ -481,7 +482,7 @@ def fix_brief(b: Boundary, context: FixContext) -> str:
 
 def _fix_lines(failure: Failure) -> tuple[str, ...]:
     """R2: a replay stopped inside a story has its own text; else the case's."""
-    if failure.case is FixCase.REBASE_CONFLICT and failure.story:
+    if failure.case is FixCase.REBASE_CONFLICT and failure.stage is Stage.REPLAY:
         return REPLAY_FIX_LINES
     return FIX_LINES[failure.case]
 
@@ -489,6 +490,7 @@ def _fix_lines(failure: Failure) -> tuple[str, ...]:
 def _failure_values(failure: Failure) -> dict[str, str]:
     return {
         "story": failure.story,
+        "story_note": f"(story {failure.story}) " if failure.story else "",
         "branch": failure.branch,
         "commit": failure.commit,
         "subject": failure.subject,
