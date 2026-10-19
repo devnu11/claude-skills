@@ -249,9 +249,10 @@ so `message` catches a halt even when the status ends up as it was.
 | Status | Set by | Meaning |
 |---|---|---|
 | `idle` | runner | The run ended normally: the PO ended its turn and nothing could move, or a stop took effect after a step. |
-| `running` | runner | The run is going (PO turns and router passes). Every `start` sets it, which clears any stop below. |
+| `running` | runner | The run is going (steps, lands and PO turns). Every `start` sets it, which clears any stop below. Since s159 a run that waits on the human stays `running`, with `status_reason` saying why (see "Waiting and limits"). |
 | `sprint-end`, `done` | PO (`notify_user`) | The sprint or the whole task finished. |
-| `blocked` | PO (`notify_user`) or runner | Nothing can move without the human, or a usage limit was hit. |
+| `blocked` | runner | Spend reached `team.budget_usd`. Since s159 nothing else sets it: `notify_user(kind="blocked")`, the stuck Sprint Backlog cap and the until-blocker next-sprint cap post their note and leave the run `running`, waiting (see "Waiting and limits"). |
+| `limit` | runner | A session or usage limit was hit (s159). `status_reason` holds the reset text. |
 | `failed` | runner | The runner crashed. |
 | `stopped` | runner | `stop --now` (SIGTERM) ended the run, or `accept-checkout` kept a new HEAD. |
 | `checkout-changed` | runner | Someone else moved the checkout; the run halted and asks the human (see "Checkout guard"). Shown red on the dashboard. |
@@ -278,7 +279,7 @@ line to stderr (`agile-team start: <reason>; <advice>`) and exits:
 | 0 | the run ended (see "Routing") | `idle`, or what the PO set | — |
 | 1 | CLI error or failed preflight | unchanged | the error |
 | 70 | any other error in the PO loop | `failed` | ``details in .team/run/crash.log; run `agile-team start --resume` to continue`` |
-| 75 | a session or usage limit, in the PO or in a role step | `blocked` | ``run `agile-team start --resume` after the reset`` |
+| 75 | a session or usage limit, in the PO or in a role step; the run exits once no step is running (s159) | `limit` (the liaison note kind stays `blocked`) | ``run `agile-team start --resume` after the reset`` |
 | 77 | spend reached `team.budget_usd` (see "Budget ceiling") | `blocked` | ``raise team.budget_usd in .agile-team.toml and commit it, run `agile-team accept-checkout`, then run `agile-team start --resume` `` |
 | 78 | the checkout changed under the runner (see "Checkout guard"); the note is a `question` | `checkout-changed` | ``put the checkout back, or keep it with `agile-team accept-checkout`, then run `agile-team start --resume` `` |
 | 130 | Ctrl-C | unchanged | — |
@@ -366,6 +367,20 @@ remains, without posting a second question. Two ways on:
   branch, or after any commit of the human's own (a budget raise, a
   reconfigure).
 
+**Story worktrees** (s159). With story branches on, the main checkout moves
+only by a landing's fast-forward and by the runner's story-admin commits
+(intake, share, revert record, the PO's settle); both record the checkout.
+Each story's worktree has its own record (`branch`, `worktree_head`), checked
+before every step on that story. Drift there halts nothing: the step does not
+start, `drift` lists the changed files (`git status --porcelain`), the story
+holds, and the PO gets `worktree_drift` naming the worktree and the files.
+Only that story waits. `agile-team accept-checkout --story <id>` keeps the
+worktree as it is. It is allowed while the runner runs: it only queues
+`.team/run/checkouts/c<N>.json`, and between steps the runner records the
+worktree's HEAD, clears `drift` and the hold, and logs a `checkout` event
+(`{action: "accepted", story}`). `accept-checkout` without `--story` is
+unchanged and still refuses while the runner runs.
+
 ### Interrupted steps
 
 The runner records the role step in flight (`in_flight`: role, story,
@@ -405,6 +420,21 @@ on the story (`interrupted`) and logged as a `step-interrupted` event
   should stash or clean the tree before a resume.
 - If git fails while saving, the error goes to `crash.log`, the tree is
   left as it is, and preflight refuses it on the next start.
+
+**Story steps keep their worktree** (s159). The saving above is for
+storyless steps only (the run's `in_flight`). A step on a story runs in the
+story's worktree and is recorded in the story's own `in_flight` (role,
+story, brief and the session id, taken from the SDK's first message). When
+it is cut off (a crash, `stop --now`, a usage limit), nothing is committed
+or reverted: the worktree keeps the edits. `start --resume` logs the step's
+`step-end` (`{status: "stopped", interrupted: <cause>}`) unless it has one,
+keeps the session for that role (see "Kept sessions"), sets the story's
+`interrupted` so the next brief says `<role>'s step was cut off (<cause>);
+its uncommitted edits are still in this worktree`, and clears `in_flight`.
+It then removes every worktree whose story has nothing in flight, the land
+and replay worktrees unless a boundary replay is pinned, and runs `git
+worktree prune`. A removed worktree is rebuilt from its branch at the
+story's next step.
 
 ## Dashboard
 
@@ -463,7 +493,10 @@ none is), or when the role has a `step-start` event), `stories` (in priority ord
 state plus `opened_at`, `repeated`, the story file's `acceptance`,
 `position`, `tier`, `hold`, from s53 `po_hold` (`{"kind", "reason",
 "question"}` or `null`; see "PO story admin"), `wait`: `{"reason", "on",
-"title"}` or `null`, and from s83 `disputes`, `developer`, `commits`, `files` (the
+"title"}` or `null`, from s159 `branch` (the story branch, `""` before
+one), `landed` (the landing merge's sha once the story is done, else
+`null`) and `story_ci` (`{"sha", "verdict", "source"}` of the latest
+story-PR or landing CI, or `null`), which the Board card shows, and from s83 `disputes`, `developer`, `commits`, `files` (the
 `/api/file` kinds that exist) and `label`: `cancelled`, `cancel requested`,
 `held` or `""`;
 from s86 `depends_on` (the state list), `waiting_on` (its ids that are not
@@ -681,7 +714,7 @@ those rows' words.
 
 | Level | When |
 |---|---|
-| red | the run is halted (`blocked`, `failed`, `stopped` by `stop --now` or another SIGTERM, `checkout-changed`): `halted: <reason>` |
+| red | the run is halted (`blocked`, `failed`, `stopped` by `stop --now` or another SIGTERM, `checkout-changed`): `halted: <reason>`. A `limit` stop (s159) is red too |
 | red | turns still arriving while the run is halted |
 | red | the runner is gone (`interrupted`, or the heartbeat's pid is dead) |
 | red | no turn for `red_quiet_s` (10 min) |
@@ -832,6 +865,8 @@ auth = "api-key"               # or "login": run on the human's Claude Code logi
 cadence = "sprint"             # default; the liaison asks at every start
 budget_usd = 20.0              # ceiling: the run halts when spend reaches it
 manager_every_pct = 25         # Manager checkpoint every N% of budget
+max_open_stories = 5           # s159: at most this many stories have a worktree (integer >= 1)
+step_reserve_usd = 1.00        # s159: the least budget held back per running step (>= 0, < budget_usd)
 
 [toolchain]
 preset = "python"
@@ -904,8 +939,10 @@ token = "presentation"         # fixed write token when `dashboard` has no --tok
 
 [upstream]                     # optional; these are the defaults (see Sprint boundaries)
 remote = "origin"              # "" turns sync and pull requests off
-branch = "main"                # merged in at sprint start; what the bottom PR targets
+branch = "main"                # the sprint is replayed onto it; what the sprint's PR targets
 prefix = "team/sprint-"        # sprint branch names: <prefix><sprint>
+story_prefix = "team/story-"   # s159: story branch names: <story_prefix><id>; must differ from
+                               # prefix, and neither may start with the other
 
 [[environment]]                # one or more acceptance environments
 name = "cli"
@@ -1310,7 +1347,8 @@ over `budget_usd`. It checks:
 - at run start, before the PO's first turn. A `start --resume` that is still
   over the ceiling halts at once, with no query and no spend.
 
-The halt is like a limit stop: status `blocked`, `status_reason`
+The halt is like a limit stop, but with status `blocked` (a limit sets
+`limit` since s159), `status_reason`
 `budget reached: spent $X of $Y`, one `blocked` note to the liaison, every
 later `run_role` refused, and exit 77. After a halt, no further PO query
 starts in that process. The run can pass the ceiling by at most the step or
@@ -1374,7 +1412,10 @@ requirement and no failing test, and as `tests fail` otherwise) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
 is enabled: a `done` handoff passes only with a complete presentation and,
 for a `web` environment, a service that starts from it and answers its probe)
-→ acceptance (customer-proxy).
+→ acceptance (customer-proxy) → land (the runner itself, s159; no role
+runs it and `run_role` on a story at `land` is refused: the story merges
+into the sprint branch and is done only when land passes; see "Story
+branches and landing").
 
 A failed gate or `changes_requested` moves the story back and adds a round
 (a test dispute is the exception: see "Test disputes"; a failure in a file
@@ -2012,15 +2053,18 @@ before any other step while one of these is due (see "Routing").
 
 ## Routing: the runner drives, the PO judges
 
-`start` alternates **PO turns** with **router passes**. A PO turn resumes the
-PO's session with one prompt (the kickoff, the resume note or a hand-over)
-and lasts until the PO ends its turn. A router pass runs steps with no PO
-involved, in this order:
+`start` runs the **scheduler** (s159; see "Parallel steps"). It runs the
+steps the router offers, one task per story and several stories at once,
+and hands the PO its queued hand-overs one **PO turn** at a time. A PO turn
+resumes the PO's session with one prompt (the kickoff, the resume note or
+the hand-overs) and lasts until the PO ends its turn. Before story branches
+are switched on (see "Switching over"), it runs one step at a time, as
+before. The router offers work in this order:
 
-0. the pending sprint **boundary** (sync, full checks, push, CI, rebase;
+0. the pending sprint **boundary** (sync, full checks, push, CI, replay;
    see "Sprint boundaries"), one stage per step, or its DevOps fix
-   step. A held boundary is skipped. While a boundary is pending, no sprint
-   story moves;
+   step, once no story step and no land is running. A held boundary is
+   skipped. While a boundary is due, no new story step starts;
 1. the `manager`, story-less, while `manager_due` is not empty;
 2. the `manager` on a story escalated for a repeated setback (in the
    current sprint, not held, not blocked by a question; see "Repeated
@@ -2065,10 +2109,13 @@ The pass ends at the first step whose report matches a row of the
 | `runner_fault` | the Manager put a setback on the runner; the story is blocked and the human was told |
 | `off_pipeline_fault` | the Manager put a setback on a role with no pipeline step; brief it, then `continue_story` |
 | `fault_not_applied` | the Manager's `fault` was not applied (missing, unknown role, no story or a done story); the reason is in the line |
-| `rebase_conflict` | the sprint-end rebase conflicted and DevOps could not settle it in the scratch worktree, or its result was refused, or the full checks failed there (the stopping commit and its files, grouped by directory with a count; the reason; DevOps's notes; the scratch branch; the team branch is unchanged). `continue_boundary(note)` starts a fresh rebase and DevOps attempt (s151 AC6) |
+| `rebase_conflict` | the sprint-end replay conflicted and DevOps could not settle it in the scratch replay, or its result was refused, or the full checks failed there (the stopped story and commit and its files, grouped by directory with a count; the reason; DevOps's notes; the scratch branch; the sprint branch is unchanged). `continue_boundary(note)` starts a fresh DevOps attempt (s151 AC6, s159) |
 | `sync_conflict` | legacy (before s151 AC6): a saved boundary held on a sprint-end rebase conflict. `continue_boundary` reruns the rebase; a conflict now goes to DevOps |
-| `push_permission` | the team branch is checked at a sprint end, and the human has not yet said whether the team may push the sprint's branch and open its PR |
-| `push_rejected` | a push to the sprint's branch was refused (its remote branch moved), at the `push` or `push-rebased` stage; the stage stays and `continue_boundary` reruns it |
+| `push_permission` | the runner is about to make its first push of any kind (a story branch, a landing or the sprint branch), and the human has not yet said whether the team may push. Raised once (`permission_asked`); until the answer, steps commit and nothing is pushed (s159) |
+| `push_rejected` | a push was refused: its remote branch moved, or the runner's own check found it is not a fast-forward of the recorded head (`NOT_FAST_FORWARD`), at the `push` or `push-replayed` stage; the stage stays and `continue_boundary` reruns it. The runner never retries a refused push with another expected sha |
+| `story_ci_red` | CI failed on a story's own draft PR (s159). Nothing is held; the story lands only on green landing CI. The PO briefs its developer if it needs a fix |
+| `worktree_drift` | a story's worktree changed outside the team (s159); the line names the worktree and the files. Only that story waits. The PO tells the human; `agile-team accept-checkout --story <id>` keeps the worktree as it is |
+| `land_bounced` | a landing stopped on a merge conflict (s159); the line names the files and the role (DevOps for files only DevOps or no role owns, else the story's developer) that rebases the story onto the sprint head. Then land runs again |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 | `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
@@ -2080,6 +2127,20 @@ The pass ends at the first step whose report matches a row of the
 | `pick-request` | the human or the liaison asked for a pick (s141). The line names each commit with its subject and whether it is on `<remote>/<branch>` or not yet, the reason and who asked. The PO answers with `accept_pick(request)` or `deny_pick(request, reason)`. Until it does, the request stays pending; see "Picks (mid-sprint)". |
 | `pick-forced` | the human forced a pick and the runner applied it: the commits, the reason and the new sha12s. The PO plans around it; it can't be reverted. |
 | `pick-settled` | any other pick outcome: an accepted or own pick applied (with the new sha12s), or not picked (refused, or failed, nothing changed), or a conflict naming the files (the whole pick aborted, nothing changed). |
+
+`ci_infra` and `ci_pending` are raised by a landing's CI wait too (s159): the
+land holds, and `continue_story` lets it wait again.
+
+**Scopes** (s159, ADR-0085). Every trigger is `story` or `run` scoped, in one
+table (`handover.SCOPES`) that the runner checks before any command runs; a
+trigger missing from it is an error. A `story` hand-over queues for the PO and
+holds only its story. A `run` hand-over queues and also stops new steps from
+starting until the PO turn that receives it ends. The `run` triggers are
+`error`, `boundary_error`, `boundary_escalated`, `sync_conflict`,
+`rebase_conflict`, `push_rejected`, `ci_failed`, `main_broken`, `ci_green`,
+`sprint_end`, `next_sprint`, `stalled` and `sprint_backlog_stuck`. Every
+other trigger is `story` scoped, including `ci_infra`, `ci_pending`,
+`push_permission`, `known_failures` and `human_message`.
 
 The runner also hands over `human_message` (the inbox has answers the PO has
 not seen, listed by id with the question, or `tell` messages it has not
@@ -2122,20 +2183,23 @@ story.
   question ids it waits on (`waiting on answers: s40 waits on m42`). Neither
   `stalled` nor `sprint_backlog_stuck` is handed over while a question is open:
   the question is already the report to the human (s156).
-- The run ends when a stop is requested, the run halts, the PO sets
-  `sprint-end` (sprint cadence), `done` or `blocked`, or the PO ends a turn
-  and the next pass finds only "sprint complete" or "nothing can move" without
-  running a step. The PO's note (first line) becomes `status_reason`. A quiet
-  end stores the hand-over's first line with status `idle`. A self re-pin also
-  ends the loop, but the run goes on in the new process (see "Self re-pin").
-  A stuck Sprint Backlog is never quiet: after 3 `sprint_backlog_stuck`
-  hand-overs the run ends `blocked` (see "Backlog and sprints").
+- The run ends when a stop is requested, the run halts (`done`, `blocked`
+  on the budget, `checkout-changed`, `limit`), or the PO sets `sprint-end`
+  (sprint cadence) or `done`. Since s159 a quiet pass no longer ends it, and
+  `notify_user(kind="blocked")` no longer sets `blocked`: it posts its note
+  and the run stays `running`, waiting, with the note's first line as
+  `status_reason` (see "Waiting and limits"). A self re-pin also ends the
+  loop, but the run goes on in the new process (see "Self re-pin"). A stuck
+  Sprint Backlog is never quiet: after 3 `sprint_backlog_stuck` hand-overs
+  the runner posts the stuck note and waits on the human (see "Backlog and
+  sprints").
 - Under `until-blocker` (s128, s156), a sprint end never ends the run while the
   Product Backlog has ready stories. A sprint end with ready Product Backlog
   stories hands over `next_sprint` (the ready list and "start the next sprint
   now"). It is not quiet, so a PO turn that starts nothing gets it again. After
-  3 such hand-overs with no `start_sprint`, the runner sets `blocked` ("The PO
-  did not start a sprint after 3 next-sprint hand-overs; …") and posts it. A
+  3 such hand-overs with no `start_sprint`, the runner posts "The PO did not
+  start a sprint after 3 next-sprint hand-overs; …" and waits on the human
+  (before s159 it set `blocked`). A
   stuck Sprint Backlog is reported, not refilled, under both cadences (see
   "Backlog and sprints"). `notify_user` `done` and `blocked` are refused while
   a Sprint Backlog story can move (`cadence until-blocker: Sprint Backlog
@@ -2267,10 +2331,11 @@ committed to, or `null` when it is in the Product Backlog.
   again. `stuck_asks` in `state.json` counts these hand-overs. A step, a PO
   call to one of those tools (except `ask_user`) that is not refused, a
   `start_sprint` or an `add_to_sprint` resets the count to 0. When the count
-  is 3, the runner hands over nothing. It sets the run `blocked` with
+  is 3, the runner hands over nothing. It keeps the run `running` and
+  waiting (s159; before, it set `blocked`), with `status_reason`
   `Sprint N: the Sprint Backlog is stuck after 3 hand-overs with no PO action
-  on its stories: <each story line>; …` and posts the same text to the
-  liaison as a `blocked` note. `add_to_sprint` still works as a deliberate PO
+  on its stories: <each story line>; …`, and posts the same text to the
+  liaison as a `blocked` note, once. `add_to_sprint` still works as a deliberate PO
   action, but the runner never suggests it for a stuck sprint. An old
   `state.json` holding `offered` loads, and the field is dropped.
 - `state.json` from before backlogs existed loads every story into the
@@ -2351,7 +2416,11 @@ requested`, then `held` (any PO hold or held tier), else `""`.
 ### Reverting a story (s124)
 
 `revert_story(story, reason)` is the PO's call. It takes a story's work out of
-the team branch, so the sprint can end or the story can start again.
+the team branch, so the sprint can end or the story can start again. With
+story branches on (s159), an unlanded story only drops its branch, and a
+landed story's merge is reverted through a landing; see "Leaving and
+reverting" under "Story branches and landing". The checks, the reset and
+the records below stay the same.
 
 **Refusals**, in order (a refusal changes, saves, posts and emits nothing):
 the checkout moved (a `halted` report, as for `pass_tests`); a boundary is
@@ -2958,6 +3027,237 @@ position changed. `pulled` lists the stories this change pulled ahead.
 the stories in ranking order, with `order` set to the queue and `pulled`.
 The snapshot gives each unfinished story its `tier`.
 
+## Story branches and landing (s159)
+
+ADR-0084 (branches, landing, replay, pushes), ADR-0085 (parallel steps),
+ADR-0086 (kept sessions), ADR-0087 (waiting runs, `limit`). These rules
+apply once story branches are switched on (see "Switching over"). Words:
+
+| Word | Meaning |
+|---|---|
+| sprint branch | the team branch in the main checkout (`upstream.team_branch`); its remote copy is `<prefix><N>` |
+| story branch | `<story_prefix><id>`, or `<story_prefix><id>-r<k>` after k replays |
+| landing branch | `<story_prefix><id>-land`: pushed for one CI run, then deleted |
+| worktree | `.team/run/worktrees/<id>/`, a `git worktree` on the story branch |
+| land worktree | `.team/run/land/`, detached at the sprint head, made for each landing or revert |
+| replay worktree | `.team/run/replay/`, detached at the target, for a boundary replay |
+
+All of them are under `.team/run/`, which onboarding gitignores.
+
+**Branch and worktree.** When a story's first step starts, the runner runs
+`git branch <story_prefix><id> <sprint head>` and `git worktree add
+.team/run/worktrees/<id> <branch>`, records `branch`, `base_sha` and
+`worktree_head`, and logs `story-branch` (`action: "created"`). A story
+that has a branch but no worktree (moved out of a sprint, or pruned) gets
+its worktree back from the branch (`rebuilt`); no new branch is made. Every
+step on the story runs in its worktree: its write scope, Stop hook,
+commands, stop checks, gates and story-file reads. The run files
+(`state.json`, events, ledger, relay, heartbeat) stay in the main
+checkout's `.team/run/`. Storyless steps (the storyless architect, DevOps
+and unit-tester, the boundary fix steps) run in the main checkout.
+
+**Pushes and story PRs.** Once the team may push, the runner pushes the
+story branch after every step that committed, against the recorded
+`pushed` (see "Safety" under "Sprint boundaries"). A story with no PR gets a
+draft PR from its branch to the sprint's branch (`<id>: <title>`). Every 60 s
+at most, the runner reads each open story's PR checks on its pushed head;
+a settled result that changed is saved as the story's `ci` and logged as
+`story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). A red result hands
+over `story_ci_red` and holds nothing: only the landing CI decides.
+
+**Land.** `land` is the last pipeline step, after `acceptance`, and the
+runner runs it itself. A story is `done` only when its land passes, and
+only then do stories that `depends_on` it start. Stories land one at a time
+in the order they passed acceptance (`land_queue`); the others at `land`
+wait (`waits to land after <id>`). A land before the first push waits for
+the push permission. One land attempt:
+
+1. `git worktree add --detach .team/run/land <sprint head>`, then
+   `git merge --no-ff --no-edit -m "merge(<id>): <title>" <story branch>`.
+   The first parent is the sprint head, and the story's commits keep their
+   hashes. The runner makes no other merge commits, except a replay's
+   copies of these.
+2. **The story file.** When the merge touches `.team/stories/<id>.md`, the
+   runner writes it as `git merge-file -p <story branch copy> <base copy>
+   <sprint head copy>`: the story branch's copy wins and the sprint side's
+   story-admin edits since the fork are re-applied. If they clash, the
+   merge is dropped and the land holds (`gate_hold`): the PO has the
+   liaison settle it with `story amend`, then calls `continue_story`.
+3. **Any other conflict**: the merge is dropped and the story bounces at
+   `land` (a round; `land_bounced`). A story rebase step goes to DevOps when
+   every conflicting path is owned only by DevOps or by no role (CI, lock
+   files, `.gitignore`, the toolchain config), else to the story's
+   developer. When it is adopted, land runs again.
+4. **Full checks** on the merge, in the land worktree. Red bounces the story
+   to `implement` with the failures; the sprint branch never moved. In
+   local mode (no remote, no `gh`, or the human's `no`) green fast-forwards
+   at once and the land passes with `ci: "none"`.
+5. **Landing CI.** The runner pushes the merge as a new branch
+   `<story_prefix><id>-land`, records `landed` (`merge`, `pushed`), and
+   polls the checks on that sha under `[gates] ci_timeout_s`, in the
+   background, so other stories go on. Red or `main` bounces to
+   `implement` with the check lines and clears `landed`. `infra` gets one
+   re-run per job, then holds `ci_infra`. Still pending at the deadline
+   holds `ci_pending`, never green. Each final verdict is logged as
+   `story-ci` with `source: "landing"`. The landing branch is deleted in
+   every case.
+6. **Green.** The runner pushes the sprint branch to the merge (a
+   fast-forward of its recorded `pushed`), then fast-forwards the main
+   checkout, records the checkout and logs `story-landed` (`merge`,
+   `parents`, `sprint_branch`, `pushed`, `ci`). The sprint's first landing
+   opens the sprint's PR as a draft. The story's own PR is closed with
+   `Landed on <branch> as <merge>.` The story is done.
+
+If the sprint-branch push is refused, the runner never retries it. It
+fetches the remote head: when that descends from what the runner pushed
+(someone pushed a fix), the main checkout fast-forwards to it and the land
+starts again with a new merge, checks and CI. Otherwise the run halts as
+checkout drift (`the sprint branch <branch> on <remote> is at <sha>, which
+does not descend from the runner's <sha>; nothing was pushed`). A run
+stopped after the landing push resumes the CI wait on that sha with no new
+merge or push. Each attempt is the runner stage `story.land`; its detail
+holds the checks summary and the CI verdict.
+
+While a land holds the sprint branch (from its merge to its fast-forward
+or discard), no story-admin commit is applied; the queues wait.
+
+**Story rebases.** A landing conflict (with a round) or a carried story's
+replay conflict (without one) records the story's `rebase` (`onto`, `base`,
+`old`, `branch`, `files`, `role`). Before the step the runner runs, in the
+worktree, `git checkout -b <story_prefix><id>-r<k>` and `git rebase --onto
+<onto> <base>`, which stops at the conflict. The step may write only the
+conflicting files. Its brief says: resolve, `git add`, `git rebase
+--continue`; never merge, squash, reorder or drop. After `done`, the runner
+checks that no operation is in progress, the tree is clean, HEAD is on the
+new branch and descends from `onto`, and the commits match the old
+branch's by subject and in order. Then the story adopts the branch (remap,
+`branch`, `base_sha`, `replays`, worktree head), pushes it with a new draft
+PR and closes the old one. Otherwise the step bounces to the same role (a
+round).
+
+**Leaving and reverting.** A story that leaves the sprint (`start_sprint`
+without it) or is cancelled loses its worktree but keeps its branch, and
+its PR stays a draft; nothing of it reaches the sprint branch. The runner
+never deletes a story branch. A cancel stops a running step at its next
+tool call (a safe point; the step's commit and gate are skipped). The move
+and cancel limits apply only to landed stories; a story at `land` can't be
+moved or cancelled until its land ends (`story <id> is landing; it can't
+leave the sprint until land ends`). `revert_story` on an unlanded story
+removes its worktree and drops its `branch`, `base_sha`, `pushed`, `pr` and
+sessions (the remote branch and PR stay), with no revert commit. On a
+landed story it reverts the landing merge in the land worktree (`git revert
+--no-edit -m 1 <merge>`) and lands the revert like a story: full checks, the
+landing branch, CI, then the sprint-branch push and fast-forward. A
+conflict, red checks or red CI refuse the revert, leave the sprint branch
+untouched, and name the later landed stories whose merges touch the same
+files. A started story that depends on it refuses it as before.
+
+`state.json` per story (s159, all defaulted on load): `branch`,
+`base_sha`, `replays`, `pushed`, `pr`, `landed` (`merge`, `pushed`, `pr`),
+`worktree_head` (`""` = no worktree), `drift`, `in_flight`, `sessions`,
+`ci` (`sha`, `verdict`, `source`), `land_reran` and `rebase`. Run level:
+`story_branches`, `land_queue`, `permission_asked` and
+`checkout_requests`. Events: `story-branch` (`action`: `created`,
+`rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
+`replays`), `story-landed` and `story-ci`; `step-end` gains `resumed` and
+`cache_write`, and `checkout` gains `story`.
+
+### Parallel steps
+
+The scheduler (ADR-0085) runs one task per story at a time (a role step, a
+land, a revert landing or a story rebase), many stories at once. Each tick
+it writes the queued run-file changes, stops starting work if a stop, halt,
+re-pin or usage limit is due, applies the request queues (reorders, shares,
+intake, clerk, reverts, checkout requests) for stories with no running
+task, checks the main checkout, runs a due boundary once nothing but the
+Manager is running, starts the work the router offers within the caps, and
+starts a PO turn when hand-overs are queued.
+
+- **Caps.** A story with no worktree starts only while fewer than
+  `[team] max_open_stories` stories have one (`waits for a free worktree`).
+  Before any step the runner reserves budget for every running step: per
+  `(role, model)`, `max(mean + 3σ, step_reserve_usd)` over at least 5 fresh
+  finished steps, else `step_reserve_usd`. It starts nothing while spend
+  plus the reserves reaches `budget_usd` (`waits for budget headroom`). No
+  running step is stopped for cost; the budget halt still applies.
+- **The Manager** review runs beside the story tasks and blocks none of
+  them; it takes the main checkout's lock only around its settle.
+- **The main checkout** is used by one thing at a time: a storyless step for
+  its whole run, a land from merge to fast-forward, and the PO's settle and
+  the story-admin commits.
+- **One writer.** Only the scheduler writes `state.json`, `events.jsonl`
+  and `ledger.jsonl`. Steps and PO tool calls hand it their changes; git and
+  commands run in worker threads that never touch the run state. The live
+  meter writes its own files, one heartbeat entry per running step
+  (`steps`, oldest first; `step` is the newest).
+- **PO turns.** Hand-overs queue per story as they arrive. A PO turn takes
+  every queued one in one prompt (kinds, lines and stories joined, in
+  arrival order); later ones wait for the next turn. A hand-over leaves the
+  queue only when its turn finished. Each turn starts with a snapshot of
+  every story (step, status, hold, PO hold, rounds, landed). A tool call
+  naming a story that moved since then is refused (`story <id> moved since
+  your turn began; it is now <state>. Check it and retry`); the PO's own
+  changes refresh its snapshot.
+- **A due boundary** starts nothing new. The PO keeps getting turns, and
+  the stage runs once only the Manager review, or nothing, is running.
+- **Stop.** `stop` lets every running task finish and starts none. `stop
+  --now` cancels them all; each story step is kept as interrupted (see
+  "Interrupted steps") and the run halts `sigterm`.
+
+Before story branches are switched on, the scheduler starts one step at a
+time (`story branches are off: one step at a time`), the Manager does not
+run beside other steps, and a story with no branch passes `land` at once.
+
+### Kept sessions
+
+Each role's session on a story is kept (`sessions[role]`: `session`,
+`model`, `effort`, `provider`, `reported`) and resumed by the role's next
+step on that story when the model, effort and provider are the same;
+otherwise the step starts fresh (ADR-0086). A kept session ends:
+
+- for all roles, when the story is done, cancelled or reverted, or a bounce
+  or return sends it to an earlier step;
+- for one role on every story, when an `override` (an `upgrade_model`
+  ruling) changes that role's model;
+- for one role on one story, when a resumed query fails on the context
+  limit; that step reports `error` and the next starts fresh. A session that
+  only grows past the limit is compacted by the SDK.
+
+A resumed step's ledger entry is the session's cost delta, marked
+`resumed`; reconciled estimates are marked `estimated`. The reserve uses
+only fresh, measured steps. The dashboard's Time chart splits each role's
+bar into fresh and resumed parts.
+
+### Waiting and limits
+
+- **Waiting on the human** (ADR-0087). A run with nothing to do but wait (an
+  open question, a stuck Sprint Backlog, a cap, `notify_user(kind="blocked")`)
+  stays `running`, with `status_reason` saying why, and polls every 5 s; an
+  answer or a `tell` reaches the PO within one tick. Only `done`,
+  `checkout-changed`, `blocked` (the budget), `limit` and `sprint-end` under
+  the sprint cadence end it, plus `notify_user(kind="done")` and a stop.
+  While it waits, the heartbeat (and `$UNATTENDED_HEARTBEAT` when set)
+  carries `"waiting": <reason>`.
+- **Usage limit.** A step that hits a limit fails on its own and is kept as
+  interrupted; no new step starts; a land already waiting on CI finishes
+  its wait. Once nothing runs, the run halts `limit` with the reset text in
+  `status_reason` and exits 75. A PO turn cut off by the limit keeps its
+  session, and its hand-overs stay queued.
+- **Hold and cancel** take effect at a safe point: a PO hold on a story with
+  a running step only stops its next start; a cancel stops the step at its
+  next tool call.
+
+### Switching over
+
+`state.json` `story_branches` starts `false`. The first `start_sprint`
+after the upgrade switches it on, and refuses (`story branches can't start
+yet:` and one line per reason) while any of these holds: a listed story is
+past `design`; `.team/pending-tests.json` names a story with tests; the
+review stack is not empty; the team branch has commits not on
+`<remote>/<branch>`. After the switch the check never runs again. A Product
+Backlog story already past design keeps its step and gets its branch from
+the sprint head when it next starts.
+
 ## Sprint boundaries: sync, full checks, the sprint's PR
 
 At each sprint's start and end the runner runs a **boundary**: code steps,
@@ -2982,33 +3282,32 @@ fetch failed, the sprint's entry is still recorded.)
 **Start** (opened by `start_sprint`, before any role runs, including the
 Manager):
 
-1. **sync** (s152, ADR-0077): fetch, record the team branch, and rebase it
-   onto `<remote>/<branch>` once more, since the team may have been stopped
-   while main moved. A branch already on the target (`git rev-list --count
-   HEAD..<remote>/<branch>` is 0, and no `sync_from` is pinned) is left
-   alone: no git rebase runs, and the stage logs `current` with `behind: 0`
-   and the note `the team branch is current with <remote>/<branch>`.
-   Otherwise it pins `sync_from` and runs the same rebase as the end's
-   **rebase** stage, with the same remapping of every recorded hash (see
-   step 5 of the end: `rebased` with `sha` and `rewritten`, or `current`).
-   A pinned `sync_from` always rebases and remaps, so a crash after the
-   rebase is remapped on resume. A **conflict** is aborted, the team branch
-   is unchanged, and nothing is held: the stage logs `conflict` (`files`,
-   `commit`, `subject`, `note`), the liaison gets an `update` (`Sprint N
-   start: rebasing <team> onto <target> stopped at <commit> "<subject>"
-   with conflicts in: <files>. The rebase was aborted, <team> is unchanged
-   and the sprint goes on from it. The human can rebase <team> by hand;
-   until then the sprint end's PR conflicts with <target>, so it gets no
-   CI and the end does not rebase.`), and the boundary goes on to
-   **check**. A start conflict never goes to DevOps. Git stopping for
-   another reason, or a path only one side touched, holds `error` as at
-   the end. No stack entry is dropped, pushed or retargeted, and there is
-   no `gh` call. Within a sprint the team branch is still never rebased; a
-   change the team needs sooner comes in as a pick (see "Picks
+The start's stages are `sync, check, push-replayed, open`; the end's are
+`sync, check, push, ci, replay, push-replayed, ci-replayed` (s159,
+ADR-0084). A saved boundary at an old stage loads at its new one: `rebase`
+at `replay`, `push-rebased` at `push-replayed`, `ci-rebased` at
+`ci-replayed`. The old `sync_from` key loads as the replay's `old_head`.
+
+1. **sync** (s152, s159): fetch and record the sprint branch. A branch
+   already on the target (`git rev-list --count HEAD..<remote>/<branch>` is
+   0, and no replay is pinned) is left alone: the stage logs `current` with
+   `behind: 0` and the note `the team branch is current with
+   <remote>/<branch>`. Otherwise it **replays** the sprint branch onto the
+   target (see "Replay" below), from the last end's first-parent line
+   (`upstream.last_end`) or, when that is empty, from the merge base, and
+   remaps every recorded hash. A pinned replay always resumes and remaps,
+   so a crash in the middle is finished on resume. A **conflict** is
+   aborted, the sprint branch is unchanged, and nothing is held: the stage
+   logs `conflict` (`files`, `commit`, `subject`, `note`), the liaison gets
+   an `update` (`Sprint N start: rebasing <team> onto <target> stopped at
+   <commit> "<subject>" with conflicts in: <files>. …`), and the boundary
+   goes on to **check**. A start conflict never goes to DevOps. Git
+   stopping for another reason, or a path only one side touched, holds
+   `error` as at the end. Within a sprint the sprint branch is never
+   replayed; a change the team needs sooner comes in as a pick (see "Picks
    (mid-sprint)" below).
-2. **check**: the full checks on the team branch (skipped when HEAD is the
-   sha that last passed them). The start boundary then finishes; push, ci,
-   rebase, push-rebased and ci-rebased run only at a sprint end. A failure
+2. **check**: the full checks on the sprint branch (skipped when HEAD is the
+   sha that last passed them). A failure
    at the start **holds nothing** (s152): no DevOps fix step, no setback,
    no escalation, and `upstream.checked` is not set. The failing tests are
    the sprint's **known failures**: for each failed check, the JUnit ids of
@@ -3025,33 +3324,57 @@ Manager):
    `request_story`, with the failing output as evidence. The liaison writes
    it and places it with `story new --sprint current` (the top of this
    sprint) or `next`, `backlog` or `--after <id>` (later).
+3. **push-replayed**: only when `sync` replayed and the newest stack
+   entry's PR is still open. It pushes the replayed head to that entry's
+   next branch `<prefix><N>-r<k+1>`, as the end's **push-replayed** does,
+   once the team may push. With an empty stack, or a merged PR, nothing is
+   pushed.
+4. **open** (s159, AC2.17): the sprint's own stack entry. It creates the
+   remote branch `<prefix><N>` at the start head (a new branch; deferred
+   while the push permission is `unasked`) and appends the entry
+   (`sprint`, `branch`, `start`, `end`, `head` = the start head, `pushed`
+   = that head or `""`), logging `opened`. The end's **sync** reuses this
+   entry. Then it replays every **carried story**: one in the new sprint,
+   not landed, whose branch was made from an older sprint head. In the
+   story's worktree (rebuilt if needed) the runner stashes a cut-off
+   step's edits (`git stash push --include-untracked -m
+   agile-team-replay`), runs `git checkout -b <story_prefix><id>-r<k>` and
+   `git rebase --onto <head> <base_sha>`, and pops the stash. On success it
+   remaps the story's shas and records the new `branch`, `base_sha`,
+   `replays` and worktree head. Once the team may push, it pushes the new
+   branch, opens a new draft PR and closes the old one with a link. The old
+   branch and the role sessions are kept. A conflict is aborted (the stash
+   stays) and becomes a story rebase step with no round (see "Story
+   rebases"); the boundary goes on. A Product Backlog story with a branch
+   is replayed the same way when it next starts.
 
 **End** (opened when the sprint is finished: every sprint story is done,
 cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run in this order:
 
-1. **sync**: fetch, record the team branch, and add this sprint's entry:
-   branch `<prefix><N>`, range `start..end` (start = the previous entry's
-   end, or `git merge-base HEAD <remote>/<branch>` for the first one). A
-   sprint that added no commit (HEAD is that start) finishes the boundary
-   at once with `sprint N added no commit since the last sprint end;
-   nothing to push or rebase`. Otherwise every earlier entry leaves
+1. **sync**: fetch, record the sprint branch, and take the sprint's own
+   entry, made by the start's **open** (s159; an older run without one adds
+   it here: branch `<prefix><N>`, range `start..end`, start = the previous
+   entry's end, or `git merge-base HEAD <remote>/<branch>` for the first
+   one). A sprint that landed nothing (`head` is still `start`) finishes
+   the boundary at once with `sprint N added no commit since the last
+   sprint end; nothing to push or rebase`. Otherwise every earlier entry leaves
    `upstream.stack` with a `superseded` event (`sprint K's PR #n is
    superseded: sprint N's branch holds its commits`). Its PR number goes
    into the new PR's body, and its PR is left open: the runner closes
    nothing. After an end sync the stack holds only the sprint's own entry.
-2. **check**: the full checks on the team branch.
-3. **push**, the team branch as built (s151; needs `gh` and permission):
-   the team branch's HEAD, with any fix commits from **check**, is pushed
-   as it is (no cherry-pick, no rebase) to `refs/heads/<prefix><N>` with
-   `--force-with-lease` against the sha the runner last pushed there
-   (none: the branch must not exist yet). No local `<prefix><N>` branch is
-   made. The entry records it as `pushed` and `as_is`. Then the runner
-   finds the branch's PR: it creates it (base `[upstream] branch`, ready),
-   edits an open one whose base or draft state differs, or leaves a closed
-   or merged one alone. The liaison gets `Sprint N's branch <prefix><N>
-   holds the team branch as built (<sha>): PR #n <url>. The runner waits
-   for its CI; the team branch is rebased onto <remote>/<branch> only once
-   it is green.` Without `gh`, or with the human's `no`, nothing is pushed:
+2. **check**: the full checks on the sprint branch.
+3. **push**, the sprint branch as built (s151, s159; needs `gh` and
+   permission): when its HEAD, with any fix commits from **check**, moved
+   past the sha last pushed to `<prefix><N>` by the landings, it is pushed
+   as it is (a fast-forward, see "Pushes"). No local `<prefix><N>` branch
+   is made. The entry copies `branch`, `pushed` and `pr` into `as_is_branch`,
+   `as_is` and `as_is_pr`. The sprint's PR is the draft opened at its
+   first landing, and it stays a draft; an older run with no PR gets one
+   here (found, or created ready with base `[upstream] branch`), and only
+   then does the liaison get `Sprint N's branch <prefix><N> holds the team
+   branch as built (<sha>): PR #n <url>. …`. While the push permission is
+   `unasked`, the stage raises `push_permission` (once per run) and waits,
+   holding nothing. Without `gh`, or with the human's `no`, nothing is pushed:
    the boundary finishes with the local report (`… is checked but not
    pushed (<why>). No CI result exists. The team branch is not rebased onto
    <remote>/<branch>: the rebase waits for green CI.`).
@@ -3092,8 +3415,9 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    Verdicts:
    - **green** (every check passed on the pushed head or was skipped, at
      least one passed): a `pass` event, and the boundary moves on to
-     **rebase**. Nothing is called ready yet. Green is the gate: nothing is
-     rebased before it.
+     **replay**. Nothing is called ready yet. Green is the gate: nothing is
+     replayed before it. (The `ci` stage reads the sprint's PR whether it
+     is a draft or ready.)
    - **red** (a check is `ours`, even with others still pending): the
      boundary is held `ci_failed`, and nothing is rebased. The liaison gets
      an `update`: `Sprint N's CI failed on the team branch as built (<prs>);
@@ -3136,83 +3460,67 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    (`sprint boundary: ci`), so health stays green. If the run is stopped
    during the wait, resume waits again. The sprint-end hand-over then says
    `Review: …` with the CI text.
-5. **rebase** (only after green): the stage first checks the gate in code
+
+   **A fix pushed by hand is followed** (s159, AC2.14). While the boundary
+   holds `ci_failed`, `ci_infra` or `ci_pending`, the runner reads the
+   remote sprint branch at most once per health beat. When it moved past
+   the sha the runner pushed, the runner fetches, fast-forwards the sprint
+   branch to it, records the checkout, logs `followed`, clears the hold and
+   reads CI again for the new head. If it can't fast-forward, the run halts
+   as checkout drift naming both heads. `continue_boundary` at `ci_failed`
+   is accepted once the pushed head differs from the head CI was read on.
+5. **replay** (only after green): the stage first checks the gate in code
    (`boundary.get_rebase_refusal`): the sprint's entry must have a CI read
    that is green on the sha it pushed. If not, nothing runs: no fetch, no
    git call, no hash rewritten. The boundary holds `error` with a
    `refused` event (`the rebase waits for green CI on the team branch as
    built: <branch> at <sha> has <verdict>`), and its stage goes back to
    **ci**, so `continue_boundary` waits for CI again. After the gate it
-   fetches, then rebases the team branch onto `<remote>/<branch>`
-   (non-interactive, no autosquash, no autostash; commits already upstream,
-   merge commits and commits that become empty are dropped). There is never
-   a merge, `-s ours` or `-X ours` (s59, ADR-012). After a rebase the
-   runner pairs each old commit with its copy (author, date and message, in
-   order; a dropped commit maps to the last kept copy, or to the target)
-   and rewrites the team hashes in `state.json`: each story's `commit`,
-   `code_commits` and interrupted sha, the run's interrupted shas,
-   `upstream.last_end` and the entry's `start`/`end` (never its `as_is`,
-   `pushed` or `ci`). Then it records the checkout and saves.
+   fetches and **replays** the sprint branch onto `<remote>/<branch>` (see
+   "Replay" below). There is never `-s ours` or `-X ours` (s59, ADR-012).
    `upstream.checked` is not rewritten, so the full checks run again. A
    path only one side touched must keep that side's version. Otherwise the
-   branch is reset to where it was and the boundary holds `error`.
+   sprint branch stays where it was and the boundary holds `error`.
 
-   **A conflict goes to DevOps** (s151 AC6, ADR-0076). The rebase is
-   aborted and the team branch is unchanged. The runner makes a git
-   worktree at `.team/run/rebase` on the scratch branch
-   `agile-team/rebase-sprint-<N>`, starts the same rebase there (commits
-   that become empty are kept), emits `conflict` (no hold) and runs a
-   `rebase-fix` step for `devops`. Its brief names the stopping commit, its
+   **A conflict goes to DevOps** (s151 AC6, s159, ADR-0076, ADR-0084). The
+   replay stops in the replay worktree `.team/run/replay` on the scratch
+   branch `agile-team/replay-sprint-<N>`, and the sprint branch is
+   unchanged. The runner emits `conflict` (no hold) and runs a `rebase-fix`
+   step for `devops`. Its brief names the stopped story and commit, its
    subject and files, the worktree and the branch. The step may write only
    the worktree, and git may change only the worktree (`GIT_EDITOR=true`).
    DevOps resolves the conflicting files, keeping both sides' intent, and
-   finishes the rebase; it never merges, squashes, reorders, rewords, skips
-   or drops a commit. When it is back, the `rebase` stage (no fetch) judges
-   the result: the step ended `done`; the rebase is finished; the worktree
-   is clean and on its branch; the branch sits on the target with no merge
-   commit; its commits (author, date, message, in order) are the team
-   branch's minus those `git cherry` finds already upstream; no path only
-   one side touched changed; and the full checks, run by the runner in the
-   worktree, pass. Then the team branch is reset to the result (`reset
-   --keep`; if the team HEAD moved meanwhile, `error` and nothing is
-   reset: the worktree, the scratch branch and the pinned start are
-   dropped, so `continue_boundary` rebases afresh from the new HEAD), the
-   hashes are remapped as above, the worktree and the scratch
-   branch are removed, and the boundary goes on to **push-rebased**.
-   Otherwise it holds `rebase_conflict`: the PO's handover and an `update`
-   to the liaison (`Sprint N's rebase onto <target> stopped at <commit>
-   "<subject>" (conflicts in <files>), and DevOps could not settle it:
-   <reason>. DevOps's notes: <notes>. The team branch is unchanged;
-   DevOps's work is on the branch <branch>. …`) carry the conflict, the
-   reason, DevOps's notes and the scratch branch, which is kept.
-   `continue_boundary(note)` starts a fresh rebase and, on a new conflict,
-   a new DevOps step with the note. `sync_conflict` is no longer emitted;
-   a saved boundary held there still loads, and `continue_boundary` reruns
-   the rebase.
+   finishes the stopped rebase or cherry-pick; it never merges, squashes,
+   reorders, rewords, skips or drops a commit. When it is back, the runner
+   checks, in order: the operation is finished, the worktree is clean, HEAD
+   is on the scratch branch and descends from the replay's tip, and the
+   stopped story's commits match the old ones by subject and in order,
+   with none of them a merge. No path only one side touched may change. If
+   all pass, the replay goes on from the next commit (re-making the story
+   merge first when it stopped inside a story). A new conflict is a new
+   DevOps step, under the boundary's rounds. Otherwise it holds
+   `rebase_conflict`: the PO's handover and an `update` to the liaison
+   carry the conflict, the reason, DevOps's notes and the scratch branch,
+   which is kept. `continue_boundary(note)` starts a new DevOps step with
+   the note. `sync_conflict` is no longer emitted; a saved boundary held
+   there still loads.
 
-   The runner remaps from the HEAD it recorded before
-   the rebase (`boundary.sync_from`, saved before the rebase starts), so a
-   hand rebase is rewritten too, and so is a rebase that a crash cut off
-   before the hashes were saved. If git stops the rebase for a reason other
-   than a conflict (for example, an untracked file would be overwritten),
-   the boundary holds `error` and the rebase is left stopped. The human
-   finishes it (`git rebase --continue`) or aborts it (`git rebase
-   --abort`), then the PO calls `continue_boundary`. Hashes quoted in
-   reviews and stories are not rewritten. After `rebased` or `current`,
-   `boundary.sync_from` is cleared. The rebased team branch is checked at
-   the next start's **check**.
-6. **push-rebased**: when the rebase changed nothing (HEAD is still the
+   If git stops the replay for a reason other than a conflict (for
+   example, an untracked file would be overwritten), the boundary holds
+   `error`. Hashes quoted in reviews and stories are not rewritten. The
+   replayed sprint branch is checked at the next start's **check**.
+6. **push-replayed**: when the replay changed nothing (HEAD is still the
    sha pushed at **push**), a `pass` event (`the rebase changed nothing;
-   <branch> stays at <sha>`), and the boundary finishes green: the as-built
-   CI is that head's CI, and the PO gets `ci_green`. Otherwise the rebased
-   HEAD is force-pushed to the same `<prefix><N>`, with the lease on the
-   as-built sha. Pushing the branch updates the PR, and the PR's history
-   keeps the as-built push, so the human can compare the two. The PR is
-   not edited. The liaison gets `Sprint N's PR #n now holds the team
-   branch rebased onto <remote>/<branch> (<sha>); the as-built push
-   (<sha>) stays in the PR's history. The runner waits for CI again.` A
-   refused push holds `push_rejected`.
-7. **ci-rebased**: the same CI read as **ci**, for the rebased head. Its
+   <branch> stays at <sha>`), the draft PR is made ready, and the boundary
+   finishes green: the as-built CI is that head's CI, and the PO gets
+   `ci_green`. Otherwise the runner pushes the replayed HEAD as a **new
+   branch** `<prefix><N>-r<k>` (`k = replays + 1`) and opens a ready PR
+   from it. It closes the old draft PR with `Replayed onto <target> as
+   <url>; this PR is superseded.` and keeps the old branch. The entry's
+   `branch`, `head`, `pushed`, `pr`, `url` and `mode` now describe the
+   replay branch, and `replays = k`. Nothing is force-pushed. A refused
+   push holds `push_rejected`.
+7. **ci-replayed**: the same CI read as **ci**, for the replayed head. Its
    result replaces the entry's `ci`, so the Board shows the PR's current
    head. An `infra` check still gets its one re-run (keyed by the new head).
    - **green**: the boundary finishes and the sprint is done. The PO gets
@@ -3225,6 +3533,38 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
      and is <verdict> on it rebased onto <remote>/<branch> (<prs>). The PR
      is NOT ready; do not merge it.`, with the check lines. The PO asks the
      liaison for a bug story when the failure is ours.
+
+**Replay** (s159, ADR-0084). A replay copies the sprint branch's
+first-parent line onto a target in the replay worktree `.team/run/replay`
+(detached at the target). For each commit of `git rev-list --first-parent
+--reverse <base>..<head>`:
+
+- a story merge `M` (two parents): `git rebase --onto <tip> M^1 M^2` (empty
+  commits kept), then `git checkout --detach <tip>` and `git merge --no-ff
+  --no-edit -m "<M's full message>" <rebased tip>`, so the story stays one
+  merge with its own commits;
+- any other commit (a story-admin commit, a boundary fix):
+  `git cherry-pick --allow-empty <c>`.
+
+The progress (`boundary.replay`: `old_head`, `base`, `target`, `done`,
+`tip`, `story`, `moved`) is saved after each commit, so a crash or a
+conflict resumes at the right place. When it finishes, the runner moves the
+sprint branch to the tip only if the branch is still where the replay
+started, records the checkout, removes the worktree, and remaps every
+recorded hash **story by story**: each story's commits pair with their
+copies by subject and in order, each merge pairs with the copy whose subject
+is `merge(<id>): …` for the same id, and other commits pair by subject, in
+order. The remap rewrites each story's `commit`, `code_commits` and
+interrupted sha, each open story's `base_sha`, each `landed.merge`, each
+revert record's `merge` and `revert`, the run's interrupted shas,
+`upstream.last_end` and the entry's `start`/`end` (never `as_is`, `pushed`
+or `ci`).
+
+**main moves only by fast-forward** (s159, AC2.8). The runner never pushes
+main; the push guard refuses it. The PR body, the green report and the
+`ci_green` line give the command (`git push <remote> <sha>:<branch>`); the
+human or the liaison runs it. No text says "Rebase and merge": it would
+rewrite the story merges.
 
 **Full checks**: the `[toolchain]` `lint`, `static` and `coverage` commands
 (coverage must reach the gate or the baseline), then each acceptance
@@ -3259,19 +3599,31 @@ repeated_boundary`, and the Manager's context carries `repeated_boundary`
 (reason, key, count, history, events). The PO then gets
 `boundary_escalated` with the Manager's summary.
 
-**Permission.** The first push asks: the PO gets `push_permission`, asks
-the human once, and records the answer with `set_push_permission` (`yes`
-or `no`). `state.json` keeps it in `upstream.push` for every later sprint.
-With `no`, or without `gh` (missing or logged out), nothing is pushed: the
-boundary finishes after **check**, the human is told the branch name, that
-no CI result exists and that the team branch is not rebased (`done` event
-with `ci: none`).
+**Permission.** The run asks once, before its first push of any kind (a
+story branch, a landing, the sprint branch at the start's **open**, or a
+boundary push; s159): the PO gets `push_permission`, asks the human once,
+and records the answer with `set_push_permission` (`yes` or `no`).
+`state.json` keeps it in `upstream.push` for every later sprint, and
+`permission_asked` keeps the hand-over from being raised twice. Until the
+answer, steps commit and nothing is pushed. With `no`, or without `gh`
+(missing or logged out), nothing is pushed: landings pass on green full
+checks alone, and the boundary finishes after **check**, the human is told
+the branch name, that no CI result exists and that the sprint is not
+replayed (`done` event with `ci: none`).
 
-**Safety.** The runner pushes only branches that start with `[upstream]
-prefix`, never the team branch, never `[upstream] branch`. It pushes a sha
-(`<sha>:refs/heads/<prefix><N>`), so no local sprint branch is made. The
-only force is the lease on the sprint's branch. Roles still cannot run git commands that
-write.
+**Safety** (s159, ADR-0084: no push replaces a branch's history). The
+runner pushes only branches that start with `[upstream] prefix` or
+`story_prefix`, never the checked-out branch, never `[upstream] branch`. It
+pushes a sha (`<sha>:refs/heads/<branch>`), so no local sprint branch is
+made. Every push names the sha it expects the remote branch to be at (the
+recorded `pushed`, or nothing for a new branch) as
+`--force-with-lease=refs/heads/<b>:<expect>`, and the runner first checks
+that the new sha descends from it (`git merge-base --is-ancestor`); if not,
+it sends nothing and reports `NOT_FAST_FORWARD` as `push_rejected`. A bare
+`--force-with-lease` or `--force` never appears. A refused push is never
+retried with another expected sha. The only branches the runner deletes
+are its landing branches (`<story_prefix><id>-land`). Roles still cannot
+run git commands that write.
 
 **PO tools.** `continue_boundary(note)` releases a held boundary. Its stage
 reruns, and the note reaches the next fix brief. After an escalation it
@@ -3307,34 +3659,37 @@ blocked by main", not done, and the team carries on.
 `state.json` `upstream`: `team_branch`, `push` (`unasked`/`yes`/`no`),
 `stack` (after an end sync, only the sprint's own entry: `sprint`,
 `branch`, `start`, `end`, `title`, `stories`, `head`, `pushed`, `as_is`
-(the sha of the as-built push, s151), `supersedes` (earlier sprints' PR
-numbers), `pr`, `url`, `base`, `mode`, `ci` (the latest CI read: the
-as-built one until **ci-rebased** replaces it), `reran`, `reverted`, and
+(the sha of the as-built push, s151), `as_is_branch` and `as_is_pr` (the
+branch and PR it went to, s159), `replays` (the `k` of the newest
+`-r<k>` branch), `supersedes` (earlier sprints' PR numbers still open),
+`pr`, `url`, `base`, `mode`, `ci` (the latest CI read: the
+as-built one until **ci-replayed** replaces it), `reran`, `reverted`, and
 `commits`: the PR's commit count against main, set at each push; the old
 `checked` and `check` keys are dropped on load),
 `last_end`, `checked` (the last team sha that passed), `closed` (the last
 sprint whose end boundary finished), `report` and `ci_bug` (the bug story
 for a failed CI, until a sprint lists it first).
 
-CI: the sprint's PR is ready and based on main (s151), so it runs CI and
-is watched twice: as built, then rebased. Once `ci_green` says it is ready,
-merge it with **Rebase and merge**. It holds the commits of any earlier
-sprint PR still open, so those can then be closed. GitHub refuses **Rebase
-and merge** for a PR of more than 100 commits, so the push, green and none
-reports add a line for such a PR:
-`PR #<n> (<branch>) has <count> commits, more than the 100 GitHub allows for
-"Rebase and merge". Merge it by fast-forward: git fetch <remote> && git
-push <remote>
-<remote>/<branch>:<target>`.
+CI: the sprint's PR is based on main, a draft while the sprint is built and
+watched as built, then replaced by the ready PR of the replay branch, which
+is watched again. Once `ci_green` says it is ready, main is fast-forwarded
+to its head (the command is in the report). It holds the commits of any
+earlier sprint PR still open, so those can then be closed. For a PR of more
+than 100 commits the push, green and none reports add `PR #<n> (<branch>)
+has <count> commits, more than the 100 GitHub merges in one step. Merge it
+by fast-forward: git fetch <remote> && git push <remote> <sha>:<target>`.
 
 Boundary outcomes since s151: `pushed` (each push: `branch`, `sha`, and
 `as_is` on the second), `superseded` (an earlier entry left the stack),
-`refused` (the rebase gate; warning). The s108 outcomes `restacked`,
+`refused` (the replay gate; warning), and since s159 `opened` (the start's
+stack entry) and `followed` (a fix pushed by hand). The s108 outcomes `restacked`,
 `rebuild`, `merged` and `built` are no longer logged, and old
 `events.jsonl` lines with them still render. Stage names in `runner-stage`
 events: `boundary.sync`, `boundary.check`, `boundary.push`,
-`boundary.ci-wait`, `boundary.rebase`, `boundary.push-rebased`,
-`boundary.ci-rebased` (old lines may name `boundary.review` or
+`boundary.ci-wait`, `boundary.replay`, `boundary.push-replayed`,
+`boundary.ci-replayed`, `boundary.open`, and `story.land` for each land
+attempt (old lines may name `boundary.rebase`, `boundary.push-rebased`,
+`boundary.ci-rebased`, `boundary.review` or
 `boundary.restack`).
 
 ### Picks (mid-sprint) (s141)
