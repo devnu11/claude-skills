@@ -63,6 +63,30 @@ def test_a_plain_commit_replay_stop_has_no_story_text_or_gap() -> None:
     assert '"add a" with conflicts in: a.py' in brief
 
 
+def plain_failure(*, replay: bool) -> b.Failure:
+    return b.Failure(
+        stage=b.Stage.REPLAY,
+        case=b.FixCase.REBASE_CONFLICT,
+        reason="x",
+        plain_rebase=not replay,
+    )
+
+
+def test_a_plain_rebase_conflict_gets_the_ordinary_fix_lines() -> None:
+    lines = b._fix_lines(plain_failure(replay=False))
+    assert lines == b.FIX_LINES[b.FixCase.REBASE_CONFLICT]
+    assert lines != b.REPLAY_FIX_LINES
+
+
+def test_a_replay_stop_gets_the_replay_fix_lines() -> None:
+    assert b._fix_lines(plain_failure(replay=True)) == b.REPLAY_FIX_LINES
+
+
+def test_a_failure_without_the_plain_rebase_key_loads_as_a_replay_stop() -> None:
+    data = {"stage": "replay", "case": "rebase_conflict", "reason": "x"}
+    assert b.Failure(**data).plain_rebase is False
+
+
 @pytest.mark.parametrize("story", ["s12", ""])
 def test_a_replay_stop_is_not_aborted_and_names_the_continue_commands(story: str) -> None:
     brief = replay_brief(story)
