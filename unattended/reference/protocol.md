@@ -10,7 +10,7 @@ rewrite it).
 | Command | What it does |
 |---|---|
 | `start NAME SOURCE [options]` | Create the job and start a detached supervisor (new session, pid file). Prints the job as JSON. |
-| `status [NAME]` | The job as JSON; every job without `NAME`. |
+| `status [NAME]` | The job as JSON; every job without `NAME`. Right after `deadline` comes `time_left`: the whole minutes until the deadline, measured when the command runs and written like a duration (`23h41m`, `41m`, `0m` under a minute), `overdue` once the deadline has passed, `null` with no deadline. Every report (`list`, `wait`, `extend`) has it; it is never stored. |
 | `list` | Every job as JSON. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
