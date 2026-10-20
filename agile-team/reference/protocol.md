@@ -2116,6 +2116,7 @@ The pass ends at the first step whose report matches a row of the
 | `story_ci_red` | CI failed on a story's own draft PR (s159). Nothing is held; the story lands only on green landing CI. The PO briefs its developer if it needs a fix |
 | `worktree_drift` | a story's worktree changed outside the team (s159); the line names the worktree and the files. Only that story waits. The PO tells the human; `agile-team accept-checkout --story <id>` keeps the worktree as it is |
 | `land_bounced` | a landing stopped on a merge conflict (s159); the line names the files and the role (DevOps for files only DevOps or no role owns, else the story's developer) that rebases the story onto the sprint head. Then land runs again |
+| `overlap` | a design's `## Files` overlap another open sprint story's work (s163, per story); the story waits at `design`. The line names the files each changes and the overlap. The runner lifts it once the others have landed, left the sprint or been cancelled; `release_story` with a reason lifts it early, and `continue_story` is refused |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
 | `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
@@ -2366,7 +2367,10 @@ not the hand-over `hold`: `continue_story` clears `hold` but never
 - `release_story(story, reason)` clears `po_hold` and `hold`, sets the
   status to `active` and puts the reason in the next step's brief (as
   `pass_tests` does). The step is unchanged. It works on a PO-held story
-  or a `blocked` story with no open question.
+  or a `blocked` story with no open question. On a story held as `overlap`
+  (s163, see "Files and the overlap hold") it lifts that hold instead: the
+  story goes past `design`, the reason is recorded in `overlap-lifted`, and
+  it returns `{"status": "released", "story", "step"}`.
 - `request_cancel(story, reason)` posts one question naming the story:
   `Cancel story sN ("<title>")? The PO asks because: <reason> Answer
   "cancel" to cancel it or "keep" to keep it.` It sets a `cancel requested`
@@ -2806,7 +2810,10 @@ each problem of a requirement file whose text mentions `s7/`, the story file's
 own problems, and each AC with no covering requirement
 (`s7/AC2 is covered by no active requirement; …`). A reverted story's missing
 After revert section is listed in the same bounce. A broken file that doesn't
-mention the story does not block it; `requirements check` reports it.
+mention the story does not block it; `requirements check` reports it. Since
+s163 every `done` design, traced or not, also needs a `## Files` section
+naming the files the story changes; without it the design bounces, with
+the gate's other reasons (see "Files and the overlap hold").
 
 **Briefs.** On a checked story, the architect's brief has a
 `## Requirements` section: each AC with its covering requirements (or
@@ -3067,10 +3074,10 @@ over `story_ci_red` and holds nothing: only the landing CI decides.
 
 **Land.** `land` is the last pipeline step, after `acceptance`, and the
 runner runs it itself. A story is `done` only when its land passes, and
-only then do stories that `depends_on` it start. Stories land one at a time
-in the order they passed acceptance (`land_queue`); the others at `land`
-wait (`waits to land after <id>`). A land before the first push waits for
-the push permission. One land attempt:
+only then do stories that `depends_on` it start. Stories land one at a time,
+in the landing order (see "Landing order" below); the others at `land` wait
+(`waits to land after <id>`). A land before the first push waits for the
+push permission. One land attempt:
 
 1. `git worktree add --detach .team/run/land <sprint head>`, then
    `git merge --no-ff --no-edit -m "merge(<id>): <title>" <story branch>`.
@@ -3101,25 +3108,110 @@ the push permission. One land attempt:
    holds `ci_pending`, never green. Each final verdict is logged as
    `story-ci` with `source: "landing"`. The landing branch is deleted in
    every case.
-6. **Green.** The runner pushes the sprint branch to the merge (a
-   fast-forward of its recorded `pushed`), then fast-forwards the main
-   checkout, records the checkout and logs `story-landed` (`merge`,
-   `parents`, `sprint_branch`, `pushed`, `ci`). The sprint's first landing
-   opens the sprint's PR as a draft. The story's own PR is closed with
-   `Landed on <branch> as <merge>.` The story is done.
+6. **Green.** Under the main checkout's lock, the runner first checks that
+   the merge's first parent is still the sprint head. If it isn't (a
+   story-admin commit, a settle or a storyless step moved it during the CI
+   wait), the landing gives up its merge (below) and starts again, with no
+   push. Otherwise it pushes the sprint branch to the merge (a fast-forward
+   of its recorded `pushed`), sets `pushed` to the merge, fast-forwards the
+   main checkout and records the checkout. A failed fast-forward halts as
+   checkout drift, and `pushed` still names what the remote has. After the
+   lock, the sprint's first landing opens the sprint's PR as a draft, the
+   story's own PR is closed with `Landed on <branch> as <merge>.`, and the
+   runner logs `story-landed` (`merge`, `parents`, `sprint_branch`,
+   `pushed`, `ci`). The story is done. In local mode the fast-forward takes
+   the same lock and the same first-parent check.
 
-If the sprint-branch push is refused, the runner never retries it. It
-fetches the remote head: when that descends from what the runner pushed
-(someone pushed a fix), the main checkout fast-forwards to it and the land
-starts again with a new merge, checks and CI. Otherwise the run halts as
-checkout drift (`the sprint branch <branch> on <remote> is at <sha>, which
-does not descend from the runner's <sha>; nothing was pushed`). A run
-stopped after the landing push resumes the CI wait on that sha with no new
-merge or push. Each attempt is the runner stage `story.land`; its detail
-holds the checks summary and the CI verdict.
+**Giving up a merge.** A landing gives up its merge when the sprint head
+moved under it, or when its sprint push was refused. It clears the story's
+`landed` (a revert has none), deletes the landing branch under its lease (a
+branch already gone is fine), and logs `landing-dropped` (`merge`, `why`:
+`sprint head moved` or `sprint push refused`, `sprint_head`). It then merges
+afresh onto the current sprint head and runs its checks and CI again. After
+5 fresh starts in one turn the land holds (`the sprint branch kept moving`).
+A landing never pushes a merge made on an older sprint head.
 
-While a land holds the sprint branch (from its merge to its fast-forward
-or discard), no story-admin commit is applied; the queues wait.
+**A refused sprint push** is never retried as is. The landing gives up its
+merge, fetches the remote head `R` and:
+
+- when `R` descends from the runner's `pushed` (someone pushed a fix, or
+  another landing moved it): if the main checkout already has `R`, only
+  `pushed` becomes `R`; else the main checkout fast-forwards to `R`, the
+  checkout is recorded, and `head` and `pushed` both become `R`. Either way
+  the land merges afresh;
+- otherwise, or when the fast-forward fails, the run halts as checkout drift
+  (`the sprint branch <branch> on <remote> is at <sha>, which does not
+  descend from the runner's <sha>; nothing was pushed`).
+
+Known limit: the runner can't tell a lease refusal from another push failure
+(branch protection, auth, the network). Such a refusal with an unmoved
+remote re-lands up to the 5 fresh starts, then holds with `the sprint branch
+kept moving` (ADR-0084).
+
+**Resuming.** A run stopped after the landing push, or a held landing CI
+that `continue_story` releases, resumes the CI wait on that sha with no new
+merge or push, but only while the merge's first parent is still the sprint
+head. Otherwise the landing gives up its merge and merges afresh at once.
+Each attempt is the runner stage `story.land`; its detail holds the checks
+summary and the CI verdict.
+
+**The lock.** A landing's merge, checks, landing push and CI wait run in
+`.team/run/land` and worker threads, without the main checkout's lock. While
+it waits for CI, tells, answers, story requests, `accept-checkout --story`,
+storyless steps and PO turns carry on. The lock is taken only for the
+first-parent check, the sprint push and the move of the main checkout, on a
+first landing and a resumed one alike.
+
+**Landing order** (ADR-0088). The one landing now (`landing` in
+`state.json`) finishes first, also after a restart. Behind it, the stories
+waiting to land (at `land`, not held, with no queued story rebase), and the
+queued landing reverts, go in this order:
+
+1. the stories the PO placed with `order_landings(stories, reason)`, in its
+   order;
+2. every other one smallest first: fewest lines added plus deleted in `git
+   diff --shortstat <base_sha>..<branch>` (for a revert, of the landed
+   merge), ties by story id in number order (`s9` before `s10`). The team of
+   a larger story has more context to resolve a merge conflict.
+
+`order_landings` replaces the PO's placement (duplicates dropped). It is
+refused, with nothing changed, for an empty list (`list the ids of the
+stories waiting to land`), for the one landing now (`<id> is landing now;
+order only the stories waiting behind it`), for a story that isn't waiting
+(`<id> is not waiting to land; waiting: <ids>`), and for an order that
+departs from smallest first with a blank reason (`this order departs from
+smallest first (<ids>); give a reason`). An accepted call logs
+`landing-order` (`order`, `placed`, `smallest`, `sizes`, `reason`) and
+returns `{"status": "ordered", "order", "sizes"}`. A story whose landing
+passes, holds, bounces or waits leaves the queue and loses its placement;
+when it is ready again it rejoins smallest first. A revert and a land never
+run at once, and a revert starts only on its turn and never while a
+boundary is due.
+
+**Files and the overlap hold** (ADR-0088). Every design has a `## Files`
+section: one repo-relative path or `fnmatch` glob per line, until the next
+heading (a leading `- ` or `* `, backticks and trailing notes are dropped).
+The design gate bounces a `done` design without it (`<file> has no ## Files
+section: list the files this story changes under it, one path or glob per
+line`). When a story passes `design` with story branches on, the runner
+compares its Files list with each other open sprint story past `design`:
+that story's Files list (read from its branch) plus the files its branch
+changed since its base (`git diff --name-only`). `.team/**`, the
+architecture index and the design and requirement folders don't count. Two
+entries overlap when either matches the other as a glob. On any overlap
+the story stays at `design`, held as `overlap` (a per-story hand-over that
+names the stories, the files each changes and the overlap), and
+`overlap_with` records the others. On a tick after every one of them has
+landed, left the sprint or been cancelled, the runner lifts the hold: it
+drops the story's worktree (the branch stays, so the next step replays it
+onto the current sprint head), moves the story past `design` and logs
+`overlap-lifted` (`with`, `by: "runner"`, `reason`). `release_story(story,
+reason)` lifts it early, with the reason required (`by: "po"`).
+`continue_story` on an overlap hold is refused (`story <id> is held as
+overlap with <ids>; it goes on when they land, or release_story lifts it
+with a reason`). Known limits: globs are matched against each other, not
+against the tree, and a held design keeps its worktree, so it counts toward
+`max_open_stories`.
 
 **Story rebases.** A landing conflict (with a round) or a carried story's
 replay conflict (without one) records the story's `rebase` (`onto`, `base`,
@@ -3155,12 +3247,15 @@ files. A started story that depends on it refuses it as before.
 `state.json` per story (s159, all defaulted on load): `branch`,
 `base_sha`, `replays`, `pushed`, `pr`, `landed` (`merge`, `pushed`, `pr`),
 `worktree_head` (`""` = no worktree), `drift`, `in_flight`, `sessions`,
-`ci` (`sha`, `verdict`, `source`), `land_reran` and `rebase`. Run level:
-`story_branches`, `land_queue`, `permission_asked` and
+`ci` (`sha`, `verdict`, `source`), `land_reran`, `rebase` and (s163)
+`overlap_with`. Run level: `story_branches`, `landing_order` and `landing`
+(s163; an older file's `land_queue` is ignored), `permission_asked` and
 `checkout_requests`. Events: `story-branch` (`action`: `created`,
 `rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
 `replays`), `story-landed` and `story-ci`; `step-end` gains `resumed` and
-`cache_write`, and `checkout` gains `story`.
+`cache_write`, and `checkout` gains `story`. s163 adds `landing-order`,
+`landing-dropped`, `overlap-lifted` and `stack-dropped`, and the gate's
+hold event carries `overlap` on an overlap hold.
 
 ### Parallel steps
 
@@ -3169,9 +3264,11 @@ land, a revert landing or a story rebase), many stories at once. Each tick
 it writes the queued run-file changes, stops starting work if a stop, halt,
 re-pin or usage limit is due, applies the request queues (reorders, shares,
 intake, clerk, reverts, checkout requests) for stories with no running
-task, checks the main checkout, runs a due boundary once nothing but the
-Manager is running, starts the work the router offers within the caps, and
-starts a PO turn when hand-overs are queued.
+task, while nothing holds the main checkout's lock and no boundary stage
+runs, lifts the overlap holds that are due, checks the main checkout, starts
+a due boundary stage once nothing but the Manager is running, starts the
+work the router offers within the caps, and starts a PO turn when
+hand-overs are queued.
 
 - **Caps.** A story with no worktree starts only while fewer than
   `[team] max_open_stories` stories have one (`waits for a free worktree`).
@@ -3182,9 +3279,11 @@ starts a PO turn when hand-overs are queued.
   running step is stopped for cost; the budget halt still applies.
 - **The Manager** review runs beside the story tasks and blocks none of
   them; it takes the main checkout's lock only around its settle.
-- **The main checkout** is used by one thing at a time: a storyless step for
-  its whole run, a land from merge to fast-forward, and the PO's settle and
-  the story-admin commits.
+- **The main checkout** is used by one thing at a time, under one lock: a
+  storyless step for its whole run (started by the router or by the PO's
+  `run_role`; one rule decides for both), a landing's sprint push and
+  fast-forward (not its CI wait), a boundary's sync and replay, a follow's
+  fast-forward, and the PO's settle and the story-admin commits.
 - **One writer.** Only the scheduler writes `state.json`, `events.jsonl`
   and `ledger.jsonl`. Steps and PO tool calls hand it their changes; git and
   commands run in worker threads that never touch the run state. The live
@@ -3199,7 +3298,12 @@ starts a PO turn when hand-overs are queued.
   your turn began; it is now <state>. Check it and retry`); the PO's own
   changes refresh its snapshot.
 - **A due boundary** starts nothing new. The PO keeps getting turns, and
-  the stage runs once only the Manager review, or nothing, is running.
+  the stage runs once only the Manager review, or nothing, is running. Each
+  stage runs as a task: its checks, CI wait, git and `gh` calls run in
+  worker threads, so PO turns, story-CI polls and the writer go on during
+  it. Only the sync and the replay hold the main checkout's lock. The
+  request queues wait until the stage ends. A sprint branch held on its CI
+  is followed (a fix pushed to it) by its own task, at most once per beat.
 - **Stop.** `stop` lets every running task finish and starts none. `stop
   --now` cancels them all; each story step is kept as interrupted (see
   "Interrupted steps") and the run halts `sigterm`.
@@ -3253,10 +3357,21 @@ bar into fresh and resumed parts.
 after the upgrade switches it on, and refuses (`story branches can't start
 yet:` and one line per reason) while any of these holds: a listed story is
 past `design`; `.team/pending-tests.json` names a story with tests; the
-review stack is not empty; the team branch has commits not on
-`<remote>/<branch>`. After the switch the check never runs again. A Product
+review stack still has an entry; `git cherry <target> HEAD` lists a `+`
+line (a team commit the target lacks, even as a rebased copy). After the
+switch the check never runs again. A Product
 Backlog story already past design keeps its step and gets its branch from
 the sprint head when it next starts.
+
+**Stack entries main already has** (s163). Every `start_sprint`, after its
+sprint, dependency and leaving checks and before the switch check, fetches
+and drops each review-stack entry whose head the target already has:
+`merge-base --is-ancestor <head> <target>` (`why: "contained"`), or `git
+cherry <target> <head>` with no `+` line (`why: "patch-equivalent"`). Each
+drop logs `stack-dropped` (`sprint`, `branch`, `head`, `pr`, `why`). An
+entry with no head, or whose check fails, stays; with no upstream or a
+failed fetch nothing is dropped. So a sprint that main took by rebase never
+needs a hand edit of the state.
 
 ## Sprint boundaries: sync, full checks, the sprint's PR
 

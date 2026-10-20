@@ -58,6 +58,7 @@ class Trigger(StrEnum):
     STORY_CI_RED = "story_ci_red"
     WORKTREE_DRIFT = "worktree_drift"
     LAND_BOUNCED = "land_bounced"
+    OVERLAP = "overlap"
 
 
 class Scope(StrEnum):
@@ -163,7 +164,11 @@ def _bad_ungated(report: dict) -> bool:
 
 def _gate_held(report: dict) -> bool:
     stopped = report.get("status") in STOPPED_HANDOFFS
-    return _gate(report).get("verdict") == "hold" and not stopped
+    return _gate(report).get("verdict") == "hold" and not stopped and not _is_overlapped(report)
+
+
+def _is_overlapped(report: dict) -> bool:
+    return bool(_gate(report).get("overlap"))
 
 
 KNOWN_LINE = (
@@ -199,6 +204,13 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.GATE_HOLD,
         _gate_held,
         "{story}: {role}'s gate is on hold: {gate_reason}; fix it, then continue_story",
+    ),
+    Rule(
+        Trigger.OVERLAP,
+        _is_overlapped,
+        "{story}: held at design as overlap. It changes {overlap_files}. {overlap_text}. It goes "
+        "on by itself once {overlap_with} have landed, left the sprint or been cancelled; "
+        "release_story lifts the hold early, with a reason.",
     ),
     Rule(Trigger.BAD_HANDOFF, _bad_ungated, "{story}: {role} gave no valid handoff: {reason}"),
     Rule(
@@ -405,7 +417,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields["questions"] = "; ".join(report.get("open_questions") or [])
     fields |= _find_requirement_fields(report)
     fields |= _read_ruling_fields(report)
-    fields |= _land_fields(report)
+    fields |= _land_fields(report) | _find_overlap_fields(report)
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
 
 
@@ -436,6 +448,23 @@ def _land_fields(report: dict) -> dict[str, str]:
         "land_role": conflict.get("role"),
     }
     return {k: str(v) for k, v in fields.items() if v is not None}
+
+
+def _find_overlap_fields(report: dict) -> dict[str, str]:
+    """The overlap hold's text fields (only when the gate carries an overlap)."""
+    found = _gate(report).get("overlap")
+    if not found:
+        return {}
+    others = found.get("with") or []
+    each = (
+        f"{o['story']} changes {', '.join(o['files'])}; both: {', '.join(o['overlap'])}"
+        for o in others
+    )
+    return {
+        "overlap_files": ", ".join(found.get("files") or []),
+        "overlap_with": ", ".join(o["story"] for o in others),
+        "overlap_text": "; ".join(each),
+    }
 
 
 BOUNDARY_TEXT = (

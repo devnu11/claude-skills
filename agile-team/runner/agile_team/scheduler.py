@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import Any
 
 from . import budget_reserve, dependencies, handover, system
@@ -22,7 +21,9 @@ from .gates import FINISHED, Outcome, StoryState, Verdict
 from .halt import crash_halt
 from .handover import Pass, Scope, Trigger
 from .landing import Lander
+from .landing_queue import LandingQueue
 from .loops import Author
+from .overlaps import Overlaps
 from .po_desk import PoDesk
 from .po_tools import (
     RESUME_NOTE,
@@ -59,16 +60,13 @@ REVERT_REFUSED = "reverting story {story} was refused: {why}. The sprint branch 
 LATER = " Later stories touching the same files: {ids}."
 
 
-def make_runner_plan(story: StoryState) -> SimpleNamespace:
-    """What ``Runtime._advance_and_log`` reads of a plan, for a step the runner did itself."""
-    return SimpleNamespace(role=SimpleNamespace(name="runner"), story=story)
-
-
 BOUNDARY_FIXES = (StepKind.TEAM_FIX, StepKind.REBASE_FIX)
 
 
 class Scheduler:
     """Runs the pipeline's tasks and the PO's turns until the run ends."""
+
+    follow_task: asyncio.Task[None] | None = None
 
     def __init__(self, runtime: Runtime, start: Start) -> None:
         self.runtime = runtime
@@ -91,6 +89,7 @@ class Scheduler:
         self.result = StepResult("", 0.0)
         runtime.main_lock = self.main_lock
         self.lander = Lander(runtime, self.main_lock)
+        runtime.landings = self.landings = LandingQueue(runtime)
         self.ci_poll = StoryCiPoll(runtime)
         self.followed_at = float("-inf")
         self.ci_task: asyncio.Task[None] | None = None
@@ -160,14 +159,20 @@ class Scheduler:
         self.collect_done()
         if self.ended():
             return
-        if not self.main_lock.locked():
+        if self.may_apply_queues:
             if rt.checkout_moved():
                 return
             self.router.apply_queues()
+            Overlaps(rt).lift_due()
         self.queue_news()
         self.ask_permission()
         self.poll_story_ci()
         self.follow_boundary()
+
+    @property
+    def may_apply_queues(self) -> bool:
+        """K1, B5: the request queues wait while git moves the checkout or a stage task runs."""
+        return not self.main_lock.locked() and BOUNDARY_KEY not in self.tasks
 
     @property
     def is_finished(self) -> bool:
@@ -212,6 +217,7 @@ class Scheduler:
     async def stop_tasks(self) -> None:
         """C10: ``stop --now`` (a cancelled scheduler) cancels every task."""
         pending = [*self.tasks.values(), *([self.po_task] if self.po_task else [])]
+        pending += [self.follow_task] if self.follow_task else []
         for task in pending:
             task.cancel()
         for task in pending:
@@ -270,7 +276,7 @@ class Scheduler:
     def start_one(self, work: Work) -> bool:
         """Start ``work`` if it may; otherwise say why on the heartbeat."""
         if work.kind is StepKind.BOUNDARY:
-            return self.run_boundary(work)
+            return self.start_boundary(work)
         reason = self.can_start(work)
         if reason is not None:
             self.runtime.pulse.set_waiting(reason)
@@ -299,12 +305,12 @@ class Scheduler:
         return dependencies.WAITING.format(ids=", ".join(ids)) if ids else None
 
     def check_land(self, work: Work) -> str | None:
-        """L2, L3: only the head of the land queue lands, and only once the push is allowed."""
+        """L2, L3, Q1: only the next in the landing queue lands, once the push is allowed."""
         if work.kind is not StepKind.LAND or work.story is None:
             return None
-        state = self.runtime.state
-        if state.land_queue and state.land_queue[0] != work.story.id:
-            return WAIT_TEXTS[WaitReason.LAND_QUEUE].format(id=state.land_queue[0])
+        state, next_up = self.runtime.state, self.landings.next_up()
+        if next_up is not None and next_up != work.story.id:
+            return WAIT_TEXTS[WaitReason.LAND_QUEUE].format(id=next_up)
         if state.upstream.push is Permission.UNASKED:
             state.permission_asked = True
             return WAIT_TEXTS[WaitReason.PERMISSION]
@@ -361,25 +367,24 @@ class Scheduler:
         """Run the work: a land, or a role step under the lock its checkout needs."""
         if work.kind is StepKind.LAND:
             return await self.land(work)
+        if work.kind is StepKind.BOUNDARY:
+            return await self.router.boundaries.run_step()
         story = work.story
         request = StepRequest(work.role, work.brief, story.id if story else None, work.kind)
-        if self.uses_main_checkout(work, request):
-            async with self.main_lock:
-                return await self.runtime.run_role(request)
-        return await self.runtime.run_role(request)
-
-    def uses_main_checkout(self, work: Work, request: StepRequest) -> bool:
-        """D3: a Manager or storyless step, or a story step with no worktree, owns the checkout."""
-        if work.role == MANAGER and self.runtime.state.story_branches:
-            return False  # R2: the Manager reads; story branches leave the checkout alone
-        if work.role == MANAGER or work.story is None:
-            return True
-        return not self.runtime.uses_worktree(request, work.story)
+        async with self.runtime.lock_for(request):
+            return await self.runtime.run_role(request)
 
     async def land(self, work: Work) -> dict[str, Any]:
         """L1 to L12: land the story; its verdict goes through the gate like a role's."""
         story = work.story
         assert story is not None
+        self.landings.begin(story.id)
+        report = await self.land_report(story)
+        self.landings.finish(story.id)
+        return report
+
+    async def land_report(self, story: StoryState) -> dict[str, Any]:
+        """The land's report: an unbranched story passes at once, else the lander decides."""
         if not story.branch:
             return self.pass_unbranched(story)
         return self.settle_land(story, await self.lander.land(story))
@@ -387,8 +392,7 @@ class Scheduler:
     def pass_unbranched(self, story: StoryState) -> dict[str, Any]:
         """A story that never had a branch (before story branches) passes land at once."""
         outcome = Outcome(Verdict.PASS, "landed", author=Author.RUNNER)
-        gate = self.runtime._advance_and_log(make_runner_plan(story), outcome)  # type: ignore[arg-type]
-        self.reorder_queue(story)
+        gate = self.runtime.advance_as_runner(story, outcome)
         return {"role": "runner", "status": "land", "story": story.id, "gate": gate}
 
     def settle_land(self, story: StoryState, report: dict[str, Any]) -> dict[str, Any]:
@@ -397,38 +401,35 @@ class Scheduler:
         if found is None:
             return report
         outcome = Outcome(found["verdict"], found["reason"], found["bounce_to"], Author.RUNNER)
-        report["gate"] = self.runtime._advance_and_log(make_runner_plan(story), outcome)  # type: ignore[arg-type]
-        self.reorder_queue(story)
+        report["gate"] = self.runtime.advance_as_runner(story, outcome)
         if story.status in FINISHED:
             self.runtime.drop_worktree(story)
         return report
-
-    def reorder_queue(self, story: StoryState) -> None:
-        """L2: the story leaves the land queue; a story still at land joins its end again."""
-        queue = self.runtime.state.land_queue
-        if story.id in queue:
-            queue.remove(story.id)
-        if story.step == "land" and story.status.value == "active":
-            queue.append(story.id)
-        self.runtime.save()
 
     # ----- landing reverts (E3)
 
     def start_revert(self) -> bool:
         """E3: the next queued revert lands as a task of its own, one at a time."""
         queue = self.runtime.revert_queue
-        if not queue or REVERT_KEY in self.tasks:
+        if not queue or REVERT_KEY in self.tasks or self.is_boundary_due:
             return False
-        call = queue.pop(0)
+        call = next((c for c in queue if c.story_id == self.landings.next_up()), None)
+        if call is None:
+            return False
+        queue.remove(call)
         story = self.runtime.state.stories.get(call.story_id)
         if story is None or story.landed is None:
             return False
+        self.landings.begin_revert(story.id)
         self.tasks[REVERT_KEY] = asyncio.create_task(self.run_revert(story, call), name=REVERT_KEY)
         return True
 
     async def run_revert(self, story: StoryState, call: Call) -> None:
         """Land the revert; on green record it and reset the story, else tell why."""
-        report = await self.lander.land_revert(story, call.reason)
+        try:
+            report = await self.lander.land_revert(story, call.reason)
+        finally:
+            self.landings.finish(story.id)
         if report.get("gate", {}).get("verdict") == Verdict.PASS:
             async with self.main_lock:
                 Reverter(self.runtime).finish_landing(story, call, report["land"]["merge"])
@@ -445,23 +446,28 @@ class Scheduler:
 
     # ----- boundaries
 
-    def run_boundary(self, work: Work) -> bool:
-        """C7: a boundary stage runs once only the Manager's review (or nothing) is running."""
+    def start_boundary(self, work: Work) -> bool:
+        """C7, B1: a boundary stage is a task, started once only the Manager's review runs."""
         if any(key != MANAGER_KEY for key in self.tasks):
             return False
-        report = self.router.boundaries.step()
-        self.steps += 1
-        self.hurry = True
-        self.report_back(work, {"role": work.role, **report})
+        self.launch(work)
         return True
 
     def follow_boundary(self) -> None:
-        """R9: a CI hold follows a remote head that moved, at most once per beat."""
+        """R9, B6: a CI hold follows a remote head that moved, as a task, once per beat."""
+        self.check_follow_task()
+        busy = BOUNDARY_KEY in self.tasks or self.follow_task is not None
         now = system.monotonic()
-        if now - self.followed_at < self.runtime.config.health.beat_s:
+        if busy or now - self.followed_at < self.runtime.config.health.beat_s:
             return
         self.followed_at = now
-        self.router.boundaries.follow_remote()
+        self.follow_task = asyncio.create_task(self.router.boundaries.run_follow(), name="follow")
+
+    def check_follow_task(self) -> None:
+        """Forget a finished follow, re-raising what it raised."""
+        if self.follow_task is not None and self.follow_task.done():
+            task, self.follow_task = self.follow_task, None
+            self.check_task(task)
 
     # ----- reports and passes
 

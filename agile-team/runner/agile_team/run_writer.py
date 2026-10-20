@@ -52,6 +52,12 @@ class RunWriter:
         self.flush()
         return change()
 
+    def call_from_thread[T](self, change: Callable[[], T]) -> T:
+        """B3: run ``change`` on the loop and wait for it; at once on the loop or when unbound."""
+        if self._loop is None or threading.get_ident() == self._thread:
+            return change()
+        return asyncio.run_coroutine_threadsafe(self.apply(change), self._loop).result()
+
     def drain(  # house-rules: allow query-property -- name fixed by the s159 tests
         self,
     ) -> int:

@@ -410,6 +410,8 @@ def test_passing_a_step_other_than_tests_leaves_the_dispute_alone() -> None:
 
 def test_the_architect_ruling_returns_to_tests_still_confirmed() -> None:
     s, p = story("design", dispute=open_dispute(stage="confirmed")), pipeline()
+    p.checks.design_file = lambda sid: f"docs/design/{sid}.md"
+    p.checks.read = lambda path: "## Files\n\n- src/a.py\n"
     out = p.evaluate(s, Handoff("done"))
     p.advance(s, out)
     assert s.step == "ops-review" and s.dispute.stage is DisputeStage.CONFIRMED

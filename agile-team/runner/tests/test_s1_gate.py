@@ -17,6 +17,7 @@ from agile_team.state import RunState
 from .conftest import FakeQuery, write_story
 from .test_dispatch import open_story, run
 
+FILES = "\n## Files\n\n- src/a.py\n"
 HEAD = "s1's ACs must be traced to active requirements in docs/requirements/ before design passes:"
 
 
@@ -49,6 +50,8 @@ def gate_story(make_runtime, reasons, **kw):
         return list(reasons)
 
     rt.pipeline.checks.traced = traced
+    rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
+    rt.pipeline.checks.read = lambda path: FILES
     return rt, story, calls
 
 
@@ -56,7 +59,7 @@ def revert_setup(rt, story, design_text: str) -> None:
     """Mark the story reverted once, with a design file holding ``design_text``."""
     story.reverted = [revert_log.RevertEntry("2026-01-01", 1, "r", ["a" * 40], "b" * 40)]
     rt.pipeline.checks.design_file = lambda sid: f"docs/design/{sid}.md"
-    rt.pipeline.checks.read = lambda path: design_text
+    rt.pipeline.checks.read = lambda path: design_text + FILES
 
 
 def test_checked_story_with_untraced_ac_bounces_to_design(make_runtime) -> None:

@@ -38,11 +38,8 @@ def test_the_schema_and_tool_name_exist() -> None:
     assert "mcp__team__pass_tests" in po_tools.tool_names()
     keys = list(po_tools.SCHEMAS)
     assert keys.index("pass_tests") == keys.index("revert_story") + 1
-    assert keys[keys.index("continue_story") + 1 :][:3] == [
-        "hold_story",
-        "release_story",
-        "request_cancel",
-    ]
+    assert keys[keys.index("continue_story") + 1 :][:2] == ["hold_story", "release_story"]
+    assert "request_cancel" in keys and "order_landings" in keys
 
 
 def snap(rt) -> str:

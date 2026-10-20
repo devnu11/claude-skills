@@ -10,7 +10,7 @@ from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState, StoryStatus, Verdict
 from agile_team.roles import Handoff
 
-from .conftest import FakeQuery, FakeRunner, handoff
+from .conftest import FakeQuery, FakeRunner, handoff, name_files
 
 STEPS = list(PIPELINE_STEPS)
 COVERED = {"C": (0, "TOTAL 100%")}
@@ -23,7 +23,7 @@ def story(step: str = "tests", **kw) -> StoryState:
 
 def pipeline(results=None, steps=STEPS, cap=3):
     runner = FakeRunner(results)
-    checks = gates.Checks({"test": "T", "coverage": "C"}, 95.0, runner)
+    checks = name_files(gates.Checks({"test": "T", "coverage": "C"}, 95.0, runner))
     return gates.Pipeline(list(steps), cap, checks), runner
 
 

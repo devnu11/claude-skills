@@ -422,7 +422,7 @@ class Router:
 
     async def _run(self, work: Work) -> dict[str, Any]:
         if work.kind is StepKind.BOUNDARY:
-            return self.boundaries.step()
+            return await self.boundaries.run_step()
         story = work.story
         return await self.runtime.run_role(
             StepRequest(work.role, work.brief, story.id if story else None, work.kind)

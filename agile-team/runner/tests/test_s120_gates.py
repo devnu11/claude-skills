@@ -18,6 +18,7 @@ from .test_dispatch import open_story
 from .test_s120_shares import BYTES, DESIGN, SHA, STORY, entry
 
 OTHER = "f" * 64
+FILES = "\n## Files\n\n- src/a.py\n"
 PATH = f"{DESIGN}s1-mock.html"
 
 
@@ -127,13 +128,13 @@ def test_the_check_is_for_the_acceptance_step_only() -> None:
 
 
 def test_a_design_that_names_every_shared_path_passes() -> None:
-    text = f"## Shared files\n\n- {PATH}\n"
+    text = f"## Shared files\n\n- {PATH}\n" + FILES
     out = pipe(shares.Check(listed("mock.html")), text).evaluate(at("design"), Handoff("done"))
     assert out.verdict is Verdict.PASS
 
 
 def test_a_design_that_does_not_name_a_shared_path_bounces_to_design() -> None:
-    out = pipe(shares.Check(listed("mock.html")), "no list\n").evaluate(
+    out = pipe(shares.Check(listed("mock.html")), "no list\n" + FILES).evaluate(
         at("design"), Handoff("done")
     )
     assert out.verdict is Verdict.BOUNCE and out.bounce_to == "design"
@@ -154,7 +155,7 @@ def test_each_unnamed_path_adds_a_reason() -> None:
 
 
 def test_a_story_without_shared_files_is_not_gated() -> None:
-    out = pipe(shares.Check(shares.Listed()), "").evaluate(at("design"), Handoff("done"))
+    out = pipe(shares.Check(shares.Listed()), FILES).evaluate(at("design"), Handoff("done"))
     assert out.verdict is Verdict.PASS
 
 

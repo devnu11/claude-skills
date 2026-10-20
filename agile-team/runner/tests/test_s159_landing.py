@@ -68,9 +68,10 @@ def setup(make_runtime, fake: FakeSystem, push=Permission.YES, prs=None):
     story = StoryState("s1", "Title", "land", sprint=1, branch=BRANCH, base_sha=OLD)
     story.pr = 5
     rt.state.stories["s1"] = story
-    rt.state.land_queue = ["s1"]
+    rt.state.sprint = 1
     fake.reply(("symbolic-ref",), Done(0, "agile-team\n"))
     fake.reply(("rev-parse", "HEAD"), Done(0, MERGE + "\n"))
+    fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, HEAD + "\n"))
     return rt, story, entry
 
 
@@ -316,6 +317,7 @@ def test_a_remote_that_moved_ahead_is_followed_and_the_land_starts_again_l10(
     rt, story, _ = setup(make_runtime, fake)
     reject_sprint(fake)
     ahead = "a" * 40
+    fake.reply(("merge-base", "--is-ancestor"), Done(0), Done(0), Done(1), Done(0))
     fake.reply(("ls-remote",), Done(0, f"{ahead}\trefs/heads/{SPRINT}\n"))
     land(rt, story)
     assert len(issued(fake, "merge", "--no-ff")) >= 2
