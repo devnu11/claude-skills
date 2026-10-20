@@ -80,3 +80,18 @@ Known limits, ruled on at s163's design review (2026-10-19):
   the follow runs only on a CI hold, and both take the main lock to move
   the checkout.
 
+## Amended by s166 (2026-10-20)
+
+Decision 1's "a budget reserve for each running step" counted every running
+task, including a landing and (since s163) a boundary stage. Both run as the
+role `runner`, which has no role file or model, so the budget check raised
+`RoleError: unknown role 'runner'` when it started any step beside one
+(sprint 51's start). Design: `agile-team/docs/design/s166.md`.
+
+- **Only work with a role and a model holds a reserve.** The kinds in
+  `scheduler.COSTLESS` (land and boundary) never start the budget check, as
+  before, and now hold no reserve while they run.
+- **Consequence.** A landing's or a boundary's `gh` and CI calls cost no
+  model budget, so leaving them out loses nothing. A new costless kind joins
+  `COSTLESS` and gets both rules at once.
+

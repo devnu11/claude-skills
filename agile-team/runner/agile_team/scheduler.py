@@ -331,10 +331,18 @@ class Scheduler:
             return None
         rt = self.runtime
         floor, entries = rt.config.team.step_reserve_usd, rt.ledger.entries()
-        reserves = [self.find_reserve(entries, w, floor) for w in (*self.running.values(), work)]
+        reserves = [self.find_reserve(entries, w, floor) for w in self.costly_work(work)]
         headroom = budget_reserve.Headroom(rt.ledger.total(), rt.config.team.budget_usd)
         why = budget_reserve.start_refusal(headroom, reserves)
         return None if why is None else WAIT_TEXTS[WaitReason.RESERVE].format(why=why)
+
+    def costly_work(  # house-rules: allow verb-name -- name fixed by the s166 tests
+        self,
+        work: Work,
+    ) -> list[Work]:
+        """The running work that has a role and model, then ``work``."""
+        running = [w for w in self.running.values() if w.kind not in COSTLESS]
+        return [*running, work]
 
     def find_reserve(self, entries: list[Any], work: Work, floor: float) -> float:
         """What one step of this work's role and model may still cost."""

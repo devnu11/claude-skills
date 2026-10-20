@@ -3128,7 +3128,12 @@ push permission. One land attempt:
    lock, the sprint's first landing opens the sprint's PR as a draft, the
    story's own PR is closed with `Landed on <branch> as <merge>.`, and the
    runner logs `story-landed` (`merge`, `parents`, `sprint_branch`,
-   `pushed`, `ci`). The story is done. In local mode the fast-forward takes
+   `pushed`, `ci`). The story is done. The story PR's base is the sprint
+   branch, so the sprint push usually makes GitHub mark it merged. Then gh
+   refuses the close and posts no note, and the runner reads the PR's state:
+   a merged PR counts as closed (s166). This holds wherever the runner
+   closes a PR (a superseded story or sprint PR too); any other failure to
+   close is reported. In local mode the fast-forward takes
    the same lock and the same first-parent check.
 
 **Giving up a merge.** A landing gives up its merge when the sprint head
@@ -3284,8 +3289,10 @@ hand-overs are queued.
   Before any step the runner reserves budget for every running step: per
   `(role, model)`, `max(mean + 3σ, step_reserve_usd)` over at least 5 fresh
   finished steps, else `step_reserve_usd`. It starts nothing while spend
-  plus the reserves reaches `budget_usd` (`waits for budget headroom`). No
-  running step is stopped for cost; the budget halt still applies.
+  plus the reserves reaches `budget_usd` (`waits for budget headroom`). A
+  landing or a boundary stage, which the runner runs itself, neither waits
+  for budget nor holds a reserve while it runs (s166). No running step is
+  stopped for cost; the budget halt still applies.
 - **The Manager** review runs beside the story tasks and blocks none of
   them; it takes the main checkout's lock only around its settle.
 - **The main checkout** is used by one thing at a time, under one lock: a

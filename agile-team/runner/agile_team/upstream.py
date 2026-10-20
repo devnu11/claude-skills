@@ -325,8 +325,17 @@ class GhPrs:
         return [_run_check(r) for r in json.loads(out)["check_runs"]]
 
     def close(self, pr: int, note: str) -> None:
-        """Close the pull request with ``note`` as its comment."""
-        self._gh("pr", "close", str(pr), "--comment", note)
+        """Close the pull request with ``note``; a PR GitHub shows as merged is already done."""
+        code, out = self.run(["gh", "pr", "close", str(pr), "--comment", note])
+        if code != 0 and not self._is_merged(pr):
+            raise UpstreamError(out.strip())
+
+    def _is_merged(self, pr: int) -> bool:
+        code, out = self.run(["gh", "pr", "view", str(pr), "--json", "state"])
+        try:
+            return code == 0 and json.loads(out).get("state") == PrState.MERGED
+        except (ValueError, AttributeError):
+            return False
 
     def rerun(self, link: str) -> None:
         """Re-run the Actions job at ``link``: a new attempt on the same commit."""
