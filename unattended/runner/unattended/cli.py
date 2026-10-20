@@ -27,7 +27,7 @@ from . import probes
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
-from .limits import Bounds, local, parse_duration, parse_until, span, format_time_left
+from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
 from .prompt_job import PromptJob
 from .store import (
     DEFAULT_RESUME_PROMPT,
@@ -500,7 +500,11 @@ def limits_report(bounds: Bounds) -> dict[str, Any]:
 def build_status_limits(bounds: Bounds, now: float) -> dict[str, Any]:
     """``limits_report`` with ``time_left`` (at ``now``) right after ``deadline``."""
     rest = limits_report(bounds)
-    return {"deadline": rest.pop("deadline"), "time_left": format_time_left(bounds.deadline, now), **rest}
+    return {
+        "deadline": rest.pop("deadline"),
+        "time_left": format_time_left(bounds.deadline, now),
+        **rest,
+    }
 
 
 def watch_report(spec: Spec) -> dict[str, Any]:
