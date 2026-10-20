@@ -98,8 +98,13 @@ class Overlaps:
         shown = git.attempt("show", f"{other.branch}:{checks.design_file(other.id)}")
         listed = design_files.parse_files(shown[1]) if shown[0] == 0 else []
         span = f"{other.base_sha}..{other.branch}"
-        changed = git.attempt("diff", "--name-only", span)[1].split() if other.branch else []
+        changed = self._read_changed_files(span) if other.branch else []
         return drop_ignored([*listed, *changed], self._docs_dir)
+
+    def _read_changed_files(self, span: str) -> list[str]:
+        """Paths changed in `span`; empty when git fails, so its error words are never paths."""
+        code, out = self.runtime.git.attempt("diff", "--name-only", span)[:2]
+        return out.split() if code == 0 else []
 
     def _match(self, ours: list[str], other: StoryState) -> dict[str, Any] | None:
         theirs = self._read_theirs(other)

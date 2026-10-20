@@ -426,8 +426,10 @@ class Scheduler:
 
     async def run_revert(self, story: StoryState, call: Call) -> None:
         """Land the revert; on green record it and reset the story, else tell why."""
-        report = await self.lander.land_revert(story, call.reason)
-        self.landings.finish(story.id)
+        try:
+            report = await self.lander.land_revert(story, call.reason)
+        finally:
+            self.landings.finish(story.id)
         if report.get("gate", {}).get("verdict") == Verdict.PASS:
             async with self.main_lock:
                 Reverter(self.runtime).finish_landing(story, call, report["land"]["merge"])
