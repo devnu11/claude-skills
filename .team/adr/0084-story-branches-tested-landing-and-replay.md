@@ -105,3 +105,23 @@ A follow-up could hold at once, with the refusal text, when the remote
 didn't move, and count `R == merge` as a landed push. That narrows AC3's
 "re-lands when the remote descends", so it needs a new story.
 
+## Amended by s166 (2026-10-20)
+
+A story PR's base is the sprint branch, so the landing's sprint push makes
+GitHub mark the story PR merged. The landing's `gh pr close` then failed with
+"already merged", and the run halted after a green landing (sprint 50).
+Design: `agile-team/docs/design/s166.md`.
+
+- **A merged PR counts as closed.** `GhPrs.close` runs `gh pr close` as
+  before. Only when that fails does it read the PR's state, and `MERGED` is
+  success. Any other failure raises as before. The rule is in the one `Prs`
+  implementation, so the landing, the superseded story PR and the
+  superseded sprint PR all share it.
+- **The state decides, not the text.** The live hotfix matched gh's message.
+  Reading the state survives a change in gh's wording. Reading it after the
+  failure, not before, costs no extra call on the normal path and doesn't
+  race GitHub marking the PR merged.
+- **Consequence.** A landed story's PR usually ends merged, with no landed
+  note: gh refuses a merged PR before it comments. The landing's own record
+  and the `story-landed` event still say where it landed.
+
