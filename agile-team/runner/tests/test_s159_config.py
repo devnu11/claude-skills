@@ -89,7 +89,7 @@ def test_run_dir_follows_run_home_r1(repo: Path) -> None:
     c = cfg.from_raw(repo, {})
     assert c.run_home is None and c.run_dir == repo / ".team/run"
     worktree = repo / ".team/run/worktrees/s1"
-    at = c.at_worktree(worktree)
+    at = c.get_worktree_config(worktree)
     assert at.repo == worktree
     assert at.run_dir == repo / ".team/run"
     assert c.repo == repo

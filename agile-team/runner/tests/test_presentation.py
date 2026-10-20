@@ -316,7 +316,7 @@ def test_story_seeds_point_at_the_environment_seed_and_the_workspace(config: cfg
 
 def worktree_view(config: cfg.Config) -> cfg.Config:
     """The config of a step in s4's worktree, with the story file in that worktree."""
-    view = config.at_worktree(config.run_dir / "worktrees" / "s4")
+    view = config.get_worktree_config(config.run_dir / "worktrees" / "s4")
     write_story(view, "s4", config.environments[0].name)
     return view
 

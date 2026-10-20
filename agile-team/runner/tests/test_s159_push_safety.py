@@ -103,20 +103,20 @@ def test_delete_refuses_anything_but_a_landing_branch_r1(fake: FakeSystem, branc
 
 def test_remote_head_reads_ls_remote_r1(fake: FakeSystem) -> None:
     fake.reply(("git", "ls-remote"), Done(0, f"{NEW}\trefs/heads/team/sprint-1\n"))
-    assert upstream_for().remote_head("team/sprint-1") == NEW
+    assert upstream_for().read_remote_head("team/sprint-1") == NEW
 
 
 def test_remote_head_of_an_absent_branch_is_empty_r1(fake: FakeSystem) -> None:
     fake.reply(("git", "ls-remote"), Done(0, ""))
-    assert upstream_for().remote_head("team/sprint-1") == ""
+    assert upstream_for().read_remote_head("team/sprint-1") == ""
 
 
 def test_fast_forward_is_a_ff_only_merge_r1(fake: FakeSystem) -> None:
-    assert upstream_for().fast_forward(NEW) is True
+    assert upstream_for().advance_to(NEW) is True
     [argv] = issued(fake, "merge", "--ff-only")
     assert argv[-1] == NEW
     fake.reply(("git", "merge", "--ff-only"), Done(128, "", "fatal: Not possible"))
-    assert upstream_for().fast_forward(NEW) is False
+    assert upstream_for().advance_to(NEW) is False
 
 
 def test_no_prs_refuses_close_and_sha_checks_r1() -> None:
@@ -124,7 +124,7 @@ def test_no_prs_refuses_close_and_sha_checks_r1() -> None:
     with pytest.raises(UpstreamError, match="no gh"):
         prs.close(3, "note")
     with pytest.raises(UpstreamError, match="no gh"):
-        prs.sha_checks(NEW)
+        prs.list_checks(NEW)
 
 
 def test_gh_close_comments_on_the_pr_r1() -> None:

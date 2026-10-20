@@ -21,15 +21,15 @@ RUN = FAKE_REPO / ".team" / "run"
 
 
 def test_system_names_in_thread_and_temp_dir_s159_c6() -> None:
-    assert "in_thread" in system.__all__ and "temp_dir" in system.__all__
+    assert "run_in_thread" in system.__all__ and "get_temp_dir" in system.__all__
 
 
 def test_in_thread_runs_the_function_and_returns_its_result(fake: FakeSystem) -> None:
-    assert asyncio.run(system.in_thread(lambda a, b: a + b, 1, 2)) == 3
+    assert asyncio.run(system.run_in_thread(lambda a, b: a + b, 1, 2)) == 3
 
 
 def test_temp_dir_is_outside_the_repo(fake: FakeSystem) -> None:
-    assert FAKE_REPO not in system.temp_dir().parents
+    assert FAKE_REPO not in system.get_temp_dir().parents
 
 
 # ---------- ShaWatch (L8) ----------
@@ -40,7 +40,7 @@ class ShaPrs:
     reads: list[list[Check]]
     calls: list[str] = field(default_factory=list)
 
-    def sha_checks(self, sha: str) -> list[Check]:
+    def list_checks(self, sha: str) -> list[Check]:
         self.calls.append(sha)
         return self.reads.pop(0) if len(self.reads) > 1 else self.reads[0]
 
@@ -57,20 +57,20 @@ def watch(prs: ShaPrs, limit: float = 600):
 
 def test_a_green_landing_head_is_green_with_no_pr(fake: FakeSystem) -> None:
     prs = ShaPrs([[Check("build", Bucket.PASS, "ci")]])
-    got = asyncio.run(watch(prs).result(SHA, []))
+    got = asyncio.run(watch(prs).poll_result(SHA, []))
     assert got.verdict is CiVerdict.GREEN and got.pr == 0 and got.url == "" and got.head == SHA
     assert prs.calls == [SHA]
 
 
 def test_a_failing_check_on_our_code_is_red(fake: FakeSystem) -> None:
     prs = ShaPrs([[Check("build", Bucket.FAIL, "ci", link="https://h/runs/1")]])
-    got = asyncio.run(watch(prs).result(SHA, []))
+    got = asyncio.run(watch(prs).poll_result(SHA, []))
     assert got.verdict in (CiVerdict.RED, CiVerdict.INFRA, CiVerdict.MAIN)
     assert got.verdict is not CiVerdict.GREEN
 
 
 def test_no_checks_at_the_deadline_is_never_green(fake: FakeSystem) -> None:
-    got = asyncio.run(watch(ShaPrs([[]]), limit=0).result(SHA, []))
+    got = asyncio.run(watch(ShaPrs([[]]), limit=0).poll_result(SHA, []))
     assert got.verdict in (CiVerdict.NONE, CiVerdict.PENDING)
 
 

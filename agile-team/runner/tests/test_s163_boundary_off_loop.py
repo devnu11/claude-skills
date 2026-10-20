@@ -157,13 +157,13 @@ def test_the_r9_follow_fast_forwards_under_the_main_lock_b4(env: Env, fake: Fake
     env.rt.state.upstream.stack = [own]
     b = env.open(Edge.END, stage=Stage.CI)
     b.hold = BoundaryHold.CI_FAILED
-    env.br.remote.remote_head = lambda branch: "n" * 40
+    env.br.remote.read_remote_head = lambda branch: "n" * 40
 
-    def fast_forward(sha: str) -> bool:
+    def advance_to(sha: str) -> bool:
         held.append(lock.locked())
         return True
 
-    env.br.remote.fast_forward = fast_forward
+    env.br.remote.advance_to = advance_to
     env.rt.record_checkout = lambda: None
     asyncio.run(env.br.run_follow())
     assert held == [True] and not lock.locked()

@@ -7,15 +7,15 @@ from agile_team.gates import StoryState
 
 
 def test_story_branch_without_replays_r1() -> None:
-    assert sb.story_branch("team/story-", "s9", 0) == "team/story-s9"
+    assert sb.format_story_branch("team/story-", "s9", 0) == "team/story-s9"
 
 
 def test_story_branch_after_replays_r1() -> None:
-    assert sb.story_branch("team/story-", "s9", 2) == "team/story-s9-r2"
+    assert sb.format_story_branch("team/story-", "s9", 2) == "team/story-s9-r2"
 
 
 def test_landing_branch_r1() -> None:
-    assert sb.landing_branch("team/story-", "s9") == "team/story-s9-land"
+    assert sb.format_landing_branch("team/story-", "s9") == "team/story-s9-land"
 
 
 def test_merge_subject_and_id_round_trip_r1() -> None:

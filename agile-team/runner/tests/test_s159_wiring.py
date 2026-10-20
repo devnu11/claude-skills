@@ -60,7 +60,7 @@ def test_a_role_without_a_kept_session_starts_fresh_k1(make_runtime) -> None:
 def test_a_story_step_runs_in_the_story_worktree_b3(make_runtime) -> None:
     rt = make_runtime()
     story = story_in(rt, branch="team/story-s1", worktree_head="a" * 40)
-    view = rt.at(story)
+    view = rt.get_story_view(story)
     plan = view.plan(StepRequest("developer-cli", "go", "s1"))
     assert plan.scope.repo == rt.config.run_dir / "worktrees" / "s1"
 
@@ -73,7 +73,7 @@ def test_an_interrupted_story_step_records_in_flight_and_makes_no_salvage_commit
 ) -> None:
     rt = make_runtime()
     story = story_in(rt, branch="team/story-s1", worktree_head="a" * 40)
-    view = rt.at(story)
+    view = rt.get_story_view(story)
     asyncio.run(view.take_off(view.plan(StepRequest("developer-cli", "go", "s1"))))
     view.save_interrupted(Cause.CRASH)
     assert story.in_flight is not None and story.in_flight.role == "developer-cli"

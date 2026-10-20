@@ -26,7 +26,7 @@ def test_a_failing_sha_read_is_no_result_and_records_nothing_d4(make_runtime, fa
     def boom(sha: str) -> list:
         raise UpstreamError("gh failed")
 
-    rt.prs.sha_checks = boom  # type: ignore[method-assign]
+    rt.prs.list_checks = boom  # type: ignore[method-assign]
     assert poll.read_checks(st) == []
     assert poll.poll(st, 1000.0) is None and st.ci is None
 
@@ -37,7 +37,7 @@ def test_a_failing_sha_read_is_no_result_and_records_nothing_d4(make_runtime, fa
 def test_a_story_with_a_pr_opens_no_second_one_ac8_1(make_runtime, fake) -> None:
     rt, st = ready(make_runtime, fake)
     st.pr = 42
-    story_ci.StoryPusher(rt).after_step(st)
+    story_ci.StoryPusher(rt).push_moved_head(st)
     assert [c for c in rt.prs.calls if c[0] == "create"] == []
     assert st.pr == 42 and st.pushed == HEAD
 
