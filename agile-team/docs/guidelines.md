@@ -185,6 +185,12 @@ rule, update in the same story:
   the `scratch` or `repo` fixture instead. A test whose point is real git, a real process or real files
   belongs in `tests/e2e/`. Test helpers write through `system`, so one helper
   serves both worlds.
+- **A scratch repo never links a directory a tool writes into** (s168,
+  ADR-0081 rule 6). An e2e test that needs a project from the checkout makes
+  the project directory real in its scratch repo and links only its inputs
+  (source package, `pyproject.toml`, `uv.lock`), copying any `.gitignore`.
+  Linking the whole directory lets uv build the venv in the checkout, with
+  scripts that point at the pytest temp path.
 - **A unit test runs in under 1 s** (s72; `timeout = 1` in `pyproject.toml`,
   `e2e_timeout = 30` for `tests/e2e/`). Over it, make the test
   fast with the fake clock or a fake, or move it to `tests/e2e/`. Never add a

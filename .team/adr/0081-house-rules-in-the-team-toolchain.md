@@ -53,3 +53,25 @@ the team checkout includes untracked runner copies under `.team/run/`.
   toolchain; the human runs the team on macOS.
 - The runner reads the config at start, so the new commands and scopes apply
   from its next start.
+
+## Amended by s168 (2026-10-20)
+
+**Context.** The s157 e2e test built its scratch repo by symlinking the whole
+`house-rules/` directory. In a checkout with no `house-rules/runner/.venv` (every
+new story worktree), the first `uv run --project house-rules/runner` made that
+venv *in the checkout*, with console scripts naming the pytest temp path. Once
+pytest pruned the temp dir, every later `test` and `coverage` gate in that
+worktree failed.
+
+**Decision.** 6. **A scratch repo never shares a tool's state directory with
+the checkout.** A test that needs the checkout's house-rules project gives its
+scratch repo a real `house-rules/runner/` directory and links only the
+project's inputs into it (`house_rules/`, `pyproject.toml`, `uv.lock`); its
+`.gitignore` is copied, because git doesn't follow a symlinked one. uv then
+builds the venv in the scratch repo, and the editable install still runs the
+checkout's source. `UV_PROJECT_ENVIRONMENT` (keeps the whole-dir link, so other
+state can still leak) and a full copy (loses edits) were rejected.
+
+**Consequences.** Each such test builds its own venv from uv's cache (about a
+second). The rule is in `guidelines.md` under "Quality bar" and holds for any
+future e2e test that links a project from the checkout.
