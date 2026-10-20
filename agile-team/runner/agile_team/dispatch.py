@@ -550,7 +550,9 @@ class Runtime:
         """Guard scope from the role's globs with placeholders expanded."""
         values = self.config.placeholders()
         write, read = expand_globs(role.write, values), expand_globs(role.read, values)
-        return guard.Scope(role.name, self.config.repo, write, read, secrets=self.secrets)
+        scope = guard.Scope(role.name, self.config.repo, write, read, secrets=self.secrets)
+        scope.run_home = self.config.run_home
+        return scope
 
     # ----- refusal -------------------------------------------------------
 
@@ -771,7 +773,15 @@ class Runtime:
         spec = story_spec.read(self.config, plan.story.id).spec if plan.story else None
         if spec is None:
             return ""
-        return f"\n\n{acceptance.brief_section(spec, plan.prepared.environment.name)}"  # type: ignore[union-attr]  # proxy has a sandbox
+        section = acceptance.brief_section(spec, plan.prepared.environment.name)  # type: ignore[union-attr]  # proxy has a sandbox
+        return f"\n\n{section}{self._report_home(spec.story)}"
+
+    def _report_home(self, story: str) -> str:
+        """From a story worktree the Proxy's cwd is under the main checkout; name the worktree."""
+        if self.config.run_home is None:
+            return ""
+        file = acceptance.report_file(story)
+        return "\n\n" + acceptance.WORKTREE_LINE.format(repo=self.config.repo, file=file)
 
     def _sandbox_launch(self, prepared: sandbox.Prepared) -> Launch:
         servers = prepared.mcp_servers()

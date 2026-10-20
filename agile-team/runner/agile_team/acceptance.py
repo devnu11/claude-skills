@@ -29,6 +29,10 @@ Try only these acceptance criteria; the story's other environments get their own
 Write your findings under the heading `{section}` in {file}:
 rewrite that section only and keep the other environments' sections. If any of these
 criteria fails, hand off `changes_requested` with "failed_acs": the failed ids."""
+WORKTREE_LINE = (
+    "This step's repo is {repo}: the story file and {file} are under it, "
+    "not under the checkout that holds your sandbox."
+)
 
 
 class Mark(StrEnum):
