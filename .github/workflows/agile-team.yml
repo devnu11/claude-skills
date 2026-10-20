@@ -31,3 +31,5 @@ jobs:
       - run: uv run --locked ruff format --check .
       # No pending-test skips (s159): a story's red tests live only on its branch.
       - run: uv run --locked pytest -n auto --cov
+      # The house-rules e2e scratch repo must also work without xdist (s168 AC2).
+      - run: uv run --locked pytest -q tests/e2e/test_s157_house_rules_e2e.py
