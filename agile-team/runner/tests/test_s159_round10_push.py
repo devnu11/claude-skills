@@ -63,7 +63,7 @@ def test_after_step_stops_when_the_sprint_branch_push_is_refused_s1b(make_runtim
     rt.state.upstream.stack = [entry]
     rt.upstream = Upstream("stale info")
     story = story_of(branch="team/story-s1", worktree_head=HEAD)
-    assert StoryPusher(rt).after_step(story) is None
+    assert StoryPusher(rt).push_moved_head(story) is None
     assert len(rt.upstream.leases) == 1 and story.pr is None
 
 

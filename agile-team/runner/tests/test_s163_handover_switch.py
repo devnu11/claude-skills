@@ -79,7 +79,7 @@ def test_the_continue_tool_leaves_an_overlap_hold_in_place(make_runtime, fake) -
 
 
 class FakeUpstream:
-    """Answers ``missing`` and ``why_in_target`` from tables."""
+    """Answers ``missing`` and ``classify_in_target`` from tables."""
 
     def __init__(self, missing: str = "", answers: dict | None = None) -> None:
         self.reason, self.answers = missing, answers or {}
@@ -87,7 +87,7 @@ class FakeUpstream:
     def missing(self) -> str:
         return self.reason
 
-    def why_in_target(self, head: str) -> str | None:
+    def classify_in_target(self, head: str) -> str | None:
         answer = self.answers[head]
         if isinstance(answer, Exception):
             raise answer
@@ -149,10 +149,10 @@ def test_drop_entries_with_nothing_merged_changes_and_logs_nothing(make_runtime,
 
 
 def direct(monkeypatch) -> None:
-    async def in_thread(call, *args):
+    async def run_in_thread(call, *args):
         return call(*args)
 
-    monkeypatch.setattr(po_tools.system, "in_thread", in_thread)
+    monkeypatch.setattr(po_tools.system, "run_in_thread", run_in_thread)
 
 
 def test_start_sprint_drops_a_merged_entry_so_the_switch_sees_no_stack_s1(

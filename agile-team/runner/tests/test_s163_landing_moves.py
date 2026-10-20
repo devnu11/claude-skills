@@ -54,7 +54,7 @@ def test_a_resume_with_the_merge_on_the_head_reads_ci_and_makes_no_merge_g1(
     rt, story, _ = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
     land(rt, story)
-    assert ("sha_checks", MERGE) in rt.prs.calls
+    assert ("list_checks", MERGE) in rt.prs.calls
     assert issued(fake, "merge", "--no-ff") == [] and dropped(rt) == []
 
 
@@ -195,7 +195,7 @@ def watch_with(probe: Probe, act=None):
         prs: object
         limit_s: float
 
-        async def result(self, sha: str, reran: list) -> CiResult:
+        async def poll_result(self, sha: str, reran: list) -> CiResult:
             probe.note("ci")
             if act:
                 act()
@@ -207,7 +207,7 @@ def watch_with(probe: Probe, act=None):
 def probed(rt, monkeypatch, act=None) -> Probe:
     probe = Probe(asyncio.Lock())
     monkeypatch.setattr("agile_team.landing.ShaWatch", watch_with(probe, act))
-    for owner, name in ((rt.upstream, "fast_forward"), (rt, "record_checkout")):
+    for owner, name in ((rt.upstream, "advance_to"), (rt, "record_checkout")):
         original = getattr(owner, name)
 
         def wrapper(*a, _o=original, _n=name):
@@ -229,7 +229,7 @@ def test_the_lock_is_free_during_ci_and_held_for_the_move_on_a_first_landing_k1(
     rt, story, _ = setup(make_runtime, fake)
     probe = probed(rt, monkeypatch)
     run_with(rt, probe, story)
-    assert probe.seen == {"ci": [False], "fast_forward": [True], "record_checkout": [True]}
+    assert probe.seen == {"ci": [False], "advance_to": [True], "record_checkout": [True]}
     assert not probe.lock.locked()
 
 
@@ -241,7 +241,7 @@ def test_the_lock_is_held_for_the_move_on_a_resumed_landing_k2(
     story.landed = Landed(MERGE, pushed=MERGE)
     probe = probed(rt, monkeypatch)
     run_with(rt, probe, story)
-    assert probe.seen == {"ci": [False], "fast_forward": [True], "record_checkout": [True]}
+    assert probe.seen == {"ci": [False], "advance_to": [True], "record_checkout": [True]}
 
 
 def test_the_lock_can_be_taken_by_others_while_ci_waits_k1(make_runtime, fake, monkeypatch) -> None:
@@ -271,7 +271,7 @@ def test_a_head_that_moves_during_ci_gives_up_the_merge_before_the_push_k6(
     run_with(rt, probe, story)
     assert sprint_pushes(fake) == []
     assert dropped(rt) and dropped(rt)[0].data["why"] == "sprint head moved"
-    assert probe.seen.get("fast_forward") is None
+    assert probe.seen.get("advance_to") is None
 
 
 def test_local_mode_holds_the_lock_for_the_fast_forward_k3(make_runtime, fake, monkeypatch) -> None:
@@ -279,7 +279,7 @@ def test_local_mode_holds_the_lock_for_the_fast_forward_k3(make_runtime, fake, m
     rt, story, _ = setup(make_runtime, fake, push=Permission.NO)
     probe = probed(rt, monkeypatch)
     run_with(rt, probe, story)
-    assert probe.seen == {"fast_forward": [True], "record_checkout": [True]}
+    assert probe.seen == {"advance_to": [True], "record_checkout": [True]}
 
 
 def test_local_mode_gives_up_a_stale_merge_without_a_fast_forward_k3(
@@ -301,4 +301,4 @@ def test_a_revert_landing_takes_the_lock_only_for_the_move_k4(
     story.landed = Landed(MERGE, pushed=MERGE, pr=1)
     probe = probed(rt, monkeypatch)
     asyncio.run(landing.Lander(rt, probe.lock).land_revert(story, "bad"))
-    assert probe.seen["ci"] == [False] and probe.seen["fast_forward"] == [True]
+    assert probe.seen["ci"] == [False] and probe.seen["advance_to"] == [True]

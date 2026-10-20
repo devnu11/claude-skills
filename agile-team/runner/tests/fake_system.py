@@ -515,11 +515,11 @@ class FakeSystem:
         """Behave as ``sleep`` (no real wait)."""
         self.sleep(seconds)
 
-    async def in_thread(self, fn: Callable[..., Any], *args: Any) -> Any:
+    async def run_in_thread(self, fn: Callable[..., Any], *args: Any) -> Any:
         """Run ``fn`` at once on the caller's thread (s159 C6: the real one uses a worker)."""
         return fn(*args)
 
-    def temp_dir(self) -> Path:
+    def get_temp_dir(self) -> Path:
         """The fake system temp directory (s159 B2)."""
         return FAKE_ROOT / "tmp"
 

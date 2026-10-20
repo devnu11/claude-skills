@@ -1,4 +1,4 @@
-"""s159: push safety (P2, P5, B7), Prs.close and sha_checks."""
+"""s159: push safety (P2, P5, B7), Prs.close and list_checks."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ def test_no_prs_cannot_close_or_read_shas_r1() -> None:
     with pytest.raises(UpstreamError, match="no gh"):
         prs.close(1, "note")
     with pytest.raises(UpstreamError, match="no gh"):
-        prs.sha_checks(NEW)
+        prs.list_checks(NEW)
 
 
 def test_texts_r1() -> None:

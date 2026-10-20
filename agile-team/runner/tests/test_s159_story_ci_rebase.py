@@ -24,8 +24,8 @@ HEAD, OLD = "b" * 40, "a" * 40
 class ShaPrs(FakePrs):
     sha_list: list = field(default_factory=lambda: [Check("build", Bucket.PASS, "ci")])
 
-    def sha_checks(self, sha: str) -> list:
-        self.calls.append(("sha_checks", sha))
+    def list_checks(self, sha: str) -> list:
+        self.calls.append(("list_checks", sha))
         return self.sha_list
 
     def close(self, pr: int, note: str) -> None:
@@ -60,7 +60,7 @@ def _story():
 
 def test_a_committing_step_pushes_the_story_branch_with_its_lease_p4(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake)
-    assert story_ci.StoryPusher(rt).after_step(story) is None
+    assert story_ci.StoryPusher(rt).push_moved_head(story) is None
     [argv] = pushes(fake)
     assert "--force-with-lease=refs/heads/team/story-s1:" in " ".join(argv)
     assert story.pushed == HEAD
@@ -68,7 +68,7 @@ def test_a_committing_step_pushes_the_story_branch_with_its_lease_p4(make_runtim
 
 def test_a_draft_pr_targets_the_sprint_branch_p4(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake)
-    story_ci.StoryPusher(rt).after_step(story)
+    story_ci.StoryPusher(rt).push_moved_head(story)
     [(_, spec)] = [c for c in rt.prs.calls if c[0] == "create"]
     assert spec.branch == "team/story-s1" and spec.base == "team/sprint-1"
     assert spec.mode is PrMode.DRAFT and spec.title.startswith("s1: ")
@@ -77,13 +77,13 @@ def test_a_draft_pr_targets_the_sprint_branch_p4(make_runtime, fake) -> None:
 
 def test_nothing_is_pushed_while_permission_is_unasked_p1(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake, Permission.UNASKED)
-    assert story_ci.StoryPusher(rt).after_step(story) is None
+    assert story_ci.StoryPusher(rt).push_moved_head(story) is None
     assert pushes(fake) == [] and story.pushed == "" and story.pr is None
 
 
 def test_nothing_is_pushed_when_permission_is_no_p3(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake, Permission.NO)
-    story_ci.StoryPusher(rt).after_step(story)
+    story_ci.StoryPusher(rt).push_moved_head(story)
     assert pushes(fake) == []
 
 
@@ -91,14 +91,14 @@ def test_pushed_is_saved_only_after_success_p4(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake)
     story.pushed = OLD
     fake.reply(("merge-base", "--is-ancestor"), Done(1))
-    out = story_ci.StoryPusher(rt).after_step(story)
+    out = story_ci.StoryPusher(rt).push_moved_head(story)
     assert out and story.pushed == OLD and pushes(fake) == []
 
 
 def test_an_unchanged_head_pushes_nothing_p4(make_runtime, fake) -> None:
     rt, story = ready(make_runtime, fake)
     story.pushed = HEAD
-    story_ci.StoryPusher(rt).after_step(story)
+    story_ci.StoryPusher(rt).push_moved_head(story)
     assert pushes(fake) == []
 
 
@@ -188,7 +188,7 @@ OWNERS = Owners(
     ],
 )
 def test_devops_resolves_only_git_owned_files_o1(files, devops) -> None:
-    assert story_rebase.needs_devops(files, OWNERS) is devops
+    assert story_rebase.is_for_devops(files, OWNERS) is devops
 
 
 REBASE = StoryRebase(

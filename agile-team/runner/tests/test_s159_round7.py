@@ -63,11 +63,11 @@ def pusher_for(make_runtime, monkeypatch, refusal: str | None = None, **kw):
     story = story_of(branch="team/story-s1", worktree_head=HEAD)
     threads: list[str] = []
 
-    async def in_thread(fn, *args):
+    async def run_in_thread(fn, *args):
         threads.append(getattr(fn, "__name__", repr(fn)))
         return fn(*args)
 
-    monkeypatch.setattr(system, "in_thread", in_thread)
+    monkeypatch.setattr(system, "run_in_thread", run_in_thread)
     return rt, story, entry, threads
 
 
@@ -135,11 +135,11 @@ def pregate(make_runtime, monkeypatch, plan, parsed):
     rt = make_runtime()
     threads: list[str] = []
 
-    async def in_thread(fn, *args):
+    async def run_in_thread(fn, *args):
         threads.append(fn.__name__)
         return fn(*args)
 
-    monkeypatch.setattr(system, "in_thread", in_thread)
+    monkeypatch.setattr(system, "run_in_thread", run_in_thread)
     rt._evaluate = lambda p, h: "outcome"  # type: ignore[method-assign]
     asyncio.run(rt._run_pregate(plan, parsed))
     return threads

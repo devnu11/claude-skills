@@ -107,13 +107,13 @@ def test_the_budget_edge_starts_nothing_c4(make_runtime) -> None:
 def test_a_stop_request_ends_the_run_c10(make_runtime) -> None:
     _, s = scheduler(make_runtime)
     s.runtime.stop_requested = lambda: True
-    assert s.ended() is True
+    assert s.ended is True
 
 
 def test_waiting_on_the_human_does_not_end_the_run_i4(make_runtime) -> None:
     rt, s = scheduler(make_runtime, story("s1"))
     rt.state.mark(gates_status("running"), "waiting for the PO")
-    assert s.ended() is False
+    assert s.ended is False
 
 
 def gates_status(name: str):
@@ -127,19 +127,19 @@ def gates_status(name: str):
 
 def test_works_offers_every_startable_story_in_order_c1(make_runtime) -> None:
     rt = setup(make_runtime, story("s1"), story("s2"))
-    ws = router.Router(rt).works(frozenset())
+    ws = router.Router(rt).list_works(frozenset())
     assert [w.story.id for w in ws if w.story] == ["s1", "s2"]
 
 
 def test_works_skips_running_keys_c2(make_runtime) -> None:
     rt = setup(make_runtime, story("s1"), story("s2"))
-    ws = router.Router(rt).works(frozenset({"s1"}))
+    ws = router.Router(rt).list_works(frozenset({"s1"}))
     assert [w.story.id for w in ws if w.story] == ["s2"]
 
 
 def test_a_land_story_is_picked_as_a_land_step_l1(make_runtime) -> None:
     rt = setup(make_runtime, story("s1", "land"))
-    [w] = router.Router(rt).works(frozenset())
+    [w] = router.Router(rt).list_works(frozenset())
     assert w.kind is StepKind.LAND
 
 
@@ -148,12 +148,12 @@ def test_a_story_with_a_queued_rebase_is_picked_as_a_story_rebase_s1(make_runtim
 
     a = story("s1", rebase=StoryRebase("o", "b", "old", "new", ["a.py"], "developer"))
     rt = setup(make_runtime, a)
-    [w] = router.Router(rt).works(frozenset())
+    [w] = router.Router(rt).list_works(frozenset())
     assert w.kind is StepKind.STORY_REBASE
 
 
 def test_the_router_has_the_request_queue_methods_c1() -> None:
-    for name in ("apply_queues", "idle", "news", "works"):
+    for name in ("apply_queues", "hand_over_idle", "deliver_news", "list_works"):
         assert hasattr(router.Router, name)
 
 
@@ -182,7 +182,7 @@ def test_land_is_the_runners_text_l1() -> None:
 
 def test_runtime_at_views_the_worktree_b3(make_runtime) -> None:
     rt = setup(make_runtime, story("s1", worktree_head="a" * 40))
-    view = rt.at(rt.state.stories["s1"])
+    view = rt.get_story_view(rt.state.stories["s1"])
     assert view.config.repo == rt.config.run_dir / "worktrees" / "s1"
     assert view.config.run_dir == rt.config.run_dir
     assert view.git.repo == view.config.repo
@@ -199,7 +199,7 @@ def test_runtime_has_the_split_step_methods_c6() -> None:
 
 def test_runtime_halted_by_lives_in_the_shared_flags_c6(make_runtime) -> None:
     rt = setup(make_runtime)
-    view = rt.at(story("s1"))
+    view = rt.get_story_view(story("s1"))
     rt.halted_by = "x"
     assert view.halted_by == "x" and rt.flags.halted_by == "x"
 

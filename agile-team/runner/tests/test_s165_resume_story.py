@@ -63,7 +63,7 @@ def test_the_session_and_the_worktree_with_its_edits_are_kept(make_runtime) -> N
 
 def test_the_next_step_of_that_role_resumes_in_the_worktree(make_runtime) -> None:
     rt, story, worktree = cut_off(make_runtime)
-    view = rt.at(story)
+    view = rt.get_story_view(story)
     write_story(view.config, "s1", "cli")
     plan = view.plan(StepRequest(ROLE, "go", "s1"))
     assert view.config.repo == worktree and plan.scope.repo == worktree

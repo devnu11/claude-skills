@@ -28,8 +28,8 @@ RUN = FAKE_REPO / ".team" / "run"
 class LandPrs(FakePrs):
     sha_list: list = field(default_factory=lambda: [Check("build", Bucket.PASS, "ci")])
 
-    def sha_checks(self, sha: str) -> list:
-        self.calls.append(("sha_checks", sha))
+    def list_checks(self, sha: str) -> list:
+        self.calls.append(("list_checks", sha))
         return self.sha_list
 
     def close(self, pr: int, note: str) -> None:
@@ -348,7 +348,7 @@ def test_resume_waits_on_the_pushed_sha_and_does_not_merge_or_push_again_l11(
     rt, story, _ = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
     land(rt, story)
-    assert ("sha_checks", MERGE) in rt.prs.calls
+    assert ("list_checks", MERGE) in rt.prs.calls
     assert issued(fake, "merge", "--no-ff") == []
     assert not [a for a in issued(fake, "push") if f"{MERGE}:refs/heads/{LAND}" in a]
 

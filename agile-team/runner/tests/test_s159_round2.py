@@ -69,7 +69,7 @@ def test_start_work_starts_the_boundary_fix_and_not_the_story_step_n5(make_runti
     due_fix(s, StepKind.REBASE_FIX)
     fix = Work("devops", None, "fix", StepKind.REBASE_FIX)
     step = Work("developer-cli", story, "b", StepKind.ROLE)
-    s.router.works = lambda busy: [step, fix]  # type: ignore[method-assign]
+    s.router.list_works = lambda busy: [step, fix]  # type: ignore[method-assign]
     started: list[Work] = []
     s.start_one = lambda w: started.append(w) or True  # type: ignore[method-assign]
     s.start_work()
@@ -102,7 +102,7 @@ def test_before_the_switch_the_manager_step_holds_the_lock_r2(make_runtime) -> N
     assert manager_dispatch(make_runtime, False) is True
 
 
-# ---------- R1: the push runs through system.in_thread ----------
+# ---------- R1: the push runs through system.run_in_thread ----------
 
 
 def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> None:
@@ -110,11 +110,11 @@ def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> 
     story = a_story()
     calls: list[str] = []
 
-    async def in_thread(fn, *args):
+    async def run_in_thread(fn, *args):
         calls.append(getattr(fn, "__name__", repr(fn)))
         return fn(*args)
 
-    monkeypatch.setattr(system, "in_thread", in_thread)
+    monkeypatch.setattr(system, "run_in_thread", run_in_thread)
 
     pushed: list[str] = []
 
@@ -125,22 +125,22 @@ def test_the_story_push_runs_through_in_thread_r1(make_runtime, monkeypatch) -> 
     rt.worktree_of = story.id
     plan = SimpleNamespace(story=story)
     asyncio.run(rt.apply_settled(plan, {"status": "done"}))
-    # C6: the loop thread runs the push flow; only its commands go through in_thread
+    # C6: the loop thread runs the push flow; only its commands go through run_in_thread
     assert pushed == [story.id]
-    assert "after_step" not in calls
+    assert "push_moved_head" not in calls
 
 
 # ---------- N6: the recorded sha is the sha that was read ----------
 
 
 class MovingPrs(FakePrs):
-    """Its ``sha_checks`` answers red, and the story pushes a newer head while it reads."""
+    """Its ``list_checks`` answers red, and the story pushes a newer head while it reads."""
 
     def __init__(self, story: StoryState) -> None:
         super().__init__()
         self.story = story
 
-    def sha_checks(self, sha: str) -> list:
+    def list_checks(self, sha: str) -> list:
         self.story.pushed = NEWER
         return [Check("build", Bucket.FAIL, "ci")]
 

@@ -32,7 +32,7 @@ def has(fake: FakeSystem, *words: str) -> bool:
 
 
 def test_path_of_is_under_the_run_dir_b2() -> None:
-    assert make().path_of("s1") == RUN / "worktrees" / "s1"
+    assert make().get_path("s1") == RUN / "worktrees" / "s1"
 
 
 def test_ensure_makes_the_branch_then_the_worktree_b1(fake: FakeSystem) -> None:
@@ -76,13 +76,13 @@ def test_remove_drops_the_worktree_but_not_the_branch_e1(fake: FakeSystem) -> No
 def test_open_count_counts_stories_with_a_worktree_c3() -> None:
     open_ = StoryState(id="s1", title="t", step="design", worktree_head="c" * 40)
     shut = StoryState(id="s2", title="t", step="design")
-    assert make().open_count([open_, shut]) == 1
-    assert make().open_count([]) == 0
+    assert make().count_open([open_, shut]) == 1
+    assert make().count_open([]) == 0
 
 
 def test_changed_files_reads_the_worktree_status_b5(fake: FakeSystem) -> None:
     fake.reply(("status", "--porcelain"), Done(0, " M a.py\0?? b.py\0"))
-    assert make().changed_files("s1") == ["a.py", "b.py"]
+    assert make().list_changed_files("s1") == ["a.py", "b.py"]
 
 
 def test_prune_stale_removes_worktrees_without_in_flight_i3(fake: FakeSystem) -> None:
@@ -103,7 +103,7 @@ def test_prune_stale_removes_land_and_replay_dirs_i3(fake: FakeSystem) -> None:
 
 
 def test_at_worktree_keeps_the_main_run_dir_b3() -> None:
-    cfg = Config(repo=FAKE_REPO).at_worktree(Path("/wt"))
+    cfg = Config(repo=FAKE_REPO).get_worktree_config(Path("/wt"))
     assert cfg.repo == Path("/wt") and cfg.run_dir == RUN
 
 

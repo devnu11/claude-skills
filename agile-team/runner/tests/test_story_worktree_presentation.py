@@ -22,7 +22,7 @@ def worktree_view(make_runtime, step: str):
     rt.state.story_branches = True
     story = StoryState("s1", "T", step, sprint=1, worktree_head="a" * 40, branch="team/story-s1")
     rt.state.stories["s1"] = story
-    view = rt.at(story)
+    view = rt.get_story_view(story)
     write_story(view.config, "s1", "cli")
     return rt, view, story
 

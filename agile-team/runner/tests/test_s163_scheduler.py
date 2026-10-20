@@ -114,7 +114,7 @@ def test_start_sprint_does_not_look_for_merged_heads_without_an_upstream_d5(
     rt.state.upstream.stack = [SimpleNamespace(head="h" * 40)]
     rt.upstream = None
     calls: list[object] = []
-    monkeypatch.setattr(po_tools.system, "in_thread", lambda *a: calls.append(a))
+    monkeypatch.setattr(po_tools.system, "run_in_thread", lambda *a: calls.append(a))
     asyncio.run(Tools(rt)._drop_merged_entries())
     assert calls == []
 
@@ -125,7 +125,7 @@ def test_start_sprint_does_not_look_for_merged_heads_with_an_empty_stack_d5(
     rt = make_runtime()
     rt.upstream = object()
     calls: list[object] = []
-    monkeypatch.setattr(po_tools.system, "in_thread", lambda *a: calls.append(a))
+    monkeypatch.setattr(po_tools.system, "run_in_thread", lambda *a: calls.append(a))
     asyncio.run(Tools(rt)._drop_merged_entries())
     assert calls == []
 
