@@ -9,10 +9,12 @@ from pathlib import Path
 
 import pytest
 
+from ..clock import real_now
+
 ROOT = Path(__file__).resolve().parents[4]
 RUNNER = ROOT / "unattended" / "runner"
 SEED_SOURCE = r"""
-import sys, time
+import sys
 from pathlib import Path
 from unattended.limits import Bounds
 from unattended.store import JobHome, JobKind, JobState, JobStatus, Spec
@@ -20,7 +22,7 @@ from unattended.store import JobHome, JobKind, JobState, JobStatus, Spec
 home = Path(sys.argv[1])
 work = home / "work"
 work.mkdir(parents=True, exist_ok=True)
-now = time.time()
+now = float(sys.argv[2])
 offsets = {"long": 23 * 3600 + 41 * 60 + 30, "short": 41 * 60 + 30, "seconds": 30,
            "past": -600, "none": None}
 for name, off in offsets.items():
@@ -46,7 +48,7 @@ def cli(home: Path, *args: str) -> dict | list:
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
-    done = uv(tmp_path, "python", "-c", SEED_SOURCE, str(tmp_path))
+    done = uv(tmp_path, "python", "-c", SEED_SOURCE, str(tmp_path), str(real_now()))
     assert done.returncode == 0, done.stderr
     return tmp_path
 
