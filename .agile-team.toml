@@ -15,8 +15,8 @@ preset = "python"
 # runner below it stops the chain and its TOTAL is the last one the gate reads.
 # Each link has its own {report:<root>} (s125), so each writes its own report
 # with ids made repo-relative. Pending-test skips go with s159 (G1).
-test = "uv run --directory agile-team/runner pytest -n auto -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner} && uv run --directory house-rules/runner pytest -q {report:house-rules/runner}"
-coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner} && uv run --directory house-rules/runner pytest --cov --cov-report=term -q {report:house-rules/runner}"
+test = "uv run --directory agile-team/runner pytest -n 2 -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner} && uv run --directory house-rules/runner pytest -q {report:house-rules/runner}"
+coverage = "uv run --directory agile-team/runner pytest -n 2 --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner} && uv run --directory house-rules/runner pytest --cov --cov-report=term -q {report:house-rules/runner}"
 lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check . && uv run --directory house-rules/runner ruff check ."
 # house-rules over the whole repo (s157 R4): gates, the quality step and both
 # boundary checks run `static`, and its fail lines route to their owners.
@@ -57,7 +57,7 @@ ci = [
 # Named-test runs (s69); the agile-team runner's suite runs in parallel (s70).
 [[toolchain.targeted]]
 root = "agile-team/runner"
-command = "uv run --directory agile-team/runner pytest -q --no-header -n auto {tests}"
+command = "uv run --directory agile-team/runner pytest -q --no-header -n 2 {tests}"
 
 [[toolchain.targeted]]
 root = "unattended/runner"
