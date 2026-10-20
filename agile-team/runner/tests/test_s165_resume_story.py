@@ -23,7 +23,7 @@ def cut_off(make_runtime, cause: Cause = Cause.CRASH):
     rt.state.story_branches = True
     story = StoryState("s1", "T", "implement", sprint=1, worktree_head="a" * 40)
     story.branch, story.in_flight = "team/story-s1", InFlight(ROLE, "s1", BRIEF, session=SESSION)
-    rt.state.stories["s1"] = story
+    rt.state.stories = {"s1": story, "s2": StoryState("s2", "Idle", "design", sprint=1)}
     rt.events.emit(Event(EventKind.STEP_START, ROLE, "s1", {"brief": BRIEF}))
     worktree = rt.config.run_dir / "worktrees" / "s1"
     system.make_dirs(worktree / "src")
@@ -40,10 +40,11 @@ def test_the_cut_off_step_ends_as_stopped_with_its_cause(make_runtime) -> None:
 
 
 def test_the_interrupted_record_names_role_story_brief_and_cause(make_runtime) -> None:
-    _, story, _ = cut_off(make_runtime, Cause.SIGTERM)
+    rt, story, _ = cut_off(make_runtime, Cause.SIGTERM)
     assert story.interrupted == Interruption(ROLE, "s1", BRIEF, Cause.SIGTERM, None)
     assert story.interrupted.cause is Cause.SIGTERM and story.interrupted.brief == BRIEF
     assert story.in_flight is None
+    assert rt.state.stories["s2"].interrupted is None  # a story with nothing in flight
 
 
 def test_the_session_and_the_worktree_with_its_edits_are_kept(make_runtime) -> None:
