@@ -148,14 +148,9 @@ class Scheduler:
             self.start_turn()
             self.start_work()
             self.show_waiting()
-            if not (self.hurry or self.is_finished or self.has_pass_to_hear):
+            if not (self.hurry or self.is_finished):
                 await self.wait_for_change()
             self.hurry = False
-
-    @property
-    def has_pass_to_hear(self) -> bool:
-        """A pass queued by this iteration's work (the idle report) waits for a PO turn (s164)."""
-        return self.po_task is None and not self.desk.is_empty
 
     def tick(self) -> None:
         """C1 steps 1 to 4: drain the writer, reap done tasks, queues, guard, passes."""
@@ -575,6 +570,7 @@ class Scheduler:
             self.po.ended_by = found.lines[0] if found.lines else "idle"
             return
         self.queue_pass(found)
+        self.hurry = True  # s164 W4: the next pass starts the PO turn at once
         self.steps = 0
 
     def show_waiting(self) -> None:
