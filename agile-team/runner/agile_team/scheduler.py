@@ -227,6 +227,7 @@ class Scheduler:
 
     async def wait_for_change(self) -> None:
         """C1 step 8: wait for a task to end, a write to be submitted, or ``POLL_S``."""
+        self.runtime.writer.flush()  # our own lines land first and never wake the wait
         wake = self.runtime.writer.wake
         woken = asyncio.ensure_future(wake.wait()) if wake is not None else None
         busy = [*self.tasks.values(), *([self.po_task] if self.po_task else [])]
