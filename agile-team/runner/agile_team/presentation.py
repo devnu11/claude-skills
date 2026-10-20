@@ -245,6 +245,13 @@ def _held(entries: set[str], seeds: Seeds) -> str:
 
 
 def _rel(config: Config, path: Path) -> str:
+    """How a brief or gap names ``path``: repo-relative, or absolute from a story worktree.
+
+    The presentation lives in the main checkout's run dir (s159 B2) while a worktree
+    step's cwd is the worktree, so no relative path reaches it from there.
+    """
+    if config.run_home is not None:
+        return path.as_posix()
     return path.relative_to(config.repo).as_posix()
 
 

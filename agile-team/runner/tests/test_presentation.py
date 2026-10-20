@@ -309,3 +309,32 @@ def test_story_seeds_point_at_the_environment_seed_and_the_workspace(config: cfg
     s = presentation.story_seeds(config, showing)
     assert s.source == config.repo / "seedsrc"
     assert s.workspace == presentation.workspace_of(config, showing)
+
+
+# ----- a story worktree step (s159 B2/B3): the presentation stays in the main run dir -----
+
+
+def worktree_view(config: cfg.Config) -> cfg.Config:
+    """The config of a step in s4's worktree, with the story file in that worktree."""
+    view = config.at_worktree(config.run_dir / "worktrees" / "s4")
+    write_story(view, "s4", config.environments[0].name)
+    return view
+
+
+def test_a_worktree_step_is_told_the_presentation_dir_absolutely(config: cfg.Config) -> None:
+    view = worktree_view(config)
+    source = presentation.source_dir(view, presentation.showings(view, "s4")[0])
+    assert source == config.run_dir / "presentation/s4/cli"
+    assert f"- cli (package): {source.as_posix()}/ (AC1)" in presentation.layout_section(view, "s4")
+
+
+def test_a_worktree_steps_gaps_name_the_same_absolute_dir(config: cfg.Config) -> None:
+    view = worktree_view(config)
+    source = config.run_dir / "presentation/s4/cli"
+    no_guide = presentation.NO_GUIDE_TEXT.format(path=f"{source.as_posix()}/PRESENTATION.md")
+    assert presentation.missing(view, _state("s4")) == HEAD.format(env="cli") + no_guide
+    present(config, "s4", workspace=False)
+    no_workspace = presentation.NO_WORKSPACE_TEXT.format(path=f"{source.as_posix()}/workspace")
+    assert presentation.missing(view, _state("s4")) == HEAD.format(env="cli") + no_workspace
+    present(config, "s4")
+    assert presentation.missing(view, _state("s4")) is None
