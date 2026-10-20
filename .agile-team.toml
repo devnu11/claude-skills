@@ -9,17 +9,18 @@ manager_every_pct = 25
 
 [toolchain]
 preset = "python"
-# Two runners share one toolchain (s37): agile-team/runner, then unattended/runner.
-# `&&` keeps the coverage gate sound: both pyprojects set fail_under = 95, so a
+# Three runners share one toolchain (s37, s161): agile-team/runner, unattended/runner,
+# then house-rules/runner. `&&` keeps the coverage gate sound: each pyproject sets
+# fail_under = 95, so a
 # runner below it stops the chain and its TOTAL is the last one the gate reads.
 # Each link has its own {report:<root>} (s125), so each writes its own report
 # with ids made repo-relative. Pending-test skips go with s159 (G1).
-test = "uv run --directory agile-team/runner pytest -n auto -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner}"
-coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner}"
-lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check ."
+test = "uv run --directory agile-team/runner pytest -n auto -q {report:agile-team/runner} && uv run --directory unattended/runner pytest -q {report:unattended/runner} && uv run --directory house-rules/runner pytest -q {report:house-rules/runner}"
+coverage = "uv run --directory agile-team/runner pytest -n auto --cov --cov-report=term -q {report:agile-team/runner} && uv run --directory unattended/runner pytest --cov --cov-report=term -q {report:unattended/runner} && uv run --directory house-rules/runner pytest --cov --cov-report=term -q {report:house-rules/runner}"
+lint = "uv run --directory agile-team/runner ruff check . && uv run --directory unattended/runner ruff check . && uv run --directory house-rules/runner ruff check ."
 # house-rules over the whole repo (s157 R4): gates, the quality step and both
 # boundary checks run `static`, and its fail lines route to their owners.
-static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check . && uv run --frozen --quiet --project house-rules/runner house-rules check"
+static = "uv run --directory agile-team/runner ruff format --check . && uv run --directory unattended/runner ruff format --check . && uv run --directory house-rules/runner ruff format --check . && uv run --frozen --quiet --project house-rules/runner house-rules check"
 pragma = "# pragma: no cover"
 
 # The stop hook's lint check (s126). Runs under sh from the repo root, so "$PWD"
@@ -34,11 +35,13 @@ source = [
     "agile-team/runner/agile_team/**",
     "agile-team/runner/scripts/**",
     "unattended/runner/unattended/**",
+    "house-rules/runner/house_rules/**",
 ]
 tests = [
     "agile-team/runner/tests/**",
     "!agile-team/runner/tests/e2e/**",
     "unattended/runner/tests/**",
+    "house-rules/runner/tests/**",
 ]
 e2e = [
     "agile-team/runner/tests/e2e/**",
@@ -59,6 +62,10 @@ command = "uv run --directory agile-team/runner pytest -q --no-header -n auto {t
 [[toolchain.targeted]]
 root = "unattended/runner"
 command = "uv run --directory unattended/runner pytest -q --no-header {tests}"
+
+[[toolchain.targeted]]
+root = "house-rules/runner"
+command = "uv run --directory house-rules/runner pytest -q --no-header {tests}"
 
 [gates]
 coverage = 95
@@ -88,6 +95,16 @@ kind = "package"
 prepare = "uv venv {sandbox}/venv-unattended && uv pip install --python {sandbox}/venv-unattended {repo}/unattended/runner"
 bin = [
     "venv-unattended/bin",
+]
+
+# s161 AC2: house-rules' own CLI, installed like unattended rather than copied
+# into the presentation workspace.
+[[environment]]
+name = "house-rules"
+kind = "package"
+prepare = "uv venv {sandbox}/venv-house-rules && uv pip install --python {sandbox}/venv-house-rules {repo}/house-rules/runner"
+bin = [
+    "venv-house-rules/bin",
 ]
 
 [[environment]]
