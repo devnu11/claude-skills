@@ -71,7 +71,7 @@ class RunWriter:
             return change()
         return asyncio.run_coroutine_threadsafe(self.apply(change), self._loop).result()
 
-    def drain(  # house-rules: allow query-property -- name fixed by the s159 tests
+    def drain(
         self,
     ) -> int:
         """Run every queued write; the scheduler task only."""

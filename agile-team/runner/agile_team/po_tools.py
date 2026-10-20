@@ -279,7 +279,7 @@ class Tools:
 
     def _find_move(self, ids: list[str]) -> str | None:
         """C9: the refusal for a story that changed since the turn began, else ``None``."""
-        return self.snapshot.moved(ids, self.runtime.state) if self.snapshot else None
+        return self.snapshot.find_moved(ids, self.runtime.state) if self.snapshot else None
 
     def _accept(self, ids: list[str]) -> None:
         """C9: the PO's own change to a story never refuses its later calls."""
@@ -374,7 +374,7 @@ class Tools:
         heads = [e.head for e in stack if e.head]
         merged = {}
         if heads and rt.upstream:
-            merged = await system.in_thread(switchover.find_merged, rt.upstream, heads)
+            merged = await system.run_in_thread(switchover.find_merged, rt.upstream, heads)
         switchover.drop_entries(rt, merged)
 
     def _switch_refusal(self, ids: list[str]) -> str | None:
@@ -382,7 +382,7 @@ class Tools:
         state = self.runtime.state
         if state.story_branches:
             return None
-        found = switchover.refusals(switchover.read_facts(self.runtime, ids))
+        found = switchover.list_refusals(switchover.read_facts(self.runtime, ids))
         if found:
             return SWITCH_REFUSED.format(lines="\n".join(f"- {line}" for line in found))
         state.story_branches = True
@@ -653,9 +653,7 @@ class Tools:
             return text_result(Overlaps(self.runtime).release(story, args.get("reason") or ""))
         return text_result(Clerk(self.runtime).run(Act.RELEASE, args))
 
-    async def order_landings(  # house-rules: allow verb-name -- tool name fixed by the s163 design
-        self, args: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def set_landing_order(self, args: dict[str, Any]) -> dict[str, Any]:
         """Set the order the stories waiting to land land in (s163 Q3)."""
         rt = self.runtime
         stories = args.get("stories")
@@ -932,7 +930,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "story_status": ("Pipeline position of every story, in priority order, with the order.", {}),
 }
-METHODS = {"budget_status": "budget"}
+METHODS = {"budget_status": "budget", "order_landings": "set_landing_order"}
 
 
 def mcp_server(tools: Tools) -> Any:

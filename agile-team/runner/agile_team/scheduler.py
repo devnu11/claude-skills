@@ -157,7 +157,7 @@ class Scheduler:
         rt = self.runtime
         rt.writer.drain()
         self.collect_done()
-        if self.ended():
+        if self.ended:
             return
         if self.may_apply_queues:
             if rt.checkout_moved():
@@ -178,11 +178,10 @@ class Scheduler:
     def is_finished(self) -> bool:
         """The run is over: it ended (or the PO has nothing left to hear) and nothing is running."""
         busy = bool(self.tasks) or self.po_task is not None
-        return not busy and (self.ended() or self.po.ended_by is not None)
+        return not busy and (self.ended or self.po.ended_by is not None)
 
-    def ended(  # house-rules: allow verb-name, query-property -- name fixed by the s159 tests
-        self,
-    ) -> bool:
+    @property
+    def ended(self) -> bool:
         """C10, I4: a halt, a stop, a re-pin or a halting status ends the run; waiting does not."""
         rt = self.runtime
         stopped = rt.stop_requested() or rt.halted_by is not None or rt.state.halted()
@@ -243,7 +242,7 @@ class Scheduler:
     @property
     def is_blocked(self) -> bool:
         """C1 step 2: nothing new starts after a stop, a halt, a re-pin, a limit or a pause."""
-        return self.ended() or self.limited or self.paused_by is not None
+        return self.ended or self.limited or self.paused_by is not None
 
     @property
     def busy_keys(self) -> frozenset[str]:
@@ -256,7 +255,7 @@ class Scheduler:
             return
         started = self.start_revert()
         self.hurry = self.router.boundaries.open_end() or self.hurry
-        for work in self.router.works(self.busy_keys):
+        for work in self.router.list_works(self.busy_keys):
             if self.is_held_by_boundary(work):
                 continue
             started = self.start_one(work) or started
@@ -309,7 +308,7 @@ class Scheduler:
         """L2, L3, Q1: only the next in the landing queue lands, once the push is allowed."""
         if work.kind is not StepKind.LAND or work.story is None:
             return None
-        state, next_up = self.runtime.state, self.landings.next_up()
+        state, next_up = self.runtime.state, self.landings.pick_next()
         if next_up is not None and next_up != work.story.id:
             return WAIT_TEXTS[WaitReason.LAND_QUEUE].format(id=next_up)
         if state.upstream.push is Permission.UNASKED:
@@ -323,7 +322,7 @@ class Scheduler:
         if story is None or work.kind is not StepKind.ROLE or story.worktree_head:
             return None
         cap = rt.config.team.max_open_stories
-        open_ = Workspaces(rt.git, rt.config).open_count(rt.state.stories.values())
+        open_ = Workspaces(rt.git, rt.config).count_open(rt.state.stories.values())
         return WAIT_TEXTS[WaitReason.OPEN_CAP].format(n=cap) if open_ >= cap else None
 
     def check_budget(self, work: Work) -> str | None:
@@ -422,7 +421,7 @@ class Scheduler:
         queue = self.runtime.revert_queue
         if not queue or REVERT_KEY in self.tasks or self.is_boundary_due:
             return False
-        call = next((c for c in queue if c.story_id == self.landings.next_up()), None)
+        call = next((c for c in queue if c.story_id == self.landings.pick_next()), None)
         if call is None:
             return False
         queue.remove(call)
@@ -510,7 +509,7 @@ class Scheduler:
 
     def queue_news(self) -> None:
         """The human's new answers and tells are a pass of their own."""
-        found = self.router.news()
+        found = self.router.deliver_news()
         if found is not None:
             self.queue_pass(found)
 
@@ -546,7 +545,7 @@ class Scheduler:
         due = [s for s in stories if self.ci_poll.claim_due(s, now)]
         for story in due:
             sha = story.pushed
-            checks = await system.in_thread(self.ci_poll.read_checks, story)
+            checks = await system.run_in_thread(self.ci_poll.read_checks, story)
             self.record_story_ci(story, self.ci_poll.settle(story, checks, sha))
 
     def record_story_ci(self, story: StoryState, found: Any) -> None:
@@ -563,7 +562,7 @@ class Scheduler:
         """Nothing runs and nothing can start: sprint end, stuck, stalled, or waiting (I4)."""
         if not self.desk.is_empty:
             return
-        found = self.router.idle()
+        found = self.router.hand_over_idle()
         if found is None or not found.kinds:
             return
         if self.turns and replace(found, steps=self.steps).quiet():
@@ -585,7 +584,7 @@ class Scheduler:
 
     def start_turn(self) -> None:
         """C1 step 7, C5: one PO turn at a time, over every queued pass."""
-        if self.po_task is not None or self.ended():
+        if self.po_task is not None or self.ended:
             return
         turn = self.opening or self.build_turn(self.desk.take())
         self.opening = None
@@ -610,7 +609,7 @@ class Scheduler:
         finally:
             self.paused_by = None
         if self.runtime.halted_by is None:
-            self.desk.done()
+            self.desk.finish_turn()
 
 
 def _join_prompts(*parts: str) -> str:

@@ -425,16 +425,16 @@ class ShaWatch:
     prs: Prs
     limit_s: float
 
-    async def result(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    async def poll_result(
         self,
         sha: str,
         reran: list[str],
     ) -> CiResult:
         """Poll the commit's checks until they settle or the deadline passes, then triage them."""
         deadline = system.monotonic() + self.limit_s
-        checks = await system.in_thread(self.prs.sha_checks, sha)
+        checks = await system.run_in_thread(self.prs.list_checks, sha)
         while not _is_settled(checks) and system.monotonic() < deadline:
             await system.async_sleep(CI_POLL_S)
-            checks = await system.in_thread(self.prs.sha_checks, sha)
-        triaged = [await system.in_thread(classify_check, self.prs, c, sha) for c in checks]
+            checks = await system.run_in_thread(self.prs.list_checks, sha)
+        triaged = [await system.run_in_thread(classify_check, self.prs, c, sha) for c in checks]
         return CiResult(0, "", sha, verdict_of(triaged), triaged)

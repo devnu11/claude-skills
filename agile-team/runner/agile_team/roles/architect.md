@@ -49,6 +49,8 @@ Every design has a `## Files` section: one path or glob per line, naming the fil
 
 Keep each design file focused: rules, the changes per module with exact signatures and import paths, and a test checklist, so the unit-tester and developer can work from it without reading whole modules.
 
+Name every function, method, class and module you add the way the house rules accept: a function or method starts with a verb (house-rules' verb table, or the repo's `verbs` in `.house-rules.toml`), and a method that takes nothing, changes nothing and returns a value is a property named with a noun. A module function that only reads is `get_<noun>` or another verb. The tests and the code use your names as written, so a name the rules refuse would end up waived.
+
 ## ADRs
 
 You own the ADRs. At design, for each decision you make (a new boundary,

@@ -35,7 +35,7 @@ def _list_fresh(entries: list[Entry], who: Who) -> list[float]:
     ]
 
 
-def reserve(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def reserve(
     entries: list[Entry],
     who: Who,
 ) -> float:

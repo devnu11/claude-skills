@@ -1,6 +1,6 @@
 """Story worktrees (s159 B1, B2, B5, C3, E1, I3): one ``git worktree`` per open story.
 
-Every path is built from ``config.run_dir``, which ``Config.at_worktree`` keeps at
+Every path is built from ``config.run_dir``, which ``Config.get_worktree_config`` keeps at
 the main checkout's ``.team/run``, so nothing lands outside the repository.
 """
 
@@ -13,7 +13,7 @@ from . import system
 from .config import Config
 from .gates import StoryState
 from .git_ops import Git, parse_porcelain_z
-from .story_branches import story_branch
+from .story_branches import format_story_branch
 
 WORKTREES = "worktrees"
 LAND = "land"
@@ -28,7 +28,7 @@ class Workspaces:
         self.git = git
         self.config = config
 
-    def path_of(  # house-rules: allow verb-name -- name fixed by the tests
+    def get_path(
         self,
         story_id: str,
     ) -> Path:
@@ -39,42 +39,42 @@ class Workspaces:
         """B1: give the story a branch (once) and a worktree on it; return the worktree."""
         if not story.branch:
             self._fork(story, sprint_head)
-        path = self.path_of(story.id)
+        path = self.get_path(story.id)
         if not system.is_dir(path):
             self.git.run("worktree", "add", str(path), story.branch)
         story.worktree_head = Git(path).head()
         return path
 
     def _fork(self, story: StoryState, sprint_head: str) -> None:
-        branch = story_branch(self.config.upstream.story_prefix, story.id, story.replays)
+        branch = format_story_branch(self.config.upstream.story_prefix, story.id, story.replays)
         self.git.run("branch", branch, sprint_head)
         story.branch, story.base_sha = branch, sprint_head
 
     def remove(self, story_id: str) -> None:
         """E1, E2: take the worktree away; the branch stays."""
-        self._remove_path(self.path_of(story_id))
+        self._remove_path(self.get_path(story_id))
 
     def _remove_path(self, path: Path) -> None:
         self.git.attempt("worktree", "remove", "--force", str(path))
         if system.exists(path):
             system.remove_tree(path)
 
-    def open_count(  # house-rules: allow verb-name -- name fixed by the tests
+    def count_open(
         self,
         stories: Iterable[StoryState],
     ) -> int:
         """C3: the stories that have a worktree."""
         return sum(1 for story in stories if story.worktree_head)
 
-    def changed_files(  # house-rules: allow verb-name -- name fixed by the tests
+    def list_changed_files(
         self,
         story_id: str,
     ) -> list[str]:
         """B5: the paths git reports as changed in the story's worktree."""
-        tree = Git(self.path_of(story_id))
+        tree = Git(self.get_path(story_id))
         return parse_porcelain_z(tree.run("status", "--porcelain", "-z", "--untracked-files=all"))
 
-    def prune_stale(  # house-rules: allow verb-name -- name fixed by the tests
+    def prune_stale(
         self,
         keep: frozenset[str],
     ) -> list[str]:

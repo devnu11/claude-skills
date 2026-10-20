@@ -17,7 +17,7 @@ from .boundary import ReplayProgress
 from .events import Event, EventKind
 from .git_ops import Git
 from .relay import Note
-from .story_branches import StoryRebase, merge_id, story_branch
+from .story_branches import StoryRebase, format_story_branch, merge_id
 from .upstream import SCRATCH_REBASE_ARGV, SyncOutcome
 from .workspaces import Workspaces
 
@@ -206,7 +206,7 @@ class StoryReplay:
         old = story.branch
         stashed = self.save_edits(tree, story)
         prefix = rt.config.upstream.story_prefix
-        branch = story_branch(prefix, story.id, story.replays + 1)
+        branch = format_story_branch(prefix, story.id, story.replays + 1)
         queued = StoryRebase(head, story.base_sha, old, branch, [], "")
         tree.run("checkout", "-b", branch)
         if tree.attempt(*SCRATCH_REBASE_ARGV, "--onto", head, story.base_sha)[0] != 0:
@@ -264,7 +264,7 @@ class StoryReplay:
         undo = (("rebase", "--abort"), ("checkout", queued.old), ("branch", "-D", queued.branch))
         for argv in undo:
             tree.attempt(*argv)
-        devops = story_rebase.needs_devops(files, self.runtime.owners(story))
+        devops = story_rebase.is_for_devops(files, self.runtime.owners(story))
         role = "devops" if devops else story.developer or "developer"
         story.rebase = StoryRebase(queued.onto, queued.base, queued.old, queued.branch, files, role)
         return ReplayResult(SyncOutcome.CONFLICT, files=tuple(files))
@@ -276,7 +276,7 @@ class StoryReplay:
         new = rewrite.Listing(head, up.listing(f"{head}..{queued.branch}"))
         moved = rewrite.pair(up.listing(f"{story.base_sha}..{queued.old}"), new)
         rewrite.remap_state(rt.state, moved)
-        tip = Git(Workspaces(rt.git, rt.config).path_of(story.id)).head()
+        tip = Git(Workspaces(rt.git, rt.config).get_path(story.id)).head()
         story.branch, story.base_sha, story.pushed = queued.branch, head, ""
         story.replays, story.worktree_head = story.replays + 1, tip
         data = {"action": "replayed", "branch": queued.branch, "base_sha": head}
