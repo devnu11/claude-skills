@@ -14,12 +14,7 @@ from agile_team import replay as rp
 from agile_team.config import Config, UpstreamSettings
 from agile_team.gates import StoryState
 from agile_team.git_ops import Git
-from agile_team.story_branches import (
-    format_landing_branch,
-    format_story_branch,
-    merge_id,
-    merge_subject,
-)
+from agile_team.story_branches import landing_branch, merge_id, merge_subject, story_branch
 from agile_team.upstream import Lease, SyncOutcome, Upstream
 from agile_team.workspaces import Workspaces
 
@@ -39,7 +34,7 @@ def head(repo: Path) -> str:
 def land(repos: World, story_id: str, title: str, files: dict[str, str]) -> str:
     """Make a story branch off HEAD with two commits and merge it --no-ff, as the Lander does."""
     base = head(repos.team)
-    branch = format_story_branch("team/story-", story_id, 0)
+    branch = story_branch("team/story-", story_id, 0)
     git(repos.team, "checkout", "-q", "-b", branch)
     for i, (path, text) in enumerate(files.items()):
         repos.commit(repos.team, path, text, f"{story_id} commit {i}")
@@ -87,7 +82,7 @@ def test_ac1_1_the_open_count_counts_worktrees(repos: World) -> None:
     stories = [StoryState(sid, sid, "design") for sid in ("s1", "s2")]
     for story in stories:
         ws.ensure(story, head(repos.team))
-    assert ws.count_open(stories) == 2
+    assert ws.open_count(stories) == 2
 
 
 # ---------- AC2.1 / AC2.2: --no-ff merge, story commits keep their hashes ----------
@@ -220,12 +215,12 @@ def test_ac1_5_the_push_guard_refuses_main_and_the_checked_out_branch(repos: Wor
 def test_ac2_4_the_landing_branch_is_created_and_deleted_with_a_lease(repos: World) -> None:
     up = upstream(repos)
     sha = head(repos.team)
-    name = format_landing_branch("team/story-", "s1")
+    name = landing_branch("team/story-", "s1")
     assert name == "team/story-s1-land"
     assert up.push(Lease(name, "", sha)) is None
-    assert up.read_remote_head(name) == sha
+    assert up.remote_head(name) == sha
     assert up.delete(Lease(name, sha, sha)) is None
-    assert up.read_remote_head(name) == ""
+    assert up.remote_head(name) == ""
 
 
 def test_ac2_4_delete_refuses_a_branch_that_is_not_a_landing_branch(repos: World) -> None:
@@ -233,7 +228,7 @@ def test_ac2_4_delete_refuses_a_branch_that_is_not_a_landing_branch(repos: World
     sha = head(repos.team)
     assert up.push(Lease("team/sprint-1", "", sha)) is None
     assert up.delete(Lease("team/sprint-1", sha, sha)) is not None
-    assert up.read_remote_head("team/sprint-1") == sha
+    assert up.remote_head("team/sprint-1") == sha
 
 
 def test_ac2_4_fast_forward_moves_the_checked_out_sprint_branch(repos: World) -> None:
@@ -242,5 +237,5 @@ def test_ac2_4_fast_forward_moves_the_checked_out_sprint_branch(repos: World) ->
     git(repos.team, "checkout", "-q", "-b", "scratch")
     second = repos.commit(repos.team, "n.txt", "n\n", "merge")
     git(repos.team, "checkout", "-q", "main")
-    assert up.advance_to(second) is True and head(repos.team) == second
+    assert up.fast_forward(second) is True and head(repos.team) == second
     assert first != second
