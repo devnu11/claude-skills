@@ -117,7 +117,7 @@ class Overlaps:
         reason = OVERLAP_HOLD.format(ids=ids, pairs=pairs)
         return Outcome(Verdict.HOLD, reason, overlap={"files": ours, "with": found})
 
-    def lift_due(  # house-rules: allow verb-name -- name fixed by the s163 design
+    def lift_due(
         self,
     ) -> None:
         """F6: lift every overlap hold whose stories have all landed, left or been cancelled."""
@@ -143,9 +143,7 @@ class Overlaps:
         self.lift(story, Lift("po", reason))
         return {"status": "released", "story": story.id, "step": story.step}
 
-    def lift(  # house-rules: allow verb-name -- name fixed by the s163 design
-        self, story: StoryState, lift: Lift
-    ) -> None:
+    def lift(self, story: StoryState, lift: Lift) -> None:
         """F6 steps 1 to 4: clear the hold, drop the worktree, pass past design, log it."""
         rt, waited = self.runtime, list(story.overlap_with)
         story.hold, story.overlap_with = None, []

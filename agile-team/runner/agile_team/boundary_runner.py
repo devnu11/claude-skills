@@ -204,7 +204,7 @@ class BoundaryRunner:
 
     async def run_off(self, call: Callable[..., Any], *args: Any) -> Any:
         """B2: run blocking work in a worker thread; it never touches the run state (B3)."""
-        return await system.in_thread(call, *args)
+        return await system.run_in_thread(call, *args)
 
     def follow_remote(self) -> None:
         """B7: ``run_follow`` for a caller with no running loop."""
@@ -216,7 +216,7 @@ class BoundaryRunner:
         own = self._own(b) if b is not None else None
         if own is None or b.hold not in FOLLOW_HOLDS:  # type: ignore[union-attr]
             return
-        remote = await self.run_off(self.remote.remote_head, own.branch)
+        remote = await self.run_off(self.remote.read_remote_head, own.branch)
         if remote and remote != own.pushed:
             await self._follow(b, own, remote)  # type: ignore[arg-type]
 
@@ -232,10 +232,10 @@ class BoundaryRunner:
 
     async def _move_checkout_to(self, own: StackEntry, remote: str) -> bool:
         """Fetch the sprint branch and fast-forward the checkout to ``remote``, under the lock."""
-        async with self.runtime.checkout_lock():
+        async with self.runtime.checkout_lock:
             fetch = ("fetch", self.remote.settings.remote, own.branch)
             await self.run_off(self.remote.git.attempt, *fetch)
-            return await self.run_off(self.remote.fast_forward, remote)
+            return await self.run_off(self.remote.advance_to, remote)
 
     def _halt_diverged(self, own: StackEntry, remote: str) -> None:
         fields = {"branch": own.branch, "remote": self.remote.settings.remote}
@@ -323,7 +323,7 @@ class BoundaryRunner:
     # ----- sync
 
     async def _sync(self, b: Boundary) -> None:
-        async with self.runtime.checkout_lock():
+        async with self.runtime.checkout_lock:
             why = await self.run_off(self.remote.missing)
             if why:
                 return self._skip(b, why)
@@ -570,7 +570,7 @@ class BoundaryRunner:
 
     async def _replay(self, b: Boundary) -> None:
         """R6, R7: refuse unless the as-built push has green CI, else rebase onto the target."""
-        async with self.runtime.checkout_lock():
+        async with self.runtime.checkout_lock:
             await self._run_locked_replay(b)
 
     async def _run_locked_replay(self, b: Boundary) -> None:

@@ -35,7 +35,7 @@ class StoryPusher:
     def __init__(self, runtime: Runtime) -> None:
         self.runtime = runtime
 
-    def after_step(  # house-rules: allow verb-name -- name fixed by the tests
+    def push_moved_head(
         self,
         story: StoryState,
     ) -> str | None:
@@ -50,13 +50,13 @@ class StoryPusher:
         return refused
 
     async def push_off_loop(self, story: StoryState) -> str | None:
-        """C6: like ``after_step``, but ``push`` and ``create`` run in threads and every write
+        """C6: like ``push_moved_head``, but ``push`` and ``create`` run in threads and every write
         to the run state stays on the loop thread; the refusal text, or ``None``."""
         rt, entry, head = self.runtime, find_sprint_entry(self.runtime), story.worktree_head
         if not self._can_push(story, entry) or not await self._open_sprint_branch_off(entry):  # type: ignore[arg-type]
             return None
         lease = Lease(story.branch, story.pushed, head)
-        refused = await system.in_thread(rt.upstream.push, lease)  # type: ignore[union-attr]
+        refused = await system.run_in_thread(rt.upstream.push, lease)  # type: ignore[union-attr]
         if refused is None:
             story.pushed = head
             await self._open_draft_off(story, entry)  # type: ignore[arg-type]
@@ -64,7 +64,7 @@ class StoryPusher:
 
     def push_replayed(self, story: StoryState, old_pr: int | None) -> str | None:
         """R8, S3: push the replayed branch, open its draft PR, close the old one with a link."""
-        refused = self.after_step(story)
+        refused = self.push_moved_head(story)
         if refused is None and old_pr is not None and story.pr is not None:
             self._close(old_pr, story)
         return refused
@@ -94,7 +94,7 @@ class StoryPusher:
         async with self.runtime.sprint_push_lock:
             if not entry.pushed and entry.head:
                 lease = Lease(entry.branch, "", entry.head)
-                if await system.in_thread(self.runtime.upstream.push, lease) is None:  # type: ignore[union-attr]
+                if await system.run_in_thread(self.runtime.upstream.push, lease) is None:  # type: ignore[union-attr]
                     entry.pushed = entry.head
         return bool(entry.pushed)
 
@@ -109,7 +109,9 @@ class StoryPusher:
 
     async def _open_draft_off(self, story: StoryState, entry: StackEntry) -> None:
         if story.pr is None:
-            made = await system.in_thread(self.runtime.prs.create, self._build_spec(story, entry))
+            made = await system.run_in_thread(
+                self.runtime.prs.create, self._build_spec(story, entry)
+            )
             story.pr = made.number
 
     def _close(self, old_pr: int, story: StoryState) -> None:
@@ -154,7 +156,7 @@ class StoryCiPoll:
     def read_checks(self, story: StoryState) -> list[Check]:
         """The head's checks, safe in a worker thread; a failing ``gh`` is "no result" (AC8.3)."""
         try:
-            return self.runtime.prs.sha_checks(story.pushed)  # type: ignore[arg-type]
+            return self.runtime.prs.list_checks(story.pushed)  # type: ignore[arg-type]
         except UpstreamError:
             return []
 

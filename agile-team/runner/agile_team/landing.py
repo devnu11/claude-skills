@@ -34,10 +34,10 @@ from .story_branches import (
     Landed,
     StoryCi,
     StoryRebase,
-    landing_branch,
+    format_landing_branch,
+    format_story_branch,
     merge_id,
     merge_subject,
-    story_branch,
 )
 from .upstream import Lease, UpstreamError
 from .workspaces import LAND
@@ -85,7 +85,7 @@ class Merged:
 def merge_story_file(paths: StoryFile) -> Merged:
     """L5: the branch copy with the sprint side's edits since the base re-applied on top."""
     command = ("git", "merge-file", "-p", str(paths.ours), str(paths.base), str(paths.theirs))
-    done = system.run(system.Command(command, system.temp_dir()))
+    done = system.run(system.Command(command, system.get_temp_dir()))
     return Merged(done.code == 0, done.out)
 
 
@@ -183,15 +183,13 @@ class Lander:
         parent = await self.run_off(self.runtime.git.attempt, "rev-parse", f"{merge}^1")
         return parent[0] == 0 and parent[1].strip() == self.sprint_head
 
-    async def give_up(  # house-rules: allow verb-name -- name fixed by the s163 design
-        self, attempt: Attempt, why: str
-    ) -> None:
+    async def give_up(self, attempt: Attempt, why: str) -> None:
         """G3, G5: forget the merge; its landing branch goes, and the story merges afresh."""
         rt, story, merge = self.runtime, attempt.story, attempt.merge
         if not attempt.revert_of:
             story.landed = None
         if not self.is_local:
-            branch = landing_branch(rt.config.upstream.story_prefix, story.id)
+            branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
             await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
         data = {"merge": merge, "why": why, "sprint_head": self.sprint_head}
         rt.events.emit(Event(EventKind.LANDING_DROPPED, "runner", story.id, data))
@@ -260,7 +258,7 @@ class Lander:
 
     async def run_off(self, call: Any, *args: Any) -> Any:
         """Run blocking work in a worker thread."""
-        return await system.in_thread(call, *args)
+        return await system.run_in_thread(call, *args)
 
     @property
     def scratch_path(self) -> Path:
@@ -344,11 +342,11 @@ class Lander:
         """Write the three copies of the story file to the temp dir and merge them."""
         story, git = attempt.story, self.runtime.git
         token = system.token()
-        system.make_dirs(system.temp_dir())
+        system.make_dirs(system.get_temp_dir())
         sides = {"ours": story.branch, "base": story.base_sha, "theirs": attempt.head}
         paths = {}
         for side, rev in sides.items():
-            paths[side] = system.temp_dir() / f"agile-team-{token}-{side}"
+            paths[side] = system.get_temp_dir() / f"agile-team-{token}-{side}"
             system.write_text(paths[side], git.attempt("show", f"{rev}:{file}")[1])
         try:
             return merge_story_file(StoryFile(paths["ours"], paths["base"], paths["theirs"]))
@@ -365,10 +363,10 @@ class Lander:
         """L6: abort, and queue a story rebase for the role that owns the files."""
         story, rt = attempt.story, self.runtime
         await self.drop_merge(tree)
-        devops = story_rebase.needs_devops(files, rt.owners(story))
+        devops = story_rebase.is_for_devops(files, rt.owners(story))
         role = "devops" if devops else (story.developer or "developer")
         prefix = rt.config.upstream.story_prefix
-        branch = story_branch(prefix, story.id, story.replays + 1)
+        branch = format_story_branch(prefix, story.id, story.replays + 1)
         story.rebase = StoryRebase(attempt.head, story.base_sha, story.branch, branch, files, role)
         reason = CONFLICT_REASON.format(branch=story.branch, files=", ".join(files))
         conflict = {"files": files, "role": role}
@@ -387,7 +385,7 @@ class Lander:
     async def check(self, attempt: Attempt) -> dict[str, Any] | None:
         """Run the full checks on the merge; red bounces the story to implement."""
         rt, path = self.runtime, self.scratch_path
-        config = rt.config.at_worktree(path)
+        config = rt.config.get_worktree_config(path)
         judging = fullcheck.Judging(rt.shell(path), rt.pipeline.checks.required_coverage())
         report = await self.run_off(
             fullcheck.run_checks,
@@ -417,7 +415,7 @@ class Lander:
             if not await self.is_on_head(attempt.merge):
                 await self.give_up(attempt, GIVE_UP_MOVED)
                 return None
-            if not await self.run_off(self.runtime.upstream.fast_forward, attempt.merge):  # type: ignore[union-attr]
+            if not await self.run_off(self.runtime.upstream.advance_to, attempt.merge):  # type: ignore[union-attr]
                 return await self.halt_diverged(attempt, "")
             self.runtime.record_checkout()
         return self.record_landed(attempt, Landed(attempt.merge), "none")
@@ -425,7 +423,7 @@ class Lander:
     async def push_landing(self, attempt: Attempt) -> str | None:
         """Push the merge to the landing branch and record it; the refusal text, or ``None``."""
         story, rt = attempt.story, self.runtime
-        branch = landing_branch(rt.config.upstream.story_prefix, story.id)
+        branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
         lease = Lease(branch, "", attempt.merge)
         refused = await self.push(lease)
         if refused is None and not attempt.revert_of:
@@ -448,19 +446,19 @@ class Lander:
         try:
             return await OUTCOMES[result.verdict](self, attempt, result)
         finally:
-            branch = landing_branch(rt.config.upstream.story_prefix, story.id)
+            branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
             await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
 
     async def wait_ci(self, attempt: Attempt) -> CiResult:
         """Wait for the checks of the merge; re-run an infra failure once per job."""
         story, rt = attempt.story, self.runtime
         watch = ShaWatch(rt.prs, rt.config.gates.ci_timeout_s)
-        result = await watch.result(attempt.merge, story.land_reran)
+        result = await watch.poll_result(attempt.merge, story.land_reran)
         due = self.find_reruns(attempt, result)
         if not due:
             return result
         await self.run_again(attempt, due)
-        return await watch.result(attempt.merge, story.land_reran)
+        return await watch.poll_result(attempt.merge, story.land_reran)
 
     def find_reruns(self, attempt: Attempt, result: CiResult) -> list[Any]:
         """The infra checks whose one re-run at this head is not used yet."""
@@ -476,7 +474,7 @@ class Lander:
             await self.run_off(prs.rerun, check.link)
         self.runtime.save()
         for _ in range(CI_LOOKS):
-            seen = await self.run_off(prs.sha_checks, attempt.merge)
+            seen = await self.run_off(prs.list_checks, attempt.merge)
             if all(self.has_moved(seen, c) for c in due):
                 return
             await system.async_sleep(CI_POLL_S)
@@ -514,7 +512,7 @@ class Lander:
         if refused is not None:
             return await self.follow_remote(attempt)
         entry.pushed = attempt.merge
-        if not await self.run_off(self.runtime.upstream.fast_forward, attempt.merge):  # type: ignore[union-attr]
+        if not await self.run_off(self.runtime.upstream.advance_to, attempt.merge):  # type: ignore[union-attr]
             return await self.halt_diverged(attempt, "")
         self.runtime.record_checkout()
         return None
@@ -572,7 +570,7 @@ class Lander:
         assert entry is not None and up is not None
         await self.give_up(attempt, GIVE_UP_REFUSED)
         await self.run_off(up.git.attempt, "fetch", up.settings.remote, entry.branch)
-        remote = await self.run_off(up.remote_head, entry.branch)
+        remote = await self.run_off(up.read_remote_head, entry.branch)
         follows = bool(remote) and await self.run_off(up.is_ancestor, entry.pushed, remote)
         if follows and await self.move_to_remote(remote):
             return None
@@ -588,7 +586,7 @@ class Lander:
             return True
         if not await self.run_off(up.is_ancestor, "HEAD", remote):
             return False
-        if not await self.run_off(up.fast_forward, remote):
+        if not await self.run_off(up.advance_to, remote):
             return False
         rt.record_checkout()
         entry.head = entry.pushed = remote

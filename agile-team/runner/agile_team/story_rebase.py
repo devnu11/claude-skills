@@ -30,7 +30,7 @@ STORY_REBASE_LINES = (
 )
 
 
-def needs_devops(  # house-rules: allow verb-name -- name fixed by the tests
+def is_for_devops(
     files: list[str],
     owners: Owners,
 ) -> bool:
@@ -47,7 +47,7 @@ def prepare(git: Git, rebase: StoryRebase) -> None:
     git.attempt(*SCRATCH_REBASE_ARGV, "--onto", rebase.onto, rebase.base)
 
 
-def refusal(  # house-rules: allow verb-name -- name fixed by the tests
+def find_refusal(
     git: Git,
     rebase: StoryRebase,
 ) -> str | None:

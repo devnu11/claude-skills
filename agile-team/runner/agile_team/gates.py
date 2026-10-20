@@ -557,7 +557,7 @@ class Checks:
             *self._revert_reasons(story),
             *self._trace_reasons(story),
             *self._shared_reasons(story),
-            *self._files_reasons(story),
+            *self._list_files_reasons(story),
         ]
         if not reasons:
             return Outcome(Verdict.PASS)
@@ -577,9 +577,7 @@ class Checks:
         named = self.shares(story.id).listed.unnamed(self.read(file) or "")
         return [shares.UNNAMED.format(file=file, path=path) for path in named]
 
-    def _files_reasons(  # house-rules: allow verb-name -- name fixed by the s163 design
-        self, story: StoryState
-    ) -> list[str]:
+    def _list_files_reasons(self, story: StoryState) -> list[str]:
         file = self.design_file(story.id)
         if design_files.parse_files(self.read(file) or ""):
             return []

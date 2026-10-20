@@ -31,7 +31,7 @@ class PoDesk:
             return None
         return handover.merge(self._queued[: self._taken])
 
-    def done(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def finish_turn(
         self,
     ) -> None:
         """Drop the passes the finished turn took."""
@@ -86,7 +86,7 @@ class TurnSnapshot:
         """Snapshot every story in ``state``."""
         return cls({i: mark_of(s) for i, s in state.stories.items()})
 
-    def moved(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def find_moved(
         self,
         ids: list[str],
         state: RunState,

@@ -225,7 +225,7 @@ class CheckoutRequests:
         story = runtime.state.stories.get(request.get("story", ""))
         if story is None:
             return None
-        tree = Workspaces(runtime.git, runtime.config).path_of(story.id)
+        tree = Workspaces(runtime.git, runtime.config).get_path(story.id)
         story.worktree_head = Git(tree).head()
         story.drift, story.hold = [], None
         data = {"action": "accepted", "story": story.id, "to": story.worktree_head}

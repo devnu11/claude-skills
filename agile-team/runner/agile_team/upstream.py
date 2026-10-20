@@ -163,7 +163,7 @@ class Prs(Protocol):
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
 
-    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def list_checks(
         self,
         sha: str,
     ) -> list[Check]:
@@ -238,7 +238,7 @@ class NoPrs:
     def main_checks(self, branch: str) -> list[Check]:
         raise UpstreamError(self.why)
 
-    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def list_checks(
         self,
         sha: str,
     ) -> list[Check]:
@@ -314,9 +314,9 @@ class GhPrs:
 
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
-        return self.sha_checks(branch)
+        return self.list_checks(branch)
 
-    def sha_checks(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def list_checks(
         self,
         sha: str,
     ) -> list[Check]:
@@ -418,9 +418,7 @@ class Upstream:
         out = self.git.run("cherry", self.target, head)
         return sum(1 for ln in out.splitlines() if ln.startswith("+"))
 
-    def why_in_target(  # house-rules: allow verb-name -- name fixed by the s163 design
-        self, head: str
-    ) -> str | None:
+    def classify_in_target(self, head: str) -> str | None:
         """``"contained"``, ``"patch-equivalent"`` or ``None`` when the target lacks ``head``."""
         if self.is_ancestor(head, self.target):
             return "contained"
@@ -539,7 +537,7 @@ class Upstream:
         code, out = self.git.attempt(*argv, self.settings.remote, f":{ref}")
         return None if code == 0 else out
 
-    def remote_head(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def read_remote_head(
         self,
         branch: str,
     ) -> str:
@@ -547,7 +545,7 @@ class Upstream:
         out = self.git.attempt("ls-remote", self.settings.remote, f"refs/heads/{branch}")[1]
         return out.split()[0] if out.split() else ""
 
-    def fast_forward(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def advance_to(
         self,
         sha: str,
     ) -> bool:

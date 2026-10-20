@@ -316,7 +316,7 @@ class Router:
 
     # ----- the scheduler's views (s159 C1)
 
-    def works(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def list_works(
         self,
         running: frozenset[str],
     ) -> list[Work]:
@@ -361,7 +361,7 @@ class Router:
         self.reverter.settle()
         CheckoutRequests(self.runtime.config).apply(self.runtime)
 
-    def news(  # house-rules: allow query-property -- name fixed by the s159 tests
+    def deliver_news(
         self,
     ) -> Pass | None:
         """The human's new answers and tells as a pass, once each."""
@@ -376,7 +376,7 @@ class Router:
         """Clear a waiting reason once work starts (W4)."""
         self._end_wait()
 
-    def idle(  # house-rules: allow verb-name, query-property -- name fixed by the s159 tests
+    def hand_over_idle(
         self,
     ) -> Pass | None:
         """The pass for a run with nothing to start: sprint end, stuck, stalled; or ``None``."""

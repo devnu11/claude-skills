@@ -69,3 +69,7 @@ If the gate fails only in files you can't edit, don't block: hand off `done`.
 The runner sends those items to the role that owns the file and brings the story
 back without a round. If a test another role owns contradicts the design, raise
 a dispute naming the rule; it goes to that test's owner.
+
+## A design name the house rules refuse
+
+Don't rename it, and don't suppress the rule. Hand off `changes_requested` with `"next_role": "architect"`, and say in the summary which name, which rule, and a name that passes. The story goes back to design. A `# house-rules: allow` is only for a heuristic that misreads correct code, with that reason. A reason that says the tests or the design fixed the name fails `suppression-excuse`.

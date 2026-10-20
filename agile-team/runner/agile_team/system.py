@@ -36,12 +36,12 @@ __all__ = [
     "exec_replace",
     "exists",
     "expand_user",
+    "get_temp_dir",
     "glob",
     "hard_link",
     "home",
     "hostname",
     "http_get",
-    "in_thread",
     "is_dir",
     "is_file",
     "kill",
@@ -66,13 +66,13 @@ __all__ = [
     "replace",
     "resolve",
     "run",
+    "run_in_thread",
     "run_shell",
     "scratch_file",
     "sleep",
     "spawn_logged",
     "spawn_piped",
     "stat",
-    "temp_dir",
     "token",
     "wait_event",
     "which",
@@ -388,7 +388,7 @@ async def async_sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-async def in_thread(  # house-rules: allow verb-name -- name fixed by the s159 tests
+async def run_in_thread(
     fn: Callable[..., Any],
     *args: Any,
 ) -> Any:
@@ -396,8 +396,7 @@ async def in_thread(  # house-rules: allow verb-name -- name fixed by the s159 t
     return await asyncio.to_thread(fn, *args)
 
 
-def temp_dir(  # house-rules: allow verb-name -- name fixed by the s159 tests
-) -> Path:
+def get_temp_dir() -> Path:
     """The system's temporary directory, the only place the runner writes outside the repo."""
     return Path(tempfile.gettempdir())
 
