@@ -311,4 +311,4 @@ def test_deadline_stop() -> None:
     ],
 )
 def test_time_left(deadline: float | None, text: str | None) -> None:
-    assert limits.time_left(deadline, 1000.0) == text
+    assert limits.format_time_left(deadline, 1000.0) == text
