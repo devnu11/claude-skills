@@ -11,7 +11,7 @@ from pathlib import Path
 from agile_team import config, story_spec
 
 STORIES = Path(__file__).resolve().parents[4] / ".team" / "stories"
-SCRATCH_NAMES = ("cli", "dashboard", "review", "unattended")
+SCRATCH_NAMES = ("cli", "dashboard", "review", "unattended", "house-rules")
 SCRATCH_CONFIG = """[[environment]]
 name = "cli"
 kind = "package"
@@ -27,6 +27,10 @@ kind = "document"
 
 [[environment]]
 name = "unattended"
+kind = "package"
+
+[[environment]]
+name = "house-rules"
 kind = "package"
 """
 # Stories whose status was done in state.json when the migration landed.
@@ -115,7 +119,13 @@ def scratch(tmp_path: Path) -> config.Config:
 def test_scratch_config_has_the_three_ruled_environments(tmp_path: Path) -> None:
     cfg = scratch(tmp_path)
     assert [e.name for e in cfg.environments] == list(SCRATCH_NAMES)
-    assert [e.kind for e in cfg.environments] == ["package", "web", "document", "package"]
+    assert [e.kind for e in cfg.environments] == [
+        "package",
+        "web",
+        "document",
+        "package",
+        "package",
+    ]
 
 
 def test_every_open_story_names_a_ruled_environment_per_ac(tmp_path: Path) -> None:
