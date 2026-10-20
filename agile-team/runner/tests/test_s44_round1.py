@@ -273,9 +273,11 @@ def test_the_boundary_step_runs_as_a_chore(make_runtime, monkeypatch) -> None:
     rt.state.boundary = bd.Boundary(Edge.START, 1)
     runner = BoundaryRunner(rt)
     seen: list[Any] = []
-    monkeypatch.setattr(
-        runner, "_step", lambda: seen.append(live.read_heartbeat(rt.config.run_dir)["chore"])
-    )
+
+    async def fake_step() -> None:
+        seen.append(live.read_heartbeat(rt.config.run_dir)["chore"])
+
+    monkeypatch.setattr(runner, "_step", fake_step)
     runner.step()
     assert seen[0]["what"] == f"sprint boundary: {rt.state.boundary.stage}"
 

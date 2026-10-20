@@ -413,6 +413,19 @@ class Upstream:
         out = self.git.run("rev-list", "--count", f"{self.target}..{head}")
         return int(out.strip() or 0)
 
+    def count_unpicked(self, head: str) -> int:
+        """How many commits of ``head`` the target lacks by patch (``git cherry`` ``+`` lines)."""
+        out = self.git.run("cherry", self.target, head)
+        return sum(1 for ln in out.splitlines() if ln.startswith("+"))
+
+    def why_in_target(  # house-rules: allow verb-name -- name fixed by the s163 design
+        self, head: str
+    ) -> str | None:
+        """``"contained"``, ``"patch-equivalent"`` or ``None`` when the target lacks ``head``."""
+        if self.is_ancestor(head, self.target):
+            return "contained"
+        return "patch-equivalent" if self.count_unpicked(head) == 0 else None
+
     def rebase_onto(self, old: str) -> Rebase:
         """Rebase HEAD onto the target; abort and report on a conflict, check the result."""
         start, target_sha = self.git.head(), self.git.run("rev-parse", self.target).strip()

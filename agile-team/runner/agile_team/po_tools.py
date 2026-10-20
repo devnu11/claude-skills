@@ -57,8 +57,18 @@ from .dispatch import (
     refused,
 )
 from .events import Event, EventKind
-from .gates import FINISHED, StoryState, StoryStatus, continue_refusal, role_fits_step
+from .gates import (
+    FINISHED,
+    StoryState,
+    StoryStatus,
+    continue_refusal,
+    is_overlap_hold,
+    role_fits_step,
+)
+from .landing_queue import LandingQueue
+from .landing_queue import Placement as LandingPlacement
 from .ledger import Entry, SessionCost, budget_status
+from .overlaps import Overlaps
 from .po_desk import TurnSnapshot
 from .po_session import RenewPath
 from .priority import Change, Placement, Priority, Pull, Reorder
@@ -289,7 +299,8 @@ class Tools:
             return text_result(refused(RUNNING_STORY.format(story=request.story_id)))
         running.add(request.story_id or "")
         try:
-            return text_result(await self.runtime.run_role(request))
+            async with self.runtime.lock_for(request):
+                return text_result(await self.runtime.run_role(request))
         finally:
             running.discard(request.story_id or "")
 
@@ -319,7 +330,10 @@ class Tools:
         ids = list(dict.fromkeys(args.get("stories") or []))
         sprint = Sprint(args.get("goal", ""), ids, args.get("reason") or "")
         reason = self._sprint_refusal(sprint) or self.runtime.load_dependencies()
-        reason = reason or self._find_leaving_refusal(ids) or self._switch_refusal(ids)
+        reason = reason or self._find_leaving_refusal(ids)
+        if not reason:
+            await self._drop_merged_entries()
+            reason = self._switch_refusal(ids)
         if reason:
             return text_result(refused(reason))
         self._release_leavers(ids)
@@ -353,6 +367,15 @@ class Tools:
         stuck = [s.id for s in here if s.step == "land" and s.id not in ids]
         stuck = [i for i in stuck if state.stories[i].status not in FINISHED]
         return LAND_NOT_MOVABLE.format(id=stuck[0]) if stuck else None
+
+    async def _drop_merged_entries(self) -> None:
+        """S1, S2: drop the stack entries main already has, before the switch check."""
+        rt, stack = self.runtime, self.runtime.state.upstream.stack
+        heads = [e.head for e in stack if e.head]
+        merged = {}
+        if heads and rt.upstream:
+            merged = await system.in_thread(switchover.find_merged, rt.upstream, heads)
+        switchover.drop_entries(rt, merged)
 
     def _switch_refusal(self, ids: list[str]) -> str | None:
         """W1: the first sprint after the upgrade switches to story branches, or says why not."""
@@ -625,7 +648,20 @@ class Tools:
 
     async def release_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Release the PO's hold, or a blocked story with no open question (s53)."""
+        story, _ = self._story_for(args)
+        if story is not None and is_overlap_hold(story):
+            return text_result(Overlaps(self.runtime).release(story, args.get("reason") or ""))
         return text_result(Clerk(self.runtime).run(Act.RELEASE, args))
+
+    async def order_landings(  # house-rules: allow verb-name -- tool name fixed by the s163 design
+        self, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Set the order the stories waiting to land land in (s163 Q3)."""
+        rt = self.runtime
+        stories = args.get("stories")
+        ids = list(stories) if isinstance(stories, list) else []
+        queue = rt.landings or LandingQueue(rt)
+        return text_result(queue.place(LandingPlacement(ids, args.get("reason") or "")))
 
     async def request_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
         """Ask the human to cancel a story (s53)."""
@@ -742,6 +778,14 @@ def story_status_data(runtime: Runtime) -> dict[str, Any]:
     }
 
 
+ORDER_LANDINGS_HELP = (
+    "Set the order in which the stories waiting to land land, after the one landing now: the "
+    "listed ids first, in that order; every other waiting story follows, smallest first "
+    "(fewest lines changed since its base). Smallest first is the default because the team of "
+    "a larger story has more context to resolve a merge conflict. An order that departs from "
+    "smallest first needs a reason. Refused for a story that isn't waiting to land or is "
+    "landing now. The result lists the order and each story's size."
+)
 DASHBOARD_REASON = (
     "A reason is also required when the change changes the Product Backlog order "
     "the human set on the dashboard."
@@ -817,9 +861,12 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "release_story": (
         "Release your hold, or a blocked story with no open question, to the step it stopped "
-        "at (status active); the reason goes to its next step's brief.",
+        "at (status active); the reason goes to its next step's brief."
+        " A story held as overlap (its design overlaps another open story's files) goes past "
+        "design; the reason is required and recorded.",
         {"story": str, "reason": str},
     ),
+    "order_landings": (ORDER_LANDINGS_HELP, {"stories": list, "reason": str}),
     "request_cancel": (
         "Ask the human to cancel a story: it is held as cancel requested and the human gets one "
         'question (cancel / keep). Only their "cancel" answer cancels it; "keep" releases it. '

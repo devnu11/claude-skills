@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from claude_agent_sdk import (
@@ -97,6 +98,7 @@ from .insights import (
 )
 from .ledger import PO_ROLE, Budget, Entry, Ledger, SessionCost, Tokens, budget_status
 from .loops import Author, Setback
+from .overlaps import Overlaps
 from .owners import Fix, FixRecord, Owners, Writer
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
@@ -396,6 +398,11 @@ def commit_message(plan: Plan, subject: str) -> str:
     return f"{subject}\n\n{body}"
 
 
+def make_runner_plan(story: StoryState) -> SimpleNamespace:
+    """What ``Runtime._advance_and_log`` reads of a plan, for a step the runner did itself."""
+    return SimpleNamespace(role=SimpleNamespace(name="runner"), story=story)
+
+
 def refused(reason: str) -> dict[str, Any]:
     return {"status": "refused", "reason": reason}
 
@@ -453,6 +460,7 @@ class Runtime:
     sprint_push_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     main_git: Git | None = None
     revert_queue: list[Any] = field(default_factory=list)
+    landings: Any = None
     events: EventLog = field(init=False)
     pulse: live.Pulse = field(init=False)
     stage_log: StageLog = field(init=False)
@@ -1202,6 +1210,27 @@ class Runtime:
         with self.pulse.doing(what):
             return self._settle_tail(plan, parsed, report)
 
+    def uses_main_checkout(self, request: StepRequest) -> bool:
+        """D3, K5: a Manager or storyless step, or a story step with no worktree, owns it."""
+        story = self.state.stories.get(request.story_id or "")
+        if request.role == MANAGER and self.state.story_branches:
+            return False  # R2: the Manager reads; story branches leave the checkout alone
+        if request.role == MANAGER or story is None:
+            return True
+        return not self.uses_worktree(request, story)
+
+    def lock_for(self, request: StepRequest) -> AbstractAsyncContextManager[Any]:
+        """K5: the main lock for a step that owns the checkout, else nothing."""
+        if self.main_lock is not None and self.uses_main_checkout(request):
+            return self.main_lock
+        return nullcontext()
+
+    def checkout_lock(  # house-rules: allow query-property, verb-name -- s163 design name
+        self,
+    ) -> AbstractAsyncContextManager[Any]:
+        """B4: the main lock when there is one (a run), else nothing."""
+        return self.main_lock if self.main_lock is not None else nullcontext()
+
     def settle_lock(self, plan: Plan) -> AbstractAsyncContextManager[Any]:
         """R3: the main lock around the Manager's settle once story branches are on."""
         if plan.role.name == MANAGER and self.state.story_branches and self.main_lock:
@@ -1778,10 +1807,14 @@ class Runtime:
             if ran:
                 self._keep(story, ran, f"{story.step} gate")
 
+    def advance_as_runner(self, story: StoryState, outcome: Outcome) -> dict[str, Any]:
+        """Advance ``story`` by a step the runner did itself."""
+        return self._advance_and_log(make_runner_plan(story), outcome)  # type: ignore[arg-type]
+
     def _advance_and_log(self, plan: Plan, outcome: Outcome) -> dict[str, Any]:
         story = plan.story
         step = story.step
-        outcome = self.pipeline.route(outcome, self.owners(story))
+        outcome = self.pipeline.route(Overlaps(self).screen(story, outcome), self.owners(story))
         self._keep_runs(story, outcome)
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
@@ -1806,14 +1839,11 @@ class Runtime:
         return result
 
     def _advance_story(self, story: StoryState, step: str, outcome: Outcome) -> None:
-        """Move the story by the outcome; then K2 and L2: sessions end when it finishes or goes
-        back, and a story at land joins the land queue."""
+        """Move the story by the outcome; then K2: sessions end when it finishes or goes back."""
         self.pipeline.advance(story, outcome)
         sent_back = outcome.verdict in (Verdict.BOUNCE, Verdict.RETURN) and story.step != step
         if sent_back or story.status in FINISHED:
             kept_sessions.drop_all(story)
-        if story.step == "land" and story.id not in self.state.land_queue:
-            self.state.land_queue.append(story.id)
 
     def apply_manager(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """A Manager step clears the review queue and rules on the story; reports the ruling."""
@@ -1989,6 +2019,8 @@ def _collect_outcome_fields(outcome: Outcome) -> dict[str, Any]:
         ]
     if outcome.verdict is not Verdict.PASS:
         fields |= results_mod.collect_event_failures((outcome.ran, *outcome.extra_ran))
+    if outcome.overlap:
+        fields["overlap"] = outcome.overlap
     return fields
 
 

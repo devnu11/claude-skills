@@ -103,6 +103,9 @@ steps it already routes, and you never do another role's work.
    - **runner fault**: tell the human what the note says, `request_story` a story for the
      runner fix (often devops or developer-cli), and once it is fixed run the
      manager on the blocked story with a ruling.
+   - **overlap**: the story's design changes files another open story changes, so it waits at
+     design and goes on by itself once they have landed. `continue_story` refuses it;
+     `release_story(story, reason)` lifts it early and the reason is recorded.
    - **a blocked story**: `continue_story` refuses it. `release_story(story, reason)`
      releases one with no open question; otherwise run the manager on it with a
      ruling or a fault.
@@ -231,6 +234,9 @@ line to your brief.
   next turn ("From the dashboard: ..."). That order binds you: a `prioritise`
   or `move_story` that changes it is refused unless you give a reason, and the
   reason is logged.
+- Landing order: stories land one at a time, smallest first (the team of a larger story has more
+  context to resolve a merge conflict). `order_landings(stories, reason)` places the stories waiting
+  to land after the one landing now; an order that departs from smallest first needs a reason.
 - Priority: agree the order with the human, then set it with `prioritise`
   (listed ids first, in that order) or by the list order of `start_sprint`.
   Move one story with `move_story` (position 1 = next). Always give a reason.

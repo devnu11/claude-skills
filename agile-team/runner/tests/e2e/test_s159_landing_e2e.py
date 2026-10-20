@@ -66,7 +66,6 @@ def open_story(scene: Scene, story_id: str, path: str, text: str) -> StoryState:
 
 
 def land(scene: Scene, story: StoryState) -> dict:
-    scene.rt.state.land_queue.append(story.id)
     return asyncio.run(Lander(scene.rt, asyncio.Lock()).land(story))
 
 
@@ -151,7 +150,6 @@ def test_ac5_2_stories_land_in_the_order_they_are_landed_each_on_the_last(scene:
     first = open_story(scene, "s1", "src/a.py", "a = 1\n")
     second = open_story(scene, "s2", "src/b.py", "b = 1\n")
     m1 = land(scene, first)["land"]["merge"]
-    scene.rt.state.land_queue.clear()
     m2 = land(scene, second)["land"]["merge"]
     assert git(scene.repo, "log", "-1", "--format=%P", m2).split()[0] == m1
     subjects = git(scene.repo, "log", "--first-parent", "-2", "--format=%s", m2).splitlines()
@@ -165,7 +163,6 @@ def test_ac2_10_a_conflicting_story_goes_back_as_a_step_and_the_sprint_is_untouc
     first = open_story(scene, "s1", "src/shared.py", "one\n")
     second = open_story(scene, "s2", "src/shared.py", "two\n")
     land(scene, first)
-    scene.rt.state.land_queue.clear()
     sprint = scene.head()
     report = land(scene, second)
     assert report["gate"]["verdict"] == Verdict.BOUNCE and report["gate"]["bounce_to"] == "land"

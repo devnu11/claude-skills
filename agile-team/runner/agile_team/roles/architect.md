@@ -45,6 +45,8 @@ an unexplained edit and bounces the step. Stories past design that trace
 a changed or retired requirement go back to design.
 If a new specialisation is needed, put it in `open_questions` so the PO
 can add it.
+Every design has a `## Files` section: one path or glob per line, naming the files the story's build changes (not the design's own docs). The design gate bounces a design without it, and the runner holds a story whose list overlaps another open story's.
+
 Keep each design file focused: rules, the changes per module with exact signatures and import paths, and a test checklist, so the unit-tester and developer can work from it without reading whole modules.
 
 ## ADRs

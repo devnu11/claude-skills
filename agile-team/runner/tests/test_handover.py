@@ -50,6 +50,7 @@ def test_trigger_values_are_snake_case() -> None:
         "story_ci_red",
         "worktree_drift",
         "land_bounced",
+        "overlap",
     ]
 
 
@@ -59,6 +60,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.ERROR,
         T.STOPPED,
         T.GATE_HOLD,
+        T.OVERLAP,
         T.BAD_HANDOFF,
         T.QUESTIONS,
         T.QUARANTINE,

@@ -60,6 +60,8 @@ CI_HELD = "landing CI on {sha} is {verdict}; the land holds"
 SPRINT_PUSH_REFUSED = "pushing the sprint branch {branch} was refused: {why}"
 MAX_RESTARTS = 5
 PERMISSION_WAIT = "push_permission"
+GIVE_UP_MOVED = "sprint head moved"
+GIVE_UP_REFUSED = "sprint push refused"
 REVERT_CONFLICT = "reverting story {story} stopped: {why}; nothing was reverted"
 
 
@@ -141,8 +143,7 @@ class Lander:
         assert story.landed is not None
         attempt = Attempt(story, self.sprint_entry, self.sprint_head, revert_of=story.landed.merge)
         attempt.reason = reason
-        async with self.lock:
-            report = await self.run_attempts(attempt)
+        report = await self.run_attempts(attempt)
         return await self.add_later(attempt, report)
 
     async def add_later(self, attempt: Attempt, report: dict[str, Any]) -> dict[str, Any]:
@@ -167,12 +168,35 @@ class Lander:
         attempt = Attempt(story, self.sprint_entry, self.sprint_head)
         if story.landed is not None and story.landed.pushed:
             attempt.merge = story.landed.merge
-            return await self.finish_pushed(attempt)
-        waiting = self.find_wait(story)
-        if waiting is not None:
+            await self.check_resume(attempt)
+        elif (waiting := self.find_wait(story)) is not None:
             return waiting
-        async with self.lock:
-            return await self.run_attempts(attempt)
+        return await self.run_attempts(attempt)
+
+    async def check_resume(self, attempt: Attempt) -> None:
+        """G1: a pushed landing is resumed only while its merge is on the sprint head."""
+        if not await self.is_on_head(attempt.merge):
+            await self.give_up(attempt, GIVE_UP_MOVED)
+
+    async def is_on_head(self, merge: str) -> bool:
+        """True when the merge's first parent is the sprint head."""
+        parent = await self.run_off(self.runtime.git.attempt, "rev-parse", f"{merge}^1")
+        return parent[0] == 0 and parent[1].strip() == self.sprint_head
+
+    async def give_up(  # house-rules: allow verb-name -- name fixed by the s163 design
+        self, attempt: Attempt, why: str
+    ) -> None:
+        """G3, G5: forget the merge; its landing branch goes, and the story merges afresh."""
+        rt, story, merge = self.runtime, attempt.story, attempt.merge
+        if not attempt.revert_of:
+            story.landed = None
+        if not self.is_local:
+            branch = landing_branch(rt.config.upstream.story_prefix, story.id)
+            await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
+        data = {"merge": merge, "why": why, "sprint_head": self.sprint_head}
+        rt.events.emit(Event(EventKind.LANDING_DROPPED, "runner", story.id, data))
+        attempt.merge = ""
+        rt.save()
 
     # ----- the state the land reads
 
@@ -214,12 +238,14 @@ class Lander:
     # ----- one attempt after another
 
     async def run_attempts(self, attempt: Attempt) -> dict[str, Any]:
-        """Run the attempt again after a followed remote (L10), a few times at most."""
+        """G2: run the attempt, or resume a pushed one; again after a restart, a few times."""
         for _ in range(MAX_RESTARTS):
-            report = await self.run_attempt(attempt)
+            report = await (
+                self.finish_pushed(attempt) if attempt.merge else self.run_attempt(attempt)
+            )
             if report is not None:
                 return report
-            attempt.head = self.sprint_head
+            attempt.merge, attempt.head = "", self.sprint_head
         return make_report(attempt.story, (Verdict.HOLD, "the sprint branch kept moving"))
 
     async def run_attempt(self, attempt: Attempt) -> dict[str, Any] | None:
@@ -386,12 +412,14 @@ class Lander:
         return await self.finish_pushed(attempt)
 
     async def land_locally(self, attempt: Attempt) -> dict[str, Any] | None:
-        """P3: fast-forward on green checks, with no push and no CI."""
-        if not await self.run_off(self.runtime.upstream.fast_forward, attempt.merge):  # type: ignore[union-attr]
-            return await self.halt_diverged(attempt, "")
-        entry = attempt.entry
-        if entry is not None:
-            entry.head = attempt.merge
+        """P3, K3: fast-forward on green checks under the lock, with no push and no CI."""
+        async with self.lock:
+            if not await self.is_on_head(attempt.merge):
+                await self.give_up(attempt, GIVE_UP_MOVED)
+                return None
+            if not await self.run_off(self.runtime.upstream.fast_forward, attempt.merge):  # type: ignore[union-attr]
+                return await self.halt_diverged(attempt, "")
+            self.runtime.record_checkout()
         return self.record_landed(attempt, Landed(attempt.merge), "none")
 
     async def push_landing(self, attempt: Attempt) -> str | None:
@@ -414,14 +442,14 @@ class Lander:
 
     async def finish_pushed(self, attempt: Attempt) -> dict[str, Any] | None:
         """L8: wait for the landing CI, delete the landing branch, then act on the verdict."""
-        story, rt = attempt.story, self.runtime
+        story, rt, merge = attempt.story, self.runtime, attempt.merge
         result = await self.wait_ci(attempt)
         self.record_ci(attempt, result)
         try:
             return await OUTCOMES[result.verdict](self, attempt, result)
         finally:
             branch = landing_branch(rt.config.upstream.story_prefix, story.id)
-            await self.run_off(rt.upstream.delete, Lease(branch, attempt.merge, ""))  # type: ignore[union-attr]
+            await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
 
     async def wait_ci(self, attempt: Attempt) -> CiResult:
         """Wait for the checks of the merge; re-run an infra failure once per job."""
@@ -467,18 +495,29 @@ class Lander:
 
     # ----- the verdicts
 
-    async def push_sprint(self, attempt: Attempt, result: CiResult) -> dict[str, Any] | None:
-        """L9: green; push the sprint branch, then fast-forward the main checkout."""
+    async def move_sprint(self, attempt: Attempt, result: CiResult) -> dict[str, Any] | None:
+        """L9, K2: green; under the lock push the sprint branch and fast-forward the checkout."""
+        async with self.lock:
+            stopped = await self.push_and_follow(attempt)
+        if stopped is not None or not attempt.merge:
+            return stopped
+        return await self.complete(attempt, result)
+
+    async def push_and_follow(self, attempt: Attempt) -> dict[str, Any] | None:
+        """K2 steps 1 to 5; ``None`` with a merge still set means the move was made."""
         entry = attempt.entry
         assert entry is not None
-        lease = Lease(entry.branch, entry.pushed, attempt.merge)
-        refused = await self.push(lease)
+        if not await self.is_on_head(attempt.merge):
+            await self.give_up(attempt, GIVE_UP_MOVED)
+            return None
+        refused = await self.push(Lease(entry.branch, entry.pushed, attempt.merge))
         if refused is not None:
             return await self.follow_remote(attempt)
+        entry.pushed = attempt.merge
         if not await self.run_off(self.runtime.upstream.fast_forward, attempt.merge):  # type: ignore[union-attr]
             return await self.halt_diverged(attempt, "")
-        entry.head = entry.pushed = attempt.merge
-        return await self.complete(attempt, result)
+        self.runtime.record_checkout()
+        return None
 
     async def complete(self, attempt: Attempt, result: CiResult) -> dict[str, Any]:
         """The sprint branch moved: open the sprint PR once, close the story PR, report."""
@@ -505,7 +544,6 @@ class Lander:
         rt, story = self.runtime, attempt.story
         if not attempt.revert_of:
             story.landed = landed
-        rt.record_checkout()
         parents = rt.git.attempt("rev-list", "--parents", "-n", "1", attempt.merge)[1].split()[1:]
         entry = attempt.entry
         data = {"merge": attempt.merge, "parents": parents, "ci": ci}
@@ -529,18 +567,32 @@ class Lander:
         return make_report(attempt.story, (Verdict.HOLD, reason), ci=str(result.verdict))
 
     async def follow_remote(self, attempt: Attempt) -> dict[str, Any] | None:
-        """L10: the sprint push was rejected; follow a fix someone pushed, else halt."""
+        """G4, R2: give up the merge; follow a remote that descends from ours, else halt."""
         entry, up = attempt.entry, self.runtime.upstream
         assert entry is not None and up is not None
+        await self.give_up(attempt, GIVE_UP_REFUSED)
         await self.run_off(up.git.attempt, "fetch", up.settings.remote, entry.branch)
         remote = await self.run_off(up.remote_head, entry.branch)
-        ahead = bool(remote) and remote != entry.pushed
-        if ahead and await self.run_off(up.is_ancestor, entry.pushed, remote):
-            await self.run_off(up.fast_forward, remote)
-            entry.head = entry.pushed = remote
-            self.runtime.record_checkout()
+        follows = bool(remote) and await self.run_off(up.is_ancestor, entry.pushed, remote)
+        if follows and await self.move_to_remote(remote):
             return None
         return await self.halt_diverged(attempt, remote)
+
+    async def move_to_remote(self, remote: str) -> bool:
+        """R2: bring the main checkout and the sprint entry to the remote head, if it can."""
+        rt, up = self.runtime, self.runtime.upstream
+        entry = self.sprint_entry
+        assert entry is not None and up is not None
+        if await self.run_off(up.is_ancestor, remote, "HEAD"):
+            entry.pushed = remote
+            return True
+        if not await self.run_off(up.is_ancestor, "HEAD", remote):
+            return False
+        if not await self.run_off(up.fast_forward, remote):
+            return False
+        rt.record_checkout()
+        entry.head = entry.pushed = remote
+        return True
 
     async def halt_diverged(self, attempt: Attempt, remote_sha: str) -> dict[str, Any]:
         """The sprint branch diverged: halt as checkout drift naming both heads."""
@@ -556,7 +608,7 @@ class Lander:
 
 
 OUTCOMES = {
-    CiVerdict.GREEN: Lander.push_sprint,
+    CiVerdict.GREEN: Lander.move_sprint,
     CiVerdict.RED: Lander.bounce_red,
     CiVerdict.MAIN: Lander.bounce_red,
     CiVerdict.INFRA: Lander.hold_ci,
