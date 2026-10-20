@@ -53,3 +53,16 @@ many for one story.
   old style only in code the step changed.
 - Names that tests use (e.g. `live.interrupted_data`) stay noun-named until
   the human allows a test rename.
+
+## Amended by s161 (2026-10-20)
+
+- The naming rules are no longer only the reviewer's judgement. Since s157,
+  house-rules checks `verb-name` and `query-property` in the team's
+  toolchain (ADR-0081), and a suppression whose reason is that tests or a
+  design fixed the name fails `suppression-excuse` (ADR-0089).
+- Names start at the design. The architect names what a story adds by the
+  rules. A developer or unit-tester who meets a design name the rules refuse
+  sends it back to design (`changes_requested`, `next_role: architect`).
+- "A quality pass never renames a name a test uses" still holds for quality
+  passes. A story whose design names a rename changes the tests with it, as
+  s161 does (the human asked for it).
