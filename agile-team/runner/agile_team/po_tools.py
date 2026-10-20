@@ -372,8 +372,9 @@ class Tools:
         """S1, S2: drop the stack entries main already has, before the switch check."""
         rt, stack = self.runtime, self.runtime.state.upstream.stack
         heads = [e.head for e in stack if e.head]
-        find = system.in_thread(switchover.find_merged, rt.upstream, heads)
-        merged = await find if heads and rt.upstream else {}
+        merged = {}
+        if heads and rt.upstream:
+            merged = await system.in_thread(switchover.find_merged, rt.upstream, heads)
         switchover.drop_entries(rt, merged)
 
     def _switch_refusal(self, ids: list[str]) -> str | None:
