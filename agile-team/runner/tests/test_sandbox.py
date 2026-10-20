@@ -436,3 +436,25 @@ def test_prepare_with_seed_off_plants_nothing_for_web(configured: Path, fake: Fa
     p = prepared_web(configured, fake, seed="")
     assert not system.exists(p.root / "presentation" / "workspace" / ".agile-team.toml")
     assert p.seed_problems() == []
+
+
+# ----- a story worktree step (s159 B2/B3): the sandbox stays under the main run dir -----
+
+
+def test_a_worktree_proxy_scope_measures_the_sandbox_from_the_main_checkout(
+    configured: Path,
+) -> None:
+    d = Environment("cli", "package")
+    c = load(configured, d).at_worktree(configured / ".team/run/worktrees/s1")
+    p = sandbox.Preparer().prepare(c, sandbox.Order(d))
+    scope = sandbox.proxy_scope(c, p)
+    assert p.root == configured / ".team/run/customer/cli" and scope.run_home == configured
+    assert scope.write == [".team/run/customer/cli/**"] and scope.repo == c.repo
+    assert sandbox.proxy_read_globs(c, p)[0] == ".team/run/customer/cli/**"
+    assert use(scope, "Write", {"file_path": "notes.md"}) is None
+    assert use(scope, "Write", {"file_path": str(p.root / "notes.md")}) is None
+    assert use(scope, "Read", {"file_path": str(p.root / "presentation/PRESENTATION.md")}) is None
+    assert "outside the repo" in use(scope, "Write", {"file_path": str(configured / "src/x.py")})
+    assert "outside the repo" in use(
+        scope, "Write", {"file_path": str(configured / ".team/acceptance/s1.md")}
+    )

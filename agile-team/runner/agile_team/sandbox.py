@@ -507,7 +507,8 @@ def layout(config: Config, environment: Environment) -> Prepared:
 
 
 def _rel(config: Config, path: Path) -> str:
-    return path.relative_to(config.repo).as_posix()
+    """A sandbox path as the guard measures it: relative to the checkout holding the run dir."""
+    return path.relative_to(config.run_home or config.repo).as_posix()
 
 
 def proxy_read_globs(config: Config, prepared: Prepared) -> list[str]:
@@ -542,6 +543,7 @@ def proxy_scope(config: Config, prepared: Prepared) -> Scope:
         write=[f"{_rel(config, prepared.root)}/**"],
         read=proxy_read_globs(config, prepared),
         cwd=prepared.workdir,
+        run_home=config.run_home,
         **_bash_limits(config, prepared),
     )
 
