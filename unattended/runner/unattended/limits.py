@@ -326,6 +326,16 @@ def span(seconds: float) -> str:
     return "".join(parts) or "0s"
 
 
+def format_time_left(deadline: float | None, now: float) -> str | None:
+    """Whole minutes to ``deadline`` as ``span`` writes them; ``overdue``; None without one."""
+    if deadline is None:
+        return None
+    if deadline <= now:
+        return "overdue"
+    minutes = int((deadline - now) // 60)
+    return span(minutes * 60) if minutes else "0m"
+
+
 class Phase(StrEnum):
     """Where a stop sequence stands: not started, asking the job to stop, or ending it."""
 

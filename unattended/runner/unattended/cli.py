@@ -27,7 +27,7 @@ from . import probes
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
-from .limits import Bounds, local, parse_duration, parse_until, span
+from .limits import Bounds, local, parse_duration, parse_until, span, format_time_left
 from .prompt_job import PromptJob
 from .store import (
     DEFAULT_RESUME_PROMPT,
@@ -286,13 +286,13 @@ def detach(job: Job, args: argparse.Namespace) -> int:
         )
     # Written here too so a `wait` right after `start` sees a live supervisor.
     job.path(PID_FILE).write_text(str(proc.pid))
-    print_json(report(job))
+    print_json(report(job, time.time()))
     return 0
 
 
 def foreground(job: Job, args: argparse.Namespace) -> int:
     status = run_supervisor(job, Path(args.home))
-    print_json(report(job))
+    print_json(report(job, time.time()))
     return EXIT_CODES[status]
 
 
@@ -324,15 +324,15 @@ def running(job: Job) -> bool:
     return job.load().status not in ENDED and job.pid() is not None
 
 
-def report(job: Job) -> dict[str, Any]:
-    """The job's state for ``status``, ``list`` and ``wait``."""
+def report(job: Job, now: float) -> dict[str, Any]:
+    """The job's state at ``now`` for ``status``, ``list`` and ``wait``."""
     st, pid = job.load(), job.pid()
     found = {
         "name": st.name, "kind": st.spec.kind, "status": st.status, "reason": st.reason,
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
-        **limits_report(st.bounds), **watch_report(st.spec),
+        **build_status_limits(st.bounds, now), **watch_report(st.spec),
         "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:
@@ -343,12 +343,13 @@ def report(job: Job) -> dict[str, Any]:
 def cmd_status(args: argparse.Namespace) -> int:
     if args.name is None:
         return cmd_list(args)
-    print_json(report(job_home(args).job(args.name)))
+    print_json(report(job_home(args).job(args.name), time.time()))
     return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    print_json([report(job) for job in job_home(args).jobs()])
+    now = time.time()
+    print_json([report(job, now) for job in job_home(args).jobs()])
     return 0
 
 
@@ -375,7 +376,7 @@ def _noticed(job: Job, until: Until, seen: int) -> bool:
 
 
 def _waited(job: Job, new: list[dict[str, Any]]) -> int:
-    found = report(job)
+    found = report(job, time.time())
     if new:
         found["notice"] = new[-1]
     print_json(found)
@@ -478,7 +479,7 @@ def cmd_extend(args: argparse.Namespace) -> int:
     _require_room(bounds, state.cost)
     job.update(lambda st: setattr(st, "bounds", bounds))
     job.event("extend", {"by": "user", **limits_report(bounds)})
-    print_json(report(job))
+    print_json(report(job, time.time()))
     return 0
 
 
@@ -494,6 +495,12 @@ def limits_report(bounds: Bounds) -> dict[str, Any]:
         "hardstop": optional_span(bounds.hardstop),
         "idle_stop": optional_span(bounds.idle_stop),
     }
+
+
+def build_status_limits(bounds: Bounds, now: float) -> dict[str, Any]:
+    """``limits_report`` with ``time_left`` (at ``now``) right after ``deadline``."""
+    rest = limits_report(bounds)
+    return {"deadline": rest.pop("deadline"), "time_left": format_time_left(bounds.deadline, now), **rest}
 
 
 def watch_report(spec: Spec) -> dict[str, Any]:
