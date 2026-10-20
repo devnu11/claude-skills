@@ -70,3 +70,13 @@ storyless step without the lock. Design: `agile-team/docs/design/s163.md`
   and PO turns, story CI polls and the writer go on. `step()` stays a sync
   wrapper for the CLI and the tests.
 
+Known limits, ruled on at s163's design review (2026-10-19):
+
+- The REPLAY stage holds the main lock for the whole stage, including a
+  rebase fix's check run, so storyless steps and story-admin commits wait
+  for it. Nothing else would move the checkout then anyway.
+- A stage task can start while an R9 follow task still runs
+  (`start_boundary` doesn't check `follow_task`). The window is small:
+  the follow runs only on a CI hold, and both take the main lock to move
+  the checkout.
+

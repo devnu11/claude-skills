@@ -86,3 +86,22 @@ switch-over refused a sprint that main had taken by rebase. Design:
   patch-equivalent copies (`git cherry`). The one-time switch counts "ahead"
   with the same `git cherry` rule, so no hand edit of the state is needed.
 
+Known limits, ruled on at s163's design review (2026-10-19). The runner
+can't tell a lease refusal from other push failures, because `push()` turns
+every `UpstreamError` into refusal text:
+
+- A sprint push refused for another reason (branch protection, auth, the
+  network) while the remote still equals `pushed` counts as "descends" and
+  re-lands. Up to `MAX_RESTARTS` attempts each merge, check and wait for
+  landing CI again, then the landing holds with "the sprint branch kept
+  moving", which doesn't say what really failed. Before s163 such a refusal
+  halted at once. The cost is bounded, and the run doesn't halt.
+- A push that reports a refusal but reached the remote (`R == merge`) is
+  followed, so the story then merges a branch the sprint head already has.
+  It is the same bounded loop, ending in a hold with the story not marked
+  landed.
+
+A follow-up could hold at once, with the refusal text, when the remote
+didn't move, and count `R == merge` as a landed push. That narrows AC3's
+"re-lands when the remote descends", so it needs a new story.
+

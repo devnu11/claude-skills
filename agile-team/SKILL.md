@@ -295,9 +295,17 @@ command fails.
    sprint head, the full checks on it, a push of the merge to
    `team/story-<id>-land` and a wait for its CI. Only on green does it push
    the sprint branch and fast-forward the main checkout, and only then is
-   the story done. Stories land one at a time, in the order they passed
-   acceptance, and a story with `depends_on` starts only after its
-   dependencies landed. Red checks or CI send the story back to implement.
+   the story done. Stories land one at a time: the PO's order
+   (`order_landings`, a reason when it departs from smallest first), then
+   smallest first (fewest lines changed since the story's base). A landing
+   whose sprint head moved during its CI wait merges afresh; it never pushes
+   a stale merge. Its CI wait doesn't lock the main checkout, so tells and
+   answers carry on. A story with `depends_on` starts only after its
+   dependencies landed. Every design lists the files it changes under
+   `## Files`; a design that overlaps another open story's files waits at
+   design as `overlap` until that story lands or leaves, or the PO's
+   `release_story` with a reason. Red checks or CI send the story back to
+   implement.
    A merge conflict (`land_bounced`) goes to DevOps (CI, lock files,
    config) or the story's developer, who rebases the story onto the sprint
    head, then land runs again. The main checkout moves only by landings and
@@ -308,8 +316,10 @@ command fails.
    history: each push names the sha it expects and must be a fast-forward
    or a new branch. Story branches switch on at the first `start_sprint`
    after the upgrade, and only when no listed story is past design, no
-   pending tests are left, the review stack is empty and the team branch is
-   on main. Otherwise `start_sprint` lists every reason.
+   pending tests are left, the review stack is empty and main has every
+   team commit (rebased copies count). Each `start_sprint` first drops the
+   stack entries main already has, so no hand edit is needed. Otherwise
+   `start_sprint` lists every reason.
    **Sprint boundaries.** At each sprint start the runner creates the
    sprint branch `team/sprint-<N>` on the remote (once the team may push).
    When `origin/main` has moved, it replays the sprint branch onto it: each
