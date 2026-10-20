@@ -1127,7 +1127,7 @@ class Runtime:
         if flying.session:
             kept = KeptSession(flying.session, role.model, role.effort, role.provider)
             story.sessions[flying.role] = kept
-        story.interrupted = Interruption(cause, flying.role, story.id, flying.brief, None)
+        story.interrupted = Interruption(flying.role, story.id, flying.brief, cause, None)
         story.in_flight = None
 
     def _has_ended(self, story: StoryState, role: str) -> bool:
