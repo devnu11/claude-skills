@@ -95,3 +95,19 @@ role `runner`, which has no role file or model, so the budget check raised
   model budget, so leaving them out loses nothing. A new costless kind joins
   `COSTLESS` and gets both rules at once.
 
+## Amended by s164 (2026-10-20)
+
+An idle run spun at 84% CPU and wrote about 28,000 `checkout.guard` events
+an hour: every tick's guard stage emitted an event, its `submit` set
+`writer.wake`, and the wake ended the next wait at once. Design:
+`agile-team/docs/design/s164.md` (W1 to W5).
+
+- **Decision 2 adds a wake rule.** `RunWriter.bind` keeps the scheduler
+  task as the writer's owner. A write submitted by the owner task queues
+  without waking the scheduler; a write from any other task or a worker
+  thread queues and wakes it. The scheduler drains its own writes before it
+  waits, so they reach disk without delay.
+- **Consequence.** An idle run ticks once per `POLL_S`. A flow that needs
+  another tick at once after the scheduler's own change says so with
+  `Scheduler.hurry`, never by waking itself.
+
