@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from agile_team import run_writer as rw
+from agile_team.handover import Pass, Trigger
 from agile_team.po_tools import Start
 
 from .clock import about, real_monotonic
@@ -13,6 +14,7 @@ from .late import Late
 sched = Late("scheduler")
 
 SMALL_POLL_S = 0.05
+WINDOW_S = 0.5
 
 
 async def bound_writer() -> rw.RunWriter:
@@ -148,3 +150,44 @@ def test_a_write_from_a_step_wakes_the_wait_at_once_ac1(make_runtime) -> None:
         return elapsed
 
     assert asyncio.run(scenario()) < 1.0
+
+
+def count_loop_ticks(rt, monkeypatch, found: Pass, halted: bool) -> int:
+    """Run the loop for a window with one never-ending step and ``found`` on the desk."""
+    monkeypatch.setattr("agile_team.scheduler.POLL_S", SMALL_POLL_S)
+    ticks: list[int] = []
+    real_tick = sched.Scheduler.tick
+
+    def counted_tick(self) -> None:
+        real_tick(self)
+        ticks.append(1)
+
+    monkeypatch.setattr(sched.Scheduler, "tick", counted_tick)
+
+    async def scenario() -> None:
+        s = sched.Scheduler(rt, Start("task"))
+        rt.writer.bind(asyncio.get_running_loop(), asyncio.current_task())
+        s.tasks["k"] = asyncio.ensure_future(asyncio.Event().wait())
+        s.opening = None
+        s.desk.queue(found)
+        rt.halted_by = "halt" if halted else None
+        try:
+            await asyncio.wait_for(s.run_loop(), timeout=WINDOW_S)
+        except TimeoutError:
+            pass
+        finally:
+            s.tasks["k"].cancel()
+
+    asyncio.run(scenario())
+    return len(ticks)
+
+
+def test_ended_run_with_a_queued_pass_still_awaits_d1(make_runtime, monkeypatch) -> None:
+    found = Pass([Trigger.STORY_CI_RED], ["x"], [])
+    ticks = count_loop_ticks(make_runtime(), monkeypatch, found, halted=True)
+    assert ticks <= WINDOW_S / SMALL_POLL_S + 2
+
+
+def test_queued_pass_without_kinds_still_awaits_d1(make_runtime, monkeypatch) -> None:
+    ticks = count_loop_ticks(make_runtime(), monkeypatch, Pass([], [], []), halted=False)
+    assert ticks <= WINDOW_S / SMALL_POLL_S + 2
