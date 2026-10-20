@@ -6,7 +6,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from agile_team.boundary import Edge, ReplayProgress, Stage
+from agile_team.boundary import BoundaryHold, Edge, ReplayProgress, StackEntry, Stage
 
 from .fake_system import FakeSystem
 from .test_boundary_runner import Env
@@ -131,3 +131,40 @@ def test_a_replay_checkpoint_saves_a_copy_through_call_from_thread_b3(env: Env) 
     assert len(through) == 1
     assert b.replay == ReplayProgress("o" * 40, "b" * 40, "t" * 40, done=2)
     assert b.replay is not work
+
+
+# ---------- B4: the REPLAY stage and the R9 follow take the lock ----------
+
+
+def test_the_replay_stage_holds_the_main_lock_b4(env: Env) -> None:
+    lock = lock_it(env)
+    held: list[bool] = []
+
+    async def locked_replay(b) -> None:
+        held.append(lock.locked())
+
+    env.br._run_locked_replay = locked_replay
+    env.open(Edge.END, stage=Stage.REPLAY)
+    asyncio.run(env.br._replay(env.rt.state.boundary))
+    assert held == [True] and not lock.locked()
+
+
+def test_the_r9_follow_fast_forwards_under_the_main_lock_b4(env: Env, fake: FakeSystem) -> None:
+    lock = lock_it(env)
+    held: list[bool] = []
+    own = StackEntry(1, "team/sprint-1", "o" * 40, "p" * 40, "S", ["s1"], head="p" * 40)
+    own.pushed = "p" * 40
+    env.rt.state.upstream.stack = [own]
+    b = env.open(Edge.END, stage=Stage.CI)
+    b.hold = BoundaryHold.CI_FAILED
+    env.br.remote.remote_head = lambda branch: "n" * 40
+
+    def fast_forward(sha: str) -> bool:
+        held.append(lock.locked())
+        return True
+
+    env.br.remote.fast_forward = fast_forward
+    env.rt.record_checkout = lambda: None
+    asyncio.run(env.br.run_follow())
+    assert held == [True] and not lock.locked()
+    assert own.head == own.pushed == "n" * 40

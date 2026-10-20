@@ -12,7 +12,7 @@ from agile_team.dispatch import StepRequest
 from agile_team.gates import StoryState
 from agile_team.po_tools import Start, Tools
 from agile_team.router import Work
-from agile_team.scheduler import REVERT_KEY, Scheduler
+from agile_team.scheduler import BOUNDARY_KEY, REVERT_KEY, Scheduler
 from agile_team.story_branches import Landed
 
 from .fake_system import Done
@@ -164,3 +164,79 @@ def test_a_run_without_a_lock_runs_the_step_unlocked_ac7(make_runtime, fake) -> 
     rt.main_lock = None
     asyncio.run(Tools(rt).run_role({"role": "devops", "brief": "b"}))
     assert seen == [False]
+
+
+# ---------- K1, B5: the queues wait for a stage task or the lock; B6: the follow task ----------
+
+
+def sched_with_lock(make_runtime) -> Scheduler:
+    rt = make_runtime()
+    sched = Scheduler(rt, Start("task"))
+    sched.main_lock = asyncio.Lock()
+    return sched
+
+
+def test_the_queues_may_be_applied_when_nothing_holds_the_checkout_k1(make_runtime, fake) -> None:
+    assert sched_with_lock(make_runtime).may_apply_queues is True
+
+
+def test_the_queues_wait_while_the_main_lock_is_held_k1(make_runtime, fake) -> None:
+    sched = sched_with_lock(make_runtime)
+
+    async def scenario() -> bool:
+        async with sched.main_lock:
+            return sched.may_apply_queues
+
+    assert asyncio.run(scenario()) is False
+
+
+def test_the_queues_wait_while_a_boundary_stage_task_runs_b5(make_runtime, fake) -> None:
+    sched = sched_with_lock(make_runtime)
+
+    async def scenario() -> bool:
+        gate = asyncio.Event()
+        sched.tasks[BOUNDARY_KEY] = asyncio.create_task(gate.wait())
+        seen = sched.may_apply_queues
+        gate.set()
+        await sched.tasks[BOUNDARY_KEY]
+        return seen
+
+    assert asyncio.run(scenario()) is False
+
+
+def follow_calls(sched: Scheduler) -> list[str]:
+    calls: list[str] = []
+
+    async def run_follow() -> None:
+        calls.append("followed")
+
+    sched.router.boundaries.run_follow = run_follow
+    return calls
+
+
+def test_follow_boundary_starts_the_follow_as_a_task_b6(make_runtime, fake) -> None:
+    sched = sched_with_lock(make_runtime)
+    calls = follow_calls(sched)
+
+    async def scenario() -> None:
+        sched.follow_boundary()
+        assert sched.follow_task is not None
+        await sched.follow_task
+
+    asyncio.run(scenario())
+    assert calls == ["followed"]
+
+
+def test_follow_boundary_waits_while_a_boundary_stage_task_runs_b6(make_runtime, fake) -> None:
+    sched = sched_with_lock(make_runtime)
+    calls = follow_calls(sched)
+
+    async def scenario() -> None:
+        gate = asyncio.Event()
+        sched.tasks[BOUNDARY_KEY] = asyncio.create_task(gate.wait())
+        sched.follow_boundary()
+        gate.set()
+        await sched.tasks[BOUNDARY_KEY]
+
+    asyncio.run(scenario())
+    assert sched.follow_task is None and calls == []
