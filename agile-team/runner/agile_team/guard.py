@@ -77,6 +77,7 @@ class Scope:
     bash_allowed: list[str] | None = None
     secrets: list[Path] = field(default_factory=list)
     git_workspace: Path | None = None
+    run_home: Path | None = None
 
     @property
     def base(self) -> Path:
@@ -89,8 +90,16 @@ class Scope:
         return self.read == ["**"]
 
     def relative(self, raw: str) -> str | None:
-        """``raw`` resolved from the step's cwd, relative to the repo (``None`` if outside)."""
-        return repo_relative(self.repo, resolve_in(self.base, raw))
+        """``raw`` resolved from the step's cwd, relative to the repo (``None`` if outside).
+
+        A story worktree step (``run_home`` set) may also name the main checkout's run dir,
+        measured from that checkout, so its globs under ``.team/run/`` apply there too.
+        """
+        path = resolve_in(self.base, raw)
+        rel = repo_relative(self.repo, path)
+        if rel is None and self.run_home is not None:
+            return _run_dir_relative(self.run_home, path)
+        return rel
 
     def is_secret(self, raw: str) -> bool:
         """True when ``raw`` resolves to, or into, one of the secret paths."""
@@ -98,6 +107,12 @@ class Scope:
         return any(
             path == system.resolve(s) or system.resolve(s) in path.parents for s in self.secrets
         )
+
+
+def _run_dir_relative(run_home: Path, path: Path) -> str | None:
+    """``path`` relative to ``run_home`` when it lies in its run dir, else ``None``."""
+    rel = repo_relative(run_home, path)
+    return rel if rel is not None and matches(rel, ALWAYS_IGNORED) else None
 
 
 @dataclass(frozen=True)

@@ -214,3 +214,38 @@ def test_even_backslash_run_is_not_a_continuation(repo: Path, command: str, allo
 def test_comment_aware_continuation(repo: Path, command: str, allowed: bool) -> None:
     """D4/D5: a `#` comment ending in `\\` is not a continuation, whatever follows it."""
     assert (use(dev_scope(repo), "Bash", {"command": command}) is None) is allowed
+
+
+# ----- a story worktree step (s159 B3) and the main checkout's run dir -----
+
+
+def worktree_scope(repo: Path) -> Scope:
+    """An integration-tester step in s1's worktree; the presentation is in ``repo``'s run dir."""
+    worktree = repo / ".team/run/worktrees/s1"
+    scope = Scope("integration-tester", worktree, ["tests/e2e/**", ".team/run/presentation/**"])
+    scope.run_home = repo
+    return scope
+
+
+def test_a_worktree_step_writes_the_main_run_dir_within_its_globs(repo: Path) -> None:
+    s = worktree_scope(repo)
+    guide = repo / ".team/run/presentation/s1/cli/PRESENTATION.md"
+    assert s.relative(str(guide)) == ".team/run/presentation/s1/cli/PRESENTATION.md"
+    assert use(s, "Write", {"file_path": str(guide)}) is None
+    assert use(s, "Write", {"file_path": "tests/e2e/test_s1.py"}) is None
+    assert "may not write .team/run/state.json" in use(
+        s, "Write", {"file_path": str(repo / ".team/run/state.json")}
+    )
+
+
+def test_a_worktree_step_may_not_write_the_main_checkout_outside_its_run_dir(repo: Path) -> None:
+    s = worktree_scope(repo)
+    for path in ("src/a.py", ".team/acceptance/s1.md", "tests/e2e/test_s1.py"):
+        assert "outside the repo" in use(s, "Write", {"file_path": str(repo / path)})
+    assert s.relative(str(repo / "src/a.py")) is None
+
+
+def test_without_a_run_home_the_main_run_dir_is_outside_the_repo(repo: Path) -> None:
+    s = Scope("integration-tester", repo / ".team/run/worktrees/s1", [".team/run/presentation/**"])
+    guide = repo / ".team/run/presentation/s1/cli/PRESENTATION.md"
+    assert "outside the repo" in use(s, "Write", {"file_path": str(guide)})
