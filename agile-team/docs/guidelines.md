@@ -189,6 +189,11 @@ rule, update in the same story:
   `e2e_timeout = 30` for `tests/e2e/`). Over it, make the test
   fast with the fake clock or a fake, or move it to `tests/e2e/`. Never add a
   `pytest.mark.timeout`, raise the limit, skip or weaken the test.
+- **A regex over a whole file is anchored (s167).** A pattern that starts with
+  a repeated character class (`[^{}]*`, `[^{}]+`) and runs over a whole page
+  retries at every position, which costs the square of each stretch's length.
+  Anchor it with a lookbehind, such as `(?<![^{}])` for CSS rules, so each
+  stretch is scanned once.
 - The suite runs in parallel under pytest-xdist (s70), so a test ID never holds
   a live value. No parametrize value or id comes from a pid, a process group,
   the clock, a random number, a temp path or the environment. Parametrize with

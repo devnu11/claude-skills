@@ -4,15 +4,35 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from .test_s118_page import PAGE, flow_text
 
+# Anchored at a brace or the start: an unanchored [^{}]* rescans each stretch (s167).
+CSS_RULE = r"(?<![^{}])([^{}]+)\{([^{}]*)\}"
 
-def rule(selector: str) -> str:
-    """The declarations of the first CSS rule whose selector list holds ``selector``."""
-    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", PAGE):
+
+def find_rule(text: str, selector: str) -> str:
+    """The declarations of the first rule in ``text`` whose selector list holds ``selector``."""
+    for sel, body in re.findall(CSS_RULE, text):
         if selector in [s.strip() for s in sel.split(",")]:
             return body
     raise AssertionError(selector)
+
+
+def rule(selector: str) -> str:
+    """The declarations of the page's first CSS rule whose selector list holds ``selector``."""
+    return find_rule(PAGE, selector)
+
+
+def test_find_rule_skips_a_long_stretch_and_finds_the_rule() -> None:
+    assert "c: d" in find_rule("x" * 50_000 + "}\n.a, .b { c: d; }", ".b")
+
+
+def test_find_rule_names_a_missing_selector() -> None:
+    with pytest.raises(AssertionError) as err:
+        find_rule(".a { c: d; }", ".z")
+    assert str(err.value) == ".z"
 
 
 def test_the_tool_description_text_kind_and_line_are_gone() -> None:
