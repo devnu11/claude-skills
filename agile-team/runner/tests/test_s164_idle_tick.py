@@ -80,7 +80,7 @@ def test_is_on_owner_false_on_a_thread_without_a_loop() -> None:
 
 
 def test_own_lines_land_before_the_wait_w2(make_runtime, monkeypatch) -> None:
-    monkeypatch.setattr(sched, "POLL_S", SMALL_POLL_S)
+    monkeypatch.setattr("agile_team.scheduler.POLL_S", SMALL_POLL_S)
     rt = make_runtime()
     seen: list[int] = []
 
@@ -99,7 +99,7 @@ def test_own_lines_land_before_the_wait_w2(make_runtime, monkeypatch) -> None:
 
 
 def test_idle_loop_does_not_spin_ac1(make_runtime, monkeypatch) -> None:
-    monkeypatch.setattr(sched, "POLL_S", SMALL_POLL_S)
+    monkeypatch.setattr("agile_team.scheduler.POLL_S", SMALL_POLL_S)
     rt = make_runtime()
     ticks: list[int] = []
     real_tick = sched.Scheduler.tick
