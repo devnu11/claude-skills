@@ -3,10 +3,12 @@ worktree, and an ``interrupted`` record whose fields are in order."""
 
 from __future__ import annotations
 
-from agile_team import salvage, system
+from agile_team import cli, salvage, state, system
 from agile_team.dispatch import StepRequest
 from agile_team.events import Event, EventKind
 from agile_team.gates import StoryState
+from agile_team.halt import HaltKind
+from agile_team.po_tools import Start, StartMode
 from agile_team.salvage import Cause, InFlight, Interruption
 
 from .conftest import write_story
@@ -17,8 +19,8 @@ SESSION = "sess-1"
 EDIT = "src/edit.py"
 
 
-def cut_off(make_runtime, cause: Cause = Cause.CRASH):
-    """A run that stopped while ``ROLE`` was at implement in s1's worktree, then resumed."""
+def in_flight(make_runtime):
+    """A run that stopped while ``ROLE`` was at implement in s1's worktree, not yet resumed."""
     rt = make_runtime()
     rt.state.story_branches = True
     story = StoryState("s1", "T", "implement", sprint=1, worktree_head="a" * 40)
@@ -28,6 +30,12 @@ def cut_off(make_runtime, cause: Cause = Cause.CRASH):
     worktree = rt.config.run_dir / "worktrees" / "s1"
     system.make_dirs(worktree / "src")
     system.write_text(worktree / EDIT, "x = 1\n")
+    return rt, story, worktree
+
+
+def cut_off(make_runtime, cause: Cause = Cause.CRASH):
+    """``in_flight``, then resumed through ``Runtime.recover_stories``."""
+    rt, story, worktree = in_flight(make_runtime)
     rt.recover_stories(cause)
     return rt, story, worktree
 
@@ -61,3 +69,32 @@ def test_the_next_step_of_that_role_resumes_in_the_worktree(make_runtime) -> Non
     assert view.config.repo == worktree and plan.scope.repo == worktree
     assert salvage.offer(story.interrupted) in plan.prompt
     assert "crash" in plan.prompt and plan.launch.resume == SESSION
+
+
+def test_resume_without_a_halt_kind_records_killed(make_runtime) -> None:
+    rt, story, _ = in_flight(make_runtime)
+    cli._recover_stories(rt, Start("", StartMode.RESUME))
+    assert story.interrupted.cause is Cause.KILLED
+
+
+def test_resume_with_a_crash_halt_kind_records_crash(make_runtime) -> None:
+    rt, story, _ = in_flight(make_runtime)
+    rt.state.halt_kind = HaltKind.CRASH
+    cli._recover_stories(rt, Start("", StartMode.RESUME))
+    assert story.interrupted.cause is Cause.CRASH
+
+
+def test_the_interrupted_record_survives_a_state_json_round_trip(make_runtime) -> None:
+    rt, _, _ = cut_off(make_runtime, Cause.SIGTERM)
+    loaded = state.load(rt.config.run_dir).stories["s1"]
+    assert loaded.interrupted == Interruption(ROLE, "s1", BRIEF, Cause.SIGTERM, None)
+    assert loaded.in_flight is None
+
+
+def test_every_halt_kind_is_a_cause() -> None:
+    assert {Cause(k) for k in HaltKind} <= set(Cause)
+
+
+def test_the_story_stays_at_implement_after_the_resume(make_runtime) -> None:
+    _, story, _ = cut_off(make_runtime)
+    assert story.step == "implement"
