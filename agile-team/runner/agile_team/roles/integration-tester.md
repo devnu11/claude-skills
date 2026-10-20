@@ -24,6 +24,7 @@ developer specialization that owns the fix.
 
 The presentation: your prompt's "Presentations to build" section lists one
 showing per acceptance environment, e.g. `.team/run/presentation/<story>/cli/`
+(an absolute path when your step runs in a story worktree; use it as listed),
 with its own `workspace/` (a `manual` showing has only its guide). The runner
 lays these out the first time and keeps them across rounds, so update them
 rather than rebuild. Build every listed showing, each with its own

@@ -1939,8 +1939,9 @@ to `integration-tester`).
   survive a bounce from acceptance back to e2e, and only the tester
   replaces what is in them. The tester's prompt gains
   `## Presentations to build`, one line per environment:
-  `- <name> (<kind>): .team/run/presentation/<story>/<name>/ (<AC ids>)`.
-  Each guide covers only that environment's ACs. A story from before s95
+  `- <name> (<kind>): .team/run/presentation/<story>/<name>/ (<AC ids>)`
+  (an absolute path into the main checkout's run dir when the step runs
+  in a story worktree). Each guide covers only that environment's ACs. A story from before s95
   with one flat presentation goes back to e2e once, without a round.
 - **Git stays in the workspace** (s65). The integration-tester (step `e2e`)
   and the Customer Proxy (step `acceptance`) are *confined*, per the
@@ -3053,7 +3054,15 @@ its worktree back from the branch (`rebuilt`); no new branch is made. Every
 step on the story runs in its worktree: its write scope, Stop hook,
 commands, stop checks, gates and story-file reads. The run files
 (`state.json`, events, ledger, relay, heartbeat) stay in the main
-checkout's `.team/run/`. Storyless steps (the storyless architect, DevOps
+checkout's `.team/run/`, and so do the story's presentation
+(`.team/run/presentation/<id>/`) and the Proxy's sandbox
+(`.team/run/customer/<environment>/`). A step in a worktree is briefed
+with their absolute paths, its presentation gaps name the same paths, and
+its write scope reaches the main checkout's `.team/run/` within the role's
+globs and nothing else in that checkout. The Proxy's brief names the
+worktree as the repo holding the story file and
+`.team/acceptance/<id>.md`, where the acceptance gate reads the report.
+Storyless steps (the storyless architect, DevOps
 and unit-tester, the boundary fix steps) run in the main checkout.
 
 **Pushes and story PRs.** Once the team may push, the runner pushes the
@@ -3813,7 +3822,9 @@ This applies only when the runner runs from `.team/run/runner-pin`
   (which holds the presentation copy), `.team/stories/`, `.team/acceptance/`
   (so it can read and rewrite its own report) and `<docs>/customer/`; its
   Bash may not name a forbidden root, `..`, or repo paths outside the
-  sandbox. The Integration Tester may also write `.team/run/presentation/**`.
+  sandbox. The Integration Tester may also write `.team/run/presentation/**`;
+  from a story worktree that is the main checkout's, the only part of the
+  main checkout a worktree step may write (within its globs).
 - Runner-only files: every story file, `.team/stories/**` (s135). The hook refuses any role's Write/Edit/NotebookEdit
   there, whatever its write globs say (`<role> may not write <path>; only the
   runner writes it`), and a step's Bash change there is quarantined.
