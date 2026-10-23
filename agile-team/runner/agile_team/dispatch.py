@@ -452,6 +452,7 @@ class RunFlags:
     save_pending: bool = False
     stops: dict[str, guard.StopFlag] = field(default_factory=dict)
     limited: Halt | None = None
+    landing_base: str = ""  # s180 C6: the in-flight landing merge's first parent; "" when none
 
 
 @dataclass

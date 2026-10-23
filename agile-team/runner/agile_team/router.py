@@ -334,7 +334,19 @@ class Router:
     def _story_offers(self) -> list[Work | None]:
         rt = self.runtime
         ranked = rt.priority().ranked(rt.state.stories.values())
-        return [self._pick_work(s) for s in ranked if self._movable(s)]
+        return [
+            self._pick_work(s)
+            for s in ranked
+            if self._movable(s) and not self._is_held_by_landing(s)
+        ]
+
+    def _is_held_by_landing(self, story: StoryState) -> bool:
+        """C6: a story with no worktree waits while a landing sits below a moved sprint head."""
+        rt = self.runtime
+        base = rt.flags.landing_base
+        if not base or story.step == "land" or story.worktree_head:
+            return False
+        return base != rt.sprint_head
 
     def _pick_work(self, story: StoryState) -> Work:
         """The next work of a movable story: its queued rebase, its land, a fix or its step."""

@@ -58,6 +58,7 @@ class Trigger(StrEnum):
     STORY_CI_RED = "story_ci_red"
     WORKTREE_DRIFT = "worktree_drift"
     LAND_BOUNCED = "land_bounced"
+    LANDING_DROPPED = "landing_dropped"
     OVERLAP = "overlap"
 
 
@@ -184,6 +185,11 @@ AFFECTED_DONE_LINE = (
     "{affected_done}. Ask the liaison with request_story for a follow-up story that checks "
     "them against the changed requirements"
 )
+LANDING_DROPPED_LINE = (
+    "{story}: its landing gave up {land_dropped}, then started again. Nothing waits on you; "
+    "this says what moved the sprint head."
+)
+DROP_TEXT = "merge {merge} ({why}; the head moved by {moved})"
 HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.REFUSED,
@@ -374,7 +380,24 @@ HANDOVERS: tuple[Rule, ...] = (
         "{story}: landing stopped on a merge conflict in {land_files}; {land_role} rebases it "
         "onto the sprint head, then land runs again.",
     ),
+    Rule(
+        Trigger.LANDING_DROPPED,
+        lambda r: bool((r.get("land") or {}).get("dropped")),
+        LANDING_DROPPED_LINE,
+    ),
 )
+
+
+def format_drops(drops: Sequence[dict]) -> str:
+    """D2: each dropped merge with its reason and the commits that moved the head."""
+    return "; ".join(
+        DROP_TEXT.format(
+            merge=d["merge"][:12], why=d["why"], moved=", ".join(d["moved"]) or "nothing listed"
+        )
+        for d in drops
+    )
+
+
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
     "Handle these, then end your turn; the runner carries on with the pipeline.\n"
@@ -447,6 +470,7 @@ def _land_fields(report: dict) -> dict[str, str]:
         "drift_files": ", ".join(drift.get("files") or []) if drift else None,
         "land_files": ", ".join(conflict.get("files") or []) if conflict else None,
         "land_role": conflict.get("role"),
+        "land_dropped": format_drops(land["dropped"]) if land.get("dropped") else None,
     }
     return {k: str(v) for k, v in fields.items() if v is not None}
 
