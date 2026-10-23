@@ -218,7 +218,7 @@ def _line(showing: Showing, gap: str | None) -> str:
 
 def _gap(config: Config, showing: Showing) -> str | None:
     """Every gap of one showing, so a fix to one half does not hide the other (#57)."""
-    found = (_guide_gap(config, showing), _needed_workspace_gap(config, showing))
+    found = (_guide_gap(config, showing), _find_needed_workspace_gap(config, showing))
     return "; ".join(gap for gap in found if gap) or None
 
 
@@ -229,7 +229,7 @@ def _guide_gap(config: Config, showing: Showing) -> str | None:
     return GAPS[Gap.NO_GUIDE].format(path=_rel(config, source / GUIDE))
 
 
-def _needed_workspace_gap(config: Config, showing: Showing) -> str | None:
+def _find_needed_workspace_gap(config: Config, showing: Showing) -> str | None:
     if recipe_of(showing.environment).need is not Need.WORKSPACE:
         return None
     return _workspace_gap(config, showing)
