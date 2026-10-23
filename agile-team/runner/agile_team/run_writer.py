@@ -19,6 +19,7 @@ class RunWriter:
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: int | None = None
+        self._owner: asyncio.Task | None = None
         self._queue: list[Write] = []
         self._lock = threading.Lock()
         self.wake: asyncio.Event | None = None
@@ -27,12 +28,13 @@ class RunWriter:
         """Make ``task`` on ``loop`` the writer."""
         self._loop = loop
         self._thread = threading.get_ident()
+        self._owner = task
         self.wake = asyncio.Event()
 
     def release(self) -> None:
         """Write what is queued, then write directly again."""
         self.drain()
-        self._loop, self._thread, self.wake = None, None, None
+        self._loop, self._thread, self._owner, self.wake = None, None, None, None
 
     def submit(self, write: Write) -> None:
         """Queue a write (thread-safe), or run it at once when unbound."""
@@ -41,7 +43,18 @@ class RunWriter:
             return
         with self._lock:
             self._queue.append(write)
-        self._loop.call_soon_threadsafe(self._wake)  # wakes the scheduler for the next drain
+        if not self.is_on_owner:  # the scheduler's own writes must not wake it (s164)
+            self._loop.call_soon_threadsafe(self._wake)
+
+    @property
+    def is_on_owner(self) -> bool:
+        """True on the bound scheduler task itself; false for other tasks, threads, unbound."""
+        if self._owner is None or threading.get_ident() != self._thread:
+            return False
+        try:
+            return asyncio.current_task() is self._owner
+        except RuntimeError:
+            return False
 
     async def apply[T](self, change: Callable[[], T]) -> T:
         """Run ``change`` as the writer and return its result.

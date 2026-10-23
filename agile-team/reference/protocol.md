@@ -3314,6 +3314,13 @@ a due boundary stage once nothing but the Manager is running, starts the
 work the router offers within the caps, and starts a PO turn when
 hand-overs are queued.
 
+Between ticks the scheduler writes its own queued lines, then waits up to
+5 s. A task that ends, or a write queued by another task (a step, a PO
+turn, a boundary stage, a story CI poll) or a worker thread, ends the wait
+at once. The scheduler's own writes, such as the `checkout.guard` stage
+event of every tick, never end it, so an idle run ticks once per 5 s
+(s164).
+
 - **Caps.** A story with no worktree starts only while fewer than
   `[team] max_open_stories` stories have one (`waits for a free worktree`).
   Before any step the runner reserves budget for every running step: per

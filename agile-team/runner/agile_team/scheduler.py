@@ -148,7 +148,7 @@ class Scheduler:
             self.start_turn()
             self.start_work()
             self.show_waiting()
-            if not self.hurry:
+            if not (self.hurry or self.is_finished):
                 await self.wait_for_change()
             self.hurry = False
 
@@ -227,6 +227,7 @@ class Scheduler:
 
     async def wait_for_change(self) -> None:
         """C1 step 8: wait for a task to end, a write to be submitted, or ``POLL_S``."""
+        self.runtime.writer.flush()  # our own lines land first and never wake the wait
         wake = self.runtime.writer.wake
         woken = asyncio.ensure_future(wake.wait()) if wake is not None else None
         busy = [*self.tasks.values(), *([self.po_task] if self.po_task else [])]
@@ -569,6 +570,7 @@ class Scheduler:
             self.po.ended_by = found.lines[0] if found.lines else "idle"
             return
         self.queue_pass(found)
+        self.hurry = True  # s164 W4: the next pass starts the PO turn at once
         self.steps = 0
 
     def show_waiting(self) -> None:
