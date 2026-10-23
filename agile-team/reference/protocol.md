@@ -4062,7 +4062,9 @@ This applies only when the runner runs from `.team/run/runner-pin`
   `--config-env`, `--exec-path`, `--output` or `--ext-diff` makes the call
   not read-only (#61). Outside a confined step, a `-C`, `env -C`, `--git-dir`
   or `--work-tree` place must stay in the repo: an absolute place outside it,
-  or one with `..`, is refused (`git-outside-workspace`), and Bash may not set
+  or one with `..`, or one the shell rewrites (starting with `~`, `$` or a
+  quote: `-C ~`, `-C "$HOME"`, `-C $PWD`) is refused (`git-outside-workspace`),
+  and Bash may not set
   `GIT_EXTERNAL_DIFF` (`git-env`; it is also locked in confined steps). Only the runner pushes, and only sprint branches (see "Sprint
   boundaries"). The check sees through prefixes (s65): `X=1 git commit`,
   `env git commit`, `command git commit`, `timeout 5 git commit` and

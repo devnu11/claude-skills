@@ -67,6 +67,8 @@ GIT_ENV_LOCKED = (
     "GIT_EXTERNAL_DIFF",
     KEEP_CWD_ENV,
 )
+# A place the shell rewrites (home, a variable, a quoted word) cannot be checked.
+SHELL_EXPANDED = ("~", "$", '"', "'")
 # Options that make a read-only subcommand write a file or run a program.
 WRITING_OPTIONS = frozenset({"--output", "--ext-diff"})
 CD_WORDS = frozenset({"cd", "pushd"})
@@ -474,8 +476,8 @@ def find_unconfined_place_denial(repo: Path, links: Sequence[Link]) -> str | Non
 
 
 def _leaves(repo: Path, raw: str) -> bool:
-    """``raw`` climbs with ``..`` or names an absolute place outside ``repo``."""
-    if ".." in PurePosixPath(raw).parts:
+    """``raw`` climbs, is expanded by the shell, or names an absolute place outside ``repo``."""
+    if raw.startswith(SHELL_EXPANDED) or ".." in PurePosixPath(raw).parts:
         return True
     return Path(raw).is_absolute() and not _inside(repo, resolve_in(repo, raw))
 

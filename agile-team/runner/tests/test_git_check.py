@@ -113,6 +113,12 @@ def test_unconfined_other_git_is_denied(repo: Path, command: str) -> None:
         ("git diff --output /tmp/x", "git-write"),
         ("git diff --ext-diff", "git-write"),
         ("GIT_EXTERNAL_DIFF=evil git diff", "git-env"),
+        ("git -C ~ status", "git-outside-workspace"),
+        ("git -C ~/src log", "git-outside-workspace"),
+        ('git -C "$HOME" status', "git-outside-workspace"),
+        ("git -C $PWD status", "git-outside-workspace"),
+        ("git --git-dir=$GIT_X log", "git-outside-workspace"),
+        ("git --work-tree='$X' status", "git-outside-workspace"),
     ],
 )
 def test_unconfined_git_aimed_outside_the_repo_or_writing_is_denied(
@@ -124,7 +130,13 @@ def test_unconfined_git_aimed_outside_the_repo_or_writing_is_denied(
 
 @pytest.mark.parametrize(
     "command",
-    ["git -C src status", "git -C {repo}/src log", "git --git-dir={repo}/.git log", "git diff"],
+    [
+        "git -C src status",
+        'git -C "src" status',
+        "git -C {repo}/src log",
+        "git --git-dir={repo}/.git log",
+        "git diff",
+    ],
 )
 def test_unconfined_git_inside_the_repo_is_allowed(repo: Path, command: str) -> None:
     assert denial(unconfined(repo), command.format(repo=system.resolve(repo))) is None
