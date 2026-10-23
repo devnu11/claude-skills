@@ -721,15 +721,16 @@ class Checks:
         if pct is None:
             return Outcome(Verdict.BOUNCE, "could not read a coverage total")
         if pct < self.required_coverage():
-            return Outcome(Verdict.BOUNCE, self._coverage_low(pct))
+            return Outcome(Verdict.BOUNCE, self._describe_shortfall(pct))
         return Outcome(Verdict.PASS, f"coverage {pct}%")
 
-    def _coverage_low(self, pct: float) -> str:
+    def _describe_shortfall(self, pct: float) -> str:
         """The shortfall with the command, its scope and where the bar comes from (#59)."""
         scope = COVERAGE_SCOPE.format(command=self.commands.get("coverage", ""))
         bar = self.required_coverage()
-        return COVERAGE_LOW.format(pct=pct, bar=bar, scope=scope, source=self._bar_source())
+        return COVERAGE_LOW.format(pct=pct, bar=bar, scope=scope, source=self._bar_source)
 
+    @property
     def _bar_source(self) -> str:
         if self.baseline_coverage is None:
             return BAR_NO_BASELINE.format(threshold=self.threshold)
