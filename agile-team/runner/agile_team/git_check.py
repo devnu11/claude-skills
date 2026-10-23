@@ -30,6 +30,24 @@ LOCAL_GIT = SAFE_GIT | frozenset(
     }
 )  # fmt: skip
 NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
+LONG_PREFIX_MIN = 4
+
+
+@dataclass(frozen=True)
+class Flags:
+    """Options a LOCAL step may not give a subcommand: long names (or their abbreviations,
+    which git accepts) and short letters, alone or in a cluster such as ``-rx``."""
+
+    long: tuple[str, ...]
+    short: str = ""
+    valued: str = ""
+
+
+LOCAL_DENIED_FLAGS: dict[str, Flags] = {
+    "rebase": Flags(("--exec", "--interactive"), "ix", "sSX"),
+    "checkout": Flags(("--ignore-other-worktrees",)),
+    "switch": Flags(("--ignore-other-worktrees",)),
+}
 CEILING_ENV = "GIT_CEILING_DIRECTORIES"
 KEEP_CWD_ENV = "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"
 GIT_ENV_LOCKED = (
@@ -37,6 +55,8 @@ GIT_ENV_LOCKED = (
     "GIT_DIR",
     "GIT_WORK_TREE",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_SEQUENCE_EDITOR",
+    "GIT_EDITOR",
     KEEP_CWD_ENV,
 )
 CD_WORDS = frozenset({"cd", "pushd"})
@@ -361,7 +381,23 @@ def _read_only(call: GitCall) -> bool:
 
 
 def _is_local(call: GitCall) -> bool:
-    return call.sub in LOCAL_GIT
+    flags = LOCAL_DENIED_FLAGS.get(call.sub)
+    denied = flags is not None and any(_is_denied_flag(w, flags) for w in call.words)
+    return call.sub in LOCAL_GIT and not denied
+
+
+def _is_denied_flag(word: str, flags: Flags) -> bool:
+    if word.startswith("--"):
+        name = word.partition("=")[0]
+        return len(name) >= LONG_PREFIX_MIN and any(f.startswith(name) for f in flags.long)
+    return word.startswith("-") and bool(set(_read_cluster(word, flags)) & set(flags.short))
+
+
+def _read_cluster(word: str, flags: Flags) -> str:
+    """A short-option cluster's letters, up to the first one that takes a value."""
+    letters = word[1:]
+    cut = next((i for i, c in enumerate(letters) if c in flags.valued), len(letters))
+    return letters[:cut]
 
 
 def _any(call: GitCall) -> bool:

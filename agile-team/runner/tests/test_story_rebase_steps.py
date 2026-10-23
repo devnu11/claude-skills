@@ -88,6 +88,29 @@ NETWORK_OR_CONFIG = [
     "git config core.hooksPath hooks",
     "git -c user.name=x push origin HEAD",
 ]
+SHELL_OR_EDITOR = [
+    "git rebase --exec 'git push' x",
+    "git rebase --exec='git push origin HEAD' x",
+    "git rebase --ex 'git push' x",
+    "git rebase -x 'git push origin HEAD' x",
+    "git rebase -x'git push' x",
+    "git rebase -rx 'git push' x",
+    "git rebase -i x",
+    "git rebase --interactive x",
+    "git rebase --interac x",
+    "git checkout --ignore-other-worktrees team/sprint-1",
+    "git switch --ignore-other-worktrees team/sprint-1",
+    "git checkout --ignore-other team/sprint-1",
+    "GIT_SEQUENCE_EDITOR='sh -c \"git push\"' git rebase --continue",
+    "GIT_EDITOR=vi git rebase --continue",
+]
+STILL_LOCAL = [
+    "git rebase --continue",
+    "git rebase --skip",
+    "git rebase -Xignore-space-change --continue",
+    "git checkout --ignore-skip-worktree-bits -- src/app.py",
+    "git checkout -- src/app.py",
+]
 
 
 @pytest.mark.parametrize("command", LOCAL_COMMANDS)
@@ -272,3 +295,29 @@ def test_a_leftover_rebase_branch_is_reset_to_the_old_tip(make_runtime, fake) ->
     view._set_story_rebase_scope(plan)
     [checkout, rebase] = checkouts(fake)
     assert checkout[-2:] == ("-B", REBASED) and rebase[-2:] == (ONTO, BASE)
+
+
+@pytest.mark.parametrize("command", SHELL_OR_EDITOR)
+def test_the_story_rebase_step_may_not_run_shell_through_git(make_runtime, fake, command):
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    reason = guard.check_bash(plan.scope, command)
+    assert reason and reason.startswith("refused by rule `git-"), reason
+
+
+@pytest.mark.parametrize("command", STILL_LOCAL)
+def test_other_rebase_and_checkout_flags_stay_allowed(make_runtime, fake, command) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    assert guard.check_bash(plan.scope, command) is None
+
+
+def test_the_runner_starts_the_rebase_itself_without_the_guard(make_runtime, fake) -> None:
+    """``prepare`` runs as the runner: a plain, non-interactive ``rebase --onto``."""
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, BRANCH + "\n"))
+    view._set_story_rebase_scope(plan)
+    [rebase] = [c.argv for c in fake.commands if "--onto" in c.argv]
+    assert not {"-i", "--interactive", "-x", "--exec"} & set(rebase)

@@ -1965,7 +1965,8 @@ to `integration-tester`).
   A `cd` followed by anything but `&&` makes the directory unknown, and
   later git is denied unless it has an absolute `-C` inside the workspace.
   A confined step's Bash may not mention `GIT_CEILING_DIRECTORIES`,
-  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_DISCOVERY_ACROSS_FILESYSTEM` or
+  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_DISCOVERY_ACROSS_FILESYSTEM`,
+  `GIT_SEQUENCE_EDITOR`, `GIT_EDITOR` or
   `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`.
 - The tester builds the workspace the way a customer would have it (for this
   runner: `agile-team init` already run, plus the run files the ACs need),
@@ -3250,7 +3251,10 @@ refs and config, so its git is local only: the read-only list plus `add`,
 `reset`, `cherry-pick`, `apply`, `merge-file`, `mergetool`, `rerere` and a
 few plumbing reads. `push`, `fetch`, `pull`, `remote`, `ls-remote`,
 `config`, `worktree`, `submodule` and anything else are refused by rule
-`git-local-only`. Its brief says: resolve, `git add`, `git rebase
+`git-local-only`, and so are `rebase --exec`/`-x` and `--interactive`/`-i`
+(they run shell or an editor) and `checkout`/`switch
+--ignore-other-worktrees`, abbreviations and short clusters (`-rx`)
+included. Its brief says: resolve, `git add`, `git rebase
 --continue`; never merge, squash, reorder or drop. After `done`, the runner
 checks that no operation is in progress, the tree is clean, HEAD is on the
 new branch and descends from `onto`, and the commits match the old
