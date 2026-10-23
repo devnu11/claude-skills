@@ -35,7 +35,7 @@ class LandPrs(FakePrs):
     sha_list: list = field(default_factory=lambda: [Check("build", Bucket.PASS, "ci")])
     sha_seen: list[str] = field(default_factory=list)
 
-    def sha_checks(self, sha: str) -> list:
+    def list_checks(self, sha: str) -> list:
         self.sha_seen.append(sha)
         return self.sha_list
 
