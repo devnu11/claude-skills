@@ -41,3 +41,18 @@ poll runs every 60 s.
 - The snapshot's `story_ci` object gains `checks`. The dashboard reads only
   `sha`, `verdict` and `source`, and the fixture's `story_ci` values are all
   `null`, so the snapshot contract fixture is unchanged.
+
+## Amended by s172 design review (2026-10-23)
+
+The build chose a smaller path, and the design now follows it:
+
+- No `ci.describe_check`. `StoryCiPoll.describe` calls `ci.classify_check`
+  and keeps only its `step` and `lines`, so `kind` stays unset and the
+  verdict is still the bucket verdict (decision 1 holds).
+- A failing check is described as soon as it is read, even while other
+  checks are pending (replaces "describes nothing while any check is still
+  pending" in decision 2). The `(sha, link)` cache means each job is still
+  fetched once, so the API cost is the same; nothing is recorded until every
+  check settles.
+- The `## Story CI` brief section is built in `dispatch.render_story_ci`,
+  not in `story_branches`.

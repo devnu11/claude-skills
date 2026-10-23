@@ -3126,11 +3126,12 @@ story branch after every step that committed, against the recorded
 draft PR from its branch to the sprint's branch (`<id>: <title>`). Every 60 s
 at most, the runner reads each open story's PR checks on its pushed head;
 a settled result that changed is saved as the story's `ci` and logged as
-`story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). Once no check is
-pending, each failing Actions check is described with its failing step and
-its failing log lines. The job and log are fetched once per commit and check
-for the life of the run, and the verdict still comes from the checks'
-buckets. `checks` lists each check that did not pass as
+`story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). Each failing
+Actions check is described with its failing step and its failing log lines
+as soon as it is read, even while other checks are pending; nothing is
+recorded until all have settled. The job and log are fetched once per commit
+and check for the life of the run, and the verdict still comes from the
+checks' buckets. `checks` lists each check that did not pass as
 `- <label>: fail at step <step> <link>` with its lines indented below, as
 for sprint CI (s172). A red result hands over `story_ci_red` with those
 lines and holds nothing: only the landing CI decides. While the story's
