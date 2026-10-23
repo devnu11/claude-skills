@@ -45,6 +45,11 @@ BRIEF_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Design", ("{docs}/design/{id}.md", "{docs}/architecture.md")),
     ("Review", (".team/reviews/{id}.md",)),
 )
+LANDING_HOLD = (
+    "waits for the landing of {ids}: the sprint head moved above its merge, "
+    "so a new branch would fork on a commit that landing carries"
+)
+
 STALL_REASONS: dict[str, str] = {
     "hold": "held ({hold})",
     StoryStatus.NEEDS_MANAGER: "at the round cap",
@@ -334,7 +339,40 @@ class Router:
     def _story_offers(self) -> list[Work | None]:
         rt = self.runtime
         ranked = rt.priority().ranked(rt.state.stories.values())
-        return [self._pick_work(s) for s in ranked if self._movable(s)]
+        return [
+            self._pick_work(s)
+            for s in ranked
+            if self._movable(s) and not self._is_held_by_landing(s)
+        ]
+
+    @property
+    def _landing_bases(self) -> dict[str, str]:
+        """C6: each kept landing merge's first parent by story: pushed, and in flight."""
+        state = self.runtime.state
+        bases = {
+            s.id: s.landed.base
+            for s in state.stories.values()
+            if s.step == "land" and s.landed and s.landed.pushed and s.landed.base
+        }
+        if self.runtime.flags.landing_base:
+            bases[state.landing] = self.runtime.flags.landing_base
+        return bases
+
+    @property
+    def _held_landings(self) -> list[str]:
+        """C6: the stories whose kept merge sits below a moved sprint head."""
+        head = self.runtime.sprint_head
+        return [sid for sid, base in self._landing_bases.items() if base != head]
+
+    def _is_held_by_landing(self, story: StoryState) -> bool:
+        """C6: a story with no branch waits while a kept landing merge sits below the head."""
+        return not story.branch and bool(self._held_landings)
+
+    def _describe_stall(self, story: StoryState) -> str:
+        """The stall line's why: the landing hold for a movable story it holds, else its own."""
+        if self._movable(story) and self._is_held_by_landing(story):
+            return LANDING_HOLD.format(ids=", ".join(self._held_landings))
+        return _why(story, self.runtime.state.stories)
 
     def _pick_work(self, story: StoryState) -> Work:
         """The next work of a movable story: its queued rebase, its land, a fix or its step."""
@@ -548,8 +586,7 @@ class Router:
 
     def _list_stall_lines(self, unfinished: list[StoryState]) -> list[str]:
         """One "<id> at <step>: <why>" line per story."""
-        stories = self.runtime.state.stories
-        return [f"{s.id} at {s.step}: {_why(s, stories)}" for s in unfinished]
+        return [f"{s.id} at {s.step}: {self._describe_stall(s)}" for s in unfinished]
 
     async def _wait(self) -> None:
         self._show_wait()
