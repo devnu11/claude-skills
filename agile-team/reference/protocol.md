@@ -2844,6 +2844,20 @@ the gate's other reasons (see "Files and the overlap hold").
 id. The code reviewer's and the Customer Proxy's briefs have the coverage
 part; they cite the AC and requirement ids in their findings.
 
+**Requirement ids with story branches (s178, ADR-0090).** Stories designed in
+parallel must not pick the same id. When the runner writes the architect's
+brief, it reserves five ids for the story (`req_block` in `state.json`) above
+every id that the sprint head holds and that the sprint's other open stories
+hold: on their branches (`git ls-tree`), in their worktrees and in their
+reservations. The brief says `write REQ-NNN.md, the next free id; this
+story's ids are REQ-NNN to REQ-NNN, …`. A clean reservation is kept across
+briefs. On a checked story the design gate also bounces each added id that
+the sprint head uses (`REQ-174 is already used on the sprint head`), or that
+another open story outside the story's own block uses (`… is already used by
+s166`) or has reserved (`… is reserved by s166`). The retry brief offers a
+free id. A cancelled story, or one that left the sprint, holds nothing. Without
+story branches nothing is reserved.
+
 **Dashboard.** The Requirements tab lists the files (it reads them
 leniently, so a broken file still shows). An exempt story's untraced AC reads
 `designed before s1` and is not a gap. Each requirement's history on the tab
