@@ -1621,6 +1621,11 @@ runs in its own process group with stdin at `/dev/null`. At the limit the
 runner kills that group (`SIGKILL`) and nothing else. It then reads what the
 group wrote, for at most 5 s more. The command counts as exit code 124.
 
+Each such command also runs with `COVERAGE_FILE=<its tree>/.team/run/.coverage`,
+so coverage.py writes its data file under the run dir, which no step's audit
+looks at, instead of leaving a `.coverage` at the root for the next step's
+audit to quarantine.
+
 - At `tests` and `implement` a timeout **bounces** (the story stays at the
   step and a round counts). The reason starts
   `the command did not finish in time:` and ends with the output's tail. The

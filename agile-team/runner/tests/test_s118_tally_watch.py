@@ -189,10 +189,12 @@ def test_watching_tells_the_run_the_final_record(fake: FakeSystem) -> None:
 # ----- CommandShell.run -----
 
 
-def test_a_command_outside_a_stage_gets_no_environment(fake: FakeSystem) -> None:
+def test_a_command_outside_a_stage_gets_only_the_coverage_redirect(fake: FakeSystem) -> None:
+    fake.env = {"PATH": "p"}
     fake.reply(("pytest",), Done(0, "ok\n"))
     assert CommandShell(FAKE_REPO).run("pytest") == (0, "ok\n")
-    assert [c.env for c in fake.commands] == [None]
+    coverage = str(FAKE_REPO / ".team/run/.coverage")
+    assert [c.env for c in fake.commands] == [{"PATH": "p", "COVERAGE_FILE": coverage}]
 
 
 def test_a_command_in_a_stage_gets_the_plugin_environment(fake: FakeSystem) -> None:
@@ -204,6 +206,7 @@ def test_a_command_in_a_stage_gets_the_plugin_environment(fake: FakeSystem) -> N
     env = command.env
     assert env["PATH"] == "p" and env["PYTEST_PLUGINS"] == "agile_team_tally"
     assert env["PYTHONPATH"] == str(tally_watch.PLUGIN_DIR)
+    assert env["COVERAGE_FILE"] == str(FAKE_REPO / ".team/run/.coverage")
     assert env["AGILE_TEAM_TALLY"] not in fake.files  # removed afterwards
 
 
@@ -230,7 +233,8 @@ def test_an_import_failure_runs_the_command_again_without_the_plugin(fake: FakeS
     with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE):
         assert CommandShell(FAKE_REPO).run("pytest") == (0, "plain\n")
     first, second = fake.commands
-    assert first.env is not None and second.env is None
+    assert "PYTEST_PLUGINS" in first.env and "PYTEST_PLUGINS" not in second.env
+    assert "COVERAGE_FILE" in second.env
 
 
 def test_the_second_result_is_returned_even_when_it_fails(fake: FakeSystem) -> None:
