@@ -14,6 +14,7 @@ from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from . import system
+from .ci_findings import pick_lines
 from .ci_triage import (
     BUCKET_KIND,
     FAILING,
@@ -39,12 +40,6 @@ READY_PHRASE = "ready to merge"
 NO_CHECKS = "no checks reported"
 JOB_LINK = re.compile(r"/actions/runs/\d+/job/(\d+)")
 LOG_PREFIX = re.compile(r"^(?:[^\t]*\t){2}(?:\d{4}-\d\d-\d\dT[\d:.]+Z ?)?")
-FAILING_LINE: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bFAILED\s+\S"),
-    re.compile(r"\bERROR\s+\S+::"),
-    re.compile(r"--- FAIL: "),
-    re.compile(r"\b[1-9]\d* (?:failed|errors?)\b"),
-)
 CI_GREEN_REPORT = (
     "Sprint {sprint}'s CI passed on {prs}: ready to merge by fast-forward only, never by a "
     "rebase or squash merge."
@@ -204,7 +199,7 @@ def _plain(line: str) -> str:
 def failing_lines(log: str) -> list[str]:
     """The lines of a failed-step log that name what failed (or its tail)."""
     lines = [text for text in map(_plain, log.splitlines()) if text]
-    hits = [t for t in lines if any(p.search(t) for p in FAILING_LINE)]
+    hits = pick_lines(lines)
     return list(dict.fromkeys(hits))[:MAX_LINES] if hits else lines[-TAIL_LINES:]
 
 
