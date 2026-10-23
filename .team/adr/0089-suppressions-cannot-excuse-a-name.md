@@ -58,3 +58,12 @@ alternative was another suppression.
   baseline only shrinks (REQ-113).
 - The rename touches many test files once. After this story, a rename the
   rules ask for goes through design, not through a waiver.
+
+## Amended by s161, round 3 (2026-10-23)
+
+The code review found that a suppression could name the rule meant to catch
+it: `allow verb-name, suppression-excuse -- name fixed by the tests` waived
+the name and silenced the refusal in one comment. So `suppression-reason` and
+`suppression-excuse` can't be suppressed on a line (`checker.UNSUPPRESSIBLE`).
+A repo that wants either off says so once, in its settings, with `disable`,
+where a reviewer sees it.
