@@ -535,7 +535,10 @@ def _recover(config: config_mod.Config, start: Start) -> None:
 
 
 def _recover_stories(runtime: Runtime, start: Start) -> None:
-    """I2, I3: on ``--resume`` prune stale worktrees and mark each cut-off story step stopped."""
+    """I2, I3: on ``--resume`` prune the worktrees no open sprint story needs.
+
+    Also mark each cut-off story step stopped.
+    """
     if start.mode is StartMode.RESUME:
         kind = runtime.state.halt_kind
         runtime.recover_stories(Cause(kind) if kind else Cause.KILLED)
