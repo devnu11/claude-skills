@@ -186,12 +186,20 @@ class Lander:
         """G1, C5: resume a pushed landing while the head is unmoved or the move can be carried."""
         move = await self.read_move(attempt)
         self.runtime.flags.landing_base = move.base
+        self.keep_base(attempt, move.base)
         if move.is_unmoved:
             return
         refusal = await self.run_off(carry.find_refusal, self.runtime.git, move)
         if refusal is not None:
             attempt.not_carried = refusal
             await self.give_up(attempt, GIVE_UP_MOVED)
+
+    def keep_base(self, attempt: Attempt, base: str) -> None:
+        """C6: fill an empty saved base of a pre-s180 record and save."""
+        landed = attempt.story.landed
+        if landed is not None and not landed.base:
+            landed.base = base
+            self.runtime.save()
 
     async def read_move(self, attempt: Attempt) -> carry.Move:
         """C1: the merge's first parent, the sprint head, the pushed record and the story forks."""
@@ -513,7 +521,7 @@ class Lander:
         lease = Lease(branch, "", attempt.merge)
         refused = await self.push(lease)
         if refused is None and not attempt.revert_of:
-            story.landed = Landed(attempt.merge, pushed=attempt.merge)
+            story.landed = Landed(attempt.merge, pushed=attempt.merge, base=attempt.head)
             rt.save()
         return refused
 
