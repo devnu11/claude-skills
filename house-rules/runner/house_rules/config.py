@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tomllib
 from collections.abc import Callable, Mapping
@@ -22,6 +23,14 @@ DEFAULT_EXCLUDE = ("**/.venv/**", "**/build/**", "**/dist/**", "**/node_modules/
 DEFAULT_TEST_GLOBS = ("**/tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py")
 DEFAULT_FACTORY_NAMES = ("create", "create_{class}", "from_*")
 DEFAULT_BASELINE = ".house-rules-baseline.json"
+DEFAULT_EXCUSES = (
+    r"(?:(?:(?:the|a)\s+)?(?:tool\s+)?names?\s+(?:(?:is|was)\s+)?)?"
+    r"(?:fixed|chosen|set|given|required|named|used|expected)\s+by\s+(?:(?:the|a|an)\s+)?"
+    r"(?:[\w./-]+\s+)?(?:tests?|test\s+files?|[\w./-]*test[\w./-]*|designs?)",
+    r"(?:(?:the|a)\s+)?(?:[\w./-]+\s+)?designs?(?:'s)?\s+names?",
+    r"(?:the\s+)?(?:[\w./-]+\s+)?(?:tests?|designs?)\s+"
+    r"(?:fixed|chose|set|named|use|uses|expect|expects)\s+(?:(?:the|this|its)\s+)?(?:names?|it)",
+)
 
 
 class ConfigError(Exception):
@@ -53,6 +62,18 @@ class Settings:
     allow_names: tuple[str, ...] = ()
     factory_names: tuple[str, ...] = DEFAULT_FACTORY_NAMES
     baseline: str = DEFAULT_BASELINE
+    excuses: tuple[re.Pattern[str], ...] = ()
+
+    @cached_property
+    def known_excuses(self) -> tuple[re.Pattern[str], ...]:
+        """The default excuse patterns followed by the repo's additions."""
+        defaults = tuple(re.compile(p, re.IGNORECASE) for p in DEFAULT_EXCUSES)
+        return defaults + self.excuses
+
+    def is_excuse(self, reason: str) -> bool:
+        """The reason only says that tests or a design fixed the name."""
+        text = reason.split("#", 1)[0].strip().removesuffix(".")
+        return any(pattern.fullmatch(text) for pattern in self.known_excuses)
 
     @cached_property
     def known_synonyms(self) -> dict[str, str]:
@@ -138,6 +159,19 @@ def to_strings(value: Any) -> tuple[str, ...]:
     return tuple(value)
 
 
+def to_patterns(value: Any) -> tuple[re.Pattern[str], ...]:
+    """A list of case-insensitive regular expressions."""
+    return tuple(compile_pattern(item) for item in to_strings(value))
+
+
+def compile_pattern(item: str) -> re.Pattern[str]:
+    """``item`` compiled, or a ``ValueError`` naming it."""
+    try:
+        return re.compile(item, re.IGNORECASE)
+    except re.error as error:
+        raise ValueError(f"bad pattern {item!r}: {error}") from error
+
+
 def to_string(value: Any) -> str:
     """A string."""
     if not isinstance(value, str):
@@ -198,4 +232,5 @@ CONVERTERS: dict[str, Callable[[Any], Any]] = {
     "allow_names": to_strings,
     "factory_names": to_strings,
     "baseline": to_string,
+    "excuses": to_patterns,
 }

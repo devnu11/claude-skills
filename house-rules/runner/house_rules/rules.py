@@ -232,8 +232,9 @@ def is_verb(word: str, settings: Settings) -> bool:
 
 def check_query_properties(module: ParsedModule) -> Iterator[Measure]:
     """Methods that take nothing, return a value and change nothing should be properties."""
+    changing = list_changing_methods(module.tree)
     for site in walk_functions(module.tree):
-        if is_query(site, module.settings):
+        if site.qualname not in changing and is_query(site, module.settings):
             detail = f"`{site.qualname}` only reads: make it a property named with a noun"
             yield Measure(site.qualname, site.node.lineno, 1, detail)
 
@@ -247,6 +248,43 @@ def is_query(site: FunctionSite, settings: Settings) -> bool:
         return False
     nodes = list(walk_own_body(site.node))
     return returns_value(nodes) and not mutates_self(nodes, site.receiver)
+
+
+def list_changing_methods(tree: ast.Module) -> frozenset[str]:
+    """Qualnames of methods that change ``self``, directly or through their own class's methods."""
+    sites = [s for s in walk_functions(tree) if s.kind is Kind.METHOD and s.receiver]
+    direct = frozenset(
+        s.qualname for s in sites if mutates_self(list(walk_own_body(s.node)), s.receiver)
+    )
+    return extend_changing(sites, direct)
+
+
+def extend_changing(sites: list[FunctionSite], changing: frozenset[str]) -> frozenset[str]:
+    """Add the methods that call a changing method on ``self``, until nothing is added."""
+    for _ in range(len(sites)):
+        grown = changing | {s.qualname for s in sites if calls_changing(s, changing)}
+        if grown == changing:
+            break
+        changing = grown
+    return changing
+
+
+def calls_changing(site: FunctionSite, changing: frozenset[str]) -> bool:
+    """The method calls, on ``self``, a method of its own class that changes ``self``."""
+    owner = site.qualname.rpartition(".")[0]
+    return any(f"{owner}.{name}" in changing for name in list_self_calls(site))
+
+
+def list_self_calls(site: FunctionSite) -> set[str]:
+    """The names of the methods the body calls as ``self.<name>(...)``."""
+    calls = (n for n in walk_own_body(site.node) if isinstance(n, ast.Call))
+    return {
+        call.func.attr
+        for call in calls
+        if isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == site.receiver
+    }
 
 
 def walk_own_body(node: ast.AST) -> Iterator[ast.AST]:
@@ -282,10 +320,19 @@ def mutates_self(nodes: list[ast.AST], receiver: str) -> bool:
 
 
 def list_targets(node: ast.AST) -> list[ast.expr]:
-    """The targets an assignment or ``del`` writes to."""
+    """The targets an assignment or ``del`` writes to, tuples and lists unpacked."""
     if isinstance(node, ast.Assign | ast.Delete):
-        return list(node.targets)
-    return [node.target] if isinstance(node, ast.AugAssign | ast.AnnAssign) else []
+        found = list(node.targets)
+    else:
+        found = [node.target] if isinstance(node, ast.AugAssign | ast.AnnAssign) else []
+    return [leaf for target in found for leaf in list_target_leaves(target)]
+
+
+def list_target_leaves(target: ast.expr) -> list[ast.expr]:
+    """``a, (b, c)`` -> ``[a, b, c]``."""
+    if isinstance(target, ast.Tuple | ast.List):
+        return [leaf for item in target.elts for leaf in list_target_leaves(item)]
+    return [target]
 
 
 def is_mutating_call(function: ast.expr, receiver: str) -> bool:
@@ -318,6 +365,14 @@ def check_suppression_reasons(module: ParsedModule) -> Iterator[Measure]:
     for suppression in module.suppressions:
         if not suppression.reason:
             yield Measure(SUPPRESSIONS, suppression.line, 1, f"line {suppression.line}")
+
+
+def check_suppression_excuses(module: ParsedModule) -> Iterator[Measure]:
+    """Suppressions whose reason only says that tests or a design fixed the name."""
+    for suppression in module.suppressions:
+        if module.settings.is_excuse(suppression.reason):
+            detail = f"line {suppression.line}: {suppression.reason}"
+            yield Measure(SUPPRESSIONS, suppression.line, 1, detail)
 
 
 RULES = (
@@ -379,6 +434,13 @@ RULES = (
         Limits(0, 0),
         check_suppression_reasons,
         "suppression without a reason at {detail}",
+    ),
+    Rule(
+        "suppression-excuse",
+        'A suppression gives a reason, not "tests or a design fixed the name": fix the name.',
+        Limits(0, 0),
+        check_suppression_excuses,
+        "suppression excuses a name instead of giving a reason: {detail}",
     ),
 )
 RULE_IDS = frozenset(rule.name for rule in RULES)
