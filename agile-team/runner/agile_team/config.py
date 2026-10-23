@@ -568,6 +568,11 @@ PROVIDER_RULES: tuple[Rule, ...] = (
 )
 SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 REPEATED_ENVIRONMENT = "acceptance environment name {name!r} is repeated"
+EMPTY_HARNESS_PREPARE = (
+    "acceptance environment {name!r} (harness) has no prepare, so the Proxy's sandbox holds only "
+    "the presentation and its commands have no product to run; set prepare to build a runnable "
+    "copy there"
+)
 MISSING_ROLE = "roles.{name} is unknown; set extends or add .team/roles/{name}.md"
 DANGLING_ROLE = "roles.{name} extends unknown role {base!r}"
 
@@ -641,6 +646,12 @@ def validate(config: Config, known: Known) -> list[str]:
         *_validate_roles(config.roles, known.roles),
         *_validate_providers(config.providers),
     ]
+
+
+def environment_warnings(environments: list[Environment]) -> list[str]:
+    """Valid settings that leave the Proxy nothing to run (#56)."""
+    empty = [d for d in environments if d.kind == "harness" and not d.prepare.strip()]
+    return [EMPTY_HARNESS_PREPARE.format(name=d.name) for d in empty]
 
 
 def _validate_providers(providers: dict[str, Provider]) -> list[str]:

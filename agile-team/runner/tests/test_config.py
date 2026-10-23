@@ -160,3 +160,16 @@ def test_upstream_rules_messages(repo: Path) -> None:
 def test_upstream_valid_and_sync_off_allow_empty_branch(repo: Path) -> None:
     assert _upstream_problems(repo, {}) == []
     assert _upstream_problems(repo, {"remote": "", "branch": ""}) == []
+
+
+def test_a_harness_without_prepare_is_warned_about(repo: Path) -> None:
+    raw = {
+        "environment": [
+            {"name": "bare", "kind": "harness", "commands": ["uv run pytest"]},
+            {"name": "built", "kind": "harness", "commands": ["x"], "prepare": "make demo"},
+            {"name": "site", "kind": "web", "url": "http://localhost:1"},
+        ]
+    }
+    warnings = cfg.environment_warnings(cfg.from_raw(repo, raw).environments)
+    assert warnings == [cfg.EMPTY_HARNESS_PREPARE.format(name="bare")]
+    assert warnings[0].startswith("acceptance environment 'bare' (harness) has no prepare")

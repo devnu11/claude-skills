@@ -955,6 +955,8 @@ url = ""                       # web only; its host and port fill {host} and {po
 probe = ""                     # web only: path joined to url that must answer 200 (e.g. "api/snapshot")
 commands = []                  # harness only: the Proxy's Bash allowlist
 # prepare placeholders: {repo}, {sandbox} (absolute paths), {host}, {port} (from url)
+# `config check` warns about a harness with no prepare: its sandbox holds only the
+# presentation, so its commands have no product to run (#56)
 
 [[tool]]                       # optional, DevOps-owned (s99); a format only: nothing runs it yet
 name = "deploy.preview"        # lowercase letters, digits, - _ + and dots; not a built-in name or namespace
