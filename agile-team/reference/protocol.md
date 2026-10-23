@@ -4043,8 +4043,11 @@ This applies only when the runner runs from `.team/run/runner-pin`
   files or `~/secrets/` (hook plus Claude Code `permissions.deny` rules); Bash
   may not mention `ANTHROPIC_API_KEY` or the key paths; Bash git is limited to
   `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`,
-  `describe` and `cherry-pick -n`, so no role can commit, rewrite history or
-  push. Only the runner pushes, and only sprint branches (see "Sprint
+  `describe`, `cat-file`, `merge-base`, `ls-tree`, `rev-list`, `name-rev`,
+  `worktree list` and `cherry-pick -n`, so no role can commit, rewrite history
+  or push. The subcommand is found past git's global options, so
+  `git -C <dir> status` and `--git-dir`/`--work-tree` pass; a `-c`,
+  `--config-env` or `--exec-path` makes the call not read-only (#61). Only the runner pushes, and only sprint branches (see "Sprint
   boundaries"). The check sees through prefixes (s65): `X=1 git commit`,
   `env git commit`, `command git commit`, `timeout 5 git commit` and
   `/usr/bin/git commit` count as `git commit`. A confined step

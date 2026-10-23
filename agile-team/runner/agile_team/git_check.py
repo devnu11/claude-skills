@@ -20,8 +20,15 @@ from .refusal import Refusal, Rule
 from .suite_check import ASSIGNMENT
 
 SAFE_GIT = frozenset(
-    {"status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe"}
-)
+    {
+        "status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe",
+        "cat-file", "merge-base", "ls-tree", "rev-list", "name-rev",
+    }
+)  # fmt: skip
+# Read-only only with this action right after the subcommand.
+SAFE_GIT_ACTIONS = {"worktree": "list"}
+# Global options that can make even a read-only subcommand run a program.
+RUNS_PROGRAMS = frozenset({"--config-env", "--exec-path"})
 LOCAL_GIT = SAFE_GIT | frozenset(
     {
         "add", "rm", "mv", "restore", "checkout", "switch", "rebase", "commit", "stash",
@@ -375,9 +382,18 @@ def where(site: Site, call: GitCall, base: Path | None) -> tuple[Where, str]:
 
 
 def _read_only(call: GitCall) -> bool:
-    if call.first in SAFE_GIT:
+    """Read-only by the subcommand, past global options such as ``-C`` (#61)."""
+    if call.configs or any(w.partition("=")[0] in RUNS_PROGRAMS for w in call.words):
+        return False
+    if call.sub in SAFE_GIT or _is_safe_action(call):
         return True
-    return call.first == "cherry-pick" and bool(NO_COMMIT_FLAGS & set(call.words))
+    return call.sub == "cherry-pick" and bool(NO_COMMIT_FLAGS & set(call.words))
+
+
+def _is_safe_action(call: GitCall) -> bool:
+    action = SAFE_GIT_ACTIONS.get(call.sub)
+    after = call.words[call.words.index(call.sub) + 1 :] if action else ()
+    return after[:1] == (action,)
 
 
 def _is_local(call: GitCall) -> bool:
