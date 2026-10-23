@@ -30,12 +30,12 @@ def test_falls_back_to_home(key_home: Path) -> None:
     ],
 )
 def test_a_configured_key_outside_the_repo_is_external(key_file: str, where: Path) -> None:
-    source = keys.KeyLocations(FAKE_REPO, key_file, FAKE_HOME).configured()
+    source = keys.KeyLocations(FAKE_REPO, key_file, FAKE_HOME).configured_key
     assert source == keys.KeySource(where, keys.KeyOrigin.EXTERNAL)
 
 
 def test_an_absolute_key_inside_the_repo_is_a_repo_key() -> None:
-    source = keys.KeyLocations(FAKE_REPO, str(FAKE_REPO / "k"), FAKE_HOME).configured()
+    source = keys.KeyLocations(FAKE_REPO, str(FAKE_REPO / "k"), FAKE_HOME).configured_key
     assert source.origin is keys.KeyOrigin.REPO
 
 

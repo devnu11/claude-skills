@@ -52,9 +52,10 @@ class KeyLocations:
 
     def candidates(self) -> list[KeySource]:
         """Key files in resolution order."""
-        return [self.configured(), KeySource(self.home / HOME_KEY, KeyOrigin.HOME)]
+        return [self.configured_key, KeySource(self.home / HOME_KEY, KeyOrigin.HOME)]
 
-    def configured(self) -> KeySource:
+    @property
+    def configured_key(self) -> KeySource:
         """The configured key file, ``~`` expanded; ``EXTERNAL`` outside the repo (#53)."""
         path = self.repo / _expand_home(self.key_file, self.home)
         inside = repo_relative(self.repo, system.resolve(path)) is not None
