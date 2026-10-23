@@ -6,8 +6,8 @@ import pytest
 from agile_team import system
 from agile_team.events import EventKind
 from agile_team.gates import StoryState, StoryStatus
-from agile_team.salvage import Cause
-from agile_team.workspaces import find_prune_reason
+from agile_team.salvage import Cause, InFlight
+from agile_team.workspaces import PruneReason, find_prune_reason
 
 from .fake_system import Done, FakeSystem
 
@@ -51,20 +51,26 @@ def test_a_stuck_open_story_in_the_sprint_is_kept(status: StoryStatus) -> None:
 
 
 def test_a_done_story_is_pruned_as_done() -> None:
-    assert find_prune_reason(story("s1", status=StoryStatus.DONE), 1) == "done"
+    assert find_prune_reason(story("s1", status=StoryStatus.DONE), 1) == PruneReason.DONE
 
 
 def test_a_cancelled_story_is_pruned_as_cancelled() -> None:
-    assert find_prune_reason(story("s1", status=StoryStatus.CANCELLED), 1) == "cancelled"
+    assert find_prune_reason(story("s1", status=StoryStatus.CANCELLED), 1) == PruneReason.CANCELLED
 
 
 def test_a_story_outside_the_sprint_is_pruned_as_not_in_sprint() -> None:
-    assert find_prune_reason(story("s1", sprint=None), 1) == "not in the sprint"
-    assert find_prune_reason(story("s1", sprint=2), 1) == "not in the sprint"
+    assert find_prune_reason(story("s1", sprint=None), 1) == "not_in_sprint"
+    assert find_prune_reason(story("s1", sprint=2), 1) == "not_in_sprint"
 
 
 def test_a_worktree_with_no_story_is_pruned_as_unknown() -> None:
-    assert find_prune_reason(None, 1) == "not in the sprint"
+    assert find_prune_reason(None, 1) == "unknown"
+
+
+def test_a_story_with_a_step_in_flight_is_never_pruned() -> None:
+    flying = InFlight("architect", "s1", "brief")
+    done = story("s1", status=StoryStatus.DONE, sprint=2, in_flight=flying)
+    assert find_prune_reason(done, 1) is None
 
 
 # ---------- AC1: the worktree stays ----------
@@ -112,9 +118,25 @@ def test_each_removal_writes_one_event_naming_story_and_reason_ac2(make_runtime)
         story("s3", status=StoryStatus.CANCELLED),
         story("s4", sprint=None),
     )
-    got = {(e.story, e.data["reason"]) for e in pruned(rt)}
-    assert got == {("s2", "done"), ("s3", "cancelled"), ("s4", "not in the sprint")}
+    got = {(e.story, e.data["worktree"], e.data["reason"]) for e in pruned(rt)}
+    assert got == {
+        ("s2", "s2", "done"),
+        ("s3", "s3", "cancelled"),
+        ("s4", "s4", "not_in_sprint"),
+    }
     assert len(pruned(rt)) == 3
+    assert all(e.role is None for e in pruned(rt))
+
+
+def test_a_removed_story_worktree_head_is_cleared_ac2(make_runtime) -> None:
+    rt = resumed(make_runtime, story("s1"), story("s2", status=StoryStatus.DONE))
+    assert rt.state.stories["s1"].worktree_head == SHA
+    assert rt.state.stories["s2"].worktree_head == ""
+
+
+def test_a_kept_worktree_logs_no_event_ac2(make_runtime) -> None:
+    rt = resumed(make_runtime, story("s1"), story("s2", status=StoryStatus.BLOCKED))
+    assert pruned(rt) == []
 
 
 def test_a_worktree_of_an_unknown_story_is_removed_with_an_event_ac2(make_runtime, fake) -> None:
@@ -122,7 +144,8 @@ def test_a_worktree_of_an_unknown_story_is_removed_with_an_event_ac2(make_runtim
     rt.state.sprint = 1
     system.make_dirs(rt.config.run_dir / "worktrees" / "s9")
     rt.recover_stories(Cause.CRASH)
-    assert [(e.story, e.data["reason"]) for e in pruned(rt)] == [("s9", "not in the sprint")]
+    assert [(e.story, e.data["reason"]) for e in pruned(rt)] == [("s9", "unknown")]
+    assert pruned(rt)[0].data == {"worktree": "s9", "reason": "unknown"}
     assert len(removals(fake)) == 1
 
 
@@ -133,6 +156,16 @@ def test_land_and_replay_scratch_dirs_are_still_removed_ac2(make_runtime, fake) 
         system.make_dirs(rt.config.run_dir / name)
     rt.recover_stories(Cause.CRASH)
     assert len(removals(fake)) == 2
+    got = {(e.story, e.role, e.data["worktree"], e.data["reason"]) for e in pruned(rt)}
+    assert got == {(None, None, "land", "scratch"), (None, None, "replay", "scratch")}
+
+
+def test_a_cut_off_step_end_is_the_last_event_of_a_resume_ac2(make_runtime) -> None:
+    flying = story("s1", in_flight=InFlight("architect", "s1", "brief"))
+    rt = resumed(make_runtime, flying, story("s2", status=StoryStatus.DONE))
+    kinds = [e.kind for e in rt.events.events()]
+    assert EventKind.WORKTREE_PRUNED in kinds
+    assert kinds[-1] == EventKind.STEP_END
 
 
 def test_a_pinned_replay_dir_is_kept_ac2(make_runtime, fake) -> None:
@@ -145,6 +178,7 @@ def test_a_pinned_replay_dir_is_kept_ac2(make_runtime, fake) -> None:
     system.make_dirs(rt.config.run_dir / "replay")
     rt.recover_stories(Cause.CRASH)
     assert removals(fake) == []
+    assert pruned(rt) == []
 
 
 # ---------- AC3: drift is reported at the next step, not removed ----------
