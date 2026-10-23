@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from agile_team import system
-from agile_team.events import EventKind
+from agile_team.events import Event, EventKind
 from agile_team.gates import StoryState, StoryStatus
 from agile_team.salvage import Cause, InFlight
 from agile_team.workspaces import PruneReason, find_prune_reason
@@ -161,8 +161,14 @@ def test_land_and_replay_scratch_dirs_are_still_removed_ac2(make_runtime, fake) 
 
 
 def test_a_cut_off_step_end_is_the_last_event_of_a_resume_ac2(make_runtime) -> None:
+    rt = make_runtime()
+    rt.state.sprint = 1
     flying = story("s1", in_flight=InFlight("architect", "s1", "brief"))
-    rt = resumed(make_runtime, flying, story("s2", status=StoryStatus.DONE))
+    rt.state.stories = {"s1": flying, "s2": story("s2", status=StoryStatus.DONE)}
+    for sid in rt.state.stories:
+        system.make_dirs(rt.config.run_dir / "worktrees" / sid)
+    rt.events.emit(Event(EventKind.STEP_START, "architect", "s1", {"brief": "brief"}))
+    rt.recover_stories(Cause.CRASH)
     kinds = [e.kind for e in rt.events.events()]
     assert EventKind.WORKTREE_PRUNED in kinds
     assert kinds[-1] == EventKind.STEP_END
