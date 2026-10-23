@@ -104,7 +104,7 @@ def test_a_pass_stays_until_the_turn_is_done_r1() -> None:
     assert desk.busy
     again = desk.take()
     assert again is not None and again.lines == ["a"]
-    desk.done()
+    desk.finish_turn()
     assert desk.take() is None and not desk.busy
 
 
@@ -114,7 +114,7 @@ def test_passes_arriving_during_a_turn_wait_for_the_next_r1() -> None:
     desk.queue(p(Trigger.LAND_BOUNCED, "a", "s1"))
     desk.take()
     desk.queue(p(Trigger.WORKTREE_DRIFT, "b", "s2"))
-    desk.done()
+    desk.finish_turn()
     nxt = desk.take()
     assert nxt is not None and nxt.lines == ["b"]
 
@@ -132,7 +132,7 @@ def test_snapshot_marks_cover_every_story_r1() -> None:
     """s159 spec: snapshot marks cover every story."""
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
-    assert snap.moved(["s1"], state_with(s)) is None
+    assert snap.find_moved(["s1"], state_with(s)) is None
 
 
 def test_snapshot_refuses_a_story_that_moved_r1() -> None:
@@ -140,7 +140,7 @@ def test_snapshot_refuses_a_story_that_moved_r1() -> None:
     s = StoryState(id="s1", title="t", step="implement")
     snap = po_desk.TurnSnapshot.take(state_with(s))
     s.step = "acceptance"
-    text = snap.moved(["s1"], state_with(s))
+    text = snap.find_moved(["s1"], state_with(s))
     assert text is not None and text.startswith("story s1 moved since your turn began")
 
 
@@ -151,7 +151,7 @@ def test_refresh_lets_the_po_follow_its_own_change_r1() -> None:
     snap = po_desk.TurnSnapshot.take(state)
     s.step = "acceptance"
     snap.refresh(["s1"], state)
-    assert snap.moved(["s1"], state) is None
+    assert snap.find_moved(["s1"], state) is None
 
 
 def test_unnamed_stories_are_not_checked_r1() -> None:
@@ -161,7 +161,7 @@ def test_unnamed_stories_are_not_checked_r1() -> None:
     state = state_with(a, b)
     snap = po_desk.TurnSnapshot.take(state)
     b.step = "land"
-    assert snap.moved(["s1"], state) is None
+    assert snap.find_moved(["s1"], state) is None
 
 
 # ---------- rewrite.pair_replay (R4) ----------
