@@ -193,7 +193,7 @@ def test_runtime_at_views_the_worktree_b3(make_runtime) -> None:
 def test_runtime_has_the_split_step_methods_c6() -> None:
     from agile_team.dispatch import Runtime
 
-    for name in ("take_off", "settle_work", "apply_settled", "at"):
+    for name in ("take_off", "settle_work", "apply_settled", "get_story_view"):
         assert hasattr(Runtime, name)
 
 

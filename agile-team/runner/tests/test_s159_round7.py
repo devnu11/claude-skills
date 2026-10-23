@@ -227,7 +227,7 @@ def folder_of(runtime) -> Path:
 
 def test_each_story_view_reports_in_its_own_folder_n11b(make_runtime) -> None:
     rt = run_dir_view(make_runtime)
-    one, two = rt.at(story_of("s1")), rt.at(story_of("s2"))
+    one, two = rt.get_story_view(story_of("s1")), rt.get_story_view(story_of("s2"))
     run = rt.config.run_dir
     assert folder_of(one) == run / test_reports.STORY_FOLDER / "s1"
     assert folder_of(two) == run / test_reports.STORY_FOLDER / "s2"
@@ -238,8 +238,8 @@ def test_no_report_folder_is_inside_another_n11b(make_runtime) -> None:
     run = rt.config.run_dir
     folders = [
         folder_of(rt),
-        folder_of(rt.at(story_of("s1"))),
-        folder_of(rt.at(story_of("s2"))),
+        folder_of(rt.get_story_view(story_of("s1"))),
+        folder_of(rt.get_story_view(story_of("s2"))),
         run / test_reports.LANDING_FOLDER,
     ]
     for one in folders:
@@ -262,7 +262,7 @@ def test_the_landing_checks_report_in_the_landing_folder_n11b(
 def test_a_story_view_leaves_the_parents_pipeline_alone_n15(make_runtime) -> None:
     rt = run_dir_view(make_runtime)
     before = (rt.pipeline, rt.pipeline.checks, folder_of(rt), rt.pipeline.checks.stages)
-    view = rt.at(story_of("s1"))
+    view = rt.get_story_view(story_of("s1"))
     assert view.pipeline is not rt.pipeline and view.pipeline.checks is not rt.pipeline.checks
     assert (rt.pipeline, rt.pipeline.checks, folder_of(rt), rt.pipeline.checks.stages) == before
     assert view.pipeline.checks.stages == view.stage_log.open
@@ -270,7 +270,7 @@ def test_a_story_view_leaves_the_parents_pipeline_alone_n15(make_runtime) -> Non
 
 def test_a_view_of_a_plain_runtime_does_not_nest_the_folder_n15(make_runtime) -> None:
     rt = run_dir_view(make_runtime)
-    view = rt.at(story_of("s1"))
+    view = rt.get_story_view(story_of("s1"))
     assert folder_of(view).parent.parent == rt.config.run_dir  # reports-story/<id>, once
     assert folder_of(view).parts.count(test_reports.STORY_FOLDER) == 1
 
