@@ -3238,8 +3238,10 @@ against the tree, and a held design keeps its worktree, so it counts toward
 **Story rebases.** A landing conflict (with a round) or a carried story's
 replay conflict (without one) records the story's `rebase` (`onto`, `base`,
 `old`, `branch`, `files`, `role`). Before the step the runner runs, in the
-worktree, `git checkout -b <story_prefix><id>-r<k>` and `git rebase --onto
-<onto> <base>`, which stops at the conflict. The step may write only the
+worktree, `git checkout -B <story_prefix><id>-r<k>` (a leftover branch of
+that name is reset to the old tip) and `git rebase --onto <onto> <base>`,
+which stops at the conflict. A worktree already on that branch, or stopped
+part-way through rebasing it, is left as it is and the step resumes it. The step may write only the
 conflicting files, and its git is confined to the story's worktree (as a
 DevOps rebase fix's is to its scratch worktree), so its `git add` and `git
 rebase --continue` run there. That worktree shares the team repo's remotes,
@@ -3259,7 +3261,9 @@ round). A step that ends any other way (blocked, failed, no valid handoff)
 or leaves the rebase in progress holds the story (`the story rebase onto
 <onto> did not finish (<why>); nothing was committed or pushed, ...`): the
 runner commits, quarantines and holds back nothing, keeps the recorded
-worktree head, and leaves the worktree and the rebase as they stopped. A
+worktree head, and leaves the worktree and the rebase as they stopped.
+Released, the story re-runs the step: its stopped rebase is not counted as
+worktree drift, and the role carries on from the conflict. A
 story whose rebase is pending is never pushed, so its old branch and lease
 stay as they were.
 

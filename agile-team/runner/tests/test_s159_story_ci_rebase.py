@@ -209,7 +209,7 @@ def test_prepare_branches_then_rebases_onto_the_new_base_s2(fake: FakeSystem) ->
     fake.reply(("rebase", "--onto"), Done(1, "CONFLICT"))
     story_rebase.prepare(Git(FAKE_REPO), REBASE)
     got = argvs(fake)
-    branch = next(a for a in got if "checkout" in a and "-b" in a and REBASE.branch in a)
+    branch = next(a for a in got if "checkout" in a and "-B" in a and REBASE.branch in a)
     rebase = next(a for a in got if "rebase" in a and "--onto" in a)
     assert got.index(branch) < got.index(rebase)
     assert REBASE.onto in rebase and REBASE.base in rebase

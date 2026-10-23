@@ -6,6 +6,9 @@ story's worktree; ``refusal`` judges the result before the story adopts the new 
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from . import system
 from .checkout import operation
 from .git_ops import Git
 from .owners import Owners
@@ -21,6 +24,7 @@ COMMITS_CHANGED = (
     "reordered or reworded"
 )
 DEVOPS = "devops"
+HEAD_NAME = "rebase-merge/head-name"
 STORY_REBASE_LINES = (
     "Story {id}: its branch moves onto the sprint head. The runner started `git rebase --onto "
     "{onto} {base}` in this worktree, on the branch {branch}; it stopped on conflicts in: {files}.",
@@ -40,11 +44,28 @@ def needs_devops(  # house-rules: allow verb-name -- name fixed by the tests
 
 
 def prepare(git: Git, rebase: StoryRebase) -> None:
-    """S2: branch from the old tip and start the rebase; it stops at the conflict."""
-    if git.branch() == rebase.branch:
+    """S2: branch from the old tip and start the rebase; it stops at the conflict.
+
+    A worktree already on the rebase branch, or stopped part-way through rebasing it, is
+    left as it is: the step resumes it. A leftover rebase branch is reset to the old tip.
+    """
+    if is_resumable(git, rebase):
         return
-    git.run("checkout", "-b", rebase.branch)
+    git.run("checkout", "-B", rebase.branch)
     git.attempt(*SCRATCH_REBASE_ARGV, "--onto", rebase.onto, rebase.base)
+
+
+def is_resumable(git: Git, rebase: StoryRebase) -> bool:
+    """S3: the worktree is on the rebase branch, or stopped part-way through rebasing it."""
+    if operation(git) is None:
+        return git.branch() == rebase.branch
+    return _read_rebased_ref(git) == f"refs/heads/{rebase.branch}"
+
+
+def _read_rebased_ref(git: Git) -> str:
+    """The branch an interrupted ``rebase --merge`` is rebasing, or ``""``."""
+    path = Path(git.run("rev-parse", "--absolute-git-dir").strip()) / HEAD_NAME
+    return system.read_text(path).strip() if system.exists(path) else ""
 
 
 def refusal(  # house-rules: allow verb-name -- name fixed by the tests

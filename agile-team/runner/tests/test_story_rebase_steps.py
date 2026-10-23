@@ -230,3 +230,45 @@ def test_a_role_step_still_holds_back_an_unexplained_requirement_edit(make_runti
     plan.kind = dispatch.StepKind.ROLE
     held = view.settle_tree(plan)
     assert held.get("held_back") and plan.unexplained.startswith("explain change to REQ-001")
+
+
+# ---------- re-entry: a released held rebase resumes (S3) ----------
+
+
+def stopped_rebasing(fake: FakeSystem, branch: str) -> None:
+    """The worktree stopped part-way through rebasing ``branch``."""
+    mid_rebase(fake)
+    system.write_text(Path(GIT_DIR) / "rebase-merge" / "head-name", f"refs/heads/{branch}\n")
+
+
+def checkouts(fake: FakeSystem) -> list[tuple[str, ...]]:
+    return [c.argv for c in fake.commands if "checkout" in c.argv or "--onto" in c.argv]
+
+
+def test_a_released_stopped_rebase_is_not_drift_and_resumes(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, REBASED)
+    assert dispatch.find_drift(view.git, plan.story) is None
+    view._set_story_rebase_scope(plan)
+    assert checkouts(fake) == []
+
+
+def test_a_stopped_rebase_of_another_branch_is_still_drift(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, "someone-else")
+    assert dispatch.find_drift(view.git, plan.story) is not None
+
+
+def test_a_worktree_with_no_rebase_pending_drifts_as_before(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, REBASED)
+    plan.story.rebase = None
+    assert dispatch.find_drift(view.git, plan.story) is not None
+
+
+def test_a_leftover_rebase_branch_is_reset_to_the_old_tip(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, BRANCH + "\n"))
+    view._set_story_rebase_scope(plan)
+    [checkout, rebase] = checkouts(fake)
+    assert checkout[-2:] == ("-B", REBASED) and rebase[-2:] == (ONTO, BASE)

@@ -936,7 +936,7 @@ class Runtime:
         space = Workspaces(self.git, self.config)
         path = space.path_of(story.id)
         if story.worktree_head and system.is_dir(path):
-            drift = checkout.check_worktree(Git(path, self.git.options), story)
+            drift = find_drift(Git(path, self.git.options), story)
             if drift is not None:
                 return self._report_drift(story, space.changed_files(story.id), path)
         self._make_workspace(story, space)
@@ -1946,6 +1946,13 @@ class Runtime:
             EventKind.RULING, plan, ruling=ruling, reason=handoff.ruling_reason, now_at=now_at
         )
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
+
+
+def find_drift(git: Git, story: StoryState) -> checkout.Drift | None:
+    """B5: how the story's worktree drifted; its own held story rebase is not drift (S3)."""
+    if story.rebase is not None and story_rebase.is_resumable(git, story.rebase):
+        return None
+    return checkout.check_worktree(git, story)
 
 
 def find_rebase_refusal(role: str, story: StoryState | None) -> str | None:
