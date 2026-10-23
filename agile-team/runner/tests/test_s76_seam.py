@@ -43,7 +43,7 @@ def test_a_command_shell_run_of_a_hung_child_times_out_kills_its_group_and_keeps
     assert out.splitlines()[-1] == NO_HUNG_LINE
     assert [(n, g, s) for n, g, s in fake.signals] == [("killpg", FIRST_CHILD_PID, signal.SIGKILL)]
     assert fake.clock == START_CLOCK + 1.5
-    assert fake.commands == [system.ShellCommand("sleep 30", repo)]
+    assert [(c.text, c.cwd) for c in fake.commands] == [("sleep 30", repo)]
 
 
 def test_sandbox_env_reads_the_fake_environment(fake: FakeSystem, scratch: Path) -> None:
