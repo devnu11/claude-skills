@@ -137,16 +137,12 @@ def test_the_excuse_sample_merges_into_one_failing_finding(check_text: CheckText
 
 
 def test_an_excuse_still_hides_the_rule_it_names(check_text: CheckText) -> None:
-    text = (
-        "def fetch(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
-    )
+    text = "def area(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
     assert {f.rule for f in check_text(text)} == {"suppression-excuse"}
 
 
 def test_a_repo_can_disable_the_excuse_rule(check_text: CheckText) -> None:
-    text = (
-        "def fetch(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
-    )
+    text = "def area(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
     assert excuse_findings(check_text, text, disable=frozenset({"suppression-excuse"})) == []
 
 
