@@ -57,6 +57,16 @@ def test_config_check(configured: Path, capsys) -> None:
     assert "role broken" in out
 
 
+def test_config_check_warns_about_a_harness_without_prepare(configured: Path, capsys) -> None:
+    config_file = configured / ".agile-team.toml"
+    harness = '\n[[environment]]\nname = "bare"\nkind = "harness"\ncommands = ["uv run x"]\n'
+    system.write_text(config_file, system.read_text(config_file) + harness)
+    run("--repo", str(configured), "config", "check")
+    assert "warning: acceptance environment 'bare' (harness) has no prepare" in (
+        capsys.readouterr().out
+    )
+
+
 def test_config_missing(scratch: Path, capsys) -> None:
     assert run("--repo", str(scratch), "config", "check") == 1
     assert "not found" in capsys.readouterr().err
