@@ -299,9 +299,7 @@ class Config:
     def run_dir(self) -> Path:
         return (self.run_home or self.repo) / RUN_DIR
 
-    def at_worktree(  # house-rules: allow verb-name -- name fixed by the tests
-        self, path: Path
-    ) -> Config:
+    def get_worktree_config(self, path: Path) -> Config:
         """This config seen from a story's worktree; ``run_dir`` stays the main checkout's."""
         return replace(self, repo=path, run_home=self.run_home or self.repo)
 
@@ -534,7 +532,7 @@ HEALTH_RULES: tuple[Rule, ...] = (
 SAFE_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
 
 
-def _prefixes_apart(  # house-rules: allow verb-name -- name fixed by the design
+def _has_separate_prefixes(
     u: UpstreamSettings,
 ) -> bool:
     one, other = u.prefix, u.story_prefix
@@ -552,7 +550,7 @@ UPSTREAM_RULES: tuple[Rule, ...] = (
         "upstream.story_prefix must be a branch name prefix",
     ),
     (
-        _prefixes_apart,
+        _has_separate_prefixes,
         "upstream.story_prefix must differ from upstream.prefix, "
         "and neither may start with the other",
     ),

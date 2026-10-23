@@ -37,8 +37,19 @@ apply them.
   `rt = self.runtime`. Keep a local only when it makes the code much easier
   to read, and then give it a whole-word name
   (`boundary = self.runtime.state.boundary`).
-- These rules are the reviewer's judgement, not an automatic check. A quality
-  pass never renames a name that a test uses.
+- house-rules checks the verb and property rules (`verb-name`,
+  `query-property`, s157); the whole-word and alias rules are the reviewer's
+  judgement. A quality pass never renames a name that a test uses.
+- Names start at the design (s161, ADR-0089). The architect names every
+  function, method, class and module a story adds by these rules. A
+  developer or unit-tester who meets a design name the rules refuse hands
+  off `changes_requested` with `next_role: architect`, naming the function
+  and the rule. They don't rename it and don't suppress the rule. A
+  `# house-rules: allow` is only for a heuristic that misreads correct code,
+  with that reason. "Name fixed by the tests" or "by the design" fails
+  `suppression-excuse`.
+- A real verb missing from house-rules' table goes into `.house-rules.toml`
+  `verbs` in the design that needs it, never into a suppression.
 
 ## Refusals and side effects
 

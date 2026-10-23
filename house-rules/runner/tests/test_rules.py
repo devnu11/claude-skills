@@ -122,3 +122,91 @@ def test_ruff_aliases_map_to_rules() -> None:
 
 def test_rule_names_are_unique() -> None:
     assert len(RULE_IDS) == len(RULES)
+
+
+def excuse_findings(check_text: CheckText, text: str, **overrides: object) -> list:
+    return [f for f in check_text(text, **overrides) if f.rule == "suppression-excuse"]
+
+
+def test_the_excuse_sample_merges_into_one_failing_finding(check_text: CheckText) -> None:
+    text = (SAMPLES / "suppression_excuse_fail.py").read_text()
+    [finding] = excuse_findings(check_text, text)
+    assert (finding.level, finding.line, finding.path) == (Level.FAIL, 4, "sample.py")
+    for reason in ("tests use it", "s163 design name", "NAME FIXED BY THE DESIGN"):
+        assert reason in finding.message
+
+
+def test_an_excuse_still_hides_the_rule_it_names(check_text: CheckText) -> None:
+    text = "def area(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
+    assert {f.rule for f in check_text(text)} == {"suppression-excuse"}
+
+
+def test_a_repo_can_disable_the_excuse_rule(check_text: CheckText) -> None:
+    text = "def area(x):  # house-rules: allow verb-name -- name fixed by the tests\n    return x\n"
+    assert excuse_findings(check_text, text, disable=frozenset({"suppression-excuse"})) == []
+
+
+def test_unpacked_assignment_targets_are_a_change_q1(check_text: CheckText) -> None:
+    text = (
+        "class A:\n"
+        "    def drain(self):\n        queued, self.q = self.q, []\n        return len(queued)\n"
+        "    def flush(self):\n        [a, self.q] = [1, []]\n        return a\n"
+    )
+    assert [f for f in check_text(text) if f.rule == "query-property"] == []
+
+
+def test_a_method_reaching_a_change_through_self_calls_is_not_a_query_q2(
+    check_text: CheckText,
+) -> None:
+    text = (
+        "class A:\n"
+        "    def deliver_news(self):\n        return self._step()\n"
+        "    def _step(self):\n        return self._save()\n"
+        "    def _save(self):\n        self.x = 1\n        return 1\n"
+    )
+    assert [f for f in check_text(text) if f.rule == "query-property"] == []
+
+
+def test_a_method_calling_a_pure_sibling_is_still_a_query_q2(check_text: CheckText) -> None:
+    text = (
+        "class A:\n"
+        "    def get_size(self):\n        return self._count()\n"
+        "    def _count(self):\n        return len(self.items)\n"
+    )
+    assert "A.get_size" in [f.symbol for f in check_text(text) if f.rule == "query-property"]
+
+
+def test_a_same_named_changer_in_another_class_does_not_count_q2(check_text: CheckText) -> None:
+    text = (
+        "class A:\n"
+        "    def get_size(self):\n        return self._count()\n"
+        "    def _count(self):\n        return len(self.items)\n"
+        "class B:\n"
+        "    def _count(self):\n        self.n = 1\n        return 1\n"
+    )
+    assert "A.get_size" in [f.symbol for f in check_text(text) if f.rule == "query-property"]
+
+
+def test_a_line_suppression_cannot_silence_the_excuse_rule_e6(check_text: CheckText) -> None:
+    text = (
+        "def area(x):  # house-rules: allow verb-name, suppression-excuse"
+        " -- name fixed by the tests\n    return x\n"
+    )
+    findings = check_text(text)
+    assert {f.rule for f in findings} == {"suppression-excuse"}
+
+
+def test_a_line_suppression_cannot_silence_the_reason_rule_e6(check_text: CheckText) -> None:
+    text = "def area(x):  # house-rules: allow verb-name, suppression-reason\n    return x\n"
+    assert "suppression-reason" in {f.rule for f in check_text(text)}
+
+
+def test_a_call_on_another_object_is_judged_as_before_q2(check_text: CheckText) -> None:
+    text = (
+        "class A:\n"
+        "    def get_size(self):\n        return self.other.save_all()\n"
+        "    def get_count(self):\n        return self.other.total()\n"
+    )
+    symbols = [f.symbol for f in check_text(text) if f.rule == "query-property"]
+    assert "A.get_count" in symbols
+    assert "A.get_size" not in symbols

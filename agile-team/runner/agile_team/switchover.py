@@ -34,7 +34,7 @@ class SwitchFacts:
     ahead: int
 
 
-def refusals(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def list_refusals(
     facts: SwitchFacts,
 ) -> list[str]:
     """Every reason the switch can't happen yet."""
@@ -90,7 +90,7 @@ def find_merged(upstream: Upstream, heads: Sequence[str]) -> dict[str, str]:
 
 def _find_why_merged(upstream: Upstream, head: str) -> str | None:
     try:
-        return upstream.why_in_target(head)
+        return upstream.classify_in_target(head)
     except GitError:
         return None
 

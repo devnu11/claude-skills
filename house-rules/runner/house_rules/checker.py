@@ -14,6 +14,7 @@ from .source import Source
 from .suppress import parse_suppressions
 
 PARSE_ERROR = "parse-error"
+UNSUPPRESSIBLE = frozenset({"suppression-reason", "suppression-excuse"})
 
 
 @dataclass(frozen=True)
@@ -66,10 +67,15 @@ class RuleRun:
     @property
     def findings(self) -> list[Finding]:
         """Measure, drop suppressed lines, merge per symbol, then grade."""
-        allowed = {item.line for item in self.module.suppressions if self.rule.name in item.rules}
+        allowed = set() if self.rule.name in UNSUPPRESSIBLE else self.suppressed_lines
         kept = [measure for measure in self.rule.check(self.module) if measure.line not in allowed]
         graded = (self.grade(measure) for measure in merge_measures(kept))
         return [finding for finding in graded if finding]
+
+    @property
+    def suppressed_lines(self) -> set[int]:
+        """Lines whose suppression names this rule."""
+        return {item.line for item in self.module.suppressions if self.rule.name in item.rules}
 
     def grade(self, measure: Measure) -> Finding | None:
         """The finding a measure makes under the repo's limits and severity, if any."""

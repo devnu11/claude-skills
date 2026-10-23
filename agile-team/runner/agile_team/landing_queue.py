@@ -48,9 +48,7 @@ def rank_smallest_first(candidates: Sequence[Candidate]) -> list[str]:
     return [c.story for c in ranked]
 
 
-def arrange(  # house-rules: allow verb-name -- name fixed by the s163 design
-    candidates: Sequence[Candidate], placed: Sequence[str]
-) -> list[str]:
+def arrange(candidates: Sequence[Candidate], placed: Sequence[str]) -> list[str]:
     """Q2: the placed ids that still wait, in the PO's order, then the rest smallest first."""
     waiting = {c.story for c in candidates}
     first = [i for i in dict.fromkeys(placed) if i in waiting]
@@ -66,9 +64,8 @@ class LandingQueue:
         self.sizes: dict[tuple[str, ...], int] = {}
         self.reverting = ""
 
-    def waiting(  # house-rules: allow query-property, verb-name -- name fixed by the s163 design
-        self,
-    ) -> list[Candidate]:
+    @property
+    def candidates(self) -> list[Candidate]:
         """Stories waiting to land and landing reverts waiting, each with its size."""
         ids = [*self._ready_ids, *self._queued_ids]
         return [Candidate(i, self.measure(i)) for i in ids if i != self.runtime.state.landing]
@@ -86,23 +83,24 @@ class LandingQueue:
     def _queued_ids(self) -> list[str]:
         return list(dict.fromkeys(call.story_id for call in self.runtime.revert_queue))
 
-    def order(  # house-rules: allow query-property, verb-name -- name fixed by the s163 design
-        self,
-    ) -> list[str]:
+    @property
+    def order(self) -> list[str]:
         """Q2: the full order of the stories waiting."""
-        return arrange(self.waiting(), self.runtime.state.landing_order)
+        return arrange(self.candidates, self.runtime.state.landing_order)
 
-    def next_up(  # house-rules: allow query-property, verb-name -- name fixed by the s163 design
-        self,
-    ) -> str | None:
+    def pick_next(self) -> str | None:
         """Q1, Q5: the one now landing, else the first waiting, else ``None``."""
+        self._drop_stale_landing()
+        if self.runtime.state.landing:
+            return self.runtime.state.landing
+        found = self.order
+        return found[0] if found else None
+
+    def _drop_stale_landing(self) -> None:
+        """Q5: forget a landing slot whose story no longer lands."""
         state = self.runtime.state
         if state.landing and not self._is_live(state.landing):
             state.landing = ""
-        if state.landing:
-            return state.landing
-        found = self.order()
-        return found[0] if found else None
 
     def _is_live(self, story_id: str) -> bool:
         story = self.runtime.state.stories.get(story_id)
@@ -131,15 +129,13 @@ class LandingQueue:
         self.sizes = {k: v for k, v in self.sizes.items() if k[0] != story_id}
         self.runtime.save()
 
-    def place(  # house-rules: allow verb-name -- name fixed by the s163 design
-        self, placement: Placement
-    ) -> dict[str, Any]:
+    def place(self, placement: Placement) -> dict[str, Any]:
         """Q3, Q6: set the PO's order; a refusal or the result."""
         stories = list(dict.fromkeys(placement.stories)) if placement.stories else []
         refusal = self._find_refusal(stories)
         if refusal is not None:
             return self._make_refused(refusal)
-        waiting = self.waiting()
+        waiting = self.candidates
         order, smallest = arrange(waiting, stories), rank_smallest_first(waiting)
         if order != smallest and not placement.reason.strip():
             return self._make_refused(ORDER_NEEDS_REASON.format(smallest=", ".join(smallest)))
@@ -154,7 +150,7 @@ class LandingQueue:
             return NO_STORIES
         if state.landing in stories:
             return NOW_LANDING.format(id=state.landing)
-        ids = [c.story for c in self.waiting()]
+        ids = [c.story for c in self.candidates]
         missing = next((i for i in stories if i not in ids), None)
         return None if missing is None else NOT_WAITING.format(id=missing, ids=", ".join(ids))
 
@@ -163,7 +159,7 @@ class LandingQueue:
     ) -> dict[str, Any]:
         rt = self.runtime
         rt.state.landing_order = placement.stories
-        sizes = {c.story: c.size for c in self.waiting()}
+        sizes = {c.story: c.size for c in self.candidates}
         data = {"order": order, "placed": placement.stories, "smallest": smallest}
         data |= {"sizes": sizes, "reason": placement.reason}
         rt.events.emit(Event(EventKind.LANDING_ORDER, "po", None, data))

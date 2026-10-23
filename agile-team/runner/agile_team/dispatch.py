@@ -501,14 +501,14 @@ class Runtime:
     def halted_by(self, found: Halt | None) -> None:
         self.flags.halted_by = found
 
-    def at(  # house-rules: allow verb-name -- name fixed by the s159 tests
+    def get_story_view(
         self,
         story: StoryState,
     ) -> Runtime:
         """B3: the run seen from one story's worktree; every run file stays shared."""
-        path = Workspaces(self.git, self.config).path_of(story.id)
+        path = Workspaces(self.git, self.config).get_path(story.id)
         view = copy.copy(self)
-        view.config = self.config.at_worktree(path)
+        view.config = self.config.get_worktree_config(path)
         view.git = Git(path, self.git.options)
         view.pipeline = self._own_pipeline(view.config, story)
         view.step_meter, view.worktree_of = None, story.id
@@ -909,7 +909,7 @@ class Runtime:
             return refused_report
         self.flags.running.add(story.id)
         try:
-            return await self.at(story).run_here(request)
+            return await self.get_story_view(story).run_here(request)
         finally:
             self.flags.running.discard(story.id)
 
@@ -934,11 +934,11 @@ class Runtime:
     def prepare_story(self, story: StoryState) -> dict[str, Any] | None:
         """B1, B5: give the story its branch and worktree; a refusal report if it drifted."""
         space = Workspaces(self.git, self.config)
-        path = space.path_of(story.id)
+        path = space.get_path(story.id)
         if story.worktree_head and system.is_dir(path):
             drift = find_drift(Git(path, self.git.options), story)
             if drift is not None:
-                return self._report_drift(story, space.changed_files(story.id), path)
+                return self._report_drift(story, space.list_changed_files(story.id), path)
         self._make_workspace(story, space)
         return None
 
@@ -1237,9 +1237,8 @@ class Runtime:
             return self.main_lock
         return nullcontext()
 
-    def checkout_lock(  # house-rules: allow query-property, verb-name -- s163 design name
-        self,
-    ) -> AbstractAsyncContextManager[Any]:
+    @property
+    def checkout_lock(self) -> AbstractAsyncContextManager[Any]:
         """B4: the main lock when there is one (a run), else nothing."""
         return self.main_lock if self.main_lock is not None else nullcontext()
 
@@ -1259,7 +1258,7 @@ class Runtime:
         effect = STORY_EFFECTS.get(plan.role.name)
         if effect:
             effect(plan.story, parsed)
-        plan.gated = await system.in_thread(self._evaluate, plan, parsed)
+        plan.gated = await system.run_in_thread(self._evaluate, plan, parsed)
 
     async def apply_settled(self, plan: Plan, settled: dict[str, Any]) -> dict[str, Any]:
         """P4: after a story step, push its branch with its PR (a short call on the loop thread)."""
@@ -1287,7 +1286,7 @@ class Runtime:
 
     def _drop_overfull_session(self, plan: Plan, exc: Exception) -> None:
         """K3: a resumed query that fails on the context limit loses its kept session."""
-        if plan.story and plan.launch.resume and kept_sessions.context_exceeded(str(exc)):
+        if plan.story and plan.launch.resume and kept_sessions.is_context_exceeded(str(exc)):
             kept_sessions.drop_role(plan.story, plan.role.name)
             self.save()
 
@@ -1543,7 +1542,7 @@ class Runtime:
         story, rebase = plan.story, plan.story.rebase  # type: ignore[union-attr]
         if stop := self._find_rebase_stop(plan, handoff):
             return {"gate": self._hold_rebase(plan, stop)}
-        if why := story_rebase.refusal(self.git, rebase):  # type: ignore[arg-type]
+        if why := story_rebase.find_refusal(self.git, rebase):  # type: ignore[arg-type]
             outcome = Outcome(Verdict.BOUNCE, why, story.step, author=Author.ROLE)  # type: ignore[union-attr]
             return {"gate": self._advance_and_log(plan, outcome)}
         self._take_rebase(story, rebase)  # type: ignore[arg-type]

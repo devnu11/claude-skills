@@ -38,16 +38,16 @@ def test_count_unpicked_of_nothing_is_zero(fake: FakeSystem) -> None:
 
 def test_a_contained_head_is_contained(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(0))
-    assert upstream().why_in_target(HEAD) == "contained"
+    assert upstream().classify_in_target(HEAD) == "contained"
 
 
 def test_a_rebased_head_is_patch_equivalent(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(1))
     cherry(fake, f"- {'a' * 40}\n")
-    assert upstream().why_in_target(HEAD) == "patch-equivalent"
+    assert upstream().classify_in_target(HEAD) == "patch-equivalent"
 
 
 def test_a_head_with_a_commit_main_lacks_is_not_in_target(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base", "--is-ancestor"), Done(1))
     cherry(fake, f"- {'a' * 40}\n+ {'b' * 40}\n")
-    assert upstream().why_in_target(HEAD) is None
+    assert upstream().classify_in_target(HEAD) is None

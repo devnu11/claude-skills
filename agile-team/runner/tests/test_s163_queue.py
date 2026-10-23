@@ -50,77 +50,77 @@ def queue_revert(rt, sid: str) -> None:
 def test_stories_at_land_wait_smallest_first_q2(make_runtime, fake) -> None:
     q, _ = queue(make_runtime, story("s1"), story("s2"), story("s3"))
     sized(fake, s1=30, s2=5, s3=5)
-    assert q.order() == ["s2", "s3", "s1"]
+    assert q.order == ["s2", "s3", "s1"]
 
 
 def test_a_story_not_at_land_or_with_a_hold_does_not_wait_q1(make_runtime, fake) -> None:
     q, _ = queue(make_runtime, story("s1", "implement"), story("s2", hold="x"), story("s3"))
-    assert q.order() == ["s3"]
+    assert q.order == ["s3"]
 
 
 def test_a_story_with_a_rebase_pending_does_not_wait_q1(make_runtime, fake) -> None:
     held = story("s1")
     held.rebase = object()
     q, _ = queue(make_runtime, held, story("s2"))
-    assert q.order() == ["s2"]
+    assert q.order == ["s2"]
 
 
 def test_the_pos_order_goes_first_q2(make_runtime, fake) -> None:
     q, rt = queue(make_runtime, story("s1"), story("s2"))
     sized(fake, s1=30, s2=5)
     rt.state.landing_order = ["s1"]
-    assert q.order() == ["s1", "s2"]
+    assert q.order == ["s1", "s2"]
 
 
 def test_the_story_landing_now_is_not_waiting_q1(make_runtime, fake) -> None:
     q, _ = queue(make_runtime, story("s1"), story("s2"))
     q.begin("s1")
-    assert [c.story for c in q.waiting()] == ["s2"]
+    assert [c.story for c in q.candidates] == ["s2"]
 
 
-# ---------- next_up ----------
+# ---------- pick_next ----------
 
 
 def test_next_up_is_the_first_waiting_q1(make_runtime, fake) -> None:
     q, _ = queue(make_runtime, story("s1"), story("s2"))
     sized(fake, s1=9, s2=1)
-    assert q.next_up() == "s2"
+    assert q.pick_next() == "s2"
 
 
 def test_next_up_of_an_empty_queue_is_none_q1(make_runtime, fake) -> None:
     q, _ = queue(make_runtime)
-    assert q.next_up() is None
+    assert q.pick_next() is None
 
 
 def test_next_up_is_the_story_landing_while_it_is_live_q5(make_runtime, fake) -> None:
     q, _ = queue(make_runtime, story("s1"), story("s2"))
     q.begin("s1")
-    assert q.next_up() == "s1"
+    assert q.pick_next() == "s1"
 
 
 def test_next_up_clears_a_landing_that_left_land_q5(make_runtime, fake) -> None:
     q, rt = queue(make_runtime, story("s1", "implement"), story("s2"))
     q.begin("s1")
-    assert q.next_up() == "s2" and rt.state.landing == ""
+    assert q.pick_next() == "s2" and rt.state.landing == ""
 
 
 def test_next_up_clears_a_landing_of_an_unknown_story_q5(make_runtime, fake) -> None:
     q, rt = queue(make_runtime)
     rt.state.landing = "s9"
-    assert q.next_up() is None and rt.state.landing == ""
+    assert q.pick_next() is None and rt.state.landing == ""
 
 
 def test_a_story_with_a_queued_revert_is_live_q5(make_runtime, fake) -> None:
     q, rt = queue(make_runtime, story("s1", "done"))
     queue_revert(rt, "s1")
     rt.state.landing = "s1"
-    assert q.next_up() == "s1"
+    assert q.pick_next() == "s1"
 
 
 def test_a_running_revert_holds_the_slot_d1(make_runtime, fake) -> None:
     q, rt = queue(make_runtime, story("s1", "done"), story("s2"))
     q.begin_revert("s1")
-    assert q.next_up() == "s1" and q.reverting == "s1" and rt.state.landing == "s1"
+    assert q.pick_next() == "s1" and q.reverting == "s1" and rt.state.landing == "s1"
 
 
 # ---------- finish ----------
@@ -154,7 +154,7 @@ def test_a_landing_revert_waits_in_the_same_queue_ac1(make_runtime, fake) -> Non
     queue_revert(rt, "s2")
     fake.reply(("diff", "--shortstat", f"{'m' * 40}^1"), Done(0, SHORT.format(a=1, d=1)))
     sized(fake, s1=50)
-    assert q.order() == ["s2", "s1"]
+    assert q.order == ["s2", "s1"]
 
 
 def test_a_revert_is_sized_by_its_merge_ac1(make_runtime, fake) -> None:
@@ -241,11 +241,11 @@ def test_place_accepts_a_departure_with_a_reason_and_logs_it_q6(make_runtime, fa
 def test_the_tool_places_the_order_q3(make_runtime, fake) -> None:
     _, rt = queue(make_runtime, story("s1"), story("s2"))
     sized(fake, s1=30, s2=5)
-    out = asyncio.run(Tools(rt).order_landings({"stories": ["s1"], "reason": "why"}))
+    out = asyncio.run(Tools(rt).set_landing_order({"stories": ["s1"], "reason": "why"}))
     assert '"ordered"' in out["content"][0]["text"]
 
 
 def test_the_tool_builds_a_queue_when_the_runtime_has_none_q3(make_runtime, fake) -> None:
     rt = make_runtime()
-    out = asyncio.run(Tools(rt).order_landings({"stories": "s1"}))
+    out = asyncio.run(Tools(rt).set_landing_order({"stories": "s1"}))
     assert '"refused"' in out["content"][0]["text"]

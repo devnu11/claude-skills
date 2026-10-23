@@ -50,10 +50,10 @@ def test_drop_role_ends_only_that_role_r1() -> None:
     "text", ["Prompt is too long", "context window exceeded", "maximum context length is 200000"]
 )
 def test_context_limit_errors_are_recognised_r1(text: str) -> None:
-    assert ks.context_exceeded(text)
+    assert ks.is_context_exceeded(text)
 
 
 def test_other_errors_are_not_context_errors_r1() -> None:
-    assert not ks.context_exceeded("rate limit reached")
-    assert not ks.context_exceeded("")
+    assert not ks.is_context_exceeded("rate limit reached")
+    assert not ks.is_context_exceeded("")
     assert ks.CONTEXT_PATTERNS

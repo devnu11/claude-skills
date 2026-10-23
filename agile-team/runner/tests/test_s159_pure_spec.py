@@ -21,13 +21,13 @@ switchover = Lazy("agile_team.switchover")
 
 def test_story_branch_names_the_replay_only_after_a_replay_r1() -> None:
     """s159 spec: story branch names the replay only after a replay."""
-    assert sb.story_branch("team/story-", "s1", 0) == "team/story-s1"
-    assert sb.story_branch("team/story-", "s1", 2) == "team/story-s1-r2"
+    assert sb.format_story_branch("team/story-", "s1", 0) == "team/story-s1"
+    assert sb.format_story_branch("team/story-", "s1", 2) == "team/story-s1-r2"
 
 
 def test_landing_branch_has_the_land_suffix_r1() -> None:
     """s159 spec: landing branch has the land suffix."""
-    assert sb.landing_branch("team/story-", "s1") == "team/story-s1-land"
+    assert sb.format_landing_branch("team/story-", "s1") == "team/story-s1-land"
     assert sb.LAND_SUFFIX == "-land"
 
 
@@ -162,12 +162,12 @@ def test_drop_all_and_drop_role_r1() -> None:
 )
 def test_context_exceeded_patterns_r1(text) -> None:
     """s159 spec: context exceeded patterns."""
-    assert ks.context_exceeded(text)
+    assert ks.is_context_exceeded(text)
 
 
 def test_context_not_exceeded_for_other_errors_r1() -> None:
     """s159 spec: context not exceeded for other errors."""
-    assert not ks.context_exceeded("connection reset")
+    assert not ks.is_context_exceeded("connection reset")
     assert ks.CONTEXT_PATTERNS
 
 
@@ -181,22 +181,22 @@ def facts(**kw) -> switchover.SwitchFacts:
 
 def test_a_clean_switch_has_no_refusals_r1() -> None:
     """s159 spec: a clean switch has no refusals."""
-    assert switchover.refusals(facts()) == []
+    assert switchover.list_refusals(facts()) == []
 
 
 def test_every_reason_is_listed_together_r1() -> None:
     """s159 spec: every reason is listed together."""
-    got = switchover.refusals(facts(past_design=["s1"], pending_ids=["s2"], stack=1, ahead=3))
+    got = switchover.list_refusals(facts(past_design=["s1"], pending_ids=["s2"], stack=1, ahead=3))
     assert len(got) == 4
     assert "s1" in got[0] and "s2" in got[1]
 
 
 def test_each_reason_alone_r1() -> None:
     """s159 spec: each reason alone."""
-    assert len(switchover.refusals(facts(past_design=["s1"]))) == 1
-    assert len(switchover.refusals(facts(pending_ids=["s1"]))) == 1
-    assert len(switchover.refusals(facts(stack=2))) == 1
-    assert len(switchover.refusals(facts(ahead=1))) == 1
+    assert len(switchover.list_refusals(facts(past_design=["s1"]))) == 1
+    assert len(switchover.list_refusals(facts(pending_ids=["s1"]))) == 1
+    assert len(switchover.list_refusals(facts(stack=2))) == 1
+    assert len(switchover.list_refusals(facts(ahead=1))) == 1
 
 
 def test_story_state_new_records_start_empty_r1() -> None:

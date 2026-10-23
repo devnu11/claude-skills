@@ -445,7 +445,7 @@ def test_a_worktree_proxy_scope_measures_the_sandbox_from_the_main_checkout(
     configured: Path,
 ) -> None:
     d = Environment("cli", "package")
-    c = load(configured, d).at_worktree(configured / ".team/run/worktrees/s1")
+    c = load(configured, d).get_worktree_config(configured / ".team/run/worktrees/s1")
     p = sandbox.Preparer().prepare(c, sandbox.Order(d))
     scope = sandbox.proxy_scope(c, p)
     assert p.root == configured / ".team/run/customer/cli" and scope.run_home == configured

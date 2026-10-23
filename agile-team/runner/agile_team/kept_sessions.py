@@ -34,7 +34,7 @@ def drop_role(story: StoryState, role: str) -> None:
     story.sessions.pop(role, None)
 
 
-def context_exceeded(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def is_context_exceeded(
     text: str,
 ) -> bool:
     """True when ``text`` is a context-limit error."""

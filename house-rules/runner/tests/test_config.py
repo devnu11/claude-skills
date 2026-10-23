@@ -69,3 +69,68 @@ def test_bad_toml_names_the_file(tmp_path: Path) -> None:
 def test_defaults_are_the_global_rules(tmp_path: Path) -> None:
     settings = Settings(tmp_path)
     assert settings.tests is TestPolicy.SKIP and "create" in settings.known_verbs
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "name fixed by the tests",
+        "name fixed by the s159 tests",
+        "tool name fixed by the s163 design",
+        "named by test_rewrite.py",
+        "name fixed by a test file",
+        "s163 design name",
+        "the design's name",
+        "the s159 tests use this name",
+        "the design named it",
+        "name fixed by the tests.",
+        "NAME FIXED BY THE DESIGN",
+        "name fixed by the tests  # expect: verb-name fail",
+        "a test fixes the name",
+        "test file fixed the name",
+        "the e2e tests expect it",
+        "tests require the tool name",
+        "the tests pin this name",
+        "kept because the s159 design chose it",
+        "as named by the design",
+        "name used in test_router.py",
+        "the tests' name",
+        "per the s159 design",
+        "name fixed by the tests;",
+        "name fixed by the tests!",
+        "name fixed by the tests. ",
+        "name fixed by the tests:",
+        "name fixed by the tests.:;! ",
+    ],
+)
+def test_an_excuse_reason_is_refused(tmp_path: Path, reason: str) -> None:
+    assert Settings(tmp_path).is_excuse(reason) is True
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "",
+        "matches the CLI flag",
+        "name fixed by the tests; it mirrors git's verb",
+        "registry needs an instance",
+        "the latest gh output sets the name",
+        "a testing helper sets the name",
+        "pytest needs this name for discovery",
+        "the test helper mirrors git's verb",
+    ],
+)
+def test_a_real_reason_is_accepted(tmp_path: Path, reason: str) -> None:
+    assert Settings(tmp_path).is_excuse(reason) is False
+
+
+def test_a_repo_extends_the_excuses_and_keeps_the_defaults(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path, {"excuses": ["copied from upstream"]})
+    assert settings.is_excuse("copied from upstream") is True
+    assert settings.is_excuse("name fixed by the tests") is True
+
+
+@pytest.mark.parametrize("value", ["x", ["("], [3]])
+def test_bad_excuses_name_the_key(tmp_path: Path, value: object) -> None:
+    with pytest.raises(ConfigError, match="excuses"):
+        build_settings(tmp_path, {"excuses": value})

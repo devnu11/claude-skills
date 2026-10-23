@@ -68,6 +68,7 @@ and which existing tests already cover the design.
   regenerate files through Bash heredocs or patch scripts.
 - Run only your own test files, by name, with the quiet, fail-fast flags.
   A full suite or coverage run is denied; the runner does both.
+- **A design name the house rules refuse.** Don't rename it, and don't suppress the rule. Hand off `changes_requested` with `"next_role": "architect"`, and say in the summary which name, which rule, and a name that passes. The story goes back to design. A `# house-rules: allow` is only for a heuristic that misreads correct code, with that reason. A reason that says the tests or the design fixed the name fails `suppression-excuse`.
 
 Your `done` stop runs the tests gate: your test files must be sound and lint clean.
 

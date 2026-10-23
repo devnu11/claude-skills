@@ -52,7 +52,7 @@ class StoryRebase:
     role: str
 
 
-def story_branch(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def format_story_branch(
     prefix: str,
     story_id: str,
     replays: int,
@@ -62,7 +62,7 @@ def story_branch(  # house-rules: allow verb-name -- name fixed by the s159 test
     return name + REPLAY_SUFFIX.format(k=replays) if replays else name
 
 
-def landing_branch(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def format_landing_branch(
     prefix: str,
     story_id: str,
 ) -> str:

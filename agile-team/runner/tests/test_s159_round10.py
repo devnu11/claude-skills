@@ -23,7 +23,7 @@ def test_two_stories_push_the_sprint_branch_once_even_when_threads_interleave_t3
         await asyncio.sleep(0)
         return fn(*args)
 
-    monkeypatch.setattr(system, "in_thread", yielding)
+    monkeypatch.setattr(system, "run_in_thread", yielding)
 
     async def both() -> None:
         pusher = StoryPusher(rt)

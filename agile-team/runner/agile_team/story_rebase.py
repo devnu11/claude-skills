@@ -34,7 +34,7 @@ STORY_REBASE_LINES = (
 )
 
 
-def needs_devops(  # house-rules: allow verb-name -- name fixed by the tests
+def is_for_devops(
     files: list[str],
     owners: Owners,
 ) -> bool:
@@ -68,7 +68,7 @@ def _read_rebased_ref(git: Git) -> str:
     return system.read_text(path).strip() if system.exists(path) else ""
 
 
-def refusal(  # house-rules: allow verb-name -- name fixed by the tests
+def find_refusal(
     git: Git,
     rebase: StoryRebase,
 ) -> str | None:

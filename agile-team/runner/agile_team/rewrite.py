@@ -92,7 +92,7 @@ def _match_subjects(old: Sequence[ReplayLine], new: Sequence[ReplayLine]) -> dic
     return moved
 
 
-def pair_replay(  # house-rules: allow verb-name -- name fixed by the s159 tests
+def pair_replay(
     old: Sequence[ReplayLine],
     new: Sequence[ReplayLine],
 ) -> dict[str, str]:
