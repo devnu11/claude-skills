@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import subprocess
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from .readiness import wait_until
 
 PROJECT = Path(__file__).resolve().parents[4] / "unattended" / "runner"
 
@@ -64,7 +65,6 @@ def test_time_left_shapes_and_unchanged_state(cli: Unattended) -> None:
 
 def test_overdue_after_deadline(cli: Unattended) -> None:
     start(cli, "late", "--for", "1s")
-    time.sleep(3)
-    assert cli.status("late")["time_left"] == "overdue"
+    wait_until(lambda: cli.status("late")["time_left"] == "overdue", "deadline passed")
     cli.run("stop", "late")
     assert json.loads(cli.run("wait", "late"))["time_left"] == "overdue"
