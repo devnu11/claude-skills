@@ -505,7 +505,7 @@ state plus `opened_at`, `repeated`, the story file's `acceptance`,
 "question"}` or `null`; see "PO story admin"), `wait`: `{"reason", "on",
 "title"}` or `null`, from s159 `branch` (the story branch, `""` before
 one), `landed` (the landing merge's sha once the story is done, else
-`null`) and `story_ci` (`{"sha", "verdict", "source"}` of the latest
+`null`) and `story_ci` (`{"sha", "verdict", "source", "checks"}` of the latest
 story-PR or landing CI, or `null`), which the Board card shows, and from s83 `disputes`, `developer`, `commits`, `files` (the
 `/api/file` kinds that exist) and `label`: `cancelled`, `cancel requested`,
 `held` or `""`;
@@ -2145,7 +2145,7 @@ The pass ends at the first step whose report matches a row of the
 | `sync_conflict` | legacy (before s151 AC6): a saved boundary held on a sprint-end rebase conflict. `continue_boundary` reruns the rebase; a conflict now goes to DevOps |
 | `push_permission` | the runner is about to make its first push of any kind (a story branch, a landing or the sprint branch), and the human has not yet said whether the team may push. Raised once (`permission_asked`); until the answer, steps commit and nothing is pushed (s159) |
 | `push_rejected` | a push was refused: its remote branch moved, or the runner's own check found it is not a fast-forward of the recorded head (`NOT_FAST_FORWARD`), at the `push` or `push-replayed` stage; the stage stays and `continue_boundary` reruns it. The runner never retries a refused push with another expected sha |
-| `story_ci_red` | CI failed on a story's own draft PR (s159). Nothing is held; the story lands only on green landing CI. The PO briefs its developer if it needs a fix |
+| `story_ci_red` | CI failed on a story's own draft PR (s159). The hand-over lists each failing check, its failing step and its failing lines (s172). Nothing is held; the story lands only on green landing CI. The PO briefs its developer if it needs a fix; the developer's next brief carries the same lines |
 | `worktree_drift` | a story's worktree changed outside the team (s159); the line names the worktree and the files. Only that story waits. The PO tells the human; `agile-team accept-checkout --story <id>` keeps the worktree as it is |
 | `land_bounced` | a landing stopped on a merge conflict (s159); the line names the files and the role (DevOps for files only DevOps or no role owns, else the story's developer) that rebases the story onto the sprint head. Then land runs again |
 | `overlap` | a design's `## Files` overlap another open sprint story's work (s163, per story); the story waits at `design`. The line names the files each changes and the overlap. The runner lifts it once the others have landed, left the sprint or been cancelled; `release_story` with a reason lifts it early, and `continue_story` is refused |
@@ -3126,8 +3126,16 @@ story branch after every step that committed, against the recorded
 draft PR from its branch to the sprint's branch (`<id>: <title>`). Every 60 s
 at most, the runner reads each open story's PR checks on its pushed head;
 a settled result that changed is saved as the story's `ci` and logged as
-`story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). A red result hands
-over `story_ci_red` and holds nothing: only the landing CI decides. A
+`story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). Once no check is
+pending, each failing Actions check is described with its failing step and
+its failing log lines. The job and log are fetched once per commit and check
+for the life of the run, and the verdict still comes from the checks'
+buckets. `checks` lists each check that did not pass as
+`- <label>: fail at step <step> <link>` with its lines indented below, as
+for sprint CI (s172). A red result hands over `story_ci_red` with those
+lines and holds nothing: only the landing CI decides. While the story's
+latest PR CI is red, each developer step on it gets the same lines in a
+`## Story CI` brief section. A
 story not yet due is skipped before `gh` is asked anything. Whether `gh`
 works (`gh --version`, then `gh auth status`, which costs an API request)
 is checked once and a success is trusted for 10 minutes; a failure is
@@ -3603,9 +3611,15 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    required (s111). While no checks are reported yet (right
    after a push), it looks again every 10 s, at most 12 times. For each
    failing or cancelled Actions check it reads `gh run view --job <id>
-   --log-failed` and keeps the failing test lines (pytest `FAILED …` and
-   `ERROR …::`, go `--- FAIL:`, `N failed`; at most 20; else the last 10
-   lines). For each Actions check the runner also reads its job
+   --log-failed` and keeps the lines that name the failure, by tier (s172).
+   The test tier is pytest `FAILED …` and `ERROR …::`, go `--- FAIL:` and
+   `N failed` (not a linter's `Found N errors`). Only if no test line is
+   there does it keep the lint findings: `::error file=…,line=…::msg` or
+   `##[error]msg` annotations (not `Process completed with exit code`),
+   ruff's `path:line:col: CODE msg`, its two-line `-->` form joined into
+   one, house-rules' `path:line: fail …` lines, and `Would reformat:`.
+   Warnings never count. It keeps at most 20 lines, and the last 10 lines
+   when neither tier has a hit. For each Actions check the runner also reads its job
    (`gh api repos/{owner}/{repo}/actions/jobs/<id>`: commit and steps) and
    gives the check a **kind** (s111, `ci_triage.py`):
    - `stale`: its job ran on another commit than the one the runner
