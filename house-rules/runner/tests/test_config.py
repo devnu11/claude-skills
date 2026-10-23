@@ -99,6 +99,8 @@ def test_defaults_are_the_global_rules(tmp_path: Path) -> None:
         "name fixed by the tests;",
         "name fixed by the tests!",
         "name fixed by the tests. ",
+        "name fixed by the tests:",
+        "name fixed by the tests.:;! ",
     ],
 )
 def test_an_excuse_reason_is_refused(tmp_path: Path, reason: str) -> None:
