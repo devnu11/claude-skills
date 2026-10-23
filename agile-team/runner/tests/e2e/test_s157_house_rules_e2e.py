@@ -1,8 +1,9 @@
 """s157 end to end: the repo's own `.agile-team.toml` runs the real house-rules in the team's gates.
 
-A scratch git repo gets the real house-rules project (symlinked), the real toolchain, file
-commands and role sections from the repo's `.agile-team.toml`. Only the ruff links are dropped,
-because the scratch repo has no Python project to run ruff in.
+A scratch git repo gets the real house-rules project (its package, pyproject and lock linked
+into the scratch repo's own `house-rules/runner`, so uv builds the venv there), the real
+toolchain, file commands and role sections from the repo's `.agile-team.toml`. Only the ruff
+links are dropped, because the scratch repo has no Python project to run ruff in.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from agile_team import commands, config, fullcheck, guard, owners, roles
 REPO = Path(__file__).resolve().parents[4]
 BAD = "agile-team/runner/agile_team/bad.py"
 WARN = "unattended/runner/unattended/warn.py"
+HOUSE_RULES = "house-rules/runner"
+LINKED = ("house_rules", "pyproject.toml", "uv.lock")
 BASELINE = ".house-rules-baseline.json"
 ACCEPT = "uv run --frozen --quiet --project house-rules/runner house-rules baseline --accept-new"
 PYTHON_ROLES = [
@@ -60,11 +63,24 @@ def write(repo: Path, rel: str, text: str) -> None:
     (repo / rel).write_text(text)
 
 
+def link_house_rules(scratch: Path) -> None:
+    """Give the scratch repo its own `house-rules/runner` dir, linking only the project's files.
+
+    uv then builds the venv in the scratch repo, never in the checkout (s168).
+    `.gitignore` is copied: git doesn't follow a symlinked one.
+    """
+    for name in LINKED:
+        link = scratch / HOUSE_RULES / name
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(REPO / HOUSE_RULES / name)
+    write(scratch, f"{HOUSE_RULES}/.gitignore", (REPO / HOUSE_RULES / ".gitignore").read_text())
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A scratch git repo with the real house-rules project and an empty baseline."""
     git(tmp_path, "init", "-q")
-    (tmp_path / "house-rules").symlink_to(REPO / "house-rules")
+    link_house_rules(tmp_path)
     write(tmp_path, ".house-rules.toml", EXCLUDE)
     write(tmp_path, BAD, CLEAN)
     write(tmp_path, WARN, CLEAN)
@@ -88,6 +104,33 @@ def conf(repo: Path) -> config.Config:
 def run(repo: Path, command: str) -> tuple[int, str]:
     """Run a command the way the runner does (sh, repo root)."""
     return commands.shell_runner(repo)(command)
+
+
+def named_scripts(repo: Path) -> list[str]:
+    """Scripts in the checkout's house-rules venv `bin/` that name the scratch repo's path."""
+    bin_dir = REPO / HOUSE_RULES / ".venv" / "bin"
+    paths = [str(repo).encode(), str(repo.resolve()).encode()]
+    scripts = bin_dir.iterdir() if bin_dir.is_dir() else []
+    return [
+        s.name
+        for s in scripts
+        if s.is_file() and not s.is_symlink() and any(p in s.read_bytes() for p in paths)
+    ]
+
+
+def test_s168_house_rules_venv_is_built_in_the_scratch_repo(repo) -> None:
+    """s168: uv builds house-rules' venv in the scratch repo and runs the checkout's source."""
+    code, out = run(repo, ACCEPT)
+    assert code == 0, out
+    assert not (repo / "house-rules").is_symlink()
+    assert not (repo / HOUSE_RULES).is_symlink()
+    venv = repo / HOUSE_RULES / ".venv"
+    assert venv.is_dir()
+    assert venv.resolve().is_relative_to(repo.resolve())
+    package = (repo / HOUSE_RULES / "house_rules").resolve()
+    assert package == (REPO / HOUSE_RULES / "house_rules").resolve()
+    assert named_scripts(repo) == []
+    assert "house-rules/" not in git(repo, "status", "--porcelain")
 
 
 def stop_lint(repo: Path, conf: config.Config, files: list[str]) -> list[tuple[int, str]]:
