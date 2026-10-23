@@ -67,13 +67,34 @@ def test_write_denied_text_names_its_rule() -> None:
         "env git diff",
         "git cherry-pick -n abc",
         "git cherry-pick --no-commit a",
+        "git -C x status",
+        "git --git-dir x/.git --work-tree x log",
+        "git -C x cherry-pick -n abc",
+        "git cat-file -p HEAD",
+        "git merge-base HEAD main",
+        "git ls-tree HEAD",
+        "git rev-list HEAD",
+        "git name-rev HEAD",
+        "git worktree list --porcelain",
     ],
 )
 def test_unconfined_read_only_git_is_allowed(repo: Path, command: str) -> None:
     assert denial(unconfined(repo), command) is None
 
 
-@pytest.mark.parametrize("command", ["git cherry-pick abc", "git -C x status", "git"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git cherry-pick abc",
+        "git",
+        "git -C x commit -m y",
+        "git -c core.fsmonitor=evil status",
+        "git --config-env=core.pager=X log",
+        "git --exec-path=/x status",
+        "git worktree add list",
+        "git -C list worktree add x",
+    ],
+)
 def test_unconfined_other_git_is_denied(repo: Path, command: str) -> None:
     assert denial(unconfined(repo), command)
 
