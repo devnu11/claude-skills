@@ -25,6 +25,7 @@ Measured rules have two thresholds. A value above `warn` warns, and above `fail`
 | `query-property` | fail | — |
 | `verb-synonym` | warn | — |
 | `suppression-reason` | fail | — |
+| `suppression-excuse` | fail | — |
 
 Leave ruff's `FBT` and `PLR09xx` rules off (ruff's default) so nothing is reported twice.
 
@@ -124,7 +125,15 @@ be a property named with a noun: `shape.area`, not `shape.get_area()`.
 "Changes nothing" means it never assigns to, augments or deletes anything
 rooted at `self`, and never calls a method on `self` (or on one of its
 attributes) whose first word is a mutating verb (`set`, `add`, `append`,
-`pop`, `update`, …).
+`pop`, `update`, …). Two more cases count as a change:
+
+- **Unpacked targets:** a tuple or list assignment writes each of its items,
+  so `queued, self._queue = self._queue, []` changes `self._queue`.
+- **Its own class's methods:** a method changes `self` when it calls, on
+  `self` itself (`self._deliver()`), a method of the same class that changes
+  `self`. That holds at any depth, and for private methods too. A call on
+  another object (`self.runtime.x()`) only counts if its first word is a
+  mutating verb.
 
 The test is a heuristic. Mutation done through other objects can't be seen;
 use a suppression with the reason.
@@ -148,6 +157,26 @@ approved verbs themselves are not in the map.
 Every suppression must say why (see below). One finding per file, counting
 the suppressions that have no reason.
 
+### suppression-excuse
+
+A suppression whose reason only says that tests, a test file or a design
+fixed the name is refused: fix the name instead. One finding per file, at the
+first such line; its message lists each one as `line <n>: <reason>`.
+
+- **"Only says":** the reason is cut at its first `#` (a chained comment),
+  stripped, and stripped of one trailing `.`. A pattern must then match all
+  of it, ignoring case. `name fixed by the tests; it mirrors git's verb`
+  passes, because it gives a reason too.
+- **The default patterns** refuse reasons such as "name fixed by the tests",
+  "name fixed by the s159 tests", "tool name fixed by the s163 design",
+  "named by test_rewrite.py", "name fixed by a test file", "s163 design name",
+  "the design's name", "the s159 tests use this name" and "the design named
+  it".
+- **A repo adds patterns** with `excuses` (see Settings). They extend the
+  defaults and never replace them. To turn the rule off, `disable` it.
+- **The excuse still suppresses** the rule it names; the finding is reported
+  instead.
+
 ## Suppressions
 
 Put the comment on the `def` line (or, for `global-scope`, on the offending
@@ -160,6 +189,11 @@ def show(rows, compact: bool):  # house-rules: allow boolean-parameter -- matche
 - **Several rules:** separate them with commas.
 - **A reason is required.** A suppression without one still suppresses, but
   it is a `suppression-reason` failure.
+- **The reason can't be an excuse.** "Tests or a design fixed the name" is a
+  `suppression-excuse` failure.
+- **The two suppression rules can't be suppressed** on a line: a comment
+  that names `suppression-reason` or `suppression-excuse` still gets that
+  finding. Only `disable` turns them off.
 - **Ruff's `noqa` codes work as aliases** for the rules ruff shares, and need
   a reason too: `# noqa: FBT001 -- callback signature`. Ruff itself accepts
   text after the codes (checked with ruff 0.16).
@@ -198,4 +232,5 @@ the root is the git work tree. Unknown keys and rule names are errors.
 | `synonyms` | — | Extra synonyms: `{zap = "remove"}`. |
 | `allow_names` | — | Name patterns exempt from naming rules (`do_*`, `setUp`). |
 | `factory_names` | `create`, `create_{class}`, `from_*` | Factory name patterns. |
+| `excuses` | — | Extra regex patterns for `suppression-excuse`, matched against the whole reason, ignoring case. A pattern that doesn't compile is a config error. |
 | `baseline` | `.house-rules-baseline.json` | Baseline path, relative to the root. |

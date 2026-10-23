@@ -35,6 +35,8 @@ HR="uv run --frozen --quiet --project ~/.claude/skills/house-rules/runner house-
 2. **Fix, don't suppress.** A suppression needs a reason a reviewer can disagree with:
    `# house-rules: allow <rule> -- <reason>` on the `def` line (ruff's
    `# noqa: FBT001 -- <reason>` also works for the rules ruff shares).
+   A reason that only says tests or a design fixed the name is refused
+   (`suppression-excuse`): fix the name.
 3. **After fixing baselined code**, run `baseline` so the ratchet tightens.
 4. **Adopting it on a repo:** add `.house-rules.toml` (or `[tool.house-rules]`),
    then `baseline --accept-new` with the human's OK, and commit both.
