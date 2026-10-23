@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import signal
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +20,9 @@ CommandRunner = Callable[[str], tuple[int, str]]
 TIMED_OUT = 124
 DEFAULT_TIMEOUT_S = 300.0
 DRAIN_S = 5.0
+# The gate's own coverage data goes under the never-audited run dir, so the next step's
+# audit does not quarantine it as an out-of-scope change (#60).
+COVERAGE_DATA = ("COVERAGE_FILE", ".team/run/.coverage")
 TIMEOUT_LINE = "timed out after {limit:g}s, so the runner killed its process group: {command}"
 HUNG_LINE = "the hanging test: {test}"
 NO_HUNG_LINE = (
@@ -111,13 +114,19 @@ class CommandShell:
     def _watched(self, command: str) -> tuple[int, str]:
         """Run with the tally plugin when a stage is open."""
         run = stages.current()  # on the caller's thread: contextvars skip threads
+        plain = self._shell(command, system.environ())
         if run is None:
-            return self._run(system.ShellCommand(command, self.repo))
+            return self._run(plain)
         with tally_watch.watching(run) as env:
-            code, out = self._run(system.ShellCommand(command, self.repo, env))
+            code, out = self._run(self._shell(command, env))
         if code != 0 and tally_watch.plugin_failed(out):
-            return self._run(system.ShellCommand(command, self.repo))
+            return self._run(plain)
         return code, out
+
+    def _shell(self, command: str, env: Mapping[str, str]) -> system.ShellCommand:
+        """``command`` in the repo, under ``env`` with the coverage data redirected."""
+        name, path = COVERAGE_DATA
+        return system.ShellCommand(command, self.repo, {**env, name: str(self.repo / path)})
 
     def _run(self, shell: system.ShellCommand) -> tuple[int, str]:
         with system.spawn_piped(shell) as proc:
