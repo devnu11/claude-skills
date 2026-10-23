@@ -156,7 +156,7 @@ def test_costly_work_drops_costless_kinds_and_keeps_the_rest_in_order(make_runti
     for i, kind in enumerate(kinds):
         s.running[f"k{i}"] = Work("developer-cli", None, "", kind)
     new = Work("manager", None, "new")
-    got = s.select_costly_work(new)
+    got = s.costly_work(new)
     assert [w.kind for w in got] == [*kinds[2:], StepKind.ROLE] and got[-1] is new
 
 
