@@ -27,7 +27,18 @@ from .story_branches import LAND_SUFFIX
 NO_GH = "gh is not installed"
 GH_LOGGED_OUT = "gh is not logged in"
 GH_UNREACHABLE = "gh could not check its login (rate limited or offline): {detail}"
-GH_TRANSIENT = ("rate limit", "http 403", "http 429", "http 5", "error connecting", "timed out")
+GH_TRANSIENT = (
+    "rate limit",
+    "http 403",
+    "http 429",
+    "http 5",
+    "error connecting",
+    "timed out",
+    "dial tcp",
+    "no such host",
+    "i/o timeout",
+    "connection refused",
+)
 GH_TRUSTED_S = 600.0
 NO_PR_SERVICE = "no pull request service is configured"
 REFUSED_PUSH = (

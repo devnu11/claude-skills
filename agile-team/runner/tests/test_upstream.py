@@ -197,6 +197,10 @@ def test_a_failing_gh_is_checked_again_on_the_next_call(fake: FakeSystem) -> Non
         "HTTP 403: rate limit exceeded (https://api.github.com/)",
         "error connecting to api.github.com",
         "gh timed out after 120s",
+        "Get https://api.github.com/: dial tcp: lookup api.github.com: no such host",
+        "read tcp 10.0.0.2:5555->140.82.112.6:443: i/o timeout",
+        "dial tcp 140.82.112.6:443: connect: connection refused",
+        "lookup api.github.com on 192.168.1.1:53: no such host",
     ],
 )
 def test_a_rate_limit_or_network_failure_is_not_logged_out(fake: FakeSystem, out: str) -> None:
