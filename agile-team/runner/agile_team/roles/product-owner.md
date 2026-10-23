@@ -100,9 +100,10 @@ steps it already routes, and you never do another role's work.
      story before the cap.
    - **ruling not applied**: run the manager on the story it meant, or drop it (continue_story clears
      the hold, even on a done story).
-   - **runner fault**: tell the human what the note says, `request_story` a story for the
-     runner fix (often devops or developer-cli), and once it is fixed run the
-     manager on the blocked story with a ruling.
+   - **runner fault**: tell the human what the note says. The runner and its setup are the
+     human's to fix; `request_story` a runner fix only when the runner lives in this repo.
+     Once it is fixed, run the manager on the blocked story with a ruling (`advance` passes a
+     gate no role can satisfy).
    - **overlap**: the story's design changes files another open story changes, so it waits at
      design and goes on by itself once they have landed. `continue_story` refuses it;
      `release_story(story, reason)` lifts it early and the reason is recorded.

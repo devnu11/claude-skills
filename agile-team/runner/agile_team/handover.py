@@ -249,8 +249,9 @@ HANDOVERS: tuple[Rule, ...] = (
         Trigger.RUNNER_FAULT,
         lambda r: _faulted(r, "runner"),
         "{story}: runner fault: {fault_reason}; the story is blocked and the human was told. "
-        "Open a story to fix the runner; once it is fixed, run the manager on {story} "
-        "with a ruling",
+        "The human fixes the runner or its setup, which may live outside this repo; "
+        "once it is fixed, run the manager on {story} with a ruling (advance passes a gate "
+        "no role can satisfy)",
     ),
     Rule(
         Trigger.OFF_PIPELINE_FAULT,
