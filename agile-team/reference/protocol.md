@@ -1417,7 +1417,11 @@ implement (developer-*; gate: tests pass and coverage ≥ threshold, or ≥
 runs the suite **once**, through the `coverage` command only: a zero exit
 with a high enough total passes, and a non-zero exit never passes. It
 bounces as a coverage shortfall when the output shows a total below the
-requirement and no failing test, and as `tests fail` otherwise) → quality
+requirement and no failing test, and as `tests fail` otherwise; a shortfall
+reads `coverage X% is below Y%`, then a line naming the `coverage` command,
+that the total covers everything it measures and not only the story's files,
+and where `Y` comes from: `[gates] coverage` alone, or the lower of it and
+the `.team/baseline.json` baseline) → quality
 → review → design-review → e2e (integration-tester; gate when `acceptance`
 is enabled: a `done` handoff passes only with a complete presentation and,
 for a `web` environment, a service that starts from it and answers its probe)

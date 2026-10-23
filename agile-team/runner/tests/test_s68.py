@@ -30,7 +30,7 @@ def test_failing_run_also_runs_only_coverage() -> None:
 def test_exit_zero_low_total_bounces() -> None:
     out = made({"C": (0, "TOTAL 80%")})[0].tests_green_and_covered()
     assert out.verdict is Verdict.BOUNCE
-    assert out.reason == "coverage 80.0% is below 95.0%"
+    assert out.reason.split("\n")[0] == "coverage 80.0% is below 95.0%"
 
 
 def test_exit_zero_without_total_bounces() -> None:
@@ -41,7 +41,27 @@ def test_exit_zero_without_total_bounces() -> None:
 def test_shortfall_that_stopped_the_run_is_a_coverage_bounce() -> None:
     out = made({"C": (1, SHORT)})[0].tests_green_and_covered()
     assert out.verdict is Verdict.BOUNCE
-    assert out.reason == "coverage 80.0% is below 95.0%"
+    assert out.reason.split("\n")[0] == "coverage 80.0% is below 95.0%"
+
+
+LOW_SCOPE = "the total of `C` over everything it measures, not only this story's files; "
+
+
+def test_a_shortfall_names_the_command_its_scope_and_no_baseline() -> None:
+    out = made({"C": (0, "TOTAL 80%")})[0].tests_green_and_covered()
+    assert out.reason.split("\n")[1] == LOW_SCOPE + (
+        'the bar is [gates] coverage = 95.0%, and no .team/baseline.json "coverage" baseline '
+        "lowers it for old debt"
+    )
+
+
+def test_a_shortfall_names_the_baseline_that_set_the_bar() -> None:
+    out = made({"C": (0, "TOTAL 40%")}, baseline=51.0)[0].tests_green_and_covered()
+    assert out.reason == (
+        "coverage 40.0% is below 51.0%\n"
+        + LOW_SCOPE
+        + "the bar is the lower of [gates] coverage = 95.0% and the 51.0% in .team/baseline.json"
+    )
 
 
 @pytest.mark.parametrize("marker", ["1 failed, 10 passed", "1 error", "--- FAIL: TestX (0.0s)"])
