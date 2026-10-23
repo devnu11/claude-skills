@@ -238,7 +238,8 @@ def cmd_config_check(args: argparse.Namespace) -> int:
     place = Place.of(args)
     config = _load_config(place.repo)
     problems = check_config(config, place.home)
-    _print_lines("warning", config.warnings + config_mod.environment_warnings(config.environments))
+    warnings = config.warnings + config_mod.find_environment_warnings(config.environments)
+    _print_lines("warning", warnings)
     _print_lines("problem", problems)
     print("config ok" if not problems else f"{len(problems)} problem(s)")
     return 1 if problems else 0

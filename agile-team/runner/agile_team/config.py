@@ -650,7 +650,7 @@ def validate(config: Config, known: Known) -> list[str]:
     ]
 
 
-def environment_warnings(environments: list[Environment]) -> list[str]:
+def find_environment_warnings(environments: list[Environment]) -> list[str]:
     """Valid settings that leave the Proxy nothing to run (#56)."""
     empty = [d for d in environments if d.kind == "harness" and not d.prepare.strip()]
     return [EMPTY_HARNESS_PREPARE.format(name=d.name) for d in empty]
