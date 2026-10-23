@@ -117,9 +117,7 @@ class Overlaps:
         reason = OVERLAP_HOLD.format(ids=ids, pairs=pairs)
         return Outcome(Verdict.HOLD, reason, overlap={"files": ours, "with": found})
 
-    def lift_due(
-        self,
-    ) -> None:
+    def lift_due(self) -> None:
         """F6: lift every overlap hold whose stories have all landed, left or been cancelled."""
         for story in list(self.runtime.state.stories.values()):
             if is_overlap_hold(story) and self._is_clear(story):

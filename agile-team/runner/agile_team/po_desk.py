@@ -31,9 +31,7 @@ class PoDesk:
             return None
         return handover.merge(self._queued[: self._taken])
 
-    def finish_turn(
-        self,
-    ) -> None:
+    def finish_turn(self) -> None:
         """Drop the passes the finished turn took."""
         del self._queued[: self._taken]
         self._taken = 0
