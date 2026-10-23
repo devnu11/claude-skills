@@ -429,13 +429,13 @@ def auth_env(config: config_mod.Config, locations: keys.KeyLocations) -> dict[st
 
 def start_from(args: argparse.Namespace) -> Start:
     """The PO's task and start mode; only a resume may omit the task."""
-    task = _task_of(args)
+    task = _read_task(args)
     if args.mode is not StartMode.RESUME and not task:
         raise CliError("--task or --task-file is required unless --resume")
     return Start(task, args.mode)
 
 
-def _task_of(args: argparse.Namespace) -> str:
+def _read_task(args: argparse.Namespace) -> str:
     """The task from ``--task`` or from ``--task-file`` (a file, or - for stdin) (#52)."""
     if args.task and args.task_file:
         raise CliError("give --task or --task-file, not both")
