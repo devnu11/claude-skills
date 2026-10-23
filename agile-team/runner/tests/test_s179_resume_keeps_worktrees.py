@@ -136,11 +136,12 @@ def test_land_and_replay_scratch_dirs_are_still_removed_ac2(make_runtime, fake) 
 
 
 def test_a_pinned_replay_dir_is_kept_ac2(make_runtime, fake) -> None:
-    from types import SimpleNamespace
+    from agile_team.boundary import Boundary, Edge, ReplayProgress
 
     rt = make_runtime()
     rt.state.sprint = 1
-    rt.state.boundary = SimpleNamespace(replay=object())
+    progress = ReplayProgress(old_head="h" * 40, base="b" * 40, target="t" * 40)
+    rt.state.boundary = Boundary(Edge.END, 1, replay=progress)
     system.make_dirs(rt.config.run_dir / "replay")
     rt.recover_stories(Cause.CRASH)
     assert removals(fake) == []
