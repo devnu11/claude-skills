@@ -1,5 +1,6 @@
 """CLI wiring for every subcommand."""
 
+import io
 import json
 import signal
 from pathlib import Path
@@ -103,6 +104,42 @@ def test_start_needs_task(configured: Path, key_home: Path, fake: FakeSystem) ->
     any_tool(fake)
     with pytest.raises(cli.CliError, match="--task"):
         cli.cmd_start(start_args(configured, key_home), FakeQuery())
+
+
+def test_start_takes_the_task_from_a_file(
+    configured: Path, key_home: Path, scratch: Path, fake: FakeSystem
+) -> None:
+    any_tool(fake)
+    brief = scratch / "brief.md"
+    system.write_text(brief, "build a todo app\nwith two lines")
+    args = start_args(configured, key_home, "--task-file", str(brief))
+    assert cli.cmd_start(args, FakeQuery("PO finished")) == 0
+    state = json.loads(system.read_text(configured / ".team/run/state.json"))
+    assert state["task"] == "build a todo app\nwith two lines"
+
+
+def test_start_refuses_both_task_and_task_file(configured: Path, key_home: Path) -> None:
+    args = start_args(configured, key_home, "--task", "t", "--task-file", "f")
+    with pytest.raises(cli.CliError, match="not both"):
+        cli.start_from(args)
+
+
+def test_answer_from_a_file_or_stdin(configured: Path, scratch: Path, monkeypatch) -> None:
+    relay = Relay(configured / ".team/run")
+    relay.post(Note("question", "DB?", ["s1"]))
+    relay.post(Note("question", "UI?", ["s1"]))
+    system.write_text(scratch / "a.md", "sqlite, because\nit is local")
+    assert run("--repo", str(configured), "answer", "m1", "--file", str(scratch / "a.md")) == 0
+    monkeypatch.setattr("sys.stdin", io.StringIO("web"))
+    assert run("--repo", str(configured), "answer", "m2", "--file", "-") == 0
+    answers = relay.answers()
+    assert (answers["m1"].text, answers["m2"].text) == ("sqlite, because\nit is local", "web")
+
+
+@pytest.mark.parametrize("extra", [(), ("x", "--file", "f")])
+def test_answer_needs_exactly_one_text(configured: Path, capsys, extra: tuple[str, ...]) -> None:
+    assert run("--repo", str(configured), "answer", "m1", *extra) == 1
+    assert "not both or neither" in capsys.readouterr().err
 
 
 def test_start_via_main_reports_missing_key(configured: Path, scratch: Path, capsys) -> None:
