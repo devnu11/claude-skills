@@ -21,6 +21,24 @@ def test_falls_back_to_home(key_home: Path) -> None:
     assert keys.mode_ok(src.path)
 
 
+@pytest.mark.parametrize(
+    ("key_file", "where"),
+    [
+        (str(FAKE_HOME / "anthropic_key"), FAKE_HOME / "anthropic_key"),
+        ("~/anthropic_key", FAKE_HOME / "anthropic_key"),
+        ("../elsewhere/key", FAKE_REPO / "../elsewhere/key"),
+    ],
+)
+def test_a_configured_key_outside_the_repo_is_external(key_file: str, where: Path) -> None:
+    source = keys.KeyLocations(FAKE_REPO, key_file, FAKE_HOME).configured()
+    assert source == keys.KeySource(where, keys.KeyOrigin.EXTERNAL)
+
+
+def test_an_absolute_key_inside_the_repo_is_a_repo_key() -> None:
+    source = keys.KeyLocations(FAKE_REPO, str(FAKE_REPO / "k"), FAKE_HOME).configured()
+    assert source.origin is keys.KeyOrigin.REPO
+
+
 def test_none_found() -> None:
     with pytest.raises(keys.KeyNotFound, match="tried"):
         keys.KeyLocations(FAKE_REPO, "k", FAKE_REPO / "nohome").resolve()

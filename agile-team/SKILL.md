@@ -37,7 +37,8 @@ command fails.
    confirm or edit. Then ask: artifact policy (`.team/` and docs committed or
    ignored), docs dir, auth (`api-key` bills the repo's Console workspace;
    `login` uses the human's Claude Code subscription), key file location for
-   `api-key` (or fall back to `~/secrets/anthropic-api-key`), budget ceiling
+   `api-key` (in the repo and gitignored, or outside it, absolute or `~/…`; or
+   fall back to `~/secrets/anthropic-api-key`), budget ceiling
    in USD (the run halts when spend reaches it), default cadence. Run `$AT init --preset … --environment … [--url …]
    --docs-dir … --artifacts … --auth … --key-file … --budget … --cadence …`.
    It writes the first `[[environment]]` (acceptance environment: the setup
