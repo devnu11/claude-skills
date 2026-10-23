@@ -69,8 +69,11 @@ command fails.
    Backlog has ready stories. The PO may report `done` or `blocked` only once
    nothing in the Sprint Backlog can move. A resume keeps the cadence.
 5. **Start in the background:**
-   `$AT start --cadence <c> --task "<the human's task, verbatim>"`
-   (add `--onboard` for the onboarding sprint, `--resume` to continue).
+   write the human's task verbatim to a file with the Write tool (for example
+   `.team/run/liaison/task.md`), then
+   `$AT start --cadence <c> --task-file .team/run/liaison/task.md`
+   (`--task "<text>"` works for a short one; add `--onboard` for the
+   onboarding sprint, `--resume` to continue).
    The PO doesn't write stories: you write the task's stories with the
    human and send each with `$AT story new` (step 7), before or after the
    start, and the PO schedules them.
@@ -176,7 +179,9 @@ command fails.
    relay it to the PO. If `$AT start` fails with `story files: …; fix
    depends_on in .team/stories`, show the human the message. The human fixes
    the named files and commits them (`story amend` changes only the ACs).
-7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`. To pass on
+7. **Answer:** `$AT answer <id> "<the human's answer, verbatim>"`, or for a
+   long one write it to a file and run `$AT answer <id> --file <path>` (`-`
+   reads stdin). To pass on
    something the PO did not ask for, write the human's words verbatim to a
    file with the Write tool (for example `.team/run/liaison/draft.md`), then
    run `$AT tell .team/run/liaison/draft.md` (or `-` to read stdin). Never put

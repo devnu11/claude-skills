@@ -429,9 +429,17 @@ def auth_env(config: config_mod.Config, locations: keys.KeyLocations) -> dict[st
 
 def start_from(args: argparse.Namespace) -> Start:
     """The PO's task and start mode; only a resume may omit the task."""
-    if args.mode is not StartMode.RESUME and not args.task:
-        raise CliError("--task is required unless --resume")
-    return Start(args.task or "", args.mode)
+    task = _task_of(args)
+    if args.mode is not StartMode.RESUME and not task:
+        raise CliError("--task or --task-file is required unless --resume")
+    return Start(task, args.mode)
+
+
+def _task_of(args: argparse.Namespace) -> str:
+    """The task from ``--task`` or from ``--task-file`` (a file, or - for stdin) (#52)."""
+    if args.task and args.task_file:
+        raise CliError("give --task or --task-file, not both")
+    return _message_text(args.task_file) if args.task_file else args.task or ""
 
 
 def cmd_start(args: argparse.Namespace, query_fn: QueryFn | None = None) -> int:
@@ -645,12 +653,20 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
 
 def cmd_answer(args: argparse.Namespace) -> int:
     config = _load_config(repo_of(args))
+    text = _answer_text(args)
     try:
-        Relay(config.run_dir).answer(args.id, args.text)
+        Relay(config.run_dir).answer(args.id, text)
     except RelayError as exc:
         raise CliError(str(exc)) from exc
     print(f"answered {args.id}")
     return 0
+
+
+def _answer_text(args: argparse.Namespace) -> str:
+    """The answer from its argument or from ``--file`` (a file, or - for stdin) (#52)."""
+    if (args.text is None) == (args.file is None):
+        raise CliError("give the answer as text or with --file, not both or neither")
+    return args.text if args.file is None else _message_text(args.file)
 
 
 def _message_text(source: str) -> str:
@@ -893,6 +909,7 @@ INIT_ARGS: tuple[Arg, ...] = (
 )  # fmt: skip
 START_ARGS: tuple[Arg, ...] = (
     (("--task",), {"help": "the task for the Product Owner"}),
+    (("--task-file",), {"help": "a file holding the task, or - to read stdin"}),
     (("--cadence",), {"choices": config_mod.CADENCES}),
     (("--onboard",), {"action": "store_const", "dest": "mode", "const": StartMode.ONBOARD,
                       "default": StartMode.WORK, "help": "run the onboarding sprint"}),
@@ -944,7 +961,9 @@ COMMANDS = (
         "list the built-in runner stages and the repo's [[tool]] entries as JSON",
         cmd_tools,
     ),
-    Command("answer", "answer a PO question", cmd_answer, ((("id",), {}), (("text",), {}))),
+    Command("answer", "answer a PO question (text, or --file: a file, or - for stdin)",
+            cmd_answer, ((("id",), {}), (("text",), {"nargs": "?"}),
+                         (("--file",), {"help": "file holding the answer, or - to read stdin"}))),
     Command("tell", "queue a message for the PO (a file, or - for stdin)", cmd_tell,
             ((("source",), {"help": "file holding the message, or - to read stdin"}),)),
     Command("share", "share a file with the team for a story (hash-checked at acceptance)",
