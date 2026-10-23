@@ -3217,10 +3217,15 @@ the land holds (`the sprint branch kept moving`). A landing never pushes a
 merge made on an older sprint head, except one whose carried commits follow
 it.
 
-**No fork under a moved landing.** While a landing holds a merge whose first
-parent is no longer the sprint head, a story with no worktree yet isn't
-started: its branch would fork on a commit the landing is about to carry. It
-starts once the landing ends.
+**No fork under a moved landing.** While a landing keeps a merge whose
+first parent is no longer the sprint head, a story with no branch yet isn't
+started, because its branch would fork on a commit the landing is about to
+carry. A merge counts as kept while it is made and checked, and after its
+landing push until it lands, drops or bounces. That includes a land held on
+CI and the time after a restart: the story's `landed` record saves the
+merge's first parent as `base`. A story that already has a branch carries
+on. A held story starts once the landing ends. Until then the stall
+hand-over gives its reason as `waits for the landing of <id>`.
 
 **A refused sprint push** is never retried as is. The landing gives up its
 merge, fetches the remote head `R` and:

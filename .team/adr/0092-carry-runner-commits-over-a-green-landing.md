@@ -49,8 +49,9 @@ Carry (option 2), with three guards.
    `rewrite.remap_state` rewrites the run's recorded shas. `story-landed`
    gains `carried` (old sha → new sha).
 4. **No fork on a moved commit.** While a landing holds a merge whose first
-   parent isn't the sprint head (`RunFlags.landing_base`), a story with no
-   worktree isn't offered. A branch forked on a moved commit would keep the
+   parent isn't the sprint head (`RunFlags.landing_base`; see the round-2
+   amendment below for the saved `Landed.base`), a story with no worktree
+   isn't offered. A branch forked on a moved commit would keep the
    old copies, so the carry would have to refuse.
 5. **A drop says why.** `landing-dropped` gains `moved` (every commit of
    `B..H` as `<short sha> <subject>`) and `not_carried` (the guard that
@@ -77,3 +78,29 @@ Carry (option 2), with three guards.
   failed fast-forward does today.
 - Lands, revert landings included, still run one at a time, so one
   `landing_base` is enough.
+
+## Amended by s180, design round 2 (2026-10-23)
+
+Guard 4 used only `RunFlags.landing_base`, which lives in memory and is
+cleared when `land` returns. A land that returns on a CI hold, or a restart,
+left a pushed merge waiting with no hold. A story could then fork on the
+moved head, and the landing dropped with `FORKED`, which is the incident s180
+is about (review F1).
+
+What changed:
+
+- `Landed` gains `base`, the merge's first parent, saved at the landing
+  push. The router holds while any story at `land` keeps a pushed merge
+  whose `base` isn't the sprint head, or while the in-memory flag (the
+  merge being made and checked) is below it. A pre-s180 record has no
+  `base` and holds nothing until its resume fills it in.
+- The hold applies to a story with no `branch` (it would fork), not to one
+  with no worktree. A story with a branch never forks again.
+- The stall hand-over names the landing that holds a story.
+
+New consequence: a landing held on CI below a moved head keeps new stories
+from starting until it lands, drops or bounces. That can take hours. The
+stuck-Sprint-Backlog hand-over names the landing, so the PO and the liaison
+see what to release. Forking such a story on the merge's base instead was
+rejected: the branch would miss the story-file commit that opened it and
+any storyless config commit.
