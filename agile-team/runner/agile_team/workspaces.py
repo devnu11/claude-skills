@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import system
 from .config import Config
-from .gates import StoryState
+from .gates import StoryState, StoryStatus
 from .git_ops import Git, parse_porcelain_z
 from .story_branches import format_story_branch
 
@@ -19,6 +19,15 @@ WORKTREES = "worktrees"
 LAND = "land"
 REPLAY = "replay"
 SCRATCH_DIRS = (LAND, REPLAY)
+
+
+def find_prune_reason(story: StoryState | None, sprint: int | None) -> str | None:
+    """I3: why a resume removes the story's worktree, or None when it stays."""
+    if story is None or story.sprint is None or story.sprint != sprint:
+        return "not in the sprint"
+    if story.status in (StoryStatus.DONE, StoryStatus.CANCELLED):
+        return str(story.status)
+    return None
 
 
 class Workspaces:
