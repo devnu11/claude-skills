@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from agile_team import dispatch, guard, system
+from agile_team import dispatch, guard, requirements, system
 from agile_team.dispatch import Plan
 from agile_team.gates import StoryState, Verdict
 from agile_team.roles import RoleBook
@@ -129,3 +129,38 @@ def test_a_story_with_a_pending_rebase_never_pushes(make_runtime, monkeypatch) -
     assert asyncio.run(StoryPusher(rt).push_off_loop(story)) is None
     assert StoryPusher(rt).after_step(story) is None
     assert rt.upstream.leases == [] and story.pushed == OLD_TIP
+
+
+# ---------- C: a resolved requirement conflict is not an unexplained edit (C4, S2) ----------
+
+
+def conflicted_requirement(view: dispatch.Runtime, plan: Plan, fake: FakeSystem) -> str:
+    """A finished rebase whose conflicting requirement file is edited in the worktree."""
+    path = f"{requirements.folder_of(view.config)}/REQ-001.md"
+    plan.story.rebase.files = plan.scope.write = [path]
+    system.make_dirs((view.git.repo / path).parent)
+    system.write_text(view.git.repo / path, "---\nid: REQ-001\n---\nresolved\n")
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    fake.reply(("status", "--porcelain=v1"), Done(0, f" M {path}\0"))
+    fake.reply(("diff", "--name-status"), Done(0, f"M\0{path}\0"))
+    fake.reply(("show", f"HEAD:{path}"), Done(0, "---\nid: REQ-001\n---\nold\n"))
+    fake.reply(("merge-base", "--is-ancestor"), Done(1, ""))
+    return path
+
+
+def test_a_story_rebase_does_not_hold_back_its_conflicting_requirement(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    conflicted_requirement(view, plan, fake)
+    report = settle(view, plan, handoff("done", summary="resolved"))
+    assert "held_back" not in report and report["status"] == "done"
+    assert not [c for c in fake.commands if "revert" in c.argv]
+    assert report["commit"] is not None
+
+
+def test_a_role_step_still_holds_back_an_unexplained_requirement_edit(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    conflicted_requirement(view, plan, fake)
+    plan.kind = dispatch.StepKind.ROLE
+    held = view.settle_tree(plan)
+    assert held.get("held_back") and plan.unexplained.startswith("explain change to REQ-001")

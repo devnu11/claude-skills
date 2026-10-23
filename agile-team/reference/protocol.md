@@ -2853,7 +2853,9 @@ back`), the same way the quarantine works. The step then counts as a bad
 handoff and bounces with a round:
 `explain change to REQ-003 (your edits are held back in <sha>; make them again and give each reason in the handoff's requirement_changes)`.
 Added and explained changes still land. A reason for a file the step didn't
-touch is ignored.
+touch is ignored. In a story rebase step, edits to the conflicting files the
+rebase lists are the conflict's resolution, not requirement changes: they
+need no reason and are never held back (any other requirement file is).
 
 **Trailers.** The step commit ends with one trailer block: a
 `Requirement-Changed: REQ-003: <why>` line per landed change, in id order,

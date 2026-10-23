@@ -1659,7 +1659,7 @@ class Runtime:
     def _sort_requirements(self, plan: Plan, audit: guard.Audit) -> requirement_changes.Sorting:
         """Classify the step's requirement files and split them by their reasons (C1-C3)."""
         folder = requirements.folder_of(self.config)
-        paths = requirement_changes.select_candidates(audit.in_scope, folder)
+        paths = requirement_changes.select_candidates(_find_new_edits(plan, audit), folder)
         found = requirement_changes.find_changes(self.git, paths)
         return requirement_changes.sort_changes(found, plan.reasons)
 
@@ -2149,6 +2149,12 @@ def _writers(
 def _note_files(story: StoryState, paths: list[str]) -> None:
     """Add committed paths to the story's files, once each (R7)."""
     story.files.extend(p for p in dict.fromkeys(paths) if p not in story.files)
+
+
+def _find_new_edits(plan: Plan, audit: guard.Audit) -> list[str]:
+    """The step's in-scope edits, less a story rebase's conflicting files: those resolve (S2)."""
+    resolved = plan.story.rebase.files if plan.kind is StepKind.STORY_REBASE else []  # type: ignore[union-attr]
+    return [p for p in audit.in_scope if p not in resolved]
 
 
 def _settled(plan: Plan, parsed: Handoff | HandoffError) -> Handoff | HandoffError:
