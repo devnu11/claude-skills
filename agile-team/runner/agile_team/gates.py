@@ -426,6 +426,15 @@ def _step_refusal(role: str, story: StoryState) -> str | None:
 
 
 TESTS_FAIL = "tests fail:\n{tail}"
+COVERAGE_LOW = "coverage {pct}% is below {bar}%\n{scope}; {source}"
+COVERAGE_SCOPE = "the total of `{command}` over everything it measures, not only this story's files"
+BAR_NO_BASELINE = (
+    "the bar is [gates] coverage = {threshold}%, and no " + BASELINE + ' "coverage" baseline '
+    "lowers it for old debt"
+)
+BAR_BASELINE = "the bar is the lower of [gates] coverage = {threshold}% and the {baseline}% in " + (
+    BASELINE
+)
 TEST_FAILURES: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b[1-9]\d* (?:failed|errors?)\b"),  # pytest/cargo/jest summaries
     re.compile(r"^--- FAIL:", re.MULTILINE),  # go test
@@ -714,8 +723,19 @@ class Checks:
         if pct is None:
             return Outcome(Verdict.BOUNCE, "could not read a coverage total")
         if pct < self.required_coverage():
-            return Outcome(Verdict.BOUNCE, f"coverage {pct}% is below {self.required_coverage()}%")
+            return Outcome(Verdict.BOUNCE, self._coverage_low(pct))
         return Outcome(Verdict.PASS, f"coverage {pct}%")
+
+    def _coverage_low(self, pct: float) -> str:
+        """The shortfall with the command, its scope and where the bar comes from (#59)."""
+        scope = COVERAGE_SCOPE.format(command=self.commands.get("coverage", ""))
+        bar = self.required_coverage()
+        return COVERAGE_LOW.format(pct=pct, bar=bar, scope=scope, source=self._bar_source())
+
+    def _bar_source(self) -> str:
+        if self.baseline_coverage is None:
+            return BAR_NO_BASELINE.format(threshold=self.threshold)
+        return BAR_BASELINE.format(threshold=self.threshold, baseline=self.baseline_coverage)
 
     def after_suite_runs(self, story: str, first: Outcome) -> Outcome:
         """Run the test command the story's ``suite_runs`` times after a passing gate."""

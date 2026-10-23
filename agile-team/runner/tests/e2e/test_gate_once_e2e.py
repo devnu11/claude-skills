@@ -34,5 +34,5 @@ def test_failing_suite_bounces_with_tests_fail_after_one_run(tmp_path: Path) -> 
 def test_coverage_shortfall_bounces_with_the_shortfall_text(tmp_path: Path) -> None:
     body = "200 passed\\nTOTAL 100 20 80%\\nFAIL Required test coverage of 95% not reached"
     outcome, runs = gate(tmp_path, body, 1)
-    assert outcome.reason == "coverage 80.0% is below 95.0%"
+    assert outcome.reason.split("\n")[0] == "coverage 80.0% is below 95.0%"
     assert runs == ["run"]
