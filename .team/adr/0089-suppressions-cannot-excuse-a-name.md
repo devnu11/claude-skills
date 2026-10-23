@@ -67,3 +67,19 @@ the name and silenced the refusal in one comment. So `suppression-reason` and
 `suppression-excuse` can't be suppressed on a line (`checker.UNSUPPRESSIBLE`).
 A repo that wants either off says so once, in its settings, with `disable`,
 where a reviewer sees it.
+
+## Amended by s161, after acceptance (2026-10-23)
+
+Acceptance found that "a test fixes the name" and "test file fixed the name"
+got through. The default patterns were a phrase list: the passive form and a
+few active verb forms. The defaults are now a small grammar (design E3). An
+excuse has a source (a word part `test(s)` or `design(s)`, optionally followed
+by `file`/`suite`/`doc`), a fixing verb (a stem such as `fix`, `choos`, `us`,
+`nam`, `expect`, in any tense) and the name. It comes in four forms: active,
+passive, noun ("s163 design name") and bare ("per the design"). Matching
+stays fullmatch on the reason, cut at `#` and stripped of trailing
+punctuation. A bounded search was rejected: it would refuse a real reason
+that mentions the tests on the way to its point ("name fixed by the tests; it
+mirrors git's verb"). AC2 refuses only a reason that *only* gives the excuse.
+A new phrasing is a new verb stem or source word in the grammar, not another
+whole-sentence pattern. A repo's `excuses` are still fullmatched regexes.
