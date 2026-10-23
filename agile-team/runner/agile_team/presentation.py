@@ -65,7 +65,7 @@ LAYOUT_HEAD = (
     "that environment's ACs. Except for `manual`, its workspace/ must hold the demo or evidence\n"
     "files themselves, not only the empty git repo."
 )
-LAYOUT_LINE = "- {name} ({kind}): {path}/ ({acs})"
+LAYOUT_LINE = "- {name} ({kind}): {path}/ ({acs}); its guide: {path}/{guide}"
 STOP_HELD = "story {story} presentation did not stop: {held}"
 TRIAL_VERDICTS = {sandbox.NotUp: Verdict.BOUNCE, sandbox.PortBusy: Verdict.HOLD}
 
@@ -217,9 +217,19 @@ def _line(showing: Showing, gap: str | None) -> str:
 
 
 def _gap(config: Config, showing: Showing) -> str | None:
+    """Every gap of one showing, so a fix to one half does not hide the other (#57)."""
+    found = (_guide_gap(config, showing), _needed_workspace_gap(config, showing))
+    return "; ".join(gap for gap in found if gap) or None
+
+
+def _guide_gap(config: Config, showing: Showing) -> str | None:
     source = source_dir(config, showing)
-    if not _guide_written(source):
-        return GAPS[Gap.NO_GUIDE].format(path=_rel(config, source / GUIDE))
+    if _guide_written(source):
+        return None
+    return GAPS[Gap.NO_GUIDE].format(path=_rel(config, source / GUIDE))
+
+
+def _needed_workspace_gap(config: Config, showing: Showing) -> str | None:
     if recipe_of(showing.environment).need is not Need.WORKSPACE:
         return None
     return _workspace_gap(config, showing)
@@ -285,6 +295,7 @@ def _layout_line(config: Config, showing: Showing, ids: dict[str, list[str]]) ->
         kind=environment.kind,
         path=_rel(config, source_dir(config, showing)),
         acs=", ".join(ids[environment.name]),
+        guide=GUIDE,
     )
 
 

@@ -116,7 +116,9 @@ def test_missing_lists_every_gap_one_line_each(config: cfg.Config) -> None:
         ),
         line(
             "dashboard",
-            f"{p}/dashboard/PRESENTATION.md is missing or empty; write the customer's guide there",
+            f"{p}/dashboard/PRESENTATION.md is missing or empty; write the customer's guide there; "
+            f"{p}/dashboard/workspace is missing; "
+            "put the demo or evidence files the customer tries there",
         ),
         line(
             "review",
@@ -242,6 +244,7 @@ def test_layout_section(config: cfg.Config) -> None:
     assert "- cli (package): .team/run/presentation/s4/cli/ (AC2, AC4)" in text
     assert "- dashboard (web): .team/run/presentation/s4/dashboard/ (AC1)" in text
     assert "- review (manual): .team/run/presentation/s4/review/ (AC3)" in text
+    assert "(AC3); its guide: .team/run/presentation/s4/review/PRESENTATION.md\n" in f"{text}\n"
 
 
 def test_layout_section_empty_without_showings(config: cfg.Config) -> None:

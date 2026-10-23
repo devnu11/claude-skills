@@ -230,7 +230,7 @@ def test_scaffold_writes_missing_stubs_only(repo: Path) -> None:
 def test_integration_tester_builds_the_presentation(repo: Path) -> None:
     tester = RoleBook.for_repo(repo, {}).resolve("integration-tester")
     assert ".team/run/presentation/**" in tester.write and "{e2e}" in tester.write
-    assert "PRESENTATION.md" in tester.body and "live-status.json" in tester.body
+    assert "PRESENTATION.md" in tester.body and "only a live run shows" in tester.body
 
 
 def test_customer_proxy_never_builds_its_own_environment(repo: Path) -> None:
@@ -349,3 +349,9 @@ def test_manager_prompt_lists_every_ruling() -> None:
     prompt = system.read_text(roles.BUILTIN_DIR / "manager.md")
     assert all(f"`{ruling}`" in prompt for ruling in roles.RULINGS)
     assert "one of the four" not in prompt
+
+
+def test_the_tester_charter_names_the_guide_path_and_no_runner_repo_command() -> None:
+    prompt = system.read_text(roles.BUILTIN_DIR / "integration-tester.md")
+    assert "`<showing>/PRESENTATION.md`, beside `workspace/`" in prompt
+    assert "agile-team status" not in prompt and "live-status.json" not in prompt

@@ -10,3 +10,6 @@ This comment is ignored.
 
 Role: Writes end-to-end tests derived from the stories.
 -->
+
+For ACs that only a live run shows (sprints, stops, spend), capture
+`agile-team status` of the live run as `live-status.json` in the workspace.
