@@ -3081,7 +3081,13 @@ draft PR from its branch to the sprint's branch (`<id>: <title>`). Every 60 s
 at most, the runner reads each open story's PR checks on its pushed head;
 a settled result that changed is saved as the story's `ci` and logged as
 `story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). A red result hands
-over `story_ci_red` and holds nothing: only the landing CI decides.
+over `story_ci_red` and holds nothing: only the landing CI decides. A
+story not yet due is skipped before `gh` is asked anything. Whether `gh`
+works (`gh --version`, then `gh auth status`, which costs an API request)
+is checked once and a success is trusted for 10 minutes; a failure is
+checked again on the next call. A failure whose output shows a rate limit
+or a network error reads `gh could not check its login (rate limited or
+offline): <line>`, not `gh is not logged in`.
 
 **Land.** `land` is the last pipeline step, after `acceptance`, and the
 runner runs it itself. A story is `done` only when its land passes, and

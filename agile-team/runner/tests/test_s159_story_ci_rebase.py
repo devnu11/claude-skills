@@ -131,6 +131,17 @@ def test_polls_are_at_least_sixty_seconds_apart_sc1(make_runtime, fake) -> None:
     assert poll.poll(story, 1030.0) is None and len(rt.prs.calls) == calls
 
 
+def test_a_story_not_yet_due_never_asks_whether_gh_works_sc1(make_runtime, fake) -> None:
+    """Rate limit (2026-10-20): the time gate comes before ``prs.missing()``."""
+    rt, story, poll = poller(make_runtime, fake)
+    asked: list[str] = []
+    rt.prs.missing = lambda: asked.append("missing")
+    poll.claim_due(story, 1000.0)
+    for second in range(1, story_ci.STORY_CI_POLL_S):
+        assert poll.claim_due(story, 1000.0 + second) is False
+    assert asked == ["missing"]
+
+
 def test_the_poll_interval_is_sixty_seconds_sc1() -> None:
     assert story_ci.STORY_CI_POLL_S == 60
 

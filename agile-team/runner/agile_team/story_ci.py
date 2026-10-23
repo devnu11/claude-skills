@@ -135,9 +135,12 @@ class StoryCiPoll:
         return self.settle(story, self.read_checks(story), sha)
 
     def claim_due(self, story: StoryState, now: float) -> bool:
-        """True, and the read time noted, when the story's head is due a read (loop thread)."""
+        """True, and the read time noted, when the story's head is due a read (loop thread).
+
+        The time gate comes first: ``can_poll`` asks ``gh``, which may cost an API request.
+        """
         last = self._read_at.get(story.id)
-        if not self.can_poll(story) or (last is not None and now - last < STORY_CI_POLL_S):
+        if (last is not None and now - last < STORY_CI_POLL_S) or not self.can_poll(story):
             return False
         self._read_at[story.id] = now
         return True
