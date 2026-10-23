@@ -170,6 +170,6 @@ def test_a_harness_without_prepare_is_warned_about(repo: Path) -> None:
             {"name": "site", "kind": "web", "url": "http://localhost:1"},
         ]
     }
-    warnings = cfg.environment_warnings(cfg.from_raw(repo, raw).environments)
+    warnings = cfg.find_environment_warnings(cfg.from_raw(repo, raw).environments)
     assert warnings == [cfg.EMPTY_HARNESS_PREPARE.format(name="bare")]
     assert warnings[0].startswith("acceptance environment 'bare' (harness) has no prepare")
