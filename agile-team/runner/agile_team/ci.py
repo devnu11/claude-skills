@@ -44,6 +44,9 @@ FAILING_LINE: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bERROR\s+\S+::"),
     re.compile(r"--- FAIL: "),
     re.compile(r"\b[1-9]\d* (?:failed|errors?)\b"),
+    re.compile(r"^\S+:\d+(?::\d+)?: \S"),
+    re.compile(r"^Would reformat: "),
+    re.compile(r"\bin function\b"),
 )
 CI_GREEN_REPORT = (
     "Sprint {sprint}'s CI passed on {prs}: ready to merge by fast-forward only, never by a "

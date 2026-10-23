@@ -358,7 +358,7 @@ HANDOVERS: tuple[Rule, ...] = (
     Rule(
         Trigger.STORY_CI_RED,
         lambda r: (r.get("story_ci") or {}).get("verdict") == "red",
-        "{story}: CI failed on its PR at {ci_sha}: {ci_checks}. Nothing is held; the story "
+        "{story}: CI failed on its PR at {ci_sha}:\n{ci_checks}\nNothing is held; the story "
         "lands only on green landing CI. Brief its developer if it needs a fix.",
     ),
     Rule(
@@ -442,7 +442,7 @@ def _land_fields(report: dict) -> dict[str, str]:
     conflict = land.get("conflict") or {}
     fields = {
         "ci_sha": ci.get("sha"),
-        "ci_checks": "; ".join(ci.get("checks") or []) if ci else None,
+        "ci_checks": "\n".join(ci.get("checks") or []) if ci else None,
         "drift_path": drift.get("path"),
         "drift_files": ", ".join(drift.get("files") or []) if drift else None,
         "land_files": ", ".join(conflict.get("files") or []) if conflict else None,

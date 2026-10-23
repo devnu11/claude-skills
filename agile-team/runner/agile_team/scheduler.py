@@ -551,7 +551,7 @@ class Scheduler:
             self.queue_story_ci(story, found)
 
     def queue_story_ci(self, story: StoryState, found: Any) -> None:
-        report = {"story_ci": {"verdict": "red", "sha": found.sha, "checks": [found.verdict]}}
+        report = {"story_ci": {"verdict": "red", "sha": found.sha, "checks": found.checks}}
         lines = handover.report_lines(report, story.id)
         self.queue_pass(Pass([Trigger.STORY_CI_RED], lines, [story.id]))
 

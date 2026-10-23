@@ -6,11 +6,22 @@ the story's pushed head now and then. Neither holds the story: only the landing 
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from . import system
 from .boundary import SUPERSEDED_BY, Permission, PrMode, StackEntry, find_current_entry
-from .ci import Bucket, Check, CiResult, CiVerdict, check_lines, verdict_of
+from .ci import (
+    FAILING,
+    Bucket,
+    Check,
+    CiResult,
+    CiVerdict,
+    check_lines,
+    classify_check,
+    job_of,
+    verdict_of,
+)
 from .events import Event, EventKind
 from .gates import FINISHED, StoryState
 from .landing import STORY_PR_BODY
@@ -128,6 +139,7 @@ class StoryCiPoll:
     def __init__(self, runtime: Runtime) -> None:
         self.runtime = runtime
         self._read_at: dict[str, float] = {}
+        self._described: dict[tuple[str, str], Check] = {}
 
     def poll(self, story: StoryState, now: float) -> StoryCi | None:
         """Record and return a new settled result for the story's pushed head, else ``None``."""
@@ -162,17 +174,31 @@ class StoryCiPoll:
     def read_checks(self, story: StoryState) -> list[Check]:
         """The head's checks, safe in a worker thread; a failing ``gh`` is "no result" (AC8.3)."""
         try:
-            return self.runtime.prs.list_checks(story.pushed)  # type: ignore[arg-type]
+            raw = self.runtime.prs.list_checks(story.pushed)  # type: ignore[arg-type]
+            return [self.describe(story.pushed or "", c) for c in raw]
         except UpstreamError:
             return []
 
+    def describe(self, sha: str, check: Check) -> Check:
+        """A failing check with its step and lines; its job and log are read once per sha."""
+        if check.bucket not in FAILING or job_of(check.link) is None:
+            return check
+        key = (sha, check.link)
+        if key not in self._described:
+            self._described[key] = self.read_failing_lines(check, sha)
+        return self._described[key]
+
+    def read_failing_lines(self, check: Check, sha: str) -> Check:
+        """The check with ``step`` and ``lines`` from its job; the verdict stays the bucket's."""
+        found = classify_check(self.runtime.prs, check, sha)
+        return replace(check, step=found.step, lines=found.lines)
+
     def _record(self, story: StoryState, checks: list[Check], sha: str) -> StoryCi | None:
-        found = StoryCi(sha, str(verdict_of(checks)), "pr")
+        found = StoryCi(sha, str(verdict_of(checks)), "pr", check_lines_of(checks))
         if found == story.ci:
             return None
         story.ci = found
-        data = {**found.__dict__, "checks": check_lines_of(checks)}
-        self.runtime.events.emit(Event(EventKind.STORY_CI, None, story.id, data))
+        self.runtime.events.emit(Event(EventKind.STORY_CI, None, story.id, dict(found.__dict__)))
         return found
 
 
