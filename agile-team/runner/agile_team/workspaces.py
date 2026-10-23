@@ -7,11 +7,12 @@ the main checkout's ``.team/run``, so nothing lands outside the repository.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from enum import StrEnum
 from pathlib import Path
 
 from . import system
 from .config import Config
-from .gates import StoryState
+from .gates import StoryState, StoryStatus
 from .git_ops import Git, parse_porcelain_z
 from .story_branches import format_story_branch
 
@@ -19,6 +20,33 @@ WORKTREES = "worktrees"
 LAND = "land"
 REPLAY = "replay"
 SCRATCH_DIRS = (LAND, REPLAY)
+
+
+class PruneReason(StrEnum):
+    """I3 (s179): why a resume removes a worktree."""
+
+    UNKNOWN = "unknown"
+    DONE = "done"
+    CANCELLED = "cancelled"
+    NOT_IN_SPRINT = "not_in_sprint"
+    SCRATCH = "scratch"
+
+
+FINISHED_REASONS = {
+    StoryStatus.DONE: PruneReason.DONE,
+    StoryStatus.CANCELLED: PruneReason.CANCELLED,
+}
+
+
+def find_prune_reason(story: StoryState | None, sprint: int | None) -> PruneReason | None:
+    """I3 (s179): why a resume removes this story's worktree; ``None`` keeps it (R1, R2)."""
+    if story is None:
+        return PruneReason.UNKNOWN
+    if story.in_flight is not None:
+        return None
+    if story.status in FINISHED_REASONS:
+        return FINISHED_REASONS[story.status]
+    return None if story.sprint == sprint and sprint is not None else PruneReason.NOT_IN_SPRINT
 
 
 class Workspaces:
@@ -93,6 +121,11 @@ class Workspaces:
         """The story ids that have a worktree directory."""
         folder = self.config.run_dir / WORKTREES
         return sorted(p.name for p in system.list_dir(folder)) if system.is_dir(folder) else []
+
+    @property
+    def stored_scratch(self) -> list[str]:
+        """The scratch directories (land, replay) that exist, in ``SCRATCH_DIRS`` order."""
+        return [n for n in SCRATCH_DIRS if system.is_dir(self.config.run_dir / n)]
 
     def _remove_scratch(self, path: Path) -> None:
         if system.is_dir(path):

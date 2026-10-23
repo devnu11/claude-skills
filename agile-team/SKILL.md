@@ -446,7 +446,9 @@ command fails.
      and delivered after the resume.
    A step on a story that is cut off mid-way keeps its edits in the
    story's worktree, and `start --resume` resumes that role's session there
-   (s159). A cut-off storyless step's edits are committed as
+   (s159). A resume keeps every open sprint story's worktree, ignored files
+   included, and removes only those of done, cancelled or out-of-sprint
+   stories (s179). A cut-off storyless step's edits are committed as
    `chore(team): interrupted step by <role> on <story>`, reverted at once,
    and the sha is named in the note; the next step is offered the work. So
    you do nothing either way. **Never stash, discard or commit files by

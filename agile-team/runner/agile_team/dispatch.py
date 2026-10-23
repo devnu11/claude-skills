@@ -122,7 +122,7 @@ from .stage_log import StageLog, place_of
 from .state import RunState
 from .story_branches import KeptSession
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
-from .workspaces import Workspaces
+from .workspaces import REPLAY, SCRATCH_DIRS, PruneReason, Workspaces, find_prune_reason
 
 DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
 GATE_CHORE = "gate: {step} on {story}"
@@ -1161,16 +1161,47 @@ class Runtime:
             self.save()
 
     def recover_stories(self, cause: Cause) -> None:
-        """I2, I3: on a resume, prune stale worktrees and mark each cut-off story step stopped."""
-        pinned = self.state.boundary is not None and self.state.boundary.replay is not None
-        kept = {s.id for s in self.state.stories.values() if s.in_flight}
-        Workspaces(self.main, self.config).prune_stale(
-            frozenset(kept | ({"replay"} if pinned else set()))
-        )
+        """I2, I3 (s179): on a resume, prune the worktrees no open sprint story needs and
+        mark each cut-off story step stopped."""
+        self._prune_worktrees()
         for story in self.state.stories.values():
             if story.in_flight is not None:
                 self._resume_story(story, cause)
         self.save()
+
+    def _prune_worktrees(self) -> None:
+        """I3 (s179): remove the worktrees R2 and R3 name, one worktree-pruned event each."""
+        space = Workspaces(self.main, self.config)
+        gone = self._find_pruned(space)
+        everything = frozenset([*space.stored_worktrees, *SCRATCH_DIRS])
+        space.prune_stale(everything - gone.keys())
+        for name, reason in gone.items():
+            self._log_pruned(name, reason)
+
+    def _find_pruned(self, space: Workspaces) -> dict[str, PruneReason]:
+        """Each stored worktree and scratch dir a resume removes, with its reason (R2, R3)."""
+        gone: dict[str, PruneReason] = {}
+        for name in space.stored_worktrees:
+            reason = find_prune_reason(self.state.stories.get(name), self.state.sprint)
+            if reason is not None:
+                gone[name] = reason
+        scratch = [n for n in space.stored_scratch if n not in self._pinned_scratch]
+        return gone | dict.fromkeys(scratch, PruneReason.SCRATCH)
+
+    @property
+    def _pinned_scratch(self) -> frozenset[str]:
+        """R3: ``{REPLAY}`` while a boundary replay is pinned, else empty."""
+        boundary = self.state.boundary
+        return frozenset({REPLAY}) if boundary and boundary.replay is not None else frozenset()
+
+    def _log_pruned(self, name: str, reason: PruneReason) -> None:
+        """R4, R5: clear a removed story's ``worktree_head`` and log one worktree-pruned event."""
+        scratch = reason is PruneReason.SCRATCH
+        story = None if scratch else self.state.stories.get(name)
+        if story is not None:
+            story.worktree_head = ""
+        data = {"worktree": name, "reason": str(reason)}
+        self.events.emit(Event(EventKind.WORKTREE_PRUNED, None, None if scratch else name, data))
 
     def _resume_story(self, story: StoryState, cause: Cause) -> None:
         """I2: the cut-off step ends as stopped, its session is kept, its worktree is offered."""
