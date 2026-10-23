@@ -121,7 +121,7 @@ from .stage_log import StageLog, place_of
 from .state import RunState
 from .story_branches import KeptSession
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
-from .workspaces import Workspaces
+from .workspaces import Workspaces, find_prune_reason
 
 DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
 GATE_CHORE = "gate: {step} on {story}"
@@ -1151,15 +1151,26 @@ class Runtime:
 
     def recover_stories(self, cause: Cause) -> None:
         """I2, I3: on a resume, prune stale worktrees and mark each cut-off story step stopped."""
+        spaces = Workspaces(self.main, self.config)
         pinned = self.state.boundary is not None and self.state.boundary.replay is not None
-        kept = {s.id for s in self.state.stories.values() if s.in_flight}
-        Workspaces(self.main, self.config).prune_stale(
-            frozenset(kept | ({"replay"} if pinned else set()))
-        )
+        stale = self._note_stale_worktrees(spaces)
+        keep = set(spaces.stored_worktrees) - stale
+        spaces.prune_stale(frozenset(keep | ({"replay"} if pinned else set())))
         for story in self.state.stories.values():
             if story.in_flight is not None:
                 self._resume_story(story, cause)
         self.save()
+
+    def _note_stale_worktrees(self, spaces: Workspaces) -> set[str]:
+        """I3: write one event per worktree a resume removes; return their story ids."""
+        stale: set[str] = set()
+        for name in spaces.stored_worktrees:
+            reason = find_prune_reason(self.state.stories.get(name), self.state.sprint)
+            if reason:
+                stale.add(name)
+                data = {"reason": reason}
+                self.events.emit(Event(EventKind.WORKTREE_PRUNED, None, name, data))
+        return stale
 
     def _resume_story(self, story: StoryState, cause: Cause) -> None:
         """I2: the cut-off step ends as stopped, its session is kept, its worktree is offered."""
