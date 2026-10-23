@@ -12,3 +12,6 @@ verbs = ["arrange", "give", "lift", "pair", "place", "prune", "reserve"]
 # `pair` is a noun too: `loops.Setback.pair` is the property "the two steps
 # a setback moved between", which the `pair` verb above would refuse (s161).
 allow_names = ["pair"]
+
+# Real verbs house-rules' table lacks (s161).
+verbs = ["arrange", "give", "lift", "pair", "place", "prune", "reserve"]
