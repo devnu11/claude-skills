@@ -225,7 +225,7 @@ def _check_view(scope: Scope, command: str) -> str | None:
     segments = [list(link.words) for link in links]
     checks = (
         lambda: _check_secret_mention(scope, command),
-        lambda: git_check.git_denial(_site(scope), links),
+        lambda: _check_git(scope, links),
         lambda: _check_allowlist(scope, segments),
         lambda: _check_tokens(scope, _tokens(command)),
         lambda: _check_waits(segments),
@@ -280,6 +280,15 @@ def _links(command: str) -> list[git_check.Link]:
     return [
         git_check.Link(tuple(_tokens(parts[i])), parts[i + 1]) for i in range(0, len(parts) - 1, 2)
     ]
+
+
+def _check_git(scope: Scope, links: list[git_check.Link]) -> str | None:
+    """The git rules; an unconfined step's git also stays inside the repo (#61 review)."""
+    site = _site(scope)
+    if site is not None:
+        return git_check.git_denial(site, links)
+    repo = system.resolve(scope.repo)
+    return git_check.git_denial(None, links) or git_check.find_unconfined_place_denial(repo, links)
 
 
 def _site(scope: Scope) -> git_check.Site | None:
