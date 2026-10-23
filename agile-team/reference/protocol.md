@@ -2139,6 +2139,7 @@ The pass ends at the first step whose report matches a row of the
 | `story_ci_red` | CI failed on a story's own draft PR (s159). Nothing is held; the story lands only on green landing CI. The PO briefs its developer if it needs a fix |
 | `worktree_drift` | a story's worktree changed outside the team (s159); the line names the worktree and the files. Only that story waits. The PO tells the human; `agile-team accept-checkout --story <id>` keeps the worktree as it is |
 | `land_bounced` | a landing stopped on a merge conflict (s159); the line names the files and the role (DevOps for files only DevOps or no role owns, else the story's developer) that rebases the story onto the sprint head. Then land runs again |
+| `landing_dropped` | a landing gave up its merge because the sprint head moved in a way it couldn't carry, or its sprint push was refused (s180); the line names each dropped merge, why, and every commit that moved the head. The land already started again; nothing waits on the PO |
 | `overlap` | a design's `## Files` overlap another open sprint story's work (s163, per story); the story waits at `design`. The line names the files each changes and the overlap. The runner lifts it once the others have landed, left the sprint or been cancelled; `release_story` with a reason lifts it early, and `continue_story` is refused |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
@@ -3148,32 +3149,54 @@ push permission. One land attempt:
    `story-ci` with `source: "landing"`. The landing branch is deleted in
    every case.
 6. **Green.** Under the main checkout's lock, the runner first checks that
-   the merge's first parent is still the sprint head. If it isn't (a
-   story-admin commit, a settle or a storyless step moved it during the CI
-   wait), the landing gives up its merge (below) and starts again, with no
-   push. Otherwise it pushes the sprint branch to the merge (a fast-forward
-   of its recorded `pushed`), sets `pushed` to the merge, fast-forwards the
-   main checkout and records the checkout. A failed fast-forward halts as
-   checkout drift, and `pushed` still names what the remote has. After the
-   lock, the sprint's first landing opens the sprint's PR as a draft, the
-   story's own PR is closed with `Landed on <branch> as <merge>.`, and the
-   runner logs `story-landed` (`merge`, `parents`, `sprint_branch`,
-   `pushed`, `ci`). The story is done. The story PR's base is the sprint
+   the merge's first parent is still the sprint head. If the runner's own
+   commits moved the head during the wait (a story filed or amended, a
+   share, a record, a storyless step, a PO settle), it carries them over
+   the merge (s180, ADR-0090). In `.team/run/land` it cherry-picks
+   `<first parent>..<head>` onto the merge, oldest first, keeping each
+   commit's author and message. It carries only when the head descends from
+   the first parent, no merge commit is among the moved commits, the remote
+   has none of them, no story branch starts on one, and the cherry-pick is
+   clean. Anything else gives up the merge (below) and starts again, with
+   no push. Then it pushes the sprint branch to the merge (a fast-forward
+   of its recorded `pushed`) and sets `pushed` to the merge. It
+   fast-forwards the main checkout to the merge, or after a carry moves it
+   to the last carried copy (`reset --keep`, only while HEAD is still the
+   head it carried from). It rewrites the run's recorded shas of the
+   carried commits and records the checkout. The carried copies stay
+   unpushed until the next landing or the sprint end. A failed move halts
+   as checkout drift, and `pushed` still names what the remote has. After
+   the lock, the sprint's first landing opens the sprint's PR as a draft,
+   the story's own PR is closed with `Landed on <branch> as <merge>.`, and
+   the runner logs `story-landed` (`merge`, `parents`, `sprint_branch`,
+   `pushed`, `ci`, and `carried`, each carried commit's old sha to its new
+   one). The story is done. The story PR's base is the sprint
    branch, so the sprint push usually makes GitHub mark it merged. Then gh
    refuses the close and posts no note, and the runner reads the PR's state:
    a merged PR counts as closed (s166). This holds wherever the runner
    closes a PR (a superseded story or sprint PR too); any other failure to
    close is reported. In local mode the fast-forward takes
-   the same lock and the same first-parent check.
+   the same lock, the same first-parent check and the same carry.
 
 **Giving up a merge.** A landing gives up its merge when the sprint head
-moved under it, or when its sprint push was refused. It clears the story's
-`landed` (a revert has none), deletes the landing branch under its lease (a
-branch already gone is fine), and logs `landing-dropped` (`merge`, `why`:
-`sprint head moved` or `sprint push refused`, `sprint_head`). It then merges
-afresh onto the current sprint head and runs its checks and CI again. After
-5 fresh starts in one turn the land holds (`the sprint branch kept moving`).
-A landing never pushes a merge made on an older sprint head.
+moved under it in a way it can't carry, or when its sprint push was refused.
+It clears the story's `landed` (a revert has none), deletes the landing
+branch under its lease (a branch already gone is fine), and logs
+`landing-dropped`. The event holds `merge`, `why` (`sprint head moved` or
+`sprint push refused`) and `sprint_head`. It also holds `moved`, every
+commit from the merge's first parent to the sprint head as `<short sha>
+<subject>`, oldest first, and `not_carried`, why the move couldn't be
+carried. It then merges afresh onto the current sprint head and runs its
+checks and CI again. The land's report carries its drops, and the PO gets
+`landing_dropped` with the same commits. After 5 fresh starts in one turn
+the land holds (`the sprint branch kept moving`). A landing never pushes a
+merge made on an older sprint head, except one whose carried commits follow
+it.
+
+**No fork under a moved landing.** While a landing holds a merge whose first
+parent is no longer the sprint head, a story with no worktree yet isn't
+started: its branch would fork on a commit the landing is about to carry. It
+starts once the landing ends.
 
 **A refused sprint push** is never retried as is. The landing gives up its
 merge, fetches the remote head `R` and:
@@ -3195,7 +3218,8 @@ kept moving` (ADR-0084).
 **Resuming.** A run stopped after the landing push, or a held landing CI
 that `continue_story` releases, resumes the CI wait on that sha with no new
 merge or push, but only while the merge's first parent is still the sprint
-head. Otherwise the landing gives up its merge and merges afresh at once.
+head or the move can be carried (the carry itself waits for green).
+Otherwise the landing gives up its merge and merges afresh at once.
 Each attempt is the runner stage `story.land`; its detail holds the checks
 summary and the CI verdict.
 
@@ -3203,8 +3227,8 @@ summary and the CI verdict.
 `.team/run/land` and worker threads, without the main checkout's lock. While
 it waits for CI, tells, answers, story requests, `accept-checkout --story`,
 storyless steps and PO turns carry on. The lock is taken only for the
-first-parent check, the sprint push and the move of the main checkout, on a
-first landing and a resumed one alike.
+first-parent check, the carry, the sprint push and the move of the main
+checkout, on a first landing and a resumed one alike.
 
 **Landing order** (ADR-0088). The one landing now (`landing` in
 `state.json`) finishes first, also after a restart. Behind it, the stories

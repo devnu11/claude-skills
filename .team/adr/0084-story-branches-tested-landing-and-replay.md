@@ -125,3 +125,13 @@ Design: `agile-team/docs/design/s166.md`.
   note: gh refuses a merged PR before it comments. The landing's own record
   and the `story-landed` event still say where it landed.
 
+## Amended by s180 (2026-10-23)
+
+"A landing never pushes a stale merge" now has one exception, ADR-0090. When
+only the runner's own plain commits moved the sprint head past a landing's
+merge (story files, shares, records, storyless steps, PO settles), the green
+landing lands at its own merge sha and those commits are cherry-picked on
+top of it. A pushed landing resumes on the same terms. Every other move
+still gives up the merge, and the `landing-dropped` event now lists the
+commits that moved the head. Design: `agile-team/docs/design/s180.md`.
+
