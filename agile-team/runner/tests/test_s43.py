@@ -70,7 +70,7 @@ def test_shell_runner_merges_streams_and_keeps_the_code(fake: FakeSystem) -> Non
     fake.reply(("echo",), Done(4, "out\nerr\n"))
     code, out = shell_runner(REPO)("echo out; echo err >&2; exit 4")
     assert code == 4 and "out" in out and "err" in out
-    assert fake.commands == [system.ShellCommand("echo out; echo err >&2; exit 4", REPO)]
+    assert [(c.text, c.cwd) for c in fake.commands] == [("echo out; echo err >&2; exit 4", REPO)]
 
 
 def test_the_child_is_spawned_with_its_output_piped(fake: FakeSystem) -> None:
