@@ -1,8 +1,9 @@
 """Resolve the Anthropic API key that bills a run.
 
 Order: the key file named in config (default ``.team/run/api-key``; relative to the
-repo, absolute, or ``~/``-relative), then ``~/secrets/anthropic-api-key``. The key is only ever placed in the runner's
-child environment, so the interactive session's OAuth login is untouched.
+repo, absolute, or ``~/``-relative), then ``~/secrets/anthropic-api-key``. The key
+is only ever placed in the runner's child environment, so the interactive
+session's OAuth login is untouched.
 """
 
 from __future__ import annotations
