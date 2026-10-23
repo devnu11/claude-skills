@@ -32,7 +32,9 @@ off: write a new `<docs>/requirements/REQ-NNN.md` (frontmatter `id`,
 `title`, `status: active`, `covers: ["sN/ACk"]`; the requirement in plain
 words as the body) or add the AC to an existing one's `covers`. Your
 brief's `## Requirements` section lists the story's coverage, the active
-requirements and the next free id. The design gate bounces the story back
+requirements and the next free id. With story branches the runner reserves ids for your
+story (the brief names them); use those, because the design gate bounces an id that the
+sprint head or another open story holds. The design gate bounces the story back
 to you, listing every untraced AC and every broken requirement file that
 names the story. Retire a requirement (`status: retired`) instead of
 deleting it.

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -400,16 +400,43 @@ def design_reasons(checked: Checked, story: str) -> list[str]:
     return [head, *(f"- {r}" for r in reasons)]
 
 
-def next_id(checked: Checked) -> str:
-    """One above the highest REQ number among the files' names (``REQ-001`` with none)."""
-    numbers = [
-        int(m.group(1)) for p in checked.files if (m := re.match(r"REQ-(\d+)", _stem(p.source)))
-    ]
-    return f"REQ-{max(numbers, default=0) + 1:03d}"
-
-
 def _stem(source: Source) -> str:
     return PurePosixPath(source.file).stem
+
+
+NUMBER = re.compile(r"REQ-(\d+)")
+
+
+def parse_numbers(paths: Iterable[str]) -> set[int]:
+    """The REQ numbers among the paths' stems (``ls-tree`` lines or file names)."""
+    matches = (NUMBER.match(PurePosixPath(p).stem) for p in paths)
+    return {int(m.group(1)) for m in matches if m}
+
+
+def format_id(number: int) -> str:
+    """``REQ-007`` for 7."""
+    return f"REQ-{number:03d}"
+
+
+def list_numbers(folder: Path) -> set[int]:
+    """The REQ numbers of the files in ``folder`` (none when it is missing)."""
+    return parse_numbers(p.name for p in system.glob(folder, "REQ-*.md"))
+
+
+def next_id(checked: Checked) -> str:
+    """One above the highest REQ number among the files' names (``REQ-001`` with none)."""
+    numbers = parse_numbers(p.source.file for p in checked.files)
+    return format_id(max(numbers, default=0) + 1)
+
+
+@dataclass(frozen=True)
+class Offer:
+    """The ids a story's architect brief offers (s178)."""
+
+    story: str
+    next_free: str
+    first: str
+    last: str
 
 
 COVERAGE_HEAD = (
@@ -420,6 +447,11 @@ COVERAGE_HEAD = (
 INDEX_HEAD = (
     "Active requirements (add the story's ACs to one's `covers`, "
     "or write {next}.md, the next free id):\n\n"
+)
+OFFER_HEAD = (
+    "Active requirements (add the story's ACs to one's `covers`, "
+    "or write {next_free}.md, the next free id; this story's ids are {first} to {last}, "
+    "and an id outside them is checked at the design gate):\n\n"
 )
 UNREAD_LINE = "- the story file has problems; see the design gate"
 
@@ -445,11 +477,20 @@ def _index_line(requirement: Requirement) -> str:
     return f"- {requirement.id} {requirement.title}: {covers}"
 
 
+def _format_index(checked: Checked) -> str:
+    return "\n".join(_index_line(r) for r in checked.active())
+
+
 def design_section(checked: Checked, story: str) -> str:
     """The coverage section plus the active requirements and the next free id (T13)."""
-    index = "\n".join(_index_line(r) for r in checked.active())
     head = INDEX_HEAD.format(next=next_id(checked))
-    return f"{coverage_section(checked, story)}\n\n{head}{index}"
+    return f"{coverage_section(checked, story)}\n\n{head}{_format_index(checked)}"
+
+
+def format_offer_section(checked: Checked, offer: Offer) -> str:
+    """The architect's section with the story's reserved ids (s178 R7)."""
+    head = OFFER_HEAD.format(next_free=offer.next_free, first=offer.first, last=offer.last)
+    return f"{coverage_section(checked, offer.story)}\n\n{head}{_format_index(checked)}"
 
 
 BRIEFS: dict[str, Callable[[Checked, str], str]] = {
