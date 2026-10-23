@@ -58,6 +58,17 @@ def test_a_cancelled_story_is_pruned_as_cancelled() -> None:
     assert find_prune_reason(story("s1", status=StoryStatus.CANCELLED), 1) == PruneReason.CANCELLED
 
 
+@pytest.mark.parametrize("status", [StoryStatus.DONE, StoryStatus.CANCELLED])
+def test_a_finished_story_from_an_earlier_sprint_is_pruned_as_finished(status) -> None:
+    got = find_prune_reason(story("s1", status=status, sprint=0), 1)
+    assert got == {StoryStatus.DONE: "done", StoryStatus.CANCELLED: "cancelled"}[status]
+
+
+def test_an_open_story_at_land_in_the_sprint_is_kept() -> None:
+    at_land = StoryState("s1", "T", "land", sprint=1)
+    assert find_prune_reason(at_land, 1) is None
+
+
 def test_a_story_outside_the_sprint_is_pruned_as_not_in_sprint() -> None:
     assert find_prune_reason(story("s1", sprint=None), 1) == "not_in_sprint"
     assert find_prune_reason(story("s1", sprint=2), 1) == "not_in_sprint"
@@ -77,8 +88,17 @@ def test_a_story_with_a_step_in_flight_is_never_pruned() -> None:
 
 
 def test_a_resume_keeps_the_worktree_of_an_idle_open_story_ac1(make_runtime, fake) -> None:
-    rt = resumed(make_runtime, story("s1"), story("s2"))
+    rt = make_runtime()
+    rt.state.sprint = 1
+    rt.state.stories = {"s1": story("s1"), "s2": story("s2")}
+    marker = rt.config.run_dir / "worktrees" / "s2" / "house-rules/runner/.venv/marker"
+    system.make_dirs(marker.parent)
+    system.write_text(marker, "x")
+    system.make_dirs(rt.config.run_dir / "worktrees" / "s1")
+    rt.recover_stories(Cause.CRASH)
     assert removals(fake) == []
+    assert system.exists(marker)
+    assert rt.state.stories["s2"].worktree_head == SHA
     assert system.is_dir(rt.config.run_dir / "worktrees" / "s1")
     assert system.is_dir(rt.config.run_dir / "worktrees" / "s2")
     assert pruned(rt) == []
