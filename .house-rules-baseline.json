@@ -1459,7 +1459,6 @@
     "agile-team/runner/agile_team/upstream.py::GhPrs.failed_log::verb-name": 1,
     "agile-team/runner/agile_team/upstream.py::GhPrs.job::verb-name": 1,
     "agile-team/runner/agile_team/upstream.py::GhPrs.main_checks::verb-name": 1,
-    "agile-team/runner/agile_team/upstream.py::GhPrs.missing::query-property": 1,
     "agile-team/runner/agile_team/upstream.py::GhPrs.missing::verb-name": 1,
     "agile-team/runner/agile_team/upstream.py::GhPrs.rerun::verb-name": 1,
     "agile-team/runner/agile_team/upstream.py::NoPrs.failed_log::verb-name": 1,
