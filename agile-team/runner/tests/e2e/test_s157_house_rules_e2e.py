@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -19,6 +20,7 @@ from agile_team import commands, config, fullcheck, guard, owners, roles
 REPO = Path(__file__).resolve().parents[4]
 BAD = "agile-team/runner/agile_team/bad.py"
 WARN = "unattended/runner/unattended/warn.py"
+SKIP_BUILT = shutil.ignore_patterns(".venv", "__pycache__", ".pytest_cache")
 BASELINE = ".house-rules-baseline.json"
 ACCEPT = "uv run --frozen --quiet --project house-rules/runner house-rules baseline --accept-new"
 PYTHON_ROLES = [
@@ -64,7 +66,7 @@ def write(repo: Path, rel: str, text: str) -> None:
 def repo(tmp_path: Path) -> Path:
     """A scratch git repo with the real house-rules project and an empty baseline."""
     git(tmp_path, "init", "-q")
-    (tmp_path / "house-rules").symlink_to(REPO / "house-rules")
+    shutil.copytree(REPO / "house-rules", tmp_path / "house-rules", ignore=SKIP_BUILT)
     write(tmp_path, ".house-rules.toml", EXCLUDE)
     write(tmp_path, BAD, CLEAN)
     write(tmp_path, WARN, CLEAN)
