@@ -127,6 +127,8 @@ write = [
     "agile-team/reference/**",
     "unattended/SKILL.md",
     "unattended/reference/**",
+    "house-rules/SKILL.md",
+    "house-rules/reference/**",
     "README.md",
     ".team/adr/**",
 ]
