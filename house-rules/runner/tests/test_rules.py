@@ -185,3 +185,28 @@ def test_a_same_named_changer_in_another_class_does_not_count_q2(check_text: Che
         "    def _count(self):\n        self.n = 1\n        return 1\n"
     )
     assert "A.get_size" in [f.symbol for f in check_text(text) if f.rule == "query-property"]
+
+
+def test_a_line_suppression_cannot_silence_the_excuse_rule_e6(check_text: CheckText) -> None:
+    text = (
+        "def area(x):  # house-rules: allow verb-name, suppression-excuse"
+        " -- name fixed by the tests\n    return x\n"
+    )
+    findings = check_text(text)
+    assert {f.rule for f in findings} == {"suppression-excuse"}
+
+
+def test_a_line_suppression_cannot_silence_the_reason_rule_e6(check_text: CheckText) -> None:
+    text = "def area(x):  # house-rules: allow verb-name, suppression-reason\n    return x\n"
+    assert "suppression-reason" in {f.rule for f in check_text(text)}
+
+
+def test_a_call_on_another_object_is_judged_as_before_q2(check_text: CheckText) -> None:
+    text = (
+        "class A:\n"
+        "    def get_size(self):\n        return self.other.save_all()\n"
+        "    def get_count(self):\n        return self.other.total()\n"
+    )
+    symbols = [f.symbol for f in check_text(text) if f.rule == "query-property"]
+    assert "A.get_count" in symbols
+    assert "A.get_size" not in symbols
