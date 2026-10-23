@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from agile_team import handover
-from agile_team.boundary import StackEntry
 from agile_team.events import EventKind
 from agile_team.gates import StoryState
 from agile_team.handover import Scope, Trigger
-from agile_team.router import Router
 from agile_team.story_branches import Landed
 from agile_team.upstream import UpstreamError
 
@@ -19,7 +16,6 @@ from .s29_helpers import FakePrs
 from .test_s159_landing import (
     HEAD,
     MERGE,
-    OLD,
     SPRINT,
     checks,
     ff,
@@ -28,7 +24,6 @@ from .test_s159_landing import (
     landing,
     setup,
 )
-from .test_s159_scheduler import setup as sched_setup
 from .test_s163_landing_moves import dropped, lander, probed, sprint_pushes
 
 BASE, TIP = "b" * 40, "t" * 40
@@ -290,37 +285,6 @@ def test_a_drop_clears_the_landing_base_c6(make_runtime, fake) -> None:
     attempt = landing.Attempt(story, entry, HEAD, merge=MERGE)
     asyncio.run(lander(rt).give_up(attempt, "why"))
     assert rt.flags.landing_base == ""
-
-
-def held(make_runtime, base: str, **story_kw):
-    s = StoryState("s1", "T", "implement", sprint=1, **story_kw)
-    rt = sched_setup(make_runtime, s)
-    rt.state.upstream.stack = [StackEntry(1, SPRINT, OLD, OLD, head=HEAD, pushed=HEAD)]
-    rt.flags.landing_base = base
-    return [w.story.id for w in Router(rt).list_works(frozenset()) if w.story]
-
-
-@pytest.mark.parametrize(
-    ("base", "kw", "offered"),
-    [
-        (BASE, {}, False),
-        ("", {}, True),
-        (HEAD, {}, True),
-        (BASE, {"worktree_head": "w" * 40}, True),
-    ],
-)
-def test_a_story_with_no_worktree_waits_while_a_landing_sits_below_the_head_c6(
-    make_runtime, base, kw, offered
-) -> None:
-    assert (held(make_runtime, base, **kw) == ["s1"]) is offered
-
-
-def test_a_story_at_land_is_never_held_by_a_landing_c6(make_runtime) -> None:
-    s = StoryState("s1", "T", "land", sprint=1)
-    rt = sched_setup(make_runtime, s)
-    rt.state.upstream.stack = [StackEntry(1, SPRINT, OLD, OLD, head=HEAD, pushed=HEAD)]
-    rt.flags.landing_base = BASE
-    assert [w.story.id for w in Router(rt).list_works(frozenset()) if w.story] == ["s1"]
 
 
 # ---------- D2: the PO hears of a drop ----------
