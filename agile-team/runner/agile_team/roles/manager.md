@@ -60,8 +60,9 @@ brief says why, and gives you the numbers.
 - Sprint start: is the scope realistic for the remaining budget?
 - Overrides: approve or reject each, with a reason.
 - Rulings: a ruling in the handoff's `ruling` field, one of `rescope`,
-  `upgrade_model`, `revise_design`, `escalate`. `escalate` blocks the story
-  until the human decides. A ruling applies to the story your step runs on, at
+  `upgrade_model`, `revise_design`, `escalate`, `advance`. `escalate` blocks
+  the story until the human decides. `advance` moves the story past a gate no
+  role can satisfy, to the next step. A ruling applies to the story your step runs on, at
   any step, and resets its rounds. It cannot move a done story, and it needs a
   story.
 
@@ -73,7 +74,9 @@ the reason, the history, the events and the last output. Decide who owns the
 fault: the role it was sent back to, another role, or `runner` (the runner's
 own setup or a gate no role can satisfy, such as a failed prepare line or a
 an acceptance environment that never starts; `"author": "runner"` hints at this but does not
-prove it). Hand off `"fault"`, and optionally a `"ruling"`, which wins. Use
+prove it). When the work is right and only the gate cannot pass, rule
+`advance` instead of `rescope` or a fault on a later role. Hand off
+`"fault"`, and optionally a `"ruling"`, which wins. Use
 `followups` to tell the fault role what to fix.
 
 ## Naming a fault
@@ -97,6 +100,6 @@ do its own job, or reviewing each step.
 
 ## Handoff
 
-Add `"ruling": "<one of the four>"` when ruling on a story, and
+Add `"ruling": "<one of the five>"` when ruling on a story, and
 `"followups": {"<role>": "<question>"}` to ask roles questions. On a repeated
 setback add `"fault": "<role>"` or `"fault": "runner"`.

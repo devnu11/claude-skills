@@ -367,3 +367,11 @@ def test_footer_names_the_tools() -> None:
     assert footer.startswith("Handle these, then end your turn;")
     for name in ("continue_story", "set_developer", "run_role"):
         assert name in footer
+
+
+def test_runner_fault_points_at_the_human_and_advance_not_a_runner_story() -> None:
+    report = {"role": "manager", "fault": {"applied": True, "kind": "runner", "reason": "gate"}}
+    [line] = handover.report_lines(report, "s1")
+    assert "Open a story" not in line
+    assert "The human fixes the runner or its setup" in line
+    assert "advance" in line

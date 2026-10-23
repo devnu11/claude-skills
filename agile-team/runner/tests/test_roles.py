@@ -343,3 +343,9 @@ def test_leadership_reaches_po_and_manager_only(repo: Path) -> None:
         assert "Raise budgets slowly." in real.resolve(name).body
         assert "leadership team" in real.resolve(name).body
     assert "Raise budgets slowly." not in real.resolve("architect").body
+
+
+def test_manager_prompt_lists_every_ruling() -> None:
+    prompt = system.read_text(roles.BUILTIN_DIR / "manager.md")
+    assert all(f"`{ruling}`" in prompt for ruling in roles.RULINGS)
+    assert "one of the four" not in prompt
