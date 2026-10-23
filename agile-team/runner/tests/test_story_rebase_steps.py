@@ -7,16 +7,19 @@ from pathlib import Path
 
 import pytest
 from agile_team import dispatch, guard, requirements, system
+from agile_team.boundary import Permission, StackEntry
 from agile_team.dispatch import Plan
 from agile_team.gates import StoryState, Verdict
-from agile_team.roles import RoleBook
+from agile_team.replay import StoryReplay
+from agile_team.roles import Handoff, RoleBook
 from agile_team.story_branches import StoryRebase
 from agile_team.story_ci import StoryPusher
 from agile_team.workspaces import Workspaces
 
 from .conftest import handoff
 from .fake_system import Done, FakeSystem
-from .test_s159_round7 import pusher_for
+from .s29_helpers import FakePrs
+from .test_s159_round7 import Upstream, pusher_for
 
 ONTO, BASE, OLD_TIP = "c" * 40, "b" * 40, "a" * 40
 BRANCH, REBASED = "team/story-s1", "team/story-s1-r1"
@@ -120,6 +123,25 @@ def test_a_finished_rebase_with_another_problem_still_bounces_a_round(make_runti
     report = settle(view, plan, handoff("done", summary="resolved"))
     assert report["gate"]["verdict"] == Verdict.BOUNCE
     assert REBASED in report["gate"]["reason"]
+
+
+def test_a_finished_rebase_is_adopted_and_its_new_branch_pushed(
+    make_runtime, fake, monkeypatch
+) -> None:
+    def take_over(self, story, queued) -> None:
+        story.branch, story.pushed, story.worktree_head = queued.branch, "", ONTO
+
+    view, plan = rebase_plan(lambda: make_runtime(prs=FakePrs()))
+    view.state.sprint, view.state.upstream.push = 1, Permission.YES
+    view.state.upstream.stack = [StackEntry(1, "team/sprint-1", BASE, BASE, head=BASE)]
+    view.upstream = Upstream()
+    monkeypatch.setattr(StoryReplay, "take_over", take_over)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    got = view._apply_rebase(plan, Handoff("done"))
+    assert got == {"rebased": {"branch": REBASED, "onto": ONTO}} and plan.story.rebase is None
+    pushed = [(lease.branch, lease.expect, lease.sha) for lease in view.upstream.leases]
+    assert pushed[-1] == (REBASED, "", ONTO)
 
 
 def test_a_story_with_a_pending_rebase_never_pushes(make_runtime, monkeypatch) -> None:
