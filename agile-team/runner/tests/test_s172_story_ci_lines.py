@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
-from agile_team import ci, handover
+from agile_team import ci, handover, state
 from agile_team.ci import Bucket, Check
 from agile_team.ci_triage import Job, Step
 from agile_team.dispatch import StepRequest
@@ -169,7 +170,7 @@ def test_the_report_lines_keep_each_indented_line_apart_ac1() -> None:
 
 def test_lint_shows_the_finding_lines_not_the_tail_ac2() -> None:
     got = ci.failing_lines(log("Run ruff", *RUFF))
-    assert got[:2] == list(RUFF[:2])
+    assert got == list(RUFF[:2])
     assert "Error: Process completed with exit code 1." not in got
 
 
@@ -244,3 +245,67 @@ def test_a_red_story_ci_without_checks_adds_no_section_ac3(make_runtime) -> None
     st = add_story(rt, step="implement")
     st.ci = StoryCi(HEAD, "red", "pr", [])
     assert "## Story CI" not in prompt_of(rt)
+
+
+# ----- design: errors, re-runs, pending checks, state, roles ---------------------------
+
+
+def test_an_upstream_error_reading_the_log_gives_no_result_and_is_retried_ac1(
+    make_runtime, fake
+) -> None:
+    rt, story, poll = red_poller(make_runtime, fake)
+    real = rt.prs.failed_log
+
+    def broken(link: str) -> str:
+        raise ci.UpstreamError("gh down")
+
+    rt.prs.failed_log = broken  # type: ignore[method-assign]
+    assert poll.poll(story, 1000.0) is None
+    rt.prs.failed_log = real  # type: ignore[method-assign]
+    got = poll.poll(story, 1000.0 + story_ci.STORY_CI_POLL_S)
+    assert got is not None and got.checks[0].startswith("- ci / unit: fail at step Run ruff")
+
+
+def test_a_re_run_link_is_described_again_ac1(make_runtime, fake) -> None:
+    rt, story, poll = red_poller(make_runtime, fake)
+    poll.poll(story, 1000.0)
+    rt.prs.sha_list = [Check("unit", Bucket.FAIL, "ci", OTHER_LINK)]
+    rt.prs.jobs[OTHER_LINK] = Job("78", HEAD, "unit", (SET_UP, Step("Run ruff", "failure")))
+    rt.prs.logs[OTHER_LINK] = log("Run ruff", *RUFF)
+    poll.poll(story, 1000.0 + story_ci.STORY_CI_POLL_S)
+    assert rt.prs.fetched == [LINK, OTHER_LINK]
+
+
+def test_a_pending_check_holds_the_result_back_and_costs_no_fetch_ac1(make_runtime, fake) -> None:
+    rt, story, poll = red_poller(make_runtime, fake)
+    rt.prs.sha_list.append(Check("slow", Bucket.PENDING, "ci", OTHER_LINK))
+    assert poll.poll(story, 1000.0) is None
+    assert rt.prs.fetched == [LINK] and story.ci is None
+    rt.prs.sha_list.pop()
+    got = poll.poll(story, 1000.0 + story_ci.STORY_CI_POLL_S)
+    assert got is not None and got.verdict == "red" and rt.prs.fetched == [LINK]
+
+
+def test_the_story_ci_checks_survive_a_state_round_trip_ac3(make_runtime) -> None:
+    rt = make_runtime()
+    st = add_story(rt, step="implement")
+    st.ci = StoryCi(HEAD, "red", "pr", CHECKS)
+    back = state.RunState.from_json(rt.state.to_json())
+    assert back.stories[st.id].ci == StoryCi(HEAD, "red", "pr", CHECKS)
+
+
+def test_an_old_story_ci_without_checks_loads_as_empty_ac3(make_runtime) -> None:
+    rt = make_runtime()
+    st = add_story(rt, step="implement")
+    st.ci = StoryCi(HEAD, "red", "pr", CHECKS)
+    data = json.loads(rt.state.to_json())
+    del data["stories"][st.id]["ci"]["checks"]
+    back = state.RunState.from_json(json.dumps(data))
+    assert back.stories[st.id].ci.checks == []
+
+
+def test_a_non_developer_role_gets_no_story_ci_section_ac3(make_runtime) -> None:
+    rt = make_runtime()
+    st = add_story(rt, step="implement")
+    st.ci = StoryCi(HEAD, "red", "pr", CHECKS)
+    assert "## Story CI" not in prompt_of(rt, "unit-tester")
