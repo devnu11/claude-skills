@@ -332,11 +332,18 @@ def _find_landed(story: Any) -> str | None:
     return story.landed.merge if done and story.landed else None
 
 
+def _build_ci_row(ci: Any) -> dict[str, str] | None:
+    """The story's CI verdict row: sha, verdict and source (the check lines stay out)."""
+    if ci is None:
+        return None
+    return {"sha": ci.sha, "verdict": ci.verdict, "source": ci.source}
+
+
 def _read_branch_keys(story: Any, running: frozenset[str]) -> dict[str, Any]:
     return {
         "branch": story.branch,
         "landed": _find_landed(story),
-        "story_ci": asdict(story.ci) if story.ci else None,
+        "story_ci": _build_ci_row(story.ci),
         "running": story.id in running,
     }
 

@@ -853,6 +853,7 @@ class Runtime:
             parts.append(self._revert_note(plan, plan.story))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context(plan.story))
+        parts.append(render_story_ci(plan))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
         return "\n\n".join(p for p in parts if p)
 
@@ -2138,6 +2139,17 @@ def _capture_developer(story: StoryState, handoff: Handoff) -> None:
 STORY_EFFECTS: dict[str, Callable[[StoryState, Handoff], None]] = {
     ARCHITECT: _capture_developer,
 }
+
+
+def render_story_ci(plan: Plan) -> str:
+    """The failing checks, steps and lines of a developer's story whose PR CI is red."""
+    story = plan.story
+    if story is None or not plan.role.name.startswith("developer"):
+        return ""
+    ci = story.ci
+    if ci is None or ci.verdict != "red" or not ci.checks:
+        return ""
+    return "## Story CI\n\nThe PR's CI failed at " + ci.sha + ":\n" + "\n".join(ci.checks)
 
 
 def followup_section(questions: list[str]) -> str:
