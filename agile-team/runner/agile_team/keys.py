@@ -1,7 +1,7 @@
 """Resolve the Anthropic API key that bills a run.
 
-Order: the repo key file named in config (default ``.team/run/api-key``), then
-``~/secrets/anthropic-api-key``. The key is only ever placed in the runner's
+Order: the key file named in config (default ``.team/run/api-key``; relative to the
+repo, absolute, or ``~/``-relative), then ``~/secrets/anthropic-api-key``. The key is only ever placed in the runner's
 child environment, so the interactive session's OAuth login is untouched.
 """
 
@@ -12,6 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from . import system
+from .paths import repo_relative
 
 ENV_VAR = "ANTHROPIC_API_KEY"
 # Blanked in the child so an inherited subscription token cannot win over the key.
@@ -28,6 +29,7 @@ class KeyOrigin(StrEnum):
     """Where a key file lives; only a repo key must be gitignored."""
 
     REPO = "repo"
+    EXTERNAL = "external"
     HOME = "home"
 
 
@@ -49,10 +51,13 @@ class KeyLocations:
 
     def candidates(self) -> list[KeySource]:
         """Key files in resolution order."""
-        return [
-            KeySource(self.repo / self.key_file, KeyOrigin.REPO),
-            KeySource(self.home / HOME_KEY, KeyOrigin.HOME),
-        ]
+        return [self.configured(), KeySource(self.home / HOME_KEY, KeyOrigin.HOME)]
+
+    def configured(self) -> KeySource:
+        """The configured key file, ``~`` expanded; ``EXTERNAL`` outside the repo (#53)."""
+        path = self.repo / _expand_home(self.key_file, self.home)
+        inside = repo_relative(self.repo, system.resolve(path)) is not None
+        return KeySource(path, KeyOrigin.REPO if inside else KeyOrigin.EXTERNAL)
 
     def resolve(self) -> KeySource:
         """First existing key file, or ``KeyNotFound``."""
@@ -65,6 +70,10 @@ class KeyLocations:
     def secret_paths(self) -> list[Path]:
         """Paths no role may read: both key file candidates and ``~/secrets``."""
         return [c.path for c in self.candidates()] + [self.home / HOME_KEY.parent]
+
+
+def _expand_home(raw: str, home: Path) -> Path:
+    return home / raw.removeprefix("~/") if raw.startswith("~/") else Path(raw)
 
 
 def mode_ok(path: Path) -> bool:

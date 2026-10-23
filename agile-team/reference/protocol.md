@@ -44,8 +44,9 @@ team works on this runner itself, it runs on a pinned copy instead (see
 Preflight refuses to start when: the tree is dirty (except on `--resume`
 after a kill or a checkout halt that left a step's edits, see "Interrupted
 steps"); with `auth = "api-key"`,
-no key file exists, the repo key file is not gitignored, or a key file is not
-mode 600; with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
+no key file exists, the key file is inside the repo and not gitignored, or a
+key file is not mode 600 (a `key_file` outside the repo, absolute or `~/…`,
+needs no gitignore); with `auth = "login"`, `ANTHROPIC_API_KEY` is set in the environment; a toolchain
 command's executable is missing; `config check` fails.
 
 ## Relay files (`.team/run/`, always gitignored)
@@ -860,7 +861,7 @@ only the title changes.
 [team]
 docs_dir = "docs"
 artifacts = "committed"        # or "ignored"
-key_file = ".team/run/api-key" # falls back to ~/secrets/anthropic-api-key
+key_file = ".team/run/api-key" # repo-relative, absolute or ~/…; falls back to ~/secrets/anthropic-api-key
 auth = "api-key"               # or "login": run on the human's Claude Code login
 cadence = "sprint"             # default; the liaison asks at every start
 budget_usd = 20.0              # ceiling: the run halts when spend reaches it

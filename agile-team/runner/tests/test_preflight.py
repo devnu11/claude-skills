@@ -56,6 +56,16 @@ def test_repo_key_not_ignored_and_bad_mode(
     assert any("mode 600" in p for p in problems)
 
 
+def test_an_external_key_file_needs_no_gitignore(
+    configured: Path, scratch: Path, fake: FakeSystem
+) -> None:
+    pre = check(configured, scratch / "none")
+    pre.config.team.key_file = str(scratch / "anthropic_key")
+    fake.put(scratch / "anthropic_key", "k", mode=0o600)
+    fake.reply(("git", "check-ignore"), Done(1))
+    assert pre.key() == []
+
+
 def test_executable_of() -> None:
     assert preflight.executable_of("FOO=1 uv run pytest") == "uv"
     assert preflight.executable_of("") == ""
