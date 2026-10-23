@@ -292,3 +292,23 @@ def test_deadline_stop() -> None:
     assert Bounds(deadline=5.0, hardstop=60.0).deadline_stop() == Stop(
         StopCause.DEADLINE, 5.0, 60.0
     )
+
+
+# ----- time_left ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("deadline", "text"),
+    [
+        (None, None),
+        (1000.0, "overdue"),
+        (999.0, "overdue"),
+        (1059.0, "0m"),
+        (1000.0 + 41 * 60 + 59, "41m"),
+        (1000.0 + 23 * 3600 + 41 * 60 + 30, "23h41m"),
+        (1000.0 + 3600, "1h"),
+        (1000.0 + 86400 + 120, "1d2m"),
+    ],
+)
+def test_time_left(deadline: float | None, text: str | None) -> None:
+    assert limits.format_time_left(deadline, 1000.0) == text

@@ -622,3 +622,73 @@ def test_stop_on_windows_leaves_it_to_the_stop_file(
     assert sent == []
     assert job.stop_requested()
     assert "stops within 30 s" in capsys.readouterr().out
+
+
+# ----- time_left ---------------------------------------------------------------------------
+
+
+def with_deadline(job: Job, deadline: float | None) -> None:
+    job.update(lambda st: setattr(st.bounds, "deadline", deadline))
+
+
+def test_report_time_left_beside_the_deadline(tmp_path: Path) -> None:
+    job = make(tmp_path)
+    with_deadline(job, 10_000.0 + 3630)
+    found = cli.report(job, 10_000.0)
+    assert found["time_left"] == "1h"
+    assert found["deadline"] == cli.iso(10_000.0 + 3630)
+    assert list(found).index("time_left") == list(found).index("deadline") + 1
+
+
+def test_report_time_left_overdue(tmp_path: Path) -> None:
+    job = make(tmp_path)
+    with_deadline(job, 10_000.0)
+    assert cli.report(job, 10_001.0)["time_left"] == "overdue"
+
+
+def test_report_time_left_without_a_deadline(tmp_path: Path) -> None:
+    found = cli.report(make(tmp_path), 10_000.0)
+    assert found["time_left"] is None
+    assert found["deadline"] is None
+
+
+def test_report_keeps_its_other_fields_in_order(tmp_path: Path) -> None:
+    found = cli.report(make(tmp_path), 10_000.0)
+    expected = [
+        "name", "kind", "status", "reason", "runs", "resumes", "max_resumes", "cost",
+        "max_cost", "next_wake", "wake_on", "deadline", "time_left", "hardstop", "idle_stop",
+    ]  # fmt: skip
+    assert list(found)[: len(expected)] == expected
+    assert {"session_id", "supervisor_pid", "dir"} <= set(found)
+
+
+def test_status_list_and_wait_print_time_left(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.DONE)
+    with_deadline(job, time.time() + 5430)
+    assert run(tmp_path, "status", "j") == 0
+    assert printed(capsys)["time_left"] == "1h30m"
+    assert run(tmp_path, "list") == 0
+    assert printed(capsys)[0]["time_left"] == "1h30m"
+    run(tmp_path, "wait", "j")
+    assert printed(capsys)["time_left"] == "1h30m"
+
+
+def test_status_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    job = make(tmp_path)
+    with_deadline(job, time.time() + 5430)
+    files = [job.path(name) for name in ("state.json", EVENTS_FILE)]
+    before = [f.read_bytes() if f.exists() else None for f in files]
+    run(tmp_path, "status", "j")
+    capsys.readouterr()
+    assert [f.read_bytes() if f.exists() else None for f in files] == before
+
+
+def test_extend_event_has_no_time_left(tmp_path: Path) -> None:
+    job = make(tmp_path, JobStatus.RUNNING)
+    job.path(PID_FILE).write_text(str(os.getpid()))
+    assert run(tmp_path, "extend", "j", "--for", "10m") == 0
+    event = events_of(job, "extend")[0]
+    assert "time_left" not in event
+    assert {"deadline", "hardstop", "idle_stop"} <= set(event)
