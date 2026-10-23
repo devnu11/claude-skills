@@ -4059,7 +4059,11 @@ This applies only when the runner runs from `.team/run/runner-pin`
   `worktree list` and `cherry-pick -n`, so no role can commit, rewrite history
   or push. The subcommand is found past git's global options, so
   `git -C <dir> status` and `--git-dir`/`--work-tree` pass; a `-c`,
-  `--config-env` or `--exec-path` makes the call not read-only (#61). Only the runner pushes, and only sprint branches (see "Sprint
+  `--config-env`, `--exec-path`, `--output` or `--ext-diff` makes the call
+  not read-only (#61). Outside a confined step, a `-C`, `env -C`, `--git-dir`
+  or `--work-tree` place must stay in the repo: an absolute place outside it,
+  or one with `..`, is refused (`git-outside-workspace`), and Bash may not set
+  `GIT_EXTERNAL_DIFF` (`git-env`; it is also locked in confined steps). Only the runner pushes, and only sprint branches (see "Sprint
   boundaries"). The check sees through prefixes (s65): `X=1 git commit`,
   `env git commit`, `command git commit`, `timeout 5 git commit` and
   `/usr/bin/git commit` count as `git commit`. A confined step

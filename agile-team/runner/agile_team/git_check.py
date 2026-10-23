@@ -64,8 +64,11 @@ GIT_ENV_LOCKED = (
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
     "GIT_SEQUENCE_EDITOR",
     "GIT_EDITOR",
+    "GIT_EXTERNAL_DIFF",
     KEEP_CWD_ENV,
 )
+# Options that make a read-only subcommand write a file or run a program.
+WRITING_OPTIONS = frozenset({"--output", "--ext-diff"})
 CD_WORDS = frozenset({"cd", "pushd"})
 AND = "&&"
 UNSAFE_DIR_CHARS = ("$", "`", "~")
@@ -104,6 +107,16 @@ GIT_LOCAL_DENIED = Refusal(
     "remotes, refs and config, so its git stays local, and only the runner pushes or fetches",
     "local git in {workspace}: `git add`, `git rebase --continue`, `git status`, `git diff`, "
     "`git log`, `git checkout -- <file>`",
+).text()
+GIT_ELSEWHERE = Refusal(
+    Rule.GIT_OUTSIDE,
+    "`git {sub}` may not name {place}: outside a confined step git works only in {repo}",
+    "`git -C <dir inside the repo> …`, or plain `git …` from the repo",
+).text()
+GIT_EXTERNAL_DIFF_DENIED = Refusal(
+    Rule.GIT_ENV,
+    "Bash may not set GIT_EXTERNAL_DIFF: it makes read-only git run a program",
+    "the same git command without GIT_EXTERNAL_DIFF",
 ).text()
 GIT_ENV_DENIED = Refusal(
     Rule.GIT_ENV,
@@ -383,7 +396,8 @@ def where(site: Site, call: GitCall, base: Path | None) -> tuple[Where, str]:
 
 def _read_only(call: GitCall) -> bool:
     """Read-only by the subcommand, past global options such as ``-C`` (#61)."""
-    if call.configs or any(w.partition("=")[0] in RUNS_PROGRAMS for w in call.words):
+    unsafe = RUNS_PROGRAMS | WRITING_OPTIONS
+    if call.configs or any(w.partition("=")[0] in unsafe for w in call.words):
         return False
     if call.sub in SAFE_GIT or _is_safe_action(call):
         return True
@@ -447,6 +461,23 @@ def git_denial(site: Site | None, links: Sequence[Link]) -> str | None:
     starts = bases(links, site.step_dir) if site else [None] * len(links)
     reasons = (_link_denial(site, link, start) for link, start in zip(links, starts, strict=True))
     return next((r for r in reasons if r), None)
+
+
+def find_unconfined_place_denial(repo: Path, links: Sequence[Link]) -> str | None:
+    """Deny an unconfined step's git aimed outside ``repo`` by -C, --git-dir or --work-tree."""
+    if any("GIT_EXTERNAL_DIFF" in w for link in links for w in link.words):
+        return GIT_EXTERNAL_DIFF_DENIED
+    calls = [c for c in (parse_git(strip_prefixes(link.words)) for link in links) if c]
+    found = ((c, p) for c in calls for p in (*c.places, *c.paths) if _leaves(repo, p))
+    hit = next(found, None)
+    return GIT_ELSEWHERE.format(sub=hit[0].sub, place=hit[1], repo=repo) if hit else None
+
+
+def _leaves(repo: Path, raw: str) -> bool:
+    """``raw`` climbs with ``..`` or names an absolute place outside ``repo``."""
+    if ".." in PurePosixPath(raw).parts:
+        return True
+    return Path(raw).is_absolute() and not _inside(repo, resolve_in(repo, raw))
 
 
 def _locked_mention(site: Site | None, links: Sequence[Link]) -> str | None:

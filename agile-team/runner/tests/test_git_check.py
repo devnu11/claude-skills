@@ -99,6 +99,37 @@ def test_unconfined_other_git_is_denied(repo: Path, command: str) -> None:
     assert denial(unconfined(repo), command)
 
 
+@pytest.mark.parametrize(
+    ("command", "rule"),
+    [
+        ("git -C /other/repo log", "git-outside-workspace"),
+        ("git --git-dir=/other/.git log", "git-outside-workspace"),
+        ("git --git-dir /other/.git log", "git-outside-workspace"),
+        ("git --work-tree=/other status", "git-outside-workspace"),
+        ("git -C ../sibling status", "git-outside-workspace"),
+        ("git -C src/../../up status", "git-outside-workspace"),
+        ("env -C /other git status", "git-outside-workspace"),
+        ("git log --output=/tmp/x", "git-write"),
+        ("git diff --output /tmp/x", "git-write"),
+        ("git diff --ext-diff", "git-write"),
+        ("GIT_EXTERNAL_DIFF=evil git diff", "git-env"),
+    ],
+)
+def test_unconfined_git_aimed_outside_the_repo_or_writing_is_denied(
+    repo: Path, command: str, rule: str
+) -> None:
+    reason = denial(unconfined(repo), command)
+    assert reason and f"`{rule}`" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["git -C src status", "git -C {repo}/src log", "git --git-dir={repo}/.git log", "git diff"],
+)
+def test_unconfined_git_inside_the_repo_is_allowed(repo: Path, command: str) -> None:
+    assert denial(unconfined(repo), command.format(repo=system.resolve(repo))) is None
+
+
 def test_unconfined_non_git_is_untouched(repo: Path) -> None:
     assert denial(unconfined(repo), "env FOO=1 ls") is None
     assert denial(unconfined(repo), "echo git commit") is None
@@ -361,6 +392,7 @@ def test_env_lock_names() -> None:
         "GIT_DISCOVERY_ACROSS_FILESYSTEM",
         "GIT_SEQUENCE_EDITOR",
         "GIT_EDITOR",
+        "GIT_EXTERNAL_DIFF",
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR",
     }
 
