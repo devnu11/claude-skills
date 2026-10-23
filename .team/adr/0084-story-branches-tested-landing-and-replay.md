@@ -125,3 +125,24 @@ Design: `agile-team/docs/design/s166.md`.
   note: gh refuses a merged PR before it comments. The landing's own record
   and the `story-landed` event still say where it landed.
 
+## Amended by s179 (2026-10-23)
+
+Each mid-sprint restart (sprint 51) removed the worktree of every story
+without a step in flight, because s159's I3 called those "stale". With a
+worktree per open story, they are not: each one held a synced venv in
+ignored files, and five parallel stories cost five rebuilds per restart.
+Design: `agile-team/docs/design/s179.md`.
+
+- **A resume keeps every open sprint story's worktree** (decision 1). It
+  removes a story worktree only when the story is done, cancelled, out of
+  the sprint or unknown, and never while a step is in flight; and `land`
+  and `replay` unless a boundary replay is pinned.
+- **Each removal is a `worktree-pruned` event** with the worktree's name and
+  the reason, and a removed story's `worktree_head` is cleared.
+- **The resume judges no drift.** A kept worktree that moved is held at its
+  story's next step by the existing drift check, so a restart never throws
+  away work the human might want to keep.
+- **Consequence.** Worktrees of open stories outlive restarts, so disk use
+  between sprint boundaries grows with the open stories, bounded by
+  `max_open_stories`.
+

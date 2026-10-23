@@ -432,10 +432,19 @@ or reverted: the worktree keeps the edits. `start --resume` logs the step's
 keeps the session for that role (see "Kept sessions"), sets the story's
 `interrupted` so the next brief says `<role>'s step was cut off (<cause>);
 its uncommitted edits are still in this worktree`, and clears `in_flight`.
-It then removes every worktree whose story has nothing in flight, the land
-and replay worktrees unless a boundary replay is pinned, and runs `git
-worktree prune`. A removed worktree is rebuilt from its branch at the
-story's next step.
+Before that, it keeps every worktree an open story needs (s179): one whose
+story has a step in flight, and one whose story is in the current sprint
+and not done or cancelled, ignored files (such as a synced `.venv`)
+included. It removes only the worktree of a story that is done
+(`reason: "done"`), cancelled (`cancelled`), not in the current sprint
+(`not_in_sprint`) or not in `state.json` (`unknown`), plus the land and
+replay worktrees (`scratch`) unless a boundary replay is pinned. Each
+removal logs one `worktree-pruned` event (`worktree`, `reason`; `story` is
+the story id, or none for a scratch dir) and clears the story's
+`worktree_head`. Then it runs `git worktree prune`. A removed story
+worktree is rebuilt from its branch at the story's next step. The resume
+judges no drift: a kept worktree that moved is held as `worktree_drift`
+at its story's next step, as any drifted worktree is.
 
 ## Dashboard
 
@@ -3094,7 +3103,8 @@ All of them are under `.team/run/`, which onboarding gitignores.
 `git branch <story_prefix><id> <sprint head>` and `git worktree add
 .team/run/worktrees/<id> <branch>`, records `branch`, `base_sha` and
 `worktree_head`, and logs `story-branch` (`action: "created"`). A story
-that has a branch but no worktree (moved out of a sprint, or pruned) gets
+that has a branch but no worktree (moved out of a sprint, or pruned at a
+resume because it left the sprint) gets
 its worktree back from the branch (`rebuilt`); no new branch is made. Every
 step on the story runs in its worktree: its write scope, Stop hook,
 commands, stop checks, gates and story-file reads. The run files
@@ -3331,7 +3341,8 @@ files. A started story that depends on it refuses it as before.
 (s163; an older file's `land_queue` is ignored), `permission_asked` and
 `checkout_requests`. Events: `story-branch` (`action`: `created`,
 `rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
-`replays`), `story-landed` and `story-ci`; `step-end` gains `resumed` and
+`replays`), `story-landed`, `story-ci` and (s179) `worktree-pruned`
+(`worktree`, `reason`); `step-end` gains `resumed` and
 `cache_write`, and `checkout` gains `story`. s163 adds `landing-order`,
 `landing-dropped`, `overlap-lifted` and `stack-dropped`, and the gate's
 hold event carries `overlap` on an overlap hold.
