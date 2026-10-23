@@ -1176,8 +1176,9 @@ class Runtime:
         """I3: write one event per worktree a resume removes; return their story ids."""
         stale: set[str] = set()
         for name in spaces.stored_worktrees:
-            reason = find_prune_reason(self.state.stories.get(name), self.state.sprint)
-            if reason:
+            story = self.state.stories.get(name)
+            reason = find_prune_reason(story, self.state.sprint)
+            if reason and not (story and story.in_flight):
                 stale.add(name)
                 data = {"reason": reason}
                 self.events.emit(Event(EventKind.WORKTREE_PRUNED, None, name, data))
