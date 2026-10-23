@@ -23,13 +23,21 @@ DEFAULT_EXCLUDE = ("**/.venv/**", "**/build/**", "**/dist/**", "**/node_modules/
 DEFAULT_TEST_GLOBS = ("**/tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py")
 DEFAULT_FACTORY_NAMES = ("create", "create_{class}", "from_*")
 DEFAULT_BASELINE = ".house-rules-baseline.json"
+_EXCUSE_SUBJECT = (
+    r"(?:(?:the|a|an)\s+)?(?:[\w./-]+\s+)?"
+    r"(?:tests?|test\s+files?|designs?|test_[\w./-]+)(?:'s?)?"
+)
+_EXCUSE_LEAD = r"(?:[\w ]+?\s)?"
 DEFAULT_EXCUSES = (
-    r"(?:(?:(?:the|a)\s+)?(?:tool\s+)?names?\s+(?:(?:is|was)\s+)?)?"
-    r"(?:fixed|chosen|set|given|required|named|used|expected)\s+by\s+(?:(?:the|a|an)\s+)?"
-    r"(?:[\w./-]+\s+)?(?:tests?|test\s+files?|[\w./-]*test[\w./-]*|designs?)",
-    r"(?:(?:the|a)\s+)?(?:[\w./-]+\s+)?designs?(?:'s)?\s+names?",
-    r"(?:the\s+)?(?:[\w./-]+\s+)?(?:tests?|designs?)\s+"
-    r"(?:fixed|chose|set|named|use|uses|expect|expects)\s+(?:(?:the|this|its)\s+)?(?:names?|it)",
+    _EXCUSE_LEAD
+    + r"(?:fixed|chosen|set|given|required|named|used)\s+(?:by|in)\s+"
+    + _EXCUSE_SUBJECT,
+    r"per\s+" + _EXCUSE_SUBJECT,
+    _EXCUSE_SUBJECT + r"\s+names?",
+    _EXCUSE_LEAD
+    + _EXCUSE_SUBJECT
+    + r"\s+(?:fix(?:ed|es)?|chose|set|sets|named?|uses?|used|expects?|requires?|pins?)\s+"
+    + r"(?:(?:the|this|its)\s+)?(?:tool\s+)?(?:names?|it)",
 )
 
 
@@ -72,7 +80,7 @@ class Settings:
 
     def is_excuse(self, reason: str) -> bool:
         """The reason only says that tests or a design fixed the name."""
-        text = reason.split("#", 1)[0].strip().removesuffix(".")
+        text = reason.split("#", 1)[0].strip().rstrip(".;! ")
         return any(pattern.fullmatch(text) for pattern in self.known_excuses)
 
     @cached_property
