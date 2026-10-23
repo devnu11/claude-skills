@@ -18,6 +18,7 @@ class Landed:
     merge: str
     pushed: str = ""
     pr: int | None = None
+    base: str = ""  # s180 C6: the merge's first parent, set at the landing push
 
 
 @dataclass
