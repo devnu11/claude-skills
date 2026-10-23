@@ -1391,6 +1391,12 @@ Every query (role steps and the PO) runs with `strict_mcp_config` and
 runner passes (the PO's `team` tools, the Customer Proxy's sandbox servers),
 never the human's claude.ai connectors. Why: `docs/adr/ADR-003-lean-context.md`.
 
+The runner itself runs in its own venv (`uv run --project <runner>`), which a
+role must not inherit: its Bash would then find the runner's `python` and
+`pytest` instead of the project's. When `VIRTUAL_ENV` is set, every query
+gets `VIRTUAL_ENV=""` and a `PATH` without that venv's `bin` (or `Scripts`)
+directory (#55).
+
 ### The PO stays in its lane
 
 The PO may read only `.team/**` and the docs directory, so it cannot read

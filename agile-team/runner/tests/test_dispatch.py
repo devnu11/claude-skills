@@ -58,6 +58,22 @@ def test_collect_without_result_message() -> None:
     assert (result.text, result.cost) == ("only text", 0.0)
 
 
+def test_a_role_does_not_inherit_the_runners_venv(make_runtime, fake: FakeSystem) -> None:
+    fake.env = {"VIRTUAL_ENV": "/r/.venv", "PATH": "/r/.venv/bin:/usr/bin:/bin"}
+    q = FakeQuery()
+    run(make_runtime(q), "architect")
+    env = q.calls[0]["options"].env
+    assert (env["VIRTUAL_ENV"], env["PATH"]) == ("", "/usr/bin:/bin")
+
+
+def test_hiding_the_venv_keeps_a_launch_path_and_other_venvs() -> None:
+    inherited = {"VIRTUAL_ENV": "/r/.venv", "PATH": "/r/.venv/bin:/bin"}
+    env = {"PATH": "/sandbox/bin:/r/.venv/bin:/p/.venv/bin:/bin", "K": "v"}
+    hidden = dispatch.hide_runner_venv(env, inherited)
+    assert hidden == {"PATH": "/sandbox/bin:/p/.venv/bin:/bin", "K": "v", "VIRTUAL_ENV": ""}
+    assert dispatch.hide_runner_venv(env, {"PATH": "/bin"}) == env
+
+
 def test_options_carry_role_settings(make_runtime) -> None:
     q = FakeQuery()
     rt = make_runtime(q)
