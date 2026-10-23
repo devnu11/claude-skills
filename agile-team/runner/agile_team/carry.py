@@ -1,4 +1,4 @@
-"""Carrying the runner's own commits over a green landing (s180, ADR-0092).
+"""Carrying the runner's own commits over a green landing (s180, ADR-0090).
 
 The runner commits story files and storyless steps on the sprint branch while a landing
 waits on CI. Instead of dropping the landing, those commits are cherry-picked onto it.
