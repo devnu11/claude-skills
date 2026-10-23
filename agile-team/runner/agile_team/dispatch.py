@@ -104,6 +104,7 @@ from .owners import Fix, FixRecord, Owners, Writer
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
+from .requirement_ids import RequirementIds
 from .results import Ran
 from .roles import (
     Handoff,
@@ -121,7 +122,7 @@ from .stage_log import StageLog, place_of
 from .state import RunState
 from .story_branches import KeptSession
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
-from .workspaces import Workspaces
+from .workspaces import REPLAY, SCRATCH_DIRS, PruneReason, Workspaces, find_prune_reason
 
 DISPUTE_OUTPUT = "Output of the test command when the dispute was raised:\n```\n{output}\n```"
 GATE_CHORE = "gate: {step} on {story}"
@@ -530,6 +531,7 @@ class Runtime:
         view.main_git = self.main
         view.stage_log = copy.copy(self.stage_log)
         view.pipeline.checks.stages = view.stage_log.open
+        view.pipeline.checks.clashed = RequirementIds(view).list_clashes
         return view
 
     def _own_pipeline(self, config: Config, story: StoryState) -> Pipeline:
@@ -676,7 +678,16 @@ class Runtime:
         """Add the ``## Requirements`` section to a checked story's brief (s1 T13)."""
         section = requirements.BRIEFS.get(plan.role.name)
         if section and plan.story is not None and plan.story.trace is Trace.CHECKED:
-            plan.prompt += "\n\n" + section(requirements.load(self.config), plan.story.id)
+            plan.prompt += "\n\n" + self._format_requirements(plan, section)
+
+    def _format_requirements(self, plan: Plan, section: Any) -> str:
+        """The brief section; the architect gets reserved ids with story branches (s178 R7)."""
+        checked = requirements.load(self.config)
+        if plan.role.name == "architect" and self.state.story_branches:
+            return requirements.format_offer_section(
+                checked, RequirementIds(self).reserve(plan.story)
+            )
+        return section(checked, plan.story.id)
 
     def _attach_shares(self, plan: Plan) -> None:
         """Add the ``## Shared files`` section to a story-bound brief (s120 S9)."""
@@ -853,6 +864,7 @@ class Runtime:
             parts.append(self._revert_note(plan, plan.story))
         if plan.role.name == MANAGER:
             parts.append(self._manager_context(plan.story))
+        parts.append(render_story_ci(plan))
         parts.append(followup_section(self.state.followups.get(plan.role.name, [])))
         return "\n\n".join(p for p in parts if p)
 
@@ -1150,16 +1162,47 @@ class Runtime:
             self.save()
 
     def recover_stories(self, cause: Cause) -> None:
-        """I2, I3: on a resume, prune stale worktrees and mark each cut-off story step stopped."""
-        pinned = self.state.boundary is not None and self.state.boundary.replay is not None
-        kept = {s.id for s in self.state.stories.values() if s.in_flight}
-        Workspaces(self.main, self.config).prune_stale(
-            frozenset(kept | ({"replay"} if pinned else set()))
-        )
+        """I2, I3 (s179): on a resume, prune the worktrees no open sprint story needs and
+        mark each cut-off story step stopped."""
+        self._prune_worktrees()
         for story in self.state.stories.values():
             if story.in_flight is not None:
                 self._resume_story(story, cause)
         self.save()
+
+    def _prune_worktrees(self) -> None:
+        """I3 (s179): remove the worktrees R2 and R3 name, one worktree-pruned event each."""
+        space = Workspaces(self.main, self.config)
+        gone = self._find_pruned(space)
+        everything = frozenset([*space.stored_worktrees, *SCRATCH_DIRS])
+        space.prune_stale(everything - gone.keys())
+        for name, reason in gone.items():
+            self._log_pruned(name, reason)
+
+    def _find_pruned(self, space: Workspaces) -> dict[str, PruneReason]:
+        """Each stored worktree and scratch dir a resume removes, with its reason (R2, R3)."""
+        gone: dict[str, PruneReason] = {}
+        for name in space.stored_worktrees:
+            reason = find_prune_reason(self.state.stories.get(name), self.state.sprint)
+            if reason is not None:
+                gone[name] = reason
+        scratch = [n for n in space.stored_scratch if n not in self._pinned_scratch]
+        return gone | dict.fromkeys(scratch, PruneReason.SCRATCH)
+
+    @property
+    def _pinned_scratch(self) -> frozenset[str]:
+        """R3: ``{REPLAY}`` while a boundary replay is pinned, else empty."""
+        boundary = self.state.boundary
+        return frozenset({REPLAY}) if boundary and boundary.replay is not None else frozenset()
+
+    def _log_pruned(self, name: str, reason: PruneReason) -> None:
+        """R4, R5: clear a removed story's ``worktree_head`` and log one worktree-pruned event."""
+        scratch = reason is PruneReason.SCRATCH
+        story = None if scratch else self.state.stories.get(name)
+        if story is not None:
+            story.worktree_head = ""
+        data = {"worktree": name, "reason": str(reason)}
+        self.events.emit(Event(EventKind.WORKTREE_PRUNED, None, None if scratch else name, data))
 
     def _resume_story(self, story: StoryState, cause: Cause) -> None:
         """I2: the cut-off step ends as stopped, its session is kept, its worktree is offered."""
@@ -2138,6 +2181,17 @@ def _capture_developer(story: StoryState, handoff: Handoff) -> None:
 STORY_EFFECTS: dict[str, Callable[[StoryState, Handoff], None]] = {
     ARCHITECT: _capture_developer,
 }
+
+
+def render_story_ci(plan: Plan) -> str:
+    """The failing checks, steps and lines of a developer's story whose PR CI is red."""
+    story = plan.story
+    if story is None or not plan.role.name.startswith("developer"):
+        return ""
+    ci = story.ci
+    if ci is None or ci.verdict != "red" or not ci.checks:
+        return ""
+    return "## Story CI\n\nThe PR's CI failed at " + ci.sha + ":\n" + "\n".join(ci.checks)
 
 
 def followup_section(questions: list[str]) -> str:

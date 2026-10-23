@@ -208,6 +208,10 @@ def _no_trace_reasons(_story: str) -> list[str]:
     return []
 
 
+def _list_no_clashes(_story: str) -> list[str]:
+    return []
+
+
 def _nothing_shared(_story: str) -> shares.Check:
     return shares.Check(shares.Listed())
 
@@ -270,6 +274,7 @@ class StoryState:
     trace: Trace = Trace.CHECKED
     branch: str = ""
     base_sha: str = ""
+    req_block: int = 0  # s178: first number of the story's reserved requirement ids; 0 = none
     replays: int = 0
     pushed: str = ""
     pr: int | None = None
@@ -521,6 +526,7 @@ class Checks:
     reuse: Callable[[], Outcome | None] = _nothing_kept
     design_file: Callable[[str], str] = _no_design_file
     traced: Callable[[str], list[str]] = _no_trace_reasons
+    clashed: Callable[[str], list[str]] = _list_no_clashes
     shares: Callable[[str], shares.Check] = _nothing_shared
     reporting: test_reports.Reporting = field(default_factory=test_reports.Reporting)
     serving: Serving = Serving()
@@ -579,7 +585,9 @@ class Checks:
         return [outcome.reason] if outcome.verdict is Verdict.BOUNCE else []
 
     def _trace_reasons(self, story: StoryState) -> list[str]:
-        return self.traced(story.id) if story.trace is Trace.CHECKED else []
+        if story.trace is not Trace.CHECKED:
+            return []
+        return [*self.traced(story.id), *self.clashed(story.id)]
 
     def _shared_reasons(self, story: StoryState) -> list[str]:
         file = self.design_file(story.id)

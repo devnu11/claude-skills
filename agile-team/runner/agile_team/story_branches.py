@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 MERGE_SUBJECT = "merge({id}): {title}"
 MERGE_ID = re.compile(r"^merge\((?P<id>[^)]+)\): ")
@@ -38,6 +38,7 @@ class StoryCi:
     sha: str
     verdict: str
     source: str  # "pr" | "landing"
+    checks: list[str] = field(default_factory=list)
 
 
 @dataclass

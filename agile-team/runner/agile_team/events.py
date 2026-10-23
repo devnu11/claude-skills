@@ -63,6 +63,7 @@ class EventKind(StrEnum):
     OVERLAP_LIFTED = "overlap-lifted"
     STACK_DROPPED = "stack-dropped"
     STORY_CI = "story-ci"
+    WORKTREE_PRUNED = "worktree-pruned"
 
 
 @dataclass
