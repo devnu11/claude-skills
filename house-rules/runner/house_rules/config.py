@@ -80,7 +80,7 @@ class Settings:
 
     def is_excuse(self, reason: str) -> bool:
         """The reason only says that tests or a design fixed the name."""
-        text = reason.split("#", 1)[0].strip().rstrip(".;! ")
+        text = reason.split("#", 1)[0].strip().rstrip(".;:! ")
         return any(pattern.fullmatch(text) for pattern in self.known_excuses)
 
     @cached_property
