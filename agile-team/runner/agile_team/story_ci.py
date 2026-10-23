@@ -70,9 +70,12 @@ class StoryPusher:
         return refused
 
     def _can_push(self, story: StoryState, entry: StackEntry | None) -> bool:
-        """P1, P3: the head moved, and permission, a PR service and a sprint branch allow a push."""
+        """P1, P3: the head moved, no rebase is pending (S3), and permission, a PR service and a
+        sprint branch allow a push."""
         rt = self.runtime
-        if not (story.branch and story.worktree_head and story.worktree_head != story.pushed):
+        if story.rebase is not None or not story.branch or not story.worktree_head:
+            return False
+        if story.worktree_head == story.pushed:
             return False
         if entry is None or rt.prs.missing() or rt.state.upstream.push is Permission.NO:
             return False

@@ -63,9 +63,14 @@ def refusal(  # house-rules: allow verb-name -- name fixed by the tests
     return next((r for r in reasons if r), None)
 
 
-def _find_unfinished(git: Git, rebase: StoryRebase) -> str | None:
+def find_unfinished(git: Git) -> str | None:
+    """S3: the git operation still in progress in the worktree, as a refusal; else ``None``."""
     found = operation(git)
     return UNFINISHED.format(operation=found) if found else None
+
+
+def _find_unfinished(git: Git, rebase: StoryRebase) -> str | None:
+    return find_unfinished(git)
 
 
 def _find_dirty(git: Git, rebase: StoryRebase) -> str | None:

@@ -3241,7 +3241,13 @@ new branch and descends from `onto`, and the commits match the old
 branch's by subject and in order. Then the story adopts the branch (remap,
 `branch`, `base_sha`, `replays`, worktree head), pushes it with a new draft
 PR and closes the old one. Otherwise the step bounces to the same role (a
-round).
+round). A step that ends any other way (blocked, failed, no valid handoff)
+or leaves the rebase in progress holds the story (`the story rebase onto
+<onto> did not finish (<why>); nothing was committed or pushed, ...`): the
+runner commits, quarantines and holds back nothing, keeps the recorded
+worktree head, and leaves the worktree and the rebase as they stopped. A
+story whose rebase is pending is never pushed, so its old branch and lease
+stay as they were.
 
 **Leaving and reverting.** A story that leaves the sprint (`start_sprint`
 without it) or is cancelled loses its worktree but keeps its branch, and
