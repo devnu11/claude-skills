@@ -51,3 +51,10 @@ def test_ac2_repo_extends_patterns(tmp_path: Path) -> None:
     (tmp_path / "m.py").write_text(EXCUSE.replace("name fixed by the {who}", "legacy callers"))
     out = run_check(tmp_path, "m.py")
     assert "suppression-excuse" in out.stdout + out.stderr
+
+
+def test_ac2_other_phrasings_refused(tmp_path: Path) -> None:
+    for reason in ("test file fixed the name", "tests fix the name", "a test fixes the name"):
+        (tmp_path / "m.py").write_text(EXCUSE.replace("name fixed by the {who}", reason))
+        out = run_check(tmp_path, "m.py")
+        assert out.returncode != 0 and "suppression-excuse" in out.stdout, reason
