@@ -164,8 +164,8 @@ fixed the name is refused: fix the name instead. One finding per file, at the
 first such line; its message lists each one as `line <n>: <reason>`.
 
 - **"Only says":** the reason is cut at its first `#` (a chained comment),
-  stripped, and stripped of one trailing `.`. A pattern must then match all
-  of it, ignoring case. `name fixed by the tests; it mirrors git's verb`
+  stripped, stripped of any trailing `.`, `;`, `:` and `!`, and stripped
+  again. A pattern must then match all of it, ignoring case. `name fixed by the tests; it mirrors git's verb`
   passes, because it gives a reason too.
 - **The default patterns** refuse reasons such as "name fixed by the tests",
   "name fixed by the s159 tests", "tool name fixed by the s163 design",
