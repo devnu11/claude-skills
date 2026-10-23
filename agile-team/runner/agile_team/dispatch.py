@@ -151,7 +151,7 @@ BARE_KINDS = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
 FAILED_WITHOUT_HANDOFF = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
 REBASE_LEFT = (
     "the story rebase onto {onto} did not finish ({why}); nothing was committed or pushed, and "
-    "the worktree and the rebase to {branch} are left as they are"
+    "the worktree and the rebase to {branch} are left as they are; release_story resumes it"
 )
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
