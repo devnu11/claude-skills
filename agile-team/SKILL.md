@@ -303,9 +303,12 @@ command fails.
    the sprint branch and fast-forward the main checkout, and only then is
    the story done. Stories land one at a time: the PO's order
    (`order_landings`, a reason when it departs from smallest first), then
-   smallest first (fewest lines changed since the story's base). A landing
-   whose sprint head moved during its CI wait merges afresh; it never pushes
-   a stale merge. Its CI wait doesn't lock the main checkout, so tells and
+   smallest first (fewest lines changed since the story's base). When only
+   the runner's own commits (story files, shares, storyless steps) moved
+   the sprint head during a landing's CI wait, they are cherry-picked on top
+   of the landed merge. Any other move makes the landing merge afresh
+   (`landing_dropped` names the commits); it never pushes a stale merge.
+   Its CI wait doesn't lock the main checkout, so tells and
    answers carry on. A story with `depends_on` starts only after its
    dependencies landed. Every design lists the files it changes under
    `## Files`; a design that overlaps another open story's files waits at
