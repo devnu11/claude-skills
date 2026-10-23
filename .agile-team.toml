@@ -81,11 +81,26 @@ steps = [
     "acceptance",
 ]
 
+# s168: the Proxy's OS sandbox has no network and may not write the user's uv
+# cache, so prepare (which runs outside it) warms {sandbox}/uv-cache with every
+# runner's locked deps, in throwaway envs so no checkout .venv is touched, and
+# puts a bin/uv wrapper first on PATH that runs the real uv offline on it.
 [[environment]]
 name = "cli"
 kind = "package"
-prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}/agile-team/runner"
+prepare = """
+real_uv=$(command -v uv) \
+&& uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}/agile-team/runner \
+&& export UV_CACHE_DIR={sandbox}/uv-cache \
+&& for project in agile-team house-rules unattended; do \
+UV_PROJECT_ENVIRONMENT={sandbox}/warm/$project \
+uv sync --frozen --quiet --directory {repo}/$project/runner || exit 1; done \
+&& mkdir -p {sandbox}/bin \
+&& printf '#!/bin/sh\\nexport UV_CACHE_DIR=%s UV_OFFLINE=1\\nexec %s "$@"\\n' \
+{sandbox}/uv-cache "$real_uv" > {sandbox}/bin/uv \
+&& chmod +x {sandbox}/bin/uv"""
 bin = [
+    "bin",
     "venv/bin",
 ]
 
@@ -127,6 +142,8 @@ write = [
     "agile-team/reference/**",
     "unattended/SKILL.md",
     "unattended/reference/**",
+    "house-rules/SKILL.md",
+    "house-rules/reference/**",
     "README.md",
     ".team/adr/**",
 ]

@@ -148,6 +148,11 @@ BOUNDARY_UNGATED = frozenset({MANAGER})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX})
 REBASE_FIX_ENV = {"GIT_EDITOR": "true"}
 BARE_KINDS = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
+FAILED_WITHOUT_HANDOFF = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
+REBASE_LEFT = (
+    "the story rebase onto {onto} did not finish ({why}); nothing was committed or pushed, and "
+    "the worktree and the rebase to {branch} are left as they are; release_story resumes it"
+)
 FIX_DISAGREES = "{role} says the failure is not theirs to fix: {summary}"
 FIX_GLOBS = ("{source}", "{tests}", "{e2e}")
 
@@ -728,12 +733,19 @@ class Runtime:
         plan.launch.env = {**plan.launch.env, **REBASE_FIX_ENV}
 
     def _set_story_rebase_scope(self, plan: Plan) -> None:
-        """S2: the rebase step writes only the conflicting files, in the story's worktree."""
+        """S2: the rebase step writes only the conflicting files, and runs git, in the worktree."""
         rebase = plan.story.rebase  # type: ignore[union-attr]
         plan.scope.write = list(rebase.files)
+        self._set_git_workspace(plan, self.git.repo)
+        plan.scope.git_allows = git_check.Allows.LOCAL
         story_rebase.prepare(self.git, rebase)
         plan.launch.env = {**(plan.launch.env or self.env), **REBASE_FIX_ENV}
-        lines = story_rebase.STORY_REBASE_LINES
+        self._add_story_rebase_brief(plan)
+
+    @staticmethod
+    def _add_story_rebase_brief(plan: Plan) -> None:
+        """S2: the brief's lines naming the rebase and its conflicting files."""
+        rebase, lines = plan.story.rebase, story_rebase.STORY_REBASE_LINES  # type: ignore[union-attr]
         values = {"id": plan.story.id, "files": ", ".join(rebase.files)}  # type: ignore[union-attr]
         values |= {"onto": rebase.onto, "base": rebase.base, "branch": rebase.branch}
         plan.prompt += "\n\n" + "\n\n".join(line.format(**values) for line in lines)
@@ -924,7 +936,7 @@ class Runtime:
         space = Workspaces(self.git, self.config)
         path = space.path_of(story.id)
         if story.worktree_head and system.is_dir(path):
-            drift = checkout.check_worktree(Git(path, self.git.options), story)
+            drift = find_drift(Git(path, self.git.options), story)
             if drift is not None:
                 return self._report_drift(story, space.changed_files(story.id), path)
         self._make_workspace(story, space)
@@ -1434,7 +1446,7 @@ class Runtime:
         self._keep_session(plan, result)
         parsed = self._parse(plan)
         report = {"role": plan.role.name, "cost_usd": round(result.cost, 4)}
-        report |= self.settle_tree(plan)
+        report |= self._settle_step_tree(plan, parsed)
         parsed = _check_explained(parsed, plan)
         self._emit_step_end(plan, parsed, result, report["commit"])
         return report, parsed
@@ -1527,19 +1539,37 @@ class Runtime:
         return report | {"gate": self._advance_and_log(plan, outcome)}
 
     def _apply_rebase(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
-        """S3: adopt the rebased branch when the role's result checks out; else bounce a round."""
+        """S3: adopt the rebased branch when it checks out; hold an unfinished one; else bounce."""
         story, rebase = plan.story, plan.story.rebase  # type: ignore[union-attr]
-        why = self._find_rebase_refusal(plan, handoff)
-        if why:
+        if stop := self._find_rebase_stop(plan, handoff):
+            return {"gate": self._hold_rebase(plan, stop)}
+        if why := story_rebase.refusal(self.git, rebase):  # type: ignore[arg-type]
             outcome = Outcome(Verdict.BOUNCE, why, story.step, author=Author.ROLE)  # type: ignore[union-attr]
             return {"gate": self._advance_and_log(plan, outcome)}
         self._take_rebase(story, rebase)  # type: ignore[arg-type]
         return {"rebased": {"branch": story.branch, "onto": rebase.onto}}  # type: ignore[union-attr]
 
-    def _find_rebase_refusal(self, plan: Plan, handoff: Handoff) -> str | None:
-        if handoff.status != "done":
-            return f"role reported {handoff.status}: {handoff.summary}"
-        return story_rebase.refusal(self.git, plan.story.rebase)  # type: ignore[union-attr,arg-type]
+    def _find_rebase_stop(self, plan: Plan, parsed: Handoff | HandoffError) -> str | None:
+        """S3: why a story-rebase step left its rebase unfinished; ``None`` for other steps."""
+        if plan.kind is not StepKind.STORY_REBASE:
+            return None
+        if isinstance(parsed, HandoffError):
+            return str(parsed)
+        if parsed.status != "done":
+            return f"role reported {parsed.status}: {parsed.summary}"
+        return story_rebase.find_unfinished(self.git)
+
+    def _hold_rebase(self, plan: Plan, stop: str) -> dict[str, Any]:
+        """S3: the story holds; its worktree, its rebase and its recorded shas stay as they are."""
+        rebase = plan.story.rebase  # type: ignore[union-attr]
+        reason = REBASE_LEFT.format(onto=rebase.onto, branch=rebase.branch, why=stop)  # type: ignore[union-attr]
+        return self._advance_and_log(plan, Outcome(Verdict.HOLD, reason, author=Author.ROLE))
+
+    def _settle_step_tree(self, plan: Plan, parsed: Handoff | HandoffError) -> dict[str, Any]:
+        """Settle the step's tree; an unfinished story rebase leaves it untouched (S3)."""
+        if self._find_rebase_stop(plan, parsed):
+            return {"commit": None, "quarantine": None}
+        return self.settle_tree(plan)
 
     def _take_rebase(self, story: StoryState, rebase: Any) -> None:
         """S3: the story takes the rebased branch, remaps its shas and pushes it."""
@@ -1630,7 +1660,7 @@ class Runtime:
     def _sort_requirements(self, plan: Plan, audit: guard.Audit) -> requirement_changes.Sorting:
         """Classify the step's requirement files and split them by their reasons (C1-C3)."""
         folder = requirements.folder_of(self.config)
-        paths = requirement_changes.select_candidates(audit.in_scope, folder)
+        paths = requirement_changes.select_candidates(_find_new_edits(plan, audit), folder)
         found = requirement_changes.find_changes(self.git, paths)
         return requirement_changes.sort_changes(found, plan.reasons)
 
@@ -1918,6 +1948,13 @@ class Runtime:
         return {"ruling": {"ruling": ruling, "applied": True, "now_at": now_at}}
 
 
+def find_drift(git: Git, story: StoryState) -> checkout.Drift | None:
+    """B5: how the story's worktree drifted; its own held story rebase is not drift (S3)."""
+    if story.rebase is not None and story_rebase.is_resumable(git, story.rebase):
+        return None
+    return checkout.check_worktree(git, story)
+
+
 def find_rebase_refusal(role: str, story: StoryState | None) -> str | None:
     """S1: only the role a queued story rebase names may run it, on its story."""
     if story is None or story.rebase is None:
@@ -2122,9 +2159,15 @@ def _note_files(story: StoryState, paths: list[str]) -> None:
     story.files.extend(p for p in dict.fromkeys(paths) if p not in story.files)
 
 
+def _find_new_edits(plan: Plan, audit: guard.Audit) -> list[str]:
+    """The step's in-scope edits, less a story rebase's conflicting files: those resolve (S2)."""
+    resolved = plan.story.rebase.files if plan.kind is StepKind.STORY_REBASE else []  # type: ignore[union-attr]
+    return [p for p in audit.in_scope if p not in resolved]
+
+
 def _settled(plan: Plan, parsed: Handoff | HandoffError) -> Handoff | HandoffError:
-    """A malformed handoff on a gate fix step counts as failed (R17)."""
-    if isinstance(parsed, HandoffError) and plan.kind is StepKind.GATE_FIX:
+    """A malformed handoff on a gate fix (R17) or a story rebase (S3) step counts as failed."""
+    if isinstance(parsed, HandoffError) and plan.kind in FAILED_WITHOUT_HANDOFF:
         return Handoff("failed", summary=str(parsed))
     return parsed
 

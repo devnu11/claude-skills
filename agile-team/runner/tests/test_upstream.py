@@ -164,6 +164,50 @@ def test_gh_missing() -> None:
     assert ex.calls == [["gh", "--version"], ["gh", "auth", "status"]]
 
 
+def test_a_working_gh_is_trusted_without_asking_again(fake: FakeSystem) -> None:
+    """Rate limit (2026-10-20): ``gh auth status`` costs an API call, so a success is kept."""
+    ex = FakeExec()
+    prs = GhPrs(ex)
+    for _ in range(100):
+        assert prs.missing() is None
+    assert len(ex.calls) == 2
+
+
+def test_a_working_gh_is_checked_again_after_the_trust_period(fake: FakeSystem) -> None:
+    ex = FakeExec()
+    prs = GhPrs(ex)
+    prs.missing()
+    fake.clock += up.GH_TRUSTED_S
+    prs.missing()
+    assert len(ex.calls) == 4
+
+
+def test_a_failing_gh_is_checked_again_on_the_next_call(fake: FakeSystem) -> None:
+    ex = FakeExec({("gh", "auth", "status"): (1, "")})
+    prs = GhPrs(ex)
+    assert prs.missing() == up.GH_LOGGED_OUT
+    ex.results = {}
+    assert prs.missing() is None
+
+
+@pytest.mark.parametrize(
+    "out",
+    [
+        "X Failed to log in to github.com: API rate limit exceeded for user ID 1.",
+        "HTTP 403: rate limit exceeded (https://api.github.com/)",
+        "error connecting to api.github.com",
+        "gh timed out after 120s",
+        "Get https://api.github.com/: dial tcp: lookup api.github.com: no such host",
+        "read tcp 10.0.0.2:5555->140.82.112.6:443: i/o timeout",
+        "dial tcp 140.82.112.6:443: connect: connection refused",
+        "lookup api.github.com on 192.168.1.1:53: no such host",
+    ],
+)
+def test_a_rate_limit_or_network_failure_is_not_logged_out(fake: FakeSystem, out: str) -> None:
+    why = GhPrs(FakeExec({("gh", "auth", "status"): (1, "\n" + out + "\n")})).missing()
+    assert why != up.GH_LOGGED_OUT and why == up.GH_UNREACHABLE.format(detail=out)
+
+
 FIND = [
     "gh",
     "pr",

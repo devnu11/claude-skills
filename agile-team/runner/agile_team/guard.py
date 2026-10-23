@@ -78,6 +78,7 @@ class Scope:
     secrets: list[Path] = field(default_factory=list)
     git_workspace: Path | None = None
     run_home: Path | None = None
+    git_allows: git_check.Allows = git_check.Allows.ANY
 
     @property
     def base(self) -> Path:
@@ -286,7 +287,8 @@ def _site(scope: Scope) -> git_check.Site | None:
     if scope.git_workspace is None:
         return None
     base = system.resolve(scope.base)
-    return git_check.Site(scope.role, system.resolve(scope.repo), base, scope.git_workspace)
+    repo, workspace = system.resolve(scope.repo), scope.git_workspace
+    return git_check.Site(scope.role, repo, base, workspace, scope.git_allows)
 
 
 def _check_allowlist(scope: Scope, segments: list[list[str]]) -> str | None:

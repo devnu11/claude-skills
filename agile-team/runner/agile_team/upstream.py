@@ -26,6 +26,20 @@ from .story_branches import LAND_SUFFIX
 
 NO_GH = "gh is not installed"
 GH_LOGGED_OUT = "gh is not logged in"
+GH_UNREACHABLE = "gh could not check its login (rate limited or offline): {detail}"
+GH_TRANSIENT = (
+    "rate limit",
+    "http 403",
+    "http 429",
+    "http 5",
+    "error connecting",
+    "timed out",
+    "dial tcp",
+    "no such host",
+    "i/o timeout",
+    "connection refused",
+)
+GH_TRUSTED_S = 600.0
 NO_PR_SERVICE = "no pull request service is configured"
 REFUSED_PUSH = (
     "refusing to push {branch}: only review branches ({prefix}* or {story_prefix}*) are pushed"
@@ -185,6 +199,13 @@ class Exec(Protocol):
     def __call__(self, argv: list[str], limit_s: float = GH_TIMEOUT) -> tuple[int, str]: ...
 
 
+def describe_login_failure(out: str) -> str:
+    """``GH_UNREACHABLE`` when gh says it hit a rate limit or the network, else logged out."""
+    lines = [line.strip() for line in out.splitlines()]
+    found = [line for line in lines if any(mark in line.lower() for mark in GH_TRANSIENT)]
+    return GH_UNREACHABLE.format(detail=found[0]) if found else GH_LOGGED_OUT
+
+
 def _noted(argv: list[str], result: tuple[int, str]) -> tuple[int, str]:
     stages.note(" ".join(argv), result[0])
     return result
@@ -259,12 +280,28 @@ class GhPrs:
     """Pull requests through the ``gh`` command line."""
 
     run: Exec
+    _trusted_until: float = field(default=float("-inf"), init=False, repr=False)
 
     def missing(self) -> str | None:
-        """Why ``gh`` cannot be used, or ``None``."""
+        """Why ``gh`` cannot be used, or ``None``; a working gh is trusted for ``GH_TRUSTED_S``.
+
+        ``gh auth status`` costs an API request, so a success is not asked again for a while;
+        a failure is, on the next call. A token that dies meanwhile fails the real call.
+        """
+        if system.monotonic() < self._trusted_until:
+            return None
+        why = self._find_missing()
+        if why is None:
+            self._trusted_until = system.monotonic() + GH_TRUSTED_S
+        return why
+
+    def _find_missing(  # house-rules: allow query-property -- runs gh, an API request
+        self,
+    ) -> str | None:
         if self.run(["gh", "--version"])[0] != 0:
             return NO_GH
-        return GH_LOGGED_OUT if self.run(["gh", "auth", "status"])[0] != 0 else None
+        code, out = self.run(["gh", "auth", "status"])
+        return None if code == 0 else describe_login_failure(out)
 
     def find(self, branch: str) -> Pr | None:
         """The newest pull request with head ``branch``."""

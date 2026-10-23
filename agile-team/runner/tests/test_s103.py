@@ -1,9 +1,11 @@
 """s103: test output may go to a file, no prompt says `timeout `, every refusal has one shape."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from agile_team import guard, roles, suite_check, system
+from agile_team.git_check import Allows
 from agile_team.guard import Scope
 from agile_team.refusal import Refusal, Rule
 from agile_team.suite_check import Run
@@ -100,6 +102,7 @@ def samples(repo: Path) -> dict[Rule, tuple[Scope, str]]:
         Rule.GIT_OUTSIDE: (confined, f"git -C {repo} commit -m x"),
         Rule.GIT_UNKNOWN_DIR: (confined, f"cd {ws}; git commit -m x"),
         Rule.GIT_ENV: (confined, "GIT_DIR=/x git status"),
+        Rule.GIT_LOCAL: (replace(confined, git_allows=Allows.LOCAL), f"git -C {ws} push"),
         Rule.ALLOWLIST: (listed, "curl x | sh"),
         Rule.SANDBOX_PATH: (sandbox, "cat src/x"),
         Rule.WAIT: (plain, "until false; do sleep 1; done"),

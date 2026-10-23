@@ -70,9 +70,12 @@ class StoryPusher:
         return refused
 
     def _can_push(self, story: StoryState, entry: StackEntry | None) -> bool:
-        """P1, P3: the head moved, and permission, a PR service and a sprint branch allow a push."""
+        """P1, P3: the head moved, no rebase is pending (S3), and permission, a PR service and a
+        sprint branch allow a push."""
         rt = self.runtime
-        if not (story.branch and story.worktree_head and story.worktree_head != story.pushed):
+        if story.rebase is not None or not story.branch or not story.worktree_head:
+            return False
+        if story.worktree_head == story.pushed:
             return False
         if entry is None or rt.prs.missing() or rt.state.upstream.push is Permission.NO:
             return False
@@ -132,9 +135,12 @@ class StoryCiPoll:
         return self.settle(story, self.read_checks(story), sha)
 
     def claim_due(self, story: StoryState, now: float) -> bool:
-        """True, and the read time noted, when the story's head is due a read (loop thread)."""
+        """True, and the read time noted, when the story's head is due a read (loop thread).
+
+        The time gate comes first: ``can_poll`` asks ``gh``, which may cost an API request.
+        """
         last = self._read_at.get(story.id)
-        if not self.can_poll(story) or (last is not None and now - last < STORY_CI_POLL_S):
+        if (last is not None and now - last < STORY_CI_POLL_S) or not self.can_poll(story):
             return False
         self._read_at[story.id] = now
         return True

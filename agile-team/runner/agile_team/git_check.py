@@ -22,7 +22,32 @@ from .suite_check import ASSIGNMENT
 SAFE_GIT = frozenset(
     {"status", "diff", "log", "show", "blame", "grep", "ls-files", "rev-parse", "describe"}
 )
+LOCAL_GIT = SAFE_GIT | frozenset(
+    {
+        "add", "rm", "mv", "restore", "checkout", "switch", "rebase", "commit", "stash",
+        "reset", "cherry-pick", "apply", "merge-file", "mergetool", "rerere", "merge-base",
+        "rev-list", "cat-file", "ls-tree", "show-ref", "diff-files", "diff-index", "var",
+    }
+)  # fmt: skip
 NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
+LONG_PREFIX_MIN = 4
+
+
+@dataclass(frozen=True)
+class Flags:
+    """Options a LOCAL step may not give a subcommand: long names (or their abbreviations,
+    which git accepts) and short letters, alone or in a cluster such as ``-rx``."""
+
+    long: tuple[str, ...]
+    short: str = ""
+    valued: str = ""
+
+
+LOCAL_DENIED_FLAGS: dict[str, Flags] = {
+    "rebase": Flags(("--exec", "--interactive"), "ix", "sSX"),
+    "checkout": Flags(("--ignore-other-worktrees",)),
+    "switch": Flags(("--ignore-other-worktrees",)),
+}
 CEILING_ENV = "GIT_CEILING_DIRECTORIES"
 KEEP_CWD_ENV = "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"
 GIT_ENV_LOCKED = (
@@ -30,6 +55,8 @@ GIT_ENV_LOCKED = (
     "GIT_DIR",
     "GIT_WORK_TREE",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_SEQUENCE_EDITOR",
+    "GIT_EDITOR",
     KEEP_CWD_ENV,
 )
 CD_WORDS = frozenset({"cd", "pushd"})
@@ -63,6 +90,13 @@ GIT_DIR_UNKNOWN = Refusal(
     Rule.GIT_UNKNOWN_DIR,
     "{role} may not run `git {sub}` where an earlier `cd` may not have run",
     "chain the `cd` with `&&`, or give git an absolute `-C` inside {workspace}",
+).text()
+GIT_LOCAL_DENIED = Refusal(
+    Rule.GIT_LOCAL,
+    "{role} may not run `git {sub}` in {workspace}: this worktree shares the team repo's "
+    "remotes, refs and config, so its git stays local, and only the runner pushes or fetches",
+    "local git in {workspace}: `git add`, `git rebase --continue`, `git status`, `git diff`, "
+    "`git log`, `git checkout -- <file>`",
 ).text()
 GIT_ENV_DENIED = Refusal(
     Rule.GIT_ENV,
@@ -129,6 +163,7 @@ class Allows(StrEnum):
     """Which subcommands a row lets through (G6)."""
 
     READ_ONLY = "read-only"
+    LOCAL = "local"
     ANY = "any"
     NONE = "none"
 
@@ -184,6 +219,7 @@ class Site:
     repo: Path
     step_dir: Path
     workspace: Path
+    workspace_allows: Allows = Allows.ANY
 
 
 NO_SITE = Site("", Path(), Path(), Path())
@@ -344,6 +380,26 @@ def _read_only(call: GitCall) -> bool:
     return call.first == "cherry-pick" and bool(NO_COMMIT_FLAGS & set(call.words))
 
 
+def _is_local(call: GitCall) -> bool:
+    flags = LOCAL_DENIED_FLAGS.get(call.sub)
+    denied = flags is not None and any(_is_denied_flag(w, flags) for w in call.words)
+    return call.sub in LOCAL_GIT and not denied
+
+
+def _is_denied_flag(word: str, flags: Flags) -> bool:
+    if word.startswith("--"):
+        name = word.partition("=")[0]
+        return len(name) >= LONG_PREFIX_MIN and any(f.startswith(name) for f in flags.long)
+    return word.startswith("-") and bool(set(_read_cluster(word, flags)) & set(flags.short))
+
+
+def _read_cluster(word: str, flags: Flags) -> str:
+    """A short-option cluster's letters, up to the first one that takes a value."""
+    letters = word[1:]
+    cut = next((i for i, c in enumerate(letters) if c in flags.valued), len(letters))
+    return letters[:cut]
+
+
 def _any(call: GitCall) -> bool:
     return True
 
@@ -355,12 +411,13 @@ def _none(call: GitCall) -> bool:
 GIT_RULES: dict[Where, GitRule] = {
     Where.UNCONFINED: GitRule(Allows.READ_ONLY, GIT_WRITE_DENIED),
     Where.STEP_DIR: GitRule(Allows.READ_ONLY, GIT_OUTSIDE),
-    Where.WORKSPACE: GitRule(Allows.ANY, ""),
+    Where.WORKSPACE: GitRule(Allows.ANY, GIT_LOCAL_DENIED),
     Where.ELSEWHERE: GitRule(Allows.NONE, GIT_OUTSIDE),
     Where.UNKNOWN: GitRule(Allows.NONE, GIT_DIR_UNKNOWN),
 }
 ALLOWS: dict[Allows, Callable[[GitCall], bool]] = {
     Allows.READ_ONLY: _read_only,
+    Allows.LOCAL: _is_local,
     Allows.ANY: _any,
     Allows.NONE: _none,
 }
@@ -389,10 +446,18 @@ def _link_denial(site: Site | None, link: Link, start: Path | None) -> str | Non
     if call is None:
         return None
     place, target = where(site, call, start) if site else (Where.UNCONFINED, "")
-    rule = GIT_RULES[place]
+    rule = _find_rule(site, place)
     if ALLOWS[rule.allows](call):
         return None
     return rule.reason.format(**_fields(site or NO_SITE, call, target))
+
+
+def _find_rule(site: Site | None, place: Where) -> GitRule:
+    """The ``GIT_RULES`` row; in the workspace, what the site lets through there."""
+    rule = GIT_RULES[place]
+    if site is None or place is not Where.WORKSPACE:
+        return rule
+    return GitRule(site.workspace_allows, rule.reason)
 
 
 def _fields(site: Site, call: GitCall, target: str) -> dict[str, str]:

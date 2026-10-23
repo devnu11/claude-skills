@@ -1965,7 +1965,8 @@ to `integration-tester`).
   A `cd` followed by anything but `&&` makes the directory unknown, and
   later git is denied unless it has an absolute `-C` inside the workspace.
   A confined step's Bash may not mention `GIT_CEILING_DIRECTORIES`,
-  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_DISCOVERY_ACROSS_FILESYSTEM` or
+  `GIT_DIR`, `GIT_WORK_TREE`, `GIT_DISCOVERY_ACROSS_FILESYSTEM`,
+  `GIT_SEQUENCE_EDITOR`, `GIT_EDITOR` or
   `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`.
 - The tester builds the workspace the way a customer would have it (for this
   runner: `agile-team init` already run, plus the run files the ACs need),
@@ -2853,7 +2854,9 @@ back`), the same way the quarantine works. The step then counts as a bad
 handoff and bounces with a round:
 `explain change to REQ-003 (your edits are held back in <sha>; make them again and give each reason in the handoff's requirement_changes)`.
 Added and explained changes still land. A reason for a file the step didn't
-touch is ignored.
+touch is ignored. In a story rebase step, edits to the conflicting files the
+rebase lists are the conflict's resolution, not requirement changes: they
+need no reason and are never held back (any other requirement file is).
 
 **Trailers.** The step commit ends with one trailer block: a
 `Requirement-Changed: REQ-003: <why>` line per landed change, in id order,
@@ -3079,7 +3082,13 @@ draft PR from its branch to the sprint's branch (`<id>: <title>`). Every 60 s
 at most, the runner reads each open story's PR checks on its pushed head;
 a settled result that changed is saved as the story's `ci` and logged as
 `story-ci` (`sha`, `verdict`, `source: "pr"`, `checks`). A red result hands
-over `story_ci_red` and holds nothing: only the landing CI decides.
+over `story_ci_red` and holds nothing: only the landing CI decides. A
+story not yet due is skipped before `gh` is asked anything. Whether `gh`
+works (`gh --version`, then `gh auth status`, which costs an API request)
+is checked once and a success is trusted for 10 minutes; a failure is
+checked again on the next call. A failure whose output shows a rate limit
+or a network error reads `gh could not check its login (rate limited or
+offline): <line>`, not `gh is not logged in`.
 
 **Land.** `land` is the last pipeline step, after `acceptance`, and the
 runner runs it itself. A story is `done` only when its land passes, and
@@ -3230,16 +3239,37 @@ against the tree, and a held design keeps its worktree, so it counts toward
 **Story rebases.** A landing conflict (with a round) or a carried story's
 replay conflict (without one) records the story's `rebase` (`onto`, `base`,
 `old`, `branch`, `files`, `role`). Before the step the runner runs, in the
-worktree, `git checkout -b <story_prefix><id>-r<k>` and `git rebase --onto
-<onto> <base>`, which stops at the conflict. The step may write only the
-conflicting files. Its brief says: resolve, `git add`, `git rebase
+worktree, `git checkout -B <story_prefix><id>-r<k>` (a leftover branch of
+that name is reset to the old tip) and `git rebase --onto <onto> <base>`,
+which stops at the conflict. A worktree already on that branch, or stopped
+part-way through rebasing it, is left as it is and the step resumes it. The step may write only the
+conflicting files, and its git is confined to the story's worktree (as a
+DevOps rebase fix's is to its scratch worktree), so its `git add` and `git
+rebase --continue` run there. That worktree shares the team repo's remotes,
+refs and config, so its git is local only: the read-only list plus `add`,
+`rm`, `mv`, `restore`, `checkout`, `switch`, `rebase`, `commit`, `stash`,
+`reset`, `cherry-pick`, `apply`, `merge-file`, `mergetool`, `rerere` and a
+few plumbing reads. `push`, `fetch`, `pull`, `remote`, `ls-remote`,
+`config`, `worktree`, `submodule` and anything else are refused by rule
+`git-local-only`, and so are `rebase --exec`/`-x` and `--interactive`/`-i`
+(they run shell or an editor) and `checkout`/`switch
+--ignore-other-worktrees`, abbreviations and short clusters (`-rx`)
+included. Its brief says: resolve, `git add`, `git rebase
 --continue`; never merge, squash, reorder or drop. After `done`, the runner
 checks that no operation is in progress, the tree is clean, HEAD is on the
 new branch and descends from `onto`, and the commits match the old
 branch's by subject and in order. Then the story adopts the branch (remap,
 `branch`, `base_sha`, `replays`, worktree head), pushes it with a new draft
 PR and closes the old one. Otherwise the step bounces to the same role (a
-round).
+round). A step that ends any other way (blocked, failed, no valid handoff)
+or leaves the rebase in progress holds the story (`the story rebase onto
+<onto> did not finish (<why>); nothing was committed or pushed, ...`): the
+runner commits, quarantines and holds back nothing, keeps the recorded
+worktree head, and leaves the worktree and the rebase as they stopped.
+Released, the story re-runs the step: its stopped rebase is not counted as
+worktree drift, and the role carries on from the conflict. A
+story whose rebase is pending is never pushed, so its old branch and lease
+stay as they were.
 
 **Leaving and reverting.** A story that leaves the sprint (`start_sprint`
 without it) or is cancelled loses its worktree but keeps its branch, and

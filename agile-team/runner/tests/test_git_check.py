@@ -338,6 +338,8 @@ def test_env_lock_names() -> None:
         "GIT_DIR",
         "GIT_WORK_TREE",
         "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_SEQUENCE_EDITOR",
+        "GIT_EDITOR",
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR",
     }
 

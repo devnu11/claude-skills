@@ -131,6 +131,17 @@ def test_polls_are_at_least_sixty_seconds_apart_sc1(make_runtime, fake) -> None:
     assert poll.poll(story, 1030.0) is None and len(rt.prs.calls) == calls
 
 
+def test_a_story_not_yet_due_never_asks_whether_gh_works_sc1(make_runtime, fake) -> None:
+    """Rate limit (2026-10-20): the time gate comes before ``prs.missing()``."""
+    rt, story, poll = poller(make_runtime, fake)
+    asked: list[str] = []
+    rt.prs.missing = lambda: asked.append("missing")
+    poll.claim_due(story, 1000.0)
+    for second in range(1, story_ci.STORY_CI_POLL_S):
+        assert poll.claim_due(story, 1000.0 + second) is False
+    assert asked == ["missing"]
+
+
 def test_the_poll_interval_is_sixty_seconds_sc1() -> None:
     assert story_ci.STORY_CI_POLL_S == 60
 
@@ -198,7 +209,7 @@ def test_prepare_branches_then_rebases_onto_the_new_base_s2(fake: FakeSystem) ->
     fake.reply(("rebase", "--onto"), Done(1, "CONFLICT"))
     story_rebase.prepare(Git(FAKE_REPO), REBASE)
     got = argvs(fake)
-    branch = next(a for a in got if "checkout" in a and "-b" in a and REBASE.branch in a)
+    branch = next(a for a in got if "checkout" in a and "-B" in a and REBASE.branch in a)
     rebase = next(a for a in got if "rebase" in a and "--onto" in a)
     assert got.index(branch) < got.index(rebase)
     assert REBASE.onto in rebase and REBASE.base in rebase
