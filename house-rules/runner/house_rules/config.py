@@ -161,10 +161,10 @@ def to_strings(value: Any) -> tuple[str, ...]:
 
 def to_patterns(value: Any) -> tuple[re.Pattern[str], ...]:
     """A list of case-insensitive regular expressions."""
-    return tuple(compile_pattern(item) for item in to_strings(value))
+    return tuple(build_pattern(item) for item in to_strings(value))
 
 
-def compile_pattern(item: str) -> re.Pattern[str]:
+def build_pattern(item: str) -> re.Pattern[str]:
     """``item`` compiled, or a ``ValueError`` naming it."""
     try:
         return re.compile(item, re.IGNORECASE)
