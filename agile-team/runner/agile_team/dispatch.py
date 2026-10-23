@@ -728,9 +728,10 @@ class Runtime:
         plan.launch.env = {**plan.launch.env, **REBASE_FIX_ENV}
 
     def _set_story_rebase_scope(self, plan: Plan) -> None:
-        """S2: the rebase step writes only the conflicting files, in the story's worktree."""
+        """S2: the rebase step writes only the conflicting files, and runs git, in the worktree."""
         rebase = plan.story.rebase  # type: ignore[union-attr]
         plan.scope.write = list(rebase.files)
+        self._set_git_workspace(plan, self.git.repo)
         story_rebase.prepare(self.git, rebase)
         plan.launch.env = {**(plan.launch.env or self.env), **REBASE_FIX_ENV}
         lines = story_rebase.STORY_REBASE_LINES

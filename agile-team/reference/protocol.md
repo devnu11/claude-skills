@@ -3232,7 +3232,9 @@ replay conflict (without one) records the story's `rebase` (`onto`, `base`,
 `old`, `branch`, `files`, `role`). Before the step the runner runs, in the
 worktree, `git checkout -b <story_prefix><id>-r<k>` and `git rebase --onto
 <onto> <base>`, which stops at the conflict. The step may write only the
-conflicting files. Its brief says: resolve, `git add`, `git rebase
+conflicting files, and its git is confined to the story's worktree (as a
+DevOps rebase fix's is to its scratch worktree), so its `git add` and `git
+rebase --continue` run there. Its brief says: resolve, `git add`, `git rebase
 --continue`; never merge, squash, reorder or drop. After `done`, the runner
 checks that no operation is in progress, the tree is clean, HEAD is on the
 new branch and descends from `onto`, and the commits match the old
