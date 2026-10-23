@@ -1,0 +1,323 @@
+"""The s159 story-rebase step in the runner: its git workspace, its settle and its push."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+import pytest
+from agile_team import dispatch, guard, requirements, system
+from agile_team.boundary import Permission, StackEntry
+from agile_team.dispatch import Plan
+from agile_team.gates import StoryState, Verdict
+from agile_team.replay import StoryReplay
+from agile_team.roles import Handoff, RoleBook
+from agile_team.story_branches import StoryRebase
+from agile_team.story_ci import StoryPusher
+from agile_team.workspaces import Workspaces
+
+from .conftest import handoff
+from .fake_system import Done, FakeSystem
+from .s29_helpers import FakePrs
+from .test_s159_round7 import Upstream, pusher_for
+
+ONTO, BASE, OLD_TIP = "c" * 40, "b" * 40, "a" * 40
+BRANCH, REBASED = "team/story-s1", "team/story-s1-r1"
+CONFLICTS = ["src/app.py", "agile-team/docs/requirements/REQ-001.md"]
+
+
+def rebasing_story() -> StoryState:
+    story = StoryState("s1", "Title", "land", sprint=1, branch=BRANCH, base_sha=BASE)
+    story.worktree_head = story.pushed = OLD_TIP
+    story.rebase = StoryRebase(ONTO, BASE, BRANCH, REBASED, list(CONFLICTS), "developer-cli")
+    return story
+
+
+def rebase_plan(make_runtime) -> tuple[dispatch.Runtime, Plan]:
+    rt = make_runtime()
+    story = rebasing_story()
+    rt.state.stories["s1"] = story
+    view = rt.get_story_view(story)
+    role = RoleBook.for_repo(rt.config.repo, {}).resolve("developer-cli")
+    scope = guard.Scope("developer-cli", view.config.repo, [], [])
+    return view, Plan(role, scope, story, kind=dispatch.StepKind.STORY_REBASE)
+
+
+# ---------- A: the step's git runs in the story's worktree (s159 S2) ----------
+
+
+def test_the_story_rebase_step_confines_git_to_the_story_worktree(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    worktree = Workspaces(view.main, view.config).path_of("s1")
+    assert plan.scope.git_workspace == system.resolve(worktree)
+    assert plan.scope.write == CONFLICTS
+
+
+def test_the_story_rebase_step_may_add_and_continue_the_rebase(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    for command in ("git add src/app.py", "git rebase --continue"):
+        assert guard.check_bash(plan.scope, command) is None, command
+
+
+LOCAL_COMMANDS = [
+    "git add src/app.py",
+    "git rebase --continue",
+    "git status",
+    "git diff",
+    "git log --oneline",
+    "git checkout --theirs src/app.py",
+    "git restore --staged src/app.py",
+    "git commit -m x",
+]
+NETWORK_OR_CONFIG = [
+    "git push",
+    "git push origin HEAD",
+    "git push --force origin team/story-s1-r1",
+    "git push origin HEAD:team/sprint-1",
+    "git fetch origin",
+    "git pull",
+    "git remote add x /tmp/x",
+    "git remote set-url origin https://example.com/x.git",
+    "git ls-remote origin",
+    "git worktree add ../x",
+    "git submodule update --init",
+    "git config core.hooksPath hooks",
+    "git -c user.name=x push origin HEAD",
+]
+SHELL_OR_EDITOR = [
+    "git rebase --exec 'git push' x",
+    "git rebase --exec='git push origin HEAD' x",
+    "git rebase --ex 'git push' x",
+    "git rebase -x 'git push origin HEAD' x",
+    "git rebase -x'git push' x",
+    "git rebase -rx 'git push' x",
+    "git rebase -i x",
+    "git rebase --interactive x",
+    "git rebase --interac x",
+    "git checkout --ignore-other-worktrees team/sprint-1",
+    "git switch --ignore-other-worktrees team/sprint-1",
+    "git checkout --ignore-other team/sprint-1",
+    "GIT_SEQUENCE_EDITOR='sh -c \"git push\"' git rebase --continue",
+    "GIT_EDITOR=vi git rebase --continue",
+]
+STILL_LOCAL = [
+    "git rebase --continue",
+    "git rebase --skip",
+    "git rebase -Xignore-space-change --continue",
+    "git checkout --ignore-skip-worktree-bits -- src/app.py",
+    "git checkout -- src/app.py",
+]
+
+
+@pytest.mark.parametrize("command", LOCAL_COMMANDS)
+def test_the_story_rebase_step_runs_local_git(make_runtime, fake, command) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    assert guard.check_bash(plan.scope, command) is None
+
+
+@pytest.mark.parametrize("command", NETWORK_OR_CONFIG)  # some are also outside the worktree
+def test_the_story_rebase_step_may_not_push_fetch_or_reconfigure(make_runtime, fake, command):
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    reason = guard.check_bash(plan.scope, command)
+    assert reason and reason.startswith("refused by rule `git-"), reason
+
+
+# ---------- B: an unfinished story rebase is left as it is (s159 S3) ----------
+
+GIT_DIR = "/fake/repo/.git/worktrees/s1"
+
+
+def mid_rebase(fake: FakeSystem, *changed: str) -> None:
+    """The worktree stopped mid-rebase (detached), with ``changed`` edited."""
+    fake.reply(("symbolic-ref",), Done(1, ""))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    fake.reply(("rev-parse", "HEAD"), Done(0, ONTO + "\n"))
+    fake.reply(("status", "--porcelain=v1"), Done(0, "".join(f" M {p}\0" for p in changed)))
+    system.make_dirs(Path(GIT_DIR) / "rebase-merge")
+
+
+def settle(view: dispatch.Runtime, plan: Plan, text: str) -> dict:
+    return view.settle(plan, dispatch.StepResult(text, 0.1))
+
+
+def git_writes(fake: FakeSystem) -> list[list[str]]:
+    writes = ("commit", "add", "revert", "push")
+    return [c.argv for c in fake.commands if c.argv[:1] == ("git",) and c.argv[1] in writes]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        handoff("blocked", summary="git add is denied"),
+        handoff("failed", summary="gave up"),
+        "no handoff at all",
+        handoff("done", summary="resolved"),
+    ],
+    ids=["blocked", "failed", "bad_handoff", "done_but_unfinished"],
+)
+def test_an_unfinished_story_rebase_commits_nothing_and_holds(make_runtime, fake, text) -> None:
+    view, plan = rebase_plan(make_runtime)
+    mid_rebase(fake, "src/app.py", "docs/elsewhere.md")
+    report = settle(view, plan, text)
+    story = plan.story
+    assert git_writes(fake) == []
+    assert report["commit"] is None and report["quarantine"] is None
+    assert story.worktree_head == OLD_TIP and story.branch == BRANCH
+    assert story.rebase is not None and story.rebase.branch == REBASED
+    assert report["gate"]["verdict"] == Verdict.HOLD
+    assert "nothing was committed or pushed" in report["gate"]["reason"]
+
+
+def test_a_held_story_rebase_says_why_it_stopped(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    mid_rebase(fake)
+    reason = settle(view, plan, handoff("done", summary="ok"))["gate"]["reason"]
+    assert "rebase in progress" in reason and ONTO in reason and REBASED in reason
+
+
+def test_a_finished_rebase_with_another_problem_still_bounces_a_round(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, BRANCH + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    report = settle(view, plan, handoff("done", summary="resolved"))
+    assert report["gate"]["verdict"] == Verdict.BOUNCE
+    assert REBASED in report["gate"]["reason"]
+
+
+def test_a_finished_rebase_is_adopted_and_its_new_branch_pushed(
+    make_runtime, fake, monkeypatch
+) -> None:
+    def take_over(self, story, queued) -> None:
+        story.branch, story.pushed, story.worktree_head = queued.branch, "", ONTO
+
+    view, plan = rebase_plan(lambda: make_runtime(prs=FakePrs()))
+    view.state.sprint, view.state.upstream.push = 1, Permission.YES
+    view.state.upstream.stack = [StackEntry(1, "team/sprint-1", BASE, BASE, head=BASE)]
+    view.upstream = Upstream()
+    monkeypatch.setattr(StoryReplay, "take_over", take_over)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    got = view._apply_rebase(plan, Handoff("done"))
+    assert got == {"rebased": {"branch": REBASED, "onto": ONTO}} and plan.story.rebase is None
+    pushed = [(lease.branch, lease.expect, lease.sha) for lease in view.upstream.leases]
+    assert pushed[-1] == (REBASED, "", ONTO)
+
+
+def test_a_story_with_a_pending_rebase_never_pushes(make_runtime, monkeypatch) -> None:
+    rt, story, _, _ = pusher_for(make_runtime, monkeypatch)
+    story.pushed, story.rebase = OLD_TIP, rebasing_story().rebase
+    story.worktree_head = ONTO
+    assert asyncio.run(StoryPusher(rt).push_off_loop(story)) is None
+    assert StoryPusher(rt).after_step(story) is None
+    assert rt.upstream.leases == [] and story.pushed == OLD_TIP
+
+
+# ---------- C: a resolved requirement conflict is not an unexplained edit (C4, S2) ----------
+
+
+def conflicted_requirement(view: dispatch.Runtime, plan: Plan, fake: FakeSystem) -> str:
+    """A finished rebase whose conflicting requirement file is edited in the worktree."""
+    path = f"{requirements.folder_of(view.config)}/REQ-001.md"
+    plan.story.rebase.files = plan.scope.write = [path]
+    system.make_dirs((view.git.repo / path).parent)
+    system.write_text(view.git.repo / path, "---\nid: REQ-001\n---\nresolved\n")
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    fake.reply(("status", "--porcelain=v1"), Done(0, f" M {path}\0"))
+    fake.reply(("diff", "--name-status"), Done(0, f"M\0{path}\0"))
+    fake.reply(("show", f"HEAD:{path}"), Done(0, "---\nid: REQ-001\n---\nold\n"))
+    fake.reply(("merge-base", "--is-ancestor"), Done(1, ""))
+    return path
+
+
+def test_a_story_rebase_does_not_hold_back_its_conflicting_requirement(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    conflicted_requirement(view, plan, fake)
+    report = settle(view, plan, handoff("done", summary="resolved"))
+    assert "held_back" not in report and report["status"] == "done"
+    assert not [c for c in fake.commands if "revert" in c.argv]
+    assert report["commit"] is not None
+
+
+def test_a_role_step_still_holds_back_an_unexplained_requirement_edit(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    conflicted_requirement(view, plan, fake)
+    plan.kind = dispatch.StepKind.ROLE
+    held = view.settle_tree(plan)
+    assert held.get("held_back") and plan.unexplained.startswith("explain change to REQ-001")
+
+
+# ---------- re-entry: a released held rebase resumes (S3) ----------
+
+
+def stopped_rebasing(fake: FakeSystem, branch: str) -> None:
+    """The worktree stopped part-way through rebasing ``branch``."""
+    mid_rebase(fake)
+    system.write_text(Path(GIT_DIR) / "rebase-merge" / "head-name", f"refs/heads/{branch}\n")
+
+
+def checkouts(fake: FakeSystem) -> list[tuple[str, ...]]:
+    return [c.argv for c in fake.commands if "checkout" in c.argv or "--onto" in c.argv]
+
+
+def test_a_released_stopped_rebase_is_not_drift_and_resumes(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, REBASED)
+    assert dispatch.find_drift(view.git, plan.story) is None
+    view._set_story_rebase_scope(plan)
+    assert checkouts(fake) == []
+
+
+def test_a_stopped_rebase_of_another_branch_is_still_drift(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, "someone-else")
+    assert dispatch.find_drift(view.git, plan.story) is not None
+
+
+def test_a_worktree_with_no_rebase_pending_drifts_as_before(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    stopped_rebasing(fake, REBASED)
+    plan.story.rebase = None
+    assert dispatch.find_drift(view.git, plan.story) is not None
+
+
+def test_a_leftover_rebase_branch_is_reset_to_the_old_tip(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, BRANCH + "\n"))
+    view._set_story_rebase_scope(plan)
+    [checkout, rebase] = checkouts(fake)
+    assert checkout[-2:] == ("-B", REBASED) and rebase[-2:] == (ONTO, BASE)
+
+
+@pytest.mark.parametrize("command", SHELL_OR_EDITOR)
+def test_the_story_rebase_step_may_not_run_shell_through_git(make_runtime, fake, command):
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    reason = guard.check_bash(plan.scope, command)
+    assert reason and reason.startswith("refused by rule `git-"), reason
+
+
+@pytest.mark.parametrize("command", STILL_LOCAL)
+def test_other_rebase_and_checkout_flags_stay_allowed(make_runtime, fake, command) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    assert guard.check_bash(plan.scope, command) is None
+
+
+def test_the_runner_starts_the_rebase_itself_without_the_guard(make_runtime, fake) -> None:
+    """``prepare`` runs as the runner: a plain, non-interactive ``rebase --onto``."""
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, BRANCH + "\n"))
+    view._set_story_rebase_scope(plan)
+    [rebase] = [c.argv for c in fake.commands if "--onto" in c.argv]
+    assert not {"-i", "--interactive", "-x", "--exec"} & set(rebase)
