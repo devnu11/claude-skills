@@ -104,6 +104,7 @@ from .owners import Fix, FixRecord, Owners, Writer
 from .priority import SOURCE_ROLES, Priority, Reorder
 from .providers import Providers
 from .relay import Note, Relay
+from .requirement_ids import RequirementIds
 from .results import Ran
 from .roles import (
     Handoff,
@@ -530,6 +531,7 @@ class Runtime:
         view.main_git = self.main
         view.stage_log = copy.copy(self.stage_log)
         view.pipeline.checks.stages = view.stage_log.open
+        view.pipeline.checks.clashed = RequirementIds(view).list_clashes
         return view
 
     def _own_pipeline(self, config: Config, story: StoryState) -> Pipeline:
@@ -676,7 +678,16 @@ class Runtime:
         """Add the ``## Requirements`` section to a checked story's brief (s1 T13)."""
         section = requirements.BRIEFS.get(plan.role.name)
         if section and plan.story is not None and plan.story.trace is Trace.CHECKED:
-            plan.prompt += "\n\n" + section(requirements.load(self.config), plan.story.id)
+            plan.prompt += "\n\n" + self._format_requirements(plan, section)
+
+    def _format_requirements(self, plan: Plan, section: Any) -> str:
+        """The brief section; the architect gets reserved ids with story branches (s178 R7)."""
+        checked = requirements.load(self.config)
+        if plan.role.name == "architect" and self.state.story_branches:
+            return requirements.format_offer_section(
+                checked, RequirementIds(self).reserve(plan.story)
+            )
+        return section(checked, plan.story.id)
 
     def _attach_shares(self, plan: Plan) -> None:
         """Add the ``## Shared files`` section to a story-bound brief (s120 S9)."""
