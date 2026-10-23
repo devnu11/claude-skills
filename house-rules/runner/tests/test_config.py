@@ -86,6 +86,19 @@ def test_defaults_are_the_global_rules(tmp_path: Path) -> None:
         "name fixed by the tests.",
         "NAME FIXED BY THE DESIGN",
         "name fixed by the tests  # expect: verb-name fail",
+        "a test fixes the name",
+        "test file fixed the name",
+        "the e2e tests expect it",
+        "tests require the tool name",
+        "the tests pin this name",
+        "kept because the s159 design chose it",
+        "as named by the design",
+        "name used in test_router.py",
+        "the tests' name",
+        "per the s159 design",
+        "name fixed by the tests;",
+        "name fixed by the tests!",
+        "name fixed by the tests. ",
     ],
 )
 def test_an_excuse_reason_is_refused(tmp_path: Path, reason: str) -> None:
@@ -99,6 +112,10 @@ def test_an_excuse_reason_is_refused(tmp_path: Path, reason: str) -> None:
         "matches the CLI flag",
         "name fixed by the tests; it mirrors git's verb",
         "registry needs an instance",
+        "the latest gh output sets the name",
+        "a testing helper sets the name",
+        "pytest needs this name for discovery",
+        "the test helper mirrors git's verb",
     ],
 )
 def test_a_real_reason_is_accepted(tmp_path: Path, reason: str) -> None:

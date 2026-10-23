@@ -16,6 +16,11 @@ def mirror(rows):  # house-rules: allow verb-name -- the tests use this name.
     return rows
 
 
+def active(rows):  # house-rules: allow verb-name -- a test fixes the name
+    """Active voice."""
+    return rows
+
+
 def upper(rows):  # house-rules: allow verb-name -- NAME FIXED BY THE DESIGN
     """Upper case."""
     return rows
