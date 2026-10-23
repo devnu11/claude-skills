@@ -256,6 +256,9 @@ when it has landed, and its dependants start only then. Hand-overs:
 
 - `land_bounced`: a merge conflict. The named role rebases, then land runs
   again. Do nothing unless it repeats.
+- `landing_dropped`: the sprint head moved under a landing in a way the runner can't
+  carry; the line names the commits. The land started again by itself. Do nothing unless
+  it repeats.
 - `story_ci_red`: nothing is held. Brief the developer if a fix is needed.
 - `worktree_drift`: tell the human. `agile-team accept-checkout --story <id>`
   keeps it. Never edit the worktree.
