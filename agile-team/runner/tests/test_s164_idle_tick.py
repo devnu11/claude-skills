@@ -1,4 +1,4 @@
-"""s164: the scheduler's own writes never wake it (W1 to W5, REQ-174)."""
+"""s164: the scheduler's own writes never wake it (W1 to W5, REQ-184)."""
 
 from __future__ import annotations
 
