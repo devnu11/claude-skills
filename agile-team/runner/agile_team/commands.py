@@ -114,16 +114,16 @@ class CommandShell:
     def _watched(self, command: str) -> tuple[int, str]:
         """Run with the tally plugin when a stage is open."""
         run = stages.current()  # on the caller's thread: contextvars skip threads
-        plain = self._shell(command, system.environ())
+        plain = self._build_shell(command, system.environ())
         if run is None:
             return self._run(plain)
         with tally_watch.watching(run) as env:
-            code, out = self._run(self._shell(command, env))
+            code, out = self._run(self._build_shell(command, env))
         if code != 0 and tally_watch.plugin_failed(out):
             return self._run(plain)
         return code, out
 
-    def _shell(self, command: str, env: Mapping[str, str]) -> system.ShellCommand:
+    def _build_shell(self, command: str, env: Mapping[str, str]) -> system.ShellCommand:
         """``command`` in the repo, under ``env`` with the coverage data redirected."""
         name, path = COVERAGE_DATA
         return system.ShellCommand(command, self.repo, {**env, name: str(self.repo / path)})
