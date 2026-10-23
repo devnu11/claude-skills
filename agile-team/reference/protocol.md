@@ -1945,7 +1945,8 @@ to `integration-tester`).
   survive a bounce from acceptance back to e2e, and only the tester
   replaces what is in them. The tester's prompt gains
   `## Presentations to build`, one line per environment:
-  `- <name> (<kind>): .team/run/presentation/<story>/<name>/ (<AC ids>)`
+  `- <name> (<kind>): <dir>/ (<AC ids>); its guide: <dir>/PRESENTATION.md`,
+  where `<dir>` is `.team/run/presentation/<story>/<name>`
   (an absolute path into the main checkout's run dir when the step runs
   in a story worktree). Each guide covers only that environment's ACs. A story from before s95
   with one flat presentation goes back to e2e once, without a round.
@@ -1995,8 +1996,10 @@ to `integration-tester`).
   gate bounces (one round) with one line per incomplete environment (s95,
   s91), each
   `story sN has no presentation for acceptance environment '<name>': <gap>`,
-  where `<gap>` is the first of:
+  where `<gap>` names every gap of that environment, joined by `; ` (#57):
+  the guide's,
   `<dir>/PRESENTATION.md is missing or empty; write the customer's guide there`,
+  then the workspace's, one of
   `<dir>/workspace is missing; put the demo or evidence files the customer tries there`,
   `<dir>/workspace is empty; …`, or
   `<dir>/workspace holds only .git; add the demo or evidence files themselves, for example <dir>/workspace/DEMO.md`

@@ -96,6 +96,7 @@ NO_WORKSPACE_REASON = (
     HEAD.format(env="cli") + BASE.format(env="cli") + f"/workspace is missing; {TRIES}"
 )
 EMPTY_REASON = HEAD.format(env="cli") + BASE.format(env="cli") + f"/workspace is empty; {TRIES}"
+NO_DIR_REASON = f"{GUIDE_REASON}; {BASE.format(env='cli')}/workspace is missing; {TRIES}"
 HOLLOW_REASON = (
     HEAD.format(env="cli")
     + BASE.format(env="cli")
@@ -110,7 +111,7 @@ def cli_dir(config: cfg.Config) -> Path:
 
 
 def test_missing_when_there_is_no_dir(config: cfg.Config) -> None:
-    assert presentation.missing(config, story_of(config)) == GUIDE_REASON
+    assert presentation.missing(config, story_of(config)) == NO_DIR_REASON
 
 
 @pytest.mark.parametrize("text", ["", "   \n\t\n"])
@@ -120,10 +121,11 @@ def test_missing_when_the_guide_is_blank(config: cfg.Config, text: str) -> None:
     assert presentation.missing(config, story_of(config)) == GUIDE_REASON
 
 
-def test_guide_is_checked_before_the_workspace(config: cfg.Config) -> None:
+def test_both_gaps_of_a_showing_are_named_in_one_reason(config: cfg.Config) -> None:
     story_of(config)
     system.make_dirs(cli_dir(config) / "workspace")
-    assert presentation.missing(config, story_of(config)) == GUIDE_REASON
+    empty = BASE.format(env="cli") + f"/workspace is empty; {TRIES}"
+    assert presentation.missing(config, story_of(config)) == f"{GUIDE_REASON}; {empty}"
 
 
 def test_missing_when_there_is_a_guide_but_no_workspace(config: cfg.Config) -> None:
@@ -165,7 +167,7 @@ def test_a_story_without_showings_has_nothing_missing(config: cfg.Config) -> Non
 
 def test_each_story_has_its_own_presentation(config: cfg.Config) -> None:
     present(config, "s5")
-    assert presentation.missing(config, story_of(config, "s4")) == GUIDE_REASON
+    assert presentation.missing(config, story_of(config, "s4")) == NO_DIR_REASON
     assert presentation.missing(config, story_of(config, "s5")) is None
 
 
@@ -325,16 +327,19 @@ def test_a_worktree_step_is_told_the_presentation_dir_absolutely(config: cfg.Con
     view = worktree_view(config)
     source = presentation.source_dir(view, presentation.showings(view, "s4")[0])
     assert source == config.run_dir / "presentation/s4/cli"
-    assert f"- cli (package): {source.as_posix()}/ (AC1)" in presentation.layout_section(view, "s4")
+    path = source.as_posix()
+    line = f"- cli (package): {path}/ (AC1); its guide: {path}/PRESENTATION.md"
+    assert line in presentation.layout_section(view, "s4")
 
 
 def test_a_worktree_steps_gaps_name_the_same_absolute_dir(config: cfg.Config) -> None:
     view = worktree_view(config)
     source = config.run_dir / "presentation/s4/cli"
     no_guide = presentation.NO_GUIDE_TEXT.format(path=f"{source.as_posix()}/PRESENTATION.md")
-    assert presentation.missing(view, _state("s4")) == HEAD.format(env="cli") + no_guide
-    present(config, "s4", workspace=False)
     no_workspace = presentation.NO_WORKSPACE_TEXT.format(path=f"{source.as_posix()}/workspace")
+    both = f"{no_guide}; {no_workspace}"
+    assert presentation.missing(view, _state("s4")) == HEAD.format(env="cli") + both
+    present(config, "s4", workspace=False)
     assert presentation.missing(view, _state("s4")) == HEAD.format(env="cli") + no_workspace
     present(config, "s4")
     assert presentation.missing(view, _state("s4")) is None

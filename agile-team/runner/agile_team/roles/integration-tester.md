@@ -27,8 +27,9 @@ showing per acceptance environment, e.g. `.team/run/presentation/<story>/cli/`
 (an absolute path when your step runs in a story worktree; use it as listed),
 with its own `workspace/` (a `manual` showing has only its guide). The runner
 lays these out the first time and keeps them across rounds, so update them
-rather than rebuild. Build every listed showing, each with its own
-`PRESENTATION.md`; a missing guide costs a round. The workspace holds the demo
+rather than rebuild. Build every listed showing, each with its own guide at
+`<showing>/PRESENTATION.md`, beside `workspace/` and not inside it; a missing
+guide costs a round. The workspace holds the demo
 or evidence files themselves, not only an empty repo. Build demos only inside
 `workspace/`. There git
 runs freely: `git init demo`, `cd <workspace> && git …`,
@@ -37,10 +38,11 @@ read-only in your cwd only. Git cannot climb out of `.team/run` (the runner
 sets `GIT_CEILING_DIRECTORIES`), so give every demo repo its own `git init`.
 Never point git at the team repo. Build the workspace the way the team would
 hand the product to a customer (follow the design's recipe for the story's
-acceptance environment). Write `PRESENTATION.md` there: for each AC, what to run or open and
-what the customer should see. For a `document` environment, copy the files the story changed (prompts, docs, designs) into `workspace/`, keeping their repo paths. In the guide, say for each AC which file and section shows it. For ACs that only a live run shows (sprints,
-stops, spend), capture the real output, e.g. `agile-team status` of the live
-run as `live-status.json`, and say in `PRESENTATION.md` what it is.
+acceptance environment). In the showing's `PRESENTATION.md` (beside
+`workspace/`), write for each AC what to run or open and what the customer
+should see. For a `document` environment, copy the files the story changed (prompts, docs, designs) into `workspace/`, keeping their repo paths. In the guide, say for each AC which file and section shows it. For ACs that only a live run shows,
+capture the real output into the workspace and say in `PRESENTATION.md` what
+it is.
 
 The presentation is self-contained. The Customer Proxy's sandbox can't read
 repo paths, so `PRESENTATION.md` names none and the presentation holds no
