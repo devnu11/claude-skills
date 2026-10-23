@@ -63,6 +63,50 @@ def test_the_story_rebase_step_may_add_and_continue_the_rebase(make_runtime, fak
         assert guard.check_bash(plan.scope, command) is None, command
 
 
+LOCAL_COMMANDS = [
+    "git add src/app.py",
+    "git rebase --continue",
+    "git status",
+    "git diff",
+    "git log --oneline",
+    "git checkout --theirs src/app.py",
+    "git restore --staged src/app.py",
+    "git commit -m x",
+]
+NETWORK_OR_CONFIG = [
+    "git push",
+    "git push origin HEAD",
+    "git push --force origin team/story-s1-r1",
+    "git push origin HEAD:team/sprint-1",
+    "git fetch origin",
+    "git pull",
+    "git remote add x /tmp/x",
+    "git remote set-url origin https://example.com/x.git",
+    "git ls-remote origin",
+    "git worktree add ../x",
+    "git submodule update --init",
+    "git config core.hooksPath hooks",
+    "git -c user.name=x push origin HEAD",
+]
+
+
+@pytest.mark.parametrize("command", LOCAL_COMMANDS)
+def test_the_story_rebase_step_runs_local_git(make_runtime, fake, command) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    assert guard.check_bash(plan.scope, command) is None
+
+
+@pytest.mark.parametrize("command", NETWORK_OR_CONFIG)  # some are also outside the worktree
+def test_the_story_rebase_step_may_not_push_fetch_or_reconfigure(make_runtime, fake, command):
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    view._set_story_rebase_scope(plan)
+    reason = guard.check_bash(plan.scope, command)
+    assert reason and reason.startswith("refused by rule `git-"), reason
+
+
 # ---------- B: an unfinished story rebase is left as it is (s159 S3) ----------
 
 GIT_DIR = "/fake/repo/.git/worktrees/s1"

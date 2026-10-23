@@ -737,6 +737,7 @@ class Runtime:
         rebase = plan.story.rebase  # type: ignore[union-attr]
         plan.scope.write = list(rebase.files)
         self._set_git_workspace(plan, self.git.repo)
+        plan.scope.git_allows = git_check.Allows.LOCAL
         story_rebase.prepare(self.git, rebase)
         plan.launch.env = {**(plan.launch.env or self.env), **REBASE_FIX_ENV}
         self._add_story_rebase_brief(plan)
