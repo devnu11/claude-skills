@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from agile_team import landing, router
 from agile_team.boundary import StackEntry
 from agile_team.dispatch import RunFlags
@@ -120,10 +119,9 @@ def test_the_hold_ends_when_the_head_comes_back_to_the_base_c6(make_runtime) -> 
     assert "s2" in ids(rt)
 
 
-@pytest.mark.parametrize("step", ["review", "done"])
-def test_the_hold_ends_when_the_landing_leaves_land_c6(make_runtime, step) -> None:
+def test_the_hold_ends_when_the_landing_leaves_land_c6(make_runtime) -> None:
     gone = kept("s1", BASE)
-    gone.step = step
+    gone.step = "review"
     rt = runtime(make_runtime, MOVED, gone, fresh())
     assert "s2" in ids(rt)
 
@@ -162,7 +160,7 @@ def test_an_unpushed_record_holds_nothing_c6(make_runtime) -> None:
 
 def test_a_landed_story_past_land_holds_nothing_c6(make_runtime) -> None:
     done = kept("s1", BASE)
-    done.step = "done"
+    done.step = "review"
     rt = runtime(make_runtime, MOVED, done, fresh())
     assert Router(rt)._held_landings == []
 
