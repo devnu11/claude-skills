@@ -208,6 +208,7 @@ def scope_of(repo: Path, **kw: object) -> Scope:
         "developer-cli",
         repo,
         ["**"],
+        cwd=ws,
         git_workspace=system.resolve(ws),
         git_allows=Allows.LOCAL,
         **kw,  # type: ignore[arg-type]
