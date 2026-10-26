@@ -75,6 +75,8 @@ header { border-bottom: 1px solid var(--border); background: var(--surface); }
 .lp-when { flex: none; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
 .lp-line { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-line.tool { font-style: italic; }
+.lp-chores[hidden] { display: none; }
+.lp-chore { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-msg { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .lp-msg[hidden] { display: none; }
 .lp-msg .md > *, .lp-msg .md li { margin: 0; }
@@ -363,6 +365,7 @@ details > summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; mar
       <div class="live-panel h-idle" id="live-panel" role="button" tabindex="0" data-live-panel data-live-tip>
         <div class="lp-top"><b class="lp-who" id="lp-who"></b><span class="lp-when" id="lp-when"></span></div>
         <div class="lp-line" id="lp-line"></div>
+        <div class="lp-chores" id="lp-chores" hidden></div>
         <div class="lp-msg" id="lp-msg" hidden></div>
       </div>
       <button class="ctl" id="theme" title="Theme">◐</button>
@@ -748,6 +751,33 @@ function openStages(view) {
   return beating(view) && Array.isArray(view.heartbeat.stages) ? view.heartbeat.stages : [];
 }
 
+/** The chores open now (CH7). */
+function openChores(view) {
+  return beating(view) && Array.isArray(view.heartbeat.chores) ? view.heartbeat.chores : [];
+}
+
+/** One chore row's text: its story (or "run"), what it does and how long (CH7). */
+function choreText(view, chore) {
+  return `⚙ ${chore.story || "run"} · ${chore.what} · ${fmt.age(clockNow(view) - chore.since)}`;
+}
+
+/** The panel line when only chores are open (CH8). */
+function choresLine(n) {
+  return n === 1 ? "1 chore open" : `${n} chores open`;
+}
+
+/** Rebuilds the chore rows under the panel's second line from the heartbeat (CH7). */
+function renderChoreRows(view) {
+  const rows = openChores(view).map((chore) => {
+    const div = document.createElement("div");
+    div.className = "lp-chore";
+    div.textContent = choreText(view, chore);
+    return div;
+  });
+  $("#lp-chores").replaceChildren(...rows);
+  $("#lp-chores").hidden = rows.length === 0;
+}
+
 /** The health level, mapped through the whitelist so nothing unknown reaches HTML (P2). */
 function healthLevel(view) {
   return HEALTH_LEVELS.includes(view.health.level) ? view.health.level : "idle";
@@ -982,9 +1012,9 @@ function stagePanel(view) {
 
 /** The panel state for a runner chore, else null. */
 function chorePanel(view) {
-  const chore = beating(view) ? view.heartbeat.chore : null;
-  if (!chore) return null;
-  return { kind: "stage", who: "⚙ runner", when: fmt.age(clockNow(view) - chore.since), line: chore.what, story: "" };
+  const n = openChores(view).length;
+  if (!n) return null;
+  return { kind: "stage", who: "⚙ runner", when: "", line: choresLine(n), story: "" };
 }
 
 /** Why nothing runs: open questions first, else the health reason or run status (LP5). */
@@ -1045,6 +1075,7 @@ function fillPanelText(state) {
 function renderLivePanel(view) {
   const state = panelState(view), box = $("#live-panel"), show = state.kind === "step";
   fillPanelText(state);
+  renderChoreRows(view);
   $("#lp-msg").hidden = !show;
   $("#lp-msg").innerHTML = show ? panelMessageHtml(latestMessage(view, state.story)) : "";
   box.dataset.story = state.story;
@@ -1055,6 +1086,7 @@ function renderLivePanel(view) {
 /** Rewrites only the panel's text lines so the clocks move (LP7). */
 function renderPanelText(view) {
   fillPanelText(panelState(view));
+  renderChoreRows(view);
 }
 
 /** Opens the Activity tab filtered to `story` when it exists (LP8). */

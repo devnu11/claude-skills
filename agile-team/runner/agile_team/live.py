@@ -22,7 +22,7 @@ from .salvage import STOP_REASONS, Cause
 
 TURNS = "turns.jsonl"
 HEARTBEAT = "heartbeat.json"
-HEARTBEAT_VERSION = 2
+HEARTBEAT_VERSION = 3
 PER_MILLION = 1_000_000
 # $/Mtok: input, output, cache read, cache write.
 RATES: dict[str, tuple[float, float, float, float]] = {
@@ -335,7 +335,7 @@ class Pulse:
     _last_beat: float = field(init=False)
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
     _open: list[Meter] = field(init=False, default_factory=list)
-    _chore: dict[str, Any] | None = field(init=False, default=None)
+    _chores: list[dict[str, Any]] = field(init=False, default_factory=list)
     _stages: list[dict[str, Any]] = field(init=False, default_factory=list)
     _ended: bool = field(init=False, default=False)
     _reported: bool = field(init=False, default=False)
@@ -401,16 +401,17 @@ class Pulse:
             )
 
     @contextmanager
-    def doing(self, what: str) -> Iterator[None]:
-        """Mark runner-side work in progress (H5); restores the previous chore on exit."""
+    def doing(self, what: str, story: str | None = None) -> Iterator[None]:
+        """Mark runner-side work on ``story`` (``None``: run-wide) in progress (H5, CH1)."""
+        row = {"what": what, "story": story, "since": system.now()}
         with self._lock:
-            previous, self._chore = self._chore, {"what": what, "since": system.now()}
+            self._chores.append(row)
         self.write()
         try:
             yield
         finally:
             with self._lock:
-                self._chore = previous
+                self._chores = [r for r in self._chores if r is not row]
                 self._wake_innermost()
             self.write()
 
@@ -533,7 +534,7 @@ class Pulse:
             "mono": system.monotonic(),
             "started_at": self.started_at,
             "slept": round(self.slept_s, 1),
-            "chore": self._chore if live else None,
+            "chores": list(self._chores) if live else [],
             "step": step,
             "calls": self._open_calls() if live else [],
             "stages": list(self._stages) if live else [],

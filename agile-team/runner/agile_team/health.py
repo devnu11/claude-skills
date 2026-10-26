@@ -166,8 +166,15 @@ class Vitals:
         return (self.beat or {}).get("step") if self.beating else None
 
     @property
+    def chores(self) -> list[dict[str, Any]]:
+        """The heartbeat's open chores, oldest first; ``[]`` when not beating or not a list."""
+        rows = (self.beat or {}).get("chores") if self.beating else None
+        return rows if isinstance(rows, list) else []
+
+    @property
     def chore(self) -> dict[str, Any] | None:
-        return (self.beat or {}).get("chore") if self.beating else None
+        """The oldest open chore, else ``None`` (CH6)."""
+        return self.chores[0] if self.chores else None
 
     @property
     def tool(self) -> dict[str, Any] | None:

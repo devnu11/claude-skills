@@ -726,7 +726,7 @@ class Runtime:
         """Lint, static and (unless kept at HEAD) coverage before the quality czar (Q1-Q3)."""
         if plan.story is None:
             return
-        with self.pulse.doing(QUALITY_CHORE.format(story=plan.story.id)):
+        with self.pulse.doing(QUALITY_CHORE.format(story=plan.story.id), plan.story.id):
             for name in self._quality_due(plan.story):
                 checks = self.pipeline.serving(Serving(plan.story.id)).checks
                 self._keep(plan.story, checks.ran(name), "before quality")
@@ -1273,11 +1273,12 @@ class Runtime:
             raise task.exception()  # type: ignore[misc]
 
     async def _settle_threaded(self, plan: Plan, result: StepResult) -> dict[str, Any]:
-        what = f"settling {salvage.label(plan.role.name, plan.story.id if plan.story else None)}"
-        with self.pulse.doing(what):  # N13
+        owner = plan.story.id if plan.story else None
+        what = f"settling {salvage.label(plan.role.name, owner)}"
+        with self.pulse.doing(what, owner):  # N13
             report, parsed = self._settle_head(plan, result)
         await self._run_pregate(plan, parsed)
-        with self.pulse.doing(what):
+        with self.pulse.doing(what, owner):
             return self._settle_tail(plan, parsed, report)
 
     def uses_main_checkout(self, request: StepRequest) -> bool:
@@ -1487,8 +1488,9 @@ class Runtime:
 
     def settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
         """Record cost, read the handoff, settle the tree, then gate; save state."""
-        what = f"settling {salvage.label(plan.role.name, plan.story.id if plan.story else None)}"
-        with self.pulse.doing(what):
+        owner = plan.story.id if plan.story else None
+        what = f"settling {salvage.label(plan.role.name, owner)}"
+        with self.pulse.doing(what, owner):
             return self._settle(plan, result)
 
     def _settle(self, plan: Plan, result: StepResult) -> dict[str, Any]:
@@ -1856,7 +1858,7 @@ class Runtime:
 
     def _evaluate(self, plan: Plan, handoff: Handoff) -> Outcome:
         chore = GATE_CHORE.format(step=plan.story.step, story=plan.story.id)
-        with self.pulse.doing(chore):
+        with self.pulse.doing(chore, plan.story.id):
             return self._gating(plan).evaluate(plan.story, handoff)
 
     def _gating(self, plan: Plan) -> Pipeline:

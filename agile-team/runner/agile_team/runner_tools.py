@@ -169,9 +169,10 @@ class RunnerTools:
         return path
 
     async def _run(self, ids: list[str], plan: list[Batch]) -> dict[str, Any]:
-        story = self.plan.story.id if self.plan.story else NO_STORY_ID
+        owner = self.plan.story.id if self.plan.story else None
+        chore = TESTS_CHORE.format(role=self.plan.role.name, story=owner or NO_STORY_ID)
         started = system.monotonic()
-        with self.runtime.pulse.doing(TESTS_CHORE.format(role=self.plan.role.name, story=story)):
+        with self.runtime.pulse.doing(chore, owner):
             runs = [await self._run_batch(batch) for batch in plan]
         seconds = round(system.monotonic() - started, 1)
         self._log(ids, runs, seconds)
