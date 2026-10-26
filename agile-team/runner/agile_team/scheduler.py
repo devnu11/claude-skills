@@ -363,7 +363,6 @@ class Scheduler:
         try:
             report = await self.dispatch(work)
         except Exception as exc:
-            log_traceback(self.runtime.config.run_dir, exc)
             report = {"status": "error", "role": work.role, "reason": crash_halt(exc).reason}
         finally:
             self.running.pop(key, None)
@@ -385,9 +384,18 @@ class Scheduler:
         story = work.story
         assert story is not None
         self.landings.begin(story.id)
-        report = await self.land_report(story)
+        report = await self.run_logged_land(story)
         self.landings.finish(story.id)
         return report
+
+    async def run_logged_land(self, story: StoryState) -> dict[str, Any]:
+        """The land's report; an exception's traceback goes to crash.log first (s175 E4)."""
+        try:
+            return await self.land_report(story)
+        except Exception as exc:
+            with contextlib.suppress(OSError):
+                log_traceback(self.runtime.config.run_dir, exc)
+            raise
 
     async def land_report(self, story: StoryState) -> dict[str, Any]:
         """The land's report: an unbranched story passes at once, else the lander decides."""

@@ -13,7 +13,7 @@ from enum import StrEnum
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
-from . import system
+from . import stages, system
 from .ci_findings import pick_lines
 from .ci_triage import (
     BUCKET_KIND,
@@ -72,7 +72,7 @@ NO_STEP_NAMED = "step not named"
 __all__ = ["FAILING", "PASSING", "Bucket"]
 
 
-class UpstreamError(Exception):
+class UpstreamError(stages.CommandFailed):
     """The remote or the PR service refused or failed."""
 
 

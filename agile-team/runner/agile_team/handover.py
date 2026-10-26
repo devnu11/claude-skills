@@ -397,8 +397,16 @@ def triggers(report: dict) -> list[Trigger]:
 
 def hold_reason(report: dict) -> str | None:
     """The matching trigger names joined by ``, ``, or ``None`` when nothing matches."""
-    names = triggers(report)
+    names = [describe_hold(trigger, report) for trigger in triggers(report)]
     return ", ".join(names) if names else None
+
+
+def describe_hold(trigger: Trigger, report: dict) -> str:
+    """The trigger's name; an error's is followed by the report's reason (s175 E7)."""
+    reason = report.get("reason")
+    if trigger is Trigger.ERROR and reason:
+        return f"{trigger}: {reason}"
+    return str(trigger)
 
 
 def _find_requirement_fields(report: dict) -> dict[str, str]:
