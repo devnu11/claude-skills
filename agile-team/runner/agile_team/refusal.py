@@ -15,6 +15,7 @@ class Rule(StrEnum):
     GIT_UNKNOWN_DIR = "git-unknown-dir"
     GIT_ENV = "git-env"
     GIT_LOCAL = "git-local-only"
+    GIT_OWN_BRANCH = "git-own-branch"
     ALLOWLIST = "allowlist"
     SANDBOX_PATH = "sandbox-path"
     WAIT = "wait-deadline"

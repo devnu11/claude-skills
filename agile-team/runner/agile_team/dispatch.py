@@ -764,7 +764,9 @@ class Runtime:
         plan.scope.write = list(rebase.files)
         self._set_git_workspace(plan, self.git.repo)
         plan.scope.git_allows = git_check.Allows.LOCAL
+        plan.scope.git_branch = rebase.branch
         story_rebase.prepare(self.git, rebase)
+        rebase.heads = rebase.heads or story_rebase.read_branch_heads(self.git, rebase)
         plan.launch.env = {**(plan.launch.env or self.env), **REBASE_FIX_ENV}
         self._add_story_rebase_brief(plan)
 
@@ -1598,6 +1600,9 @@ class Runtime:
     def _apply_rebase(self, plan: Plan, handoff: Handoff) -> dict[str, Any]:
         """S3: adopt the rebased branch when it checks out; hold an unfinished one; else bounce."""
         story, rebase = plan.story, plan.story.rebase  # type: ignore[union-attr]
+        if put_back := self._put_back_moved(plan):
+            outcome = Outcome(Verdict.BOUNCE, put_back, story.step, author=Author.ROLE)  # type: ignore[union-attr]
+            return {"gate": self._advance_and_log(plan, outcome)}
         if stop := self._find_rebase_stop(plan, handoff):
             return {"gate": self._hold_rebase(plan, stop)}
         if why := story_rebase.find_refusal(self.git, rebase):  # type: ignore[arg-type]
@@ -1605,6 +1610,15 @@ class Runtime:
             return {"gate": self._advance_and_log(plan, outcome)}
         self._take_rebase(story, rebase)  # type: ignore[arg-type]
         return {"rebased": {"branch": story.branch, "onto": rebase.onto}}  # type: ignore[union-attr]
+
+    def _put_back_moved(self, plan: Plan) -> str | None:
+        """s176: put back each free branch the step moved; the bounce reason, else ``None``."""
+        rebase = plan.story.rebase  # type: ignore[union-attr]
+        moved = story_rebase.list_moved_branches(self.git, rebase) if rebase.heads else []  # type: ignore[union-attr]
+        if not moved:
+            return None
+        rebase.heads = {}  # type: ignore[union-attr]
+        return "\n".join(story_rebase.put_back_branch(self.git, m) for m in moved)
 
     def _find_rebase_stop(self, plan: Plan, parsed: Handoff | HandoffError) -> str | None:
         """S3: why a story-rebase step left its rebase unfinished; ``None`` for other steps."""
