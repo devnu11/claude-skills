@@ -18,7 +18,7 @@ from .boundary import Permission, StepKind
 from .ci import CiVerdict
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest, StepResult
 from .gates import FINISHED, Outcome, StoryState, Verdict
-from .halt import crash_halt
+from .halt import crash_halt, log_traceback
 from .handover import Pass, Scope, Trigger
 from .landing import Lander
 from .landing_queue import LandingQueue
@@ -384,9 +384,18 @@ class Scheduler:
         story = work.story
         assert story is not None
         self.landings.begin(story.id)
-        report = await self.land_report(story)
+        report = await self.run_logged_land(story)
         self.landings.finish(story.id)
         return report
+
+    async def run_logged_land(self, story: StoryState) -> dict[str, Any]:
+        """The land's report; an exception's traceback goes to crash.log first (s175 E4)."""
+        try:
+            return await self.land_report(story)
+        except Exception as exc:
+            with contextlib.suppress(OSError):
+                log_traceback(self.runtime.config.run_dir, exc)
+            raise
 
     async def land_report(self, story: StoryState) -> dict[str, Any]:
         """The land's report: an unbranched story passes at once, else the lander decides."""

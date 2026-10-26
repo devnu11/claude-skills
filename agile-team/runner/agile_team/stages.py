@@ -215,6 +215,28 @@ NOWHERE = Place()
 
 
 @dataclass(frozen=True)
+class Invocation:
+    """One command line a stage ran and its exit code (s175)."""
+
+    command: str
+    code: int
+
+
+class CommandFailed(Exception):
+    """An error raised because one command failed; ``invocation`` names it (s175 E1)."""
+
+    def __init__(self, message: str, invocation: Invocation | None = None) -> None:
+        super().__init__(message)
+        self.invocation = invocation
+
+
+def get_error_line(exc: BaseException) -> str:
+    """The first non-blank line of ``str(exc)``, stripped; "" when there is none."""
+    lines = [line.strip() for line in str(exc).splitlines()]
+    return next((line for line in lines if line), "")
+
+
+@dataclass(frozen=True)
 class Attempt:
     """Which Stop-hook attempt a stage ran in: ``n`` of at most ``of``."""
 
@@ -235,6 +257,7 @@ class Run:
     detail: str = ""
     code: int | None = None
     raised: str | None = None
+    error: str | None = None
     attempt: Attempt | None = None
     listeners: list[Callable[[str], None]] = field(default_factory=list)
 
@@ -242,6 +265,13 @@ class Run:
         """Tell every listener one line of the stage's command output."""
         for listener in self.listeners:
             listener(line)
+
+    def record_raise(self, exc: BaseException) -> None:
+        """Keep the class, the first line and the raising call of ``exc`` (s175 E2)."""
+        self.raised = type(exc).__name__
+        self.error = get_error_line(exc)
+        call = exc.invocation if isinstance(exc, CommandFailed) else None
+        self.detail, self.code = (call.command, call.code) if call else ("", None)
 
     def note(self, command: str, code: int) -> None:
         """Keep the first failing command, else the latest one."""
@@ -262,7 +292,7 @@ def entered(run: Run) -> Iterator[Run]:
     try:
         yield run
     except BaseException as exc:
-        run.raised = type(exc).__name__
+        run.record_raise(exc)
         raise
     finally:
         _OPEN.reset(token)

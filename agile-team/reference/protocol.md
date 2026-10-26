@@ -1622,7 +1622,7 @@ to `events.jsonl`, however many commands it ran:
 {"kind": "runner-stage", "role": "runner", "story": "s99",
  "data": {"stage": "gate.tests+coverage", "when": "after", "attach": "step",
           "step": "implement", "detail": "uv run pytest --cov -q", "code": 0,
-          "raised": null, "started_at": 1760313600.0, "started_mono": 5321.4,
+          "raised": null, "error": null, "started_at": 1760313600.0, "started_mono": 5321.4,
           "started_slept": 0.0, "seconds": 41.253},
  "at": 1760313641.3, "id": "e812"}
 ```
@@ -1631,14 +1631,20 @@ to `events.jsonl`, however many commands it ran:
   runs (set for the whole step, from its request), or the story of a
   `pass_tests` check; both `null` elsewhere (router tick, PO turn, boundary).
   `when` and `attach` are the table row's.
-- `detail`: the first command that exited non-zero, else the last command
-  noted; masked like a tool call's detail (secrets `***`, whitespace
-  collapsed, at most 80 characters); `""` when none ran.
+- `detail`: for a stage that returned, the first command that exited
+  non-zero, else the last command noted. For a stage that raised, the call
+  that raised (the git or gh command the exception carries, s175), or `""`
+  when no command raised it, even if an earlier one failed. Masked like a
+  tool call's detail (secrets `***`, whitespace collapsed, at most 80
+  characters); `""` when none ran.
 - `code`: that command's exit code; with no command, `0` when the stage
   returned and `null` when it raised. A service that never answered is code
-  `1`; a missing binary is `127`; a command killed at its limit is `124`.
+  `1`; a missing binary is `127`; a command killed at its limit is `124`. A
+  gh call whose output wasn't the JSON expected is code `0`.
 - `raised`: the exception's class name when the stage raised (it still
   propagates), else `null`.
+- `error`: the exception's first non-blank line, masked, at most 500
+  characters, when the stage raised; `null` when it returned (s175).
 - `started_at`, `started_mono`, `started_slept`: the wall clock, monotonic
   clock and heartbeat sleep counter at the start; `seconds` is the awake time
   (POSIX: monotonic span; Windows: wall less counted sleep), 3 decimals.
@@ -2143,7 +2149,7 @@ The pass ends at the first step whose report matches a row of the
 | Trigger | When |
 |---|---|
 | `refused` | the step was refused |
-| `error` | the step raised an error other than a limit (traceback in `crash.log`) |
+| `error` | the step or a landing raised an error other than a limit (traceback in `crash.log`); the story's hold reads `error: <reason>` (s175) |
 | `stopped` | the handoff is `blocked` or `failed` |
 | `gate_hold` | the gate put a `done` step on hold for an environment reason (e.g. a `web` environment's port is in use by another process), or a story file that went bad before a Proxy step (s94, "Story files"); `continue_story` once it is fixed. The PO can't fix a story file: the liaison does, with `story amend` (see "Story files") |
 | `bad_handoff` | the `manager` gave no valid handoff |

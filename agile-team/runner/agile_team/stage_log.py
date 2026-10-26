@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from . import stages, system, test_tally
 from .dashboard.step_times import Mark, Platform
 from .events import Event, EventKind, EventLog
-from .tool_calls import awake_gap, shown
+from .tool_calls import awake_gap, masked, shown
 
 if TYPE_CHECKING:
     from .gates import StoryState
@@ -104,6 +104,14 @@ def place_of(story: StoryState | None) -> stages.Place:
     return stages.Place(story.id, story.step) if story else stages.NOWHERE
 
 
+ERROR_MAX = 500
+
+
+def show_error(error: str | None) -> str | None:
+    """``None`` for no error, else the masked error cut to ``ERROR_MAX`` characters."""
+    return None if error is None else masked(error)[:ERROR_MAX]
+
+
 @dataclass(frozen=True)
 class Timed:
     """A closed stage run with its start and awake seconds."""
@@ -125,6 +133,7 @@ class Timed:
             "detail": shown(run.detail),
             "code": 0 if done else run.code,
             "raised": run.raised,
+            "error": show_error(run.error),
             "started_at": self.start.at,
             "started_mono": self.start.mono,
             "started_slept": self.start.slept,
