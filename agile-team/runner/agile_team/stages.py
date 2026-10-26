@@ -214,6 +214,9 @@ class Place:
 NOWHERE = Place()
 
 
+ERROR_CHARS = 500
+
+
 @dataclass(frozen=True)
 class Attempt:
     """Which Stop-hook attempt a stage ran in: ``n`` of at most ``of``."""
@@ -235,6 +238,8 @@ class Run:
     detail: str = ""
     code: int | None = None
     raised: str | None = None
+    error: str | None = None
+    last: tuple[str, int | None] = ("", None)
     attempt: Attempt | None = None
     listeners: list[Callable[[str], None]] = field(default_factory=list)
 
@@ -243,8 +248,16 @@ class Run:
         for listener in self.listeners:
             listener(line)
 
+    def fail(self, exc: BaseException) -> None:
+        """Record a raised exception: its class, its message, and the call that raised."""
+        self.raised = type(exc).__name__
+        self.error = (str(exc).splitlines() or [""])[0][:ERROR_CHARS]
+        if self.last[0]:
+            self.detail, self.code = self.last
+
     def note(self, command: str, code: int) -> None:
-        """Keep the first failing command, else the latest one."""
+        """Keep the first failing command, else the latest one; always remember the latest."""
+        self.last = (command, code)
         if self.code:
             return
         self.detail, self.code = command, code
@@ -262,7 +275,7 @@ def entered(run: Run) -> Iterator[Run]:
     try:
         yield run
     except BaseException as exc:
-        run.raised = type(exc).__name__
+        run.fail(exc)
         raise
     finally:
         _OPEN.reset(token)

@@ -125,6 +125,7 @@ class Timed:
             "detail": shown(run.detail),
             "code": 0 if done else run.code,
             "raised": run.raised,
+            "error": run.error,
             "started_at": self.start.at,
             "started_mono": self.start.mono,
             "started_slept": self.start.slept,

@@ -390,10 +390,18 @@ class GhPrs:
         return out if code == 0 else ""
 
     def _gh(self, *args: str) -> str:
-        code, out = self.run(["gh", *args])
+        argv = ["gh", *args]
+        code, out = self.run(argv)
         if code != 0:
-            raise UpstreamError(out.strip())
+            raise UpstreamError(describe_failure(argv, (code, out)))
         return out
+
+
+def describe_failure(argv: list[str], result: tuple[int, str]) -> str:
+    """One line naming the command, its exit code and its raw output."""
+    code, out = result
+    raw = " ".join(out.split())
+    return f"{' '.join(argv)} (exit {code}): {raw}".rstrip(": ")
 
 
 def _run_check(raw: dict[str, Any]) -> Check:
