@@ -3787,7 +3787,23 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    example, an untracked file would be overwritten), the boundary holds
    `error`. Hashes quoted in reviews and stories are not rewritten. The
    replayed sprint branch is checked at the next start's **check**.
-6. **push-replayed**: when the replay changed nothing (HEAD is still the
+6. **push-replayed**: first the runner fetches and checks whether the
+   target already contains HEAD (their merge base is HEAD), for example
+   because the human fast-forwarded main to the sprint head (s183). If so,
+   the sprint closes **as shipped**. Nothing is pushed, no PR is created or
+   made ready, and the sprint's recorded PR is closed with `Already on
+   <target> at <sha>; closed as shipped.` when it is still open (GitHub
+   already shows a fast-forwarded PR as merged, and a merged one is left
+   alone). The entry's `mode` becomes `closed`, and the boundary finishes
+   with a `done` event whose `note` (also the PO's `Review:` text) reads
+   `Sprint N is already on <target> at <sha>: nothing was pushed and no
+   pull request was opened; the sprint is closed as shipped.` The event
+   has `sha` and `target` and no `ci` key, so the PO gets no `ci_green`.
+   The same check runs again when `continue_boundary` reruns a stage held
+   `error`, such as a refused PR create ("No commits between"), so that
+   boundary closes as shipped too and needs no `state.json` edit. A target
+   that holds only part of the sprint gets what follows.
+   When the replay changed nothing (HEAD is still the
    sha pushed at **push**), a `pass` event (`the rebase changed nothing;
    <branch> stays at <sha>`), the draft PR is made ready, and the boundary
    finishes green: the as-built CI is that head's CI, and the PO gets

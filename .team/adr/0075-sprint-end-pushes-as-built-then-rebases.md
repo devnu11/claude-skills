@@ -91,3 +91,20 @@ and the old draft PR is closed with a link. main moves only by
 fast-forward, which the reports give as a command instead of "Rebase and
 merge". End stages are `sync, check, push, ci, replay, push-replayed,
 ci-replayed`.
+
+## Amended by s183 (2026-10-25)
+
+A sprint can reach main before its END boundary runs, for example when the
+human fast-forwards main to the sprint head. Until now, `push-replayed`
+compared HEAD only with the entry's `pushed` sha. It pushed `-r<k>` and asked
+for a PR that GitHub refused, and a rerun then marked a merged PR ready.
+Now `push-replayed` on the END edge first fetches and checks whether the
+target contains HEAD (their merge base is HEAD). If it does, the sprint
+closes as **shipped**: no push, no PR created or made ready, the recorded PR
+closed when it is still open (a merged one is left as is) and the entry's
+mode set to `closed`. The `done` event and the PO's `Review:` text say the
+sprint is already on the target at that sha. The event carries no `ci` key,
+so `ci_green` ("ready to merge") does not fire. Green CI on the as-built
+push still gates the end, because `replay` runs only after it. A target
+that holds only part of the sprint, or holds it only by patch, gets the
+replay push as before.
