@@ -36,7 +36,9 @@ STORY_REBASE_LINES = (
     "refuses git commands that move another.",
 )
 BRANCH_MOVED = "branch {branch} moved from {old} to {new}; the runner put it back"
-BRANCH_STUCK = "branch {branch} moved from {old} to {new} and moved again; the runner could not put it back"
+BRANCH_STUCK = (
+    "branch {branch} moved from {old} to {new} and moved again; the runner could not put it back"
+)
 PUT_BACK_MESSAGE = "agile-team: put back after a story rebase step"
 HEADS_FORMAT = "--format=%(refname:short)\t%(objectname)\t%(worktreepath)"
 
@@ -76,7 +78,10 @@ def read_branch_heads(git: Git, rebase: StoryRebase) -> dict[str, str]:
 
     Branches checked out in another worktree are left out: git refuses to move them.
     """
-    rows = (line.split("\t") for line in git.run("for-each-ref", HEADS_FORMAT, "refs/heads").splitlines())
+    rows = (
+        line.split("\t")
+        for line in git.run("for-each-ref", HEADS_FORMAT, "refs/heads").splitlines()
+    )
     free = ("", str(git.repo))
     return {n: sha for n, sha, where in rows if where in free and n != rebase.branch}
 
@@ -84,7 +89,9 @@ def read_branch_heads(git: Git, rebase: StoryRebase) -> dict[str, str]:
 def list_moved_branches(git: Git, rebase: StoryRebase) -> list[MovedBranch]:
     """s176: the branches whose head is not the one recorded at the step's start."""
     now = read_branch_heads(git, rebase)
-    return [MovedBranch(n, old, now[n]) for n, old in rebase.heads.items() if now.get(n, old) != old]
+    return [
+        MovedBranch(n, old, now[n]) for n, old in rebase.heads.items() if now.get(n, old) != old
+    ]
 
 
 def put_back_branch(git: Git, moved: MovedBranch) -> str:
