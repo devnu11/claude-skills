@@ -471,12 +471,17 @@ def _prepared(
     _record_cut_off_spend(config)
     runtime = _load_runtime(place, query_fn)
     _recover_stories(runtime, start)
-    kept = runtime.state.cadence if start.mode is StartMode.RESUME else config.team.cadence
+    _settle_state(runtime, args, start)
+    repin.drop_unpinned(runtime)
+    return runtime
+
+
+def _settle_state(runtime: Runtime, args: argparse.Namespace, start: Start) -> None:
+    """Set the cadence, record the task and drop a held done on the loaded state."""
+    kept = runtime.state.cadence if start.mode is StartMode.RESUME else runtime.config.team.cadence
     runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
     _drop_held_done(runtime.state, start)
-    repin.drop_unpinned(runtime)
-    return runtime
 
 
 def _load_runtime(place: Place, query_fn: QueryFn | None) -> Runtime:
