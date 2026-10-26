@@ -28,3 +28,6 @@ removed and the same PATH filter). `dispatch`, `commands` and `tally_watch` impo
 - Any later place that starts a configured command builds its environment with
   `get_command_environ`, never from `system.environ()` directly. `system.run` calls for
   git, gh, ps and the re-pin are not configured commands and keep the full environment.
+- Known exception, left for a follow-up story: the acceptance environments'
+  `prepare`/`start` commands (`sandbox.sandbox_env`) still build from `system.environ()`
+  and inherit the runner's `VIRTUAL_ENV`.
