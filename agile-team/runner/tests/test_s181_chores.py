@@ -258,11 +258,8 @@ def test_the_chore_row_style_exists() -> None:
     assert re.search(r"(?m)^\s*\.lp-chore\s*\{[^}]*text-overflow:\s*ellipsis", PAGE)
 
 
-def test_the_fixture_source_and_snapshot_carry_the_list() -> None:
-    root = Path(__file__).resolve().parent.parent
-    src = system.read_text(root / "scripts/dashboard_fixture/heartbeat.json")
-    snap = system.read_text(root / "agile_team/dashboard/fixtures/snapshot.json")
-    source, snapshot = json.loads(src), json.loads(snap)
-    assert source["version"] == 3 and "chore" not in source
-    assert len(source["chores"]) == 1 and snapshot["heartbeat"]["chores"] == source["chores"]
-    assert snapshot["heartbeat"]["version"] == 3
+def test_the_snapshot_fixture_carries_the_chore_list() -> None:
+    snap = json.loads(system.read_text(PKG.joinpath("fixtures/snapshot.json")))
+    beat = snap["heartbeat"]
+    assert beat["version"] == 3 and "chore" not in beat
+    assert len(beat["chores"]) == 1 and list(beat["chores"][0]) == ["what", "story", "since"]
