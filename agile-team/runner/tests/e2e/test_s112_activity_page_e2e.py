@@ -269,8 +269,10 @@ def test_live_panel_fills_its_parts() -> None:
     const els = {};
     const el = () => ({textContent: "", innerHTML: "", hidden: false, className: "", dataset: {}, attrs: {},
       setAttribute(k, v) { this.attrs[k] = v; }, classList: {toggle: (c, on) => { els.cls = [c, on]; }}});
-    for (const q of ["#live-panel", "#lp-who", "#lp-when", "#lp-line", "#lp-msg"]) els[q] = el();
+    for (const q of ["#live-panel", "#lp-who", "#lp-when", "#lp-line", "#lp-msg", "#lp-chores"]) els[q] = el();
+    els["#lp-chores"].replaceChildren = () => {};
     globalThis.document.querySelector = (q) => els[q];
+    globalThis.document.createElement = () => ({className: "", textContent: ""});
     renderLivePanel(view);
     out.who = els["#lp-who"].textContent; out.story = els["#live-panel"].dataset.story;
     out.label = els["#live-panel"].attrs["aria-label"]; out.className = els["#live-panel"].className;
@@ -462,14 +464,14 @@ HEARTBEAT_GONE = "view.heartbeat = null;"
 
 
 def test_event_panel_without_heartbeat_has_an_empty_line_and_chore_panel_names_the_chore() -> None:
-    """LP2: an open step in the events gives line ''; a chore alone gives who '⚙ runner' and line chore.what."""
+    """LP2: an open step in the events gives line ''; a chore alone gives who '⚙ runner' and line "1 chore open"."""
     out = _run(
         _events(
             """
     v.heartbeat = null; v.events = [ev("a", "s3", 1791473000, "step-start", {brief: "b"})];
     out.event = eventPanel(v);
     const c = structuredClone(view);
-    c.heartbeat.step = null; c.heartbeat.stages = []; c.heartbeat.chore = {what: "syncing", since: clockNow(c) - 9};
+    c.heartbeat.step = null; c.heartbeat.stages = []; c.heartbeat.chores = [{what: "syncing", story: null, since: clockNow(c) - 9}];
     out.chore = panelState(c);
     """
         )
@@ -477,8 +479,8 @@ def test_event_panel_without_heartbeat_has_an_empty_line_and_chore_panel_names_t
     assert out["event"]["kind"] == "step" and out["event"]["line"] == ""
     assert out["event"]["who"].startswith("developer-cli · s3")
     chore = out["chore"]
-    assert chore["who"] == "⚙ runner" and chore["line"] == "syncing" and chore["story"] == ""
-    assert chore["when"]
+    assert chore["who"] == "⚙ runner" and chore["line"] == "1 chore open" and chore["story"] == ""
+    assert chore["when"] == ""  # CH8: the ages are on the chore rows
 
 
 def test_run_label_is_round_n_restarted_or_first_run() -> None:
@@ -535,3 +537,30 @@ def test_pill_details_first_line_has_the_rate_and_last_turn() -> None:
     first = out["lines"][0]
     assert "/min" in first and "last turn" in first
     assert out["none"] == [] or all("/min" not in x for x in out["none"])
+
+
+def test_each_open_chore_is_its_own_row_and_drops_with_the_next_beat() -> None:
+    """s181 AC3, CH7: one row per chore, text names story, what and age; an emptied list hides the box."""
+    out = _run(
+        """
+    const els = {"#lp-chores": {hidden: true, rows: [], replaceChildren(...r) { this.rows = r; }}};
+    globalThis.document.querySelector = (q) => els[q];
+    globalThis.document.createElement = () => ({className: "", textContent: ""});
+    const c = structuredClone(view), at = clockNow(c);
+    c.heartbeat.chores = [{what: "stop checks", story: "s162", since: at - 60}, {what: "gate", story: null, since: at - 5}];
+    renderChoreRows(c);
+    out.two = {hidden: els["#lp-chores"].hidden, rows: els["#lp-chores"].rows.map((r) => r.textContent)};
+    c.heartbeat.chores = [c.heartbeat.chores[1]];
+    renderChoreRows(c);
+    out.one = els["#lp-chores"].rows.map((r) => r.textContent);
+    c.heartbeat.chores = [];
+    renderChoreRows(c);
+    out.none = {hidden: els["#lp-chores"].hidden, rows: els["#lp-chores"].rows.length};
+    """
+    )
+    assert out["two"]["hidden"] is False
+    two = out["two"]["rows"]
+    assert len(two) == 2 and "s162" in two[0] and "stop checks" in two[0]
+    assert "run" in two[1] and "gate" in two[1]
+    assert len(out["one"]) == 1 and "s162" not in out["one"][0]
+    assert out["none"] == {"hidden": True, "rows": 0}
