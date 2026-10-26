@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from agile_team import dispatch, guard, requirements, system
+from agile_team import dispatch, guard, requirements, story_rebase, system
 from agile_team.boundary import Permission, StackEntry
 from agile_team.dispatch import Plan
 from agile_team.gates import StoryState, Verdict
@@ -17,7 +17,7 @@ from agile_team.story_ci import StoryPusher
 from agile_team.workspaces import Workspaces
 
 from .conftest import handoff
-from .fake_system import Done, FakeSystem
+from .fake_system import FAKE_HEAD, Done, FakeSystem
 from .s29_helpers import FakePrs
 from .test_s159_round7 import Upstream, pusher_for
 
@@ -244,7 +244,7 @@ def test_a_story_rebase_does_not_hold_back_its_conflicting_requirement(make_runt
     report = settle(view, plan, handoff("done", summary="resolved"))
     assert "held_back" not in report and report["status"] == "done"
     assert not [c for c in fake.commands if "revert" in c.argv]
-    assert report["commit"] is not None
+    assert report["commit"] is None  # s182 R1: a finished rebase makes no step commit
 
 
 def test_a_role_step_still_holds_back_an_unexplained_requirement_edit(make_runtime, fake) -> None:
@@ -321,3 +321,107 @@ def test_the_runner_starts_the_rebase_itself_without_the_guard(make_runtime, fak
     view._set_story_rebase_scope(plan)
     [rebase] = [c.argv for c in fake.commands if "--onto" in c.argv]
     assert not {"-i", "--interactive", "-x", "--exec"} & set(rebase)
+
+
+# ---------- s182: a finished rebase's settle adds no commit to the rebase branch ----------
+
+
+def finished(view: dispatch.Runtime, plan: Plan, fake: FakeSystem, *changed: str) -> None:
+    """A finished, foldable rebase (on its branch, over onto) with ``changed`` edited."""
+    plan.scope.write = plan.story.rebase.files = list(CONFLICTS)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
+    fake.reply(("rev-parse", ONTO), Done(0, ONTO + "\n"))
+    fake.reply(("status", "--porcelain=v1"), Done(0, "".join(f" M {p}\0" for p in changed)))
+
+
+def settle_tree_of(view: dispatch.Runtime, plan: Plan) -> dict:
+    return view._settle_step_tree(plan, Handoff("done"))
+
+
+def verbs(fake: FakeSystem) -> list[str]:
+    return [c.argv[1] for c in fake.commands if c.argv[:1] == ("git",) and len(c.argv) > 1]
+
+
+def test_an_in_scope_leftover_is_folded_into_the_tip_not_committed_ac1(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "src/app.py")
+    report = settle_tree_of(view, plan)
+    amends = [c.argv for c in fake.commands if "--amend" in c.argv]
+    assert len(amends) == 1 and "--no-edit" in amends[0]
+    assert report["commit"] is None and report["quarantine"] is None
+    assert report["folded"] == {"sha": FAKE_HEAD, "paths": ["src/app.py"]}
+    assert plan.story.rebase.made == [FAKE_HEAD]
+    assert plan.commit is None
+    assert not [c for c in fake.commands if c.argv[1:2] == ("revert",)]
+
+
+def test_a_leftover_on_an_unfoldable_rebase_stays_in_the_worktree_ac1(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "src/app.py")
+    fake.reply(("rev-parse", "HEAD"), Done(0, ONTO + "\n"))  # no commit over onto
+    report = settle_tree_of(view, plan)
+    assert "folded" not in report and report["commit"] is None
+    assert "--amend" not in {a for c in fake.commands for a in c.argv}
+    assert plan.story.rebase.made == []
+
+
+def test_an_unfoldable_leftover_is_refused_naming_the_file_never_as_changed_commits(
+    make_runtime, fake
+) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "src/app.py")
+    fake.reply(("rev-parse", "HEAD"), Done(0, ONTO + "\n"))
+    fake.reply(("status", "--porcelain"), Done(0, " M src/app.py\n"))
+    settle_tree_of(view, plan)
+    refusal = story_rebase.find_refusal(view.git, plan.story.rebase)
+    assert "src/app.py" in refusal and "commits are not" not in refusal
+
+
+def test_an_out_of_scope_edit_is_set_aside_off_the_branch_ac2(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "docs/elsewhere.md")
+    report = settle_tree_of(view, plan)
+    ref = guard.SET_ASIDE_REF.format(sha=FAKE_HEAD)
+    assert report["quarantine"] == FAKE_HEAD and report["commit"] is None
+    assert report["set_aside"] == {"ref": ref, "paths": ["docs/elsewhere.md"]}
+    assert ("git", "update-ref", ref, FAKE_HEAD) in [c.argv for c in fake.commands]
+    assert "revert" not in verbs(fake) and "--amend" not in {
+        a for c in fake.commands for a in c.argv
+    }
+    event = next(e for e in view.events.events() if e.kind == "quarantine")
+    assert event.data["sha"] == FAKE_HEAD and event.data["ref"] == ref
+    assert event.data["paths"] == ["docs/elsewhere.md"]
+
+
+def test_an_out_of_scope_edit_and_an_in_scope_leftover_give_set_aside_and_fold_ac2(
+    make_runtime, fake
+) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "docs/elsewhere.md", "src/app.py")
+    report = settle_tree_of(view, plan)
+    assert report["set_aside"]["paths"] == ["docs/elsewhere.md"]
+    assert report["folded"]["paths"] == ["src/app.py"]
+    assert report["commit"] is None
+    commits = [c.argv for c in fake.commands if c.argv[1:2] == ("commit",)]
+    assert len(commits) == 2 and sum("--amend" in c for c in commits) == 1
+
+
+def test_a_clean_finished_rebase_settles_to_nothing(make_runtime, fake) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake)
+    report = settle_tree_of(view, plan)
+    assert report["commit"] is None and report["quarantine"] is None
+    assert "folded" not in report and "set_aside" not in report
+    assert not {"commit", "update-ref"} & set(verbs(fake))
+
+
+def test_a_finished_rebase_never_runs_the_general_settle(make_runtime, fake, monkeypatch) -> None:
+    view, plan = rebase_plan(make_runtime)
+    finished(view, plan, fake, "src/app.py")
+
+    def boom(self, plan) -> dict:
+        raise AssertionError("settle_tree must not run for a finished story rebase")
+
+    monkeypatch.setattr(dispatch.Runtime, "settle_tree", boom)
+    assert settle_tree_of(view, plan)["commit"] is None
