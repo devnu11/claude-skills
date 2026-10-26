@@ -226,7 +226,7 @@ def clean(fake: FakeSystem) -> None:
     fake.reply(("symbolic-ref",), Done(0, REBASE.branch + "\n"))
     fake.reply(("status", "--porcelain"), Done(0, ""))
     fake.reply(("merge-base", "--is-ancestor"), Done(0))
-    fake.reply(("log",), Done(0, "one\ntwo\n"))
+    fake.reply(("log",), Done(0, "a1\tone\nb2\ttwo\n"))
 
 
 def test_a_finished_clean_rebase_has_no_refusal_s3(fake: FakeSystem) -> None:
@@ -254,6 +254,6 @@ def test_head_not_descending_from_onto_is_refused_s3(fake: FakeSystem) -> None:
 
 def test_changed_commits_are_refused_s3(fake: FakeSystem) -> None:
     clean(fake)
-    fake.reply(("log", f"{REBASE.base}..{REBASE.old}"), Done(0, "one\ntwo\nthree\n"))
-    fake.reply(("log", f"{REBASE.onto}..HEAD"), Done(0, "one\ntwo\n"))
+    fake.reply(("log", f"{REBASE.base}..{REBASE.old}"), Done(0, "a1\tone\nb2\ttwo\nc3\tthree\n"))
+    fake.reply(("log", f"{REBASE.onto}..HEAD"), Done(0, "d4\tone\ne5\ttwo\n"))
     assert story_rebase.find_refusal(Git(FAKE_REPO), REBASE)
