@@ -18,7 +18,7 @@ from .boundary import Permission, StepKind
 from .ci import CiVerdict
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest, StepResult
 from .gates import FINISHED, Outcome, StoryState, Verdict
-from .halt import crash_halt
+from .halt import crash_halt, log_traceback
 from .handover import Pass, Scope, Trigger
 from .landing import Lander
 from .landing_queue import LandingQueue
@@ -363,6 +363,7 @@ class Scheduler:
         try:
             report = await self.dispatch(work)
         except Exception as exc:
+            log_traceback(self.runtime.config.run_dir, exc)
             report = {"status": "error", "role": work.role, "reason": crash_halt(exc).reason}
         finally:
             self.running.pop(key, None)
