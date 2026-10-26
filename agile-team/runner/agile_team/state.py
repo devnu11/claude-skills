@@ -113,6 +113,7 @@ class RunState:
     manager_due: list[str] = field(default_factory=list)
     status_reason: str | None = None
     repin: str = ""
+    held_done: str | None = None  # a PO done waiting for the sprint end boundary (s184)
     keep_going_asks: int = 0
     stuck_asks: int = 0  # stuck Sprint Backlog hand-overs since it last moved (s156 S4)
     task: str = ""
@@ -142,6 +143,18 @@ class RunState:
     def mark(self, status: RunStatus, reason: str | None = None) -> None:
         """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
         self.status, self.status_reason, self.halt_kind = status, reason, None
+
+    @property
+    def is_boundary_pending(self) -> bool:
+        """D1: a boundary is open, or the complete sprint's end boundary hasn't closed."""
+        return self.boundary is not None or (self.sprint_complete() and self.sprint_open())
+
+    def release_held_done(self) -> None:
+        """s184: once no boundary is pending, a held done ends the run."""
+        if self.held_done is None or self.is_boundary_pending:
+            return
+        self.mark(RunStatus.DONE, self.held_done or None)
+        self.held_done = None
 
     def runtime_overrides(self, role: str) -> dict[str, Any]:
         """Fields from a PO model override for ``role``, if any."""

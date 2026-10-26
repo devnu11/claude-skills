@@ -19,9 +19,11 @@ NEXT_SPRINT_LEAD = (
     "A sprint end doesn't end the run while the Product Backlog has ready stories."
 )
 NEXT_SPRINT_ADVICE = (
-    "Don't end your turn without starting a sprint, and don't notify done or blocked while "
-    "Product Backlog stories are ready. A PR waiting for review or merge does not hold the "
-    "next sprint."
+    "Don't end your turn until you start a sprint while Product Backlog stories are ready; "
+    "ready stories alone are no reason for done or blocked. A PR waiting for review or merge "
+    "does not hold the next sprint. If the human's instructions say to start no further "
+    "sprint, notify done quoting them. Otherwise only the liaison ends the run, by resuming "
+    "it with `--cadence sprint`."
 )
 KEEP_GOING_REFUSED = (
     "cadence until-blocker: Sprint Backlog stories can still move ({ids}); end your turn and "

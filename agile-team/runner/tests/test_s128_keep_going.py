@@ -173,6 +173,7 @@ def test_done_and_blocked_are_accepted_when_nothing_in_the_sprint_moves(
 ) -> None:
     rt = ended_sprint(make_runtime)
     del rt.state.stories["s3"]
+    rt.state.upstream.closed = 1  # s184 D1: a done during a pending end boundary is held
     assert "id" in call(Tools(rt).notify_user({"kind": kind, "text": "bye"}))
     want = RunStatus.DONE if kind == "done" else RunStatus.RUNNING  # I4: blocked only waits
     assert rt.state.status is want

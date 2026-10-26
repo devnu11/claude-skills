@@ -282,6 +282,9 @@ A `gate_hold` hand-over means the gate could not run for an environment reason (
   reviewed or merged. A stuck Sprint Backlog is reported, not refilled: act on its stories,
   or `notify_user` `done` (everything is done) or `blocked` (the rest needs the human) and
   end your turn. The runner refuses `done` and `blocked` while a Sprint Backlog story can move.
+  Ready Product Backlog stories alone are no reason for `done`. Notify `done` only when the
+  human's instructions say to start no further sprint, and quote them. A `done` sent while
+  the sprint end boundary is pending is held: the run ends when the boundary closes.
 
 ## Models and budget
 

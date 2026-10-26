@@ -85,3 +85,21 @@ the subcommand: `agile-team --repo <repo> [--home <home>] config check` and
 the run's global options (`repin.build_global_argv`) and builds both commands from
 them, so the config check also gets the run's key home. Tests parse every argv
 the re-pin builds with the real CLI parser. See `agile-team/docs/design/s158.md`.
+
+## Amended by s184 (2026-10-25)
+
+Rule 6 lost the PO's `done` when it came during the end boundary. The status
+went `done`, the check set `repin`, and `_repin_or` (`idle`) and the new
+process's `begin` (`running`) both overwrote it. The new process then asked for
+the next sprint three times and blocked. Without a re-pin, the same `done` ended
+the run before the boundary finished. Now a `done` sent while a boundary is
+pending (one is open, or the complete sprint's end boundary hasn't closed) is
+held in `state.held_done`, outside the status. The tool's result says `held`.
+`BoundaryRunner._close` marks the run `done` with the held reason. The
+scheduler then ends the run before the router can hand anything over. The held
+done is saved state, so the re-pin carries it. The status writes in `_repin_or`
+and `begin` stay as they are. A start with a task drops a held done, and
+`status` shows it as `held_done`. The `next_sprint` advice now says how a run
+ends on purpose: the PO notifies `done` when the human or the liaison said to
+start no further sprint, or the liaison resumes with `--cadence sprint`. The
+refusal rule (s156) does not change. See `agile-team/docs/design/s184.md`.
