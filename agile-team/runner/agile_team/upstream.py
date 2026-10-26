@@ -637,6 +637,12 @@ class Upstream:
         """True when ``older`` is an ancestor of ``newer``."""
         return self.git.attempt("merge-base", "--is-ancestor", older, newer)[0] == 0
 
+    def is_in_target(self, head: str) -> bool:
+        """True when the target already contains ``head``: their merge base is ``head`` itself."""
+        # Not is_ancestor: an exit-code check reads any unscripted fake command as "shipped".
+        code, out = self.git.attempt("merge-base", head, self.target)
+        return code == 0 and out.strip() == head
+
     def delete(self, lease: Lease) -> str | None:
         """Delete a landing branch with its lease (P5); the refusal or git's output on failure."""
         story_prefix = self.settings.story_prefix

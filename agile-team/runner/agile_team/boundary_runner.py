@@ -40,6 +40,8 @@ from .boundary import (
     REBASE_UNCHANGED,
     REBASED_NOT_GREEN,
     REBASED_PUSHED_REPORT,
+    SHIPPED_PR_NOTE,
+    SHIPPED_REPORT,
     SKIPPED_REPORT,
     SPRINT_BRANCH_DIVERGED,
     SPRINT_TITLE,
@@ -888,16 +890,38 @@ class BoundaryRunner:
     # ----- push replayed
 
     async def _push_replayed(self, b: Boundary) -> None:
-        """R5: push the replayed head to the next ``-r<k>`` branch; nothing if it did not change."""
+        """R5: on the end edge, close a sprint the target already holds, else push the replay."""
         if b.edge is Edge.START:
             return await self._push_start_replay(b)
-        own, head = self._own(b), self.runtime.git.head()
-        if head == own.pushed:  # type: ignore[union-attr]
-            return await self._report_unchanged(b, own)  # type: ignore[arg-type]
-        rejected = await self._push_replay_branch(own, head)  # type: ignore[arg-type]
+        await self._fetch()
+        own = self._own(b)
+        if await self.run_off(self.remote.is_in_target, self.runtime.git.head()):
+            return await self._close_shipped(b, own)  # type: ignore[arg-type]
+        await self._push_end_replay(b, own)  # type: ignore[arg-type]
+
+    async def _close_shipped(self, b: Boundary, own: StackEntry) -> None:
+        """s183: the target already holds HEAD; close its PR and finish the sprint as shipped."""
+        head = self.runtime.git.head()
+        text = SHIPPED_REPORT.format(sprint=b.sprint, target=self.target, sha=head)
+        await self._close_shipped_pr(own)
+        self._finish(b, text, note=text, sha=head, target=self.target)
+
+    async def _close_shipped_pr(self, own: StackEntry) -> None:
+        """Close the sprint's still-open PR (a merged one is left as is) and record it closed."""
+        if own.pr and own.mode is not PrMode.CLOSED and not self.runtime.prs.missing():
+            note = SHIPPED_PR_NOTE.format(target=self.target, sha=self.runtime.git.head())
+            await self.run_off(self.runtime.prs.close, own.pr, note)
+        own.mode = PrMode.CLOSED
+
+    async def _push_end_replay(self, b: Boundary, own: StackEntry) -> None:
+        """R5: push the replayed head to the next ``-r<k>`` branch; nothing if it did not change."""
+        head = self.runtime.git.head()
+        if head == own.pushed:
+            return await self._report_unchanged(b, own)
+        rejected = await self._push_replay_branch(own, head)
         if rejected is not None:
-            return self._reject(b, own, rejected)  # type: ignore[arg-type]
-        self._report_rebased(b, own)  # type: ignore[arg-type]
+            return self._reject(b, own, rejected)
+        self._report_rebased(b, own)
         self._advance(b)
 
     async def _push_start_replay(self, b: Boundary) -> None:

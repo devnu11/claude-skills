@@ -47,6 +47,11 @@ BOUNDARY_REFUSAL = (
     "sprint {sprint} {edge} boundary is at {stage}{held}; the sprint's stories move once it passes"
 )
 SKIPPED_REPORT = "sync and pull requests skipped: {why}"
+SHIPPED_REPORT = (
+    "Sprint {sprint} is already on {target} at {sha}: nothing was pushed and no pull request "
+    "was opened; the sprint is closed as shipped."
+)
+SHIPPED_PR_NOTE = "Already on {target} at {sha}; closed as shipped."
 PUSHED_REPORT = (
     "Sprint {sprint}'s branch {branch} holds the team branch as built ({sha}): PR #{pr} {url}. "
     "The runner waits for its CI; the team branch is rebased onto {target} only once it is green."

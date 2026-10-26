@@ -387,3 +387,23 @@ def test_s153_up_adopt_refuses_when_the_team_branch_moved(fake: FakeSystem) -> N
         upstream_for().move_team_branch(OLD, "c" * 40)
     assert str(raised.value) == up.TEAM_MOVED.format(team="team", old=OLD)
     assert issued(fake, "reset") == []
+
+
+# ---------- s183: is_in_target ----------
+
+
+def test_s183_is_in_target_when_the_merge_base_is_the_head(fake: FakeSystem) -> None:
+    fake.reply(("git", "merge-base"), Done(0, NEW + "\n"))
+    assert upstream_for().is_in_target(NEW) is True
+    [argv] = issued(fake, "merge-base")
+    assert argv[-2:] == (NEW, "origin/main")
+
+
+def test_s183_is_not_in_target_when_the_merge_base_is_another_sha(fake: FakeSystem) -> None:
+    fake.reply(("git", "merge-base"), Done(0, OLD + "\n"))
+    assert upstream_for().is_in_target(NEW) is False
+
+
+def test_s183_is_not_in_target_when_merge_base_fails(fake: FakeSystem) -> None:
+    fake.reply(("git", "merge-base"), Done(1, NEW + "\n"))
+    assert upstream_for().is_in_target(NEW) is False
