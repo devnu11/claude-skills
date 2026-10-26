@@ -33,6 +33,7 @@ def test_a_status_note_stores_its_first_line(make_runtime, kind: str) -> None:
     rt.state.stories["s1"] = __import__("agile_team.gates").gates.StoryState(
         "s1", "t", "done", sprint=1, status=StoryStatus.DONE
     )
+    rt.state.upstream.closed = 1  # s184 D1: the end boundary has closed, so a done lands at once
     out = call(Tools(rt).notify_user({"kind": kind, "text": "Need the API key.\nmore"}))
     assert "id" in out
     assert rt.state.status is (RunStatus.RUNNING if kind == "blocked" else RunStatus(kind))  # I4
