@@ -423,7 +423,7 @@ def test_an_open_stage_listens_and_the_event_is_unchanged(scratch: Path, fake: F
     (event,) = [e for e in log.log.events() if e.kind == "runner-stage"]
     assert list(event.data) == [
         "stage", "when", "attach", "step", "attempt", "detail", "code", "raised",
-        "started_at", "started_mono", "started_slept", "seconds",
+        "error", "started_at", "started_mono", "started_slept", "seconds",
     ]  # fmt: skip
 
 
