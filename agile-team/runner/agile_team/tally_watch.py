@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
-from . import stages, system
+from . import runner_venv, stages, system
 
 PLUGIN = "agile_team_tally"
 PLUGIN_DIR = Path(__file__).parent / "pytest_plugin"
@@ -92,7 +92,7 @@ def watching(run: stages.Run) -> Iterator[dict[str, str]]:
     watch = TallyWatch(path, run)
     watch.start()
     try:
-        yield plugin_env(system.environ(), path)
+        yield plugin_env(runner_venv.get_command_environ(), path)
     finally:
         watch.stop()
         system.remove(path)

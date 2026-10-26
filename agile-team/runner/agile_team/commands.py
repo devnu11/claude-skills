@@ -13,7 +13,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import stages, system, tally_watch
+from . import runner_venv, stages, system, tally_watch
 from .process_groups import signal_child_group
 
 CommandRunner = Callable[[str], tuple[int, str]]
@@ -114,7 +114,7 @@ class CommandShell:
     def _watched(self, command: str) -> tuple[int, str]:
         """Run with the tally plugin when a stage is open."""
         run = stages.current()  # on the caller's thread: contextvars skip threads
-        plain = self._build_shell(command, system.environ())
+        plain = self._build_shell(command, runner_venv.get_command_environ())
         if run is None:
             return self._run(plain)
         with tally_watch.watching(run) as env:
