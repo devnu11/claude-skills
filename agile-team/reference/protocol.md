@@ -2920,7 +2920,8 @@ handoff and bounces with a round:
 Added and explained changes still land. A reason for a file the step didn't
 touch is ignored. In a story rebase step, edits to the conflicting files the
 rebase lists are the conflict's resolution, not requirement changes: they
-need no reason and are never held back (any other requirement file is).
+need no reason and are never held back. Any other requirement file is out of
+the step's scope and is set aside off the branch (s182, see "Story rebases").
 
 **Trailers.** The step commit ends with one trailer block: a
 `Requirement-Changed: REQ-003: <why>` line per landed change, in id order,
@@ -3354,10 +3355,25 @@ checks below, each recorded branch that moved is put back with a checked
 <old> to <new>; the runner put it back` (one line per branch). The record is
 then cleared, so the next round takes a fresh one. Its brief says:
 resolve, `git add`, `git rebase --continue`; never merge, squash, reorder or
-drop; move no other branch. After `done`, the runner checks that no
+drop; move no other branch. After `done`, the runner settles the tree
+without adding a commit to the rebase branch (s182, ADR-0092). It makes no
+step commit and holds back nothing. An out-of-scope edit is committed alone,
+kept at `refs/agile-team/set-aside/<sha>`, and taken off the branch again
+(`git reset --keep HEAD^`). The `quarantine` event and the step report
+(`set_aside`) name its paths and the ref. An uncommitted edit to a
+conflicting file is amended into the rebased tip with its message unchanged
+(report `folded`), when the rebase is finished, on its branch, on `onto` and
+has a commit over it. Otherwise the edit stays and the dirty-tree check
+below names it. Then the runner checks that no
 operation is in progress, the tree is clean, HEAD is on the
 new branch and descends from `onto`, and the commits match the old
-branch's by subject and in order. Then the story adopts the branch (remap,
+branch's by subject and in order. A mismatch bounces with one line per
+difference: `- extra <sha> <subject> (made by the role|the runner)`,
+`- missing <sha> <subject> (on <old>)` or `- changed <old sha> <old
+subject> -> <sha> <subject> (made by …)`. A Manager `advance` is refused
+while the rebase is queued (`story <id> has a queued story rebase onto
+<onto>; …`), so the rebase never runs again under a later step's name.
+`upgrade_model` retries it. Then the story adopts the branch (remap,
 `branch`, `base_sha`, `replays`, worktree head), pushes it with a new draft
 PR and closes the old one. Otherwise the step bounces to the same role (a
 round). A step that ends any other way (blocked, failed, no valid handoff)

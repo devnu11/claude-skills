@@ -102,7 +102,9 @@ moves on. Nobody has to write a test that fails on purpose.
 The Manager's rulings (`revise_design`, `rescope`, `upgrade_model`,
 `escalate`, `advance`) work at any step, not only at the round cap.
 `advance` moves a story one step on when its gate can't be met; the event
-log records why. It can't move a story past its last step. A ruling that can't
+log records why. It can't move a story past its last step, and it can't move
+a story whose story rebase is queued: that rebase would only run again under
+the next step's name. To retry the rebase, rule `upgrade_model`. A ruling that can't
 apply, such as one on a done story, is reported to the PO. It is never
 silently dropped. The PO can then clear the done story's hold with
 `continue_story`.
