@@ -67,11 +67,11 @@ HEAD = "cur"
         ("git rebase --edit-todo", DETACHED),
         ("git rebase --show-current-patch", DETACHED),
         ("git rebase main", HEAD),
-        ("git rebase main other", "other"),
-        ("git rebase --onto main base other", "other"),
-        ("git rebase --root other", "other"),
+        ("git rebase main other", git_check.REBASE_UNCLEAR),
+        ("git rebase --onto main base other", git_check.REBASE_UNCLEAR),
+        ("git rebase --root other", git_check.REBASE_UNCLEAR),
         ("git rebase --root", HEAD),
-        ("git rebase -s ours main other", "other"),
+        ("git rebase -s ours main other", git_check.REBASE_UNCLEAR),
         ("git stash branch other", "other"),
         ("git stash", DETACHED),
         ("git stash push -m x", DETACHED),
@@ -83,6 +83,19 @@ HEAD = "cur"
 )
 def test_find_moved_branch_names_the_branch_a_call_moves(command: str, moved: str) -> None:
     assert git_check.find_moved_branch(parsed(command), HEAD) == moved
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git rebase main other",
+        "git rebase --onto main base other",
+        "git rebase --root other",
+        "git rebase -s ours main other",
+    ],
+)
+def test_find_moved_branch_names_the_rebase_branch_when_head_is_detached(command: str) -> None:
+    assert git_check.find_moved_branch(parsed(command), DETACHED) == "other"
 
 
 def test_branch_moves_is_a_table_keyed_by_subcommand() -> None:

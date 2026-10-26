@@ -118,7 +118,12 @@ def test_s153_the_texts_format_with_their_fields() -> None:
 
 def test_s153_dispatch_has_the_rebase_fix_scope_table_entries() -> None:
     assert frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX}) == dispatch.FIX_KINDS_SET
-    assert dispatch.REBASE_FIX_ENV == {"GIT_EDITOR": "true"}
+    assert dispatch.REBASE_FIX_ENV == {
+        "GIT_EDITOR": "true",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "rebase.updateRefs",
+        "GIT_CONFIG_VALUE_0": "false",
+    }
     assert dispatch.FIX_SETUPS[StepKind.REBASE_FIX] == dispatch.Runtime._set_rebase_fix_scope
 
 
