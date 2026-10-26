@@ -4,10 +4,10 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from agile_team import halt, scheduler, stages, system
+from agile_team import halt, handover, scheduler, stage_log, stages, system
 from agile_team.boundary import StepKind
 from agile_team.gates import StoryState
-from agile_team.git_ops import GitError
+from agile_team.git_ops import Git, GitError
 from agile_team.po_tools import Start
 from agile_team.router import Work
 from agile_team.upstream import GhPrs, UpstreamError
@@ -161,3 +161,182 @@ def test_the_report_reason_carries_the_error_message(make_runtime) -> None:
     _, report = run_failing_land(make_runtime, UpstreamError("gh api x (exit 1): {"))
     assert report["status"] == "error"
     assert report["reason"] == "crashed: UpstreamError: gh api x (exit 1): {"
+
+
+# ---------- T1: the event masks secrets ----------
+
+
+def test_show_error_masks_a_secret() -> None:
+    assert stage_log.show_error("failed token=abc") == "failed token=***"
+    assert stage_log.show_error(None) is None
+
+
+def test_the_event_error_is_masked(repo: Path) -> None:
+    assert land_event(repo, GitError("bad token=abc"))["error"] == "bad token=***"
+
+
+# ---------- T2: exact GH_FAILED strings ----------
+
+
+def failure(code: int, out: str) -> str:
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(Exec(code, out))._gh("api", "x")
+    return str(raised.value)
+
+
+def test_an_empty_body_reads_no_output() -> None:
+    assert failure(1, "") == "gh api x: exit 1: (no output)"
+
+
+def test_a_long_json_body_is_cut_at_300() -> None:
+    body = "{" + "y" * 900
+    assert failure(1, body) == "gh api x: exit 1: " + body[:300]
+
+
+def test_an_http_status_in_the_body_is_named() -> None:
+    body = '{\n  "message": "rate"\n}\ngh: rate (HTTP 403)'
+    expected = 'gh api x: exit 1, HTTP 403: { "message": "rate" } gh: rate (HTTP 403)'
+    assert failure(1, body) == expected
+
+
+def test_the_error_carries_its_invocation() -> None:
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(Exec(4, "{"))._gh("api", "x")
+    assert raised.value.invocation == stages.Invocation("gh api x", 4)
+
+
+# ---------- T3: GitError ----------
+
+
+def test_git_run_failure_carries_the_git_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(system, "run", lambda _: system.Completed(128, "", " fatal: no \n"))
+    with pytest.raises(GitError) as raised:
+        Git(Path("r")).run("push", "origin")
+    assert str(raised.value) == "git push origin: fatal: no"
+    assert raised.value.invocation == stages.Invocation("git push origin", 128)
+
+
+# ---------- T4: close ----------
+
+
+class Script:
+    """A gh runner answering by its second argument."""
+
+    def __init__(self, answers: dict[str, tuple[int, str]]) -> None:
+        self.answers = answers
+
+    def __call__(self, argv: list[str]) -> tuple[int, str]:
+        return self.answers[argv[1] + " " + argv[2]]
+
+
+def test_close_failing_on_an_open_pr_names_the_close_call() -> None:
+    prs = GhPrs(Script({"pr close": (1, "{"), "pr view": (0, '{"state": "OPEN"}')}))
+    with pytest.raises(UpstreamError) as raised:
+        prs.close(7, "n")
+    assert raised.value.invocation == stages.Invocation("gh pr close 7 --comment n", 1)
+    assert str(raised.value).startswith("gh pr close 7 --comment n: exit 1")
+
+
+# ---------- T5: output that is not JSON ----------
+
+
+def test_json_decode_failure_names_the_call_with_exit_zero() -> None:
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(Exec(0, "{"))._read_gh_json("pr", "list")
+    assert str(raised.value) == "gh pr list: exit 0: {"
+    assert raised.value.invocation == stages.Invocation("gh pr list", 0)
+    assert isinstance(raised.value.__cause__, ValueError)
+
+
+# ---------- T8: GhPrs.checks ----------
+
+CHECKS = "gh pr checks 14 --required --json " + "name,state,bucket,link,workflow"
+
+
+class Sequence:
+    """A gh runner answering its scripted results in order, recording argvs."""
+
+    def __init__(self, *results: tuple[int, str]) -> None:
+        self.results = list(results)
+        self.argvs: list[list[str]] = []
+
+    def __call__(self, argv: list[str]) -> tuple[int, str]:
+        self.argvs.append(argv)
+        return self.results.pop(0)
+
+
+def test_checks_decode_failure_names_the_required_call_and_real_code() -> None:
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(Sequence((1, "{"))).checks(14)
+    assert str(raised.value) == f"{CHECKS}: exit 1: {{"
+    assert raised.value.invocation == stages.Invocation(CHECKS, 1)
+
+
+def test_checks_decode_failure_after_the_fallback_names_the_argv_without_required() -> None:
+    run = Sequence((1, "no required checks reported on the 'x' branch"), (8, "{"))
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(run).checks(14)
+    plain = CHECKS.replace(" --required", "")
+    assert str(raised.value) == f"{plain}: exit 8: {{"
+    assert raised.value.invocation == stages.Invocation(plain, 8)
+    assert "--required" not in run.argvs[1]
+
+
+def test_checks_decode_failure_names_the_http_status() -> None:
+    with pytest.raises(UpstreamError, match="exit 1, HTTP 403"):
+        GhPrs(Sequence((1, "{\n(HTTP 403)"))).checks(14)
+
+
+# ---------- T6: the hold reason ----------
+
+
+def test_an_error_hold_carries_the_reason() -> None:
+    report = {"status": "error", "reason": "crashed: UpstreamError: gh x"}
+    assert handover.hold_reason(report) == "error: crashed: UpstreamError: gh x"
+
+
+def test_an_error_hold_without_a_reason_is_bare() -> None:
+    assert handover.hold_reason({"status": "error"}) == "error"
+    assert handover.hold_reason({"status": "error", "reason": ""}) == "error"
+
+
+# ---------- T7: crash.log write failure ----------
+
+
+def test_a_crash_log_write_error_does_not_hide_the_land_error(
+    make_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*_: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(scheduler, "log_traceback", fail)
+    _, report = run_failing_land(make_runtime, UpstreamError("gh api x: exit 1: {"))
+    assert report["reason"] == "crashed: UpstreamError: gh api x: exit 1: {"
+
+
+# ---------- AC1-AC3 together ----------
+
+
+def test_a_land_that_hits_the_rate_limit_keeps_its_error_everywhere(make_runtime) -> None:
+    rt, s, work = land_work(make_runtime)
+    work.story.branch = "b"
+    body = '{\n  "message": "API rate limit exceeded"\n}\ngh: rate limit (HTTP 403)'
+    reports: list[dict] = []
+
+    class Lander:
+        async def land(self, _: object) -> dict:
+            with rt.stage_log.open(stages.Name.STORY_LAND):
+                stages.note(TOLERATED, 128)
+                GhPrs(Exec(1, body)).list_checks("abc")
+            return {}
+
+    s.lander = Lander()
+    s.report_back = lambda _, report: reports.append(report)
+    asyncio.run(s.run_work(work))
+    data = runs(rt.stage_log)[0].data
+    assert (data["code"], data["raised"]) == (1, "UpstreamError")
+    assert data["detail"].startswith(RAISING)
+    assert "exit 1, HTTP 403" in data["error"]
+    assert "UpstreamError" in system.read_text(rt.config.run_dir / halt.CRASH_LOG)
+    assert "exit 1, HTTP 403" in reports[0]["reason"]
+    assert "exit 1, HTTP 403" in handover.hold_reason(reports[0])
