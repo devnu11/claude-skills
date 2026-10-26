@@ -193,8 +193,11 @@ def list_commits(git: Git, span: str) -> list[ListedCommit]:
     return [ListedCommit(sha, subject) for sha, subject in rows]
 
 
-def _get_maker(lists: CommitLists, sha: str) -> str:
-    return RUNNER if sha in lists.rebase.made else ROLE
+def _get_maker(lists: CommitLists, commit: ListedCommit) -> str:
+    """The runner only if it made the commit and the commit is not a replayed one it amended."""
+    replayed = {c.subject for c in lists.wanted}
+    made = commit.sha in lists.rebase.made and commit.subject not in replayed
+    return RUNNER if made else ROLE
 
 
 def _list_missing(lists: CommitLists, opcode: Opcode) -> list[str]:
@@ -209,7 +212,7 @@ def _list_missing(lists: CommitLists, opcode: Opcode) -> list[str]:
 def _list_extra(lists: CommitLists, opcode: Opcode) -> list[str]:
     _, _, _, j1, j2 = opcode
     return [
-        EXTRA_LINE.format(sha=c.sha[:SHA_WIDTH], subject=c.subject, maker=_get_maker(lists, c.sha))
+        EXTRA_LINE.format(sha=c.sha[:SHA_WIDTH], subject=c.subject, maker=_get_maker(lists, c))
         for c in lists.found[j1:j2]
     ]
 
@@ -223,7 +226,7 @@ def _list_replaced(lists: CommitLists, opcode: Opcode) -> list[str]:
             old_subject=o.subject,
             sha=n.sha[:SHA_WIDTH],
             subject=n.subject,
-            maker=_get_maker(lists, n.sha),
+            maker=_get_maker(lists, n),
         )
         for o, n in zip(lists.wanted[i1 : i1 + paired], lists.found[j1 : j1 + paired], strict=True)
     ]
