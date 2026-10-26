@@ -166,7 +166,7 @@ def _find_off_base(git: Git, rebase: StoryRebase) -> str | None:
     return NOT_ON_BASE.format(branch=rebase.branch, onto=rebase.onto) if code else None
 
 
-Opcode = tuple[str, int, int, int, int]
+type Opcode = tuple[str, int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -260,17 +260,11 @@ def _find_changed_commits(git: Git, rebase: StoryRebase) -> str | None:
 
 
 def is_foldable(git: Git, rebase: StoryRebase) -> bool:
-    """R4: the rebase is finished, on its branch, on ``onto``, with a replayed commit at the tip."""
+    """R4: the rebase is finished, on its branch, on ``onto``, with a commit over it."""
     checks = (_find_unfinished, _find_off_branch, _find_off_base)
     if any(check(git, rebase) for check in checks):
         return False
-    return git.head() != git.run("rev-parse", rebase.onto).strip() and _tip_is_replayed(git, rebase)
-
-
-def _tip_is_replayed(git: Git, rebase: StoryRebase) -> bool:
-    """Never fold into a role's own tip: it would be blamed on the runner."""
-    replayed = {c.subject for c in list_commits(git, f"{rebase.base}..{rebase.old}")}
-    return git.run("log", "-1", "--format=%s").strip() in replayed
+    return git.head() != git.run("rev-parse", rebase.onto).strip()
 
 
 def add_to_tip(git: Git, paths: list[str]) -> str:
