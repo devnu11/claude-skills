@@ -625,7 +625,7 @@ def test_a_crash_in_a_step_hands_over_an_error_and_holds(make_runtime) -> None:
     add_story(rt)
     drive(rt)
     story = rt.state.stories["s1"]
-    assert story.hold == "error"
+    assert story.hold == "error: crashed: RuntimeError: boom"
     assert "s1: architect crashed: crashed: RuntimeError: boom" in script.po_prompts[1]
     assert "details in .team/run/crash.log" in script.po_prompts[1]
     assert system.is_file(rt.config.run_dir / "crash.log")
