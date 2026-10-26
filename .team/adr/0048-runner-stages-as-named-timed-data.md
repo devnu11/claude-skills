@@ -91,6 +91,22 @@ captions a running stop check `attempt n of 3`. A new event kind, `stop-check`,
 records each refused check. The page counts those events per role and stage
 for `· n refused`.
 
+## Amended by s175 (2026-10-25)
+
+When a stage raises, the RS5 rule (the first failing command, else the
+latest) no longer sets `detail` and `code`. The stage takes them from the
+exception: an error raised because one command failed carries a
+`stages.Invocation(command, code)` on `stages.CommandFailed`, the new base of
+`GitError` and `UpstreamError`. An exception without one gives `detail ""`
+and `code null`. The `runner-stage` event gains `error` after `raised`: the
+exception's first non-blank line, masked, at most 500 characters, and `null`
+when the stage returned. A stage that returns is unchanged. `stages` stays
+pure. Why: s165's land raised after a tolerated `git worktree remove` failure,
+and the event named that command and kept no message, so nobody could tell
+what failed. Carrying the call on the exception holds across the worker
+threads the land runs gh in, and it names the right call when a check runs
+after the failure (`GhPrs.close` runs `pr view` before it raises).
+
 ## References
 
 - Design: `agile-team/docs/design/s99.md` (RS1–RS14, stage table, test checklist)
