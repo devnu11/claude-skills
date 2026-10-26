@@ -86,7 +86,7 @@ from .sprint_add import (  # noqa: F401  (re-exported)
     SprintAdd,
 )
 from .stage_log import place_of
-from .state import ModelOverride, RunState, RunStatus
+from .state import ModelOverride, RunStatus
 from .story_admin import Act, Clerk
 from .workspaces import Workspaces
 
@@ -149,10 +149,6 @@ DONE_HELD = (
     "Your done is held: sprint {sprint}'s end boundary is still open. The run ends done "
     "when it closes; end your turn."
 )
-
-
-def _end_pending(state: RunState) -> bool:
-    return state.boundary is not None or state.sprint_open()
 
 
 KIND_REFUSALS: dict[str, Callable[[Runtime], str | None]] = {
@@ -597,7 +593,7 @@ class Tools:
         if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime):
             return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
-        if kind == "done" and _end_pending(self.runtime.state):
+        if kind == "done" and self.runtime.state.is_boundary_pending:
             return self._hold_done(msg.id, args["text"])
         if kind in STATUS_KINDS or kind == "blocked":
             reason = args["text"].splitlines()[0][:REASON_CUT] if args["text"] else None

@@ -472,7 +472,6 @@ def _prepared(
     runtime = _load_runtime(place, query_fn)
     _recover_stories(runtime, start)
     _settle_state(runtime, args, start)
-    repin.drop_unpinned(runtime)
     return runtime
 
 
@@ -482,6 +481,7 @@ def _settle_state(runtime: Runtime, args: argparse.Namespace, start: Start) -> N
     runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
     _drop_held_done(runtime.state, start)
+    repin.drop_unpinned(runtime)
 
 
 def _load_runtime(place: Place, query_fn: QueryFn | None) -> Runtime:

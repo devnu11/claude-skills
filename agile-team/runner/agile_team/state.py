@@ -144,9 +144,14 @@ class RunState:
         """Set the run status and why; no reason clears the old one; any halt kind is cleared."""
         self.status, self.status_reason, self.halt_kind = status, reason, None
 
+    @property
+    def is_boundary_pending(self) -> bool:
+        """D1: a boundary is open, or the complete sprint's end boundary hasn't closed."""
+        return self.boundary is not None or (self.sprint_complete() and self.sprint_open())
+
     def release_held_done(self) -> None:
         """s184: once no boundary is pending, a held done ends the run."""
-        if self.held_done is None or self.boundary or self.sprint_open():
+        if self.held_done is None or self.is_boundary_pending:
             return
         self.mark(RunStatus.DONE, self.held_done or None)
         self.held_done = None
