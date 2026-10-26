@@ -167,7 +167,10 @@ class StopChecks:
             return {}
         attempt = stages.Attempt(self.refusals + 1, MAX_REFUSALS)
         start = system.monotonic()
-        with self.runtime.stage_log.trying(attempt), self.runtime.pulse.doing(self._chore()):
+        with (
+            self.runtime.stage_log.trying(attempt),
+            self.runtime.pulse.doing(self._chore(), self.owner),
+        ):
             failures = await self._failures(input_data)
         self.spent += system.monotonic() - start
         return self._refuse(failures, attempt) if failures else {}
@@ -191,9 +194,14 @@ class StopChecks:
     def _open(self, stage: stages.Name) -> Any:
         return self.runtime.stage_log.open(stage)
 
-    def _chore(self) -> str:
+    @property
+    def owner(self) -> str | None:
+        """The plan's story id, else ``None``."""
         story = self.plan.story
-        return STOP_CHORE.format(role=self.plan.role.name, story=story.id if story else "-")
+        return story.id if story else None
+
+    def _chore(self) -> str:
+        return STOP_CHORE.format(role=self.plan.role.name, story=self.owner or "-")
 
     def _capped(self) -> bool:
         budget = self.runtime.config.gates.stop_check_budget_s

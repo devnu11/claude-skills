@@ -4654,14 +4654,20 @@
   }
  ],
  "heartbeat": {
-  "version": 2,
+  "version": 3,
   "pid": 4242,
   "beat": "beating",
   "at": 1791473157.0,
   "mono": 523000.0,
   "started_at": 1791469560.0,
   "slept": 0.0,
-  "chore": null,
+  "chores": [
+   {
+    "what": "quality checks for s4",
+    "story": "s4",
+    "since": 1791473140.0
+   }
+  ],
   "step": {
    "role": "developer-cli",
    "story": "s3",

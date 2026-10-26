@@ -100,7 +100,7 @@ def test_a_chore_with_nothing_open_ends_quietly(scratch: Path, fake: FakeSystem)
     pulse, _ = make_pulse(scratch, fake)
     with pulse.doing("x"):
         pass
-    assert beat_file(scratch)["chore"] is None
+    assert beat_file(scratch)["chores"] == []
 
 
 def test_quiet_for_uses_quiet_since_and_falls_back_without_it() -> None:
@@ -141,20 +141,23 @@ def test_wait_for_answers_is_a_chore_and_stays_green(make_runtime, fake: FakeSys
     asyncio.run(t.ask_user({"text": "?"}))
     asyncio.run(t.ask_user({"text": "?"}))
     asyncio.run(t.wait_for_answers({"ids": ["m1", "m2"]}))
-    chore = seen[0]["chore"]
+    chore = seen[0]["chores"][0]
+    assert chore["story"] is None
     assert chore["what"] == po_tools.WAIT_CHORE.format(ids="m1, m2")
     late = {**seen[0], "at": seen[0]["at"]}
     late["step"] = {**late["step"], "quiet_since": late["at"] - 700}
     v = Vitals(late["at"], RunStatus.RUNNING, None, late, Runner.UP, LIMITS)
     assert judge(v).level is Level.GREEN
-    assert live.read_heartbeat(rt.config.run_dir)["chore"] is None
+    assert live.read_heartbeat(rt.config.run_dir)["chores"] == []
 
 
 def test_wait_chore_text_has_a_dash_without_ids(make_runtime, fake: FakeSystem) -> None:
     rt = make_runtime()
     system.make_dirs(rt.config.run_dir)
     seen: list[Any] = []
-    fake.on_sleep = [lambda: seen.append(live.read_heartbeat(rt.config.run_dir)["chore"]["what"])]
+    fake.on_sleep = [
+        lambda: seen.append(live.read_heartbeat(rt.config.run_dir)["chores"][0]["what"])
+    ]
 
     asyncio.run(Tools(rt).wait_for_answers({"ids": [], "timeout_s": 1}))
     assert seen == []  # nothing to wait for: no poll, no chore left behind
@@ -275,7 +278,7 @@ def test_the_boundary_step_runs_as_a_chore(make_runtime, monkeypatch) -> None:
     seen: list[Any] = []
 
     async def fake_step() -> None:
-        seen.append(live.read_heartbeat(rt.config.run_dir)["chore"])
+        seen.append(live.read_heartbeat(rt.config.run_dir)["chores"][0])
 
     monkeypatch.setattr(runner, "_step", fake_step)
     runner.step()

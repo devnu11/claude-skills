@@ -57,7 +57,7 @@ def _beat(run: Path, pid: int, age: float, slept: float = 0.0, **extra) -> None:
     now = clock.real_now()
     mono = clock.real_monotonic() - (age - slept)
     beat = {"version": 2, "pid": pid, "beat": "beating", "at": now - age, "mono": mono}
-    beat |= {"started_at": now - 1000, "chore": None, "step": None} | extra
+    beat |= {"started_at": now - 1000, "chores": [], "step": None} | extra
     (run / "heartbeat.json").write_text(json.dumps(beat))
 
 
@@ -88,7 +88,7 @@ def test_late_beat_with_open_tool_is_amber_not_red(configured: Path, run_dir: Pa
 def test_late_beat_during_a_gate_is_amber_naming_the_gate(configured, run_dir, alive):
     """AC2: a gate chore with a 100 s late beat is amber, reason names the gate."""
     chore = {"what": "gate: implement on s71", "since": clock.real_now() - 100}
-    _beat(run_dir, alive, 100, chore=chore)
+    _beat(run_dir, alive, 100, chores=[chore])
     health = _health(configured)
     assert health["level"] == "amber", health
     assert "while runner: gate: implement on s71" in health["reason"]
@@ -100,7 +100,7 @@ def _chore_beat(run_dir: Path) -> bool:
         beat = json.loads((run_dir / "heartbeat.json").read_text())
     except (OSError, ValueError):
         return False
-    return (beat.get("chore") or {}).get("what") == "gate: implement on s71"
+    return "gate: implement on s71" in [c.get("what") for c in beat.get("chores") or []]
 
 
 def test_real_pulse_in_a_gate_reads_green(configured: Path, run_dir: Path):
@@ -133,7 +133,9 @@ def test_dead_runner_stays_red(configured: Path, run_dir: Path):
     """AC3: the beat is excused-looking but the pid is gone: red, not running."""
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait(timeout=10)
-    _beat(run_dir, dead.pid, 100, chore={"what": "gate: x on s1", "since": clock.real_now() - 100})
+    _beat(
+        run_dir, dead.pid, 100, chores=[{"what": "gate: x on s1", "since": clock.real_now() - 100}]
+    )
     health = _health(configured)
     assert health["level"] == "red" and "the runner is not running" in health["reason"]
 

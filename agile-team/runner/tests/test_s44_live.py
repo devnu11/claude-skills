@@ -231,14 +231,14 @@ def test_heartbeat_shape_and_atomic_write(scratch: Path, fake: FakeSystem) -> No
         "mono",
         "started_at",
         "slept",
-        "chore",
+        "chores",
         "step",
         "calls",
         "stages",
         "steps",
     ]  # fmt: skip (s97 "slept"; s101 "calls"; s102 "stages"; s159 I5 "steps")
-    assert beat["version"] == 2 and beat["pid"] == FAKE_IDS[0] and beat["beat"] == "beating"
-    assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chore"] is None
+    assert beat["version"] == 3 and beat["pid"] == FAKE_IDS[0] and beat["beat"] == "beating"
+    assert beat["at"] == NOW + 3 and beat["started_at"] == NOW and beat["chores"] == []
     assert list(beat["step"]) == [
         "role", "story", "step", "started_at", "turn", "model", "configured_model",
         "last_turn_at", "quiet_since", "tool", "tokens", "cost_usd", "rate",
@@ -295,7 +295,7 @@ def test_start_and_end_run_the_thread_and_mark_ended(scratch: Path, fake: FakeSy
     pulse.start()
     pulse.end()
     assert beat_file(scratch)["beat"] == "ended"
-    assert beat_file(scratch)["step"] is None and beat_file(scratch)["chore"] is None
+    assert beat_file(scratch)["step"] is None and beat_file(scratch)["chores"] == []
 
 
 def test_a_close_after_end_keeps_it_ended(scratch: Path, fake: FakeSystem) -> None:
@@ -317,19 +317,19 @@ def test_a_failed_write_does_not_raise(scratch: Path, fake: FakeSystem) -> None:
 def test_doing_sets_and_restores_the_chore_nested(scratch: Path, fake: FakeSystem) -> None:
     pulse, clock = make_pulse(scratch, fake)
     with pulse.doing("outer"):
-        assert beat_file(scratch)["chore"] == {"what": "outer", "since": NOW}
+        assert beat_file(scratch)["chores"] == [{"what": "outer", "story": None, "since": NOW}]
         clock.t += 1
         with pulse.doing("inner"):
-            assert beat_file(scratch)["chore"]["what"] == "inner"
-        assert beat_file(scratch)["chore"]["what"] == "outer"
-    assert beat_file(scratch)["chore"] is None
+            assert [c["what"] for c in beat_file(scratch)["chores"]] == ["outer", "inner"]
+        assert [c["what"] for c in beat_file(scratch)["chores"]] == ["outer"]
+    assert beat_file(scratch)["chores"] == []
 
 
 def test_doing_restores_after_an_exception(scratch: Path, fake: FakeSystem) -> None:
     pulse, _ = make_pulse(scratch, fake)
     with pytest.raises(ValueError), pulse.doing("x"):
         raise ValueError
-    assert beat_file(scratch)["chore"] is None
+    assert beat_file(scratch)["chores"] == []
 
 
 def test_nested_meters_show_the_innermost(scratch: Path, fake: FakeSystem) -> None:
@@ -406,7 +406,7 @@ def step(**over: Any) -> dict[str, Any]:
 
 def beat(**over: Any) -> dict[str, Any]:
     base = {"version": 1, "pid": 77, "beat": "beating", "at": NOW - 5, "started_at": NOW - 900}
-    return {**base, "chore": None, "step": step(), **over}
+    return {**base, "chores": [], "step": step(), **over}
 
 
 def vitals(
@@ -434,8 +434,8 @@ def test_r10_green_turns_arriving() -> None:
 
 def test_r9_green_chore_and_it_silences_the_quiet_rules() -> None:
     quiet = step(last_turn_at=NOW - 5000)
-    chore = {"what": "settling developer-cli on s29", "since": NOW - 120}
-    verdict = health.judge(vitals(heartbeat=beat(step=quiet, chore=chore)))
+    chore = {"what": "settling developer-cli on s29", "story": "s29", "since": NOW - 120}
+    verdict = health.judge(vitals(heartbeat=beat(step=quiet, chores=[chore])))
     assert verdict.level is Level.GREEN
     assert verdict.reason == "runner: settling developer-cli on s29 for 2 min"
 

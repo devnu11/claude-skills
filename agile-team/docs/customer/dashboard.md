@@ -76,6 +76,14 @@ To keep it on your own machine, run `agile-team dashboard --host 127.0.0.1`.
     stage and its time on the right (`boundary.check · 45 s`), and what
     that stage does under it (`Lint, static analysis, the full suite,
     coverage and each environment's e2e, on the team branch`).
+  - While the runner does its own work for a story or the run (a gate,
+    stop checks, named tests, settling a step, a sprint boundary, waiting
+    for your answer), each piece of work gets its own row under the
+    second line, whatever else the panel shows: `⚙ s162 · stop checks for
+    developer-cli on s162 · 2 min`, with `run` in place of the story for
+    run-wide work. A row goes away when its work ends, so a row that has
+    been there for hours is a stall worth a look. With only such work
+    open, the panel reads `⚙ runner` and `2 chores open`.
   - When nothing runs: `● Nothing running` and why, for example
     `waiting on m121`.
 

@@ -651,8 +651,8 @@ gate runs. A failed write never stops the thread. Its first failure goes to
 `crash.log`:
 
 ```json
-{"version": 2, "pid": 4242, "beat": "beating", "at": 1791800020.0, "mono": 523000.0, "started_at": 1791799000.0,
- "slept": 0.0, "chore": null,
+{"version": 3, "pid": 4242, "beat": "beating", "at": 1791800020.0, "mono": 523000.0, "started_at": 1791799000.0,
+ "slept": 0.0, "chores": [],
  "step": {"role": "developer-cli", "story": "s29", "step": "implement", "started_at": 1791799500.0,
           "turn": 12, "model": "claude-sonnet-4-5-20250929", "configured_model": "sonnet",
           "last_turn_at": 1791800012.5, "quiet_since": 1791800012.5,
@@ -677,11 +677,16 @@ there. Every `step-start` and `step-end` the runner writes carries
 `data.mono` and `data.slept` read at that moment. Recovery's `killed`
 step-end does not. `step` is the
 innermost open query (a role step inside the PO's `run_role` call), else
-`null`. `chore` is runner-side work such as `{"what": "settling
-developer-cli on s29", "since": …}`, else `null`. Other chores are
-`gate: implement on s29` while a gate runs, `sprint boundary: <stage>`,
-`quality checks for s29`, `running named tests for <role> on s29`, and
-`waiting for answers to m3` while the PO waits on the human. `quiet_since` is when
+`null`. `chores` (s181; `chore` before, one value) lists the runner-side
+work open now, oldest first, one row per chore such as `{"what": "settling
+developer-cli on s29", "story": "s29", "since": …}`; it is `[]` when there
+is none. `story` is `null` for run-wide work (a sprint boundary, the PO's
+wait). Other chores are `gate: implement on s29` while a gate runs,
+`stop checks for <role> on s29`, `sprint boundary: <stage>`, `quality
+checks for s29`, `running named tests for <role> on s29`, and `waiting for
+answers to m3` while the PO waits on the human. Each chore removes only its
+own row when it ends, so chores of parallel stories can end in any order.
+Health reads the oldest open chore. `quiet_since` is when
 the query last had the floor back: its last turn, a tool's end, the end of
 an inner query (a role step inside `run_role`), or the end of a chore.
 `calls` (s101) lists the tool calls still open in **every** open query,
@@ -757,7 +762,12 @@ implement`, the awake time and the run (`first run`, `round N`, or
 and story), the newest open tool call, and up to 3 lines of the latest
 message on the story. While the runner works between steps it shows the
 open stage (the heartbeat's `stages`; each open row carries the stage's
-`description` since s119, and that is the panel's second line) or chore.
+`description` since s119, and that is the panel's second line), or with
+only chores open `⚙ runner` and `N chores open`. In every state, each open
+chore of the heartbeat's `chores` gets its own row under the second line
+(s181), for example `⚙ s162 · stop checks for developer-cli on s162 · 2
+min`; `run` stands for a chore with no story. The rows are read from the
+heartbeat on every render, so a row goes when its chore ends.
 With nothing running it reads `● Nothing running` and why: the
 open question ids, else the health reason (for example the halt and its
 reset time), else the run status. With no heartbeat (an old runner, or a

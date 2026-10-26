@@ -142,16 +142,16 @@ def test_kept_coverage_not_at_head_is_rerun(make_runtime) -> None:
 
 def test_quality_pre_run_is_a_runner_chore(make_runtime, monkeypatch: pytest.MonkeyPatch) -> None:
     rt, _ = quality_runtime(make_runtime)
-    seen: list[str] = []
+    seen: list[tuple[str, str | None]] = []
 
     @contextmanager
-    def doing(what: str):
-        seen.append(what)
+    def doing(what: str, story: str | None = None):
+        seen.append((what, story))
         yield
 
     monkeypatch.setattr(rt.pulse, "doing", doing)
     rt.plan(StepRequest("quality-czar", "go", "s1"))
-    assert seen == ["quality checks for s1"]
+    assert seen == [("quality checks for s1", "s1")]
 
 
 def test_quality_step_without_story_runs_nothing(make_runtime) -> None:
@@ -319,16 +319,16 @@ def test_located_swaps_the_file_part() -> None:
 def test_run_logs_one_event_inside_a_chore(make_runtime, monkeypatch: pytest.MonkeyPatch) -> None:
     results = {**tracked(PKG_TEST), ROW.command.replace("{tests}", "tests/test_x.py"): (1, "bad")}
     t, rt, _ = tools(make_runtime, results)
-    seen: list[str] = []
+    seen: list[tuple[str, str | None]] = []
 
     @contextmanager
-    def doing(what: str):
-        seen.append(what)
+    def doing(what: str, story: str | None = None):
+        seen.append((what, story))
         yield
 
     monkeypatch.setattr(rt.pulse, "doing", doing)
     call(t.run_tests, {"tests": [PKG_TEST]})
-    assert seen == ["running named tests for developer-cli on s1"]
+    assert seen == [("running named tests for developer-cli on s1", "s1")]
     events = [e for e in rt.events.events() if e.kind == "tests-run"]
     assert len(events) == 1 and events[0].role == "developer-cli" and events[0].story == "s1"
     assert events[0].data["tests"] == [PKG_TEST]
