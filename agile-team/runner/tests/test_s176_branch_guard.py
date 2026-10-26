@@ -280,3 +280,92 @@ def test_read_head_branch_maps_the_exit_code(repo: Path, fake: FakeSystem, done,
     assert guard._read_head_branch(repo) == head
     asked = [c.argv for c in fake.commands if "symbolic-ref" in c.argv]
     assert asked and "-q" in asked[0] and "--short" in asked[0] and "HEAD" in asked[0]
+
+
+# ----- R1: rebase options that take a value, and abbreviated long options ---------
+
+R1_REBASES = [
+    "git rebase -S main other",
+    f"git rebase --ont main {BRANCH} other",
+    "git rebase --roo other",
+    f"git rebase -C 4 {BRANCH} other",
+    f"git rebase --whitespace fix {BRANCH} other",
+    f"git rebase --emp drop {BRANCH} other",
+]
+
+
+@pytest.mark.parametrize("command", R1_REBASES)
+def test_r1_a_rebase_naming_another_branch_is_refused_whatever_its_options(
+    repo: Path, command: str
+) -> None:
+    reason = denial(repo, command)
+    assert reason and BRANCH in reason
+
+
+@pytest.mark.parametrize("command", R1_REBASES)
+def test_r1_a_rebase_naming_another_branch_moves_it_when_head_is_detached(command: str) -> None:
+    assert git_check.find_moved_branch(parsed(command), DETACHED) == "other"
+
+
+@pytest.mark.parametrize(
+    "command", [f"git rebase --trailer X {BRANCH}", f"git rebase main {BRANCH}"]
+)
+def test_r1_head_on_another_branch_with_the_rebase_branch_named_is_unclear(
+    repo: Path, command: str
+) -> None:
+    reason = denial(repo, command, head="other")
+    assert reason and "more than one branch" in reason
+
+
+def test_r1_naming_the_rebase_branch_is_allowed_on_it_and_detached(repo: Path) -> None:
+    command = f"git rebase main {BRANCH}"
+    assert denial(repo, command, head=BRANCH) is None
+    assert denial(repo, command, head=DETACHED) is None
+
+
+# ----- R2: --update-refs and rebase.updateRefs ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git rebase --update-refs main",
+        "git rebase --upd main",
+        "git -c rebase.updateRefs=true rebase main",
+    ],
+)
+def test_r2_a_rebase_that_updates_other_refs_is_refused(repo: Path, command: str) -> None:
+    reason = denial(repo, command)
+    assert reason and BRANCH in reason and "--update-refs" in reason
+
+
+def test_r2_no_update_refs_is_allowed(repo: Path) -> None:
+    assert denial(repo, "git rebase --no-update-refs main") is None
+
+
+# ----- R3: the GIT_CONFIG_* env lock ----------------------------------------------
+
+
+def test_r3_git_config_count_is_refused_on_a_branch_site(repo: Path) -> None:
+    reason = denial(repo, "GIT_CONFIG_COUNT=1 git rebase main")
+    assert reason and "GIT_CONFIG" in reason
+
+
+def test_r3_git_config_count_passes_the_env_lock_without_a_branch(repo: Path) -> None:
+    assert denial(repo, "GIT_CONFIG_COUNT=1 git rebase main", branch="") is None
+
+
+# ----- R4: checkout -B of the own branch moves HEAD to it -------------------------
+
+R4 = f"git checkout -B {BRANCH} X; git reset --hard Y"
+
+
+def test_r4_a_hard_reset_after_checkout_b_is_refused_when_head_was_on_another_branch(
+    repo: Path,
+) -> None:
+    reason = denial(repo, R4, head="other")
+    assert reason and "other" in reason
+
+
+def test_r4_the_same_command_is_allowed_when_head_is_detached(repo: Path) -> None:
+    assert denial(repo, R4, head=DETACHED) is None

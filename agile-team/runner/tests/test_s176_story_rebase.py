@@ -196,3 +196,40 @@ def test_a_step_that_moved_nothing_is_settled_as_before(make_runtime, fake: Fake
 
 def test_the_runtime_module_exposes_the_put_back_step() -> None:
     assert hasattr(dispatch.Runtime, "_put_back_moved")
+
+
+# ----- R3, R5, R6 ----------------------------------------------------------------
+
+
+def test_r5_a_symlinked_repo_keeps_the_worktrees_own_branch(fake: FakeSystem, monkeypatch) -> None:
+    link = Path("/fake/repo/link")
+    system.make_dirs(link)
+    real = system.resolve
+    monkeypatch.setattr(system, "resolve", lambda p: WORKTREE if p == link else real(p))
+    fake.reply(("for-each-ref",), listing(("mine", NEW, str(WORKTREE))))
+    assert story_rebase.read_branch_heads(Git(link), rebase_of()) == {"mine": NEW}
+
+
+def test_r3_the_story_rebase_launch_env_pins_rebase_update_refs_off(
+    make_runtime, fake: FakeSystem
+) -> None:
+    view, plan = rebase_plan(make_runtime)
+    fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
+    fake.reply(("for-each-ref",), listing())
+    view._set_story_rebase_scope(plan)
+    env = plan.launch.env
+    assert env["GIT_CONFIG_COUNT"] == "1"
+    assert env["GIT_CONFIG_KEY_0"] == "rebase.updateRefs"
+    assert env["GIT_CONFIG_VALUE_0"] == "false"
+
+
+def test_r6_a_held_step_that_moved_nothing_ends_with_no_recorded_heads(
+    make_runtime, fake: FakeSystem
+) -> None:
+    view, plan = rebase_plan(make_runtime)
+    plan.story.rebase.heads = {"free": OLD}
+    mid_rebase(fake)
+    fake.reply(("for-each-ref",), listing(("free", OLD, "")))
+    gate = settle(view, plan, handoff("blocked", summary="stuck"))["gate"]
+    assert gate["verdict"] == Verdict.HOLD
+    assert plan.story.rebase.heads == {}
