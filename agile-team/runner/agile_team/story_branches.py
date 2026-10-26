@@ -51,6 +51,7 @@ class StoryRebase:
     branch: str
     files: list[str]
     role: str
+    heads: dict[str, str] = field(default_factory=dict)  # s176: free branch -> sha at the start
 
 
 def format_story_branch(
