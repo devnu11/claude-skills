@@ -546,8 +546,24 @@ def get_next_head(call: GitCall, head: str) -> str:
         return created
     if "-d" in rest or any(_is_long(w, DETACH_FLAGS) for w in rest):
         return DETACHED
-    named = [w for w in rest if not w.startswith("-")]
-    return head if "--" in rest or not named else HEAD_UNKNOWN
+    return _find_plain_next_head(rest, head)
+
+
+def _find_plain_next_head(rest: list[str], head: str) -> str:
+    """HEAD after a checkout/switch that creates nothing: ``-`` or a bare ``<b> --`` is unclear."""
+    before, after = _split_dashes(rest)
+    named = [w for w in before if w == "-" or not w.startswith("-")]
+    if after or not named:
+        return head
+    return HEAD_UNKNOWN
+
+
+def _split_dashes(rest: list[str]) -> tuple[list[str], list[str]]:
+    """``rest`` split at the first ``--`` into the words before and after it."""
+    if "--" not in rest:
+        return rest, []
+    i = rest.index("--")
+    return rest[:i], rest[i + 1 :]
 
 
 def find_branch_denial(site: Site, call: GitCall, head: str) -> str | None:
