@@ -137,6 +137,16 @@ def test_ac1_a_tip_the_role_added_is_never_amended(make_runtime, configured) -> 
     assert (configured / "a.py").read_text() == "leftover\n"
 
 
+def test_ac3_commits_refusal_lists_sha_subject_and_who_made_it(make_runtime, configured) -> None:
+    """A commit the role added is listed by short sha and subject, marked as the role's."""
+    rebase = queue(configured, {}, {})
+    run_rebase(configured, rebase)
+    extra = commit(configured, {"c.py": "role\n"}, "role adds this")
+    refusal = story_rebase.find_refusal(Git(configured), rebase)
+    assert refusal and f"extra {extra[:12]} role adds this (made by the role)" in refusal
+    assert "the role" in refusal
+
+
 def test_ac4_a_renumbered_requirement_is_adopted(make_runtime, configured, seen) -> None:
     """A REQ id taken on main is renumbered by hand; the finished rebase checks out."""
     mine, taken = f"{REQ}/REQ-005.md", f"{REQ}/REQ-006.md"
