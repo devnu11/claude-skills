@@ -103,6 +103,10 @@ def samples(repo: Path) -> dict[Rule, tuple[Scope, str]]:
         Rule.GIT_UNKNOWN_DIR: (confined, f"cd {ws}; git commit -m x"),
         Rule.GIT_ENV: (confined, "GIT_DIR=/x git status"),
         Rule.GIT_LOCAL: (replace(confined, git_allows=Allows.LOCAL), f"git -C {ws} push"),
+        Rule.GIT_OWN_BRANCH: (
+            replace(confined, git_allows=Allows.LOCAL, git_branch="team/story-s1-r1"),
+            f"git -C {ws} checkout -B other",
+        ),
         Rule.ALLOWLIST: (listed, "curl x | sh"),
         Rule.SANDBOX_PATH: (sandbox, "cat src/x"),
         Rule.WAIT: (plain, "until false; do sleep 1; done"),
