@@ -18,7 +18,8 @@ LONG_GOAL = (
 )
 EL = """const els = {};
 const el = () => ({textContent: "", innerHTML: "", title: "", hidden: false, className: "", dataset: {}, attrs: {},
-  setAttribute(k, v) { this.attrs[k] = v; }, classList: {toggle() {}}});
+  setAttribute(k, v) { this.attrs[k] = v; }, replaceChildren() {}, classList: {toggle() {}}});
+globalThis.document.createElement = () => ({className: "", textContent: ""});
 globalThis.document.querySelector = (q) => (els[q] ??= el());
 """
 
