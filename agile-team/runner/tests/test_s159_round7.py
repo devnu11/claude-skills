@@ -377,11 +377,11 @@ def test_a_settle_error_during_a_cancel_reaches_step_failed_not_a_bare_cancel_n1
 
 def test_the_pulse_names_the_settling_for_a_story_steps_head_and_tail_n13(make_runtime) -> None:
     rt = make_runtime()
-    seen: list[str] = []
+    seen: list[tuple[str, str | None]] = []
 
     @contextmanager
-    def doing(what: str):
-        seen.append(what)
+    def doing(what: str, story: str | None = None):
+        seen.append((what, story))
         yield
 
     async def pregate(plan, parsed) -> None:
@@ -393,4 +393,5 @@ def test_the_pulse_names_the_settling_for_a_story_steps_head_and_tail_n13(make_r
     rt._run_pregate = pregate  # type: ignore[method-assign]
     assert asyncio.run(rt._settle_threaded(plan_of(story_of()), None)) == {"ok": 1}
     assert len(seen) == 2 and seen[0] == seen[1]
+    assert seen[0][1] == "s1"  # s181 CH5: the chore carries the story id
     assert seen[0].startswith("settling ") and "s1" in seen[0]

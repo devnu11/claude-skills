@@ -110,13 +110,13 @@ def test_settle_runs_as_a_chore(make_runtime, monkeypatch) -> None:
     real = rt._settle
 
     def spy(plan, result):
-        seen.append(live.read_heartbeat(rt.config.run_dir)["chore"])
+        seen.append(live.read_heartbeat(rt.config.run_dir)["chores"][0])
         return real(plan, result)
 
     monkeypatch.setattr(rt, "_settle", spy)
     run_step(rt)
     assert seen[0]["what"] == "settling architect on s1"
-    assert live.read_heartbeat(rt.config.run_dir)["chore"] is None
+    assert live.read_heartbeat(rt.config.run_dir)["chores"] == []
 
 
 def test_a_role_step_turns_land_in_turns_jsonl(make_runtime) -> None:
@@ -220,7 +220,7 @@ def test_heartbeat_section_and_health_match_judge(scratch: Path) -> None:
     system.write_text(config.run_dir / "runner.pid", str(FAKE_IDS[0]))
     beat = {
         "version": 1, "pid": FAKE_IDS[0], "beat": "beating", "at": NOW - 2,
-        "started_at": NOW - 99, "chore": None,
+        "started_at": NOW - 99, "chores": [],
         "step": {
             "role": "architect", "story": "s1", "step": "design", "started_at": NOW - 50,
             "turn": 2, "model": "claude-opus-4", "configured_model": "sonnet",

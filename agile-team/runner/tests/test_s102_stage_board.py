@@ -217,8 +217,8 @@ def test_a_stage_log_on_a_pulse_lists_its_open_row(fake: FakeSystem, repo: Path)
     assert pulse.heartbeat()["stages"] == []
 
 
-def test_the_heartbeat_version_stays_2() -> None:
-    assert live.HEARTBEAT_VERSION == 2
+def test_the_heartbeat_version_is_3() -> None:
+    assert live.HEARTBEAT_VERSION == 3
 
 
 def test_open_meters_do_not_show_in_stages(fake: FakeSystem) -> None:

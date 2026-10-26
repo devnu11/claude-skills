@@ -39,10 +39,10 @@ def step(**over: Any) -> dict[str, Any]:
 
 
 def beat(age: float = 5, slept: float | None = 0, **over: Any) -> dict[str, Any]:
-    """A version-2 beat ``age`` s old whose monotonic stamp says it slept ``slept`` s."""
+    """A version-3 beat ``age`` s old whose monotonic stamp says it slept ``slept`` s."""
     base: dict[str, Any] = {
-        "version": 2, "pid": 77, "beat": "beating", "at": NOW - age,
-        "started_at": NOW - 900, "chore": None, "step": step(),
+        "version": 3, "pid": 77, "beat": "beating", "at": NOW - age,
+        "started_at": NOW - 900, "chores": [], "step": step(),
     }  # fmt: skip
     if slept is not None:
         base["mono"] = MONO - (age - slept)
@@ -62,7 +62,7 @@ def verdict(heartbeat: dict[str, Any], **over: Any) -> health.Health:
 
 
 def chore(what: str, seconds: float) -> dict[str, Any]:
-    return {"what": what, "since": NOW - seconds}
+    return {"what": what, "story": None, "since": NOW - seconds}
 
 
 # ----- rules ------------------------------------------------------------------------
@@ -76,18 +76,18 @@ def test_a_late_beat_while_a_tool_runs_is_amber() -> None:
 
 
 def test_a_late_beat_during_the_gate_chore_is_amber() -> None:
-    v = verdict(beat(100, chore=chore("gate: implement on s71", 100)))
+    v = verdict(beat(100, chores=[chore("gate: implement on s71", 100)]))
     assert v.level is Level.AMBER
     assert v.reason == "heartbeat 1 min old while runner: gate: implement on s71 for 1 min"
 
 
 def test_a_chore_wins_over_a_tool_in_the_words() -> None:
-    heartbeat = beat(100, chore=chore("tests", 100), step=step(tool=BASH))
+    heartbeat = beat(100, chores=[chore("tests", 100)], step=step(tool=BASH))
     assert verdict(heartbeat).reason == "heartbeat 1 min old while runner: tests for 1 min"
 
 
 def test_the_gate_chore_with_a_fresh_beat_is_green() -> None:
-    v = verdict(beat(5, chore=chore("gate: implement on s71", 120)))
+    v = verdict(beat(5, chores=[chore("gate: implement on s71", 120)]))
     assert v.level is Level.GREEN
     assert v.reason == "runner: gate: implement on s71 for 2 min"
 
@@ -158,7 +158,7 @@ def test_a_fresh_beat_is_not_stale() -> None:
 def test_busy_means_a_tool_or_a_chore() -> None:
     assert not vitals(beat()).busy
     assert vitals(beat(step=step(tool=BASH))).busy
-    assert vitals(beat(chore=chore("x", 1))).busy
+    assert vitals(beat(chores=[chore("x", 1)])).busy
 
 
 def test_clock_read_gives_both_clocks_from_the_system(fake: FakeSystem) -> None:
@@ -180,10 +180,10 @@ def make_pulse(fake: FakeSystem, ticks: int = 0) -> tuple[live.Pulse, list[int]]
     return pulse, writes
 
 
-def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSystem) -> None:
+def test_the_heartbeat_is_version_3_with_a_monotonic_stamp_in_order(fake: FakeSystem) -> None:
     pulse, _ = make_pulse(fake)
     data = pulse.heartbeat()
-    assert live.HEARTBEAT_VERSION == 2 and data["version"] == 2
+    assert live.HEARTBEAT_VERSION == 3 and data["version"] == 3
     assert data["mono"] == fake.clock and data["at"] == fake.clock
     assert data["pid"] == FAKE_IDS[0]
     # s101 N11 adds "calls"; s102 HB3 adds "stages"; s97 adds "slept" (test_s97_clocks)
@@ -195,7 +195,7 @@ def test_the_heartbeat_is_version_2_with_a_monotonic_stamp_in_order(fake: FakeSy
         "at",
         "mono",
         "started_at",
-        "chore",
+        "chores",
         "step",
         "calls",
         "stages",
@@ -265,7 +265,7 @@ def make_runtime(seen: list[Any], fake: FakeSystem) -> tuple[Runtime, live.Pulse
     runtime.pulse = pulse
 
     def evaluate(story: Any, handoff: Any) -> Any:
-        seen.append(pulse.heartbeat()["chore"]["what"])
+        seen.append(pulse.heartbeat()["chores"][-1])
         return SimpleNamespace(verdict="fail", pending=None)
 
     pipeline = SimpleNamespace(evaluate=evaluate)
@@ -284,22 +284,22 @@ def test_the_gate_runs_inside_a_chore_and_restores_the_outer_one(fake: FakeSyste
     assert GATE_CHORE == "gate: {step} on {story}"
     with pulse.doing("settling developer-cli on s71"):
         assert runtime.gate(plan, object()) == {"outcome": "outcome", "step": "implement"}  # type: ignore[arg-type]
-        assert pulse.heartbeat()["chore"]["what"] == "settling developer-cli on s71"
-    assert seen == ["gate: implement on s71"]
+        assert [c["what"] for c in pulse.heartbeat()["chores"]] == ["settling developer-cli on s71"]
+    assert [(c["what"], c["story"]) for c in seen] == [("gate: implement on s71", "s71")]
     runtime.gate(plan, object())  # type: ignore[arg-type]
-    assert pulse.heartbeat()["chore"] is None
+    assert pulse.heartbeat()["chores"] == []
 
 
 def seed_run(fake: FakeSystem) -> cfg.Config:
-    """A running state and a late v2 heartbeat with a tool open, written to the fake."""
+    """A running state and a late v3 heartbeat with a tool open, written to the fake."""
     config = cfg.from_raw(Path("/fake/repo"), {})
     state = state_mod.RunState()
     state.mark(RunStatus.RUNNING)
     state_mod.save(config.run_dir, state)
     now = fake.clock
     late = {
-        "version": 2, "pid": fake.pid(), "beat": "beating", "at": now - 240, "mono": now - 240,
-        "started_at": now - 900, "chore": None,
+        "version": 3, "pid": fake.pid(), "beat": "beating", "at": now - 240, "mono": now - 240,
+        "started_at": now - 900, "chores": [],
         "step": step(last_turn_at=now - 240, tool={"name": "Bash", "started_at": now - 240}),
     }  # fmt: skip
     fake.put(config.run_dir / live.HEARTBEAT, json.dumps(late))
