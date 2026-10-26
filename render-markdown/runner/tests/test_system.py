@@ -81,8 +81,12 @@ def is_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    stat = Path(f"/proc/{pid}/stat")
-    return not (stat.exists() and stat.read_text().rsplit(")", 1)[1].split()[0] == "Z")
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        # Gone between the kill and the read on Linux; macOS has no /proc at all.
+        return not Path("/proc").is_dir()
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
 
 
 def test_windows_stops_only_the_process() -> None:
