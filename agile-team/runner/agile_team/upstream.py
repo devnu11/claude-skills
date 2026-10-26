@@ -177,7 +177,20 @@ class Prs(Protocol):
         """Wait for the PR's checks to finish; False when ``limit_s`` ran out."""
 
     def checks(self, number: int) -> list[Check]:
-        """The PR's checks now ([] when none are reported)."""
+        """The PR's checks now; gh's exit code says only pass or fail, so it is ignored."""
+        argv, result = self._run_checks(number)
+        try:
+            return checks_of(result[1])
+        except UpstreamError as exc:
+            raise build_gh_decode_error(argv, result) from exc
+
+    def _run_checks(self, number: int) -> tuple[list[str], tuple[int, str]]:
+        argv = ["gh", "pr", "checks", str(number), "--required", "--json", CHECK_FIELDS]
+        result = self.run(argv)
+        if NO_REQUIRED not in result[1].lower():
+            return argv, result
+        argv = [a for a in argv if a != "--required"]
+        return argv, self.run(argv)
 
     def job(self, link: str) -> Job | None:
         """The Actions job behind a check link; None when the link names no job."""
@@ -414,8 +427,7 @@ class GhPrs:
         try:
             return json.loads(out)
         except ValueError as exc:
-            invocation = stages.Invocation(" ".join(["gh", *args]), 0)
-            raise UpstreamError(format_gh_call(invocation, out), invocation) from exc
+            raise build_gh_decode_error(["gh", *args], (0, out)) from exc
 
 
 def is_plain_text(out: str) -> bool:
@@ -448,6 +460,12 @@ def build_gh_error(argv: list[str], result: tuple[int, str]) -> UpstreamError:
     """The UpstreamError for a failed gh call, carrying its invocation (s175 E1, E5)."""
     invocation = stages.Invocation(" ".join(argv), result[0])
     return UpstreamError(describe_gh_failure(invocation, result[1]), invocation)
+
+
+def build_gh_decode_error(argv: list[str], result: tuple[int, str]) -> UpstreamError:
+    """The UpstreamError for gh output that did not decode, with the real exit code."""
+    invocation = stages.Invocation(" ".join(argv), result[0])
+    return UpstreamError(format_gh_call(invocation, result[1]), invocation)
 
 
 def _run_check(raw: dict[str, Any]) -> Check:
