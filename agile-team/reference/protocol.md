@@ -2265,10 +2265,11 @@ story.
   a Sprint Backlog story can move (`cadence until-blocker: Sprint Backlog
   stories can still move (…)`), never because Product Backlog stories are
   ready. A PR waiting for review or merge never holds the next sprint.
-  The `next_sprint` advice says how a run ends on purpose (s184). If the human
-  or the liaison told the PO to start no further sprint, the PO notifies `done`
-  quoting them. Otherwise the liaison resumes with `start --resume --cadence
-  sprint`, which stops at every sprint end.
+  The `next_sprint` advice says how a run ends on purpose (s184). If the
+  human's instructions (in the task or relayed by the liaison) say to start no
+  further sprint, the PO notifies `done` quoting them. Otherwise only the
+  liaison ends the run, by resuming with `start --resume --cadence sprint`,
+  which stops at every sprint end.
 - `start --resume` with no `--task` runs a router pass first. The PO gets a
   turn only when that pass hands over; its prompt then starts with the resume
   note. Exception: with interrupted steps pending, the PO gets the first
