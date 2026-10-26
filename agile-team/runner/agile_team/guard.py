@@ -79,6 +79,7 @@ class Scope:
     git_workspace: Path | None = None
     run_home: Path | None = None
     git_allows: git_check.Allows = git_check.Allows.ANY
+    git_branch: str = ""  # s176: the one local branch a LOCAL step may move
 
     @property
     def base(self) -> Path:
@@ -297,7 +298,18 @@ def _site(scope: Scope) -> git_check.Site | None:
         return None
     base = system.resolve(scope.base)
     repo, workspace = system.resolve(scope.repo), scope.git_workspace
-    return git_check.Site(scope.role, repo, base, workspace, scope.git_allows)
+    head = _read_head_branch(workspace) if scope.git_branch else git_check.DETACHED
+    return git_check.Site(
+        scope.role, repo, base, workspace, scope.git_allows, scope.git_branch, head
+    )
+
+
+def _read_head_branch(workspace: Path) -> str:
+    """The branch HEAD is on; ``DETACHED`` when on none; ``HEAD_UNKNOWN`` if git failed."""
+    done = system.run(system.Command(("git", "symbolic-ref", "-q", "--short", "HEAD"), workspace))
+    if done.code == 0:
+        return done.out.strip()
+    return git_check.DETACHED if done.code == 1 else git_check.HEAD_UNKNOWN
 
 
 def _check_allowlist(scope: Scope, segments: list[list[str]]) -> str | None:

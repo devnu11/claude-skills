@@ -12,6 +12,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import NamedTuple
 from pathlib import Path, PurePosixPath
 
 from . import system
@@ -38,6 +39,16 @@ LOCAL_GIT = SAFE_GIT | frozenset(
 )  # fmt: skip
 NO_COMMIT_FLAGS = frozenset({"-n", "--no-commit"})
 LONG_PREFIX_MIN = 4
+# A head that is on no branch, or that cannot be told: not valid ref names (``~``).
+DETACHED = "~detached"
+HEAD_UNKNOWN = "~unknown"
+REBASE_OPERATIONS = frozenset(
+    {"--continue", "--abort", "--skip", "--quit", "--edit-todo", "--show-current-patch"}
+)  # fmt: skip
+REBASE_VALUED = frozenset(
+    {"--onto", "-s", "--strategy", "-X", "--strategy-option", "-x", "--exec", "-S"}
+)
+DETACH_FLAGS = ("--detach",)
 
 
 @dataclass(frozen=True)
@@ -109,6 +120,20 @@ GIT_LOCAL_DENIED = Refusal(
     "remotes, refs and config, so its git stays local, and only the runner pushes or fetches",
     "local git in {workspace}: `git add`, `git rebase --continue`, `git status`, `git diff`, "
     "`git log`, `git checkout -- <file>`",
+).text()
+GIT_OWN_BRANCH_DENIED = Refusal(
+    Rule.GIT_OWN_BRANCH,
+    "{role} may not run `git {sub}` in {workspace}: it would move {moved}, and this step may "
+    "move only its own branch {branch}",
+    "`git checkout -B {branch}`, `git reset` and `git rebase` while HEAD is on {branch}, "
+    "`git rebase --continue`, `git add`, `git checkout -- <file>`",
+).text()
+GIT_HEAD_UNKNOWN_DENIED = Refusal(
+    Rule.GIT_OWN_BRANCH,
+    "{role} may not run `git {sub}` in {workspace}: an earlier `git checkout` or `git switch` "
+    "in this command may have left HEAD on a branch other than {branch}, the only one this "
+    "step may move",
+    "the `git {sub}` in its own command, once HEAD is on {branch}",
 ).text()
 GIT_ELSEWHERE = Refusal(
     Rule.GIT_OUTSIDE,
@@ -242,6 +267,15 @@ class Site:
     step_dir: Path
     workspace: Path
     workspace_allows: Allows = Allows.ANY
+    branch: str = ""  # the one branch the step may move; "" = no branch check (s176)
+    head: str = DETACHED  # the branch HEAD is on when the command starts
+
+
+class Position(NamedTuple):
+    """Where a link starts: its directory and the branch HEAD is on (s176)."""
+
+    base: Path | None
+    head: str
 
 
 NO_SITE = Site("", Path(), Path(), Path())
@@ -393,6 +427,139 @@ def where(site: Site, call: GitCall, base: Path | None) -> tuple[Where, str]:
     return kind, str(outside)
 
 
+# ----- s176: which branch a call moves ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class Create:
+    """The options that make checkout or switch create (or reset) a branch."""
+
+    short: str
+    long: tuple[str, ...]
+
+
+CREATES = {
+    "checkout": Create("Bb", ("--orphan",)),
+    "switch": Create("Cc", ("--create", "--force-create", "--orphan")),
+}
+
+
+def _after_sub(call: GitCall) -> list[str]:
+    return list(call.words[call.words.index(call.sub) + 1 :])
+
+
+def _is_long(word: str, names: Sequence[str]) -> bool:
+    name = word.partition("=")[0]
+    return len(name) >= LONG_PREFIX_MIN and any(n.startswith(name) for n in names)
+
+
+def _value_of(rest: list[str], i: int) -> str:
+    """The value of the option at ``rest[i]``: after ``=`` or the next word."""
+    word = rest[i]
+    if word.startswith("--") and "=" in word:
+        return word.partition("=")[2]
+    return rest[i + 1] if i + 1 < len(rest) else ""
+
+
+def _short_create(word: str, letters: str) -> str | None:
+    """The branch a short cluster such as ``-fB``, ``-Bname`` creates, ``""`` if unnamed."""
+    cut = next((i for i, c in enumerate(word[1:]) if c in letters), None)
+    return None if cut is None else word[cut + 2 :]
+
+
+def _find_created(call: GitCall) -> str | None:
+    """The branch ``checkout``/``switch`` creates or resets, or None."""
+    spec, rest = CREATES[call.sub], _after_sub(call)
+    for i, word in enumerate(rest):
+        if word == "--":
+            return None
+        if word.startswith("--"):
+            found = _value_of(rest, i) if _is_long(word, spec.long) else None
+        elif word.startswith("-"):
+            attached = _short_create(word, spec.short)
+            found = None if attached is None else attached or _value_of(rest, i)
+        else:
+            continue
+        if found is not None:
+            return found
+    return None
+
+
+def _moves_by_checkout(call: GitCall, head: str) -> str:
+    return _find_created(call) or DETACHED
+
+
+def _moves_head(call: GitCall, head: str) -> str:
+    return head
+
+
+def _moves_by_rebase(call: GitCall, head: str) -> str:
+    """The branch ``git rebase`` moves: the last operand, else the one HEAD is on."""
+    rest = _after_sub(call)
+    if REBASE_OPERATIONS & set(rest):
+        return DETACHED
+    operands = _rebase_operands(rest)
+    index = 0 if "--root" in rest else 1
+    return operands[index] if len(operands) > index else head
+
+
+def _rebase_operands(rest: list[str]) -> list[str]:
+    out, skip = [], False
+    for word in rest:
+        if skip or not word.startswith("-"):
+            out += [] if skip else [word]
+        skip = not skip and word in REBASE_VALUED
+    return out
+
+
+def _moves_by_stash(call: GitCall, head: str) -> str:
+    rest = _after_sub(call)
+    return rest[1] if rest[:1] == ["branch"] and len(rest) > 1 else DETACHED
+
+
+def _moves_none(call: GitCall, head: str) -> str:
+    return DETACHED
+
+
+BRANCH_MOVES: dict[str, Callable[[GitCall, str], str]] = {
+    "checkout": _moves_by_checkout,
+    "switch": _moves_by_checkout,
+    "reset": _moves_head,
+    "commit": _moves_head,
+    "cherry-pick": _moves_head,
+    "rebase": _moves_by_rebase,
+    "stash": _moves_by_stash,
+}
+
+
+def find_moved_branch(call: GitCall, head: str) -> str:
+    """The local branch ``call`` moves: ``head`` if it moves the current one, else DETACHED."""
+    return BRANCH_MOVES.get(call.sub, _moves_none)(call, head)
+
+
+def get_next_head(call: GitCall, head: str) -> str:
+    """The branch HEAD is on after ``call``; HEAD_UNKNOWN when a checkout leaves it unclear."""
+    if call.sub not in CREATES:
+        return head
+    rest = _after_sub(call)
+    if created := _find_created(call):
+        return created
+    if "-d" in rest or any(_is_long(w, DETACH_FLAGS) for w in rest):
+        return DETACHED
+    named = [w for w in rest if not w.startswith("-")]
+    return head if "--" in rest or not named else HEAD_UNKNOWN
+
+
+def find_branch_denial(site: Site, call: GitCall, head: str) -> str | None:
+    """The refusal when ``call`` would move a branch other than the site's own (s176)."""
+    moved = find_moved_branch(call, head)
+    if moved in (DETACHED, site.branch):
+        return None
+    template = GIT_HEAD_UNKNOWN_DENIED if moved == HEAD_UNKNOWN else GIT_OWN_BRANCH_DENIED
+    fields = _fields(site, call, "") | {"moved": f"branch {moved}", "branch": site.branch}
+    return template.format(**fields)
+
+
 # ----- G6: the rule table ---------------------------------------------------------
 
 
@@ -460,9 +627,20 @@ def git_denial(site: Site | None, links: Sequence[Link]) -> str | None:
     locked = _locked_mention(site, links)
     if locked:
         return locked
-    starts = bases(links, site.step_dir) if site else [None] * len(links)
-    reasons = (_link_denial(site, link, start) for link, start in zip(links, starts, strict=True))
+    spots = _positions(site, links)
+    reasons = (_link_denial(site, link, spot) for link, spot in zip(links, spots, strict=True))
     return next((r for r in reasons if r), None)
+
+
+def _positions(site: Site | None, links: Sequence[Link]) -> list[Position]:
+    """Each link's start directory and the branch HEAD is on there (G5, s176)."""
+    starts = bases(links, site.step_dir) if site else [None] * len(links)
+    heads, head = [], site.head if site else DETACHED
+    for link in links:
+        heads.append(head)
+        call = parse_git(strip_prefixes(link.words))
+        head = get_next_head(call, head) if call else head
+    return [Position(b, h) for b, h in zip(starts, heads, strict=True)]
 
 
 def find_unconfined_place_denial(repo: Path, links: Sequence[Link]) -> str | None:
@@ -490,15 +668,19 @@ def _locked_mention(site: Site | None, links: Sequence[Link]) -> str | None:
     return GIT_ENV_DENIED.format(role=site.role, name=name) if name else None
 
 
-def _link_denial(site: Site | None, link: Link, start: Path | None) -> str | None:
+def _link_denial(site: Site | None, link: Link, spot: Position) -> str | None:
     call = parse_git(strip_prefixes(link.words))
     if call is None:
         return None
-    place, target = where(site, call, start) if site else (Where.UNCONFINED, "")
+    place, target = where(site, call, spot.base) if site else (Where.UNCONFINED, "")
     rule = _find_rule(site, place)
     if ALLOWS[rule.allows](call):
-        return None
+        return find_branch_denial(site, call, spot.head) if _guards_branch(site, rule) else None
     return rule.reason.format(**_fields(site or NO_SITE, call, target))
+
+
+def _guards_branch(site: Site | None, rule: GitRule) -> bool:
+    return site is not None and bool(site.branch) and rule.allows is Allows.LOCAL
 
 
 def _find_rule(site: Site | None, place: Where) -> GitRule:

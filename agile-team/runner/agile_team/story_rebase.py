@@ -6,6 +6,7 @@ story's worktree; ``refusal`` judges the result before the story adopts the new 
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import system
@@ -31,7 +32,22 @@ STORY_REBASE_LINES = (
     "Resolve the conflicts in those files only: edit them, `git add` them and run `git rebase "
     "--continue` until it is done. Never merge, squash, reorder, reword, skip or drop a commit. "
     "Then hand off done.",
+    "Move no other branch: {branch} is the one local branch this step may move, and the runner "
+    "refuses git commands that move another.",
 )
+BRANCH_MOVED = "branch {branch} moved from {old} to {new}; the runner put it back"
+BRANCH_STUCK = "branch {branch} moved from {old} to {new} and moved again; the runner could not put it back"
+PUT_BACK_MESSAGE = "agile-team: put back after a story rebase step"
+HEADS_FORMAT = "--format=%(refname:short)\t%(objectname)\t%(worktreepath)"
+
+
+@dataclass(frozen=True)
+class MovedBranch:
+    """A local branch whose head differs from its value at the step's start (s176)."""
+
+    branch: str
+    old: str
+    new: str
 
 
 def is_for_devops(
@@ -53,6 +69,31 @@ def prepare(git: Git, rebase: StoryRebase) -> None:
         return
     git.run("checkout", "-B", rebase.branch)
     git.attempt(*SCRATCH_REBASE_ARGV, "--onto", rebase.onto, rebase.base)
+
+
+def read_branch_heads(git: Git, rebase: StoryRebase) -> dict[str, str]:
+    """s176: the heads of the local branches the step could move, but the rebase branch.
+
+    Branches checked out in another worktree are left out: git refuses to move them.
+    """
+    rows = (line.split("\t") for line in git.run("for-each-ref", HEADS_FORMAT, "refs/heads").splitlines())
+    free = ("", str(git.repo))
+    return {n: sha for n, sha, where in rows if where in free and n != rebase.branch}
+
+
+def list_moved_branches(git: Git, rebase: StoryRebase) -> list[MovedBranch]:
+    """s176: the branches whose head is not the one recorded at the step's start."""
+    now = read_branch_heads(git, rebase)
+    return [MovedBranch(n, old, now[n]) for n, old in rebase.heads.items() if now.get(n, old) != old]
+
+
+def put_back_branch(git: Git, moved: MovedBranch) -> str:
+    """s176: set the branch back to its old sha if it is still at its new one; say what happened."""
+    code, _ = git.attempt(
+        "update-ref", "-m", PUT_BACK_MESSAGE, f"refs/heads/{moved.branch}", moved.old, moved.new
+    )
+    template = BRANCH_STUCK if code else BRANCH_MOVED
+    return template.format(branch=moved.branch, old=moved.old, new=moved.new)
 
 
 def is_resumable(git: Git, rebase: StoryRebase) -> bool:
