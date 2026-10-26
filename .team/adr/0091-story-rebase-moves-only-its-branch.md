@@ -55,3 +55,29 @@ branch. A naive compare would bounce a good step and undo the runner's work.
   its move.
 - `git checkout <other>` (which moves HEAD, not a branch) stays allowed, and
   the existing S3 check still bounces a step that ends off its branch.
+
+## Amended by s176 design review (2026-10-25)
+
+The first build left holes in decision 1. It read `git rebase`'s operands
+with an exact list of value-taking options. git accepts long abbreviations,
+and `-S` takes its key only attached, so a command could hide the branch it
+rebases. `--update-refs`, a `-c rebase.updateRefs=true`, or a repo config
+that turns it on moves every free branch that points into the rebased
+commits. A `checkout` that fails, followed by `;`, left the tracked HEAD
+wrong. What changed:
+
+- A rebase's candidates are every operand from the `<branch>` position on,
+  plus HEAD's branch. More than one distinct candidate is refused. Only
+  options that git always gives a separate value skip a word, so an
+  unknown option can only add a candidate, never hide one.
+- `--update-refs` and any `-c` option are refused by `git-own-branch` in a
+  story rebase step. The step's env pins `rebase.updateRefs=false` through
+  `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, and the step
+  may not name a `GIT_CONFIG*` variable. A later git that adds a ref-moving
+  option or setting is still caught by decision 2.
+- The tracked HEAD follows a `checkout`/`switch` only while it is detached
+  or on the rebase branch. From another branch it stays put, because a
+  failed checkout leaves it there.
+- The record of heads is cleared every time the step ends and the compare
+  runs, not only when a branch moved, so a held step's next round starts
+  from a fresh record.

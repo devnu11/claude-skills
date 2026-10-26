@@ -3334,9 +3334,15 @@ by rule `git-own-branch`, with a refusal that names the rebase branch. That
 covers `checkout -B`/`-b`/`--orphan` and `switch -C`/`-c` naming another
 branch, `rebase <onto> <other>` (or `--root <other>`), `stash branch
 <other>`, and `reset`, `rebase`, `commit` or `cherry-pick` while HEAD is on
-another branch. The guard reads HEAD in the worktree at each Bash call and
-follows it through one command: after a `checkout`/`switch` to an operand it
-can't place, HEAD counts as unknown. `rebase --continue`/`--abort`/`--skip`,
+another branch. A `rebase` that names a branch while HEAD is on a different
+one is refused too, since it could move either. So are `rebase
+--update-refs` and any `git -c …`, which can move other branches. The step's
+env pins `rebase.updateRefs=false`, and the step may not set a
+`GIT_CONFIG*` variable. The guard reads HEAD in the worktree at each Bash
+call and follows it through one command, but only while HEAD is detached or
+on the rebase branch: after a `checkout`/`switch` to an operand it can't
+place, HEAD counts as unknown, and from another branch it stays there, since
+the checkout may fail. `rebase --continue`/`--abort`/`--skip`,
 `add`, `checkout -- <file>`, the read-only commands, and `reset` or
 `checkout -B` on the rebase branch (or with HEAD detached) still run. When
 the step starts, the runner records the heads of the local branches it could
@@ -3344,8 +3350,9 @@ move (every branch but the rebase branch and those checked out in another
 worktree) on the story's `rebase.heads`. A cut-off step keeps that record
 for its resume. When the step ends, whatever its handoff and before the
 checks below, each recorded branch that moved is put back with a checked
-`update-ref`, and the step bounces a round: `the step moved <branch> from
-<old> to <new>; the runner put it back` (one per branch). Its brief says:
+`update-ref`, and the step bounces a round: `branch <branch> moved from
+<old> to <new>; the runner put it back` (one line per branch). The record is
+then cleared, so the next round takes a fresh one. Its brief says:
 resolve, `git add`, `git rebase --continue`; never merge, squash, reorder or
 drop; move no other branch. After `done`, the runner checks that no
 operation is in progress, the tree is clean, HEAD is on the
