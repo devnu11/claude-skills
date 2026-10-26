@@ -206,12 +206,12 @@ def test_event_keys_and_values(repo: Path) -> None:
     assert event.role == stages.RUNNER_ROLE == "runner" and event.story == "s1"
     assert list(event.data) == [
         "stage", "when", "attach", "step", "attempt", "detail", "code", "raised",
-        "started_at", "started_mono", "started_slept", "seconds",
+        "error", "started_at", "started_mono", "started_slept", "seconds",
     ]  # fmt: skip
     assert event.data == {
         "stage": "gate.tests+coverage", "when": "after", "attach": "step",
         "step": "implement", "attempt": None, "detail": "uv run pytest --cov -q", "code": 0,
-        "raised": None, "started_at": 100, "started_mono": 50, "started_slept": 0.0,
+        "raised": None, "error": None, "started_at": 100, "started_mono": 50, "started_slept": 0.0,
         "seconds": about(2.0),
     }  # fmt: skip
 
