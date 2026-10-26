@@ -69,13 +69,14 @@ def test_a_stage_that_does_not_raise_has_no_error(repo: Path) -> None:
 
 
 def test_detail_and_code_name_the_call_that_raised_not_a_tolerated_one(repo: Path) -> None:
-    data = land_event(repo, UpstreamError("{"), (TOLERATED, 128), (RAISING, 1))
+    exc = UpstreamError("{", stages.Invocation(RAISING, 1))
+    data = land_event(repo, exc, (TOLERATED, 128))
     assert (data["detail"], data["code"]) == (RAISING, 1)
 
 
-def test_a_call_that_ran_before_the_raising_one_does_not_stick(repo: Path) -> None:
+def test_an_exception_without_a_call_shows_no_earlier_command(repo: Path) -> None:
     data = land_event(repo, GitError("x"), ("git fetch", 0), ("git push", 1))
-    assert (data["detail"], data["code"]) == ("git push", 1)
+    assert (data["detail"], data["code"]) == ("", None)
 
 
 def test_a_failure_in_a_stage_that_ends_well_is_still_the_first_failure(repo: Path) -> None:
@@ -99,12 +100,18 @@ def test_an_empty_or_non_text_body_still_names_the_command_and_code(body: str) -
     assert "\n" not in text
 
 
-def test_the_raw_output_is_trimmed_to_one_line() -> None:
-    prs = GhPrs(Exec(4, "HTTP 403: API rate limit exceeded\nsee docs\n"))
+def test_json_output_is_trimmed_to_one_line() -> None:
+    prs = GhPrs(Exec(4, '{\n  "message": "rate limit"\n}\n(HTTP 403)\n'))
     with pytest.raises(UpstreamError) as raised:
         prs.list_checks("abc")
     text = str(raised.value)
-    assert "\n" not in text and "HTTP 403: API rate limit exceeded" in text and "4" in text
+    assert "\n" not in text and '{ "message": "rate limit" }' in text and "HTTP 403" in text
+
+
+def test_plain_text_output_is_kept_stripped() -> None:
+    with pytest.raises(UpstreamError) as raised:
+        GhPrs(Exec(4, "HTTP 403: limit\nsee docs\n")).list_checks("abc")
+    assert str(raised.value) == "HTTP 403: limit\nsee docs"
 
 
 def test_an_error_with_a_full_message_keeps_it() -> None:
@@ -129,22 +136,25 @@ def land_work(make_runtime):
 
 def run_failing_land(make_runtime, exc: Exception):
     rt, s, work = land_work(make_runtime)
+    work.story.branch = "b"
     reports: list[dict] = []
 
-    async def dispatch(_: Work) -> dict:
-        raise exc
+    class Lander:
+        async def land(self, _: object) -> dict:
+            raise exc
 
-    s.dispatch = dispatch
+    s.lander = Lander()
     s.report_back = lambda _, report: reports.append(report)
     asyncio.run(s.run_work(work))
     return rt, reports[0]
 
 
 def test_a_raising_landing_logs_its_traceback_to_crash_log(make_runtime) -> None:
-    rt, _ = run_failing_land(make_runtime, UpstreamError("gh api x (exit 1): {"))
+    rt, report = run_failing_land(make_runtime, UpstreamError("gh api x (exit 1): {"))
     log = system.read_text(rt.config.run_dir / halt.CRASH_LOG)
     assert log.startswith("--- ") and "UpstreamError" in log.splitlines()[0]
     assert "Traceback" in log and "gh api x (exit 1): {" in log
+    assert report["status"] == "error"
 
 
 def test_the_report_reason_carries_the_error_message(make_runtime) -> None:
