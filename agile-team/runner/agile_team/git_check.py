@@ -45,9 +45,21 @@ HEAD_UNKNOWN = "~unknown"
 REBASE_OPERATIONS = frozenset(
     {"--continue", "--abort", "--skip", "--quit", "--edit-todo", "--show-current-patch"}
 )  # fmt: skip
-REBASE_VALUED = frozenset(
-    {"--onto", "-s", "--strategy", "-X", "--strategy-option", "-x", "--exec", "-S"}
+# Options git always gives a separate value (``-S``/``--gpg-sign`` take theirs attached only).
+REBASE_VALUED_SHORT = frozenset({"-s", "-X", "-C", "-x"})
+REBASE_VALUED_LONG = (
+    "--onto",
+    "--strategy",
+    "--strategy-option",
+    "--whitespace",
+    "--empty",
+    "--exec",
 )
+REBASE_UNCLEAR = "~unclear"
+OTHER_REFS = "~other-refs"
+UPDATE_REFS = ("--update-refs",)
+ROOT_FLAGS = ("--root",)
+BRANCH_ENV_LOCKED = ("GIT_CONFIG",)
 DETACH_FLAGS = ("--detach",)
 
 
@@ -134,6 +146,19 @@ GIT_HEAD_UNKNOWN_DENIED = Refusal(
     "in this command may have left HEAD on a branch other than {branch}, the only one this "
     "step may move",
     "the `git {sub}` in its own command, once HEAD is on {branch}",
+).text()
+GIT_REBASE_UNCLEAR_DENIED = Refusal(
+    Rule.GIT_OWN_BRANCH,
+    "{role} may not run `git rebase` in {workspace}: it could move more than one branch "
+    "(HEAD's and the one it names), and this step may move only {branch}",
+    "`git rebase <onto>` while HEAD is on {branch}, or `git rebase <onto> {branch}` with "
+    "HEAD on {branch} or detached",
+).text()
+GIT_OTHER_REFS_DENIED = Refusal(
+    Rule.GIT_OWN_BRANCH,
+    "{role} may not run `git {sub}` in {workspace}: `--update-refs` or a `-c` setting can "
+    "move branches other than {branch}, the only one this step may move",
+    "the same git command without `--update-refs` or `-c`",
 ).text()
 GIT_ELSEWHERE = Refusal(
     Rule.GIT_OUTSIDE,
@@ -494,13 +519,26 @@ def _moves_head(call: GitCall, head: str) -> str:
 
 
 def _moves_by_rebase(call: GitCall, head: str) -> str:
-    """The branch ``git rebase`` moves: the last operand, else the one HEAD is on."""
+    """The branch ``git rebase`` moves: HEAD's and any operand after the upstream (R1)."""
     rest = _list_args_after_sub(call)
     if REBASE_OPERATIONS & set(rest):
         return DETACHED
     operands = _split_rebase_operands(rest)
-    index = 0 if "--root" in rest else 1
-    return operands[index] if len(operands) > index else head
+    start = 0 if any(_is_long(w, ROOT_FLAGS) for w in rest) else 1
+    return _find_rebase_branch([*operands[start:], head])
+
+
+def _find_rebase_branch(candidates: list[str]) -> str:
+    """The one branch among ``candidates``, DETACHED for none, REBASE_UNCLEAR for several."""
+    named = {c for c in candidates if c != DETACHED}
+    if len(named) > 1:
+        return REBASE_UNCLEAR
+    return next(iter(named), DETACHED)
+
+
+def _is_rebase_valued(word: str) -> bool:
+    """Whether git always reads the word after ``word`` as its value."""
+    return word in REBASE_VALUED_SHORT or ("=" not in word and _is_long(word, REBASE_VALUED_LONG))
 
 
 def _split_rebase_operands(rest: list[str]) -> list[str]:
@@ -508,7 +546,7 @@ def _split_rebase_operands(rest: list[str]) -> list[str]:
     for word in rest:
         if skip or not word.startswith("-"):
             out += [] if skip else [word]
-        skip = not skip and word in REBASE_VALUED
+        skip = not skip and _is_rebase_valued(word)
     return out
 
 
@@ -534,7 +572,14 @@ BRANCH_MOVES: dict[str, Callable[[GitCall, str], str]] = {
 
 def find_moved_branch(call: GitCall, head: str) -> str:
     """The local branch ``call`` moves: ``head`` if it moves the current one, else DETACHED."""
+    if call.configs or _updates_refs(call):
+        return OTHER_REFS
     return BRANCH_MOVES.get(call.sub, _moves_none)(call, head)
+
+
+def _updates_refs(call: GitCall) -> bool:
+    """Whether a ``rebase`` asks to move the other branches that point into it (R2)."""
+    return call.sub == "rebase" and any(_is_long(w, UPDATE_REFS) for w in call.words)
 
 
 def get_next_head(call: GitCall, head: str) -> str:
@@ -566,14 +611,25 @@ def _split_dashes(rest: list[str]) -> tuple[list[str], list[str]]:
     return rest[:i], rest[i + 1 :]
 
 
+def _is_own_or_detached(site: Site, branch: str) -> bool:
+    return branch in (DETACHED, site.branch)
+
+
 def find_branch_denial(site: Site, call: GitCall, head: str) -> str | None:
     """The refusal when ``call`` would move a branch other than the site's own (s176)."""
     moved = find_moved_branch(call, head)
-    if moved in (DETACHED, site.branch):
+    if _is_own_or_detached(site, moved):
         return None
-    template = GIT_HEAD_UNKNOWN_DENIED if moved == HEAD_UNKNOWN else GIT_OWN_BRANCH_DENIED
+    template = BRANCH_DENIALS.get(moved, GIT_OWN_BRANCH_DENIED)
     fields = _fields(site, call, "") | {"moved": f"branch {moved}", "branch": site.branch}
     return template.format(**fields)
+
+
+BRANCH_DENIALS = {
+    HEAD_UNKNOWN: GIT_HEAD_UNKNOWN_DENIED,
+    REBASE_UNCLEAR: GIT_REBASE_UNCLEAR_DENIED,
+    OTHER_REFS: GIT_OTHER_REFS_DENIED,
+}
 
 
 # ----- G6: the rule table ---------------------------------------------------------
@@ -655,7 +711,8 @@ def _list_positions(site: Site | None, links: Sequence[Link]) -> list[Position]:
     for link in links:
         heads.append(head)
         call = parse_git(strip_prefixes(link.words))
-        head = get_next_head(call, head) if call else head
+        if call and (site is None or _is_own_or_detached(site, head)):
+            head = get_next_head(call, head)
     return [Position(b, h) for b, h in zip(starts, heads, strict=True)]
 
 
@@ -680,7 +737,8 @@ def _locked_mention(site: Site | None, links: Sequence[Link]) -> str | None:
     if site is None:
         return None
     words = [w for link in links for w in link.words]
-    name = next((n for n in GIT_ENV_LOCKED if any(n in w for w in words)), None)
+    locked = GIT_ENV_LOCKED + (BRANCH_ENV_LOCKED if site.branch else ())
+    name = next((n for n in locked if any(n in w for w in words)), None)
     return GIT_ENV_DENIED.format(role=site.role, name=name) if name else None
 
 
