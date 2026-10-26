@@ -8,6 +8,7 @@ use bare repos for the first and a fake for the second; they never run ``gh``.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -76,6 +77,13 @@ GH_TIMED_OUT = "gh timed out after {limit:.0f}s"
 CHECK_FIELDS = "name,state,bucket,link,workflow"
 NO_JOB = "no Actions job to re-run at {link}"
 NO_REQUIRED = "no required checks reported"
+
+GH_FAILED = "{command}: exit {code}{status}: {output}"
+GH_STATUS = ", HTTP {status}"
+NO_OUTPUT = "(no output)"
+OUTPUT_MAX = 300
+JSON_STARTS = ("{", "[")
+HTTP_STATUS = re.compile(r"\bHTTP (\d{3})\b")
 
 __all__ = ["UpstreamError"]
 
@@ -307,7 +315,7 @@ class GhPrs:
         """The newest pull request with head ``branch``."""
         fields = "number,url,state,isDraft,baseRefName"
         argv = ["pr", "list", "--head", branch, "--state", "all", "--json", fields, "--limit", "1"]
-        found = json.loads(self._gh(*argv))
+        found = self._read_gh_json(*argv)
         return _pr_of(found[0]) if found else None
 
     def create(self, spec: PrSpec) -> Pr:
@@ -347,7 +355,7 @@ class GhPrs:
         job = job_of(link)
         if job is None:
             return None
-        return job_from(json.loads(self._gh("api", f"repos/{{owner}}/{{repo}}/actions/jobs/{job}")))
+        return job_from(self._read_gh_json("api", f"repos/{{owner}}/{{repo}}/actions/jobs/{job}"))
 
     def main_checks(self, branch: str) -> list[Check]:
         """The latest check runs on ``branch``'s head commit."""
@@ -358,14 +366,15 @@ class GhPrs:
         sha: str,
     ) -> list[Check]:
         """The check runs on commit ``sha`` (or a branch name)."""
-        out = self._gh("api", f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100")
-        return [_run_check(r) for r in json.loads(out)["check_runs"]]
+        path = f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100"
+        return [_run_check(r) for r in self._read_gh_json("api", path)["check_runs"]]
 
     def close(self, pr: int, note: str) -> None:
         """Close the pull request with ``note``; a PR GitHub shows as merged is already done."""
-        code, out = self.run(["gh", "pr", "close", str(pr), "--comment", note])
+        argv = ["gh", "pr", "close", str(pr), "--comment", note]
+        code, out = self.run(argv)
         if code != 0 and not self._is_merged(pr):
-            raise UpstreamError(out.strip())
+            raise build_gh_error(argv, (code, out))
 
     def _is_merged(self, pr: int) -> bool:
         code, out = self.run(["gh", "pr", "view", str(pr), "--json", "state"])
@@ -393,15 +402,48 @@ class GhPrs:
         argv = ["gh", *args]
         code, out = self.run(argv)
         if code != 0:
-            raise UpstreamError(describe_failure(argv, (code, out)))
+            raise build_gh_error(argv, (code, out))
         return out
 
+    def _read_gh_json(self, *args: str) -> Any:
+        out = self._gh(*args)
+        try:
+            return json.loads(out)
+        except ValueError as exc:
+            invocation = stages.Invocation(" ".join(["gh", *args]), 0)
+            raise UpstreamError(format_gh_call(invocation, out), invocation) from exc
 
-def describe_failure(argv: list[str], result: tuple[int, str]) -> str:
-    """One line naming the command, its exit code and its raw output."""
-    code, out = result
-    raw = " ".join(out.split())
-    return f"{' '.join(argv)} (exit {code}): {raw}".rstrip(": ")
+
+def is_plain_text(out: str) -> bool:
+    """True when the first non-blank line of ``out`` exists and isn't JSON (s175 E5)."""
+    lines = [line.strip() for line in out.splitlines()]
+    first = next((line for line in lines if line), "")
+    return bool(first) and not first.startswith(JSON_STARTS)
+
+
+def trim_output(out: str) -> str:
+    """``out`` on one line, cut to OUTPUT_MAX; NO_OUTPUT when empty (s175 E5)."""
+    return " ".join(out.split())[:OUTPUT_MAX] or NO_OUTPUT
+
+
+def format_gh_call(invocation: stages.Invocation, out: str) -> str:
+    """GH_FAILED for the call: its command, exit code, HTTP status and output (s175 E5)."""
+    found = HTTP_STATUS.search(out)
+    status = GH_STATUS.format(status=found[1]) if found else ""
+    return GH_FAILED.format(
+        command=invocation.command, code=invocation.code, status=status, output=trim_output(out)
+    )
+
+
+def describe_gh_failure(invocation: stages.Invocation, out: str) -> str:
+    """``out.strip()`` when it is plain text, else ``format_gh_call`` (s175 E5)."""
+    return out.strip() if is_plain_text(out) else format_gh_call(invocation, out)
+
+
+def build_gh_error(argv: list[str], result: tuple[int, str]) -> UpstreamError:
+    """The UpstreamError for a failed gh call, carrying its invocation (s175 E1, E5)."""
+    invocation = stages.Invocation(" ".join(argv), result[0])
+    return UpstreamError(describe_gh_failure(invocation, result[1]), invocation)
 
 
 def _run_check(raw: dict[str, Any]) -> Check:

@@ -26,7 +26,12 @@ class Authored:
     trailers: tuple[str, ...] = ()
 
 
-class GitError(Exception):
+def format_git_command(args: Sequence[str]) -> str:
+    """The command line ``git <args>``."""
+    return f"git {' '.join(args)}"
+
+
+class GitError(stages.CommandFailed):
     """A git command exited non-zero."""
 
 
@@ -41,7 +46,9 @@ class Git:
         """Run ``git <args>`` and return stdout; raise ``GitError`` on failure."""
         proc = self._exec(*args)
         if proc.code != 0:
-            raise GitError(f"git {' '.join(args)}: {proc.err.strip()}")
+            command = format_git_command(args)
+            call = stages.Invocation(command, proc.code)
+            raise GitError(f"{command}: {proc.err.strip()}", call)
         return proc.out
 
     def attempt(self, *args: str) -> tuple[int, str]:
@@ -56,7 +63,7 @@ class Git:
 
     def _exec(self, *args: str) -> system.Completed:
         proc = system.run(system.Command(("git", *self.options, *args), self.repo))
-        stages.note(f"git {' '.join(args)}", proc.code)
+        stages.note(format_git_command(args), proc.code)
         return proc
 
     def is_repo(self) -> bool:
