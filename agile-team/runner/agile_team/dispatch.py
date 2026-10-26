@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import os
 import tomllib
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager, nullcontext
@@ -117,6 +116,7 @@ from .roles import (
     scope_note,
 )
 from .run_writer import RunWriter
+from .runner_venv import hide_runner_venv
 from .salvage import Cause, Interruption
 from .stage_log import StageLog, place_of
 from .state import RunState
@@ -272,20 +272,6 @@ class StepResult:
 
 
 ISOLATION_ENV = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
-VENV_VAR = "VIRTUAL_ENV"
-
-
-def hide_runner_venv(env: Mapping[str, str], inherited: Mapping[str, str]) -> dict[str, str]:
-    """``env`` with the runner's own venv blanked and dropped from PATH (#55).
-
-    The SDK only adds to the inherited environment, so the venv is overridden, not removed.
-    """
-    venv = inherited.get(VENV_VAR)
-    if not venv:
-        return dict(env)
-    dirs = env.get("PATH", inherited.get("PATH", "")).split(os.pathsep)
-    kept = [d for d in dirs if Path(d).parent != Path(venv)]
-    return {**env, VENV_VAR: "", "PATH": os.pathsep.join(kept)}
 
 
 def _hooks(plan: Plan, pre_tool: Any) -> dict[str, list[HookMatcher]]:

@@ -210,6 +210,41 @@ def test_a_command_in_a_stage_gets_the_plugin_environment(fake: FakeSystem) -> N
     assert env["AGILE_TEAM_TALLY"] not in fake.files  # removed afterwards
 
 
+VENV_ENV = {
+    "VIRTUAL_ENV": "/r/.venv",
+    "PATH": "/r/.venv/bin:/usr/bin",
+    "HOME": "/h",
+}
+
+
+def test_a_plain_command_does_not_see_the_runners_venv(fake: FakeSystem) -> None:
+    fake.env = dict(VENV_ENV)
+    fake.reply(("pytest",), Done(0, "ok\n"))
+    CommandShell(FAKE_REPO).run("pytest")
+    (command,) = fake.commands
+    assert "VIRTUAL_ENV" not in command.env
+    assert command.env["PATH"] == "/usr/bin" and command.env["HOME"] == "/h"
+    assert command.env["COVERAGE_FILE"] == str(FAKE_REPO / ".team/run/.coverage")
+
+
+def test_tally_run_and_retry_both_start_without_the_venv(fake: FakeSystem) -> None:
+    fake.env = dict(VENV_ENV)
+    fake.reply(("pytest",), Done(4, IMPORT_ERROR), Done(0, "plain\n"))
+    with stages.opened(NAME.GATE_TESTS_COVERAGE, PLACE):
+        CommandShell(FAKE_REPO).run("pytest")
+    for command in fake.commands:
+        assert "VIRTUAL_ENV" not in command.env
+        assert command.env["PATH"] == "/usr/bin" and command.env["HOME"] == "/h"
+
+
+def test_watching_yields_an_environment_without_the_venv(fake: FakeSystem) -> None:
+    fake.env = dict(VENV_ENV)
+    with tally_watch.watching(a_run()) as env:
+        assert "VIRTUAL_ENV" not in env
+        assert env["PATH"] == "/usr/bin" and env["HOME"] == "/h"
+        assert env["PYTEST_PLUGINS"] == "agile_team_tally"
+
+
 def test_a_record_written_by_the_command_reaches_the_stage(
     fake: FakeSystem, monkeypatch: pytest.MonkeyPatch
 ) -> None:
