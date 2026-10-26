@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
-from . import stages, system
+from . import runner_venv, stages, system
 from .config import Config, Environment
 from .guard import Scope
 from .paths import literal_root, under_root
@@ -365,8 +365,11 @@ def fresh_dir(path: Path) -> Path:
 
 
 def sandbox_env(environment: Environment, root: Path) -> dict[str, str]:
-    """The current environment with the environment's ``bin`` dirs prepended to PATH."""
-    env = dict(system.environ())
+    """The runner-venv-free environment with the environment's ``bin`` dirs prepended to PATH.
+
+    ``VIRTUAL_ENV`` and the runner venv's directory in ``PATH`` are removed first.
+    """
+    env = runner_venv.get_command_environ()
     path = [str(root / b) for b in environment.bin] + [env.get("PATH", "")]
     env["PATH"] = os.pathsep.join(p for p in path if p)
     return env
