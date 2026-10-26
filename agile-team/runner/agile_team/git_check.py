@@ -12,8 +12,8 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NamedTuple
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 from . import system
 from .paths import resolve_in
@@ -444,7 +444,7 @@ CREATES = {
 }
 
 
-def _after_sub(call: GitCall) -> list[str]:
+def _list_args_after_sub(call: GitCall) -> list[str]:
     return list(call.words[call.words.index(call.sub) + 1 :])
 
 
@@ -453,7 +453,7 @@ def _is_long(word: str, names: Sequence[str]) -> bool:
     return len(name) >= LONG_PREFIX_MIN and any(n.startswith(name) for n in names)
 
 
-def _value_of(rest: list[str], i: int) -> str:
+def _read_value_at(rest: list[str], i: int) -> str:
     """The value of the option at ``rest[i]``: after ``=`` or the next word."""
     word = rest[i]
     if word.startswith("--") and "=" in word:
@@ -461,7 +461,7 @@ def _value_of(rest: list[str], i: int) -> str:
     return rest[i + 1] if i + 1 < len(rest) else ""
 
 
-def _short_create(word: str, letters: str) -> str | None:
+def _find_short_create(word: str, letters: str) -> str | None:
     """The branch a short cluster such as ``-fB``, ``-Bname`` creates, ``""`` if unnamed."""
     cut = next((i for i, c in enumerate(word[1:]) if c in letters), None)
     return None if cut is None else word[cut + 2 :]
@@ -469,15 +469,15 @@ def _short_create(word: str, letters: str) -> str | None:
 
 def _find_created(call: GitCall) -> str | None:
     """The branch ``checkout``/``switch`` creates or resets, or None."""
-    spec, rest = CREATES[call.sub], _after_sub(call)
+    spec, rest = CREATES[call.sub], _list_args_after_sub(call)
     for i, word in enumerate(rest):
         if word == "--":
             return None
         if word.startswith("--"):
-            found = _value_of(rest, i) if _is_long(word, spec.long) else None
+            found = _read_value_at(rest, i) if _is_long(word, spec.long) else None
         elif word.startswith("-"):
-            attached = _short_create(word, spec.short)
-            found = None if attached is None else attached or _value_of(rest, i)
+            attached = _find_short_create(word, spec.short)
+            found = None if attached is None else attached or _read_value_at(rest, i)
         else:
             continue
         if found is not None:
@@ -495,15 +495,15 @@ def _moves_head(call: GitCall, head: str) -> str:
 
 def _moves_by_rebase(call: GitCall, head: str) -> str:
     """The branch ``git rebase`` moves: the last operand, else the one HEAD is on."""
-    rest = _after_sub(call)
+    rest = _list_args_after_sub(call)
     if REBASE_OPERATIONS & set(rest):
         return DETACHED
-    operands = _rebase_operands(rest)
+    operands = _split_rebase_operands(rest)
     index = 0 if "--root" in rest else 1
     return operands[index] if len(operands) > index else head
 
 
-def _rebase_operands(rest: list[str]) -> list[str]:
+def _split_rebase_operands(rest: list[str]) -> list[str]:
     out, skip = [], False
     for word in rest:
         if skip or not word.startswith("-"):
@@ -513,7 +513,7 @@ def _rebase_operands(rest: list[str]) -> list[str]:
 
 
 def _moves_by_stash(call: GitCall, head: str) -> str:
-    rest = _after_sub(call)
+    rest = _list_args_after_sub(call)
     return rest[1] if rest[:1] == ["branch"] and len(rest) > 1 else DETACHED
 
 
@@ -541,7 +541,7 @@ def get_next_head(call: GitCall, head: str) -> str:
     """The branch HEAD is on after ``call``; HEAD_UNKNOWN when a checkout leaves it unclear."""
     if call.sub not in CREATES:
         return head
-    rest = _after_sub(call)
+    rest = _list_args_after_sub(call)
     if created := _find_created(call):
         return created
     if "-d" in rest or any(_is_long(w, DETACH_FLAGS) for w in rest):
@@ -627,12 +627,12 @@ def git_denial(site: Site | None, links: Sequence[Link]) -> str | None:
     locked = _locked_mention(site, links)
     if locked:
         return locked
-    spots = _positions(site, links)
+    spots = _list_positions(site, links)
     reasons = (_link_denial(site, link, spot) for link, spot in zip(links, spots, strict=True))
     return next((r for r in reasons if r), None)
 
 
-def _positions(site: Site | None, links: Sequence[Link]) -> list[Position]:
+def _list_positions(site: Site | None, links: Sequence[Link]) -> list[Position]:
     """Each link's start directory and the branch HEAD is on there (G5, s176)."""
     starts = bases(links, site.step_dir) if site else [None] * len(links)
     heads, head = [], site.head if site else DETACHED
