@@ -968,7 +968,7 @@ story_prefix = "team/story-"   # s159: story branch names: <story_prefix><id>; m
 name = "cli"
 kind = "package"               # package | script | web | library | harness | manual | document
 prepare = "uv venv {sandbox}/venv && uv pip install --python {sandbox}/venv {repo}"
-bin = ["venv/bin"]             # prepended to the Proxy's PATH
+bin = ["venv/bin"]             # prepended to PATH for prepare, start and the Proxy
 e2e = ""                       # this environment's e2e suite, run with the full checks at sprint boundaries
 url = ""                       # web only; its host and port fill {host} and {port}
 probe = ""                     # web only: path joined to url that must answer 200 (e.g. "api/snapshot")
@@ -1419,7 +1419,9 @@ gets `VIRTUAL_ENV=""` and a `PATH` without that venv's `bin` (or `Scripts`)
 directory (#55). The commands the runner runs itself (the gate's test,
 coverage and named-test commands, the stop checks, house-rules and the
 boundary's full check) get the same `PATH` and no `VIRTUAL_ENV` at all, so
-`uv run` there doesn't warn and finds the repo's tools (s174). Everything
+`uv run` there doesn't warn and finds the repo's tools (s174). An acceptance
+environment's prepare and start commands get the same environment, with the
+environment's own `bin` directories first on `PATH` (s186). Everything
 else in the environment is the runner's.
 
 ### The PO stays in its lane

@@ -31,3 +31,13 @@ removed and the same PATH filter). `dispatch`, `commands` and `tally_watch` impo
 - Known exception, left for a follow-up story: the acceptance environments'
   `prepare`/`start` commands (`sandbox.sandbox_env`) still build from `system.environ()`
   and inherit the runner's `VIRTUAL_ENV`.
+
+## Amended by s186 (2026-10-25)
+
+The known exception is closed. `sandbox.sandbox_env` now starts from
+`get_command_environ()` and then puts the environment's `bin` dirs in front of the
+filtered `PATH`. Filtering comes first, so an environment's own venv `bin` is never
+dropped. The prepare and start commands therefore get no `VIRTUAL_ENV` and no runner
+venv `bin`. The Customer Proxy's launch still goes through `hide_runner_venv`, which
+blanks `VIRTUAL_ENV` for the SDK's merge. Why: an acceptance check must not pass or fail
+because of the runner's own Python (REQ-232, REQ-233).
