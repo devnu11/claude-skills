@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,8 @@ def test_prepare_sees_its_own_venv_not_the_runners(
 ) -> None:
     runner_venv = "/nonexistent/runner-venv"
     monkeypatch.setenv("VIRTUAL_ENV", runner_venv)
-    monkeypatch.setenv("PATH", f"{runner_venv}/bin:/usr/bin:/bin:/opt/homebrew/bin")
+    uv_dir = str(Path(shutil.which("uv") or "/usr/bin/uv").parent)
+    monkeypatch.setenv("PATH", f"{runner_venv}/bin:{uv_dir}:/usr/bin:/bin:/opt/homebrew/bin")
     config = make_config(configured)
     prepared = Preparer().prepare(config, Order(config.environments[0]))
     seen = (prepared.root / "seen.txt").read_text()
