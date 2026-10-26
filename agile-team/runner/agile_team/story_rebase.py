@@ -166,7 +166,7 @@ def _find_off_base(git: Git, rebase: StoryRebase) -> str | None:
     return NOT_ON_BASE.format(branch=rebase.branch, onto=rebase.onto) if code else None
 
 
-Opcode = tuple[str, int, int, int, int]
+type Opcode = tuple[str, int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -225,7 +225,7 @@ def _list_replaced(lists: CommitLists, opcode: Opcode) -> list[str]:
             subject=n.subject,
             maker=_get_maker(lists, n.sha),
         )
-        for o, n in zip(lists.wanted[i1 : i1 + paired], lists.found[j1 : j1 + paired])
+        for o, n in zip(lists.wanted[i1 : i1 + paired], lists.found[j1 : j1 + paired], strict=True)
     ]
     missing = _list_missing(lists, ("delete", i1 + paired, i2, j2, j2))
     extra = _list_extra(lists, ("insert", i2, i2, j1 + paired, j2))
