@@ -148,7 +148,12 @@ NOT_NOTED = frozenset({"refused", "halted"})
 DEVOPS_SECTIONS = ("toolchain", ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, "tool")
 BOUNDARY_UNGATED = frozenset({MANAGER})
 FIX_KINDS_SET = frozenset({StepKind.TEAM_FIX, StepKind.REBASE_FIX})
-REBASE_FIX_ENV = {"GIT_EDITOR": "true"}
+REBASE_FIX_ENV = {
+    "GIT_EDITOR": "true",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "rebase.updateRefs",
+    "GIT_CONFIG_VALUE_0": "false",
+}
 BARE_KINDS = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
 FAILED_WITHOUT_HANDOFF = frozenset({StepKind.GATE_FIX, StepKind.STORY_REBASE})
 REBASE_LEFT = (
@@ -1615,9 +1620,9 @@ class Runtime:
         """s176: put back each free branch the step moved; the bounce reason, else ``None``."""
         rebase = plan.story.rebase  # type: ignore[union-attr]
         moved = story_rebase.list_moved_branches(self.git, rebase) if rebase.heads else []  # type: ignore[union-attr]
+        rebase.heads = {}  # type: ignore[union-attr]
         if not moved:
             return None
-        rebase.heads = {}  # type: ignore[union-attr]
         return "\n".join(story_rebase.put_back_branch(self.git, m) for m in moved)
 
     def _find_rebase_stop(self, plan: Plan, parsed: Handoff | HandoffError) -> str | None:

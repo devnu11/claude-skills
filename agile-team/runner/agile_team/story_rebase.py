@@ -82,8 +82,13 @@ def read_branch_heads(git: Git, rebase: StoryRebase) -> dict[str, str]:
         line.split("\t")
         for line in git.run("for-each-ref", HEADS_FORMAT, "refs/heads").splitlines()
     )
-    free = ("", str(git.repo))
-    return {n: sha for n, sha, where in rows if where in free and n != rebase.branch}
+    here = system.resolve(git.repo)
+    return {n: sha for n, sha, where in rows if _is_free(where, here) and n != rebase.branch}
+
+
+def _is_free(where: str, here: Path) -> bool:
+    """Whether a branch's worktree path is none or this step's worktree (resolved)."""
+    return not where or system.resolve(Path(where)) == here
 
 
 def list_moved_branches(git: Git, rebase: StoryRebase) -> list[MovedBranch]:
