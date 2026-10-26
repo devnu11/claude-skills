@@ -2242,7 +2242,14 @@ story.
   `notify_user(kind="blocked")` no longer sets `blocked`: it posts its note
   and the run stays `running`, waiting, with the note's first line as
   `status_reason` (see "Waiting and limits"). A self re-pin also ends the
-  loop, but the run goes on in the new process (see "Self re-pin"). A stuck
+  loop, but the run goes on in the new process (see "Self re-pin"). A `done`
+  sent while a boundary is pending (one is open, or the complete sprint's end
+  boundary has not closed yet) is held (s184). The note is posted, the tool's
+  result has `held`, the status stays, and `state.json` keeps the reason as
+  `held_done` (shown by `status`). When the boundary closes, the run is marked
+  `done` with that reason. It ends before any further hand-over, `next_sprint`
+  included. A start with `--task` drops a held done, and a bare `--resume`
+  keeps it. A stuck
   Sprint Backlog is never quiet: after 3 `sprint_backlog_stuck` hand-overs
   the runner posts the stuck note and waits on the human (see "Backlog and
   sprints").
@@ -2258,6 +2265,10 @@ story.
   a Sprint Backlog story can move (`cadence until-blocker: Sprint Backlog
   stories can still move (…)`), never because Product Backlog stories are
   ready. A PR waiting for review or merge never holds the next sprint.
+  The `next_sprint` advice says how a run ends on purpose (s184). If the human
+  or the liaison told the PO to start no further sprint, the PO notifies `done`
+  quoting them. Otherwise the liaison resumes with `start --resume --cadence
+  sprint`, which stops at every sprint end.
 - `start --resume` with no `--task` runs a router pass first. The PO gets a
   turn only when that pass hands over; its prompt then starts with the resume
   note. Exception: with interrupted steps pending, the PO gets the first
@@ -4076,6 +4087,11 @@ This applies only when the runner runs from `.team/run/runner-pin`
 5. A stop requested at the same time wins. `repin` stays in `state.json`, and
    the next `start --resume` re-pins first. A start that is not pinned drops a
    leftover `repin`.
+6. A `done` the PO sent during the boundary is held in `state.json`
+   (`held_done`, s184), not in the status, which step 2 sets to `idle` and the
+   new process sets to `running`. The new process runs the rest of the
+   boundary. When it closes, the run is marked `done` with the PO's reason and
+   ends with no `next_sprint` hand-over.
 
 ## Enforcement
 

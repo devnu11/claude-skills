@@ -67,7 +67,10 @@ command fails.
    run until a blocker (`until-blocker`)? Under `until-blocker`, a sprint end
    never stops the team: the PO must start the next sprint while the Product
    Backlog has ready stories. The PO may report `done` or `blocked` only once
-   nothing in the Sprint Backlog can move. A resume keeps the cadence.
+   nothing in the Sprint Backlog can move. A resume keeps the cadence. To end
+   such a run on purpose, tell the PO to start no further sprint and notify
+   `done`. A `done` sent during the sprint-end boundary ends the run once the
+   boundary closes, across a re-pin. Or resume with `--cadence sprint`.
 5. **Start in the background:**
    write the human's task verbatim to a file with the Write tool (for example
    `.team/run/liaison/task.md`), then
