@@ -155,7 +155,10 @@ def check_of(raw: dict[str, Any]) -> Check:
 
 
 def checks_of(output: str) -> list[Check]:
-    """The checks in gh's ``--json`` output; ``[]`` when none are reported."""
+    """The checks in gh's ``--json`` output; ``[]`` when none are reported.
+
+    Non-JSON output raises a bare ``UpstreamError``; the caller adds the command.
+    """
     if NO_CHECKS in output.lower():
         return []
     try:
