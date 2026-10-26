@@ -267,7 +267,13 @@ def is_foldable(git: Git, rebase: StoryRebase) -> bool:
     checks = (_find_unfinished, _find_off_branch, _find_off_base)
     if any(check(git, rebase) for check in checks):
         return False
-    return git.head() != git.run("rev-parse", rebase.onto).strip()
+    return git.head() != git.run("rev-parse", rebase.onto).strip() and is_tip_replayed(git, rebase)
+
+
+def is_tip_replayed(git: Git, rebase: StoryRebase) -> bool:
+    """R4: the tip's subject is one of ``base..old``'s, so the role did not add it."""
+    tip = git.run("log", "-1", "--format=%s").strip()
+    return tip in {c.subject for c in list_commits(git, f"{rebase.base}..{rebase.old}")}
 
 
 def add_to_tip(git: Git, paths: list[str]) -> str:
