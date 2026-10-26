@@ -1406,7 +1406,11 @@ The runner itself runs in its own venv (`uv run --project <runner>`), which a
 role must not inherit: its Bash would then find the runner's `python` and
 `pytest` instead of the project's. When `VIRTUAL_ENV` is set, every query
 gets `VIRTUAL_ENV=""` and a `PATH` without that venv's `bin` (or `Scripts`)
-directory (#55).
+directory (#55). The commands the runner runs itself (the gate's test,
+coverage and named-test commands, the stop checks, house-rules and the
+boundary's full check) get the same `PATH` and no `VIRTUAL_ENV` at all, so
+`uv run` there doesn't warn and finds the repo's tools (s174). Everything
+else in the environment is the runner's.
 
 ### The PO stays in its lane
 
