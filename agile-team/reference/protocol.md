@@ -3328,9 +3328,27 @@ few plumbing reads. `push`, `fetch`, `pull`, `remote`, `ls-remote`,
 `git-local-only`, and so are `rebase --exec`/`-x` and `--interactive`/`-i`
 (they run shell or an editor) and `checkout`/`switch
 --ignore-other-worktrees`, abbreviations and short clusters (`-rx`)
-included. Its brief says: resolve, `git add`, `git rebase
---continue`; never merge, squash, reorder or drop. After `done`, the runner
-checks that no operation is in progress, the tree is clean, HEAD is on the
+included. Its git may also move only its own rebase branch (s176, ADR-0091).
+A command that would move any other local branch is refused before it runs,
+by rule `git-own-branch`, with a refusal that names the rebase branch. That
+covers `checkout -B`/`-b`/`--orphan` and `switch -C`/`-c` naming another
+branch, `rebase <onto> <other>` (or `--root <other>`), `stash branch
+<other>`, and `reset`, `rebase`, `commit` or `cherry-pick` while HEAD is on
+another branch. The guard reads HEAD in the worktree at each Bash call and
+follows it through one command: after a `checkout`/`switch` to an operand it
+can't place, HEAD counts as unknown. `rebase --continue`/`--abort`/`--skip`,
+`add`, `checkout -- <file>`, the read-only commands, and `reset` or
+`checkout -B` on the rebase branch (or with HEAD detached) still run. When
+the step starts, the runner records the heads of the local branches it could
+move (every branch but the rebase branch and those checked out in another
+worktree) on the story's `rebase.heads`. A cut-off step keeps that record
+for its resume. When the step ends, whatever its handoff and before the
+checks below, each recorded branch that moved is put back with a checked
+`update-ref`, and the step bounces a round: `the step moved <branch> from
+<old> to <new>; the runner put it back` (one per branch). Its brief says:
+resolve, `git add`, `git rebase --continue`; never merge, squash, reorder or
+drop; move no other branch. After `done`, the runner checks that no
+operation is in progress, the tree is clean, HEAD is on the
 new branch and descends from `onto`, and the commits match the old
 branch's by subject and in order. Then the story adopts the branch (remap,
 `branch`, `base_sha`, `replays`, worktree head), pushes it with a new draft
