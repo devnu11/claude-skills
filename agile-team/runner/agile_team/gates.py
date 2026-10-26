@@ -144,6 +144,10 @@ class DisputeStage(StrEnum):
 
 ANCESTOR_COMMAND = "git merge-base --is-ancestor {sha} HEAD"
 ADVANCE_LAST = "story {id} is at {step}, its last step; advance cannot mark it done"
+ADVANCE_REBASE = (
+    "story {id} has a queued story rebase onto {onto}; advance would only run it again under "
+    "the next step's name. Rule upgrade_model to retry it, or rescope, revise_design or escalate"
+)
 EXCERPT_LINES = 40
 TEST_GREEN = "the test command passes, so {test} is not failing"
 TEST_NOT_IN_OUTPUT = "the test command fails, but its output never names {name}; its tail:\n{tail}"
@@ -1140,6 +1144,8 @@ class Pipeline:
 
     def ruling_move_refusal(self, story: StoryState, ruling: str) -> str | None:
         """Why the ruling's move cannot be made, or ``None``."""
+        if ruling == "advance" and story.rebase is not None:
+            return ADVANCE_REBASE.format(id=story.id, onto=story.rebase.onto)
         if ruling == "advance" and story.step == self.steps[-1]:
             return ADVANCE_LAST.format(id=story.id, step=story.step)
         return None

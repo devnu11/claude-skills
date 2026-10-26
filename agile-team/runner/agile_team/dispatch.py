@@ -1633,7 +1633,38 @@ class Runtime:
         """Settle the step's tree; an unfinished story rebase leaves it untouched (S3)."""
         if self._find_rebase_stop(plan, parsed):
             return {"commit": None, "quarantine": None}
+        if plan.kind is StepKind.STORY_REBASE:
+            return self._settle_rebase_tree(plan)
         return self.settle_tree(plan)
+
+    def _settle_rebase_tree(self, plan: Plan) -> dict[str, Any]:
+        """R1: set aside out-of-scope edits and fold in-scope ones; commit nothing new."""
+        self.verify_checkout()
+        audit = restrict_config(guard.audit_step(self.git, plan.scope), self.git)
+        aside = self._set_aside(plan, audit)
+        folded = self._add_leftovers(plan, audit.in_scope)
+        if aside or folded:
+            self.record_checkout()
+        return {"commit": None, "quarantine": None} | aside | folded
+
+    def _set_aside(self, plan: Plan, audit: guard.Audit) -> dict[str, Any]:
+        """R2: set the out-of-scope edits aside off the branch and report them."""
+        if not audit.out_of_scope:
+            return {}
+        sha = guard.set_aside(self.git, audit)
+        ref = guard.SET_ASIDE_REF.format(sha=sha)
+        paths = audit.out_of_scope
+        self.emit(EventKind.QUARANTINE, plan, sha=sha, paths=paths, ref=ref)
+        return {"quarantine": sha, "set_aside": {"ref": ref, "paths": paths}}
+
+    def _add_leftovers(self, plan: Plan, paths: list[str]) -> dict[str, Any]:
+        """R3: fold the in-scope leftovers into the rebase tip when foldable."""
+        rebase = plan.story.rebase
+        if not paths or not story_rebase.is_foldable(self.git, rebase):  # type: ignore[arg-type]
+            return {}
+        sha = story_rebase.add_to_tip(self.git, paths)
+        rebase.made.append(sha)  # type: ignore[union-attr]
+        return {"folded": {"sha": sha, "paths": paths}}
 
     def _take_rebase(self, story: StoryState, rebase: Any) -> None:
         """S3: the story takes the rebased branch, remaps its shas and pushes it."""

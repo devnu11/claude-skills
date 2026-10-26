@@ -409,6 +409,18 @@ def audit_step(git: Git, scope: Scope) -> Audit:
     )
 
 
+SET_ASIDE_REF = "refs/agile-team/set-aside/{sha}"
+
+
+def set_aside(git: Git, audit: Audit) -> str:
+    """Commit the out-of-scope paths alone, keep that commit at a ref, move the branch back."""
+    sha = git.commit(audit.out_of_scope, QUARANTINE.format(role=audit.role))
+    git.run("update-ref", SET_ASIDE_REF.format(sha=sha), sha)
+    # --keep leaves the other (in-scope) unstaged edits in place; none is in the commit.
+    git.run("reset", "-q", "--keep", "HEAD^")
+    return sha
+
+
 def quarantine(git: Git, audit: Audit) -> str:
     """Commit the out-of-scope paths alone, revert that commit, return its sha."""
     sha = git.commit(audit.out_of_scope, QUARANTINE.format(role=audit.role))
