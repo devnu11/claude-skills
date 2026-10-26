@@ -234,20 +234,21 @@ def test_an_old_state_loads_without_a_held_done() -> None:
 # ----- D5: the human's new direction drops it -------------------------------------------------
 
 
-def start_of(*, task: str, resume: bool) -> Start:
-    mode = cli.StartMode.RESUME if resume else cli.StartMode.WORK
+def start_of(task: str, mode: cli.StartMode) -> Start:
     return Start(task, mode)
 
 
-def test_a_start_with_a_task_drops_the_held_done() -> None:
+@pytest.mark.parametrize("mode", [cli.StartMode.RESUME, cli.StartMode.WORK])
+def test_a_start_with_a_task_drops_the_held_done(mode: cli.StartMode) -> None:
     state = RunState(held_done=REASON)
-    cli._drop_held_done(state, start_of(task="new work", resume=True))
+    cli._drop_held_done(state, start_of("new work", mode))
     assert state.held_done is None
 
 
-def test_a_bare_resume_keeps_the_held_done() -> None:
+@pytest.mark.parametrize("mode", [cli.StartMode.RESUME, cli.StartMode.WORK])
+def test_a_start_without_a_task_keeps_the_held_done(mode: cli.StartMode) -> None:
     state = RunState(held_done=REASON)
-    cli._drop_held_done(state, start_of(task="", resume=True))
+    cli._drop_held_done(state, start_of("", mode))
     assert state.held_done == REASON
 
 
@@ -281,7 +282,7 @@ def test_status_shows_done_and_the_reason_after_the_run_ends(make_runtime) -> No
     BoundaryRunner(rt)._close(rt.state.boundary, "")
     rt.save()
     report = cli.status_report(rt.config)
-    assert report["status"] != "running" and report["status"] != "blocked"
+    assert report["status"] is RunStatus.DONE
     assert report["status_reason"] == REASON and report["held_done"] is None
 
 
