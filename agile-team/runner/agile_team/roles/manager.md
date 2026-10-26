@@ -62,7 +62,7 @@ brief says why, and gives you the numbers.
 - Rulings: a ruling in the handoff's `ruling` field, one of `rescope`,
   `upgrade_model`, `revise_design`, `escalate`, `advance`. `escalate` blocks
   the story until the human decides. `advance` moves the story past a gate no
-  role can satisfy, to the next step. A ruling applies to the story your step runs on, at
+  role can satisfy, to the next step. It can't move a story whose story rebase is queued; rule `upgrade_model` to retry the rebase. A ruling applies to the story your step runs on, at
   any step, and resets its rounds. It cannot move a done story, and it needs a
   story.
 
