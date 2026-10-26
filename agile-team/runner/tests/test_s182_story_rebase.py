@@ -168,6 +168,7 @@ def test_a_rebase_in_progress_is_not_foldable(fake: FakeSystem, monkeypatch) -> 
 
 
 def test_add_to_tip_amends_with_exactly_the_paths_and_keeps_the_message(fake: FakeSystem) -> None:
+    fake.reply(("rev-parse", "HEAD"), Done(0, FAKE_HEAD + "\n"))
     got = story_rebase.add_to_tip(Git(FAKE_REPO), ["a.py", "docs/b.md"])
     argvs = [c.argv[1:] for c in fake.commands if c.argv[:1] == ("git",)]
     assert got == FAKE_HEAD
@@ -207,6 +208,7 @@ def test_an_old_state_without_made_loads_empty() -> None:
 
 
 def test_set_aside_commits_alone_keeps_a_ref_and_moves_the_branch_back(fake: FakeSystem) -> None:
+    fake.reply(("rev-parse", "HEAD"), Done(0, FAKE_HEAD + "\n"))
     git = Git(FAKE_REPO)
     audit = Audit("developer", ["src/a.py"], ["tests/x"])
     sha = guard.set_aside(git, audit)
