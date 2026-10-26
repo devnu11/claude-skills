@@ -177,20 +177,7 @@ class Prs(Protocol):
         """Wait for the PR's checks to finish; False when ``limit_s`` ran out."""
 
     def checks(self, number: int) -> list[Check]:
-        """The PR's checks now; gh's exit code says only pass or fail, so it is ignored."""
-        argv, result = self._run_checks(number)
-        try:
-            return checks_of(result[1])
-        except UpstreamError as exc:
-            raise build_gh_decode_error(argv, result) from exc
-
-    def _run_checks(self, number: int) -> tuple[list[str], tuple[int, str]]:
-        argv = ["gh", "pr", "checks", str(number), "--required", "--json", CHECK_FIELDS]
-        result = self.run(argv)
-        if NO_REQUIRED not in result[1].lower():
-            return argv, result
-        argv = [a for a in argv if a != "--required"]
-        return argv, self.run(argv)
+        """The PR's checks now ([] when none are reported)."""
 
     def job(self, link: str) -> Job | None:
         """The Actions job behind a check link; None when the link names no job."""
@@ -357,15 +344,20 @@ class GhPrs:
 
     def checks(self, number: int) -> list[Check]:
         """The PR's checks now; gh's exit code says only pass or fail, so it is ignored."""
-        argv = ["gh", "pr", "checks", str(number), "--required", "--json", CHECK_FIELDS]
-        out = self.run(argv)[1]
-        if NO_REQUIRED in out.lower():
-            out = self.run([a for a in argv if a != "--required"])[1]
+        argv, result = self._run_checks(number)
         try:
-            return checks_of(out)
+            return checks_of(result[1])
         except UpstreamError as exc:
-            invocation = stages.Invocation(" ".join(argv), 0)
-            raise UpstreamError(format_gh_call(invocation, out), invocation) from exc
+            raise build_gh_decode_error(argv, result) from exc
+
+    def _run_checks(self, number: int) -> tuple[list[str], tuple[int, str]]:
+        """Run ``gh pr checks``; retry without ``--required`` when none are required."""
+        argv = ["gh", "pr", "checks", str(number), "--required", "--json", CHECK_FIELDS]
+        result = self.run(argv)
+        if NO_REQUIRED not in result[1].lower():
+            return argv, result
+        argv = [a for a in argv if a != "--required"]
+        return argv, self.run(argv)
 
     def job(self, link: str) -> Job | None:
         """The Actions job behind a check link; None when the link names no job."""
