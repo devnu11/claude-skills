@@ -275,7 +275,6 @@ class Run:
 
     def note(self, command: str, code: int) -> None:
         """Keep the first failing command, else the latest one."""
-        self.last = (command, code)
         if self.code:
             return
         self.detail, self.code = command, code

@@ -348,7 +348,11 @@ class GhPrs:
         out = self.run(argv)[1]
         if NO_REQUIRED in out.lower():
             out = self.run([a for a in argv if a != "--required"])[1]
-        return checks_of(out)
+        try:
+            return checks_of(out)
+        except UpstreamError as exc:
+            invocation = stages.Invocation(" ".join(argv), 0)
+            raise UpstreamError(format_gh_call(invocation, out), invocation) from exc
 
     def job(self, link: str) -> Job | None:
         """The Actions job behind a check link; None when the link names no job."""
