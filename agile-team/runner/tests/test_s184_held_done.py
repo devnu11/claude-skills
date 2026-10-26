@@ -17,7 +17,7 @@ from agile_team.state import RunState, RunStatus
 
 from .fake_system import Done, FakeSystem
 from .test_po_tools import call
-from .test_s128_keep_going import ended_sprint
+from .test_s128_keep_going import ended_sprint, stuck_sprint
 
 REASON = "Stop after 52"
 NOTE = f"{REASON}\nmore detail"
@@ -80,6 +80,28 @@ def test_done_with_the_end_boundary_closed_marks_done_at_once(make_runtime) -> N
     assert set(out) == {"id"}
     assert rt.state.status is RunStatus.DONE and rt.state.status_reason == REASON
     assert rt.state.held_done is None
+
+
+@pytest.mark.parametrize("cadence", ["sprint", "until-blocker"])
+def test_done_on_an_open_incomplete_sprint_lands_at_once(make_runtime, cadence: str) -> None:
+    rt = stuck_sprint(make_runtime, cadence)
+    assert rt.state.sprint_open() and not rt.state.sprint_complete()
+    assert rt.state.boundary is None
+    out = done_call(rt)
+    assert set(out) == {"id"}
+    assert rt.state.status is RunStatus.DONE and rt.state.status_reason == REASON
+    assert rt.state.held_done is None
+
+
+def test_closing_a_start_boundary_on_an_incomplete_sprint_releases_the_held_done(
+    make_runtime,
+) -> None:
+    rt = stuck_sprint(make_runtime)
+    rt.state.boundary = bd.Boundary(bd.Edge.START, 1)
+    assert "held" in done_call(rt)
+    BoundaryRunner(rt)._close(rt.state.boundary, "")
+    assert rt.state.status is RunStatus.DONE and rt.state.status_reason == REASON
+    assert rt.state.held_done is None and rt.state.boundary is None
 
 
 def test_a_refused_done_holds_nothing(make_runtime) -> None:
