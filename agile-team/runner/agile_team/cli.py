@@ -474,6 +474,7 @@ def _prepared(
     kept = runtime.state.cadence if start.mode is StartMode.RESUME else config.team.cadence
     runtime.state.cadence = args.cadence or kept
     _record_task(runtime.state, start)
+    _drop_held_done(runtime.state, start)
     repin.drop_unpinned(runtime)
     return runtime
 
@@ -516,6 +517,12 @@ def _record_task(state: state_mod.RunState, start: Start) -> None:
     """Remember the run's task; a resume's ``--task`` is only a message to the PO."""
     if start.mode is not StartMode.RESUME:
         state.task = start.task
+
+
+def _drop_held_done(state: state_mod.RunState, start: Start) -> None:
+    """s184: new work from the human cancels a held done."""
+    if start.task:
+        state.held_done = None
 
 
 UNATTENDED_HEARTBEAT = "UNATTENDED_HEARTBEAT"
@@ -635,6 +642,7 @@ def status_report(config: config_mod.Config) -> dict[str, Any]:
     return {
         "status": state_mod.shown_status(config.run_dir, st),
         "status_reason": st.status_reason,
+        "held_done": st.held_done,
         "cadence": st.cadence,
         "sprint": st.sprint,
         "running": state_mod.runner_alive(config.run_dir),

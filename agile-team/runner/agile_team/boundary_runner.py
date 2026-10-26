@@ -308,6 +308,7 @@ class BoundaryRunner:
         if b.edge is Edge.END:
             self.mine.closed, self.mine.report = b.sprint, report
         self.runtime.state.boundary = None
+        self.runtime.state.release_held_done()
 
     def _finish(self, b: Boundary, report: str = "", **data: Any) -> None:
         self._close(b, report)

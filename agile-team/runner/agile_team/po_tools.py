@@ -86,7 +86,7 @@ from .sprint_add import (  # noqa: F401  (re-exported)
     SprintAdd,
 )
 from .stage_log import place_of
-from .state import ModelOverride, RunStatus
+from .state import ModelOverride, RunState, RunStatus
 from .story_admin import Act, Clerk
 from .workspaces import Workspaces
 
@@ -143,6 +143,16 @@ def _no_refusal(_runtime: Runtime) -> str | None:
 
 def _keep_going_refusal(runtime: Runtime) -> str | None:
     return sprint_end.keep_going_refusal(runtime.state, runtime.relay.blocked_stories())
+
+
+DONE_HELD = (
+    "Your done is held: sprint {sprint}'s end boundary is still open. The run ends done "
+    "when it closes; end your turn."
+)
+
+
+def _end_pending(state: RunState) -> bool:
+    return state.boundary is not None or state.sprint_open()
 
 
 KIND_REFUSALS: dict[str, Callable[[Runtime], str | None]] = {
@@ -587,12 +597,21 @@ class Tools:
         if text := KIND_REFUSALS.get(kind, _no_refusal)(self.runtime):
             return text_result(refused(text))
         msg = self.runtime.relay.post(Note(kind, args["text"], args.get("stories", [])))
+        if kind == "done" and _end_pending(self.runtime.state):
+            return self._hold_done(msg.id, args["text"])
         if kind in STATUS_KINDS or kind == "blocked":
             reason = args["text"].splitlines()[0][:REASON_CUT] if args["text"] else None
             status = RunStatus(kind) if kind in STATUS_KINDS else RunStatus.RUNNING
             self.runtime.state.mark(status, reason)  # I4: waiting on the human ends nothing
             self.runtime.save()
         return text_result({"id": msg.id})
+
+    def _hold_done(self, msg_id: str, text: str) -> dict[str, Any]:
+        """s184: keep the PO's done until the sprint end boundary closes."""
+        state = self.runtime.state
+        state.held_done = text.splitlines()[0][:REASON_CUT] if text else ""
+        self.runtime.save()
+        return text_result({"id": msg_id, "held": DONE_HELD.format(sprint=state.sprint)})
 
     async def reply_story(self, args: dict[str, Any]) -> dict[str, Any]:
         """Answer the human on a story's thread (s84)."""
