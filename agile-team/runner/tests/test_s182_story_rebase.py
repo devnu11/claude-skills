@@ -133,6 +133,8 @@ def foldable(fake: FakeSystem) -> None:
     fake.reply(("merge-base", "--is-ancestor"), Done(0))
     fake.reply(("rev-parse", REBASE.onto), Done(0, REBASE.onto + "\n"))
     fake.reply(("rev-parse", "HEAD"), Done(0, FAKE_HEAD + "\n"))
+    fake.reply(("log", "-1", "--format=%s"), Done(0, "replayed\n"))
+    fake.reply(("log", "--reverse"), Done(0, f"{REBASE.old}\treplayed\n"))
 
 
 def test_a_finished_rebase_with_a_commit_over_onto_is_foldable(fake: FakeSystem) -> None:

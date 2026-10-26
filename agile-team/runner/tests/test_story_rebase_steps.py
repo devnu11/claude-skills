@@ -332,6 +332,8 @@ def finished(view: dispatch.Runtime, plan: Plan, fake: FakeSystem, *changed: str
     fake.reply(("symbolic-ref",), Done(0, REBASED + "\n"))
     fake.reply(("rev-parse", "--absolute-git-dir"), Done(0, GIT_DIR + "\n"))
     fake.reply(("rev-parse", ONTO), Done(0, ONTO + "\n"))
+    fake.reply(("log", "-1", "--format=%s"), Done(0, "replayed\n"))  # the tip is a replayed one
+    fake.reply(("log", "--reverse"), Done(0, f"{OLD_TIP}\treplayed\n"))
     fake.reply(("status", "--porcelain=v1"), Done(0, "".join(f" M {p}\0" for p in changed)))
 
 
