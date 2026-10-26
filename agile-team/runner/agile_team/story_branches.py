@@ -52,6 +52,7 @@ class StoryRebase:
     files: list[str]
     role: str
     heads: dict[str, str] = field(default_factory=dict)  # s176: free branch -> sha at the start
+    made: list[str] = field(default_factory=list)  # s182: tips the runner made by folding
 
 
 def format_story_branch(
