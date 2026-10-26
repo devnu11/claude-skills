@@ -236,6 +236,26 @@ def test_sandbox_env(scratch: Path, fake: FakeSystem) -> None:
     assert sandbox.sandbox_env(Environment("x", "package"), scratch)["PATH"] == ""
 
 
+def test_sandbox_env_hides_the_runners_venv(scratch: Path, fake: FakeSystem) -> None:
+    fake.env = {"VIRTUAL_ENV": "/r/.venv", "PATH": "/r/.venv/bin:/usr/bin", "K": "v"}
+    env = sandbox.sandbox_env(Environment("x", "package", bin=["b", "c"]), scratch)
+    assert "VIRTUAL_ENV" not in env
+    assert env["PATH"] == os.pathsep.join([str(scratch / "b"), str(scratch / "c"), "/usr/bin"])
+    assert env["K"] == "v"
+
+
+def test_sandbox_env_keeps_other_venvs_on_path(scratch: Path, fake: FakeSystem) -> None:
+    fake.env = {"VIRTUAL_ENV": "/r/.venv", "PATH": "/r/.venv/bin:/p/.venv/bin:/bin"}
+    env = sandbox.sandbox_env(Environment("x", "package"), scratch)
+    assert env["PATH"] == "/p/.venv/bin:/bin"
+
+
+def test_sandbox_env_without_a_runner_venv_is_unchanged(scratch: Path, fake: FakeSystem) -> None:
+    fake.env = {"PATH": "/r/.venv/bin:/bin"}
+    env = sandbox.sandbox_env(Environment("x", "package"), scratch)
+    assert env["PATH"] == "/r/.venv/bin:/bin"
+
+
 def test_sandbox_env_is_a_copy(fake: FakeSystem, scratch: Path) -> None:
     fake.env["K"] = "v"
     env = sandbox.sandbox_env(Environment("x", "package"), scratch)
