@@ -92,3 +92,23 @@ Without this rule, the PO meter would go red for a moment after every role step 
 - Event log stays sparse (one line per step, gate, ruling).
 - Ledger cost and tokens are never live estimates.
 - No new runtime dependencies (stdlib, bundled SDK only).
+
+## Amended by s181 (2026-10-25)
+
+**Context.** `Pulse.doing` kept one chore and restored the one it replaced
+on exit. That is right only when chores nest last-in-first-out. Since s159
+stories run in parallel tasks and threads, so two chores overlap and end in
+any order: A opens, B opens (saved A), A ends, B ends and restores A. A's
+finished chore then stayed on the heartbeat for hours.
+
+**Decision.** The heartbeat holds a list of open chores, like `stages`:
+`"chores": [{"what", "story", "since"}, …]`, oldest first, replacing the
+single `chore` key. `doing` appends its own row and removes that row by
+identity on exit; it never restores anything. Each row names its story
+(`null` for run-wide work). `HEARTBEAT_VERSION` becomes 3, because a key is
+removed, not added. Health still reads one chore for its words: the oldest
+open one, since the longest-running chore is the one a human should look at.
+
+**Consequences.** Readers of `chore` (health, the dashboard) read `chores`.
+The live panel shows one row per open chore. A reader that still looks for
+`chore` sees none, which is safe: it shows no chore rather than a wrong one.
