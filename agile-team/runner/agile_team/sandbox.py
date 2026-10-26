@@ -365,7 +365,10 @@ def fresh_dir(path: Path) -> Path:
 
 
 def sandbox_env(environment: Environment, root: Path) -> dict[str, str]:
-    """The current environment with the environment's ``bin`` dirs prepended to PATH."""
+    """The runner-venv-free environment with the environment's ``bin`` dirs prepended to PATH.
+
+    ``VIRTUAL_ENV`` and the runner venv's directory in ``PATH`` are removed first.
+    """
     env = runner_venv.get_command_environ()
     path = [str(root / b) for b in environment.bin] + [env.get("PATH", "")]
     env["PATH"] = os.pathsep.join(p for p in path if p)
