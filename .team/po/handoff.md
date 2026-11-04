@@ -1,23 +1,27 @@
-# PO handoff (sprint 54, in progress)
+# PO handoff (sprint 55, just started)
 
 ## State
-- Sprint 54 goal: fix runner bugs found in sprints 52 and 53.
-- Scope: s182, s183, s184, s186. s180 stays PO-HELD in sprint 54 (liaison t246/t247 choice b): it can't be reverted (no commits); the liaison will stop the run, move it out by hand and remove the leftover local team/story-s180 branch. Do NOT call start_sprint or revert s180. s177 was reverted to the Product Backlog (waits for the human, m284).
-- s183, s184, s186: done (landed).
-- s182: at land, round 2. Landing hit a merge conflict in agile-team/docs/architecture.md (land_bounced). I called continue_story with a note: developer-cli rebases team/story-s182 onto the sprint head (3e27f67), keeps both sides' architecture.md lines, no squash or reorder. Land then runs again. Earlier it was at e2e r3; its review is .team/run/worktrees/s182/.team/reviews/s182.md.
-- A "Sprint Backlog stuck" hand-over (1 of 3) came before my continue_story. If it comes again with s182 still held, act on s182 (release_story/continue_story, or run_role developer-cli) rather than ignoring it. After 3 stuck hand-overs with no action the run is set blocked.
-- Budget at session start about $292 of $1500 left. Raise only in small steps.
+- Sprint 55 goal: fix s180 (runner's own commits move the sprint head and drop pushed landings; fresh design from main, architect allocates new REQ/ADR ids; branch liaison/s180-r1-kept is reference only) and s185 (s159 follow-up per REQ-160 with the resume rules of REQ-193/194).
+- Scope: s180 and s185 ONLY. Pull nothing else in. q40-q43 and s187-s190 are Product Backlog stories and do not join. The last sprint of this run: when it ends, notify_user kind `done` once and start no sprint 56.
+- Sprint 54 is closed (PR #82 on main at 14c30be9; the liaison closed its end boundary by hand on 10-26). Don't replay it or call continue_boundary for it. Sprint 55's start boundary should bring in main's one newer commit (render-markdown test fix).
+- Runner pin: 76eacf9.
+- start_sprint(55) succeeded; the runner runs the manager next.
+
+## Limits (liaison t249, today 2026-11-04)
+- About $60 for the sprint, $75 hard stop, counted from the sprint start (budget at start: $1239.25 spent of $1500). Raise the budget only in small steps if ever needed.
+- Job deadline 2026-11-05 08:00 CDT. Any story not at `land` by 07:00 that day goes back to the Product Backlog.
+- Stop conditions (t237): quarantined twice, a pin change, a GitHub rate limit, a rebase step bouncing twice; plus (t248) a second action against a liaison tell. When one hits, tell the liaison.
 
 ## Open decisions / pending questions
-- None waiting on the human. No pending ask_user ids.
+- None waiting on the human. No pending ask_user ids. m391 (sprint 54 boundary loop) was resolved by the liaison.
 
 ## Next
-- Handle runner hand-overs. Limits from t246: about $60 for the sprint, $75 hard stop. A story not at `land` by 07:30 on 10-26 goes to the Product Backlog. Job deadline 09:00. Stop conditions (t237): quarantined twice, a pin change, a GitHub rate limit, a rebase step bouncing twice (a second s182 land bounce is a stop condition: tell the liaison).
-- When s182 has landed (s183, s184, s186 already have): notify_user kind `done` once, then tell the liaison. Do not start sprint 55 even if the hand-over asks for one. Do not call a PR ready except on `ci_green`.
-- Routing rules: a review needing real git goes to the integration-tester (s152); findings naming only test files go to the unit-tester or integration-tester, not implement (s179). When a reviewer names a non-role owner, the runner puts the story at implement and run_role is refused: ask the manager for a ruling, make sure its ruling and fault agree on one next step, then continue_story with a note listing the findings.
-- Do not call story_status: its output is over 650,000 characters. Rely on the hand-over lines.
+- Handle runner hand-overs for s180 and s185.
+- Routing rules: real-git reviews go to the integration-tester (s152); findings naming only test files go to the unit-tester or integration-tester, not implement (s179). When a reviewer names a non-role owner, ask the manager for a ruling and then continue_story with a note listing the findings.
+- A "Sprint Backlog stuck" hand-over: act on the named story (release_story/continue_story, run_role); 3 with no action sets the run blocked.
+- Only call a PR ready on `ci_green`. A CI failure becomes a request_story bug, not a retry.
+- Don't call story_status: its output is over 650,000 characters.
 
 ## Artifacts
-- Stories: .team/stories/ (s182, s183, s184, s186, s180, s177).
-- Designs: agile-team/docs/design/. Reviews of sprint stories: .team/run/worktrees/<id>/.team/reviews/. Acceptance: .team/acceptance/.
-- Liaison messages: .team/run/liaison/messages/t246.md, t247.md.
+- Liaison messages: .team/run/liaison/messages/t248.md, t249.md.
+- Stories: .team/stories/ (s180, s185). Designs: agile-team/docs/design/. Reviews: .team/run/worktrees/<id>/.team/reviews/. Acceptance: .team/acceptance/.
