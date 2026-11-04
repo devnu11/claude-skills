@@ -15,6 +15,7 @@ from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
 from agile_team.sprint_add import boundary_text
 from agile_team.state import RunState
+from agile_team.story_branches import Landed
 
 from .conftest import write_story
 from .fake_system import Done, FakeSystem
@@ -54,6 +55,11 @@ def leave(t: Tools, story: str = "s1", reason: str = REASON) -> dict:
 
 def events_of(rt, kind: str) -> list[Event]:
     return [e for e in rt.events.events() if e.kind == kind]
+
+
+def noted(t: Tools, reason: str = REASON) -> dict:
+    """The call as the PO's turn makes it: through ``noted``, which applies STUCK_RESETS."""
+    return call(t.noted("remove_from_sprint")({"story": "s1", "reason": reason}))
 
 
 def file_text(rt, story: str = "s1") -> str:
@@ -120,7 +126,7 @@ def test_the_story_file_records_the_move(make_runtime, fake: FakeSystem) -> None
     assert re.fullmatch(pattern + re.escape(f"{CRASH}; PO hold: hold it."), line)
     assert len(fake.tree.commits) == commits + 1
     assert fake.tree.commits[-1].subject() == sprint_leave.RECORD_SUBJECT.format(story="s1")
-    assert out["record"] == rt.git.head() and rt.state.checkout.sha == rt.git.head()
+    assert out["record"] == rt.git.head() and rt.state.checkout.head == rt.git.head()
 
 
 def test_a_second_removal_adds_a_line_under_the_same_heading(make_runtime) -> None:
@@ -139,11 +145,10 @@ def test_a_second_removal_adds_a_line_under_the_same_heading(make_runtime) -> No
 
 def test_no_story_file_means_no_record_and_no_commit(make_runtime, fake: FakeSystem) -> None:
     rt, t = setup(make_runtime)
-    system.unlink(rt.config.stories_dir / "s1.md")
-    rt.settle_po()
-    rt.record_checkout()
+    add_story(rt, "s3", "design")  # no story file written
+    rt.save()
     commits = len(fake.tree.commits)
-    out = leave(t)
+    out = leave(t, story="s3")
     assert out["status"] == "removed" and out["record"] == ""
     assert len(fake.tree.commits) == commits
 
@@ -218,14 +223,14 @@ def test_no_worktree_means_no_branch_event(make_runtime) -> None:
 def test_not_refused_resets_stuck_asks(make_runtime) -> None:
     rt, t = setup(make_runtime)
     rt.state.stuck_asks = 2
-    leave(t)
+    noted(t)
     assert rt.state.stuck_asks == 0
 
 
 def test_a_refused_call_keeps_stuck_asks(make_runtime) -> None:
     rt, t = setup(make_runtime)
     rt.state.stuck_asks = 2
-    leave(t, reason="")
+    noted(t, reason="")
     assert rt.state.stuck_asks == 2
 
 
@@ -251,7 +256,7 @@ def notify_end(t: Tools) -> dict:
 def test_until_blocker_no_longer_names_it(make_runtime) -> None:
     rt, t = setup(make_runtime, steps=("s1", "s2"))
     rt.state.cadence = sprint_end.UNTIL_BLOCKER
-    rt.state.stories["s2"].hold = "h"
+    rt.state.stories["s1"].hold, rt.state.stories["s2"].hold = None, "held"
     assert "s1" in sprint_end.keep_going_refusal(rt.state, set())
     leave(t)
     assert sprint_end.keep_going_refusal(rt.state, set()) is None
@@ -292,7 +297,7 @@ def test_code_commits_are_work(make_runtime) -> None:
 
 def test_a_landing_is_work(make_runtime) -> None:
     def mutate(rt) -> None:
-        rt.state.stories["s1"].landed = SimpleNamespace()
+        rt.state.stories["s1"].landed = Landed("m" * 40)
 
     work_refused(make_runtime, mutate, sprint_leave.LANDED)
 
