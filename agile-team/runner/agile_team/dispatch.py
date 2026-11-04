@@ -1981,7 +1981,9 @@ class Runtime:
 
     def _attach_gate_tree(self, plan: Plan) -> None:
         """s187 G3: append the head fix's ``Tree:`` section to the prompt and the brief."""
-        fix = plan.story.fixes[0]  # type: ignore[union-attr]
+        if plan.story is None or not plan.story.fixes:
+            return
+        fix = plan.story.fixes[0]
         text = "\n".join(owners_mod.format_tree_lines(fix, self._read_tree(fix)))
         plan.prompt += "\n\n" + text
         plan.brief += "\n\n" + text
