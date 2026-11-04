@@ -11,6 +11,7 @@ from agile_team.halt import HaltKind
 from agile_team.story_branches import Landed
 
 from .fake_system import Done
+from .late import Late
 from .test_s159_landing import (
     HEAD,
     LAND,
@@ -26,6 +27,12 @@ from .test_s159_landing import (
 )
 
 MOVED, REMOTE = "e" * 40, "a" * 40
+lc = Late("landing_carry")
+
+
+def off_head(fake) -> None:
+    """The merge's first parent is not an ancestor of the sprint head: nothing can be carried."""
+    fake.reply(("merge-base", "--is-ancestor"), Done(1))
 
 
 def dropped(rt) -> list:
@@ -65,6 +72,7 @@ def test_a_resume_with_the_merge_off_the_head_gives_up_and_merges_afresh_g1(
     rt, story, entry = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
     fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, MOVED + "\n"), Done(0, HEAD + "\n"))
+    off_head(fake)
     land(rt, story)
     assert [e.data["why"] for e in dropped(rt)] == ["sprint head moved"]
     assert len(issued(fake, "merge", "--no-ff")) == 1
@@ -76,7 +84,7 @@ def test_giving_up_clears_landed_and_deletes_the_landing_branch_with_its_lease_g
 ) -> None:
     rt, story, entry = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
-    asyncio.run(lander(rt).give_up(attempt_of(rt, story, entry), "why"))
+    asyncio.run(lander(rt).give_up(attempt_of(rt, story, entry), lc.Drop("why")))
     assert story.landed is None
     [delete] = issued(fake, "push", f":refs/heads/{LAND}")
     assert any(f"{LAND}:{MERGE}" in a for a in delete)
@@ -86,7 +94,7 @@ def test_a_landing_branch_that_is_already_gone_is_not_an_error_g3(make_runtime, 
     rt, story, entry = setup(make_runtime, fake)
     fake.reply(("push", f":refs/heads/{LAND}"), Done(1, "unable to delete: remote ref"))
     attempt = attempt_of(rt, story, entry)
-    asyncio.run(lander(rt).give_up(attempt, "why"))
+    asyncio.run(lander(rt).give_up(attempt, lc.Drop("why")))
     assert attempt.merge == "" and len(dropped(rt)) == 1
 
 
@@ -266,6 +274,7 @@ def test_a_head_that_moves_during_ci_gives_up_the_merge_before_the_push_k6(
 
     def move_head() -> None:
         entry.head = MOVED
+        off_head(fake)
 
     probe = probed(rt, monkeypatch, act=move_head)
     run_with(rt, probe, story)
@@ -288,6 +297,7 @@ def test_local_mode_gives_up_a_stale_merge_without_a_fast_forward_k3(
     checks(monkeypatch)
     rt, story, _ = setup(make_runtime, fake, push=Permission.NO)
     fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, MOVED + "\n"))
+    off_head(fake)
     land(rt, story)
     assert ff(fake) == []
     assert dropped(rt) and dropped(rt)[0].data["why"] == "sprint head moved"

@@ -51,6 +51,7 @@ def test_trigger_values_are_snake_case() -> None:
         "worktree_drift",
         "land_bounced",
         "overlap",
+        "landing_dropped",
     ]
 
 
@@ -86,6 +87,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.STORY_CI_RED,
         T.WORKTREE_DRIFT,
         T.LAND_BOUNCED,
+        T.LANDING_DROPPED,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
@@ -375,3 +377,64 @@ def test_runner_fault_points_at_the_human_and_advance_not_a_runner_story() -> No
     assert "Open a story" not in line
     assert "The human fixes the runner or its setup" in line
     assert "advance" in line
+
+
+# ---------- s180 C7: landing_dropped ----------
+
+DROP = {
+    "merge": "m" * 40,
+    "why": "sprint head moved",
+    "moved_by": ["abc1234 docs(s2): amend", "def5678 chore: step"],
+    "refusal": "carrying abc1234 docs(s2): amend onto mmmm stopped on a conflict in a.md",
+}
+
+
+def dropped_report(*drops, **extra) -> dict:
+    return {"status": "done", "role": "runner", "land": {"dropped": list(drops), **extra}}
+
+
+def test_landing_dropped_is_a_story_scope_trigger_c7() -> None:
+    assert T.LANDING_DROPPED == "landing_dropped"
+    assert T.LANDING_DROPPED not in handover.RUN_WIDE
+    assert T.LANDING_DROPPED in handover.UNHELD
+
+
+def test_landing_dropped_matches_only_with_dropped_commits_c7() -> None:
+    assert T.LANDING_DROPPED in handover.triggers(dropped_report(DROP))
+    assert T.LANDING_DROPPED not in handover.triggers(dropped_report())
+    assert T.LANDING_DROPPED not in handover.triggers({"status": "done", "role": "runner"})
+
+
+def test_the_line_names_the_merge_the_refusal_and_every_commit_c7() -> None:
+    [line] = handover.report_lines(dropped_report(DROP), "s1")
+    assert line.startswith("s1: its landing gave up a merge and merged afresh:")
+    assert "- " + "m" * 12 + " (sprint head moved)" in line
+    assert f"not carried: {DROP['refusal']}" in line
+    assert "moved by: abc1234 docs(s2): amend, def5678 chore: step" in line
+
+
+def test_empty_parts_of_a_drop_line_are_left_out_c7() -> None:
+    bare = {"merge": "m" * 40, "why": "sprint head moved", "moved_by": [], "refusal": ""}
+    [line] = handover.report_lines(dropped_report(bare), "s1")
+    assert "not carried" not in line and "moved by" not in line
+    assert "- " + "m" * 12 + " (sprint head moved)" in line
+
+
+def test_one_line_per_drop_c7() -> None:
+    second = {**DROP, "merge": "n" * 40, "moved_by": ["1111111 x"], "refusal": ""}
+    [line] = handover.report_lines(dropped_report(DROP, second), "s1")
+    assert "- " + "m" * 12 in line and "- " + "n" * 12 in line
+    assert "moved by: 1111111 x" in line
+
+
+def test_a_passing_land_with_drops_holds_nothing_c7() -> None:
+    report = dropped_report(DROP) | {"gate": gated("pass")}
+    assert handover.hold_reason(report) is None
+
+
+def test_a_bounced_land_with_drops_holds_only_by_its_other_trigger_c7() -> None:
+    conflict = {"conflict": {"files": ["a.md"], "role": "developer-cli"}}
+    report = dropped_report(DROP, **conflict)
+    reason = handover.hold_reason(report)
+    assert reason == "land_bounced"
+    assert "landing_dropped" not in (reason or "")
