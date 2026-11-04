@@ -108,3 +108,15 @@ so `ci_green` ("ready to merge") does not fire. Green CI on the as-built
 push still gates the end, because `replay` runs only after it. A target
 that holds only part of the sprint, or holds it only by patch, gets the
 replay push as before.
+
+## Amended by s188 (2026-11-04)
+
+The END boundary no longer compares raw HEAD. When HEAD adds only
+bookkeeping commits (plain commits that change only `.team/`) to the
+entry's pushed sha, the **push** stage, the shipped check and the
+"replay changed nothing" check all use that pushed sha, the work head
+(ADR-0094). So a PO's chore commit after green CI no longer pushes `-r<k>`
+or closes the green PR, and a sprint whose pushed head main already holds
+closes as shipped with the chore commit on top. The bookkeeping commits stay
+on the team branch for the next sprint. `ci_green` now fires only on the
+boundary's `done` event, not on the CI stage's green `pass`.
