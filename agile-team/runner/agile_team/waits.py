@@ -29,6 +29,7 @@ class WaitReason(StrEnum):
     WORKTREE_DRIFT = "worktree_drift"
     OPEN_CAP = "open_cap"
     RESERVE = "reserve"
+    LANDING_FORK = "landing_fork"
 
 
 TITLED = frozenset({WaitReason.PO_HOLD, WaitReason.CANCEL_REQUESTED, WaitReason.REVERT_REQUESTED})
