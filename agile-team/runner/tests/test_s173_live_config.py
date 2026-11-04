@@ -79,6 +79,15 @@ def test_the_story_intake_reads_the_new_environments_s173(make_runtime) -> None:
 # ---------- Scheduler ----------
 
 
+def ticked(s) -> None:
+    """Run one tick inside an event loop, as the scheduler does (it starts a CI-poll task)."""
+
+    async def once() -> None:
+        s.tick()
+
+    asyncio.run(once())
+
+
 def fake_update(rt, change: ConfigChange | None):
     calls: list[int] = []
     rt.update_config = lambda: calls.append(1) or change  # type: ignore[method-assign]
@@ -90,7 +99,7 @@ def test_a_tick_takes_the_config_before_the_queues_s173(make_runtime) -> None:
     order: list[str] = []
     rt.update_config = lambda: order.append("config")  # type: ignore[method-assign]
     s.router.apply_queues = lambda: order.append("queues")  # type: ignore[method-assign]
-    s.tick()
+    ticked(s)
     assert order[:2] == ["config", "queues"]
 
 
@@ -110,7 +119,7 @@ def test_a_refused_config_found_in_a_tick_is_queued_for_the_po_s173(make_runtime
     fake_update(rt, BAD)
     queued: list = []
     s.queue_pass = queued.append  # type: ignore[method-assign]
-    s.tick()
+    ticked(s)
     (found,) = queued
     assert found.kinds == [Trigger.CONFIG_INVALID] and found.stories == []
     assert "boom: broken" in "\n".join(found.lines)
@@ -121,7 +130,7 @@ def test_a_taken_config_in_a_tick_queues_nothing_s173(make_runtime) -> None:
     fake_update(rt, GOOD)
     queued: list = []
     s.queue_pass = queued.append  # type: ignore[method-assign]
-    s.tick()
+    ticked(s)
     assert queued == []
 
 
