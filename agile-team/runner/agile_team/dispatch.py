@@ -926,7 +926,7 @@ class Runtime:
         """Make the story's branch and worktree, then run the step in a view of the run."""
         refused_report = await self.writer.apply(lambda: self.prepare_story(story))
         if refused_report is not None:
-            return refused_report
+            return {**refused_report, "role": request.role}
         self.flags.running.add(story.id)
         try:
             return await self.get_story_view(story).run_here(request)
@@ -952,27 +952,40 @@ class Runtime:
         return entry.head if entry and entry.head else self.git.head()
 
     def prepare_story(self, story: StoryState) -> dict[str, Any] | None:
-        """B1, B5: give the story its branch and worktree; a refusal report if it drifted."""
+        """B1, B5, s190: give the story its branch and worktree; a refusal report if its
+        worktree drifted or its branch name is taken."""
         space = Workspaces(self.git, self.config)
+        refusal = self._check_drift(story, space) or self._check_taken(story, space)
+        if refusal is None:
+            self._make_workspace(story, space)
+        return refusal
+
+    def _check_drift(self, story: StoryState, space: Workspaces) -> dict[str, Any] | None:
+        """B5: a refusal report if the story's worktree changed outside the team."""
         path = space.get_path(story.id)
-        if story.worktree_head and system.is_dir(path):
-            drift = find_drift(Git(path, self.git.options), story)
-            if drift is not None:
-                return self._report_drift(story, space.list_changed_files(story.id), path)
-        self._make_workspace(story, space)
-        return None
+        if not (story.worktree_head and system.is_dir(path)):
+            return None
+        if find_drift(Git(path, self.git.options), story) is None:
+            return None
+        return self._report_drift(story, space.list_changed_files(story.id), path)
+
+    def _check_taken(self, story: StoryState, space: Workspaces) -> dict[str, Any] | None:
+        """T3: a refusal report if a leftover branch has the fork's name away from the base."""
+        taken = space.find_taken_branch(story, self.sprint_head)
+        if taken is None or taken.is_at_base:
+            return None
+        self.events.emit(Event(EventKind.STORY_BRANCH, None, story.id, taken.event_data))
+        return refused(taken.reason)
 
     def _make_workspace(self, story: StoryState, space: Workspaces) -> None:
         """B1: fork the branch at the sprint head, or rebuild the worktree of a kept branch."""
-        action = "rebuilt" if story.branch else "created"
         head = self.sprint_head
         if story.branch and not story.worktree_head and story.base_sha != head:
             return self._run_returning_replay(story, head)
+        data = space.describe_branch_start(story, head)
         space.ensure(story, head)
-        data = {"action": action, "branch": story.branch, "base_sha": story.base_sha}
-        self.events.emit(
-            Event(EventKind.STORY_BRANCH, None, story.id, data | {"replays": story.replays})
-        )
+        data |= {"branch": story.branch, "base_sha": story.base_sha, "replays": story.replays}
+        self.events.emit(Event(EventKind.STORY_BRANCH, None, story.id, data))
         self.save()
 
     def _run_returning_replay(self, story: StoryState, head: str) -> None:
