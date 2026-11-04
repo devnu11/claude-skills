@@ -1778,7 +1778,10 @@ tests do not.
   runner context: the reason verbatim (the last gate or job output), key,
   count, author, the history (roles, steps, verdicts, reasons, event ids)
   and the story's `gate`, `step-end`, `test-dispute`, `escalation`,
-  `ruling` and `fault` events since the first setback. If the escalating
+  `ruling`, `fault` and `gate-fix` events since the first setback. Its
+  `fix_rounds` (s187) lists the story's gate fix records grouped by the
+  commit their gate ran on: `[{gated, fixes: [{role, files, commit, head}]}]`,
+  12-character shas, `commit` `"none"` for a fix that committed nothing. If the escalating
   step also handed over (questions, blocked), the PO gets the story first,
   and the Manager runs after `continue_story`.
 - While a story is escalated, `run_role` of any gated role on it is
@@ -1945,6 +1948,10 @@ gate routes.
   `also routed to <role> (<files>); their fix steps run first`. The gate
   event carries `fixes` (`[{role, files}]`). Every gate result replaces
   the queue. A ruling, a fault or `pass_tests` empties it.
+- **Gated commit (s187).** Every gate event the runner writes for a story
+  step carries `head`: the head of the tree it judged (the story's worktree,
+  or the main checkout without story branches). Each new fix in a `route`
+  keeps that sha as `gated`. A re-queued fix keeps its own.
 - **Dispute on a foreign test.** A developer's dispute on a test another
   role owns (e.g. an e2e test) opens no dispute. It is a `route` to the
   test's owner, and the fix brief cites the dispute's rule and reason. A
@@ -1953,11 +1960,27 @@ gate routes.
   kind `gate-fix` for that role, with the role's own scope and none of its
   set-ups (no presentation lay-out), but with git confinement. Its brief
   starts `Gate fix on story sN: the implement gate failed on files you
-  own…` and lists only that role's items and their output lines. A
+  own…` and lists only that role's items and their output lines. At plan
+  time the runner adds a `Tree:` section (s187), which `step-start`'s
+  `brief` records. It gives the gated commit (12-character sha) and the
+  tree's path, and tells the role to run every command there and never `cd`
+  out. Then one of: the head is still that commit; the head moved, with each
+  commit since (`<sha> <subject>`, oldest first); the head no longer
+  contains it (the branch was rewritten); or the gate's commit wasn't
+  recorded (a fix queued before s187). After an empty `done` (below) it
+  adds that the last fix step changed nothing, so the items still stand. A
   `run_role` for a gate fix is refused unless the role is the head fix's.
-- **Settling a fix step.** `done` pops the head and runs no gate; after the
-  last fix step the developer runs again, with `Other roles fix items in
-  their files first, then this step runs again: <reason>` in its brief.
+- **Settling a fix step.** `done` with a commit pops the head and runs no
+  gate. After the last fix step the developer runs again, with `Other roles
+  fix items in their files first, then this step runs again: <reason>` in
+  its brief. A `done` with **no commit** (nothing in scope changed;
+  quarantined edits don't count) is not a fix (s187). It settles as a
+  `route` that keeps the queue as it is, with the head fix's `unchanged`
+  raised by one. The story stays at its step, counts no round, and the same
+  role runs again. The reason is `<role>'s gate fix on <files> handed off
+  done with no commit, so the items still stand; the gate ran on <sha>; the
+  fix step runs again`. A second one in a row is a repeated setback, so it
+  escalates to the Manager.
   `changes_requested` bounces the story to `implement` with a round
   (`<role> says the failure is not theirs to fix: <summary>`). `blocked`
   or `failed` holds the story and hands over (`stopped`); a malformed
@@ -1966,9 +1989,10 @@ gate routes.
   (see "Repeated setbacks").
 - **Assertions (`asserts`).** Each settled fix step adds a record to the
   story's `fixed` (role, files, commit, `asserts`, whether the commit's
-  diff changed assertion lines) and logs a `gate-fix` event
-  (`{status, files, commit, asserts, assertions_changed, left}`, `left`
-  the roles still queued). The code-reviewer's brief lists each record:
+  diff changed assertion lines, `gated` and the tree's `head` after the
+  step, s187) and logs a `gate-fix` event
+  (`{status, files, commit, asserts, assertions_changed, left, gated, head}`,
+  `left` the roles still queued). The code-reviewer's brief lists each record:
   `Gate fix by <role> (commit <sha>) on <files>: <note>`. A fix that
   changed assertion lines without naming a rule is flagged there, not
   refused; the reviewer judges it.
