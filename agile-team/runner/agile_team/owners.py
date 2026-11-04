@@ -91,6 +91,8 @@ class Fix:
     items: list[Item]
     rule: str = ""
     why: str = ""
+    gated: str = ""  # full sha the gate ran on (s187 G1)
+    unchanged: int = 0  # done handoffs on this fix that committed nothing (s187 G5)
 
 
 @dataclass
@@ -102,6 +104,8 @@ class FixRecord:
     commit: str | None
     asserts: str = ""
     changed: bool = False
+    gated: str = ""
+    head: str = ""
 
 
 @dataclass(frozen=True)
@@ -214,6 +218,81 @@ def fix_lines(fix: Fix) -> list[str]:
     return lines
 
 
+# ----- the gate fix brief's Tree section (s187) -------------------------------
+
+
+class TreeState(StrEnum):
+    """How a gate fix's tree stands against the commit its gate ran on (s187)."""
+
+    SAME = "same"
+    MOVED = "moved"
+    REWRITTEN = "rewritten"
+    UNRECORDED = "unrecorded"
+
+
+@dataclass(frozen=True)
+class Tree:
+    """The tree a gate fix step works in, read at plan time (s187 G3)."""
+
+    path: str
+    head: str
+    state: TreeState
+    since: tuple[tuple[str, str], ...] = ()
+
+
+SHORT = 12  # characters of a sha shown in briefs and the Manager's view
+STAY_IN_TREE = "run every command there and never cd out of it."
+TREE_FIRST = {
+    TreeState.UNRECORDED: "- The gate's commit wasn't recorded. Your working directory is {path}: "
+    + STAY_IN_TREE,
+}
+TREE_GATED = (
+    "- The gate ran on commit {gated} in {path}. Your working directory is that tree: "
+    + STAY_IN_TREE
+)
+TREE_LINES = {
+    TreeState.SAME: "- Its head is still {gated}.",
+    TreeState.MOVED: "- Its head is now {head}. Commits since the gate, oldest first:",
+    TreeState.REWRITTEN: (
+        "- Its head is now {head}, which doesn't contain {gated}: "
+        "its branch was rewritten since the gate ran."
+    ),
+    TreeState.UNRECORDED: "- Its head is {head}.",
+}
+UNCHANGED_LINE = (
+    "- Your last {n} fix step(s) on these items handed off done with no commit, so the "
+    "items still stand. A done that changes nothing doesn't count as a fix: run the listed "
+    "tests here, at this head, and fix them. If they pass here, hand off changes_requested "
+    "and name the commands you ran."
+)
+
+
+def format_short(sha: str) -> str:
+    """The first ``SHORT`` characters of ``sha``."""
+    return sha[:SHORT]
+
+
+def format_tree_lines(fix: Fix, tree: Tree) -> list[str]:
+    """The brief's ``Tree:`` section for one gate fix (s187 G4)."""
+    names = {
+        "path": tree.path,
+        "gated": format_short(fix.gated),
+        "head": format_short(tree.head),
+    }
+    first = TREE_FIRST.get(tree.state, TREE_GATED)
+    lines = ["Tree:", first.format(**names), TREE_LINES[tree.state].format(**names)]
+    lines.extend(f"    - {format_short(sha)} {subject}" for sha, subject in tree.since)
+    if fix.unchanged:
+        lines.append(UNCHANGED_LINE.format(n=fix.unchanged))
+    return lines
+
+
+def mark_gated(fixes: list[Fix], sha: str) -> None:
+    """Set ``gated`` to ``sha`` on every fix that has none yet (s187 G1)."""
+    for fix in fixes:
+        fix.gated = fix.gated or sha
+
+
 def _marked(diff: str, sign: str) -> list[str]:
     lines = (
         ln[1:] for ln in diff.splitlines() if ln.startswith(sign) and not ln.startswith(sign * 3)
@@ -238,4 +317,11 @@ def fix_note(record: FixRecord) -> str:
 def load_fix(data: dict[str, Any]) -> Fix:
     """Rebuild a ``Fix`` from ``state.json``."""
     items = [Item(**{**d, "source": Source(d["source"])}) for d in data["items"]]
-    return Fix(data["role"], items, data.get("rule", ""), data.get("why", ""))
+    return Fix(
+        data["role"],
+        items,
+        data.get("rule", ""),
+        data.get("why", ""),
+        data.get("gated", ""),
+        data.get("unchanged", 0),
+    )

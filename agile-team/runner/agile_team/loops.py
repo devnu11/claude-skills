@@ -13,9 +13,12 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from . import owners
+
 if TYPE_CHECKING:
     from .events import Event
     from .gates import StoryState
+    from .owners import FixRecord
 
 
 class Author(StrEnum):
@@ -55,7 +58,7 @@ NORMALISE: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?<![a-z_])\d+(?:\.\d+)?"), "<n>"),  # counts, codes, durations, pids
     (re.compile(r"\s+"), " "),
 )
-HISTORY_KINDS = frozenset({"gate", "step-end", "test-dispute", "escalation", "ruling", "fault"})
+HISTORY_KINDS = frozenset({"gate", "step-end", "test-dispute", "escalation", "ruling", "fault", "gate-fix"})
 BACKSTOP_HEAD = (
     "bounced {count} times in a row between {step} and {to_step}, reasons not all the same:"
 )
@@ -166,6 +169,24 @@ def _history_events(story: StoryState, events: list[Event]) -> list[dict[str, An
     return [asdict(e) for e in mine if event_number(e.id) >= first]
 
 
+def _fix_entry(record: FixRecord) -> dict[str, Any]:
+    return {
+        "role": record.role,
+        "files": record.files,
+        "commit": owners.format_short(record.commit) if record.commit else "none",
+        "head": owners.format_short(record.head) if record.head else "unrecorded",
+    }
+
+
+def list_fix_rounds(records: list[FixRecord]) -> list[dict[str, Any]]:
+    """The story's gate fix records grouped by the commit their gate ran on (s187 G9)."""
+    rounds: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        gated = owners.format_short(record.gated) if record.gated else "unrecorded"
+        rounds.setdefault(gated, []).append(_fix_entry(record))
+    return [{"gated": gated, "fixes": fixes} for gated, fixes in rounds.items()]
+
+
 def manager_view(story: StoryState, events: list[Event]) -> dict[str, Any]:
     """The ``repeated_setback`` entry of the Manager's runner context."""
     setbacks = trail(story)
@@ -180,4 +201,5 @@ def manager_view(story: StoryState, events: list[Event]) -> dict[str, Any]:
         "author": last.author,
         "history": [asdict(s) for s in setbacks],
         "events": _history_events(story, events),
+        "fix_rounds": list_fix_rounds(story.fixed),
     }

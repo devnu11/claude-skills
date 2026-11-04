@@ -133,6 +133,10 @@ INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
 MANAGER = "manager"
 ARCHITECT = "architect"
+FIX_UNCHANGED = (
+    "{role}'s gate fix on {files} handed off done with no commit, so the items still stand; "
+    "the gate ran on {gated}; the fix step runs again"
+)
 GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
 SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD, Verdict.ROUTE})
 PUSH_REFUSED = "pushing {branch} was refused (push_rejected): {why}; nothing was sent"
@@ -1584,7 +1588,7 @@ class Runtime:
         """Settle a gate fix step: pop it when done, else set the story back (R17)."""
         story, fix = plan.story, plan.story.fixes[0]
         report: dict[str, Any] = {"fix": self._record_fix(plan, handoff, fix)}
-        outcome = fix_outcome(story, handoff)
+        outcome = fix_outcome(story, handoff) or find_unchanged_fix(story, plan.commit)
         if outcome is None:
             story.fixes.pop(0)
             return report
@@ -1685,6 +1689,8 @@ class Runtime:
             plan.commit,
             handoff.asserts,
             owners_mod.asserts_changed(diff),
+            fix.gated,
+            self.git.head(),
         )
         story.fixed.append(record)
         left = [f.role for f in story.fixes[1:]]
@@ -1696,6 +1702,8 @@ class Runtime:
             commit=record.commit,
             asserts=record.asserts,
             assertions_changed=record.changed,
+            gated=record.gated,
+            head=record.head,
             left=left,
         )
         return asdict(record)
@@ -1940,6 +1948,7 @@ class Runtime:
         story = plan.story
         step = story.step
         outcome = self.pipeline.route(Overlaps(self).screen(story, outcome), self.owners(story))
+        head = self._mark_gated(outcome)
         self._keep_runs(story, outcome)
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
@@ -1952,6 +1961,7 @@ class Runtime:
             "now_at": story.step,
             "story_status": story.status,
             "rounds": story.rounds,
+            "head": head,
         }
         result |= _collect_outcome_fields(outcome)
         result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
@@ -1962,6 +1972,30 @@ class Runtime:
             loops.after_pass(story.run, step) if outcome.verdict is Verdict.PASS else story.run
         )
         return result
+
+    def _mark_gated(self, outcome: Outcome) -> str:
+        """s187 G1: the tree's head, marked on the outcome's new fixes."""
+        head = self.git.head()
+        owners_mod.mark_gated(outcome.fixes, head)
+        return head
+
+    def _attach_gate_tree(self, plan: Plan) -> None:
+        """s187 G3: append the head fix's ``Tree:`` section to the prompt and the brief."""
+        fix = plan.story.fixes[0]  # type: ignore[union-attr]
+        text = "\n".join(owners_mod.format_tree_lines(fix, self._read_tree(fix)))
+        plan.prompt += "\n\n" + text
+        plan.brief += "\n\n" + text
+
+    def _read_tree(self, fix: Fix) -> owners_mod.Tree:
+        head, path = self.git.head(), str(self.config.repo)
+        state, since = owners_mod.TreeState.REWRITTEN, ()
+        if not fix.gated:
+            state = owners_mod.TreeState.UNRECORDED
+        elif head == fix.gated:
+            state = owners_mod.TreeState.SAME
+        elif self.git.is_ancestor(fix.gated):
+            state, since = owners_mod.TreeState.MOVED, tuple(self.git.list_after(fix.gated))
+        return owners_mod.Tree(path, head, state, since)
 
     def _advance_story(self, story: StoryState, step: str, outcome: Outcome) -> None:
         """Move the story by the outcome; then K2: sessions end when it finishes or goes back."""
@@ -2103,6 +2137,7 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 }
 
 FIX_SETUPS = {
+    StepKind.GATE_FIX: Runtime._attach_gate_tree,
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
     StepKind.REBASE_FIX: Runtime._set_rebase_fix_scope,
     StepKind.STORY_REBASE: Runtime._set_story_rebase_scope,
@@ -2299,6 +2334,19 @@ def fix_outcome(story: StoryState, handoff: Handoff) -> Outcome | None:
     """The setback a gate fix handoff causes, or ``None`` when it is done."""
     make = FIX_OUTCOMES.get(handoff.status)
     return make(story, handoff) if make else None
+
+
+def find_unchanged_fix(story: StoryState, commit: str | None) -> Outcome | None:
+    """s187 G5: the route that keeps an empty done's fix queued, or None when it committed."""
+    if commit:
+        return None
+    head, *rest = story.fixes
+    fix = replace(head, unchanged=head.unchanged + 1)
+    shown = owners_mod.format_short(fix.gated) if fix.gated else "an unrecorded commit"
+    reason = FIX_UNCHANGED.format(
+        role=fix.role, files=", ".join(i.shown for i in fix.items), gated=shown
+    )
+    return Outcome(Verdict.ROUTE, reason, author=Author.ROLE, fixes=[fix, *rest])
 
 
 STORY_REFUSALS = {StepKind.GATE_FIX: fix_refusal, StepKind.STORY_REBASE: find_rebase_refusal}
