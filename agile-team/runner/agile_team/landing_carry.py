@@ -153,13 +153,13 @@ class Carrier:
         tree = Git(self.tree)
         code, _ = tree.attempt(*CHERRY_PICK_ARGV, f"{span.base}..{span.head}")
         if code != 0:
-            return Carry(span, commits, refusal=self.abort_pick(span, tree))
+            return Carry(span, commits, refusal=self.stop_pick(span, tree))
         tip = tree.head()
         old = self.upstream.listing(f"{span.base}..{span.head}")
         new = rewrite.Listing(span.merge, self.upstream.listing(f"{span.merge}..{tip}"))
         return Carry(span, commits, tip=tip, moved=rewrite.pair(old, new))
 
-    def abort_pick(self, span: CarrySpan, tree: Git) -> str:
+    def stop_pick(self, span: CarrySpan, tree: Git) -> str:
         names = tree.attempt("diff", "--name-only", "--diff-filter=U")[1]
         sha = tree.attempt("rev-parse", "CHERRY_PICK_HEAD")[1].strip()
         subject = tree.attempt("log", "-1", "--format=%s", sha)[1].strip()

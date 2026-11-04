@@ -225,7 +225,7 @@ class Lander:
             return carry
         return await self.run_off(self.carrier.carry, carry.span, carry.commits)
 
-    async def adopt_carry(self, attempt: Attempt, carry: Carry) -> dict[str, Any] | None:
+    async def apply_carry(self, attempt: Attempt, carry: Carry) -> dict[str, Any] | None:
         """C4, C5: move the checkout to the tip, remap the shas, log; a halt report on failure."""
         if not await self.run_off(self.carrier.move_checkout, carry):
             return await self.halt_diverged(attempt, "")
@@ -476,7 +476,7 @@ class Lander:
             if carry.refusal:
                 await self.give_up(attempt, build_moved_drop(carry))
                 return None
-            stopped = await self.adopt_carry(attempt, carry)
+            stopped = await self.apply_carry(attempt, carry)
             if stopped is not None:
                 return stopped
         return self.record_landed(attempt, Landed(attempt.merge), "none")
@@ -574,7 +574,7 @@ class Lander:
         if refused is not None:
             return await self.follow_remote(attempt)
         entry.pushed = attempt.merge
-        return await self.adopt_carry(attempt, carry)
+        return await self.apply_carry(attempt, carry)
 
     async def complete(self, attempt: Attempt, result: CiResult) -> dict[str, Any]:
         """The sprint branch moved: open the sprint PR once, close the story PR, report."""
