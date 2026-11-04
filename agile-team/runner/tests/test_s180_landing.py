@@ -207,6 +207,21 @@ def test_a_resume_refused_by_a_forked_story_names_it_c8(make_runtime, fake, monk
     )
 
 
+def test_a_resume_whose_merge_has_no_first_parent_gives_up_without_listing_c8(
+    make_runtime, fake, monkeypatch
+) -> None:
+    rig = resumed(make_runtime, fake, monkeypatch)
+    rt, story = rig.rt, rig.story
+    fake.reply(
+        ("rev-parse", f"{MERGE}^1"), Done(128, "", "fatal: bad revision"), Done(0, H2 + "\n")
+    )
+    land(rt, story)
+    drop = events_of(rt, EventKind.LANDING_DROPPED)[0]
+    assert drop.data["refusal"] == lc.CARRY_NO_BASE.format(merge=MERGE[: lc.SHORT])
+    assert drop.data["moved_by"] == []
+    assert issued(fake, "log", "--reverse") == []
+
+
 # ---------- C9: local mode ----------
 
 
