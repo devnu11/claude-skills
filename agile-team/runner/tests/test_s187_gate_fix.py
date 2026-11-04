@@ -151,11 +151,13 @@ def test_a_routed_gate_stamps_each_fix_and_the_event_with_the_head(make_runtime)
 
 
 def test_an_escalation_event_carries_the_head(make_runtime) -> None:
-    rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    rt, script = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    script.writes["integration-tester"] = (E2E_FILE, "def test_keep():\n    assert 1\n")
     run(rt, "developer")
     fix_step(rt, "integration-tester")
     run(rt, "developer")
-    assert events_of(rt, "escalation")[-1].data["head"] == FAKE_HEAD
+    head = rt.git.head()
+    assert head != FAKE_HEAD and events_of(rt, "escalation")[-1].data["head"] == head
 
 
 # ---- dispatch: the brief's Tree section -----------------------------------------
@@ -177,6 +179,7 @@ def test_the_gate_fix_brief_and_prompt_end_with_the_tree_section(make_runtime) -
 def test_a_moved_worktree_lists_the_commit_since_the_gate(make_runtime, fake) -> None:
     rt, _ = routed(make_runtime, handoff())
     head = "e" * 40
+    rt.worktree_of = "s1"
     fake.reply(("git", "rev-parse", "HEAD"), Done(0, head + "\n"))
     fake.reply(("git", "merge-base"), Done(0))
     fake.reply(("git", "log", "--reverse"), Done(0, f"{head}\x1fchore: moved\n"))
@@ -187,6 +190,7 @@ def test_a_moved_worktree_lists_the_commit_since_the_gate(make_runtime, fake) ->
 
 def test_a_rewritten_worktree_says_so(make_runtime, fake) -> None:
     rt, _ = routed(make_runtime, handoff())
+    rt.worktree_of = "s1"
     fake.reply(("git", "rev-parse", "HEAD"), Done(0, "f" * 40 + "\n"))
     fake.reply(("git", "merge-base"), Done(1))
     fix_step(rt, "integration-tester")

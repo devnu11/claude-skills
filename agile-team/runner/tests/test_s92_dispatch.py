@@ -24,6 +24,7 @@ UNIT_FAIL = "FAILED tests/test_x.py::test_a - AssertionError\n1 failed in 0.1s"
 LINT_UNIT = f"{UNIT_FILE}:8:1: I001 unsorted imports"
 LINT_SRC = "src/a.py:3:1: F401 unused import"
 GREEN = (0, "TOTAL 100%")
+FIXED_TEST = "def test_keep():\n    assert f(1) == 2\n"
 DIFF_CHANGED = "--- a/f\n+++ b/f\n-    assert f(1) == 1\n+    assert f(1) == 2\n"
 
 
@@ -56,6 +57,12 @@ def runtime(make_runtime, coverage=GREEN, lint=None, replies=None, files=(), **k
     script.rt = rt
     add_story(rt, "s1", "implement", files=list(files))
     return rt, script
+
+
+def both_write(script):
+    """Make each fix role commit a change, so its done counts as a fix (s187)."""
+    script.writes["unit-tester"] = (UNIT_FILE, "import os\n")
+    script.writes["integration-tester"] = (E2E_FILE, FIXED_TEST)
 
 
 def run(rt, role, kind=StepKind.ROLE):
@@ -92,7 +99,8 @@ def test_an_e2e_only_failure_routes_without_a_round_or_a_dispute(make_runtime) -
 
 
 def test_the_router_runs_the_fix_step_then_the_developer(make_runtime) -> None:
-    rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    rt, script = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    script.writes["integration-tester"] = (E2E_FILE, FIXED_TEST)
     run(rt, "developer")
     work = next_work(rt)
     assert (work.role, work.kind, work.story.id) == ("integration-tester", StepKind.GATE_FIX, "s1")
@@ -140,7 +148,10 @@ def test_lint_in_the_developers_own_file_passes(make_runtime) -> None:
 
 
 def test_fix_steps_run_unit_tester_then_integration_tester_then_developer(make_runtime) -> None:
-    rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL), lint=(1, LINT_UNIT), files=[UNIT_FILE])
+    rt, script = runtime(
+        make_runtime, coverage=(1, E2E_FAIL), lint=(1, LINT_UNIT), files=[UNIT_FILE]
+    )
+    both_write(script)
     run(rt, "developer")
     seen = []
     for _ in range(2):
@@ -155,7 +166,10 @@ def test_fix_steps_run_unit_tester_then_integration_tester_then_developer(make_r
 
 
 def test_the_fix_brief_lists_only_that_roles_items(make_runtime) -> None:
-    rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL), lint=(1, LINT_UNIT), files=[UNIT_FILE])
+    rt, script = runtime(
+        make_runtime, coverage=(1, E2E_FAIL), lint=(1, LINT_UNIT), files=[UNIT_FILE]
+    )
+    both_write(script)
     run(rt, "developer")
     unit = next_work(rt).brief
     assert UNIT_FILE in unit and E2E_FILE not in unit and "I001 unsorted imports" in unit
@@ -216,7 +230,8 @@ def test_a_malformed_fix_handoff_is_settled_as_failed(make_runtime) -> None:
 
 
 def test_a_done_fix_runs_no_gate_and_leaves_previous_alone(make_runtime) -> None:
-    rt, _ = routed(make_runtime, handoff())
+    rt, script = routed(make_runtime, handoff())
+    both_write(script)
     before = story_of(rt).previous
     gates = len(events_of(rt, "gate"))
     fix_step(rt, "integration-tester")
@@ -226,7 +241,8 @@ def test_a_done_fix_runs_no_gate_and_leaves_previous_alone(make_runtime) -> None
 
 
 def test_a_fix_step_is_refused_for_the_wrong_role_or_no_queue(make_runtime) -> None:
-    rt, _ = routed(make_runtime, handoff())
+    rt, script = routed(make_runtime, handoff())
+    both_write(script)
     assert "next gate fix is for integration-tester" in fix_step(rt, "unit-tester")["reason"]
     fix_step(rt, "integration-tester")
     assert "has no gate fix queued" in fix_step(rt, "integration-tester")["reason"]
@@ -236,7 +252,8 @@ def test_a_fix_step_is_refused_for_the_wrong_role_or_no_queue(make_runtime) -> N
 
 
 def test_the_same_route_twice_in_a_row_escalates(make_runtime) -> None:
-    rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    rt, script = runtime(make_runtime, coverage=(1, E2E_FAIL))
+    both_write(script)
     run(rt, "developer")
     fix_step(rt, "integration-tester")
     gate = run(rt, "developer")["gate"]

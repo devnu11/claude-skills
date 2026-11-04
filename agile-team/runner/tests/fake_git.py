@@ -235,11 +235,21 @@ class FakeTree:
         count = next((int(a[1:]) for a in rest if a[1:].isdigit() and a[0] == "-"), None)
         named = [c for c in map(self._find, rest) if c is not None and rest[-1:] != ["HEAD"]]
         commits = named[:1] if named else list(reversed(self.commits))
+        if "--reverse" in rest and ".." in rest[-1]:
+            commits = self._after(rest[-1].partition("..")[0])
         lines = [self._render(fmt, c) for c in commits[:count]]
         return Reply(0, "".join(lines))
 
+    def _after(self, older: str) -> list[Commit]:
+        """The commits after ``older`` up to HEAD, oldest first (``log --reverse A..HEAD``)."""
+        known = [c.sha for c in self.commits]
+        found = self._find(older)
+        return self.commits[known.index(found.sha) + 1 :] if found else list(self.commits)
+
     @staticmethod
     def _render(fmt: str, commit: Commit) -> str:
+        if fmt == "%H%x1f%s":
+            return f"{commit.sha}\x1f{commit.subject()}\n"
         shown = {"%B": commit.message.rstrip(), "%H": commit.sha}.get(fmt, commit.subject())
         return shown + "\n"
 
