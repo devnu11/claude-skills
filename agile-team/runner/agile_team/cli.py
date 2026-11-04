@@ -49,6 +49,7 @@ from . import config as config_mod
 from . import state as state_mod
 from .commands import shell_runner
 from .dashboard import server
+from .config_reload import LiveConfig, check_static, read_blob
 from .dispatch import QueryFn, Runtime, StepResult
 from .git_ops import Git, GitError
 from .ledger import LEDGER, Ledger, budget_status
@@ -285,8 +286,18 @@ def _print_lines(prefix: str, lines: list[str]) -> None:
 def check_config(config: config_mod.Config, home: Path) -> list[str]:
     """Static config problems plus every role's resolution and glob expansion."""
     book = role_book(config, home)
-    known = config_mod.Known(book.names(), set(sandbox.ENVIRONMENT_KINDS))
-    return config_mod.validate(config, known) + _role_problems(book, config)
+    return check_static(config, book) + _role_problems(book, config)
+
+
+def build_live_config(place: Place, config: config_mod.Config) -> LiveConfig:
+    """R4: the run's config-derived parts, or ``ConfigError`` listing every problem."""
+    problems = check_config(config, place.home)
+    if problems:
+        raise config_mod.ConfigError("; ".join(problems))
+    shell = functools.partial(shell_runner, limit_s=config.gates.command_timeout_s)
+    providers = Providers(config.providers, system.environ())
+    book = role_book(config, place.home)
+    return LiveConfig(config, book, make_pipeline(config), providers, shell)
 
 
 def _role_problems(book: RoleBook, config: config_mod.Config) -> list[str]:
@@ -403,10 +414,11 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
     """Wire config, roles, git, ledger, relay, state and the API key together."""
     config = _load_config(place.repo)
     locations = keys.KeyLocations(place.repo, config.team.key_file, place.home)
+    main_git = Git(place.repo)
     return Runtime(
         config=config,
         book=role_book(config, place.home),
-        git=Git(place.repo),
+        git=main_git,
         ledger=Ledger(config.run_dir / LEDGER),
         relay=Relay(config.run_dir),
         state=state_mod.load(config.run_dir),
@@ -418,6 +430,8 @@ def make_runtime(place: Place, query_fn: QueryFn) -> Runtime:
         prs=GhPrs(command_runner(place.repo)),
         shell=functools.partial(shell_runner, limit_s=config.gates.command_timeout_s),
         pipeline_for=make_pipeline,
+        live_for=functools.partial(build_live_config, place),
+        config_blob=read_blob(main_git),
     )
 
 

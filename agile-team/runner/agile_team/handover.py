@@ -60,6 +60,7 @@ class Trigger(StrEnum):
     LAND_BOUNCED = "land_bounced"
     OVERLAP = "overlap"
     LANDING_DROPPED = "landing_dropped"
+    CONFIG_INVALID = "config_invalid"
 
 
 class Scope(StrEnum):
@@ -86,7 +87,7 @@ RUN_WIDE = frozenset(
         "SPRINT_BACKLOG_STUCK",
     }
 )
-UNHELD = frozenset({Trigger.LANDING_DROPPED})
+UNHELD = frozenset({Trigger.LANDING_DROPPED, Trigger.CONFIG_INVALID})
 SCOPES: dict[Trigger, Scope] = {
     t: Scope.RUN if t.name in RUN_WIDE else Scope.STORY for t in Trigger
 }
@@ -381,6 +382,13 @@ HANDOVERS: tuple[Rule, ...] = (
         lambda r: bool((r.get("land") or {}).get("dropped")),
         "{story}: its landing gave up a merge and merged afresh:\n{land_dropped}",
     ),
+    Rule(
+        Trigger.CONFIG_INVALID,
+        lambda r: bool((r.get("config") or {}).get("error")),
+        "{story}: the committed .agile-team.toml at {config_sha} is not valid, so the "
+        "runner keeps the config it had:\n{config_error}\nNothing is held. Brief DevOps "
+        "to fix it in a new commit.",
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -428,6 +436,14 @@ def _find_requirement_fields(report: dict) -> dict[str, str]:
     }
 
 
+def _find_config_fields(report: dict) -> dict[str, str]:
+    """s173: the short sha and the error of a refused config change."""
+    change = report.get("config") or {}
+    if not change:
+        return {}
+    return {"config_sha": str(change.get("sha") or "")[:8], "config_error": str(change.get("error") or "")}
+
+
 def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     """The text fields a line can use; ``""`` when the report lacks one."""
     fields = {name: str(report.get(name) or "") for name in FIELDS}
@@ -435,6 +451,7 @@ def report_fields(report: dict, story_id: str | None) -> dict[str, str]:
     fields |= _find_requirement_fields(report)
     fields |= _read_ruling_fields(report)
     fields |= _land_fields(report) | _find_overlap_fields(report)
+    fields |= _find_config_fields(report)
     return {**fields, **_boundary_fields(report), "story": story_id or "run"}
 
 
