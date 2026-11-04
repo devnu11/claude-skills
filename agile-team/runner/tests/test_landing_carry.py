@@ -228,11 +228,32 @@ def test_carry_cherry_picks_the_span_onto_the_merge_in_the_land_tree(fake) -> No
     script_listings(fake)
     carry = c.carry(span(), (C1, C2))
     [add] = issued(fake, "worktree", "add")
-    assert add.argv[-3:] == ("--detach", str(TREE), M) or M in add.argv
+    assert add.argv[-3:] == ("--detach", str(TREE), M)
     [pick] = issued(fake, "cherry-pick")
     assert pick.argv[-2:] == ("--keep-redundant-commits", f"{B}..{H}") and pick.cwd == TREE
     assert carry.tip == T and carry.refusal == "" and carry.commits == (C1, C2)
     assert carry.moved == {"old1": "new1", "old2": "new2"}
+
+
+def test_carry_clears_a_leftover_land_tree_before_adding_the_new_one(fake) -> None:
+    c, _ = carrier(fake)
+    script_listings(fake)
+    c.carry(span(), (C1,))
+    kinds = [
+        ("remove" if "remove" in a.argv else "add") for a in fake.commands if "worktree" in a.argv
+    ]
+    assert kinds == ["remove", "add", "remove"]
+
+
+def test_a_failed_worktree_add_still_removes_the_land_tree(fake) -> None:
+    c, _ = carrier(fake)
+    fake.reply(("worktree", "add"), Done(1, "", "fatal: bad object"))
+    with pytest.raises(GitError):
+        c.carry(span(), (C1,))
+    kinds = [
+        ("remove" if "remove" in a.argv else "add") for a in fake.commands if "worktree" in a.argv
+    ]
+    assert kinds == ["remove", "add", "remove"]
 
 
 def test_carry_removes_the_worktree_after_a_clean_replay(fake) -> None:
