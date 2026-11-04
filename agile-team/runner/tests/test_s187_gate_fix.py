@@ -147,7 +147,7 @@ def test_a_routed_gate_stamps_each_fix_and_the_event_with_the_head(make_runtime)
     rt, _ = runtime(make_runtime, coverage=(1, E2E_FAIL))
     run(rt, "developer")
     assert [f.gated for f in story_of(rt).fixes] == [FAKE_HEAD]
-    assert events_of(rt, "gate")[-1].data["result"]["head"] == FAKE_HEAD
+    assert events_of(rt, "gate")[-1].data["head"] == FAKE_HEAD
 
 
 def test_an_escalation_event_carries_the_head(make_runtime) -> None:
@@ -155,7 +155,7 @@ def test_an_escalation_event_carries_the_head(make_runtime) -> None:
     run(rt, "developer")
     fix_step(rt, "integration-tester")
     run(rt, "developer")
-    assert events_of(rt, "escalation")[-1].data["result"]["head"] == FAKE_HEAD
+    assert events_of(rt, "escalation")[-1].data["head"] == FAKE_HEAD
 
 
 # ---- dispatch: the brief's Tree section -----------------------------------------
@@ -230,7 +230,7 @@ def test_a_second_empty_done_escalates_to_the_manager(make_runtime) -> None:
     assert gate["verdict"] == "escalate" and s.status is StoryStatus.NEEDS_MANAGER
     assert s.fixes == [] and s.rounds == 0
     [event] = events_of(rt, "escalation")
-    assert "handed off done with no commit" in event.data["result"]["reason"]
+    assert "handed off done with no commit" in event.data["reason"]
 
 
 def test_a_done_fix_with_a_commit_pops_as_before(make_runtime) -> None:
