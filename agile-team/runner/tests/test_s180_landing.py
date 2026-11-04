@@ -88,7 +88,7 @@ def test_a_carried_landing_logs_landing_carried_with_the_pairs_c5(
     rt, story = rig.rt, rig.story
     land(rt, story)
     [event] = events_of(rt, EventKind.LANDING_CARRIED)
-    assert event.actor == "runner" and event.story == "s1"
+    assert event.role == "runner" and event.story == "s1"
     assert event.data["merge"] == MERGE and event.data["from"] == H2 and event.data["to"] == TIP
     assert event.data["commits"] == [{"old": C1.sha, "new": NEW, "subject": C1.subject}]
 
