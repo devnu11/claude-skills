@@ -40,6 +40,13 @@ also needs Chrome for PDFs and CUPS for printing. The others run on your
 Claude Code login, or on an API key from a key file (agile-team:
 `.team/run/api-key`; both: `~/secrets/anthropic-api-key`, mode 600).
 
+## Docs
+
+- [The Karpathy method: spec, verifier, environment](docs/spec-driven-method/README.md):
+  a talk paced to the video, walking each layer with its steps, an analogy
+  and how agile-team and the chezmoi-managed `CLAUDE.md` implement it,
+  illustrated with the agile-team dashboard.
+
 ## Install
 
 Claude Code reads personal skills from `~/.claude/skills/<skill-name>/`. The
