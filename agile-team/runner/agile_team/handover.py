@@ -59,6 +59,7 @@ class Trigger(StrEnum):
     WORKTREE_DRIFT = "worktree_drift"
     LAND_BOUNCED = "land_bounced"
     OVERLAP = "overlap"
+    LANDING_DROPPED = "landing_dropped"
 
 
 class Scope(StrEnum):
@@ -85,6 +86,7 @@ RUN_WIDE = frozenset(
         "SPRINT_BACKLOG_STUCK",
     }
 )
+UNHELD = frozenset({Trigger.LANDING_DROPPED})
 SCOPES: dict[Trigger, Scope] = {
     t: Scope.RUN if t.name in RUN_WIDE else Scope.STORY for t in Trigger
 }
@@ -374,6 +376,11 @@ HANDOVERS: tuple[Rule, ...] = (
         "{story}: landing stopped on a merge conflict in {land_files}; {land_role} rebases it "
         "onto the sprint head, then land runs again.",
     ),
+    Rule(
+        Trigger.LANDING_DROPPED,
+        lambda r: bool((r.get("land") or {}).get("dropped")),
+        "{story}: its landing gave up a merge and merged afresh:\n{land_dropped}",
+    ),
 )
 QUIET_AFTER_PO = frozenset({Trigger.SPRINT_END, Trigger.STALLED})
 HANDOVER_FOOTER = (
@@ -397,7 +404,8 @@ def triggers(report: dict) -> list[Trigger]:
 
 def hold_reason(report: dict) -> str | None:
     """The matching trigger names joined by ``, ``, or ``None`` when nothing matches."""
-    names = [describe_hold(trigger, report) for trigger in triggers(report)]
+    held = [t for t in triggers(report) if t not in UNHELD]
+    names = [describe_hold(trigger, report) for trigger in held]
     return ", ".join(names) if names else None
 
 
@@ -444,6 +452,16 @@ def _read_ruling_fields(report: dict) -> dict[str, str]:
     return {k: str(v or "") for k, v in pairs.items()}
 
 
+def describe_drop_line(drop: dict) -> str:
+    """C7: one dropped merge as a line; the parts it lacks are left out."""
+    line = f"- {drop['merge'][:12]} ({drop['why']})"
+    if drop.get("refusal"):
+        line += f"; not carried: {drop['refusal']}"
+    if drop.get("moved_by"):
+        line += f"; moved by: {', '.join(drop['moved_by'])}"
+    return line
+
+
 def _land_fields(report: dict) -> dict[str, str]:
     """The text fields of the story CI, drift and land-conflict rows (only those present)."""
     ci, drift, land = (report.get(k) or {} for k in ("story_ci", "drift", "land"))
@@ -456,6 +474,9 @@ def _land_fields(report: dict) -> dict[str, str]:
         "land_files": ", ".join(conflict.get("files") or []) if conflict else None,
         "land_role": conflict.get("role"),
     }
+    dropped = land.get("dropped")
+    if dropped:
+        fields["land_dropped"] = "\n".join(describe_drop_line(d) for d in dropped)
     return {k: str(v) for k, v in fields.items() if v is not None}
 
 

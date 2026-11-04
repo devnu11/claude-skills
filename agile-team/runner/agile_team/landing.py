@@ -8,11 +8,11 @@ fast-forwards the main checkout. Anything red leaves the sprint branch where it 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import fullcheck, stages, story_rebase, story_spec, system, test_reports
+from . import fullcheck, rewrite, stages, story_rebase, story_spec, system, test_reports
 from .boundary import (
     SPRINT_BRANCH_DIVERGED,
     Permission,
@@ -28,6 +28,18 @@ from .events import Event, EventKind
 from .gates import StoryState, Verdict
 from .git_ops import Git
 from .halt import Halt, HaltKind
+from .landing_carry import (
+    CARRY_NO_BASE,
+    SHORT,
+    Carrier,
+    Carry,
+    CarrySpan,
+    Drop,
+    build_moved_drop,
+    describe_drop,
+    find_forked_story,
+    remove_land_tree,
+)
 from .reverts import REVERT_BODY, REVERT_SUBJECT
 from .stage_log import place_of
 from .story_branches import (
@@ -60,7 +72,6 @@ CI_HELD = "landing CI on {sha} is {verdict}; the land holds"
 SPRINT_PUSH_REFUSED = "pushing the sprint branch {branch} was refused: {why}"
 MAX_RESTARTS = 5
 PERMISSION_WAIT = "push_permission"
-GIVE_UP_MOVED = "sprint head moved"
 GIVE_UP_REFUSED = "sprint push refused"
 REVERT_CONFLICT = "reverting story {story} stopped: {why}; nothing was reverted"
 
@@ -106,6 +117,7 @@ class Attempt:
     merge: str = ""
     revert_of: str = ""
     reason: str = ""
+    dropped: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def title(self) -> str:
@@ -171,19 +183,73 @@ class Lander:
             await self.check_resume(attempt)
         elif (waiting := self.find_wait(story)) is not None:
             return waiting
-        return await self.run_attempts(attempt)
+        return self.add_dropped(attempt, await self.run_attempts(attempt))
+
+    def add_dropped(self, attempt: Attempt, report: dict[str, Any]) -> dict[str, Any]:
+        """C7: the drops of this land go on the report, whatever its verdict."""
+        if attempt.dropped:
+            report.setdefault("land", {})["dropped"] = attempt.dropped
+        return report
 
     async def check_resume(self, attempt: Attempt) -> None:
-        """G1: a pushed landing is resumed only while its merge is on the sprint head."""
-        if not await self.is_on_head(attempt.merge):
-            await self.give_up(attempt, GIVE_UP_MOVED)
+        """C8: a pushed landing is resumed unless its commits can't be carried."""
+        carry = await self.check_carry(attempt)
+        if carry.refusal:
+            await self.give_up(attempt, build_moved_drop(carry))
 
-    async def is_on_head(self, merge: str) -> bool:
-        """True when the merge's first parent is the sprint head."""
-        parent = await self.run_off(self.runtime.git.attempt, "rev-parse", f"{merge}^1")
-        return parent[0] == 0 and parent[1].strip() == self.sprint_head
+    @property
+    def carrier(self) -> Carrier:
+        """The carrier over the runtime's upstream and the land worktree."""
+        upstream = self.runtime.upstream
+        assert upstream is not None
+        return Carrier(upstream, self.scratch_path)
 
-    async def give_up(self, attempt: Attempt, why: str) -> None:
+    async def read_span(self, attempt: Attempt) -> CarrySpan:
+        """C1: the merge, its first parent, the sprint head and what the remote has."""
+        parent = await self.run_off(self.runtime.git.attempt, "rev-parse", f"{attempt.merge}^1")
+        pushed = attempt.entry.pushed if attempt.entry else ""
+        base = parent[1].strip() if parent[0] == 0 else ""
+        return CarrySpan(attempt.merge, base, self.sprint_head, pushed)
+
+    async def check_carry(self, attempt: Attempt) -> Carry:
+        """C1, C2: the commits between the merge's base and the head, and why not to carry them."""
+        span = await self.read_span(attempt)
+        if not span.base:
+            return Carry(span, refusal=CARRY_NO_BASE.format(merge=attempt.merge[:SHORT]))
+        if span.base == span.head:
+            return Carry(span, tip=attempt.merge)
+        commits = await self.run_off(self.carrier.list_carried, span)
+        refusal = await self.run_off(self.carrier.find_refusal, span)
+        refusal = refusal or find_forked_story(self.runtime.state.stories.values(), commits)
+        return Carry(span, commits, refusal=refusal)
+
+    async def prepare_carry(self, attempt: Attempt) -> Carry:
+        """C3: check the carry and, when there is something to carry, replay it."""
+        carry = await self.check_carry(attempt)
+        if carry.refusal or not carry.commits:
+            return carry
+        return await self.run_off(self.carrier.carry, carry.span, carry.commits)
+
+    async def apply_carry(self, attempt: Attempt, carry: Carry) -> dict[str, Any] | None:
+        """C4, C5: move the checkout to the tip, remap the shas, log; a halt report on failure."""
+        if not await self.run_off(self.carrier.move_checkout, carry):
+            return await self.halt_diverged(attempt, "")
+        if carry.commits:
+            rewrite.remap_state(self.runtime.state, carry.moved)
+            self.emit_carried(attempt, carry)
+        self.runtime.record_checkout()
+        return None
+
+    def emit_carried(self, attempt: Attempt, carry: Carry) -> None:
+        """C5: the ``landing-carried`` event with every old and new sha."""
+        pairs = [
+            {"old": c.sha, "new": carry.moved.get(c.sha, ""), "subject": c.subject}
+            for c in carry.commits
+        ]
+        data = {"merge": attempt.merge, "from": carry.span.head, "to": carry.tip, "commits": pairs}
+        self.runtime.events.emit(Event(EventKind.LANDING_CARRIED, "runner", attempt.story.id, data))
+
+    async def give_up(self, attempt: Attempt, drop: Drop) -> None:
         """G3, G5: forget the merge; its landing branch goes, and the story merges afresh."""
         rt, story, merge = self.runtime, attempt.story, attempt.merge
         if not attempt.revert_of:
@@ -191,8 +257,10 @@ class Lander:
         if not self.is_local:
             branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
             await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
-        data = {"merge": merge, "why": why, "sprint_head": self.sprint_head}
+        described = describe_drop(drop, merge)
+        data = described | {"sprint_head": self.sprint_head}
         rt.events.emit(Event(EventKind.LANDING_DROPPED, "runner", story.id, data))
+        attempt.dropped.append(described)
         attempt.merge = ""
         rt.save()
 
@@ -267,10 +335,7 @@ class Lander:
 
     async def clear_tree(self) -> None:
         """Remove the land worktree if there is one."""
-        git = self.runtime.git
-        await self.run_off(git.attempt, "worktree", "remove", "--force", str(self.scratch_path))
-        if system.exists(self.scratch_path):
-            system.remove_tree(self.scratch_path)
+        await self.run_off(remove_land_tree, self.runtime.git, self.scratch_path)
 
     # ----- the merge (L4 to L6)
 
@@ -412,12 +477,13 @@ class Lander:
     async def land_locally(self, attempt: Attempt) -> dict[str, Any] | None:
         """P3, K3: fast-forward on green checks under the lock, with no push and no CI."""
         async with self.lock:
-            if not await self.is_on_head(attempt.merge):
-                await self.give_up(attempt, GIVE_UP_MOVED)
+            carry = await self.prepare_carry(attempt)
+            if carry.refusal:
+                await self.give_up(attempt, build_moved_drop(carry))
                 return None
-            if not await self.run_off(self.runtime.upstream.advance_to, attempt.merge):  # type: ignore[union-attr]
-                return await self.halt_diverged(attempt, "")
-            self.runtime.record_checkout()
+            stopped = await self.apply_carry(attempt, carry)
+            if stopped is not None:
+                return stopped
         return self.record_landed(attempt, Landed(attempt.merge), "none")
 
     async def push_landing(self, attempt: Attempt) -> str | None:
@@ -505,17 +571,15 @@ class Lander:
         """K2 steps 1 to 5; ``None`` with a merge still set means the move was made."""
         entry = attempt.entry
         assert entry is not None
-        if not await self.is_on_head(attempt.merge):
-            await self.give_up(attempt, GIVE_UP_MOVED)
+        carry = await self.prepare_carry(attempt)
+        if carry.refusal:
+            await self.give_up(attempt, build_moved_drop(carry))
             return None
         refused = await self.push(Lease(entry.branch, entry.pushed, attempt.merge))
         if refused is not None:
             return await self.follow_remote(attempt)
         entry.pushed = attempt.merge
-        if not await self.run_off(self.runtime.upstream.advance_to, attempt.merge):  # type: ignore[union-attr]
-            return await self.halt_diverged(attempt, "")
-        self.runtime.record_checkout()
-        return None
+        return await self.apply_carry(attempt, carry)
 
     async def complete(self, attempt: Attempt, result: CiResult) -> dict[str, Any]:
         """The sprint branch moved: open the sprint PR once, close the story PR, report."""
@@ -568,7 +632,7 @@ class Lander:
         """G4, R2: give up the merge; follow a remote that descends from ours, else halt."""
         entry, up = attempt.entry, self.runtime.upstream
         assert entry is not None and up is not None
-        await self.give_up(attempt, GIVE_UP_REFUSED)
+        await self.give_up(attempt, Drop(GIVE_UP_REFUSED))
         await self.run_off(up.git.attempt, "fetch", up.settings.remote, entry.branch)
         remote = await self.run_off(up.read_remote_head, entry.branch)
         follows = bool(remote) and await self.run_off(up.is_ancestor, entry.pushed, remote)

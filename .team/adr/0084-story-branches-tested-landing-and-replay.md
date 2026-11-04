@@ -146,3 +146,18 @@ Design: `agile-team/docs/design/s179.md`.
   between sprint boundaries grows with the open stories, bounded by
   `max_open_stories`.
 
+## Amended by s180 (2026-11-04)
+
+The s163 rule "a pushed landing resumes only while its merge's first parent
+is still the sprint head" also dropped landings whose head the runner's own
+bookkeeping commits had moved. Each such commit cost every waiting landing a
+fresh merge, checks and CI run. Design: `agile-team/docs/design/s180.md`.
+
+- **A landing carries the runner's unpushed commits** (ADR-0093). When only
+  plain, unpushed commits that no open story was forked from follow the
+  merge's first parent, the landing pushes its merge as is. It then replays
+  those commits on top of the merge, moves the main checkout to the replayed
+  tip and remaps their shas. Otherwise it gives up the merge as s163 said.
+- **A drop names what moved the head.** `landing-dropped` gains `moved_by`
+  and `refusal`, and the PO gets a non-holding `landing_dropped` line.
+
