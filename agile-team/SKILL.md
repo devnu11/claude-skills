@@ -306,10 +306,14 @@ command fails.
    the sprint branch and fast-forward the main checkout, and only then is
    the story done. Stories land one at a time: the PO's order
    (`order_landings`, a reason when it departs from smallest first), then
-   smallest first (fewest lines changed since the story's base). A landing
-   whose sprint head moved during its CI wait merges afresh; it never pushes
-   a stale merge. Its CI wait doesn't lock the main checkout, so tells and
-   answers carry on. A story with `depends_on` starts only after its
+   smallest first (fewest lines changed since the story's base). The
+   runner's own commits made during a landing's CI wait (story files,
+   shares, story-admin edits, storyless steps) are carried: on green the
+   merge is pushed as is, and those commits are replayed on top of it and
+   may get new shas (`landing-carried`). A landing whose head moved in a way
+   it can't carry merges afresh (`landing_dropped` names the commits); it
+   never pushes a stale merge. Its CI wait doesn't lock the main checkout,
+   so tells and answers carry on. A story with `depends_on` starts only after its
    dependencies landed. Every design lists the files it changes under
    `## Files`; a design that overlaps another open story's files waits at
    design as `overlap` until that story lands or leaves, or the PO's
