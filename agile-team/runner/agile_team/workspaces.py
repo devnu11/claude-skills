@@ -14,12 +14,13 @@ from . import system
 from .config import Config
 from .gates import StoryState, StoryStatus
 from .git_ops import Git, parse_porcelain_z
-from .story_branches import format_story_branch
+from .story_branches import BranchAction, TakenBranch, format_story_branch
 
 WORKTREES = "worktrees"
 LAND = "land"
 REPLAY = "replay"
 SCRATCH_DIRS = (LAND, REPLAY)
+ADOPTED_WHY = "the branch already existed at the sprint head, where a fork would put it"
 
 
 class PruneReason(StrEnum):
@@ -73,9 +74,33 @@ class Workspaces:
         story.worktree_head = Git(path).head()
         return path
 
+    def find_taken_branch(self, story: StoryState, sprint_head: str) -> TakenBranch | None:
+        """T1: the local branch with the name the story's fork wants; None if free or recorded."""
+        if story.branch:
+            return None
+        branch = self._get_fork_branch(story)
+        tip = self._read_tip(branch)
+        return TakenBranch(story.id, branch, tip, sprint_head) if tip else None
+
+    def describe_branch_start(self, story: StoryState, sprint_head: str) -> dict[str, str]:
+        """T2: the story-branch event's action for ``ensure``; call it before ensure."""
+        if story.branch:
+            return {"action": BranchAction.REBUILT.value}
+        if self.find_taken_branch(story, sprint_head) is None:
+            return {"action": BranchAction.CREATED.value}
+        return {"action": BranchAction.ADOPTED.value, "why": ADOPTED_WHY}
+
+    def _get_fork_branch(self, story: StoryState) -> str:
+        return format_story_branch(self.config.upstream.story_prefix, story.id, story.replays)
+
+    def _read_tip(self, branch: str) -> str:
+        code, out = self.git.attempt("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+        return out.strip() if code == 0 else ""
+
     def _fork(self, story: StoryState, sprint_head: str) -> None:
-        branch = format_story_branch(self.config.upstream.story_prefix, story.id, story.replays)
-        self.git.run("branch", branch, sprint_head)
+        branch = self._get_fork_branch(story)
+        if self._read_tip(branch) != sprint_head:
+            self.git.run("branch", branch, sprint_head)
         story.branch, story.base_sha = branch, sprint_head
 
     def remove(self, story_id: str) -> None:
