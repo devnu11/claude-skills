@@ -3138,7 +3138,18 @@ All of them are under `.team/run/`, which onboarding gitignores.
 **Branch and worktree.** When a story's first step starts, the runner runs
 `git branch <story_prefix><id> <sprint head>` and `git worktree add
 .team/run/worktrees/<id> <branch>`, records `branch`, `base_sha` and
-`worktree_head`, and logs `story-branch` (`action: "created"`). A story
+`worktree_head`, and logs `story-branch` (`action: "created"`). Before
+the fork it looks for a local branch that already has the name (s190, for
+example the leftover of a `revert_story`). If that branch's tip is the
+sprint head, the runner adopts it with no `git branch` and logs `adopted`
+with a `why`. If the tip is anything else, the step is refused and nothing
+changes. The runner logs `taken` (`branch`, `tip`, `base_sha`, `aside`),
+and the story holds `refused`. The reason in the PO's hand-over names the
+branch, its tip, the sprint head and the way out: the human or the liaison
+runs `git branch -m <branch> <branch>-kept-<tip[:12]>` in the main checkout,
+which keeps the old commits on the aside branch, and then the PO runs
+`continue_story`, after which the next step forks as usual. The runner
+never moves, renames or deletes the leftover itself. A story
 that has a branch but no worktree (moved out of a sprint, or pruned at a
 resume because it left the sprint) gets
 its worktree back from the branch (`rebuilt`); no new branch is made. Every
@@ -3443,7 +3454,9 @@ and cancel limits apply only to landed stories; a story at `land` can't be
 moved or cancelled until its land ends (`story <id> is landing; it can't
 leave the sprint until land ends`). `revert_story` on an unlanded story
 removes its worktree and drops its `branch`, `base_sha`, `pushed`, `pr` and
-sessions (the remote branch and PR stay), with no revert commit. On a
+sessions (the remote branch and PR stay, and so does the local branch; if
+the story is planned again, its first step adopts or holds on it as "Branch
+and worktree" says), with no revert commit. On a
 landed story it reverts the landing merge in the land worktree (`git revert
 --no-edit -m 1 <merge>`) and lands the revert like a story: full checks, the
 landing branch, CI, then the sprint-branch push and fast-forward. A
@@ -3458,7 +3471,8 @@ files. A started story that depends on it refuses it as before.
 `overlap_with`. Run level: `story_branches`, `landing_order` and `landing`
 (s163; an older file's `land_queue` is ignored), `permission_asked` and
 `checkout_requests`. Events: `story-branch` (`action`: `created`,
-`rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
+`rebuilt`, `replayed`, `removed`, `dropped`, and (s190) `adopted` with
+`why` and `taken` with `tip` and `aside`; `branch`, `base_sha`,
 `replays`), `story-landed`, `story-ci` and (s179) `worktree-pruned`
 (`worktree`, `reason`); `step-end` gains `resumed` and
 `cache_write`, and `checkout` gains `story`. s163 adds `landing-order`,
