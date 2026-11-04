@@ -3239,8 +3239,9 @@ push permission. One land attempt:
    the same lock and the same carry, with no push.
 
 **Carrying the runner's commits** (s180, ADR-0093). The commits `B..head`
-are carried when none of these holds, checked in this order: the head
-doesn't descend from `B`; one of them is a merge; the remote already has one
+are carried when none of these holds, checked in this order: the merge's
+first parent can't be read, so there is no `B` (`moved_by` is then empty);
+the head doesn't descend from `B`; one of them is a merge; the remote already has one
 of them (`pushed` isn't an ancestor of `B`); an open story's `base_sha` or
 queued rebase `onto` is one of them; or replaying them onto the merge
 conflicts. The replay runs in `.team/run/land` as `git cherry-pick
