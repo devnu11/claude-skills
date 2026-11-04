@@ -61,3 +61,13 @@ sprint to be reported, not refilled from the Product Backlog. `ready_backlog` an
 `sprint_backlog_stuck` with each story's stall reason, and blocks the run after 3
 hand-overs with no PO action on its stories. While a question is open the run
 waits again. `END_REFUSED` no longer advises `add_to_sprint`. See ADR-0082.
+
+## Amended by s189 (2026-11-04)
+
+The consequence "a story with no commits can't be reverted; the PO finishes it, or
+asks the human to cancel it" left a story that crashed before its first commit
+stuck in the sprint (s180, sprint 54). Such a story can't be reverted still, but the
+PO can now take it out of the running sprint with `remove_from_sprint(story,
+reason)`. The story goes to the Product Backlog at its step, and its holds are
+cleared. A sprint therefore ends when each of its stories is done, cancelled,
+reverted, or taken out that way. `END_REFUSED` names the new tool. See ADR-0094.
