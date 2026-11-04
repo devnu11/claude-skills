@@ -48,8 +48,8 @@ from . import (
 from . import config as config_mod
 from . import state as state_mod
 from .commands import shell_runner
-from .dashboard import server
 from .config_reload import LiveConfig, check_static, read_blob
+from .dashboard import server
 from .dispatch import QueryFn, Runtime, StepResult
 from .git_ops import Git, GitError
 from .ledger import LEDGER, Ledger, budget_status

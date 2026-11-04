@@ -441,7 +441,10 @@ def _find_config_fields(report: dict) -> dict[str, str]:
     change = report.get("config") or {}
     if not change:
         return {}
-    return {"config_sha": str(change.get("sha") or "")[:8], "config_error": str(change.get("error") or "")}
+    return {
+        "config_sha": str(change.get("sha") or "")[:8],
+        "config_error": str(change.get("error") or ""),
+    }
 
 
 def report_fields(report: dict, story_id: str | None) -> dict[str, str]:

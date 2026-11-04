@@ -517,11 +517,11 @@ class Runtime:
         if problems:
             raise ConfigError("; ".join(problems))
         assert self.pipeline_for is not None
-        return LiveConfig(
-            config, self.book, self.pipeline_for(config), self.providers, self.shell
-        )
+        return LiveConfig(config, self.book, self.pipeline_for(config), self.providers, self.shell)
 
-    def update_config(self) -> ConfigChange | None:
+    def update_config(  # house-rules: allow query-property -- swaps the live config, logs an event
+        self,
+    ) -> ConfigChange | None:
         """R2: take a new committed config at a safe point; ``None`` in a view or under the lock."""
         if self.worktree_of is not None or (self.main_lock and self.main_lock.locked()):
             return None
