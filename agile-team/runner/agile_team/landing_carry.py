@@ -16,7 +16,7 @@ from .upstream import Upstream, UpstreamError
 
 GIVE_UP_MOVED = "sprint head moved"
 CARRY_OFF_HEAD = "the sprint head {head} does not descend from the merge's base {base}"
-CARRY_NO_BASE = "the merge {merge} has no first parent"
+CARRY_NO_BASE = "the first parent of the merge {merge} can't be read"
 CARRY_MERGE = "{commit} is a merge"
 CARRY_PUSHED = "the remote already has {pushed}, which is past the merge's base {base}"
 CARRY_FORKED = "story {story} was forked from {commit}"
