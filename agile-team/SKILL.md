@@ -273,7 +273,10 @@ command fails.
    human. Each AC's environment is the exact name of an `[[environment]]`
    in `.agile-team.toml` (s94); `story new` refuses any other with every
    problem (file, AC, problem). To change an AC's environment, send the
-   corrected ACs with `story amend` (step 7). The runner reads the story
+   corrected ACs with `story amend` (step 7). A config change committed
+   during a run (a new environment, a gate command) is live from the next
+   step, with no restart (s173). A bad one is refused with a `config_invalid`
+   hand-over and the run keeps its old config. The runner reads the story
    file again before each Proxy step and holds the story (`gate_hold`) if
    it went bad. Fix the config and the PO calls `continue_story`, or amend
    the ACs, which sends the story back to design. A `manual` environment's script reaches

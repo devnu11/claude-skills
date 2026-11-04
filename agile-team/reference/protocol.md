@@ -1093,6 +1093,32 @@ config edit touching only those sections is kept, any other is quarantined.
 In s99 the rows are a format only: the runner runs no `[[tool]]` command, and
 an agent's Bash call is never matched to one by its text.
 
+### Config changes during a run (s173)
+
+A run follows the `.agile-team.toml` committed at the main checkout's
+`HEAD`, not the working tree. Each scheduler tick checks the file's blob id
+once the request queues may apply (main lock free, no boundary stage), before
+the intake and the other queues. Each step's report gets the same check.
+When the blob is new, the runner parses and validates it and swaps the
+config, the role book (role files re-read), the gate pipeline, the providers
+and the command shell. No restart is needed. So an amendment naming an
+environment DevOps just committed is onboarded, and the next gate runs the
+new commands.
+
+- A step that is running keeps the config it started with, with its stop
+  checks and gate, until it ends. The PO's tool calls read the live config.
+- Each new blob logs one `config` event: `sha` (the commit that last changed
+  the file), `blob`, `sections` (the TOML sections whose values changed) and
+  `error` (`""` when taken). A rewritten commit with the same content logs
+  nothing.
+- A config that fails to parse or validate changes nothing. Its event holds
+  the error, and the PO gets a non-holding `config_invalid` hand-over. The
+  hand-over comes in the committing step's own report when that step's
+  commit made the change, and as a pass of its own otherwise. The same bad
+  content is reported once.
+- `[team] auth`, `key_file`, `cadence` and `[health] beat_s` still take
+  effect only at the next `start`.
+
 ## Roles
 
 Built-ins live in `runner/agile_team/roles/`. Frontmatter is data:
@@ -2171,6 +2197,7 @@ The pass ends at the first step whose report matches a row of the
 | `worktree_drift` | a story's worktree changed outside the team (s159); the line names the worktree and the files. Only that story waits. The PO tells the human; `agile-team accept-checkout --story <id>` keeps the worktree as it is |
 | `land_bounced` | a landing stopped on a merge conflict (s159); the line names the files and the role (DevOps for files only DevOps or no role owns, else the story's developer) that rebases the story onto the sprint head. Then land runs again |
 | `landing_dropped` | a land gave up a merge and merged afresh (s180); one line per drop names the merge, why, why its commits couldn't be carried, and every commit that moved the sprint head (`<sha7> <subject>`). It holds nothing |
+| `config_invalid` | a committed `.agile-team.toml` failed to parse or validate (s173); the line names the commit and the error, the run keeps its last good config, and nothing is held. It comes in the committing step's report, or as a pass of its own for an outside commit |
 | `overlap` | a design's `## Files` overlap another open sprint story's work (s163, per story); the story waits at `design`. The line names the files each changes and the overlap. The runner lifts it once the others have landed, left the sprint or been cancelled; `release_story` with a reason lifts it early, and `continue_story` is refused |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
@@ -3471,10 +3498,17 @@ files. A started story that depends on it refuses it as before.
 `overlap_with`. Run level: `story_branches`, `landing_order` and `landing`
 (s163; an older file's `land_queue` is ignored), `permission_asked` and
 `checkout_requests`. Events: `story-branch` (`action`: `created`,
+<<<<<<< HEAD
 `rebuilt`, `replayed`, `removed`, `dropped`, and (s190) `adopted` with
 `why` and `taken` with `tip` and `aside`; `branch`, `base_sha`,
 `replays`), `story-landed`, `story-ci` and (s179) `worktree-pruned`
 (`worktree`, `reason`); `step-end` gains `resumed` and
+=======
+`rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
+`replays`), `story-landed`, `story-ci`, (s179) `worktree-pruned`
+(`worktree`, `reason`) and (s173) `config` (`sha`, `blob`, `sections`,
+`error`); `step-end` gains `resumed` and
+>>>>>>> 61f56411 (feat(s173): Bug: a config change committed during a run isn't used until the runner restarts; story amends naming a new environment are refused meanwhile)
 `cache_write`, and `checkout` gains `story`. s163 adds `landing-order`,
 `landing-dropped`, `overlap-lifted` and `stack-dropped`, and the gate's
 hold event carries `overlap` on an overlap hold. s180 adds `landing-carried`
