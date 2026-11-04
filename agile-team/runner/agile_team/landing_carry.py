@@ -10,11 +10,13 @@ from typing import Any
 from . import rewrite, system
 from .gates import FINISHED, StoryState
 from .git_ops import Git, GitError
+from .priority import natural
 from .story_rebase import ListedCommit, list_commits
 from .upstream import Upstream, UpstreamError
 
 GIVE_UP_MOVED = "sprint head moved"
 CARRY_OFF_HEAD = "the sprint head {head} does not descend from the merge's base {base}"
+CARRY_NO_BASE = "the merge {merge} has no first parent"
 CARRY_MERGE = "{commit} is a merge"
 CARRY_PUSHED = "the remote already has {pushed}, which is past the merge's base {base}"
 CARRY_FORKED = "story {story} was forked from {commit}"
@@ -58,11 +60,6 @@ def format_commit(commit: ListedCommit) -> str:
     return f"{commit.sha[:7]} {commit.subject}"
 
 
-def read_story_number(story: StoryState) -> int:
-    digits = "".join(ch for ch in story.id if ch.isdigit())
-    return int(digits) if digits else 0
-
-
 def _forks_from(story: StoryState, shas: set[str]) -> str | None:
     """The carried sha the story was forked from or will be rebased onto, if any."""
     onto = story.rebase.onto if story.rebase else ""
@@ -72,7 +69,7 @@ def _forks_from(story: StoryState, shas: set[str]) -> str | None:
 def find_forked_story(stories: Iterable[StoryState], commits: tuple[ListedCommit, ...]) -> str:
     """C2(d): the refusal text for the first open story forked from a carried commit, or ``""``."""
     by_sha = {c.sha: c for c in commits}
-    for story in sorted(stories, key=read_story_number):
+    for story in sorted(stories, key=lambda s: natural(s.id)):
         hit = None if story.status in FINISHED else _forks_from(story, set(by_sha))
         if hit is not None:
             return CARRY_FORKED.format(story=story.id, commit=format_commit(by_sha[hit]))
@@ -143,13 +140,15 @@ class Carrier:
 
     def carry(self, span: CarrySpan, commits: tuple[ListedCommit, ...]) -> Carry:
         """C3: replay the commits onto the merge in the land worktree; always removes it."""
-        self.upstream.git.run("worktree", "add", "--detach", str(self.tree), span.merge)
+        remove_land_tree(self.upstream.git, self.tree)
         try:
+            self.upstream.git.run("worktree", "add", "--detach", str(self.tree), span.merge)
             return self.run_replay(span, commits)
         finally:
             remove_land_tree(self.upstream.git, self.tree)
 
     def run_replay(self, span: CarrySpan, commits: tuple[ListedCommit, ...]) -> Carry:
+        """Cherry-pick ``base..head`` in the land worktree; the new tip, or the conflict."""
         tree = Git(self.tree)
         code, _ = tree.attempt(*CHERRY_PICK_ARGV, f"{span.base}..{span.head}")
         if code != 0:
@@ -160,6 +159,7 @@ class Carrier:
         return Carry(span, commits, tip=tip, moved=rewrite.pair(old, new))
 
     def stop_pick(self, span: CarrySpan, tree: Git) -> str:
+        """Abort the stopped cherry-pick and say which commit conflicted, in which files."""
         names = tree.attempt("diff", "--name-only", "--diff-filter=U")[1]
         sha = tree.attempt("rev-parse", "CHERRY_PICK_HEAD")[1].strip()
         subject = tree.attempt("log", "-1", "--format=%s", sha)[1].strip()

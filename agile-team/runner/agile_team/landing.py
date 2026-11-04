@@ -29,6 +29,8 @@ from .gates import StoryState, Verdict
 from .git_ops import Git
 from .halt import Halt, HaltKind
 from .landing_carry import (
+    CARRY_NO_BASE,
+    SHORT,
     Carrier,
     Carry,
     CarrySpan,
@@ -206,11 +208,14 @@ class Lander:
         """C1: the merge, its first parent, the sprint head and what the remote has."""
         parent = await self.run_off(self.runtime.git.attempt, "rev-parse", f"{attempt.merge}^1")
         pushed = attempt.entry.pushed if attempt.entry else ""
-        return CarrySpan(attempt.merge, parent[1].strip(), self.sprint_head, pushed)
+        base = parent[1].strip() if parent[0] == 0 else ""
+        return CarrySpan(attempt.merge, base, self.sprint_head, pushed)
 
     async def check_carry(self, attempt: Attempt) -> Carry:
         """C1, C2: the commits between the merge's base and the head, and why not to carry them."""
         span = await self.read_span(attempt)
+        if not span.base:
+            return Carry(span, refusal=CARRY_NO_BASE.format(merge=attempt.merge[:SHORT]))
         if span.base == span.head:
             return Carry(span, tip=attempt.merge)
         commits = await self.run_off(self.carrier.list_carried, span)
