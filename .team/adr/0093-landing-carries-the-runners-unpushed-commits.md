@@ -28,7 +28,8 @@ landing on top of them.
    the old head, and remaps the moved shas in `state.json`
    (`rewrite.remap_state`). One `landing-carried` event pairs old and new.
 2. **Only safe commits are carried.** The carry is refused, and the landing
-   gives up as before, when the head doesn't descend from `B`, when a
+   gives up as before, when the merge's first parent `B` can't be read
+   (the drop then names no commits), when the head doesn't descend from `B`, when a
    carried commit is a merge or is already on the remote, when an open story
    was forked from (or is queued to rebase onto) a carried commit, or when
    the replay conflicts.
