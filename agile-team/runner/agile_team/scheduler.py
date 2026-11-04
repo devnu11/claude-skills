@@ -54,6 +54,7 @@ WAIT_TEXTS = {
     WaitReason.PERMISSION: "waits for the push permission",
     WaitReason.OPEN_CAP: "waits for a free worktree (max_open_stories {n})",
     WaitReason.RESERVE: "waits for budget headroom: {why}",
+    WaitReason.LANDING_FORK: "waits for the running landing before forking its branch",
 }
 ONE_AT_A_TIME = "story branches are off: one step at a time"
 REVERT_REFUSED = "reverting story {story} was refused: {why}. The sprint branch is untouched."
@@ -286,7 +287,13 @@ class Scheduler:
 
     def can_start(self, work: Work) -> str | None:
         """C2 to C4, L2, L3, D1: why ``work`` has to wait, or ``None``."""
-        checks = (self.check_free, self.check_deps, self.check_land, self.check_cap)
+        checks = (
+            self.check_free,
+            self.check_deps,
+            self.check_land,
+            self.check_cap,
+            self.check_fork,
+        )
         reasons = (check(work) for check in checks)
         return next((r for r in reasons if r is not None), None) or self.check_budget(work)
 
@@ -324,6 +331,20 @@ class Scheduler:
         cap = rt.config.team.max_open_stories
         open_ = Workspaces(rt.git, rt.config).count_open(rt.state.stories.values())
         return WAIT_TEXTS[WaitReason.OPEN_CAP].format(n=cap) if open_ >= cap else None
+
+    @property
+    def is_landing(self) -> bool:
+        """C10: a land step or a landing revert is running."""
+        return REVERT_KEY in self.tasks or any(
+            w.kind is StepKind.LAND for w in self.running.values()
+        )
+
+    def check_fork(self, work: Work) -> str | None:
+        """C10: a story without a worktree forks its branch only while no landing runs."""
+        story = work.story
+        if story is None or work.kind is not StepKind.ROLE or story.worktree_head:
+            return None
+        return WAIT_TEXTS[WaitReason.LANDING_FORK] if self.is_landing else None
 
     def check_budget(self, work: Work) -> str | None:
         """C4: nothing starts when spend plus every running step's reserve reaches the ceiling."""
