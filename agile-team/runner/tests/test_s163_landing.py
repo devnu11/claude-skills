@@ -6,7 +6,7 @@ from agile_team.events import EventKind
 from agile_team.halt import HaltKind
 
 from .fake_system import Done
-from .test_s159_landing import MERGE, SPRINT, checks, issued, land, setup
+from .test_s159_landing import HEAD, MERGE, SPRINT, checks, issued, land, setup
 
 MOVED = "e" * 40
 
@@ -20,9 +20,10 @@ def test_a_merge_not_on_the_sprint_head_is_given_up_not_pushed_k2(
 ) -> None:
     checks(monkeypatch)
     rt, story, _ = setup(make_runtime, fake)
-    fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, MOVED + "\n"))
+    fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, MOVED + "\n"), Done(0, HEAD + "\n"))
+    fake.reply(("merge-base", "--is-ancestor"), Done(1), Done(0))
     land(rt, story)
-    assert sprint_pushes(fake) == []
+    assert len(sprint_pushes(fake)) == 1  # only the fresh merge, after the drop
     dropped = [e for e in rt.events.events() if e.kind == EventKind.LANDING_DROPPED]
     assert dropped and dropped[0].data["why"] == "sprint head moved"
     assert dropped[0].data["merge"] == MERGE and dropped[0].story == "s1"

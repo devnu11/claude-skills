@@ -72,7 +72,7 @@ def test_a_resume_with_the_merge_off_the_head_gives_up_and_merges_afresh_g1(
     rt, story, entry = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
     fake.reply(("rev-parse", f"{MERGE}^1"), Done(0, MOVED + "\n"), Done(0, HEAD + "\n"))
-    off_head(fake)
+    fake.reply(("merge-base", "--is-ancestor"), Done(1), Done(0))
     land(rt, story)
     assert [e.data["why"] for e in dropped(rt)] == ["sprint head moved"]
     assert len(issued(fake, "merge", "--no-ff")) == 1
