@@ -52,6 +52,7 @@ def test_trigger_values_are_snake_case() -> None:
         "land_bounced",
         "overlap",
         "landing_dropped",
+        "config_invalid",
     ]
 
 
@@ -88,6 +89,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.WORKTREE_DRIFT,
         T.LAND_BOUNCED,
         T.LANDING_DROPPED,
+        T.CONFIG_INVALID,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
