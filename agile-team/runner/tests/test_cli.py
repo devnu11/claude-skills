@@ -231,6 +231,27 @@ def test_check_config_flags_unknown_provider(configured: Path) -> None:
     assert cli.check_config(c, configured) == []
 
 
+def test_build_live_config_raises_listing_the_problems_s173(configured: Path) -> None:
+    c = cfg.load(configured)
+    c.providers["local"] = Provider("local", "http://localhost:11434")
+    c.roles["quality-czar"] = {"provider": "nope"}
+    with pytest.raises(cfg.ConfigError, match="unknown provider 'nope'"):
+        cli.build_live_config(cli.Place(configured, configured), c)
+
+
+def test_build_live_config_returns_the_parts_s173(configured: Path) -> None:
+    c = cfg.load(configured)
+    live = cli.build_live_config(cli.Place(configured, configured), c)
+    assert live.config is c
+    assert live.pipeline is not None and live.book.names()
+
+
+def test_make_runtime_wires_live_config_s173(configured: Path, key_home: Path) -> None:
+    rt = cli.make_runtime(cli.Place(configured, key_home), FakeQuery())
+    assert rt.live_for is not None
+    assert rt.config_blob is not None
+
+
 def test_init_refuses_dirty_tree(repo: Path, capsys, fake: FakeSystem) -> None:
     system.write_text(repo / "wip.txt", "x")
     fake.reply(("git", "status"), Done(0, "?? wip.txt\0"))
