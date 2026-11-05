@@ -113,7 +113,10 @@ without running anything.
 
 A gate fix step means the implement gate failed on files you own. Fix only the
 items in your brief, then hand off `done`; the story goes back to its step with
-no round counted. If a fix changes what a test asserts, put the AC or design
+no round counted. Your brief's `Tree:` section names the commit the gate ran on
+and the tree you work in; run every command there, never `cd` out of it. A `done`
+that commits nothing doesn't count as a fix: the step runs again, and a second one
+goes to the Manager. If a fix changes what a test asserts, put the AC or design
 rule that makes the old assertion wrong in your handoff's `asserts` field. If
 the failure is not yours to fix, hand off `changes_requested` and say why; the
 story goes back to its step as a round.

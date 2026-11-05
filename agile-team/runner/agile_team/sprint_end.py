@@ -8,7 +8,8 @@ from .state import RunState
 
 END_REFUSED = (
     "sprint {sprint} can't end: {stories} unfinished. Finish them, revert_story(story, reason), "
-    "or ask the human to cancel them (request_cancel)"
+    "remove_from_sprint(story, reason) for one with no commits, or ask the human to cancel "
+    "them (request_cancel)"
 )
 READY_HEAD = "Ready in the Product Backlog (dependencies done, not held):"
 READY_MORE = "- and {count} more"
@@ -40,8 +41,9 @@ SPRINT_STUCK_LEAD = "Nothing in the Sprint Backlog of sprint {sprint} can move. 
 SPRINT_STUCK_ADVICE = (
     "Stuck hand-over {count} of {cap}. Act on these stories: continue_story or release_story "
     "once the cause is fixed, run_role with your own brief, pass_tests, revert_story, "
-    "request_cancel, or request_story for a bug the team can't fix itself; ask_user when only "
-    "the human can unblock one. Don't refill the sprint to keep the team busy. After {cap} "
+    "remove_from_sprint for a story with no commits, request_cancel, or "
+    "request_story for a bug the team can't fix itself; ask_user when only the human can "
+    "unblock one. Don't refill the sprint to keep the team busy. After {cap} "
     "stuck hand-overs with none of these, the runner sets the run blocked and tells the human."
 )
 SPRINT_STUCK_BLOCKED = (

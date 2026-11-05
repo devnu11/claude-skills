@@ -103,21 +103,22 @@ def test_a_landing_branch_that_is_already_gone_is_not_an_error_g3(make_runtime, 
 
 def follow(rt, story, entry) -> tuple[object, object]:
     attempt = attempt_of(rt, story, entry)
-    return asyncio.run(lander(rt).follow_remote(attempt)), attempt
+    return asyncio.run(lander(rt).settle_refusal(attempt, "! [rejected]")), attempt
 
 
 def remote_at(fake, sha: str) -> None:
     fake.reply(("ls-remote",), Done(0, f"{sha}\trefs/heads/{SPRINT}\n"))
 
 
-def test_a_remote_that_is_our_pushed_gives_up_and_starts_again_g4(make_runtime, fake) -> None:
+def test_a_remote_that_moved_on_gives_up_and_starts_again_g4(make_runtime, fake) -> None:
     rt, story, entry = setup(make_runtime, fake)
     story.landed = Landed(MERGE, pushed=MERGE)
-    remote_at(fake, HEAD)
+    remote_at(fake, REMOTE)
     fake.reply(("merge-base", "--is-ancestor"), Done(0))
-    report, _ = follow(rt, story, entry)
+    report, attempt = follow(rt, story, entry)
     assert report is None and rt.halted_by is None
-    assert story.landed is None and entry.pushed == HEAD and ff(fake) == []
+    assert story.landed is None and entry.pushed == REMOTE and attempt.remotes == [REMOTE]
+    assert ff(fake) == []
 
 
 def test_a_remote_that_moved_ahead_is_followed_with_head_and_pushed_equal_r2(
@@ -177,7 +178,7 @@ def test_a_refused_landing_whose_remote_is_ours_does_not_halt_g4(
     checks(monkeypatch)
     rt, story, _ = setup(make_runtime, fake)
     fake.reply(("push", f"{MERGE}:refs/heads/{SPRINT}"), Done(1, "! [rejected]"))
-    remote_at(fake, HEAD)
+    remote_at(fake, REMOTE)
     fake.reply(("merge-base", "--is-ancestor"), Done(0))
     land(rt, story)
     assert rt.halted_by is None and len(dropped(rt)) >= 1

@@ -68,7 +68,15 @@ from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
 from .checkout import CheckoutChanged
 from .commands import CommandRunner, shell_runner
-from .config import CONFIG_NAME, ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, Config, Environment
+from .config import (
+    CONFIG_NAME,
+    ENVIRONMENT_SECTION,
+    OLD_ENVIRONMENT_NAME,
+    Config,
+    ConfigError,
+    Environment,
+)
+from .config_reload import ConfigChange, ConfigWatch, LiveConfig, check_static
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
     FINISHED,
@@ -133,6 +141,10 @@ INTEGRATION_TESTER = "integration-tester"
 PO = PO_ROLE
 MANAGER = "manager"
 ARCHITECT = "architect"
+FIX_UNCHANGED = (
+    "{role}'s gate fix on {files} handed off done with no commit, so the items still stand; "
+    "the gate ran on {gated}; the fix step runs again"
+)
 GATE_EVENTS = {Verdict.DISPUTE: EventKind.TEST_DISPUTE, Verdict.ESCALATE: EventKind.ESCALATION}
 SETBACKS = frozenset({Verdict.BOUNCE, Verdict.RETURN, Verdict.HOLD, Verdict.ROUTE})
 PUSH_REFUSED = "pushing {branch} was refused (push_rejected): {why}; nothing was sent"
@@ -473,6 +485,8 @@ class Runtime:
     main_git: Git | None = None
     revert_queue: list[Any] = field(default_factory=list)
     landings: Any = None
+    config_blob: str | None = None
+    live_for: Callable[[Config], LiveConfig] | None = None
     events: EventLog = field(init=False)
     pulse: live.Pulse = field(init=False)
     stage_log: StageLog = field(init=False)
@@ -489,6 +503,8 @@ class Runtime:
             self.upstream = Upstream(self.git, self.config.upstream)
         if self.pipeline_for is None:
             self.pipeline_for = self._get_pipeline
+        if self.live_for is None:
+            self.live_for = self._keep_live
         self.events.writer = self.ledger.writer = self.writer
 
     @property
@@ -498,6 +514,22 @@ class Runtime:
 
     def _get_pipeline(self, config: Config) -> Pipeline:
         return self.pipeline
+
+    def _keep_live(self, config: Config) -> LiveConfig:
+        """R4 without the CLI: same book, providers and shell; pipeline from pipeline_for."""
+        problems = check_static(config, self.book)
+        if problems:
+            raise ConfigError("; ".join(problems))
+        assert self.pipeline_for is not None
+        return LiveConfig(config, self.book, self.pipeline_for(config), self.providers, self.shell)
+
+    def update_config(  # house-rules: allow query-property -- swaps the live config, logs an event
+        self,
+    ) -> ConfigChange | None:
+        """R2: take a new committed config at a safe point; ``None`` in a view or under the lock."""
+        if self.worktree_of is not None or (self.main_lock and self.main_lock.locked()):
+            return None
+        return ConfigWatch(self).update()
 
     @property
     def halted_by(self) -> Halt | None:
@@ -926,7 +958,7 @@ class Runtime:
         """Make the story's branch and worktree, then run the step in a view of the run."""
         refused_report = await self.writer.apply(lambda: self.prepare_story(story))
         if refused_report is not None:
-            return refused_report
+            return {**refused_report, "role": request.role}
         self.flags.running.add(story.id)
         try:
             return await self.get_story_view(story).run_here(request)
@@ -952,27 +984,40 @@ class Runtime:
         return entry.head if entry and entry.head else self.git.head()
 
     def prepare_story(self, story: StoryState) -> dict[str, Any] | None:
-        """B1, B5: give the story its branch and worktree; a refusal report if it drifted."""
+        """B1, B5, s190: give the story its branch and worktree; a refusal report if its
+        worktree drifted or its branch name is taken."""
         space = Workspaces(self.git, self.config)
+        refusal = self._check_drift(story, space) or self._check_taken(story, space)
+        if refusal is None:
+            self._make_workspace(story, space)
+        return refusal
+
+    def _check_drift(self, story: StoryState, space: Workspaces) -> dict[str, Any] | None:
+        """B5: a refusal report if the story's worktree changed outside the team."""
         path = space.get_path(story.id)
-        if story.worktree_head and system.is_dir(path):
-            drift = find_drift(Git(path, self.git.options), story)
-            if drift is not None:
-                return self._report_drift(story, space.list_changed_files(story.id), path)
-        self._make_workspace(story, space)
-        return None
+        if not (story.worktree_head and system.is_dir(path)):
+            return None
+        if find_drift(Git(path, self.git.options), story) is None:
+            return None
+        return self._report_drift(story, space.list_changed_files(story.id), path)
+
+    def _check_taken(self, story: StoryState, space: Workspaces) -> dict[str, Any] | None:
+        """T3: a refusal report if a leftover branch has the fork's name away from the base."""
+        taken = space.find_taken_branch(story, self.sprint_head)
+        if taken is None or taken.is_at_base:
+            return None
+        self.events.emit(Event(EventKind.STORY_BRANCH, None, story.id, taken.event_data))
+        return refused(taken.reason)
 
     def _make_workspace(self, story: StoryState, space: Workspaces) -> None:
         """B1: fork the branch at the sprint head, or rebuild the worktree of a kept branch."""
-        action = "rebuilt" if story.branch else "created"
         head = self.sprint_head
         if story.branch and not story.worktree_head and story.base_sha != head:
             return self._run_returning_replay(story, head)
+        data = space.describe_branch_start(story, head)
         space.ensure(story, head)
-        data = {"action": action, "branch": story.branch, "base_sha": story.base_sha}
-        self.events.emit(
-            Event(EventKind.STORY_BRANCH, None, story.id, data | {"replays": story.replays})
-        )
+        data |= {"branch": story.branch, "base_sha": story.base_sha, "replays": story.replays}
+        self.events.emit(Event(EventKind.STORY_BRANCH, None, story.id, data))
         self.save()
 
     def _run_returning_replay(self, story: StoryState, head: str) -> None:
@@ -1584,7 +1629,7 @@ class Runtime:
         """Settle a gate fix step: pop it when done, else set the story back (R17)."""
         story, fix = plan.story, plan.story.fixes[0]
         report: dict[str, Any] = {"fix": self._record_fix(plan, handoff, fix)}
-        outcome = fix_outcome(story, handoff)
+        outcome = fix_outcome(story, handoff) or find_unchanged_fix(story, plan.commit)
         if outcome is None:
             story.fixes.pop(0)
             return report
@@ -1685,6 +1730,8 @@ class Runtime:
             plan.commit,
             handoff.asserts,
             owners_mod.asserts_changed(diff),
+            fix.gated,
+            self.git.head(),
         )
         story.fixed.append(record)
         left = [f.role for f in story.fixes[1:]]
@@ -1696,6 +1743,8 @@ class Runtime:
             commit=record.commit,
             asserts=record.asserts,
             assertions_changed=record.changed,
+            gated=record.gated,
+            head=record.head,
             left=left,
         )
         return asdict(record)
@@ -1940,28 +1989,46 @@ class Runtime:
         story = plan.story
         step = story.step
         outcome = self.pipeline.route(Overlaps(self).screen(story, outcome), self.owners(story))
+        head = self._mark_gated(outcome)
         self._keep_runs(story, outcome)
         setback = _setback(plan, outcome)
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self._advance_story(story, step, outcome)
         self._queue_done_renewal(story)
-        result = {
-            "step": step,
-            "verdict": outcome.verdict,
-            "reason": outcome.reason,
-            "now_at": story.step,
-            "story_status": story.status,
-            "rounds": story.rounds,
-        }
-        result |= _collect_outcome_fields(outcome)
-        result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
-        result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
+        result = {"step": step, "head": head} | _collect_gate_fields(story, outcome)
+        result |= _setback_fields(setback, story)
         event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
         _record(story, setback, event)
         story.run = (
             loops.after_pass(story.run, step) if outcome.verdict is Verdict.PASS else story.run
         )
         return result
+
+    def _mark_gated(self, outcome: Outcome) -> str:
+        """s187 G1: the tree's head, marked on the outcome's new fixes."""
+        head = self.git.head()
+        owners_mod.mark_gated(outcome.fixes, head)
+        return head
+
+    def _attach_gate_tree(self, plan: Plan) -> None:
+        """s187 G3: append the head fix's ``Tree:`` section to the prompt and the brief."""
+        if plan.story is None or not plan.story.fixes:
+            return
+        fix = plan.story.fixes[0]
+        text = "\n".join(owners_mod.format_tree_lines(fix, self._read_tree(fix)))
+        plan.prompt += "\n\n" + text
+        plan.brief += "\n\n" + text
+
+    def _read_tree(self, fix: Fix) -> owners_mod.Tree:
+        head, path = self.git.head(), str(self.config.repo)
+        state, since = owners_mod.TreeState.REWRITTEN, ()
+        if not fix.gated:
+            state = owners_mod.TreeState.UNRECORDED
+        elif head == fix.gated:
+            state = owners_mod.TreeState.SAME
+        elif self.git.is_ancestor(fix.gated):
+            state, since = owners_mod.TreeState.MOVED, tuple(self.git.list_after(fix.gated))
+        return owners_mod.Tree(path, head, state, since)
 
     def _advance_story(self, story: StoryState, step: str, outcome: Outcome) -> None:
         """Move the story by the outcome; then K2: sessions end when it finishes or goes back."""
@@ -2103,6 +2170,7 @@ GIT_CONFINED: dict[str, Callable[[Runtime, Plan], Path]] = {
 }
 
 FIX_SETUPS = {
+    StepKind.GATE_FIX: Runtime._attach_gate_tree,
     StepKind.TEAM_FIX: Runtime._team_fix_scope,
     StepKind.REBASE_FIX: Runtime._set_rebase_fix_scope,
     StepKind.STORY_REBASE: Runtime._set_story_rebase_scope,
@@ -2140,6 +2208,19 @@ def _dispute_lines(story: StoryState) -> list[str]:
         return []
     head = f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"
     return [head, DISPUTE_OUTPUT.format(output=d.output)] if d.output else [head]
+
+
+def _collect_gate_fields(story: StoryState, outcome: Outcome) -> dict[str, Any]:
+    """The verdict fields of a gate event for ``outcome``."""
+    result: dict[str, Any] = {
+        "verdict": outcome.verdict,
+        "reason": outcome.reason,
+        "now_at": story.step,
+        "story_status": story.status,
+        "rounds": story.rounds,
+    }
+    result |= _collect_outcome_fields(outcome) | _dispute_fields(outcome, story)
+    return result | ({"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {})
 
 
 def _collect_outcome_fields(outcome: Outcome) -> dict[str, Any]:
@@ -2299,6 +2380,19 @@ def fix_outcome(story: StoryState, handoff: Handoff) -> Outcome | None:
     """The setback a gate fix handoff causes, or ``None`` when it is done."""
     make = FIX_OUTCOMES.get(handoff.status)
     return make(story, handoff) if make else None
+
+
+def find_unchanged_fix(story: StoryState, commit: str | None) -> Outcome | None:
+    """s187 G5: the route that keeps an empty done's fix queued, or None when it committed."""
+    if commit:
+        return None
+    head, *rest = story.fixes
+    fix = replace(head, unchanged=head.unchanged + 1)
+    shown = owners_mod.format_short(fix.gated) if fix.gated else "an unrecorded commit"
+    reason = FIX_UNCHANGED.format(
+        role=fix.role, files=", ".join(i.shown for i in fix.items), gated=shown
+    )
+    return Outcome(Verdict.ROUTE, reason, author=Author.ROLE, fixes=[fix, *rest])
 
 
 STORY_REFUSALS = {StepKind.GATE_FIX: fix_refusal, StepKind.STORY_REBASE: find_rebase_refusal}

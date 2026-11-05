@@ -16,6 +16,7 @@ from typing import Any
 from . import budget_reserve, dependencies, handover, system
 from .boundary import Permission, StepKind
 from .ci import CiVerdict
+from .config_reload import ConfigChange
 from .dispatch import MANAGER, NOT_NOTED, Runtime, StepRequest, StepResult
 from .gates import FINISHED, Outcome, StoryState, Verdict
 from .halt import crash_halt, log_traceback
@@ -163,12 +164,34 @@ class Scheduler:
         if self.may_apply_queues:
             if rt.checkout_moved():
                 return
+            self.update_config()
             self.router.apply_queues()
             Overlaps(rt).lift_due()
         self.queue_news()
         self.ask_permission()
         self.poll_story_ci()
         self.follow_boundary()
+
+    def update_config(self) -> None:
+        """R2.1, R8: take a new committed config in the tick; a refused one goes to the PO."""
+        change = self.runtime.update_config()
+        if change is not None and change.error:
+            self.queue_config_pass(change)
+
+    def add_config_change(self, report: dict[str, Any]) -> dict[str, Any]:
+        """R2.2, R8: after a step, ``report`` with its own refused config, else unchanged."""
+        change = self.runtime.update_config() if self.may_apply_queues else None
+        if change is None or not change.error:
+            return report
+        if change.sha == report.get("commit"):
+            return report | {"config": change.data}
+        self.queue_config_pass(change)
+        return report
+
+    def queue_config_pass(self, change: ConfigChange) -> None:
+        """R8: a ``config_invalid`` pass for the PO about an outside or unmatched commit."""
+        lines = handover.report_lines({"config": change.data}, None)
+        self.queue_pass(Pass([Trigger.CONFIG_INVALID], lines, []))
 
     @property
     def may_apply_queues(self) -> bool:
@@ -382,7 +405,7 @@ class Scheduler:
         """One task: dispatch the work, note its report, queue its pass (C2)."""
         key = find_key(work)
         try:
-            report = await self.dispatch(work)
+            report = self.add_config_change(await self.dispatch(work))
         except Exception as exc:
             report = {"status": "error", "role": work.role, "reason": crash_halt(exc).reason}
         finally:

@@ -60,12 +60,25 @@ def file_line(entry: RevertEntry) -> str:
     )
 
 
+@dataclass(frozen=True)
+class FileSection:
+    """A story-file heading and the line to append under it."""
+
+    heading: str
+    line: str
+
+
+def append_under(text: str, section: FileSection) -> str:
+    """``text`` with the section's line appended, and its heading added before the first one."""
+    text = text if text.endswith("\n") else text + "\n"
+    if section.heading not in text.splitlines():
+        text += f"\n{section.heading}\n\n"
+    return f"{text}{section.line}\n"
+
+
 def with_entry(text: str, entry: RevertEntry) -> str:
     """The story file text with the entry appended, and HEADING added before the first one."""
-    text = text if text.endswith("\n") else text + "\n"
-    if HEADING not in text.splitlines():
-        text += f"\n{HEADING}\n\n"
-    return f"{text}{file_line(entry)}\n"
+    return append_under(text, FileSection(HEADING, file_line(entry)))
 
 
 def brief_section(entries: list[RevertEntry], step: str) -> str:

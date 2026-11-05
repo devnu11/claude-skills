@@ -143,9 +143,12 @@ command fails.
    within each group. The PO can pull a not-started story ahead only with a
    reason, and the pull shows in the timeline. The PO adds a story to the
    running sprint with `add_to_sprint(stories, reason)`. The sprint keeps its
-   number and branch, and no boundary or Manager turn runs. A new
-   `start_sprint` while stories are unfinished needs a reason. **A sprint
-   ends only when every story in it is done, cancelled or reverted:** the
+   number and branch, and no boundary or Manager turn runs. It takes a
+   story with no commits out with `remove_from_sprint(story, reason)`; the
+   story keeps its step, its holds are cleared, and you get an `update`
+   note. A new `start_sprint` while stories are unfinished needs a reason.
+   **A sprint ends only when every story in it is done, cancelled, reverted
+   or taken out:** the
    runner refuses the PO's `sprint-end` note before then and names the
    unfinished stories. When nothing in the Sprint Backlog can move, the
    runner hands the PO each story's stall reason and never offers Product
@@ -273,7 +276,10 @@ command fails.
    human. Each AC's environment is the exact name of an `[[environment]]`
    in `.agile-team.toml` (s94); `story new` refuses any other with every
    problem (file, AC, problem). To change an AC's environment, send the
-   corrected ACs with `story amend` (step 7). The runner reads the story
+   corrected ACs with `story amend` (step 7). A config change committed
+   during a run (a new environment, a gate command) is live from the next
+   step, with no restart (s173). A bad one is refused with a `config_invalid`
+   hand-over and the run keeps its old config. The runner reads the story
    file again before each Proxy step and holds the story (`gate_hold`) if
    it went bad. Fix the config and the PO calls `continue_story`, or amend
    the ACs, which sends the story back to design. A `manual` environment's script reaches
@@ -377,7 +383,11 @@ command fails.
    then does it replay the sprint onto `origin/main` on a new branch
    `team/sprint-<N>-r<k>`, remap the recorded hashes, open a ready PR from
    it, close the old draft PR with a link to the new one (the old branch
-   stays), and wait for CI again. A replay conflict goes to DevOps in a
+   stays), and wait for CI again. When the replay changes nothing, the
+   green PR stays the sprint's PR. Commits after the pushed head that
+   change only `.team/` (the PO's `chore(team): <role> step` commits, for
+   example) are not new work: they push nothing, open no new PR and stay
+   on the team branch for the next sprint (s188). A replay conflict goes to DevOps in a
    scratch replay, checked story by story, and the runner moves the sprint
    branch to its result only when it is clean and the full checks pass.
    Red CI on the as-built push holds the boundary, and you get the failing
@@ -389,7 +399,7 @@ command fails.
    tab shows the **Sprint PR**. The sprint is done only when the PR's
    current head has a green run of every required check, read from GitHub
    by the runner itself. No note or answer can make it done. Only a green
-   result says **ready to merge**. main moves only by fast-forward: the
+   result says **ready to merge**, once, when the boundary has finished. main moves only by fast-forward: the
    report gives the command (`git push <remote> <sha>:main`); never
    "Rebase and merge", which would rewrite the story merges. Red CI comes with the failing jobs,
    steps and test lines, and the runner sorts it out (s111):
@@ -481,7 +491,9 @@ command fails.
   the implement gate fails in a file another role owns (an e2e test, lint
   in a test file), the runner sends it to that role as a gate fix step
   with no round (`fix by …` and `gate fix` on the timeline), then the
-  developer runs again. A story
+  developer runs again. The fix brief names the gated commit and the
+  story's worktree. A fix that hands off done with no commit runs again,
+  and the Manager rules on it the second time. A story
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit

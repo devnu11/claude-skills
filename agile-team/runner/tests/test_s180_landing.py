@@ -263,7 +263,7 @@ def test_a_refused_sprint_push_drops_with_no_moved_by_and_no_refusal_c6(
     checks(monkeypatch)
     rt, story, _ = setup(make_runtime, fake)
     fake.reply(("push", f"{MERGE}:refs/heads/{SPRINT}"), Done(1, "! [rejected]"))
-    fake.reply(("ls-remote",), Done(0, f"{HEAD}\trefs/heads/{SPRINT}\n"))
+    fake.reply(("ls-remote",), Done(0, f"{'a' * 40}\trefs/heads/{SPRINT}\n"))
     fake.reply(("merge-base", "--is-ancestor"), Done(0))
     land(rt, story)
     first = events_of(rt, EventKind.LANDING_DROPPED)[0]

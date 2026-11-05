@@ -320,7 +320,7 @@
     "agile-team/runner/agile_team/dependencies.py::warning_texts::verb-name": 1,
     "agile-team/runner/agile_team/dependencies.py::warnings::verb-name": 1,
     "agile-team/runner/agile_team/dispatch.py::<module>::global-scope": 2,
-    "agile-team/runner/agile_team/dispatch.py::Runtime._advance_and_log::function-length": 16,
+    "agile-team/runner/agile_team/dispatch.py::Runtime._advance_and_log::function-length": 15,
     "agile-team/runner/agile_team/dispatch.py::Runtime._boundary_context::query-property": 1,
     "agile-team/runner/agile_team/dispatch.py::Runtime._boundary_context::verb-name": 1,
     "agile-team/runner/agile_team/dispatch.py::Runtime._boundary_refusal::verb-name": 1,

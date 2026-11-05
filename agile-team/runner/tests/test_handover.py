@@ -52,6 +52,7 @@ def test_trigger_values_are_snake_case() -> None:
         "land_bounced",
         "overlap",
         "landing_dropped",
+        "config_invalid",
     ]
 
 
@@ -88,6 +89,7 @@ def test_table_rows_are_in_design_order() -> None:
         T.WORKTREE_DRIFT,
         T.LAND_BOUNCED,
         T.LANDING_DROPPED,
+        T.CONFIG_INVALID,
     ]
     assert set(handover.QUIET_AFTER_PO) == {T.SPRINT_END, T.STALLED}
 
@@ -438,3 +440,23 @@ def test_a_bounced_land_with_drops_holds_only_by_its_other_trigger_c7() -> None:
     reason = handover.hold_reason(report)
     assert reason == "land_bounced"
     assert "landing_dropped" not in (reason or "")
+
+
+# ---------- s188 W6: ci_green fires on the finish only ----------
+
+
+def _ci_green_report(outcome: str, ci: str = "green") -> dict:
+    boundary = {"edge": "end", "sprint": 2, "stage": "ci", "outcome": outcome, "ci": ci}
+    return {"role": "runner", "status": "boundary", "boundary": boundary}
+
+
+def test_s188_ci_green_fires_on_the_done_report() -> None:
+    assert handover.triggers(_ci_green_report("done")) == [T.CI_GREEN]
+
+
+def test_s188_ci_green_ignores_the_ci_stages_pass() -> None:
+    assert handover.triggers(_ci_green_report("pass")) == []
+
+
+def test_s188_ci_green_needs_a_green_ci_on_done() -> None:
+    assert T.CI_GREEN not in handover.triggers(_ci_green_report("done", ci="red"))
