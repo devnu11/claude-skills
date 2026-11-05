@@ -93,8 +93,62 @@ def release_worktree(runtime: Runtime, story: StoryState) -> None:
     runtime.events.emit(Event(EventKind.STORY_BRANCH, story_admin.PO_ROLE, story.id, data))
 
 
-def _today() -> str:
+def read_today() -> str:
     return datetime.fromtimestamp(system.now(), UTC).strftime("%Y-%m-%d")
+
+
+@dataclass(frozen=True)
+class Move:
+    """One story's move out of ``sprint``, with the holds it cleared."""
+
+    story: StoryState
+    leave: Leave
+    sprint: int
+    cleared: Cleared
+    before: dict[str, Any]
+
+    @property
+    def line(self) -> str:
+        """The story-file line (L4)."""
+        return FILE_LINE.format(
+            date=read_today(),
+            sprint=self.sprint,
+            reason=self.leave.reason,
+            cleared=self.cleared.text,
+        )
+
+    @property
+    def notice(self) -> str:
+        """The update note text (L5)."""
+        return NOTICE.format(
+            story=self.story.id,
+            title=self.story.title,
+            sprint=self.sprint,
+            reason=self.leave.reason,
+            cleared=self.cleared.text,
+        )
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """The event data before the record and the facts (L5)."""
+        return {
+            "tool": TOOL,
+            "reason": self.leave.reason,
+            "question": None,
+            "sprint": self.sprint,
+            "cleared": asdict(self.cleared),
+        }
+
+    def build_result(self, record: str) -> dict[str, Any]:
+        """The tool result (L6)."""
+        return {
+            "status": "removed",
+            "story": self.story.id,
+            "step": self.story.step,
+            "sprint": self.sprint,
+            "cleared": asdict(self.cleared),
+            "record": record,
+        }
 
 
 @dataclass
@@ -123,21 +177,21 @@ class SprintLeave:
             [
                 SprintAdd(self.runtime).boundary_refusal,
                 lambda: None if leave.reason.strip() else story_admin.NO_REASON,
-                lambda: self._finished_refusal(story),
-                lambda: self._sprint_refusal(story),
+                lambda: self.find_finished_refusal(story),
+                lambda: self.find_sprint_refusal(story),
                 lambda: story_admin.asked_text(story),
                 lambda: self._find_work_refusal(story),
-                lambda: self._running_refusal(story),
-                lambda: self._dependents_refusal(story),
+                lambda: self.find_running_refusal(story),
+                lambda: self.find_dependents_refusal(story),
             ]
         )
 
-    def _finished_refusal(self, story: StoryState) -> str | None:
+    def find_finished_refusal(self, story: StoryState) -> str | None:
         if story.status not in FINISHED:
             return None
         return story_admin.FINISHED_TEXT.format(story=story.id, status=story.status, verb=VERB)
 
-    def _sprint_refusal(self, story: StoryState) -> str | None:
+    def find_sprint_refusal(self, story: StoryState) -> str | None:
         state = self.runtime.state
         if state.sprint_open() and story.sprint == state.sprint:
             return None
@@ -154,12 +208,12 @@ class SprintLeave:
             return HAS_COMMITS.format(story=story.id)
         return None
 
-    def _running_refusal(self, story: StoryState) -> str | None:
+    def find_running_refusal(self, story: StoryState) -> str | None:
         if story.id not in self.runtime.flags.running:
             return None
         return STEP_RUNNING.format(story=story.id, step=story.step)
 
-    def _dependents_refusal(self, story: StoryState) -> str | None:
+    def find_dependents_refusal(self, story: StoryState) -> str | None:
         ids = list_sprint_dependents(self.runtime.state, story.id)
         if not ids:
             return None
@@ -168,50 +222,24 @@ class SprintLeave:
     async def apply(self, leave: Leave) -> dict[str, Any]:
         """L1 to L6: move the story, record it, tell the human."""
         rt = self.runtime
-        story, sprint = rt.state.stories[leave.story_id], rt.state.sprint
-        before, cleared = story_admin.facts(story), read_cleared(story)
+        story = rt.state.stories[leave.story_id]
+        move = Move(story, leave, rt.state.sprint, read_cleared(story), story_admin.facts(story))
         story.sprint, story.hold, story.overlap_with, story.po_hold = None, None, [], None
         release_worktree(rt, story)
         rt.save()
-        line = self._line(leave, sprint, cleared)
-        record = await self._record(story, line)
-        data = self._data(leave, sprint, cleared) | {"record": record}
-        data |= {"before": before, "after": story_admin.facts(story)}
+        record = await self.write_record(story, move.line)
+        self.emit_announcement(move, record)
+        return move.build_result(record)
+
+    def emit_announcement(self, move: Move, record: str) -> None:
+        """L5: the one story-admin event and the update note."""
+        rt, story = self.runtime, move.story
+        data = move.data | {"record": record, "before": move.before}
+        data["after"] = story_admin.facts(story)
         rt.events.emit(Event(EventKind.STORY_ADMIN, story_admin.PO_ROLE, story.id, data))
-        rt.relay.post(Note("update", self._notice(story, leave, sprint, cleared), [story.id]))
-        return {
-            "status": "removed",
-            "story": story.id,
-            "step": story.step,
-            "sprint": sprint,
-            "cleared": asdict(cleared),
-            "record": record,
-        }
+        rt.relay.post(Note("update", move.notice, [story.id]))
 
-    def _data(self, leave: Leave, sprint: int, cleared: Cleared) -> dict[str, Any]:
-        return {
-            "tool": TOOL,
-            "reason": leave.reason,
-            "question": None,
-            "sprint": sprint,
-            "cleared": asdict(cleared),
-        }
-
-    def _notice(self, story: StoryState, leave: Leave, sprint: int, cleared: Cleared) -> str:
-        return NOTICE.format(
-            story=story.id,
-            title=story.title,
-            sprint=sprint,
-            reason=leave.reason,
-            cleared=cleared.text,
-        )
-
-    def _line(self, leave: Leave, sprint: int, cleared: Cleared) -> str:
-        return FILE_LINE.format(
-            date=_today(), sprint=sprint, reason=leave.reason, cleared=cleared.text
-        )
-
-    async def _record(self, story: StoryState, line: str) -> str:
+    async def write_record(self, story: StoryState, line: str) -> str:
         """L4: add the line to the story file and commit it, holding the checkout lock."""
         rt = self.runtime
         file = story_spec.file_of(rt.config, story.id)
