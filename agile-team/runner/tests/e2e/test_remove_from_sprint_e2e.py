@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from agile_team import sprint_end, system
+from agile_team.boundary import Boundary, Edge
 from agile_team.cli import status_report
 from agile_team.gates import StoryStatus
 from agile_team.po_tools import Tools
+from agile_team.story_branches import Landed
 
-from ..test_po_tools import call
+from ..test_po_tools import call, snapshot
 from ..test_s189_remove_from_sprint import CRASH, REASON, leave, setup
 
 
@@ -40,17 +43,54 @@ def test_ac2_the_sprint_can_end(make_runtime) -> None:
     rt.state.stories["s2"].status = StoryStatus.DONE
     rt.save()
     end = {"kind": "sprint-end", "text": "done"}
-    assert call(t.notify_user(end))["status"] == "refused"
+    print("END CHECK BEFORE", sprint_end.end_refusal(rt.state))
+    refusal = call(t.notify_user(end))
+    print("SPRINT-END BEFORE", json.dumps(refusal))
+    assert refusal["status"] == "refused"
     leave(t)
+    print("END CHECK AFTER", sprint_end.end_refusal(rt.state))
     assert sprint_end.end_refusal(rt.state) is None
-    assert call(Tools(rt).notify_user(end)).get("status") != "refused"
+    accepted = call(Tools(rt).notify_user(end))
+    print("SPRINT-END AFTER", json.dumps(accepted))
+    assert accepted.get("status") != "refused"
 
 
-def test_ac3_work_is_refused_pointing_at_revert_story(make_runtime) -> None:
-    rt, t = setup(make_runtime)
+def mark_commit(rt) -> None:
     rt.state.stories["s1"].commit = "1" * 40
+
+
+def mark_landed(rt) -> None:
+    rt.state.stories["s1"].landed = Landed("m" * 40)
+
+
+def mark_open_landing(rt) -> None:
+    rt.state.landing = "s1"
+
+
+def mark_boundary(rt) -> None:
+    rt.state.boundary = Boundary(Edge.START, 2)
+
+
+REFUSALS = {
+    "commit": mark_commit,
+    "landing": mark_landed,
+    "open-landing": mark_open_landing,
+    "pending-boundary": mark_boundary,
+}
+
+
+@pytest.mark.parametrize("case", list(REFUSALS))
+def test_ac3_work_is_refused_pointing_at_revert_story(make_runtime, case) -> None:
+    rt, t = setup(make_runtime)
+    REFUSALS[case](rt)
     rt.save()
+    before = snapshot(rt)
     out = leave(t)
-    print("REFUSAL", json.dumps(out))
-    assert out["status"] == "refused" and "revert_story" in out["reason"]
+    print("REFUSAL", case, json.dumps(out))
+    assert out["status"] == "refused"
+    if case != "pending-boundary":
+        assert "revert_story" in out["reason"]
+    after = snapshot(rt)
+    print("UNCHANGED", case, before == after)
+    assert before == after
     assert rt.state.stories["s1"].sprint == 1 and rt.state.stories["s1"].hold == CRASH
