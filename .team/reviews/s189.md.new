@@ -1,0 +1,125 @@
+## Round 3 (diff `941e9cfb..7bc4ac39`, plus a re-read of the whole story diff)
+
+**Verdict: done.** Runner results: coverage exit 0, 98% total, all green.
+
+Since round 2:
+
+| Commit | Change | Finding |
+|---|---|---|
+| `ba0783ab` | `docs/design/s189.md` now lists the helpers as shipped (`find_*_refusal`, `_find_work_refusal`, `emit_announcement`, `write_record`) | matches `sprint_leave.py`; none |
+| `7bc4ac39` | `roles/product-owner.md`, the Sprint Backlog stuck list now names `remove_from_sprint for a story with no commits` | design § product-owner.md (stuck list) is now complete, and it matches `sprint_end.SPRINT_STUCK_ADVICE` (s189/AC2, REQ-254); none |
+
+I re-read `sprint_leave.py`, the `po_tools`/`revert_log`/`sprint_end` diffs and the test file
+against design L1 to L10. The per-function table below still holds. New checks this round:
+
+- **Other stories' overlap holds** (s189/AC1, REQ-253): if another sprint story is
+  overlap-held waiting on the removed story, `overlaps._is_gone` counts a story with
+  `sprint != state.sprint` as gone, so that hold lifts on the next `lift_due`. No defect.
+- **`pulled` kept** (s189/AC1, REQ-252): `Reverter` drops the story from `state.pulled`,
+  but this tool keeps it. Design L1 asks for that, and the test asserts it. As designed.
+- **The s156 assertion change** (`c69fcb82`, `STUCK_RESETS` gains the tool): design L6
+  supports it. Justified.
+- **Nit, docs only, no AC** (`reference/protocol.md`, the refusals bullet): it says the
+  answered questions are "settled first. Then: a drifted checkout …". In the code,
+  `Tools.remove_from_sprint` checks drift **before** `SprintLeave.run` settles. This is
+  harmless, because a drift halt changes nothing, but the doc's order is backwards. Fix
+  it when the file is next touched.
+- **Nit, test, s189/AC3 (REQ-255)**: `test_refused_when_the_checkout_moved` asserts only
+  `sprint == 1`. It does not use the `refused()` helper's full no-change check. Not blocking.
+- Round-2 nit still open: no test pins the boundary text winning over an unknown id
+  (s189/AC3, REQ-256).
+
+There is no new copy/paste and no top-level code.
+
+## Round 2 (diff `778bba46..941e9cfb`)
+
+**Verdict: done.** All four round-1 findings are fixed. Runner results: coverage 98%, all green.
+
+| Round-1 finding | Fix | Status |
+|---|---|---|
+| 1. Docs missing (s189/AC1–AC3; REQ-252, REQ-254, REQ-255) | `roles/product-owner.md`: a new `remove_from_sprint` bullet beside `revert_story` (when to use it, what it keeps and what refuses it), and the sprint-end rule now includes "removed from the sprint". `reference/protocol.md`: a full section (what stays, holds cleared, worktree, story-file line, event and note, refusal order, work texts), the sprint-end bullet and the stuck-backlog list. `SKILL.md` and the `README.md` row each get one sentence. The texts match `sprint_end.END_REFUSED` / `SPRINT_STUCK_ADVICE` and `sprint_leave` | fixed |
+| 2. Refusal order vs L9 (s189/AC3, REQ-256) | `find_refusal` now runs `boundary_refusal` first and the unknown check second, inside `priority.first_refusal`. That call is lazy (`next(...)`), so the later lambdas never see `story is None` | fixed |
+| 3. Missing docstrings (no AC; engineering rule) | `read_today` and the four `find_*_refusal` methods now have docstrings | fixed |
+| 4. Board side of AC1 not checked (s189/AC1, REQ-252) | `test_status_and_snapshot_show_it_in_the_product_backlog` now builds `dashboard.snapshot` and asserts that `s1.sprint is None` and `s2.sprint == 1` | fixed |
+| Nit: local import | `CheckoutRecord` moved to the module imports | fixed |
+
+Nit, not blocking (s189/AC3, REQ-256): no test sends an unknown id while a boundary is
+pending, so the new order (boundary text wins) isn't pinned by a test. Nothing changes
+either way.
+
+No new copy/paste and no top-level code in the changed files.
+
+# s189 review: `remove_from_sprint`
+
+Diff reviewed: `7830c089^..HEAD` (story commits only). Runner results: coverage 98%, all green.
+
+**Verdict: changes requested.** The code and its tests are sound. The docs the design
+lists in its Files section were never written, and the PO's role prompt is one of them.
+
+## Defects
+
+1. **Blocking: the role prompt and the reference docs are missing** (s189/AC1, AC2, AC3;
+   REQ-252, REQ-254, REQ-255; repo rule "Docs move with behaviour"; design § "Changes
+   per module"). `grep remove_from_sprint` finds nothing in:
+   - `agile-team/runner/agile_team/roles/product-owner.md`: the `revert_story` bullet,
+     the sprint-end rule and the stuck-backlog action list are unchanged. The PO learns
+     of the tool only from the SCHEMAS text, and its prompt still says a sprint ends only
+     when its stories are done, cancelled or reverted.
+   - `agile-team/reference/protocol.md`: the sprint-membership list (L1–L10, the event,
+     the texts), the "A sprint ends only when it is finished" bullet and the stuck-backlog
+     list.
+   - `agile-team/SKILL.md`: the sentence after `add_to_sprint`.
+   - `README.md` agile-team row, if it lists the PO tools (check).
+2. **Minor: refusal order differs from L9** (s189/AC3, REQ-256). The design order is
+   boundary (2), then unknown (3). `SprintLeave.find_refusal` checks unknown before
+   `boundary_refusal`, so an unknown id while a boundary is pending gets `UNKNOWN`, not
+   the boundary text. Nothing changes either way, so it does no harm. Either reorder
+   it, or have the architect note that unknown comes first (`revert_story` and
+   `add_to_sprint` can be the model).
+3. **Minor: public methods have no docstrings** (no AC; engineering rule "Every public
+   function is documented"): `read_today`, `SprintLeave.find_finished_refusal`,
+   `find_sprint_refusal`, `find_running_refusal`, `find_dependents_refusal`. Either
+   document them or make the helpers private (`_find_work_refusal` is already private).
+4. **Minor test gap: the Board side of AC1 is not checked** (s189/AC1, REQ-252). The
+   design checklist asks for "the snapshot's story `sprint` are `None`".
+   `test_status_and_snapshot_show_it_in_the_product_backlog` checks only
+   `status_report`, although its name says snapshot. Add the dashboard snapshot
+   assertion, or rename the test.
+
+## Per function
+
+| Function | What it does | Tests | Defect |
+|---|---|---|---|
+| `Cleared.text` | `runner hold: …; PO hold: …` or `none` | all four cases, `test_cleared_text_names_both_holds_or_none` | none |
+| `read_cleared` | runner hold, plus the PO hold reason when the kind is HOLD | plain and CANCEL kinds | none (AC1/REQ-253) |
+| `list_sprint_dependents` | unfinished sprint stories that depend on the id, in state order | order, an out-of-sprint dependent ignored, a done dependent ignored | none |
+| `release_worktree` | removes the worktree, clears `worktree_head`, emits `story-branch removed` | worktree / no worktree; the event data is asserted exactly | none. `Workspaces.remove` uses `--force`, so a dirty crashed tree is fine |
+| `read_today` | UTC date from `system.now()` | indirectly (regex on the line) | no docstring (#3) |
+| `Move.line` / `notice` / `data` / `build_result` | L4/L5/L6 texts and payloads | file-line regex, exact NOTICE, event fields, result fields | none |
+| `SprintLeave.run` | settles cancel and revert questions, checks, applies | settle test (answered cancel leads to the cancelled refusal) | none |
+| `find_refusal` | runs the L9 chain through `priority.first_refusal` | each refusal tested once, with state, git head, story file and notes unchanged | order (#2) |
+| `find_finished_refusal`, `find_sprint_refusal`, `find_running_refusal`, `find_dependents_refusal` | single checks | done and cancelled; not in the sprint; sprint 0; running; two dependents | no docstrings (#3) |
+| `_find_work_refusal` | open landing (step, `state.landing`, revert queue) > landed > commits | all six cases; every text contains `revert_story` (AC3/REQ-255); a branch with no commits is allowed | none |
+| `apply` | snapshots facts, clears the sprint and holds, releases the worktree, saves, records, emits | step, order, pulled, goal and sprint kept; holds cleared; BLOCKED kept; no boundary and no priority event | none (AC1/REQ-252, REQ-253) |
+| `emit_announcement` | one `story-admin` event, one `update` note | `test_one_story_admin_event`, `test_one_update_note` | none |
+| `write_record` | appends under `## Left the sprint`, commits the one file under `checkout_lock`, records the checkout | one commit and its subject; `record` == HEAD == checkout record; a second line under the same heading; no file means `""` and no commit | none. Note: `rt.save()` runs before the commit, so a failed commit leaves the state saved with no event. This matches `Reverter`; acceptable |
+| `revert_log.FileSection` / `append_under` | shared append under a heading | heading added once; trailing newline handled | none |
+| `revert_log.with_entry` | now delegates | the s124 tests are unchanged and green | none |
+| `po_tools.Tools.remove_from_sprint` | drift halt, then `SprintLeave` | drift gives `halted` with nothing changed | none |
+| `po_tools._release_leavers` | loops and delegates to `release_worktree` | the start_sprint leaver tests are unchanged and green | none |
+| `po_tools.STUCK_RESETS`, `SCHEMAS` | tool registered and resets `stuck_asks` | reset on success, kept on refusal, schema and `tool_names` | none. The s156 assertion change is justified: L6 adds the tool |
+| `sprint_end.END_REFUSED`, `SPRINT_STUCK_ADVICE` | name the new tool | `test_texts_name_the_tool`, both formats | none (AC2/REQ-254) |
+| AC2 end to end | | `end_refusal` is None, `sprint_complete`, the `notify_user(sprint-end)` refusal goes away, `keep_going_refusal` | none |
+
+## Copy/paste
+
+The `_release_leavers` loop body was moved into `sprint_leave.release_worktree`, and
+`with_entry` now uses `append_under`, so no duplicate is left. The four
+`find_*_refusal` methods share one shape (`if ok: return None; return TEXT.format`). That
+is the repo's usual idiom, not a copied block.
+
+## Top-level code
+
+`sprint_leave.py` and `test_s189_remove_from_sprint.py` hold only a docstring, imports,
+constants, defs and classes. Nit: `test_refused_when_the_checkout_moved` imports
+`CheckoutRecord` inside the function; move it up to the module imports.
