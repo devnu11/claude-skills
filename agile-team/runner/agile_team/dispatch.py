@@ -68,7 +68,15 @@ from .boundary import BoundaryHold, StepKind
 from .boundary_runner import boundary_data
 from .checkout import CheckoutChanged
 from .commands import CommandRunner, shell_runner
-from .config import CONFIG_NAME, ENVIRONMENT_SECTION, OLD_ENVIRONMENT_NAME, Config, Environment
+from .config import (
+    CONFIG_NAME,
+    ENVIRONMENT_SECTION,
+    OLD_ENVIRONMENT_NAME,
+    Config,
+    ConfigError,
+    Environment,
+)
+from .config_reload import ConfigChange, ConfigWatch, LiveConfig, check_static
 from .events import EVENTS, Event, EventKind, EventLog
 from .gates import (
     FINISHED,
@@ -477,6 +485,8 @@ class Runtime:
     main_git: Git | None = None
     revert_queue: list[Any] = field(default_factory=list)
     landings: Any = None
+    config_blob: str | None = None
+    live_for: Callable[[Config], LiveConfig] | None = None
     events: EventLog = field(init=False)
     pulse: live.Pulse = field(init=False)
     stage_log: StageLog = field(init=False)
@@ -493,6 +503,8 @@ class Runtime:
             self.upstream = Upstream(self.git, self.config.upstream)
         if self.pipeline_for is None:
             self.pipeline_for = self._get_pipeline
+        if self.live_for is None:
+            self.live_for = self._keep_live
         self.events.writer = self.ledger.writer = self.writer
 
     @property
@@ -502,6 +514,22 @@ class Runtime:
 
     def _get_pipeline(self, config: Config) -> Pipeline:
         return self.pipeline
+
+    def _keep_live(self, config: Config) -> LiveConfig:
+        """R4 without the CLI: same book, providers and shell; pipeline from pipeline_for."""
+        problems = check_static(config, self.book)
+        if problems:
+            raise ConfigError("; ".join(problems))
+        assert self.pipeline_for is not None
+        return LiveConfig(config, self.book, self.pipeline_for(config), self.providers, self.shell)
+
+    def update_config(  # house-rules: allow query-property -- swaps the live config, logs an event
+        self,
+    ) -> ConfigChange | None:
+        """R2: take a new committed config at a safe point; ``None`` in a view or under the lock."""
+        if self.worktree_of is not None or (self.main_lock and self.main_lock.locked()):
+            return None
+        return ConfigWatch(self).update()
 
     @property
     def halted_by(self) -> Halt | None:

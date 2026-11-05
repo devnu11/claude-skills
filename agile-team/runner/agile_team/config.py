@@ -336,8 +336,13 @@ def read_raw(repo: Path) -> dict[str, Any]:
     path = config_path(repo)
     if not system.is_file(path):
         raise ConfigError(f"{CONFIG_NAME} not found in {repo}; run `agile-team init`")
+    return parse_text(system.read_text(path))
+
+
+def parse_text(text: str) -> dict[str, Any]:
+    """s173: parse config text; a TOML error is a ``ConfigError`` naming the file."""
     try:
-        return tomllib.loads(system.read_text(path))
+        return tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{CONFIG_NAME}: {exc}") from exc
 
