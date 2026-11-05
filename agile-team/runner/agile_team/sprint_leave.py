@@ -94,6 +94,7 @@ def release_worktree(runtime: Runtime, story: StoryState) -> None:
 
 
 def read_today() -> str:
+    """UTC date today."""
     return datetime.fromtimestamp(system.now(), UTC).strftime("%Y-%m-%d")
 
 
@@ -170,12 +171,11 @@ class SprintLeave:
     def find_refusal(self, leave: Leave) -> str | None:
         """Why the call is refused, or None; the first failing check wins."""
         stories = self.runtime.state.stories
-        if leave.story_id not in stories:
-            return story_admin.UNKNOWN.format(story=leave.story_id)
-        story = stories[leave.story_id]
+        story = stories.get(leave.story_id)
         return priority.first_refusal(
             [
                 SprintAdd(self.runtime).boundary_refusal,
+                lambda: None if story else story_admin.UNKNOWN.format(story=leave.story_id),
                 lambda: None if leave.reason.strip() else story_admin.NO_REASON,
                 lambda: self.find_finished_refusal(story),
                 lambda: self.find_sprint_refusal(story),
@@ -187,11 +187,13 @@ class SprintLeave:
         )
 
     def find_finished_refusal(self, story: StoryState) -> str | None:
+        """Refuse a done or cancelled story."""
         if story.status not in FINISHED:
             return None
         return story_admin.FINISHED_TEXT.format(story=story.id, status=story.status, verb=VERB)
 
     def find_sprint_refusal(self, story: StoryState) -> str | None:
+        """Refuse a story not in the running sprint."""
         state = self.runtime.state
         if state.sprint_open() and story.sprint == state.sprint:
             return None
@@ -209,11 +211,13 @@ class SprintLeave:
         return None
 
     def find_running_refusal(self, story: StoryState) -> str | None:
+        """Refuse a story whose step is running."""
         if story.id not in self.runtime.flags.running:
             return None
         return STEP_RUNNING.format(story=story.id, step=story.step)
 
     def find_dependents_refusal(self, story: StoryState) -> str | None:
+        """Refuse while sprint stories depend on it."""
         ids = list_sprint_dependents(self.runtime.state, story.id)
         if not ids:
             return None

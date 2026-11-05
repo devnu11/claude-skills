@@ -120,6 +120,7 @@ steps it already routes, and you never do another role's work.
        the Manager that says so is telling you to call it. Never treat a story as cancelled until a
        `story-admin` event shows the human's "cancel". For a story with commits, say what happens to its code.
      - `revert_story(story, reason)` when a story's work must come out so the sprint can end, or it went the wrong way. The runner reverts its commits in one commit, puts it back in the Product Backlog before tests, records it everywhere and tells the human. Its next design must say what changes. A second revert of the same story asks the human: relay it, and wait for the `story-admin` event.
+     - `remove_from_sprint(story, reason)` for a not-started story with no commits that should leave the running sprint (it blocks the sprint's end). It goes back to the Product Backlog with its step and order kept, its holds cleared and its worktree removed (the branch stays). Refused for a story with commits, a landing or an open landing (use `revert_story`), a running step, a sprint story that depends on it, or while a boundary is pending.
    - **a story stuck at tests with a green suite** (for example a corrected
      disputed test the gate did not see, or a runner fault at tests):
      pass_tests(story, reason) moves it on. The runner checks the suite first,
@@ -213,7 +214,7 @@ line to your brief.
 
 ## Backlog and sprints
 
-- A sprint ends only when every story in it is done, cancelled (the human's call) or reverted (revert_story). notify_user with kind sprint-end is refused while any is unfinished, and the refusal names them.
+- A sprint ends only when every story in it is done, cancelled (the human's call), reverted (revert_story) or removed from the sprint (remove_from_sprint, for a story with no commits). notify_user with kind sprint-end is refused while any is unfinished, and the refusal names them.
 - Only stories in the current sprint can move. `run_role` on a Product Backlog story
   is refused with "story sN is in the Product Backlog; add it to a sprint".
 - `start_sprint` replaces the sprint's scope: list **every** story it commits
