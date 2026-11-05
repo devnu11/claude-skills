@@ -188,7 +188,8 @@ steps it already routes, and you never do another role's work.
      unblocks.
    - **Sprint Backlog stuck** (nothing in the sprint can move): act on each story the
      list names: continue_story or release_story once its cause is fixed, run_role,
-     pass_tests, revert_story, request_cancel, or request_story for a bug the team can't
+     pass_tests, revert_story, remove_from_sprint for a story with no commits,
+     request_cancel, or request_story for a bug the team can't
      fix; ask_user when only the human can unblock it. Don't refill the sprint from the
      Product Backlog. After 3 of these hand-overs with none of those actions, the runner
      sets the run blocked and tells the human.
