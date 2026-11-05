@@ -161,3 +161,35 @@ fresh merge, checks and CI run. Design: `agile-team/docs/design/s180.md`.
 - **A drop names what moved the head.** `landing-dropped` gains `moved_by`
   and `refusal`, and the PO gets a non-holding `landing_dropped` line.
 
+## Amended by s177 (2026-11-04)
+
+This amendment does the follow-up that s163's known limits asked for. Before
+it, a refused sprint push gave up its merge and then followed any remote that
+descended from `pushed`. A remote that hadn't moved, or one that already had
+the merge, therefore cost up to five merges, five full checks and five CI
+runs, and ended in a hold whose reason was wrong. Design:
+`agile-team/docs/design/s177.md`.
+
+- **Fetch first, then decide by the remote head `R`.** The lander gives up
+  nothing before it has `R`. One table (`landing.REFUSALS`, keyed by
+  `SprintRemote`) holds the cases.
+  - `R == merge`: the push counts as made, and the story lands as after a
+    successful push.
+  - `R == pushed`: the land holds at once, with the refusal text as the
+    reason. It keeps the merge, `landed` and the landing branch, and
+    `continue_story` / `release_story` retries the same merge. A landing
+    revert holds too, but drops its landing branch, because it keeps no
+    record of its revert merge.
+  - `pushed` is an ancestor of `R`: the merge is given up and the remote is
+    followed, as s163 said.
+  - anything else: the merge is given up and the run halts, as s163 said.
+- **Restart limits are per cause.** Followed remote heads and refused
+  carries each have their own limit of `MAX_RESTARTS`. "The sprint branch
+  kept moving" now needs 5 distinct remote heads and lists them. The carry
+  cause holds with "the sprint head kept moving under the land".
+
+This replaces s163's two known limits. The runner still can't tell a lease
+refusal from other push failures, but it no longer needs to: an unmoved
+remote holds with the text, and the PO reads why. A remote that descends
+from the merge still counts as moved on (known limit in the design).
+
