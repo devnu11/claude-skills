@@ -1010,8 +1010,6 @@ class BoundaryRunner:
         self._advance(b)
 
     async def _finish_green(self, b: Boundary, results: list[CiResult]) -> None:
-        if not results:  # no CI read to name: finish with the fast-forward only
-            return self._finish(b, self._add_ff(f"Sprint {b.sprint} is pushed."))
         text = self._with_big(green_report(b.sprint, results))
         self._finish(b, self._add_ff(text), ci=CiVerdict.GREEN, **_ci_fields(results))
 
