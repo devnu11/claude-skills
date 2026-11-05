@@ -2198,7 +2198,7 @@ The pass ends at the first step whose report matches a row of the
 | `overlap` | a design's `## Files` overlap another open sprint story's work (s163, per story); the story waits at `design`. The line names the files each changes and the overlap. The runner lifts it once the others have landed, left the sprint or been cancelled; `release_story` with a reason lifts it early, and `continue_story` is refused |
 | `boundary_error` | a boundary stage raised an error (traceback in `crash.log`) |
 | `boundary_escalated` | the same boundary failure repeated after a fix and the Manager reviewed it |
-| `ci_green` | the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. This is the only text that calls a PR ready; see the CI rule under **Ready.** |
+| `ci_green` | the END boundary finished with the review PR's CI checks all passed; the line says it is **ready to merge**, and the PO tells the human. It fires once per sprint end, on the boundary's `done` event, never on the CI stage's green `pass` (s188). This is the only text that calls a PR ready; see the CI rule under **Ready.** |
 | `ci_failed` | the review PR's CI failed where our code ran; the line names each failing check (workflow / job), its failing step, its link and its failing test lines. `continue_boundary` is refused here (s111). The PO asks the liaison for a bug story at once (`request_story`; or picks an open story that fixes it), records it with `record_ci_bug` once the runner has opened it, tells the human the PR is **NOT** ready, and lists the story first in the next sprint; see the CI rule under **Ready.** |
 | `ci_infra` | a CI job ran no step, and still ran none after the runner's one re-run. The PR is NOT ready. The PO tells the human; `continue_boundary` reads the checks again once they re-ran it, or `record_ci_bug` records a story that changes the CI job; see the CI rule under **Ready.** |
 | `main_broken` | a check failed where our code ran, and the same job and step fail on `[upstream] branch`'s head. The PO asks the liaison for a bug story for main (`request_story`) and records it with `record_ci_bug` once the runner has opened it: the sprint ends as "ended, CI blocked by main" (NOT done, PR unmerged) and the next sprint starts with that story first; see the CI rule under **Ready.** |
@@ -3753,6 +3753,17 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    A refused push holds `push_rejected` and the stage stays;
    `continue_boundary` reruns it, and a sha already pushed is not pushed
    again.
+
+   **Bookkeeping commits are not new work** (s188, ADR-0094). A
+   *bookkeeping commit* has one parent and changes only paths under
+   `.team/` (or none), like a storyless step's `chore(team): <role> step`
+   or a story-file intake. When every commit after the sha last pushed is
+   one, the stage works on that pushed sha, the **work head**: it pushes
+   nothing, the entry's `head`, `end` and `upstream.last_end` are the
+   pushed sha, and CI is read on it. The bookkeeping commits stay on the
+   team branch, unpushed, and ship with the next sprint's PR. A merge, or
+   a commit that touches any other path, is work, and the work head is
+   HEAD as before.
 4. **ci** (s81), the gate: for the sprint's PR the runner runs
    `gh pr checks <n> --watch`, all under one deadline of `[gates]
    ci_timeout_s` (default 1800 s). It then reads `gh pr checks <n> --required --json
@@ -3792,7 +3803,8 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    Verdicts:
    - **green** (every check passed on the pushed head or was skipped, at
      least one passed): a `pass` event, and the boundary moves on to
-     **replay**. Nothing is called ready yet. Green is the gate: nothing is
+     **replay**. Nothing is called ready yet: the event carries `ci: green`,
+     but `ci_green` fires only on the boundary's `done` (s188). Green is the gate: nothing is
      replayed before it. (The `ci` stage reads the sprint's PR whether it
      is a draft or ready.)
    - **red** (a check is `ours`, even with others still pending): the
@@ -3890,9 +3902,13 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    example, an untracked file would be overwritten), the boundary holds
    `error`. Hashes quoted in reviews and stories are not rewritten. The
    replayed sprint branch is checked at the next start's **check**.
-6. **push-replayed**: first the runner fetches and checks whether the
-   target already contains HEAD (their merge base is HEAD), for example
-   because the human fast-forwarded main to the sprint head (s183). If so,
+6. **push-replayed**: the stage works on the work head (see **push**;
+   s188): HEAD, or the pushed sha when HEAD adds only bookkeeping commits
+   to it. First the runner fetches and checks whether the
+   target already contains the work head (their merge base is the work
+   head), for example
+   because the human fast-forwarded main to the sprint head (s183), even
+   with a PO's chore commit on top of it. If so,
    the sprint closes **as shipped**. Nothing is pushed, no PR is created or
    made ready, and the sprint's recorded PR is closed with `Already on
    <target> at <sha>; closed as shipped.` when it is still open (GitHub
@@ -3906,11 +3922,11 @@ cancelled or reverted (s124), before the `sprint_end` hand-over). The stages run
    `error`, such as a refused PR create ("No commits between"), so that
    boundary closes as shipped too and needs no `state.json` edit. A target
    that holds only part of the sprint gets what follows.
-   When the replay changed nothing (HEAD is still the
+   When the replay changed nothing (the work head is still the
    sha pushed at **push**), a `pass` event (`the rebase changed nothing;
    <branch> stays at <sha>`), the draft PR is made ready, and the boundary
    finishes green: the as-built CI is that head's CI, and the PO gets
-   `ci_green`. Otherwise the runner pushes the replayed HEAD as a **new
+   `ci_green`, once, naming that PR. Otherwise the runner pushes the replayed work head as a **new
    branch** `<prefix><N>-r<k>` (`k = replays + 1`) and opens a ready PR
    from it. It closes the old draft PR with `Replayed onto <target> as
    <url>; this PR is superseded.` and keeps the old branch. The entry's

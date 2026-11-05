@@ -20,7 +20,7 @@ from .boundary import DETACHED, FETCH_FAILED, NO_REMOTE, NO_TARGET, SYNC_OFF, Pr
 from .ci import Check, UpstreamError, checks_of, job_of
 from .ci_triage import Job, bucket_of_run, job_from
 from .commands import TIMED_OUT
-from .config import UpstreamSettings
+from .config import TEAM_DIR, UpstreamSettings
 from .git_ops import Git, GitError
 from .rewrite import Listing, Stamped, pair, parse_listing
 from .story_branches import LAND_SUFFIX
@@ -94,6 +94,36 @@ class SyncOutcome(StrEnum):
     CURRENT = "current"
     REBASED = "rebased"
     CONFLICT = "conflict"
+
+
+TAIL_MARK = "\x1e"  # starts each commit in a tail listing (s188)
+TAIL_MARK_FORMAT = "%x1e%H %P"  # git's spelling of TAIL_MARK, then the sha and parents
+
+
+@dataclass(frozen=True)
+class TailCommit:
+    """One commit after the pushed head: its sha, how many parents it has and its paths."""
+
+    sha: str
+    parents: int
+    paths: tuple[str, ...]
+
+
+def _tail_commit(chunk: str) -> TailCommit:
+    first, *rest = chunk.strip().splitlines()
+    sha, *parents = first.split()
+    return TailCommit(sha, len(parents), tuple(p.strip() for p in rest if p.strip()))
+
+
+def parse_tail(out: str) -> tuple[TailCommit, ...]:
+    """The commits of a ``git log --format=%x1e%H %P --name-only`` listing, as git lists them."""
+    return tuple(_tail_commit(c) for c in out.split(TAIL_MARK) if c.strip())
+
+
+def is_bookkeeping(commit: TailCommit) -> bool:
+    """W1: a plain commit whose paths all lie under the team dir (one with no paths too)."""
+    under = all(p == TEAM_DIR or p.startswith(f"{TEAM_DIR}/") for p in commit.paths)
+    return commit.parents == 1 and under
 
 
 @dataclass(frozen=True)
@@ -642,6 +672,19 @@ class Upstream:
         # Not is_ancestor: an exit-code check reads any unscripted fake command as "shipped".
         code, out = self.git.attempt("merge-base", head, self.target)
         return code == 0 and out.strip() == head
+
+    def has_only_bookkeeping(self, base: str) -> bool:
+        """W2: True when ``base`` is under HEAD and ``base..HEAD`` holds only bookkeeping."""
+        if not self._is_base_of_head(base):
+            return False
+        argv = ("log", "--first-parent", "--no-renames", "--name-only")
+        commits = parse_tail(self.git.run(*argv, f"--format={TAIL_MARK_FORMAT}", f"{base}..HEAD"))
+        return bool(commits) and all(is_bookkeeping(c) for c in commits)
+
+    def _is_base_of_head(self, base: str) -> bool:
+        """True when git names ``base`` as the merge base with HEAD (an exit code alone is not)."""
+        code, out = self.git.attempt("merge-base", base, "HEAD")
+        return code == 0 and out.strip() == base
 
     def delete(self, lease: Lease) -> str | None:
         """Delete a landing branch with its lease (P5); the refusal or git's output on failure."""

@@ -377,7 +377,11 @@ command fails.
    then does it replay the sprint onto `origin/main` on a new branch
    `team/sprint-<N>-r<k>`, remap the recorded hashes, open a ready PR from
    it, close the old draft PR with a link to the new one (the old branch
-   stays), and wait for CI again. A replay conflict goes to DevOps in a
+   stays), and wait for CI again. When the replay changes nothing, the
+   green PR stays the sprint's PR. Commits after the pushed head that
+   change only `.team/` (the PO's `chore(team): <role> step` commits, for
+   example) are not new work: they push nothing, open no new PR and stay
+   on the team branch for the next sprint (s188). A replay conflict goes to DevOps in a
    scratch replay, checked story by story, and the runner moves the sprint
    branch to its result only when it is clean and the full checks pass.
    Red CI on the as-built push holds the boundary, and you get the failing
@@ -389,7 +393,7 @@ command fails.
    tab shows the **Sprint PR**. The sprint is done only when the PR's
    current head has a green run of every required check, read from GitHub
    by the runner itself. No note or answer can make it done. Only a green
-   result says **ready to merge**. main moves only by fast-forward: the
+   result says **ready to merge**, once, when the boundary has finished. main moves only by fast-forward: the
    report gives the command (`git push <remote> <sha>:main`); never
    "Rebase and merge", which would rewrite the story merges. Red CI comes with the failing jobs,
    steps and test lines, and the runner sorts it out (s111):

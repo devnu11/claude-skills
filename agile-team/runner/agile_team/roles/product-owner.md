@@ -150,8 +150,9 @@ steps it already routes, and you never do another role's work.
    - **boundary escalated**: the same check failure repeated after a devops
      fix and the manager reviewed it. Decide what changes (ask the human,
      `request_story`), then `continue_boundary(note)`.
-   - **ci_green**: tell the human the PR is ready to merge, quoting the line.
-     This is the only time you may call a PR ready.
+   - **ci_green**: the sprint end boundary has finished with green CI. Tell the human the PR
+     is ready to merge, quoting the line. It comes once per sprint end; this is the only time
+     you may call a PR ready.
    - **ci_failed**: our code ran and failed. The runner has already
      re-run, once, any job that never ran (`no runner was assigned`, or
      a cancel whose steps never started), so read the failing lines first

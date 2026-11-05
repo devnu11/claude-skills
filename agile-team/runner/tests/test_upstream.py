@@ -407,3 +407,73 @@ def test_s183_is_not_in_target_when_the_merge_base_is_another_sha(fake: FakeSyst
 def test_s183_is_not_in_target_when_merge_base_fails(fake: FakeSystem) -> None:
     fake.reply(("git", "merge-base"), Done(1, NEW + "\n"))
     assert upstream_for().is_in_target(NEW) is False
+
+
+# ---------- s188: bookkeeping tails ----------
+
+MARK = up.TAIL_MARK
+TEAM_ONLY = f"{MARK}{NEW} {OLD}\n\n.team/po/handoff.md\n"
+MIXED = f"{MARK}{NEW} {OLD}\n\n.team/x.md\nagile-team/x.py\n"
+
+
+def test_s188_parse_tail_reads_commits_with_parents_and_paths() -> None:
+    merge = f"{MARK}{OLD} {NEW} {'c' * 40}\n"
+    commits = up.parse_tail(TEAM_ONLY + merge)
+    assert commits == (
+        up.TailCommit(NEW, 1, (".team/po/handoff.md",)),
+        up.TailCommit(OLD, 2, ()),
+    )
+
+
+def test_s188_parse_tail_of_nothing_is_empty() -> None:
+    assert up.parse_tail("") == ()
+    assert up.parse_tail("\n") == ()
+
+
+@pytest.mark.parametrize(
+    ("commit", "want"),
+    [
+        (up.TailCommit(NEW, 1, (".team/po/handoff.md",)), True),
+        (up.TailCommit(NEW, 1, (".team",)), True),
+        (up.TailCommit(NEW, 1, ()), True),
+        (up.TailCommit(NEW, 1, (".team/a", "agile-team/x.py")), False),
+        (up.TailCommit(NEW, 1, (".teamwork/x",)), False),
+        (up.TailCommit(NEW, 2, (".team/a",)), False),
+    ],
+)
+def test_s188_is_bookkeeping(commit: up.TailCommit, want: bool) -> None:
+    assert up.is_bookkeeping(commit) is want
+
+
+def tail_replies(fake: FakeSystem, base: str, log: str, code: int = 0) -> None:
+    fake.reply(("git", "merge-base"), Done(code, base + "\n"))
+    fake.reply(("git", "log", "--name-only"), Done(0, log))
+
+
+def test_s188_has_only_bookkeeping_is_true_for_a_team_only_tail(fake: FakeSystem) -> None:
+    tail_replies(fake, OLD, TEAM_ONLY)
+    assert upstream_for().has_only_bookkeeping(OLD) is True
+    [argv] = issued(fake, "merge-base")
+    assert argv[-2:] == (OLD, "HEAD")
+    [log] = issued(fake, "log")
+    assert "--first-parent" in log and f"{OLD}..HEAD" in log
+
+
+def test_s188_has_only_bookkeeping_is_false_when_base_is_not_under_head(fake: FakeSystem) -> None:
+    tail_replies(fake, NEW, TEAM_ONLY)
+    assert upstream_for().has_only_bookkeeping(OLD) is False
+
+
+def test_s188_has_only_bookkeeping_is_false_when_merge_base_fails(fake: FakeSystem) -> None:
+    tail_replies(fake, OLD, TEAM_ONLY, code=1)
+    assert upstream_for().has_only_bookkeeping(OLD) is False
+
+
+def test_s188_has_only_bookkeeping_is_false_for_an_empty_log(fake: FakeSystem) -> None:
+    tail_replies(fake, OLD, "")
+    assert upstream_for().has_only_bookkeeping(OLD) is False
+
+
+def test_s188_has_only_bookkeeping_is_false_when_one_commit_is_work(fake: FakeSystem) -> None:
+    tail_replies(fake, OLD, TEAM_ONLY + MIXED)
+    assert upstream_for().has_only_bookkeeping(OLD) is False

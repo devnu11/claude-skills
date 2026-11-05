@@ -398,7 +398,7 @@ def brep(hold=None, **fields) -> dict:
 
 
 def test_ci_green_row_matches_on_the_ci_field() -> None:
-    report = brep(None, ci="green", prs="#14 u")
+    report = brep(None, outcome="done", ci="green", prs="#14 u")
     assert handover.triggers(report) == [T.CI_GREEN]
     [line] = handover.report_lines(report, None)
     assert "ready to merge" in line and "#14 u" in line
