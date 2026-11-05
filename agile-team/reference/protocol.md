@@ -2460,9 +2460,10 @@ committed to, or `null` when it is in the Product Backlog.
     <cleared>.` The result is `{"status": "removed", "story", "step",
     "sprint", "cleared", "record"}`, and a call that is not refused resets
     `stuck_asks`.
-  - **Refusals, first one wins, nothing changed.** Answered cancel and revert
-    questions are settled first. Then: a drifted checkout (the halted
-    report, as `revert_story`); a pending boundary (the `add_to_sprint`
+  - **Refusals, first one wins, nothing changed.** A drifted checkout is
+    checked first and returns the halted report, as `revert_story`, before
+    anything else runs. Then answered cancel and revert questions are
+    settled, and the checks run: a pending boundary (the `add_to_sprint`
     text); an unknown story; a blank reason; a done or cancelled story; a
     story not in the open sprint (`story sN is not in the running sprint N;
     nothing to remove`); a cancel or revert question waiting on the story;
