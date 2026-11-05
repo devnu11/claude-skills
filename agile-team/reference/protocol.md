@@ -2429,10 +2429,20 @@ committed to, or `null` when it is in the Product Backlog.
   `reason` (`sprint N still has unfinished stories (…); use add_to_sprint to
   add work, or give a reason for starting a new sprint`). The reason is added
   to the `sprint-start` event as `"reason"`.
+- **`remove_from_sprint(story, reason)` (s189)** takes a not-started story with
+  no commits out of the running sprint. Its `sprint` becomes `None` (it shows in
+  the Product Backlog), its step and order are kept, its runner and PO holds are
+  cleared, its worktree is removed and its branch kept. The runner appends a line
+  under `## Left the sprint` in the story file (one commit), emits a `story-admin`
+  event and posts an `update` note. Refusals, in order: boundary pending, unknown
+  story, empty reason, done or cancelled, not in the running sprint, a question
+  asked about it, an open landing, landed, commits (the last three name
+  `revert_story`), a running step, sprint stories that depend on it. It resets
+  `stuck_asks`. The stuck Sprint Backlog advice and the `sprint-end` refusal name it.
 - **A sprint ends only when it is finished (s124).** It is finished when it
   has stories and every one is done, cancelled (the human's call) or reverted
   (`revert_story`, see "Reverting a story"). Cancelled and reverted stories
-  leave the sprint. The end boundary opens, and `sprint_end` is handed over,
+  leave the sprint, and so does one taken out with `remove_from_sprint`. The end boundary opens, and `sprint_end` is handed over,
   only then. `notify_user` with kind `sprint-end` is refused while any sprint
   story is unfinished: `sprint N can't end: s3 at implement, s5 at design
   unfinished. Finish them, revert_story(story, reason), or ask the human to

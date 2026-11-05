@@ -145,7 +145,8 @@ command fails.
    running sprint with `add_to_sprint(stories, reason)`. The sprint keeps its
    number and branch, and no boundary or Manager turn runs. A new
    `start_sprint` while stories are unfinished needs a reason. **A sprint
-   ends only when every story in it is done, cancelled or reverted:** the
+   ends only when every story in it is done, cancelled, reverted or removed (`remove_from_sprint(story, reason)`, for a
+   story with no commits):** the
    runner refuses the PO's `sprint-end` note before then and names the
    unfinished stories. When nothing in the Sprint Backlog can move, the
    runner hands the PO each story's stall reason and never offers Product
