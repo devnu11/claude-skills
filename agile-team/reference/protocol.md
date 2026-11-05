@@ -3380,7 +3380,7 @@ commit about to be carried.
 
 **Giving up a merge.** A landing gives up its merge when the sprint head
 moved under it and the commits can't be carried, or when its sprint push
-was refused. It clears the story's `landed` (a revert has none), deletes the
+was refused and the remote moved on or went elsewhere (below). It clears the story's `landed` (a revert has none), deletes the
 landing branch under its lease (a branch already gone is fine), and logs
 `landing-dropped`. The event holds `merge`, `why` (`sprint head moved` or
 `sprint push refused`), `sprint_head`, `moved_by` and `refusal`. `moved_by`
@@ -3388,27 +3388,44 @@ lists every commit of `B..head`, oldest first, as `<sha7> <subject>`, and is
 empty after a refused push. `refusal` is the reason the carry was refused.
 The land step's report lists the drops under `land.dropped`, and the PO gets
 a `landing_dropped` line that holds nothing. The landing then merges afresh
-onto the current sprint head and runs its checks and CI again. After 5 fresh
-starts in one turn the land holds (`the sprint branch kept moving`). A
-landing never pushes a merge the sprint head has moved past, except over
-commits it carries.
+onto the current sprint head and runs its checks and CI again. Fresh starts
+in one land are counted by cause, each with a limit of 5. After 5 followed
+remote heads (below) the land holds with `the sprint branch kept moving: its
+remote moved 5 times, to <head>, ...` (each head's first 12 characters,
+oldest first). After 5 refused carries it holds with `the sprint head kept
+moving under the land: it started afresh 5 times`. A landing never pushes a
+merge the sprint head has moved past, except over commits it carries.
 
-**A refused sprint push** is never retried as is. The landing gives up its
-merge, fetches the remote head `R` and:
+**A refused sprint push** (s177). The landing first fetches the sprint
+branch and reads its remote head `R`. It gives up nothing until it has `R`:
 
-- when `R` descends from the runner's `pushed` (someone pushed a fix, or
-  another landing moved it): if the main checkout already has `R`, only
-  `pushed` becomes `R`; else the main checkout fast-forwards to `R`, the
-  checkout is recorded, and `head` and `pushed` both become `R`. Either way
-  the land merges afresh;
-- otherwise, or when the fast-forward fails, the run halts as checkout drift
-  (`the sprint branch <branch> on <remote> is at <sha>, which does not
-  descend from the runner's <sha>; nothing was pushed`).
+- `R` equals the merge: the push went through and only its reply was lost.
+  The landing goes on as after a successful push: `pushed` becomes the
+  merge, the main checkout fast-forwards (over any carried commits), `head`
+  follows the checkout, and the story is recorded landed with `ci: green`.
+  No `landing-dropped`.
+- `R` equals the runner's `pushed`: the remote didn't move, so the push
+  failed for another reason (branch protection, auth, the network). The land
+  holds at once with `pushing the sprint branch <branch> was refused:
+  <refusal text>`. The merge is kept: `landed.merge` and `landed.pushed`
+  stay, the landing branch stays, and no new merge is made.
+  `continue_story` or `release_story` resumes that merge, reads its CI again
+  and pushes it again. A landing revert holds the same way, but its landing
+  branch is deleted and its release reverts afresh, because a revert keeps
+  no record of its revert merge.
+- `R` descends from `pushed` (someone pushed a fix, or another landing moved
+  it): the landing gives up its merge. If the main checkout already has `R`,
+  only `pushed` becomes `R`. Else the main checkout fast-forwards to `R`,
+  the checkout is recorded, and `head` and `pushed` both become `R`. Either
+  way the land merges afresh, and `R` counts toward the 5 followed heads.
+- otherwise, when `R` is empty, or when the fast-forward fails: the landing
+  gives up its merge and the run halts as checkout drift (`the sprint branch
+  <branch> on <remote> is at <sha>, which does not descend from the
+  runner's <sha>; nothing was pushed`).
 
-Known limit: the runner can't tell a lease refusal from another push failure
-(branch protection, auth, the network). Such a refusal with an unmoved
-remote re-lands up to the 5 fresh starts, then holds with `the sprint branch
-kept moving` (ADR-0084).
+Known limit: a remote that descends from the merge (the push went through,
+then something else was pushed on top) counts as moved on, so the story
+merges again onto a head that already has it (ADR-0084).
 
 **Resuming.** A run stopped after the landing push, or a held landing CI
 that `continue_story` releases, resumes the CI wait on that sha with no new
