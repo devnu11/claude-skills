@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -71,6 +72,8 @@ PUSH_REFUSED = "the landing push was refused: {why}"
 CI_HELD = "landing CI on {sha} is {verdict}; the land holds"
 SPRINT_PUSH_REFUSED = "pushing the sprint branch {branch} was refused: {why}"
 MAX_RESTARTS = 5
+KEPT_MOVING = "the sprint branch kept moving: its remote moved {count} times, to {heads}"
+HEAD_KEPT_MOVING = "the sprint head kept moving under the land: it started afresh {count} times"
 PERMISSION_WAIT = "push_permission"
 GIVE_UP_REFUSED = "sprint push refused"
 REVERT_CONFLICT = "reverting story {story} stopped: {why}; nothing was reverted"
@@ -91,6 +94,23 @@ class Merged:
 
     clean: bool
     text: str
+
+
+class SprintRemote(StrEnum):
+    """Where a refused sprint push found the remote head (s177 R1)."""
+
+    HAS_MERGE = "has-merge"
+    UNMOVED = "unmoved"
+    MOVED_ON = "moved-on"
+    DIVERGED = "diverged"
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """A refused sprint push: the refusal text and the remote head fetched after it."""
+
+    why: str
+    remote: str
 
 
 def merge_story_file(paths: StoryFile) -> Merged:
@@ -118,11 +138,36 @@ class Attempt:
     revert_of: str = ""
     reason: str = ""
     dropped: list[dict[str, Any]] = field(default_factory=list)
+    remotes: list[str] = field(default_factory=list)  # R5: remote heads followed, oldest first
+    restarts: int = 0  # R5: fresh starts in this land, any cause
+    kept: str = ""  # R4: the merge held after an unmoved refusal; its landing branch stays
 
     @property
     def title(self) -> str:
         """The merge commit's subject."""
         return merge_subject(self.story.id, self.story.title)
+
+
+def match_remote(remote: str, attempt: Attempt) -> SprintRemote | None:
+    """R1: HAS_MERGE, UNMOVED or DIVERGED (empty) from equality alone; None when it needs git."""
+    if not remote:
+        return SprintRemote.DIVERGED
+    pushed = attempt.entry.pushed if attempt.entry else ""
+    found = {pushed: SprintRemote.UNMOVED, attempt.merge: SprintRemote.HAS_MERGE}
+    return found.get(remote)
+
+
+def find_restart_hold(attempt: Attempt) -> dict[str, Any] | None:
+    """R5: the hold report once either restart count reaches MAX_RESTARTS, else None."""
+    remotes = attempt.remotes
+    if len(remotes) >= MAX_RESTARTS:
+        heads = ", ".join(h[:SHORT] for h in remotes)
+        reason = KEPT_MOVING.format(count=len(remotes), heads=heads)
+    elif attempt.restarts - len(remotes) >= MAX_RESTARTS:
+        reason = HEAD_KEPT_MOVING.format(count=MAX_RESTARTS)
+    else:
+        return None
+    return make_report(attempt.story, (Verdict.HOLD, reason))
 
 
 class Lander:
@@ -304,15 +349,16 @@ class Lander:
     # ----- one attempt after another
 
     async def run_attempts(self, attempt: Attempt) -> dict[str, Any]:
-        """G2: run the attempt, or resume a pushed one; again after a restart, a few times."""
-        for _ in range(MAX_RESTARTS):
+        """G2, R5: run or resume the attempt, again after each restart, to a report or a limit."""
+        while (limit := find_restart_hold(attempt)) is None:
             report = await (
                 self.finish_pushed(attempt) if attempt.merge else self.run_attempt(attempt)
             )
             if report is not None:
                 return report
+            attempt.restarts += 1
             attempt.merge, attempt.head = "", self.sprint_head
-        return make_report(attempt.story, (Verdict.HOLD, "the sprint branch kept moving"))
+        return limit
 
     async def run_attempt(self, attempt: Attempt) -> dict[str, Any] | None:
         """Merge, check, ship; the report, or ``None`` to start again."""
@@ -512,8 +558,9 @@ class Lander:
         try:
             return await OUTCOMES[result.verdict](self, attempt, result)
         finally:
-            branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
-            await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
+            if attempt.kept != merge:
+                branch = format_landing_branch(rt.config.upstream.story_prefix, story.id)
+                await self.run_off(rt.upstream.delete, Lease(branch, merge, ""))  # type: ignore[union-attr]
 
     async def wait_ci(self, attempt: Attempt) -> CiResult:
         """Wait for the checks of the merge; re-run an infra failure once per job."""
@@ -575,11 +622,65 @@ class Lander:
         if carry.refusal:
             await self.give_up(attempt, build_moved_drop(carry))
             return None
-        refused = await self.push(Lease(entry.branch, entry.pushed, attempt.merge))
-        if refused is not None:
-            return await self.follow_remote(attempt)
+        stopped = await self.push_sprint(attempt)
+        if stopped is not None or not attempt.merge:
+            return stopped
         entry.pushed = attempt.merge
         return await self.apply_carry(attempt, carry)
+
+    async def push_sprint(self, attempt: Attempt) -> dict[str, Any] | None:
+        """K2 step 4: push the merge to the sprint branch; a refusal is settled by the remote."""
+        entry = attempt.entry
+        assert entry is not None
+        refused = await self.push(Lease(entry.branch, entry.pushed, attempt.merge))
+        return None if refused is None else await self.settle_refusal(attempt, refused)
+
+    async def settle_refusal(self, attempt: Attempt, why: str) -> dict[str, Any] | None:
+        """R1: fetch the remote head and act on it; None with the merge kept means it was pushed."""
+        refusal = Refusal(why, await self.fetch_remote(attempt))
+        found = await self.classify_remote(attempt, refusal.remote)
+        if found is SprintRemote.HAS_MERGE:
+            return None
+        return await REFUSALS[found](self, attempt, refusal)
+
+    async def fetch_remote(self, attempt: Attempt) -> str:
+        """Fetch the sprint branch and read its remote head ("" when it can't be read)."""
+        entry, up = attempt.entry, self.runtime.upstream
+        assert entry is not None and up is not None
+        await self.run_off(up.git.attempt, "fetch", up.settings.remote, entry.branch)
+        return await self.run_off(up.read_remote_head, entry.branch)
+
+    async def classify_remote(self, attempt: Attempt, remote: str) -> SprintRemote:
+        """R1: match_remote, else MOVED_ON when pushed is the remote's ancestor, else DIVERGED."""
+        found = match_remote(remote, attempt)
+        if found is not None:
+            return found
+        entry, up = attempt.entry, self.runtime.upstream
+        assert entry is not None and up is not None
+        follows = await self.run_off(up.is_ancestor, entry.pushed, remote)
+        return SprintRemote.MOVED_ON if follows else SprintRemote.DIVERGED
+
+    async def hold_refused(self, attempt: Attempt, refusal: Refusal) -> dict[str, Any]:
+        """R2, R4: keep the merge (and, for a story, its landing branch) and hold with the text."""
+        entry = attempt.entry
+        assert entry is not None
+        if not attempt.revert_of:
+            attempt.kept = attempt.merge
+        reason = SPRINT_PUSH_REFUSED.format(branch=entry.branch, why=refusal.why)
+        return make_report(attempt.story, (Verdict.HOLD, reason), merge=attempt.merge)
+
+    async def follow_moved(self, attempt: Attempt, refusal: Refusal) -> dict[str, Any] | None:
+        """R5, R6: give up the merge, note the remote, follow it; halt when the checkout can't."""
+        await self.give_up(attempt, Drop(GIVE_UP_REFUSED))
+        attempt.remotes.append(refusal.remote)
+        if await self.move_to_remote(refusal.remote):
+            return None
+        return await self.halt_diverged(attempt, refusal.remote)
+
+    async def drop_diverged(self, attempt: Attempt, refusal: Refusal) -> dict[str, Any]:
+        """R6: give up the merge and halt as checkout drift naming the remote head."""
+        await self.give_up(attempt, Drop(GIVE_UP_REFUSED))
+        return await self.halt_diverged(attempt, refusal.remote)
 
     async def complete(self, attempt: Attempt, result: CiResult) -> dict[str, Any]:
         """The sprint branch moved: open the sprint PR once, close the story PR, report."""
@@ -628,18 +729,6 @@ class Lander:
         reason = CI_HELD.format(sha=attempt.merge[:12], verdict=result.verdict)
         return make_report(attempt.story, (Verdict.HOLD, reason), ci=str(result.verdict))
 
-    async def follow_remote(self, attempt: Attempt) -> dict[str, Any] | None:
-        """G4, R2: give up the merge; follow a remote that descends from ours, else halt."""
-        entry, up = attempt.entry, self.runtime.upstream
-        assert entry is not None and up is not None
-        await self.give_up(attempt, Drop(GIVE_UP_REFUSED))
-        await self.run_off(up.git.attempt, "fetch", up.settings.remote, entry.branch)
-        remote = await self.run_off(up.read_remote_head, entry.branch)
-        follows = bool(remote) and await self.run_off(up.is_ancestor, entry.pushed, remote)
-        if follows and await self.move_to_remote(remote):
-            return None
-        return await self.halt_diverged(attempt, remote)
-
     async def move_to_remote(self, remote: str) -> bool:
         """R2: bring the main checkout and the sprint entry to the remote head, if it can."""
         rt, up = self.runtime, self.runtime.upstream
@@ -676,4 +765,10 @@ OUTCOMES = {
     CiVerdict.INFRA: Lander.hold_ci,
     CiVerdict.PENDING: Lander.hold_ci,
     CiVerdict.NONE: Lander.hold_ci,
+}
+
+REFUSALS = {
+    SprintRemote.UNMOVED: Lander.hold_refused,
+    SprintRemote.MOVED_ON: Lander.follow_moved,
+    SprintRemote.DIVERGED: Lander.drop_diverged,
 }
