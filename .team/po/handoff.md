@@ -2,13 +2,12 @@
 
 ## State
 - Sprint 55 (s180, s185) is done and landed. CI was green on PR #89. The human has been told it is ready to merge by fast-forward only.
-- Sprint 56 is running: s188, s190, s189, s187, s173, s177. Goal: runner fixes.
-  - s190, s187: done.
-  - s189: hit the round cap at implement. I ran the manager (ruling: one more round, single fix) and continued it. The fix is to add `remove_from_sprint for a story with no commits,` after `revert_story,` in the "Sprint Backlog stuck" list of agile-team/runner/agile_team/roles/product-owner.md, then rewrap. Review: .team/run/worktrees/s189/.team/reviews/s189.md. If it caps again, ask the human via ask_user.
-  - s188: landing hit a merge conflict in agile-team/docs/architecture.md (first bounce). I continued it with a note for developer-cli to rebase onto the sprint head and keep both sides. Do nothing unless it bounces again.
-  - s173: at implement r1. Quarantined commit 9332ca0baf035743572651b53c7a45a19b3641d7 holds developer-cli's out-of-scope protocol.md edit; the architect should `git cherry-pick -n` it. Watch for a bounce.
-  - s177: held at ops-review (hold affected_done). I never saw the reason. If the runner raises it: DevOps found tooling with no story, so `request_story`, then `continue_story`.
+- Sprint 56 is running. Goal: runner fixes. Stories: s188, s190, s189, s187, s173, s177.
+  - s188, s190, s187, s173: done and landed.
+  - s189: land bounced on a merge conflict in agile-team/docs/architecture.md (r2). I called continue_story with a note for developer-cli to rebase onto the sprint head and keep both sides. If it bounces again, tell the liaison (stop condition: a rebase step bouncing twice). Review: .team/run/worktrees/s189/.team/reviews/s189.md.
+  - s177: held at ops-review (affected_done, because REQ-169 is traced by done story s163). I called continue_story. The s163 follow-up is requested as m409. If devops finds tooling with no story, `request_story`, then `continue_story`.
 - Budget at the last check: $237.66 remaining of $1500. Raise only in small steps. Limits per sprint: about $60, $75 hard stop.
+- The runner raised "Sprint Backlog stuck" hand-over 1 of 3. Both held stories were acted on with continue_story, so this should clear.
 
 ## Open decisions / pending questions
 - No ask_user ids are open.
@@ -20,8 +19,8 @@
 - My own decision (not the human's): for "checked by hand" ACs in a live landing, the customer-proxy's judgement from the captured real-git e2e is the accepted evidence (as for s185).
 
 ## Next (liaison plan t254)
-1. Let sprint 56 run. Handle the hand-overs the runner raises.
-2. When sprint 56 is done and its boundary has closed (call a PR ready only on ci_green): start Sprint 57, onboarding: s169, s170, s171, in that order.
+1. Let sprint 56 finish. Handle the hand-overs the runner raises (land_bounced and affected_done holds need continue_story with a note).
+2. When sprint 56 is done and its boundary has closed (call a PR ready only on ci_green): start Sprint 57, onboarding: s169, s170, s171, in that order. Check budget_status first.
 3. Time: job deadline 2026-11-05 08:00 CDT; the 07:00 cut applies to the running sprint. Start no new sprint after 05:00: notify `done` instead.
 4. More stories will arrive in the Product Backlog (amended s36, onboarding part D, two small ones, the m398 follow-up, m400, m401, m409). Do not plan around them until the runner announces their ids.
 5. When sprint 57 ends: notify_user `done` once and start no sprint 58.
