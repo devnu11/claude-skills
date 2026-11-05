@@ -124,6 +124,12 @@ def _boundary(report: dict) -> dict:
     return report.get("boundary") or {}
 
 
+def _is_finished_green(report: dict) -> bool:
+    """W6: the boundary finished with green CI; a stage's green pass is not the finish."""
+    boundary = _boundary(report)
+    return boundary.get("outcome") == "done" and boundary.get("ci") == "green"
+
+
 def _held(hold: str) -> Callable[[dict], bool]:
     return lambda r: _boundary(r).get("hold") == hold
 
@@ -314,7 +320,7 @@ HANDOVERS: tuple[Rule, ...] = (
     ),
     Rule(
         Trigger.CI_GREEN,
-        lambda r: _boundary(r).get("ci") == "green",
+        _is_finished_green,
         "{story}: sprint {sprint}'s CI passed: {prs} is ready to merge by fast-forward only "
         "(never a rebase or squash merge). Tell the human.",
     ),

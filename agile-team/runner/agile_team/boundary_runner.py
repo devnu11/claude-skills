@@ -517,8 +517,8 @@ class BoundaryRunner:
         return {} if asked else {"waiting": "push_permission", "branches": [entry.branch]}
 
     async def _push_as_is(self, b: Boundary, own: StackEntry) -> None:
-        """R3: push the team branch as it is, then open or reuse the sprint PR."""
-        own.head = own.end = self.mine.last_end = self.runtime.git.head()
+        """R3: push the sprint's work head as it is, then open or reuse the sprint PR."""
+        own.head = own.end = self.mine.last_end = await self._find_work_head(own)
         rejected = await self._push_branch(own)
         if rejected is not None:
             return self._reject(b, own, rejected)
@@ -895,34 +895,41 @@ class BoundaryRunner:
         if b.edge is Edge.START:
             return await self._push_start_replay(b)
         await self._fetch()
-        own = self._own(b)
-        if await self.run_off(self.remote.is_in_target, self.runtime.git.head()):
-            return await self._close_shipped(b, own)  # type: ignore[arg-type]
-        await self._push_end_replay(b, own)  # type: ignore[arg-type]
+        head = await self._find_work_head(self._own(b))  # type: ignore[arg-type]
+        if await self.run_off(self.remote.is_in_target, head):
+            return await self._close_shipped(b, head)
+        await self._push_end_replay(b, head)
 
-    async def _close_shipped(self, b: Boundary, own: StackEntry) -> None:
-        """s183: the target already holds HEAD; close its PR and finish the sprint as shipped."""
+    async def _find_work_head(self, own: StackEntry) -> str:
+        """W2: HEAD, or the pushed head when HEAD adds only bookkeeping commits to it."""
         head = self.runtime.git.head()
+        if not own.pushed or head == own.pushed:
+            return head
+        tail = await self.run_off(self.remote.has_only_bookkeeping, own.pushed)
+        return own.pushed if tail else head
+
+    async def _close_shipped(self, b: Boundary, head: str) -> None:
+        """s183, W4: the target already holds the work head; close its PR, finish as shipped."""
         text = SHIPPED_REPORT.format(sprint=b.sprint, target=self.target, sha=head)
-        await self._close_shipped_pr(own)
+        await self._close_shipped_pr(self._own(b), head)  # type: ignore[arg-type]
         self._finish(b, text, note=text, sha=head, target=self.target)
 
-    async def _close_shipped_pr(self, own: StackEntry) -> None:
+    async def _close_shipped_pr(self, own: StackEntry, head: str) -> None:
         """Close the sprint's still-open PR (a merged one is left as is) and record it closed."""
         if own.pr and own.mode is not PrMode.CLOSED and not self.runtime.prs.missing():
-            note = SHIPPED_PR_NOTE.format(target=self.target, sha=self.runtime.git.head())
+            note = SHIPPED_PR_NOTE.format(target=self.target, sha=head)
             await self.run_off(self.runtime.prs.close, own.pr, note)
         own.mode = PrMode.CLOSED
 
-    async def _push_end_replay(self, b: Boundary, own: StackEntry) -> None:
-        """R5: push the replayed head to the next ``-r<k>`` branch; nothing if it did not change."""
-        head = self.runtime.git.head()
+    async def _push_end_replay(self, b: Boundary, head: str) -> None:
+        """R5, W4: push a work head the replay changed to the next ``-r<k>``; else finish green."""
+        own = self._own(b)
         if head == own.pushed:
-            return await self._report_unchanged(b, own)
-        rejected = await self._push_replay_branch(own, head)
+            return await self._report_unchanged(b, own)  # type: ignore[arg-type]
+        rejected = await self._push_replay_branch(own, head)  # type: ignore[arg-type]
         if rejected is not None:
-            return self._reject(b, own, rejected)
-        self._report_rebased(b, own)
+            return self._reject(b, own, rejected)  # type: ignore[arg-type]
+        self._report_rebased(b, own)  # type: ignore[arg-type]
         self._advance(b)
 
     async def _push_start_replay(self, b: Boundary) -> None:
@@ -1003,6 +1010,8 @@ class BoundaryRunner:
         self._advance(b)
 
     async def _finish_green(self, b: Boundary, results: list[CiResult]) -> None:
+        if not results:  # no CI read to name: finish with the fast-forward only
+            return self._finish(b, self._add_ff(f"Sprint {b.sprint} is pushed."))
         text = self._with_big(green_report(b.sprint, results))
         self._finish(b, self._add_ff(text), ci=CiVerdict.GREEN, **_ci_fields(results))
 
