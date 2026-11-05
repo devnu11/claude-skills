@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -132,9 +133,27 @@ def test_sections_of_equal_configs_are_empty_s173() -> None:
 
 
 def test_the_sections_table_covers_every_config_field_s173() -> None:
-    fields = [field for field, _ in cr.SECTIONS]
-    assert fields[:3] == ["team", "toolchain", "gates"]
-    assert ("environments", "environment") in cr.SECTIONS and ("tools", "tool") in cr.SECTIONS
+    not_sections = {"repo", "run_home", "warnings"}
+    every = {f.name for f in dataclasses.fields(config_mod.Config)} - not_sections
+    assert {field for field, _ in cr.SECTIONS} == every
+
+
+def test_a_changed_upstream_section_builds_a_new_upstream_s173(make_runtime) -> None:
+    rt = watched(make_runtime, {"b2": config_text(upstream={"branch": "trunk"})}, "b2")
+    rt.config_blob = "b1"
+    old = rt.upstream
+    cr.ConfigWatch(rt).update()
+    assert rt.upstream is not old
+    assert rt.upstream.settings.branch == "trunk"
+    assert rt.upstream.settings is rt.config.upstream
+
+
+def test_a_change_to_another_section_keeps_the_upstream_s173(make_runtime) -> None:
+    rt = watched(make_runtime, {"b2": with_env("cli", "x")}, "b2")
+    rt.config_blob = "b1"
+    old = rt.upstream
+    cr.ConfigWatch(rt).update()
+    assert rt.upstream is old
 
 
 # ---------- ConfigWatch.update ----------
