@@ -481,7 +481,9 @@ command fails.
   the implement gate fails in a file another role owns (an e2e test, lint
   in a test file), the runner sends it to that role as a gate fix step
   with no round (`fix by …` and `gate fix` on the timeline), then the
-  developer runs again. A story
+  developer runs again. The fix brief names the gated commit and the
+  story's worktree. A fix that hands off done with no commit runs again,
+  and the Manager rules on it the second time. A story
   that comes back to `tests` with its code already in moves on by itself
   once the unit-tester vouches for the tests, and the PO can move a story
   stuck at `tests` with a green suite with `pass_tests`, so never edit

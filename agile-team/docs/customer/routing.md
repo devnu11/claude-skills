@@ -159,8 +159,13 @@ sends each failing item to the role that may write that file, as a
    counts no round. The timeline shows **implement → fix by
    integration-tester** (or whichever roles own the files).
 2. Each owner runs once, in pipeline order, with a brief listing only its
-   own items and their output. The timeline shows **gate fix done** with
-   the files.
+   own items and their output. The brief also names the commit the gate
+   failed on and the story's worktree, and says whether the worktree has
+   moved since, listing any newer commits. The timeline shows **gate fix
+   done** with the files. If an owner hands off done without committing
+   anything, that doesn't count as a fix. The owner runs again, told that
+   its step changed nothing, and if that happens twice in a row the
+   Manager rules on it. The Manager sees each fix's commit, or "none".
 3. Then the developer runs again, and its brief says other roles fixed
    their items first.
 

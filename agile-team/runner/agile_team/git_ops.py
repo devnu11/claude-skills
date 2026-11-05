@@ -139,9 +139,12 @@ class Git:
 
     def log_from(self, first: str) -> list[tuple[str, str]]:
         """(sha, subject) of ``first`` and every commit after it up to HEAD, oldest first."""
-        out = self.run("log", "--reverse", "--format=%H%x1f%s", f"{first}..HEAD")
-        rest = [tuple(line.split("\x1f", 1)) for line in out.splitlines() if line]
-        return [(first, self.subject(first)), *rest]
+        return [(first, self.subject(first)), *self.list_after(first)]
+
+    def list_after(self, sha: str) -> list[tuple[str, str]]:
+        """(sha, subject) of every commit after ``sha`` up to HEAD, oldest first."""
+        out = self.run("log", "--reverse", "--format=%H%x1f%s", f"{sha}..HEAD")
+        return [tuple(line.split("\x1f", 1)) for line in out.splitlines() if line]  # type: ignore[misc]
 
     def revert_all(self, shas: Sequence[str], message: str) -> str:
         """Revert ``shas`` (newest first) in one commit; on failure abort and raise GitError."""

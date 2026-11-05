@@ -557,6 +557,7 @@ def test_a_developer_dispute_logs_one_dispute_event_and_no_gate(make_runtime) ->
         "test": TEST_ID,
         "rule": "W6",
         "disputes": 1,
+        "head": rt.git.head(),
     }
     assert report["gate"] == event.data
     s = rt.state.stories["s1"]
