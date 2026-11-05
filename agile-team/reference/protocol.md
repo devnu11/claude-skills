@@ -2425,18 +2425,75 @@ committed to, or `null` when it is in the Product Backlog.
   (`depends_on not done and not in the sprint: s5 on s3; …`); a blank
   reason. Its stories show on the Board and in the sprint's review PR like
   the ones the sprint started with.
+- `remove_from_sprint(story, reason)` (s189) is the pair of `add_to_sprint`:
+  it takes one sprint story that has no commits and no landing (one that
+  never started, or crashed before its first commit) back to the Product
+  Backlog. `revert_story` is unchanged and still refuses such a story
+  (nothing to revert).
+  - **One story leaves.** The story's `sprint` becomes `null`. The sprint's
+    number, goal, branch and stack entry don't change. No boundary, Manager
+    turn or PO renewal is queued, and no `priority` event is written. The
+    story keeps its step, status, rounds, `depends_on`, developer and branch
+    record, and its place in the order and in `pulled`. `agile-team status`
+    and the Board show it in the Product Backlog.
+  - **Its holds are cleared.** The runner's hold (any text: a crash, a gate
+    hold, an overlap) and `overlap_with` are cleared, and so is a PO hold of
+    kind `hold`. A `needs-manager` or `blocked` status is kept: it is not a
+    hold, and an open question still names the story. An overlap-held story
+    runs design again when it comes back.
+  - **Its worktree goes, its branch stays**, as for a `start_sprint` leaver:
+    the worktree is removed and one `story-branch` event `{"action":
+    "removed", "branch", "base_sha", "replays"}` is written, role
+    `product-owner`. Kept sessions are left alone.
+  - **The story file records it.** The runner appends `- <date>, sprint N:
+    <reason> Cleared hold: <cleared>.` under `## Left the sprint` (the
+    heading is added once) in the main checkout's story file, and commits
+    that one file as `chore(sN): record the move to the Product Backlog`
+    under the checkout lock. `<cleared>` is `runner hold: <hold>`, `PO hold:
+    <reason>`, both joined by `; `, or `none`. A story with no story file
+    gets no line and no commit.
+  - **One event and one note.** One `story-admin` event, role
+    `product-owner`: `{"tool": "remove_from_sprint", "reason", "question":
+    null, "sprint", "cleared": {"hold", "po_hold"}, "record": <sha or "">,
+    "before", "after"}`. The human gets one `update` note: `Story sN
+    ("<title>") left sprint N for the Product Backlog: <reason> Cleared hold:
+    <cleared>.` The result is `{"status": "removed", "story", "step",
+    "sprint", "cleared", "record"}`, and a call that is not refused resets
+    `stuck_asks`.
+  - **Refusals, first one wins, nothing changed.** A drifted checkout is
+    checked first and returns the halted report, as `revert_story`, before
+    anything else runs. Then answered cancel and revert questions are
+    settled, and the checks run: a pending boundary (the `add_to_sprint`
+    text); an unknown story; a blank reason; a done or cancelled story; a
+    story not in the open sprint (`story sN is not in the running sprint N;
+    nothing to remove`); a cancel or revert question waiting on the story;
+    work on the story; a running step on it (`story sN's <step> step is
+    running; call again when it ends`); unfinished sprint stories that
+    depend on it (`unfinished sprint stories depend on sN: …; take them out
+    first, or keep sN`).
+  - **Work is refused and pointed at `revert_story`**, in this order: an open
+    landing (the story is at `land`, is the landing, or has a queued revert)
+    gives `story sN is landing; wait for land to end, then use
+    revert_story(story, reason)`; a landing gives `story sN has landed; use
+    revert_story(story, reason) to take its work out`; commits (`commit` or
+    `code_commits`) give `story sN has commits; use revert_story(story,
+    reason) to take its work out`. A branch with no commits on it is not
+    work.
 - While the current sprint has unfinished stories, `start_sprint` needs a
   `reason` (`sprint N still has unfinished stories (…); use add_to_sprint to
   add work, or give a reason for starting a new sprint`). The reason is added
   to the `sprint-start` event as `"reason"`.
 - **A sprint ends only when it is finished (s124).** It is finished when it
-  has stories and every one is done, cancelled (the human's call) or reverted
-  (`revert_story`, see "Reverting a story"). Cancelled and reverted stories
-  leave the sprint. The end boundary opens, and `sprint_end` is handed over,
-  only then. `notify_user` with kind `sprint-end` is refused while any sprint
-  story is unfinished: `sprint N can't end: s3 at implement, s5 at design
-  unfinished. Finish them, revert_story(story, reason), or ask the human to
-  cancel them (request_cancel)`. Nothing is posted and the status stays.
+  has stories and every one is done, cancelled (the human's call), reverted
+  (`revert_story`, see "Reverting a story") or taken out
+  (`remove_from_sprint`, s189, for a story with no commits). Cancelled,
+  reverted and taken-out stories leave the sprint. The end boundary opens,
+  and `sprint_end` is handed over, only then. `notify_user` with kind
+  `sprint-end` is refused while any sprint story is unfinished: `sprint N
+  can't end: s3 at implement, s5 at design unfinished. Finish them,
+  revert_story(story, reason), remove_from_sprint(story, reason) for one
+  with no commits, or ask the human to cancel them (request_cancel)`.
+  Nothing is posted and the status stays.
 - **A stuck Sprint Backlog is reported, not refilled (s156; replaces s124's
   ready backlog offer).** When the Sprint Backlog has unfinished stories,
   none can move, no boundary is pending and no question is open, the runner
@@ -2444,7 +2501,8 @@ committed to, or `null` when it is in the Product Backlog.
   Backlog of sprint N can move. Each story and why:`, one `sN at <step>:
   <why>` line per unfinished story, then the actions the PO may take on them
   (`continue_story`, `release_story`, `run_role`, `pass_tests`,
-  `revert_story`, `request_cancel`, `request_story`, `ask_user`). It names
+  `revert_story`, `remove_from_sprint` for a story with no commits,
+  `request_cancel`, `request_story`, `ask_user`). It names
   those stories and lists no Product Backlog story. It works the same under
   both cadences and is never quiet, so a PO turn that changes nothing gets it
   again. `stuck_asks` in `state.json` counts these hand-overs. A step, a PO

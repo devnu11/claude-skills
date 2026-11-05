@@ -26,6 +26,7 @@ from . import (
     reorders,
     salvage,
     sprint_end,
+    sprint_leave,
     story_admin,
     switchover,
     system,
@@ -85,10 +86,10 @@ from .sprint_add import (  # noqa: F401  (re-exported)
     Addition,
     SprintAdd,
 )
+from .sprint_leave import SprintLeave
 from .stage_log import place_of
 from .state import ModelOverride, RunStatus
 from .story_admin import Act, Clerk
-from .workspaces import Workspaces
 
 SERVER = "team"
 POLL_S = 5.0
@@ -163,6 +164,7 @@ STUCK_RESETS = frozenset(
         "release_story",
         "run_role",
         "revert_story",
+        "remove_from_sprint",
         "request_cancel",
         "request_story",
         "pass_tests",
@@ -445,15 +447,9 @@ class Tools:
 
     def _release_leavers(self, ids: list[str]) -> None:
         """E1: a story that leaves the sprint gives up its worktree and keeps its branch."""
-        rt = self.runtime
-        space = Workspaces(rt.git, rt.config)
-        for story in rt.state.stories.values():
-            if story.worktree_head and story.id not in ids and story.status not in FINISHED:
-                space.remove(story.id)
-                story.worktree_head = ""
-                data = {"action": "removed", "branch": story.branch, "base_sha": story.base_sha}
-                data["replays"] = story.replays
-                rt.events.emit(Event(EventKind.STORY_BRANCH, PO, story.id, data))
+        for story in self.runtime.state.stories.values():
+            if story.id not in ids and story.status not in FINISHED:
+                sprint_leave.release_worktree(self.runtime, story)
 
     async def prioritise(self, args: dict[str, Any]) -> dict[str, Any]:
         """Set the order the team works in."""
@@ -688,6 +684,12 @@ class Tools:
             return text_result(refused(pending))
         return text_result(Reverter(self.runtime).run(args))
 
+    async def remove_from_sprint(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Take a not-started story out of the running sprint to the Product Backlog (s189)."""
+        if moved := self.runtime.drift_halt():
+            return text_result(halted_report(PO, moved))
+        return text_result(await SprintLeave(self.runtime).run(args))
+
     async def pass_tests(self, args: dict[str, Any]) -> dict[str, Any]:
         """Move a story stuck at tests on to the next step when the suite is green."""
         moved = self.runtime.checkout_moved()
@@ -880,6 +882,19 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         {"story": str, "reason": str},
     ),
     "order_landings": (ORDER_LANDINGS_HELP, {"stories": list, "reason": str}),
+    "remove_from_sprint": (
+        "Take one story that has no commits and no landing out of the running sprint, "
+        "back to the Product Backlog, with a reason: the sprint keeps its number, goal and "
+        "branch; the story keeps its step and its place in the order. Its holds (a crash, "
+        "a gate hold, your own hold) are cleared and recorded in the story file and the "
+        "events, and the human is told. Use it for a story that never started, e.g. one "
+        "that crashed before its first commit. Refused, with nothing changed, for unknown, "
+        "done or cancelled stories, a blank reason, a story not in the sprint, a pending "
+        "cancel or revert question, a story with commits, a landing or an open landing "
+        "(use revert_story), a running step, unfinished sprint stories that depend on it, "
+        "and while a boundary is pending.",
+        {"story": str, "reason": str},
+    ),
     "request_cancel": (
         "Ask the human to cancel a story: it is held as cancel requested and the human gets one "
         'question (cancel / keep). Only their "cancel" answer cancels it; "keep" releases it. '

@@ -38,13 +38,20 @@ To add a story halfway through, the PO adds it to the running sprint with
 `add_to_sprint` and a reason. The sprint keeps its number, goal and review
 branch, no Manager turn runs, and the story lines up first among the
 stories not yet started. It joins the sprint's review PR like the others.
+To take out a story that never started (it has no commits, for example
+because its first step crashed), the PO calls `remove_from_sprint` with a
+reason. The story goes back to the Product Backlog at its step, any hold on it is
+cleared, and the sprint keeps its number. The reason and the cleared hold are
+written in the story file, and you get an update note. A story that has
+commits comes out only by a revert.
 The PO starts a new sprint only when the sprint's stories are done or you
 ask for one. Restarting with unfinished stories needs a reason.
 
 ## When a sprint ends
 
 A sprint ends only when every story in it is **done**, **cancelled** (only
-you can cancel) or **reverted** (the PO's call). The runner refuses the PO's
+you can cancel), **reverted** (the PO's call) or, for a story that never
+started, **taken out** to the Product Backlog (the PO's call). The runner refuses the PO's
 "sprint end" note before then. The refusal names each unfinished story and
 its step, so no review PR carries half-built work.
 

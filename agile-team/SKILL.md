@@ -143,9 +143,12 @@ command fails.
    within each group. The PO can pull a not-started story ahead only with a
    reason, and the pull shows in the timeline. The PO adds a story to the
    running sprint with `add_to_sprint(stories, reason)`. The sprint keeps its
-   number and branch, and no boundary or Manager turn runs. A new
-   `start_sprint` while stories are unfinished needs a reason. **A sprint
-   ends only when every story in it is done, cancelled or reverted:** the
+   number and branch, and no boundary or Manager turn runs. It takes a
+   story with no commits out with `remove_from_sprint(story, reason)`; the
+   story keeps its step, its holds are cleared, and you get an `update`
+   note. A new `start_sprint` while stories are unfinished needs a reason.
+   **A sprint ends only when every story in it is done, cancelled, reverted
+   or taken out:** the
    runner refuses the PO's `sprint-end` note before then and names the
    unfinished stories. When nothing in the Sprint Backlog can move, the
    runner hands the PO each story's stall reason and never offers Product

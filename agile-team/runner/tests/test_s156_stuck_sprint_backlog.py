@@ -174,7 +174,7 @@ def test_ac2_ask_user_hold_story_and_notify_do_not_reset(make_runtime) -> None:
 def test_ac2_the_resetting_tools_are_the_listed_ones() -> None:
     assert frozenset({
         "continue_story", "release_story", "run_role", "revert_story",
-        "request_cancel", "request_story", "pass_tests",
+        "request_cancel", "request_story", "pass_tests", "remove_from_sprint",
     }) == po_tools.STUCK_RESETS  # fmt: skip
 
 
