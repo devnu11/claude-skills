@@ -6,7 +6,7 @@ import pytest
 from agile_team import boundary as bd
 from agile_team import handover
 from agile_team.boundary import BoundaryHold, Edge, Stage
-from agile_team.ci import Bucket, Check
+from agile_team.ci import Bucket, Check, CiResult, CiVerdict
 from agile_team.ci_triage import Job, Step
 from agile_team.handover import Trigger as T
 from agile_team.upstream import Pr, PrMode, PrState, Rebase, SyncOutcome
@@ -61,6 +61,7 @@ def at_tail(cenv: Env, fake: FakeSystem, tail: str, pr: int = 74) -> bd.StackEnt
     replayed(cenv, own)
     own.pushed = own.head = H
     own.pr, own.url = pr, URL.format(pr)
+    own.ci = CiResult(pr, own.url, H, CiVerdict.GREEN)
     cenv.rt.git.head = lambda: C
     return own
 
@@ -86,7 +87,9 @@ def test_a_chore_tail_finishes_the_boundary_with_the_ff_for_h_ac1(
     up = cenv.rt.state.upstream
     assert cenv.rt.state.boundary is None
     assert f"git push origin {H}:main" in up.report
-    assert cenv.events()[-1].data["outcome"] == "done"
+    final = cenv.events()[-1].data
+    assert final["outcome"] == "done"
+    assert final["ci"] == "green" and "#74" in final["prs"]
 
 
 def test_a_chore_tail_is_kept_head_stays_on_c_ac1(cenv: Env, fake: FakeSystem) -> None:
