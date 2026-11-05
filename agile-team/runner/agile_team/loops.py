@@ -58,7 +58,9 @@ NORMALISE: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?<![a-z_])\d+(?:\.\d+)?"), "<n>"),  # counts, codes, durations, pids
     (re.compile(r"\s+"), " "),
 )
-HISTORY_KINDS = frozenset({"gate", "step-end", "test-dispute", "escalation", "ruling", "fault", "gate-fix"})
+HISTORY_KINDS = frozenset(
+    {"gate", "step-end", "test-dispute", "escalation", "ruling", "fault", "gate-fix"}
+)
 BACKSTOP_HEAD = (
     "bounced {count} times in a row between {step} and {to_step}, reasons not all the same:"
 )
