@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
+
+import pytest
 from agile_team.events import EventKind
 from agile_team.gates import Verdict
 from agile_team.story_branches import Landed
 
 from .fake_system import Done
-from .test_s159_landing import BRANCH, HEAD, LAND, MERGE, SPRINT, checks, issued, land, setup
+from .test_s159_landing import (
+    BRANCH,
+    HEAD,
+    LAND,
+    MERGE,
+    SPRINT,
+    checks,
+    issued,
+    land,
+    landing,
+    setup,
+)
 
 REFUSAL = "! [rejected] remote said no"
 
@@ -137,7 +151,7 @@ def test_the_hold_comes_after_max_restarts_distinct_heads_and_lists_them_ac3(
     remote_heads(fake, *heads)
     report = land(rt, story)
     assert "the sprint branch kept moving" in str(report)
-    assert all(h in str(report) for h in heads)
+    assert all(h[:12] in report["gate"]["reason"] for h in heads)
     assert len(issued(fake, "merge", "--no-ff")) == 5
 
 
@@ -151,3 +165,58 @@ def test_a_repeated_remote_head_holds_before_max_restarts_ac3(
     report = land(rt, story)
     assert REFUSAL in str(report)
     assert len(issued(fake, "merge", "--no-ff")) == 2
+
+
+# ---------- R1, R5 and R4 helpers ----------
+
+
+@pytest.mark.parametrize(
+    ("remote", "expected"),
+    [
+        (MERGE, "has-merge"),
+        (HEAD, "unmoved"),
+        ("", "diverged"),
+        ("z" * 40, None),
+    ],
+)
+def test_match_remote_reads_equality_alone_r1(make_runtime, fake, remote, expected) -> None:
+    _, story, entry = setup(make_runtime, fake)
+    attempt = landing.Attempt(story, entry, HEAD, merge=MERGE)
+    assert landing.match_remote(remote, attempt) == expected
+
+
+def test_no_restart_hold_below_either_limit_r5(make_runtime, fake) -> None:
+    _, story, entry = setup(make_runtime, fake)
+    attempt = landing.Attempt(story, entry, HEAD, restarts=4, remotes=["a" * 40] * 2)
+    assert landing.find_restart_hold(attempt) is None
+
+
+def test_carry_restarts_hold_on_their_own_limit_r5(make_runtime, fake) -> None:
+    _, story, entry = setup(make_runtime, fake)
+    attempt = landing.Attempt(story, entry, HEAD, restarts=landing.MAX_RESTARTS)
+    report = landing.find_restart_hold(attempt)
+    assert report["gate"]["verdict"] == Verdict.HOLD
+    assert report["gate"]["reason"] == landing.HEAD_KEPT_MOVING.format(count=landing.MAX_RESTARTS)
+
+
+def test_moved_remotes_do_not_count_toward_the_carry_limit_r5(make_runtime, fake) -> None:
+    _, story, entry = setup(make_runtime, fake)
+    attempt = landing.Attempt(story, entry, HEAD, restarts=4, remotes=["a" * 40] * 4)
+    assert landing.find_restart_hold(attempt) is None
+
+
+# ---------- AC1 for a landing revert (R4) ----------
+
+
+def test_a_refused_revert_holds_and_deletes_its_landing_branch_r4(
+    make_runtime, fake, monkeypatch
+) -> None:
+    checks(monkeypatch)
+    rt, story, _ = setup(make_runtime, fake)
+    story.landed = Landed(MERGE, pushed=MERGE, pr=1)
+    refuse_push(fake)
+    remote_heads(fake, HEAD)
+    report = asyncio.run(landing.Lander(rt, asyncio.Lock()).land_revert(story, "bad"))
+    assert report["gate"]["verdict"] == Verdict.HOLD
+    assert REFUSAL in report["gate"]["reason"]
+    assert landing_deletes(fake) != []
