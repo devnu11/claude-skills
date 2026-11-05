@@ -9,12 +9,14 @@ import pytest
 from agile_team import po_tools, revert_log, sprint_end, sprint_leave, story_admin, system
 from agile_team.boundary import Boundary, Edge
 from agile_team.cli import status_report
+from agile_team.dashboard import snapshot as dashboard_snapshot
 from agile_team.events import Event
 from agile_team.gates import StoryState, StoryStatus
 from agile_team.holds import HoldKind, PoHold
 from agile_team.po_tools import SCHEMAS, Tools
+from agile_team.roles import RoleBook
 from agile_team.sprint_add import boundary_text
-from agile_team.state import RunState
+from agile_team.state import CheckoutRecord, RunState
 from agile_team.story_branches import Landed
 
 from .conftest import write_story
@@ -97,6 +99,9 @@ def test_status_and_snapshot_show_it_in_the_product_backlog(make_runtime) -> Non
     leave(t)
     assert status_report(rt.config)["stories"]["s1"]["sprint"] is None
     assert status_report(rt.config)["stories"]["s2"]["sprint"] == 1
+    snap = dashboard_snapshot.build(rt.config, RoleBook.for_repo(rt.config.repo, rt.config.roles))
+    sprints = {x["id"]: x["sprint"] for x in snap["stories"]}
+    assert sprints["s1"] is None and sprints["s2"] == 1
 
 
 def test_nothing_is_queued_for_the_move(make_runtime) -> None:
@@ -403,8 +408,6 @@ def test_list_sprint_dependents_in_state_order() -> None:
 
 
 def test_refused_when_the_checkout_moved(make_runtime) -> None:
-    from agile_team.state import CheckoutRecord
-
     rt, t = setup(make_runtime)
     rt.state.checkout = CheckoutRecord("main", "d" * 40)
     out = leave(t)
