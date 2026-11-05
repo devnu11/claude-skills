@@ -3498,11 +3498,17 @@ files. A started story that depends on it refuses it as before.
 `overlap_with`. Run level: `story_branches`, `landing_order` and `landing`
 (s163; an older file's `land_queue` is ignored), `permission_asked` and
 `checkout_requests`. Events: `story-branch` (`action`: `created`,
+<<<<<<< HEAD
 `rebuilt`, `replayed`, `removed`, `dropped`, and (s190) `adopted` with
 `why` and `taken` with `tip` and `aside`; `branch`, `base_sha`,
+`replays`), `story-landed`, `story-ci` and (s179) `worktree-pruned`
+(`worktree`, `reason`); `step-end` gains `resumed` and
+=======
+`rebuilt`, `replayed`, `removed`, `dropped`; `branch`, `base_sha`,
 `replays`), `story-landed`, `story-ci`, (s179) `worktree-pruned`
 (`worktree`, `reason`) and (s173) `config` (`sha`, `blob`, `sections`,
 `error`); `step-end` gains `resumed` and
+>>>>>>> 61f56411 (feat(s173): Bug: a config change committed during a run isn't used until the runner restarts; story amends naming a new environment are refused meanwhile)
 `cache_write`, and `checkout` gains `story`. s163 adds `landing-order`,
 `landing-dropped`, `overlap-lifted` and `stack-dropped`, and the gate's
 hold event carries `overlap` on an overlap hold. s180 adds `landing-carried`
