@@ -1954,18 +1954,8 @@ class Runtime:
         outcome = self.pipeline.screen(story, setback) or outcome if setback else outcome
         self._advance_story(story, step, outcome)
         self._queue_done_renewal(story)
-        result = {
-            "step": step,
-            "verdict": outcome.verdict,
-            "reason": outcome.reason,
-            "now_at": story.step,
-            "story_status": story.status,
-            "rounds": story.rounds,
-            "head": head,
-        }
-        result |= _collect_outcome_fields(outcome)
-        result |= _dispute_fields(outcome, story) | _setback_fields(setback, story)
-        result |= {"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {}
+        result = {"step": step, "head": head} | _collect_gate_fields(story, outcome)
+        result |= _setback_fields(setback, story)
         event = self.emit(GATE_EVENTS.get(outcome.verdict, EventKind.GATE), plan, **result)
         _record(story, setback, event)
         story.run = (
@@ -2177,6 +2167,19 @@ def _dispute_lines(story: StoryState) -> list[str]:
         return []
     head = f"Test dispute ({d.stage}): {d.test} contradicts {d.rule}: {d.reason}"
     return [head, DISPUTE_OUTPUT.format(output=d.output)] if d.output else [head]
+
+
+def _collect_gate_fields(story: StoryState, outcome: Outcome) -> dict[str, Any]:
+    """The verdict fields of a gate event for ``outcome``."""
+    result: dict[str, Any] = {
+        "verdict": outcome.verdict,
+        "reason": outcome.reason,
+        "now_at": story.step,
+        "story_status": story.status,
+        "rounds": story.rounds,
+    }
+    result |= _collect_outcome_fields(outcome) | _dispute_fields(outcome, story)
+    return result | ({"rule": outcome.rule} if outcome.verdict is Verdict.ESCALATE else {})
 
 
 def _collect_outcome_fields(outcome: Outcome) -> dict[str, Any]:
