@@ -11,7 +11,7 @@ rewrite it).
 |---|---|
 | `start NAME SOURCE [options]` | Create the job and start a detached supervisor (new session, pid file). Prints the job as JSON. |
 | `status [NAME]` | The job as JSON; every job without `NAME`. Right after `deadline` comes `time_left`: the whole minutes until the deadline, measured when the command runs and written like a duration (`23h41m`, `41m`, `0m` under a minute), `overdue` once the deadline has passed, `null` with no deadline. Every report (`list`, `wait`, `extend`, `start`, `resume`) has it; it is never stored. |
-| `list` | Every job as JSON. |
+| `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `session_id`, `status` and `max_cost`. `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
@@ -65,7 +65,7 @@ unique within a home.
 
 | File | Holds |
 |---|---|
-| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `session_id`, `next_wake`, `wake_on`. |
+| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model; see [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
 | `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
@@ -289,7 +289,26 @@ to the local one, and the next occurrence after now is used.
   must already allow what the job needs. Use `--permission-mode` to override.
 - **Session id:** saved to `state.json` from the first message that carries
   one (the init message's `data["session_id"]`, or any message's
-  `session_id`).
+  `session_id`). The SDK's init message is the first thing a run yields, so
+  `status` shows the id seconds after the run starts, before any turn ends.
+  It is the Claude Code session id: `claude --resume <id>` opens it once the
+  job has ended.
+- **Live cost:** <a id="live-cost"></a>the SDK reports `total_cost_usd` only
+  in the result message that ends a run, so mid-run the runner estimates.
+  Each `AssistantMessage` carries `model` and `usage` (`input_tokens`,
+  `output_tokens`, `cache_creation_input_tokens` or its `cache_creation`
+  split into 5-minute and 1-hour writes, `cache_read_input_tokens`). The run
+  keeps the latest usage per `message_id` (the CLI repeats one API response's
+  usage on each of its content blocks), sums it by model and writes it to
+  `state.run_usage` as each message arrives; `settle_run` clears it when the
+  run's SDK-reported cost is added to `cost`. `pricing.RATES` holds the USD
+  per million tokens of each model from
+  https://platform.claude.com/docs/en/about-claude/pricing (read 2026-11-17),
+  keyed by the model id without its `claude-` prefix and date suffix
+  (`claude-opus-4-5-20251101` → `opus-4-5`). A model not in the table makes
+  the estimate `null` rather than wrong; add its row when a new model ships.
+  Haiku 5.5 is priced at its under-100k-token rate. A login run is estimated
+  at API rates, as the SDK's own figure is.
 - **Cost cap:** a result or `ResultError` with subtype `error_max_budget_usd`
   is a `BUDGET` outcome. The CLI ends the run there; when exactly it checks
   the budget (between turns or mid-response) is not verified.

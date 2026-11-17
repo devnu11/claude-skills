@@ -57,8 +57,15 @@ Every flag, the job files, limit detection and the command contract are in
    `output.log` for commands, in the job's `dir`). Its `time_left` says how
    long the job has left before its deadline, e.g. `23h41m` or `overdue`;
    for an `agile-team` job, its `reason` says why the run stopped, e.g.
-   `agile-team blocked: …`. `$UN log NAME` shows the
+   `agile-team blocked: …`. Its `session_id` is the Claude Code session of
+   a prompt job, saved from the run's first message. `$UN log NAME` shows the
    events: each run, wait and resume.
+5. **Spend so far:** `$UN cost NAME`, at any time. `cost` is what the SDK
+   reported for the runs that ended (exact). `run` is the current run's
+   tokens by model, priced at the published API rates, and `estimate` is the
+   two added; both are `null` when a model is not in the rate table
+   (`run.unpriced` names it). Tell the human which number is exact and which
+   is an estimate.
 
 `$UN stop NAME` stops a job. `$UN resume NAME [--max-resumes N] [--until …]
 [--max-cost …]` reruns any ended job (`done` and `failed` too), with the
