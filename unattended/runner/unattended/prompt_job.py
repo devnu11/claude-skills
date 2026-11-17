@@ -76,14 +76,14 @@ def text_of(message: Any) -> str:
     return "\n".join(block.text for block in message.content if isinstance(block, TextBlock))
 
 
-def usage_of(message: Any) -> tuple[str, str, Usage] | None:
+def read_usage(message: Any) -> tuple[str, str, Usage] | None:
     """(message id, model, usage) of an assistant message that reports usage, else None."""
     if not isinstance(message, AssistantMessage) or not message.usage:
         return None
     return message.message_id or str(id(message)), message.model, Usage.from_sdk(message.usage)
 
 
-def by_model(messages: dict[str, tuple[str, Usage]]) -> dict[str, Usage]:
+def sum_by_model(messages: dict[str, tuple[str, Usage]]) -> dict[str, Usage]:
     """Usage summed per model over the (model, usage) of each message."""
     summed: dict[str, Usage] = {}
     for model, usage in messages.values():
@@ -116,7 +116,7 @@ class Drain:
     def note(self, message: Any) -> None:
         self.spend.tick()
         self._save_session(session_of(message))
-        self._save_usage(usage_of(message))
+        self._save_usage(read_usage(message))
         self.text = text_of(message) or self.text
         if isinstance(message, ResultMessage):
             self.result = message
@@ -126,7 +126,7 @@ class Drain:
             return
         message_id, model, usage = found
         self.usage[message_id] = (model, usage)
-        summed = {model: asdict(usage) for model, usage in by_model(self.usage).items()}
+        summed = {model: asdict(usage) for model, usage in sum_by_model(self.usage).items()}
         self.job.update(lambda st: setattr(st, "run_usage", summed))
 
     def _save_session(self, session_id: str | None) -> None:
