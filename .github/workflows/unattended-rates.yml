@@ -1,0 +1,64 @@
+# Keep unattended's API rate table in step with the published pricing page.
+# Daily, and on demand (workflow_dispatch: the coordinator or a human can fire it
+# when a job's `cost` reports `rates_stale`). When the page differs from
+# `pricing.RATES`, it rewrites the table and opens (or updates) one PR for review.
+# Needs "Allow GitHub Actions to create and approve pull requests" in the repo's
+# Actions settings.
+name: unattended rates
+
+on:
+  schedule:
+    - cron: "17 13 * * *"  # daily, 13:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    working-directory: unattended/runner
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Compare the table with the pricing page
+        id: rates
+        # exit 3 means the page differs; the table is rewritten in place
+        run: |
+          set +e
+          uv run --locked unattended rates --write unattended/pricing.py | tee rates.json
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          test "$code" -eq 0 || test "$code" -eq 3
+      - name: Format the rewritten table
+        if: steps.rates.outputs.code == '3'
+        run: uv run --locked ruff format unattended/pricing.py
+      - name: Check the rewritten table
+        if: steps.rates.outputs.code == '3'
+        run: uv run --locked ruff check . && uv run --locked pytest -q tests/test_pricing.py tests/test_rates.py
+      - name: Open or update the PR
+        if: steps.rates.outputs.code == '3'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          working-directory: .
+          add-paths: unattended/runner/unattended/pricing.py
+          branch: bot/unattended-rates
+          delete-branch: true
+          commit-message: "fix(unattended): refresh the API rate table from the pricing page"
+          title: "fix(unattended): refresh the API rate table"
+          body: |
+            The published pricing page differs from `pricing.RATES`. The table was rewritten from
+            https://platform.claude.com/docs/en/about-claude/pricing by `unattended rates --write`.
+
+            Review the diff against the page before merging; a changed row here changes every
+            mid-run `cost` estimate.
+          labels: unattended
+          assignees: devnu11

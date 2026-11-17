@@ -11,7 +11,8 @@ rewrite it).
 |---|---|
 | `start NAME SOURCE [options]` | Create the job and start a detached supervisor (new session, pid file). Prints the job as JSON. |
 | `status [NAME]` | The job as JSON; every job without `NAME`. Right after `deadline` comes `time_left`: the whole minutes until the deadline, measured when the command runs and written like a duration (`23h41m`, `41m`, `0m` under a minute), `overdue` once the deadline has passed, `null` with no deadline. Every report (`list`, `wait`, `extend`, `start`, `resume`) has it; it is never stored. |
-| `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `session_id`, `status` and `max_cost`. `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
+| `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `drift` and `rates_stale` (the last ended run's estimate against the SDK's figure; see [Live cost](#live-cost)), `session_id`, `status` and `max_cost`. `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
+| `rates [--write FILE]` | Fetch the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing.md) and print the difference from `pricing.RATES` as JSON (`in_sync`, `added`, `changed`, `removed`). Exit 0 when in sync, 3 when not. With `--write`, a difference rewrites the block between `# RATES-BEGIN` and `# RATES-END` in `FILE`, with `RATES_READ` set to today. The comparison is always against the table the running `unattended` loaded, so `FILE` is that runner's own `pricing.py`. Takes no job name. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
@@ -65,8 +66,8 @@ unique within a home.
 
 | File | Holds |
 |---|---|
-| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model; see [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
@@ -216,6 +217,7 @@ environment, and unattended always reads it as a `heartbeat:` probe.
 | `deadline` | the deadline's graceful or hard phase acted |
 | `idle-stop` | the idle stop's graceful or hard phase acted |
 | `limit-reached` | the bounds ended the job |
+| `rates-stale` | a run's SDK-reported cost and its token estimate differ by more than 5 %; see [Live cost](#live-cost) |
 
 Each notice is a `notify` event in `events.jsonl` (the chat: a session in
 `wait --until-notice` wakes on it) and, unless `--notify none`, a
@@ -309,6 +311,26 @@ to the local one, and the next occurrence after now is used.
   the estimate `null` rather than wrong; add its row when a new model ships.
   Haiku 5.5 is priced at its under-100k-token rate. A login run is estimated
   at API rates, as the SDK's own figure is.
+
+  **Drift.** When a run ends, `settle_run` compares the SDK's `total_cost_usd`
+  with the run's estimate: `drift = (estimate - cost) / cost`, stored in
+  `state.drift` and the `run` event; `null` when the run saw no priced usage
+  or cost nothing. Beyond `pricing.TOLERANCE` (5 %) the table is stale:
+  `cost` reports `rates_stale: true` and the supervisor posts a `rates-stale`
+  notice naming both figures. Non-token charges (web search, for example) also
+  show up as drift, so a small one is not proof of a changed price.
+
+  **Keeping the table current.** `unattended rates` fetches the pricing page
+  as Markdown (`rates.PRICING_URL`), parses its first table (one row per
+  model; Haiku 5.5's over-100k row is skipped; notes and links after a name
+  are dropped), keys the rows as `RATES` is keyed and prints the difference;
+  `--write FILE` rewrites the marked block. The workflow
+  `.github/workflows/unattended-rates.yml` runs it daily at 13:17 UTC and on
+  `workflow_dispatch`, and when the page differs it formats and tests the
+  rewritten table and opens or updates one PR (`bot/unattended-rates`,
+  assigned to the repo owner) for review. The repo setting *Allow GitHub
+  Actions to create and approve pull requests* must be on for that step. A
+  `rates_stale` report is the cue to fire the workflow by hand.
 - **Cost cap:** a result or `ResultError` with subtype `error_max_budget_usd`
   is a `BUDGET` outcome. The CLI ends the run there; when exactly it checks
   the budget (between turns or mid-response) is not verified.

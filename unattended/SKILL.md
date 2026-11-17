@@ -65,7 +65,11 @@ Every flag, the job files, limit detection and the command contract are in
    tokens by model, priced at the published API rates, and `estimate` is the
    two added; both are `null` when a model is not in the rate table
    (`run.unpriced` names it). Tell the human which number is exact and which
-   is an estimate.
+   is an estimate. When a run ends, the estimate is checked against the SDK's
+   figure: `drift` is the relative error, and `rates_stale` is true beyond 5 %.
+   A `rates-stale` notice says so too. The fix is `$UN rates --write
+   ~/.claude/skills/unattended/runner/unattended/pricing.py`, or the daily
+   `unattended rates` workflow, which opens a PR with the refreshed table.
 
 `$UN stop NAME` stops a job. `$UN resume NAME [--max-resumes N] [--until …]
 [--max-cost …]` reruns any ended job (`done` and `failed` too), with the
