@@ -10,7 +10,7 @@ import pytest
 from unattended import store
 from unattended.auth import Auth
 from unattended.awake import SleepPolicy
-from unattended.limits import Bounds, Progress, WakeOn
+from unattended.limits import Bounds, Metrics, Progress, WakeOn
 from unattended.store import Job, JobError, JobHome, JobKind, JobState, JobStatus, Spec
 
 
@@ -55,9 +55,17 @@ def test_state_from_before_live_usage_loads() -> None:
 def test_settle_run_adds_the_cost_and_drops_the_live_usage() -> None:
     st = state()
     st.run_usage = {"claude-opus-5-5": {"input": 1}}
-    st.settle_run(0.5)
-    st.settle_run(0.25)
+    st.settle_run(Metrics(cost=0.5))
+    st.settle_run(Metrics(cost=0.25))
     assert (st.runs, st.cost, st.run_usage) == (2, 0.75, {})
+
+
+def test_settle_run_notes_the_estimate_drift() -> None:
+    st = state()
+    st.settle_run(Metrics(cost=2.0, estimate=2.1))
+    assert st.drift == pytest.approx(0.05)
+    st.settle_run(Metrics(cost=2.0))
+    assert st.drift is None
 
 
 def test_mark_clears_reason() -> None:

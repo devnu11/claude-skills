@@ -21,7 +21,8 @@ from typing import Any
 
 from .auth import Auth
 from .awake import SleepPolicy
-from .limits import DEFAULT_FALLBACK, Bounds, Progress, WakeOn
+from .limits import DEFAULT_FALLBACK, Bounds, Metrics, Progress, WakeOn
+from .pricing import measure_drift
 
 JOBS = Path(".claude/jobs")
 STATE_FILE = "state.json"
@@ -100,6 +101,7 @@ class JobState:
     retries: int = 0
     cost: float = 0.0
     run_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    drift: float | None = None
     session_id: str | None = None
     next_wake: float | None = None
     wake_on: WakeOn | None = None
@@ -113,10 +115,11 @@ class JobState:
         self.status, self.reason = status, reason
         self.next_wake = self.wake_on = None
 
-    def settle_run(self, cost: float) -> None:
-        """Add a finished run's SDK-reported cost; its live token counts are spent."""
+    def settle_run(self, metrics: Metrics) -> None:
+        """Add a finished run's SDK-reported cost and note how far the estimate was off."""
         self.runs += 1
-        self.cost += cost
+        self.cost += metrics.cost
+        self.drift = measure_drift(metrics.cost, metrics.estimate)
         self.run_usage = {}
 
     def progress(self, next_wake: float) -> Progress:

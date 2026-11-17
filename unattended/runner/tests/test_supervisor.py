@@ -439,3 +439,19 @@ def test_a_stop_by_the_user_notifies_nobody(job: Job) -> None:
     job.request_stop()
     supervise(job, Script(DONE))
     assert notified_triggers(job) == []
+
+
+def test_a_run_whose_estimate_misses_the_sdk_cost_warns_about_stale_rates(job: Job) -> None:
+    off = Outcome(OutcomeKind.DONE, metrics=Metrics(cost=1.0, estimate=1.5))
+    supervise(job, Script(off))
+    assert notified_triggers(job) == ["rates-stale", "ended-early"]
+    assert job.load().drift == pytest.approx(0.5)
+    lines = map(json.loads, job.path(EVENTS_FILE).read_text().splitlines())
+    reason = next(e for e in lines if e["event"] == "notify")["reason"]
+    assert reason.startswith("run 1: the SDK reported $1.00, the rate table estimated $1.50 (+50%)")
+
+
+def test_a_run_within_tolerance_warns_nobody(job: Job) -> None:
+    close = Outcome(OutcomeKind.DONE, metrics=Metrics(cost=1.0, estimate=1.04))
+    supervise(job, Script(close))
+    assert notified_triggers(job) == ["ended-early"]

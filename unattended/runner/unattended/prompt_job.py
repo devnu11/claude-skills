@@ -31,7 +31,7 @@ from claude_agent_sdk import (
 )
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
-from .pricing import Usage
+from .pricing import Estimate, Usage
 from .probes import Stamp
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
@@ -91,10 +91,12 @@ def sum_by_model(messages: dict[str, tuple[str, Usage]]) -> dict[str, Usage]:
     return summed
 
 
-def metrics_of(result: ResultMessage | None) -> Metrics:
+def metrics_of(result: ResultMessage | None, estimate: float | None) -> Metrics:
+    """The SDK's figures from the result, beside the run's estimate from its tokens."""
     if result is None:
-        return Metrics()
-    return Metrics(result.total_cost_usd or 0.0, result.num_turns, dict(result.usage or {}))
+        return Metrics(estimate=estimate)
+    cost, usage = result.total_cost_usd or 0.0, dict(result.usage or {})
+    return Metrics(cost, result.num_turns, usage, estimate)
 
 
 @dataclass
@@ -142,9 +144,20 @@ class Drain:
         """True when the result or an exception says the run's budget ran out."""
         return any(getattr(x, "subtype", None) == BUDGET_SUBTYPE for x in [self.result, *found])
 
+    @property
+    def metrics(self) -> Metrics:
+        return metrics_of(self.result, self.estimate)
+
+    @property
+    def estimate(self) -> float | None:
+        """The run's cost from its tokens and the rate table; None before any usage arrived."""
+        if not self.usage:
+            return None
+        return Estimate.compute(sum_by_model(self.usage)).usd
+
     def finished(self) -> Outcome:
         """``DONE``, unless the result itself is an error."""
-        metrics = metrics_of(self.result)
+        metrics = self.metrics
         if self.budget_spent([]):
             return Outcome(OutcomeKind.BUDGET, BUDGET_REASON, metrics)
         if self.result and self.result.is_error:
@@ -155,11 +168,11 @@ class Drain:
         """A budget stop, limit, rate limit or failure read from the exception."""
         found = leaves(exc)
         if self.budget_spent(found):
-            return Outcome(OutcomeKind.BUDGET, BUDGET_REASON, metrics_of(self.result))
+            return Outcome(OutcomeKind.BUDGET, BUDGET_REASON, self.metrics)
         outcome = classify("\n".join(strip_exit_suffix(str(leaf)) for leaf in found))
         if outcome.kind is OutcomeKind.FAILED:
             outcome = Outcome(outcome.kind, f"crashed: {type(found[0]).__name__}: {outcome.reason}")
-        return _with(outcome, metrics_of(self.result))
+        return _with(outcome, self.metrics)
 
 
 def _with(outcome: Outcome, metrics: Metrics) -> Outcome:

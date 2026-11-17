@@ -30,8 +30,9 @@ from types import FrameType
 from typing import Protocol
 
 from . import network
-from .limits import Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
+from .limits import Metrics, Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
 from .notify import Notice, Trigger, post
+from .pricing import is_stale
 from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
 from .watch import SLICE, RunWatch, StopRequested
 
@@ -111,13 +112,20 @@ class Supervisor:
 
     def _record(self, outcome: Outcome) -> JobState:
         def apply(st: JobState) -> None:
-            st.settle_run(outcome.metrics.cost)
+            st.settle_run(outcome.metrics)
             st.retries = st.retries + 1 if outcome.kind in RETRIED else 0
 
         state = self.job.update(apply)
         detail = {"run": state.runs, "outcome": outcome.kind, "reason": outcome.reason}
-        self.job.event("run", detail | asdict(outcome.metrics))
+        self.job.event("run", detail | asdict(outcome.metrics) | {"drift": state.drift})
+        self._notify_stale_rates(state, outcome.metrics)
         return state
+
+    def _notify_stale_rates(self, state: JobState, metrics: Metrics) -> None:
+        """Post a ``rates-stale`` notice when the run's estimate missed the SDK's cost."""
+        if is_stale(state.drift):
+            reason = describe_stale_rates(state.runs, metrics, state.drift or 0.0)
+            post(self.job, Notice(Trigger.RATES, state.status, reason))
 
     def _wait(self, state: JobState, outcome: Outcome) -> JobStatus | None:
         """Wait for the reset and count a resume, unless the bounds end the job first."""
@@ -202,6 +210,14 @@ class Supervisor:
         if trigger:
             post(self.job, Notice(trigger, status, reason))
         return status
+
+
+def describe_stale_rates(run: int, metrics: Metrics, drift: float) -> str:
+    """Why the rate table looks stale, for the notice and the log."""
+    return (
+        f"run {run}: the SDK reported ${metrics.cost:.2f}, the rate table estimated "
+        f"${metrics.estimate or 0.0:.2f} ({drift:+.0%}); refresh it with `unattended rates`"
+    )
 
 
 def early(state: JobState, now: float) -> Trigger | None:

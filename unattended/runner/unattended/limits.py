@@ -41,6 +41,7 @@ class Metrics:
     cost: float = 0.0
     turns: int = 0
     tokens: dict[str, Any] = field(default_factory=dict)
+    estimate: float | None = None  # the run's cost from its tokens and the rate table
 
 
 @dataclass(frozen=True)

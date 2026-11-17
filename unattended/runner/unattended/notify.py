@@ -46,6 +46,7 @@ class Trigger(StrEnum):
     IDLE_STOP = "idle-stop"
     LIMIT = "limit-reached"
     WAITING = "waiting"
+    RATES = "rates-stale"
 
 
 NOTICES: dict[Trigger, str] = {
@@ -56,6 +57,7 @@ NOTICES: dict[Trigger, str] = {
     Trigger.IDLE_STOP: "is being stopped for making no progress",
     Trigger.LIMIT: "reached a limit",
     Trigger.WAITING: "is waiting",
+    Trigger.RATES: "was priced with a stale rate table",
 }
 
 
