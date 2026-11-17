@@ -12,7 +12,7 @@ rewrite it).
 | `start NAME SOURCE [options]` | Create the job and start a detached supervisor (new session, pid file). Prints the job as JSON. |
 | `status [NAME]` | The job as JSON; every job without `NAME`. Right after `deadline` comes `time_left`: the whole minutes until the deadline, measured when the command runs and written like a duration (`23h41m`, `41m`, `0m` under a minute), `overdue` once the deadline has passed, `null` with no deadline. Every report (`list`, `wait`, `extend`, `start`, `resume`) has it; it is never stored. |
 | `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `drift` and `rates_stale` (the last ended run's estimate against the SDK's figure; see [Live cost](#live-cost)), `session_id`, `status` and `max_cost`. `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
-| `rates [--write FILE]` | Fetch the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing.md) and print the difference from `pricing.RATES` as JSON (`in_sync`, `added`, `changed`, `removed`). Exit 0 when in sync, 3 when not. With `--write`, a difference rewrites the block between `# RATES-BEGIN` and `# RATES-END` in `FILE`, with `RATES_READ` set to today. The comparison is always against the table the running `unattended` loaded, so `FILE` is that runner's own `pricing.py`. Takes no job name. |
+| `rates` | Fetch the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing.md) now, store its table, and print the store's state as JSON: `file`, `read_at`, `checked_at`, `age` (hours), `models`, and `against_builtin` (what differs from `pricing.RATES`). Diagnostic; the table refreshes itself (see [Live cost](#live-cost)). Takes no job name. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
@@ -303,12 +303,13 @@ to the local one, and the next occurrence after now is used.
   keeps the latest usage per `message_id` (the CLI repeats one API response's
   usage on each of its content blocks), sums it by model and writes it to
   `state.run_usage` as each message arrives; `settle_run` clears it when the
-  run's SDK-reported cost is added to `cost`. `pricing.RATES` holds the USD
-  per million tokens of each model from
-  https://platform.claude.com/docs/en/about-claude/pricing (read 2026-11-17),
-  keyed by the model id without its `claude-` prefix and date suffix
-  (`claude-opus-4-5-20251101` → `opus-4-5`). A model not in the table makes
-  the estimate `null` rather than wrong; add its row when a new model ships.
+  run's SDK-reported cost is added to `cost`. The rate table is USD per
+  million tokens of each model from
+  https://platform.claude.com/docs/en/about-claude/pricing, keyed by the model
+  id without its `claude-` prefix and date suffix (`claude-opus-4-5-20251101`
+  → `opus-4-5`); `pricing.RATES` is the built-in copy (read on `RATES_READ`),
+  and the stored one below is preferred. A model not in the table makes the
+  estimate `null` rather than wrong.
   Haiku 5.5 is priced at its under-100k-token rate. A login run is estimated
   at API rates, as the SDK's own figure is.
 
@@ -320,17 +321,25 @@ to the local one, and the next occurrence after now is used.
   notice naming both figures. Non-token charges (web search, for example) also
   show up as drift, so a small one is not proof of a changed price.
 
-  **Keeping the table current.** `unattended rates` fetches the pricing page
-  as Markdown (`rates.PRICING_URL`), parses its first table (one row per
-  model; Haiku 5.5's over-100k row is skipped; notes and links after a name
-  are dropped), keys the rows as `RATES` is keyed and prints the difference;
-  `--write FILE` rewrites the marked block. The workflow
-  `.github/workflows/unattended-rates.yml` runs it daily at 13:17 UTC and on
-  `workflow_dispatch`, and when the page differs it formats and tests the
-  rewritten table and opens or updates one PR (`bot/unattended-rates`,
-  assigned to the repo owner) for review. The repo setting *Allow GitHub
-  Actions to create and approve pull requests* must be on for that step. A
-  `rates_stale` report is the cue to fire the workflow by hand.
+  **Keeping the table current.** `pricing.RATES` is only the built-in
+  fallback. `rates.py` keeps the page's table in
+  `<home>/.claude/unattended/rates.json` (`read_at`, `checked_at`, `source`,
+  `rates`) and existing calls refresh it, so no agent or cron has to:
+
+  | Call | What it does |
+  |---|---|
+  | each run start (`Supervisor._cycle`) and `cost NAME` | `refresh_rates`: fetch when the last check is older than `REFRESH_EVERY` (24 h), or `RETRY_AFTER` (1 h) when that check failed; else the stored table |
+  | a run whose `drift` is beyond `TOLERANCE` | `fetch_rates` at once, ignoring the throttle; the `rates-stale` notice then says either that the table was refreshed or that the page agrees with it, so the difference is not the rates |
+  | `rates` | `fetch_rates` now, then the store's state |
+
+  A fetch reads the page as Markdown (`rates.PRICING_URL`, 10 s timeout, a
+  non-Python user agent: the site answers 403 to urllib's default), parses its
+  first table (one row per model; Haiku 5.5's over-100k row is skipped; notes
+  and links after a name are dropped) and keys the rows as `RATES` is keyed.
+  A failed fetch, or a page without a table, keeps the stored table and only
+  moves `checked_at`; a missing or corrupt store means the built-in table. A
+  prompt run prices its estimate with the stored table as it was when the run
+  started. Nothing is ever written into the skill's own source.
 - **Cost cap:** a result or `ResultError` with subtype `error_max_budget_usd`
   is a `BUDGET` outcome. The CLI ends the run there; when exactly it checks
   the budget (between turns or mid-response) is not verified.
