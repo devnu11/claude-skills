@@ -111,8 +111,7 @@ class Supervisor:
 
     def _record(self, outcome: Outcome) -> JobState:
         def apply(st: JobState) -> None:
-            st.runs += 1
-            st.cost += outcome.metrics.cost
+            st.settle_run(outcome.metrics.cost)
             st.retries = st.retries + 1 if outcome.kind in RETRIED else 0
 
         state = self.job.update(apply)

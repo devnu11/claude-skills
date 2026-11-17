@@ -99,6 +99,7 @@ class JobState:
     resumes: int = 0
     retries: int = 0
     cost: float = 0.0
+    run_usage: dict[str, dict[str, int]] = field(default_factory=dict)
     session_id: str | None = None
     next_wake: float | None = None
     wake_on: WakeOn | None = None
@@ -111,6 +112,12 @@ class JobState:
         """
         self.status, self.reason = status, reason
         self.next_wake = self.wake_on = None
+
+    def settle_run(self, cost: float) -> None:
+        """Add a finished run's SDK-reported cost; its live token counts are spent."""
+        self.runs += 1
+        self.cost += cost
+        self.run_usage = {}
 
     def progress(self, next_wake: float) -> Progress:
         return Progress(self.resumes, self.cost, next_wake)

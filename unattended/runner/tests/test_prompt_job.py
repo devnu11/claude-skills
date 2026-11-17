@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from claude_agent_sdk import (
 from unattended import prompt_job
 from unattended.auth import ENV_VAR
 from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
+from unattended.pricing import Usage
 from unattended.prompt_job import PromptJob
 from unattended.store import (
     DEFAULT_RESUME_PROMPT,
@@ -249,3 +251,34 @@ def test_each_message_stamps_spend_progress(job: Job) -> None:
     watch = RunWatch(job)
     PromptJob(job, {}, FakeQuery([init(), said("a"), result()])).run_once(watch)
     assert watch.spend.count == 3
+
+
+def spent(model: str, message_id: str, output: int) -> AssistantMessage:
+    usage = {"input_tokens": 10, "output_tokens": output}
+    return AssistantMessage([TextBlock("…")], model, usage=usage, message_id=message_id)
+
+
+def test_run_usage_is_summed_by_model_as_messages_arrive(job: Job) -> None:
+    messages = [init(), spent("claude-opus-5-5", "m1", 5), spent("claude-haiku-5-5", "m2", 7)]
+    fake = FakeQuery(messages, RuntimeError("crash"))
+    seen: list[dict[str, Any]] = []
+    fake.on_message.append(lambda: seen.append(job.load().run_usage))
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert seen[0] == {}
+    assert seen[1]["claude-opus-5-5"]["output"] == 5
+    assert seen[2] == {
+        "claude-opus-5-5": asdict(Usage(input=10, output=5)),
+        "claude-haiku-5-5": asdict(Usage(input=10, output=7)),
+    }
+
+
+def test_run_usage_counts_one_message_once_per_id(job: Job) -> None:
+    # The CLI repeats an API response's usage on each content block it emits.
+    messages = [init(), spent("m", "same", 5), spent("m", "same", 9), spent("m", None, 1)]
+    PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    assert job.load().run_usage == {"m": asdict(Usage(input=20, output=10))}
+
+
+def test_messages_without_usage_change_nothing(job: Job) -> None:
+    PromptJob(job, {}, FakeQuery([init(), said("x"), result()])).run_once(RunWatch(job))
+    assert job.load().run_usage == {}

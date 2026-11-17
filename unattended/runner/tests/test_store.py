@@ -46,6 +46,20 @@ def test_state_from_before_hard_stops_loads() -> None:
     assert (loaded.spec.idle, loaded.spec.progress, loaded.bounds.idle_stop) == (1200.0, [], None)
 
 
+def test_state_from_before_live_usage_loads() -> None:
+    data = json.loads(state().to_json())
+    del data["run_usage"]
+    assert JobState.from_json(json.dumps(data)).run_usage == {}
+
+
+def test_settle_run_adds_the_cost_and_drops_the_live_usage() -> None:
+    st = state()
+    st.run_usage = {"claude-opus-5-5": {"input": 1}}
+    st.settle_run(0.5)
+    st.settle_run(0.25)
+    assert (st.runs, st.cost, st.run_usage) == (2, 0.75, {})
+
+
 def test_mark_clears_reason() -> None:
     st = state()
     st.mark(JobStatus.FAILED, "boom")

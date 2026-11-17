@@ -3,7 +3,10 @@
 The job inherits the user's Claude Code settings (permissions, hooks), so
 headless it may only do what those settings allow. The session id is saved to
 ``state.json`` from the first message that carries it, so a crash mid-run
-cannot lose it. The final result goes to ``output.md``.
+cannot lose it. Each assistant message's token usage is summed by model into
+``state.run_usage`` as it arrives, so ``unattended cost`` can price the run so
+far; the SDK's own ``total_cost_usd`` comes only with the result. The final
+result goes to ``output.md``.
 
 A watcher checks the run's ``RunWatch`` after each slice beside the query.
 A hard stop cancels the query; the SDK then ends its CLI subprocess. Prompt
@@ -14,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import anyio
@@ -28,6 +31,7 @@ from claude_agent_sdk import (
 )
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
+from .pricing import Usage
 from .probes import Stamp
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
@@ -72,6 +76,21 @@ def text_of(message: Any) -> str:
     return "\n".join(block.text for block in message.content if isinstance(block, TextBlock))
 
 
+def usage_of(message: Any) -> tuple[str, str, Usage] | None:
+    """(message id, model, usage) of an assistant message that reports usage, else None."""
+    if not isinstance(message, AssistantMessage) or not message.usage:
+        return None
+    return message.message_id or str(id(message)), message.model, Usage.from_sdk(message.usage)
+
+
+def by_model(messages: dict[str, tuple[str, Usage]]) -> dict[str, Usage]:
+    """Usage summed per model over the (model, usage) of each message."""
+    summed: dict[str, Usage] = {}
+    for model, usage in messages.values():
+        summed[model] = summed.get(model, Usage()) + usage
+    return summed
+
+
 def metrics_of(result: ResultMessage | None) -> Metrics:
     if result is None:
         return Metrics()
@@ -83,6 +102,8 @@ class Drain:
     """What a query has produced so far; saves the session id as soon as it appears.
 
     Each message ticks ``spend``: an agent that is thinking or spending is making progress.
+    Usage is kept per message id, because the CLI repeats one API response's usage
+    on each of its content blocks; the latest reading per message counts once.
     """
 
     job: Job
@@ -90,13 +111,23 @@ class Drain:
     spend: Stamp = field(default_factory=Stamp)
     text: str = ""
     result: ResultMessage | None = None
+    usage: dict[str, tuple[str, Usage]] = field(default_factory=dict)
 
     def note(self, message: Any) -> None:
         self.spend.tick()
         self._save_session(session_of(message))
+        self._save_usage(usage_of(message))
         self.text = text_of(message) or self.text
         if isinstance(message, ResultMessage):
             self.result = message
+
+    def _save_usage(self, found: tuple[str, str, Usage] | None) -> None:
+        if found is None:
+            return
+        message_id, model, usage = found
+        self.usage[message_id] = (model, usage)
+        summed = {model: asdict(usage) for model, usage in by_model(self.usage).items()}
+        self.job.update(lambda st: setattr(st, "run_usage", summed))
 
     def _save_session(self, session_id: str | None) -> None:
         if session_id and session_id != self.session_id:
