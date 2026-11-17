@@ -22,12 +22,12 @@ SDK_USAGE = {
     ],
 )
 def test_rate_for_known_models(model: str, key: str) -> None:
-    assert find_rate(model) is RATES[key]
+    assert find_rate(model, RATES) is RATES[key]
 
 
 @pytest.mark.parametrize("model", ["haiku", "claude-opus-9-9", "", "gpt-4o"])
 def test_rate_for_unknown_models(model: str) -> None:
-    assert find_rate(model) is None
+    assert find_rate(model, RATES) is None
 
 
 def test_usage_from_sdk_counts_unsplit_cache_writes_as_five_minute() -> None:
@@ -62,13 +62,13 @@ def test_opus_5_5_rates_match_the_pricing_page() -> None:
 def test_estimate_sums_priced_models() -> None:
     million = Usage(output=1_000_000)
     by_model = {"claude-opus-5-5": million, "claude-haiku-5-5": million}
-    assert Estimate.compute(by_model) == Estimate(20.5, [])
+    assert Estimate.compute(by_model, RATES) == Estimate(20.5, [])
 
 
 def test_estimate_is_null_with_an_unpriced_model() -> None:
     by_model = {"claude-opus-5-5": Usage(output=1_000_000), "mystery": Usage(output=1)}
-    assert Estimate.compute(by_model) == Estimate(None, ["mystery"])
+    assert Estimate.compute(by_model, RATES) == Estimate(None, ["mystery"])
 
 
 def test_estimate_of_nothing_is_zero() -> None:
-    assert Estimate.compute({}) == Estimate(0.0, [])
+    assert Estimate.compute({}, RATES) == Estimate(0.0, [])

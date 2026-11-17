@@ -26,6 +26,7 @@ import signal
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from types import FrameType
 from typing import Protocol
 
@@ -33,6 +34,7 @@ from . import network
 from .limits import Metrics, Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
 from .notify import Notice, Trigger, post
 from .pricing import is_stale
+from .rates import fetch_rates, load_rates, refresh_rates
 from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
 from .watch import SLICE, RunWatch, StopRequested
 
@@ -82,6 +84,7 @@ class Supervisor:
     clock: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     online: Callable[[], bool] = network.online
+    rates_file: Path | None = None  # the stored rate table, refreshed before each run
 
     def run(self) -> JobStatus:
         """Run and resume until the job ends; returns its final status."""
@@ -101,6 +104,7 @@ class Supervisor:
         self._check_deadline()
         self.job.update(lambda st: st.mark(JobStatus.RUNNING))
         self.job.path(HEARTBEAT_FILE).unlink(missing_ok=True)
+        self._refresh_rates()
         watch = RunWatch(self.job, self.clock)
         outcome = watch.settle(self.runner.run_once(watch))
         state = self._record(outcome)
@@ -121,11 +125,19 @@ class Supervisor:
         self._notify_stale_rates(state, outcome.metrics)
         return state
 
+    def _refresh_rates(self) -> None:
+        """Fetch the pricing page when the stored table is a day old; quiet when offline."""
+        if self.rates_file is not None:
+            refresh_rates(self.rates_file, self.clock())
+
     def _notify_stale_rates(self, state: JobState, metrics: Metrics) -> None:
-        """Post a ``rates-stale`` notice when the run's estimate missed the SDK's cost."""
-        if is_stale(state.drift):
-            reason = describe_stale_rates(state.runs, metrics, state.drift or 0.0)
-            post(self.job, Notice(Trigger.RATES, state.status, reason))
+        """When the run's estimate missed the SDK's cost: refetch the table now, then say so."""
+        if not is_stale(state.drift):
+            return
+        reason = describe_stale_rates(state.runs, metrics, state.drift or 0.0)
+        if self.rates_file is not None:
+            reason += describe_refetch(self.rates_file, self.clock())
+        post(self.job, Notice(Trigger.RATES, state.status, reason))
 
     def _wait(self, state: JobState, outcome: Outcome) -> JobStatus | None:
         """Wait for the reset and count a resume, unless the bounds end the job first."""
@@ -212,11 +224,24 @@ class Supervisor:
         return status
 
 
+REFETCHED = {
+    True: "; the rate table was refreshed from the pricing page",
+    False: "; the pricing page agrees with the table, so the difference is not the rates",
+}
+
+
+def describe_refetch(store: Path, now: float) -> str:
+    """Fetch the page regardless of the throttle; what that changed, for the notice."""
+    before = load_rates(store)
+    after = fetch_rates(store, now)
+    return REFETCHED[after != before]
+
+
 def describe_stale_rates(run: int, metrics: Metrics, drift: float) -> str:
     """Why the rate table looks stale, for the notice and the log."""
     return (
         f"run {run}: the SDK reported ${metrics.cost:.2f}, the rate table estimated "
-        f"${metrics.estimate or 0.0:.2f} ({drift:+.0%}); refresh it with `unattended rates`"
+        f"${metrics.estimate or 0.0:.2f} ({drift:+.0%})"
     )
 
 

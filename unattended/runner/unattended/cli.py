@@ -28,9 +28,9 @@ from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
-from .pricing import Estimate, Usage, is_stale
+from .pricing import Estimate, Rates, Usage, is_stale
 from .prompt_job import PromptJob
-from .rates import compare_rates, fetch_page, parse_rates, write_rates
+from .rates import describe_store, fetch_rates, refresh_rates, resolve_store
 from .store import (
     DEFAULT_RESUME_PROMPT,
     ENDED,
@@ -52,7 +52,6 @@ from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 POLL = 5.0
 IDLE_OFF = "off"
 NOTICE_EXIT = 10
-RATES_DIFFER_EXIT = 3
 FOLLOW_POLL = 1.0
 EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.DONE: 0,
@@ -244,15 +243,15 @@ def require_auth(spec: Spec, home: Path) -> None:
 
 # ----- running -------------------------------------------------------------------
 
-RUNNERS: dict[JobKind, Callable[[Job, dict[str, str]], Runner]] = {
-    JobKind.PROMPT: lambda job, env: PromptJob(job, env),
-    JobKind.COMMAND: lambda job, env: CommandJob(job, {**os.environ, **env}),
+RUNNERS: dict[JobKind, Callable[[Job, dict[str, str], Path], Runner]] = {
+    JobKind.PROMPT: lambda job, env, home: PromptJob(job, env, rates_file=resolve_store(home)),
+    JobKind.COMMAND: lambda job, env, home: CommandJob(job, {**os.environ, **env}),
 }
 
 
 def runner_for(job: Job, home: Path) -> Runner:
     spec = job.load().spec
-    return RUNNERS[spec.kind](job, auth_setup(spec, home).env())
+    return RUNNERS[spec.kind](job, auth_setup(spec, home).env(), home)
 
 
 def run_supervisor(job: Job, home: Path) -> JobStatus:
@@ -261,7 +260,7 @@ def run_supervisor(job: Job, home: Path) -> JobStatus:
     with job.pid_file():
         hold_awake(job)
         try:
-            return Supervisor(job, runner_for(job, home)).run()
+            return Supervisor(job, runner_for(job, home), rates_file=resolve_store(home)).run()
         except Exception as exc:
             return _crashed(job, exc)
 
@@ -350,15 +349,15 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def report_cost(state: JobState) -> dict[str, Any]:
+def report_cost(state: JobState, rates: Rates) -> dict[str, Any]:
     """The job's spend: settled runs as the SDK reported them, plus the live run priced.
 
     ``cost`` is exact for every run that ended. ``run`` is the current run's tokens by
-    model and their cost at the published API rates; ``estimate`` is their sum, or null
-    when a model has no known rate (then ``unpriced`` names it).
+    model and their cost at ``rates``; ``estimate`` is their sum, or null when a model
+    has no known rate (then ``unpriced`` names it).
     """
     by_model = {model: Usage(**tokens) for model, tokens in state.run_usage.items()}
-    estimate = Estimate.compute(by_model)
+    estimate = Estimate.compute(by_model, rates)
     total = None if estimate.usd is None else round(state.cost + estimate.usd, 4)
     return {
         "name": state.name, "status": state.status, "session_id": state.session_id,
@@ -375,18 +374,18 @@ def _format_usd(usd: float | None) -> float | None:
 
 
 def run_cost(args: argparse.Namespace) -> int:
-    print_json(report_cost(job_home(args).job(args.name).load()))
+    """Price the job's live run with a table at most a day old; offline, the stored one."""
+    rates = refresh_rates(resolve_store(Path(args.home)), time.time())
+    print_json(report_cost(job_home(args).job(args.name).load(), rates))
     return 0
 
 
 def run_rates(args: argparse.Namespace) -> int:
-    """Compare the rate table with the pricing page; ``--write`` rewrites it. Exit 3 on a change."""
-    published = parse_rates(fetch_page())
-    diff = compare_rates(published)
-    print_json(diff.summary)
-    if args.write and not diff.in_sync:
-        write_rates(Path(args.write), published)
-    return 0 if diff.in_sync else RATES_DIFFER_EXIT
+    """Fetch the pricing page now, store its table and describe the store. Diagnostic."""
+    path, now = resolve_store(Path(args.home)), time.time()
+    fetch_rates(path, now)
+    print_json(describe_store(path, now))
+    return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -703,9 +702,8 @@ COMMANDS = (
             (DEADLINE,)),
     Command("extend", "change the limits of a job that has not ended", cmd_extend,
             (NAME_ARG, *limit_args(None)), (DEADLINE,)),
-    Command("rates", "compare the rate table with the pricing page (exit 3 if they differ)",
-            run_rates, ((("--write",), {"metavar": "FILE",
-                                        "help": "rewrite FILE's rate table from the page"}),)),
+    Command("rates", "fetch the pricing page now and show the stored rate table's state",
+            run_rates),
     Command("supervise", "internal: supervise a job directory in this process", cmd_supervise,
             ((("dir",), {}),)),
 )  # fmt: skip
