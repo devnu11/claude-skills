@@ -69,7 +69,7 @@ class Usage:
     @classmethod
     def from_sdk(cls, usage: dict[str, Any]) -> Usage:
         """The SDK's ``usage`` dict; its ``cache_creation`` split, when given, wins."""
-        writes = _cache_writes(usage)
+        writes = _split_cache_writes(usage)
         return cls(
             input=usage.get("input_tokens", 0),
             output=usage.get("output_tokens", 0),
@@ -82,13 +82,13 @@ class Usage:
         mine, theirs = asdict(self), asdict(other)
         return Usage(**{key: mine[key] + theirs[key] for key in mine})
 
-    def cost(self, rate: Rate) -> float:
+    def compute_cost(self, rate: Rate) -> float:
         """USD at ``rate``."""
         tokens, prices = asdict(self), asdict(rate)
         return sum(tokens[key] * prices[key] for key in tokens) / MILLION
 
 
-def _cache_writes(usage: dict[str, Any]) -> tuple[int, int]:
+def _split_cache_writes(usage: dict[str, Any]) -> tuple[int, int]:
     """(5-minute, 1-hour) cache write tokens; an unsplit total counts as 5-minute."""
     split = usage.get("cache_creation") or {}
     if split:
@@ -96,7 +96,7 @@ def _cache_writes(usage: dict[str, Any]) -> tuple[int, int]:
     return usage.get("cache_creation_input_tokens", 0), 0
 
 
-def rate_for(model: str) -> Rate | None:
+def find_rate(model: str) -> Rate | None:
     """The published rate of ``model``, or None when it is not in the table."""
     match = MODEL_KEY.match(model)
     return RATES.get(match["key"]) if match else None
@@ -110,9 +110,16 @@ class Estimate:
     unpriced: list[str]
 
     @classmethod
-    def of(cls, by_model: dict[str, Usage]) -> Estimate:
+    def compute(cls, by_model: dict[str, Usage]) -> Estimate:
         """None for ``usd`` when any model has no rate; the sum of the rest otherwise."""
-        unpriced = sorted(model for model in by_model if rate_for(model) is None)
+        unpriced = sorted(model for model in by_model if find_rate(model) is None)
         if unpriced:
             return cls(None, unpriced)
-        return cls(sum(usage.cost(rate_for(model)) for model, usage in by_model.items()), [])  # type: ignore[arg-type]
+        return cls(sum(_measure_cost(model, usage) for model, usage in by_model.items()), [])
+
+
+def _measure_cost(model: str, usage: Usage) -> float:
+    """USD of ``usage`` on ``model``, whose rate is known."""
+    rate = find_rate(model)
+    assert rate is not None  # callers check first
+    return usage.compute_cost(rate)
