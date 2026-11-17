@@ -247,6 +247,45 @@ def test_status_and_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert len(printed(capsys)) == 1
 
 
+def test_cost_prices_the_live_run_on_top_of_settled_runs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.RUNNING)
+    live = {"claude-opus-5-5": {"input": 1_000_000, "output": 0, "cache_write_5m": 0,
+                                "cache_write_1h": 0, "cache_read": 0}}  # fmt: skip
+
+    def apply(st: JobState) -> None:
+        st.cost, st.run_usage, st.session_id = 1.5, live, "sess"
+
+    job.update(apply)
+    assert run(tmp_path, "cost", "j") == 0
+    report = printed(capsys)
+    assert report["session_id"] == "sess"
+    assert (report["cost"], report["run"]["cost"], report["estimate"]) == (1.5, 4.0, 5.5)
+    assert report["run"]["tokens"] == live
+
+
+def test_cost_names_a_model_it_cannot_price(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = make(tmp_path, JobStatus.RUNNING)
+    live = {"mystery": {"input": 1, "output": 0, "cache_write_5m": 0, "cache_write_1h": 0,
+                        "cache_read": 0}}  # fmt: skip
+    job.update(lambda st: setattr(st, "run_usage", live))
+    run(tmp_path, "cost", "j")
+    report = printed(capsys)
+    assert (report["run"]["cost"], report["estimate"]) == (None, None)
+    assert report["run"]["unpriced"] == ["mystery"]
+
+
+def test_cost_of_an_ended_job_is_what_the_sdk_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    make(tmp_path).update(lambda st: setattr(st, "cost", 0.3))
+    run(tmp_path, "cost", "j")
+    assert printed(capsys)["estimate"] == 0.3
+
+
 def test_status_warns_about_an_orphan(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     make(tmp_path, JobStatus.WAITING)
     run(tmp_path, "status", "j")
