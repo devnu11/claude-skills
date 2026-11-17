@@ -1,6 +1,6 @@
 """``unattended``: run a prompt or command unattended, resuming after usage limits.
 
-start | status | cost | list | wait | log | stop | resume | extend. Jobs live in the repo's
+start | status | cost | list | wait | log | stop | resume | extend | rates. Jobs live in the repo's
 ``.claude/jobs/`` when it exists, else ``~/.claude/jobs/``. Errors print
 ``unattended <cmd>: <message>`` and return 1.
 """
@@ -30,6 +30,7 @@ from .command_job import CommandJob
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
 from .pricing import Estimate, Usage, is_stale
 from .prompt_job import PromptJob
+from .rates import compare_rates, fetch_page, parse_rates, write_rates
 from .store import (
     DEFAULT_RESUME_PROMPT,
     ENDED,
@@ -51,6 +52,7 @@ from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 POLL = 5.0
 IDLE_OFF = "off"
 NOTICE_EXIT = 10
+RATES_DIFFER_EXIT = 3
 FOLLOW_POLL = 1.0
 EXIT_CODES: dict[JobStatus, int] = {
     JobStatus.DONE: 0,
@@ -377,6 +379,16 @@ def run_cost(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_rates(args: argparse.Namespace) -> int:
+    """Compare the rate table with the pricing page; ``--write`` rewrites it. Exit 3 on a change."""
+    published = parse_rates(fetch_page())
+    diff = compare_rates(published)
+    print_json(diff.summary)
+    if args.write and not diff.in_sync:
+        write_rates(Path(args.write), published)
+    return 0 if diff.in_sync else RATES_DIFFER_EXIT
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     now = time.time()
     print_json([report(job, now) for job in job_home(args).jobs()])
@@ -691,6 +703,9 @@ COMMANDS = (
             (DEADLINE,)),
     Command("extend", "change the limits of a job that has not ended", cmd_extend,
             (NAME_ARG, *limit_args(None)), (DEADLINE,)),
+    Command("rates", "compare the rate table with the pricing page (exit 3 if they differ)",
+            run_rates, ((("--write",), {"metavar": "FILE",
+                                        "help": "rewrite FILE's rate table from the page"}),)),
     Command("supervise", "internal: supervise a job directory in this process", cmd_supervise,
             ((("dir",), {}),)),
 )  # fmt: skip
