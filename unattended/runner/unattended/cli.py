@@ -1,6 +1,6 @@
 """``unattended``: run a prompt or command unattended, resuming after usage limits.
 
-start | status | list | wait | log | stop | resume | extend. Jobs live in the repo's
+start | status | cost | list | wait | log | stop | resume | extend. Jobs live in the repo's
 ``.claude/jobs/`` when it exists, else ``~/.claude/jobs/``. Errors print
 ``unattended <cmd>: <message>`` and return 1.
 """
@@ -28,6 +28,7 @@ from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
+from .pricing import Estimate, Usage
 from .prompt_job import PromptJob
 from .store import (
     DEFAULT_RESUME_PROMPT,
@@ -347,6 +348,34 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cost_report(state: JobState) -> dict[str, Any]:
+    """The job's spend: settled runs as the SDK reported them, plus the live run priced.
+
+    ``cost`` is exact for every run that ended. ``run`` is the current run's tokens by
+    model and their cost at the published API rates; ``estimate`` is their sum, or null
+    when a model has no known rate (then ``unpriced`` names it).
+    """
+    by_model = {model: Usage(**tokens) for model, tokens in state.run_usage.items()}
+    estimate = Estimate.of(by_model)
+    total = None if estimate.usd is None else round(state.cost + estimate.usd, 4)
+    return {
+        "name": state.name, "status": state.status, "session_id": state.session_id,
+        "cost": round(state.cost, 4), "max_cost": state.bounds.max_cost,
+        "run": {"tokens": state.run_usage, "cost": _rounded(estimate.usd),
+                "unpriced": estimate.unpriced},
+        "estimate": total,
+    }  # fmt: skip
+
+
+def _rounded(usd: float | None) -> float | None:
+    return None if usd is None else round(usd, 4)
+
+
+def cmd_cost(args: argparse.Namespace) -> int:
+    print_json(cost_report(job_home(args).job(args.name).load()))
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     now = time.time()
     print_json([report(job, now) for job in job_home(args).jobs()])
@@ -648,6 +677,8 @@ COMMANDS = (
     Command("start", "create a job and supervise it", cmd_start, START_ARGS, (SOURCE, DEADLINE)),
     Command("status", "print a job's state as JSON (all jobs without NAME)", cmd_status,
             ((("name",), {"nargs": "?"}),)),
+    Command("cost", "print the job's spend so far as JSON, the current run included", cmd_cost,
+            (NAME_ARG,)),
     Command("list", "print every job's state as JSON", cmd_list),
     Command("wait", "block until the job ends; run with run_in_background", cmd_wait,
             (NAME_ARG, UNTIL_NOTICE_ARG)),
