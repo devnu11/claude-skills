@@ -3,8 +3,12 @@
 The SDK reports ``total_cost_usd`` only in the result message that ends a run.
 Each assistant message carries ``usage`` (tokens by kind) and ``model``, so a
 run's spend so far can be *estimated* from them. Rates are USD per million
-tokens from https://platform.claude.com/docs/en/about-claude/pricing (read
-2026-11-17); a model not in the table gives no estimate rather than a wrong one.
+tokens from https://platform.claude.com/docs/en/about-claude/pricing, read on
+``RATES_READ``; ``unattended rates`` compares the table with the page and can
+rewrite the block between the ``RATES-BEGIN`` and ``RATES-END`` markers. A
+model not in the table gives no estimate rather than a wrong one. When a run
+ends, the SDK's reported cost is compared with the estimate; a relative
+difference beyond ``TOLERANCE`` means the table is stale.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 MILLION = 1_000_000
+TOLERANCE = 0.05  # relative difference between the SDK's cost and the estimate that is "in sync"
 # Claude Code model ids: ``claude-opus-5-5``, ``claude-opus-4-5-20251101``; the table
 # key drops the ``claude-`` prefix and any date suffix.
 MODEL_KEY = re.compile(r"^(?:claude-)?(?P<key>[a-z]+(?:-\d+)+?)(?:-\d{8})?$")
@@ -31,6 +36,8 @@ class Rate:
 
 
 # Haiku 5.5 is priced for prompts up to 100k tokens; longer prompts cost 5x.
+# RATES-BEGIN -- rewritten by `unattended rates --write`; keep the layout
+RATES_READ = "2026-11-17"
 RATES: dict[str, Rate] = {
     "fable-5-2": Rate(8, 40, 10, 16, 0.20),
     "mythos-5-2": Rate(8, 40, 10, 16, 0.20),
@@ -54,6 +61,7 @@ RATES: dict[str, Rate] = {
     "haiku-5-5": Rate(0.10, 0.50, 0.125, 0.20, 0.01),
     "haiku-4-5": Rate(1, 5, 1.25, 2, 0.10),
 }
+# RATES-END
 
 
 @dataclass(frozen=True)
@@ -123,3 +131,15 @@ def _measure_cost(model: str, usage: Usage) -> float:
     rate = find_rate(model)
     assert rate is not None  # callers check first
     return usage.compute_cost(rate)
+
+
+def measure_drift(cost: float, estimate: float | None) -> float | None:
+    """The estimate's relative error against the SDK's ``cost``; None when there is no basis."""
+    if estimate is None or cost <= 0:
+        return None
+    return (estimate - cost) / cost
+
+
+def is_stale(drift: float | None) -> bool:
+    """True when a drift says the rate table no longer matches what the SDK charges."""
+    return drift is not None and abs(drift) > TOLERANCE

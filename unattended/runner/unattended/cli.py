@@ -28,7 +28,7 @@ from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
-from .pricing import Estimate, Usage
+from .pricing import Estimate, Usage, is_stale
 from .prompt_job import PromptJob
 from .store import (
     DEFAULT_RESUME_PROMPT,
@@ -364,6 +364,7 @@ def report_cost(state: JobState) -> dict[str, Any]:
         "run": {"tokens": state.run_usage, "cost": _format_usd(estimate.usd),
                 "unpriced": estimate.unpriced},
         "estimate": total,
+        "drift": _format_usd(state.drift), "rates_stale": is_stale(state.drift),
     }  # fmt: skip
 
 

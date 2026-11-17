@@ -282,3 +282,21 @@ def test_run_usage_counts_one_message_once_per_id(job: Job) -> None:
 def test_messages_without_usage_change_nothing(job: Job) -> None:
     PromptJob(job, {}, FakeQuery([init(), said("x"), result()])).run_once(RunWatch(job))
     assert job.load().run_usage == {}
+
+
+def test_metrics_carry_the_runs_estimate(job: Job) -> None:
+    messages = [init(), spent("claude-opus-5-5", "m1", 1_000_000), result()]
+    outcome = PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    assert outcome.metrics.estimate == pytest.approx(20 + 10 * 4 / 1_000_000)
+    assert outcome.metrics.cost == 0.25
+
+
+def test_estimate_is_none_before_any_usage(job: Job) -> None:
+    outcome = PromptJob(job, {}, FakeQuery([init(), said("x"), result()])).run_once(RunWatch(job))
+    assert outcome.metrics.estimate is None
+
+
+def test_estimate_is_none_for_an_unpriced_model(job: Job) -> None:
+    messages = [init(), spent("mystery", "m1", 5), result()]
+    outcome = PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    assert outcome.metrics.estimate is None

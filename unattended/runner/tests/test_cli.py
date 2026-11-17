@@ -263,6 +263,14 @@ def test_cost_prices_the_live_run_on_top_of_settled_runs(
     assert report["session_id"] == "sess"
     assert (report["cost"], report["run"]["cost"], report["estimate"]) == (1.5, 4.0, 5.5)
     assert report["run"]["tokens"] == live
+    assert (report["drift"], report["rates_stale"]) == (None, False)
+
+
+def test_cost_flags_a_stale_rate_table(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    make(tmp_path).update(lambda st: setattr(st, "drift", -0.2))
+    run(tmp_path, "cost", "j")
+    report = printed(capsys)
+    assert (report["drift"], report["rates_stale"]) == (-0.2, True)
 
 
 def test_cost_names_a_model_it_cannot_price(
@@ -731,3 +739,4 @@ def test_extend_event_has_no_time_left(tmp_path: Path) -> None:
     event = events_of(job, "extend")[0]
     assert "time_left" not in event
     assert {"deadline", "hardstop", "idle_stop"} <= set(event)
+
