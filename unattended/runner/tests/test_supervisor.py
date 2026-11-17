@@ -455,3 +455,64 @@ def test_a_run_within_tolerance_warns_nobody(job: Job) -> None:
     close = Outcome(OutcomeKind.DONE, metrics=Metrics(cost=1.0, estimate=1.04))
     supervise(job, Script(close))
     assert notified_triggers(job) == ["ended-early"]
+
+
+def test_a_drifted_run_refetches_the_table_at_once(
+    job: Job, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unattended import rates
+
+    from .test_rates import PAGE
+
+    store = rates.resolve_store(tmp_path)
+    stale = PAGE.replace("| Claude Opus 5.5 | $4 / MTok", "| Claude Opus 5.5 | $1 / MTok")
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: stale)
+    rates.fetch_rates(store, START)  # checked just now: the run start will not refetch
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: PAGE)
+    off = Outcome(OutcomeKind.DONE, metrics=Metrics(cost=1.0, estimate=1.5))
+    clock = FakeClock()
+    Supervisor(job, Script(off), clock, clock.sleep, rates_file=store).run()
+    lines = map(json.loads, job.path(EVENTS_FILE).read_text().splitlines())
+    reason = next(e for e in lines if e["event"] == "notify")["reason"]
+    assert reason.endswith("; the rate table was refreshed from the pricing page")
+    assert rates.load_rates(store) == rates.parse_rates(PAGE)
+
+
+def test_a_drifted_run_whose_page_agrees_says_so(
+    job: Job, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unattended import rates
+
+    from .test_rates import PAGE
+
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: PAGE)
+    store = rates.resolve_store(tmp_path)
+    rates.fetch_rates(store, START)  # already current
+    off = Outcome(OutcomeKind.DONE, metrics=Metrics(cost=1.0, estimate=1.5))
+    clock = FakeClock()
+    Supervisor(job, Script(off), clock, clock.sleep, rates_file=store).run()
+    lines = map(json.loads, job.path(EVENTS_FILE).read_text().splitlines())
+    reason = next(e for e in lines if e["event"] == "notify")["reason"]
+    assert reason.endswith(
+        "; the pricing page agrees with the table, so the difference is not the rates"
+    )
+
+
+def test_each_run_refreshes_the_table_when_it_is_due(
+    job: Job, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unattended import rates
+
+    from .test_rates import PAGE
+
+    fetched: list[str] = []
+
+    def fetch(url: str = rates.PRICING_URL) -> str:
+        fetched.append(url)
+        return PAGE
+
+    monkeypatch.setattr(rates, "fetch_page", fetch)
+    clock = FakeClock()
+    store = rates.resolve_store(tmp_path)
+    Supervisor(job, Script(LIMIT, DONE), clock, clock.sleep, rates_file=store).run()
+    assert len(fetched) == 1  # the resume came within a day of the first run

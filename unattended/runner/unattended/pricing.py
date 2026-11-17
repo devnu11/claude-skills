@@ -2,13 +2,13 @@
 
 The SDK reports ``total_cost_usd`` only in the result message that ends a run.
 Each assistant message carries ``usage`` (tokens by kind) and ``model``, so a
-run's spend so far can be *estimated* from them. Rates are USD per million
-tokens from https://platform.claude.com/docs/en/about-claude/pricing, read on
-``RATES_READ``; ``unattended rates`` compares the table with the page and can
-rewrite the block between the ``RATES-BEGIN`` and ``RATES-END`` markers. A
-model not in the table gives no estimate rather than a wrong one. When a run
-ends, the SDK's reported cost is compared with the estimate; a relative
-difference beyond ``TOLERANCE`` means the table is stale.
+run's spend so far can be *estimated* from them. ``RATES`` is the built-in
+table, USD per million tokens from
+https://platform.claude.com/docs/en/about-claude/pricing read on ``RATES_READ``;
+``rates.py`` keeps a fresher copy of the page's table on disk, and every lookup
+here takes the table to use. A model not in the table gives no estimate rather
+than a wrong one. When a run ends, the SDK's reported cost is compared with the
+estimate; a relative difference beyond ``TOLERANCE`` means the table is stale.
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ class Rate:
 
 
 # Haiku 5.5 is priced for prompts up to 100k tokens; longer prompts cost 5x.
-# RATES-BEGIN -- rewritten by `unattended rates --write`; keep the layout
+type Rates = dict[str, Rate]
 RATES_READ = "2026-11-17"
-RATES: dict[str, Rate] = {
+RATES: Rates = {
     "fable-5-2": Rate(8, 40, 10, 16, 0.20),
     "mythos-5-2": Rate(8, 40, 10, 16, 0.20),
     "fable-5-1": Rate(10, 50, 12.5, 20, 0.25),
@@ -61,7 +61,6 @@ RATES: dict[str, Rate] = {
     "haiku-5-5": Rate(0.10, 0.50, 0.125, 0.20, 0.01),
     "haiku-4-5": Rate(1, 5, 1.25, 2, 0.10),
 }
-# RATES-END
 
 
 @dataclass(frozen=True)
@@ -104,10 +103,10 @@ def _split_cache_writes(usage: dict[str, Any]) -> tuple[int, int]:
     return usage.get("cache_creation_input_tokens", 0), 0
 
 
-def find_rate(model: str) -> Rate | None:
-    """The published rate of ``model``, or None when it is not in the table."""
+def find_rate(model: str, rates: Rates) -> Rate | None:
+    """The rate of ``model`` in ``rates``, or None when it is not there."""
     match = MODEL_KEY.match(model)
-    return RATES.get(match["key"]) if match else None
+    return rates.get(match["key"]) if match else None
 
 
 @dataclass(frozen=True)
@@ -118,19 +117,13 @@ class Estimate:
     unpriced: list[str]
 
     @classmethod
-    def compute(cls, by_model: dict[str, Usage]) -> Estimate:
-        """None for ``usd`` when any model has no rate; the sum of the rest otherwise."""
-        unpriced = sorted(model for model in by_model if find_rate(model) is None)
+    def compute(cls, by_model: dict[str, Usage], rates: Rates) -> Estimate:
+        """None for ``usd`` when any model has no rate in ``rates``; else the sum."""
+        found = {model: find_rate(model, rates) for model in by_model}
+        unpriced = sorted(model for model, rate in found.items() if rate is None)
         if unpriced:
             return cls(None, unpriced)
-        return cls(sum(_measure_cost(model, usage) for model, usage in by_model.items()), [])
-
-
-def _measure_cost(model: str, usage: Usage) -> float:
-    """USD of ``usage`` on ``model``, whose rate is known."""
-    rate = find_rate(model)
-    assert rate is not None  # callers check first
-    return usage.compute_cost(rate)
+        return cls(sum(by_model[m].compute_cost(r) for m, r in found.items() if r), [])
 
 
 def measure_drift(cost: float, estimate: float | None) -> float | None:

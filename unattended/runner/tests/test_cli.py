@@ -12,12 +12,11 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import awake, cli, notify, store
+from unattended import awake, cli, notify, rates, store
 from unattended.auth import ENV_VAR
 from unattended.awake import SleepPolicy
-from unattended.pricing import RATES, Rate
+from unattended.pricing import Usage
 from unattended.prompt_job import PromptJob
-from unattended.rates import BEGIN, END
 from unattended.store import (
     EVENTS_FILE,
     OUTPUT_FILE,
@@ -31,6 +30,7 @@ from unattended.store import (
 )
 
 from .test_prompt_job import FakeQuery
+from .test_rates import PAGE, PAGE_RATES
 
 
 @pytest.fixture(autouse=True)
@@ -114,7 +114,9 @@ def test_start_prompt_in_the_foreground(
 ) -> None:
     done = ResultMessage("success", 1, 1, False, 2, "s9", total_cost_usd=0.1, result="pong")
     fake = FakeQuery([SystemMessage("init", {"session_id": "s9"}), done])
-    monkeypatch.setitem(cli.RUNNERS, JobKind.PROMPT, lambda job, env: PromptJob(job, env, fake))
+    monkeypatch.setitem(
+        cli.RUNNERS, JobKind.PROMPT, lambda job, env, home: PromptJob(job, env, fake)
+    )
     assert run(tmp_path, "start", "j", "--prompt", "Reply pong", "--foreground") == 0
     report = printed(capsys)
     assert (report["status"], report["session_id"], report["cost"]) == ("done", "s9", 0.1)
@@ -226,7 +228,7 @@ def test_start_refuses_a_duplicate(tmp_path: Path, capsys: pytest.CaptureFixture
 def test_supervisor_crash_marks_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def broken(job: Job, env: dict[str, str]) -> Any:
+    def broken(job: Job, env: dict[str, str], home: Path) -> Any:
         raise RuntimeError("bug")
 
     monkeypatch.setitem(cli.RUNNERS, JobKind.COMMAND, broken)
@@ -747,32 +749,39 @@ def test_extend_event_has_no_time_left(tmp_path: Path) -> None:
 # ----- rates -------------------------------------------------------------------------
 
 
-def test_rates_in_sync(
+def test_rates_fetches_now_and_describes_the_store(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "fetch_page", lambda: "")
-    monkeypatch.setattr(cli, "parse_rates", lambda page: dict(RATES))
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: PAGE)
     assert run(tmp_path, "rates") == 0
-    assert printed(capsys)["in_sync"] is True
+    found = printed(capsys)
+    assert found["file"] == str(rates.resolve_store(tmp_path / "home"))
+    assert found["models"] == sorted(PAGE_RATES)
+    assert found["read_at"] is not None
 
 
-def test_rates_differ_and_write(
+def test_cost_prices_with_the_stored_table(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    published = {**RATES, "opus-6": Rate(1, 2, 3, 4, 5)}
-    monkeypatch.setattr(cli, "fetch_page", lambda: "")
-    monkeypatch.setattr(cli, "parse_rates", lambda page: published)
-    target = tmp_path / "pricing.py"
-    target.write_text(f"{BEGIN}\n{END}\n")
-    assert run(tmp_path, "rates", "--write", str(target)) == cli.RATES_DIFFER_EXIT
-    assert printed(capsys)["added"] == {"opus-6": asdict(Rate(1, 2, 3, 4, 5))}
-    assert '"opus-6": Rate(1, 2, 3, 4, 5),' in target.read_text()
+    cheap = PAGE.replace("| Claude Opus 5.5 | $4 / MTok", "| Claude Opus 5.5 | $1 / MTok")
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: cheap)
+    job = make(tmp_path, JobStatus.RUNNING)
+    live = {"claude-opus-5-5": asdict(Usage(input=1_000_000))}
+    job.update(lambda st: setattr(st, "run_usage", live))
+    run(tmp_path, "cost", "j")
+    assert printed(capsys)["run"]["cost"] == 1.0
 
 
-def test_rates_without_write_touches_nothing(
+def test_cost_offline_uses_the_builtin_table(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "fetch_page", lambda: "")
-    monkeypatch.setattr(cli, "parse_rates", lambda page: {})
-    assert run(tmp_path, "rates") == cli.RATES_DIFFER_EXIT
-    assert printed(capsys)["removed"] == sorted(RATES)
+    def fail(url: str = rates.PRICING_URL) -> str:
+        raise OSError("offline")
+
+    monkeypatch.setattr(rates, "fetch_page", fail)
+    job = make(tmp_path, JobStatus.RUNNING)
+    job.update(
+        lambda st: setattr(st, "run_usage", {"claude-opus-5-5": asdict(Usage(input=1_000_000))})
+    )
+    run(tmp_path, "cost", "j")
+    assert printed(capsys)["run"]["cost"] == 4.0

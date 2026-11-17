@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -31,8 +32,9 @@ from claude_agent_sdk import (
 )
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
-from .pricing import Estimate, Usage
+from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
+from .rates import load_rates
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
 
@@ -114,6 +116,7 @@ class Drain:
     text: str = ""
     result: ResultMessage | None = None
     usage: dict[str, tuple[str, Usage]] = field(default_factory=dict)
+    rates: Rates = field(default_factory=dict)
 
     def note(self, message: Any) -> None:
         self.spend.tick()
@@ -153,7 +156,7 @@ class Drain:
         """The run's cost from its tokens and the rate table; None before any usage arrived."""
         if not self.usage:
             return None
-        return Estimate.compute(sum_by_model(self.usage)).usd
+        return Estimate.compute(sum_by_model(self.usage), self.rates).usd
 
     def finished(self) -> Outcome:
         """``DONE``, unless the result itself is an error."""
@@ -215,10 +218,11 @@ class PromptJob:
     job: Job
     env: Mapping[str, str]
     query_fn: QueryFn = query
+    rates_file: Path | None = None  # the stored rate table; the built-in one when None
 
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
-        drain = Drain(self.job, state.session_id, watch.spend)
+        drain = Drain(self.job, state.session_id, watch.spend, rates=self.rates)
         try:
             asyncio.run(self._watched(Run(state, drain, {**self.env, **watch.env()}), watch))
         except Exception as exc:
@@ -226,6 +230,11 @@ class PromptJob:
         finally:
             self._write_output(drain)
         return drain.finished()
+
+    @property
+    def rates(self) -> Rates:
+        """The stored table, else the built-in one."""
+        return RATES if self.rates_file is None else load_rates(self.rates_file)
 
     async def _watched(self, run: Run, watch: RunWatch) -> None:
         """Drain the query beside a watcher; a hard stop cancels both, ending the run."""

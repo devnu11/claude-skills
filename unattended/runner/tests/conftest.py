@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from unattended import awake, notify
+from unattended import awake, notify, rates
 from unattended.store import Job, JobHome, JobKind, JobState, Spec
 
 MakeJob = Callable[[Spec], Job]
@@ -26,6 +26,16 @@ def notified(monkeypatch: pytest.MonkeyPatch) -> list[notify.Call]:
     calls: list[notify.Call] = []
     monkeypatch.setattr(notify, "spawn", calls.append)
     return calls
+
+
+@pytest.fixture(autouse=True)
+def no_pricing_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests are offline: fetching the pricing page fails unless a test says otherwise."""
+
+    def fail(url: str = rates.PRICING_URL) -> str:
+        raise OSError("tests do not reach the network")
+
+    monkeypatch.setattr(rates, "fetch_page", fail)
 
 
 @pytest.fixture

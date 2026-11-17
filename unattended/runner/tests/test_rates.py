@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from pathlib import Path
 
@@ -7,15 +8,17 @@ import pytest
 from unattended import rates
 from unattended.pricing import RATES, Rate
 from unattended.rates import (
-    BEGIN,
-    END,
+    REFRESH_EVERY,
+    RETRY_AFTER,
     Diff,
     compare_rates,
+    describe_store,
+    fetch_rates,
     format_key,
-    format_price,
+    load_rates,
     parse_rates,
-    render_rates,
-    write_rates,
+    refresh_rates,
+    resolve_store,
 )
 
 PAGE = """
@@ -35,17 +38,20 @@ PAGE = """
 | :-- | :-- | :-- |
 | Claude Opus 5.5 | 0.05x | $0.20 USD |
 """  # noqa: E501
+PAGE_RATES = {
+    "opus-5-5": Rate(4, 20, 5, 8, 0.20),
+    "mythos-5-2": Rate(8, 40, 10, 16, 0.20),
+    "opus-4": Rate(15, 75, 18.75, 30, 1.50),
+    "haiku-5-5": Rate(0.10, 0.50, 0.125, 0.20, 0.01),
+}
+NOW = 1_800_000_000.0
+
+
+# ----- the page ------------------------------------------------------------------------
 
 
 def test_parse_rates_reads_each_model_row_once() -> None:
-    found = parse_rates(PAGE)
-    assert list(found) == ["opus-5-5", "mythos-5-2", "opus-4", "haiku-5-5"]
-    assert found["opus-5-5"] == Rate(4, 20, 5, 8, 0.20)
-    assert found["opus-4"] == Rate(15, 75, 18.75, 30, 1.50)
-
-
-def test_parse_rates_keeps_haikus_small_prompt_row() -> None:
-    assert parse_rates(PAGE)["haiku-5-5"] == Rate(0.10, 0.50, 0.125, 0.20, 0.01)
+    assert parse_rates(PAGE) == PAGE_RATES
 
 
 def test_parse_rates_skips_rows_without_five_prices() -> None:
@@ -65,8 +71,128 @@ def test_format_key(name: str, key: str) -> None:
     assert format_key(name) == key
 
 
-def test_parsed_keys_are_the_tables_keys() -> None:
+def test_parsed_keys_are_the_builtin_tables_keys() -> None:
     assert set(parse_rates(PAGE)) <= set(RATES)
+
+
+# ----- the store -----------------------------------------------------------------------
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> Path:
+    return resolve_store(tmp_path)
+
+
+@pytest.fixture
+def page(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The page the fetch returns; each fetch appends to the returned list."""
+    fetched: list[str] = []
+
+    def fetch(url: str = rates.PRICING_URL) -> str:
+        fetched.append(url)
+        return PAGE
+
+    monkeypatch.setattr(rates, "fetch_page", fetch)
+    return fetched
+
+
+@pytest.fixture
+def offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(url: str = rates.PRICING_URL) -> str:
+        raise OSError("no network")
+
+    monkeypatch.setattr(rates, "fetch_page", fail)
+
+
+def test_rates_file_is_under_the_homes_claude_dir(tmp_path: Path) -> None:
+    assert resolve_store(tmp_path) == tmp_path / ".claude" / "unattended" / "rates.json"
+
+
+def test_load_rates_falls_back_to_the_builtin_table(store: Path) -> None:
+    assert load_rates(store) is RATES
+
+
+def test_fetch_rates_stores_the_page(store: Path, page: list[str]) -> None:
+    assert fetch_rates(store, NOW) == PAGE_RATES
+    data = json.loads(store.read_text())
+    assert (data["read_at"], data["checked_at"], data["source"]) == (NOW, NOW, rates.PRICING_URL)
+    assert data["rates"]["opus-5-5"] == asdict(Rate(4, 20, 5, 8, 0.20))
+    assert load_rates(store) == PAGE_RATES
+
+
+def test_fetch_rates_offline_keeps_what_was_stored(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: PAGE)
+    fetch_rates(store, NOW)
+    monkeypatch.setattr(rates, "fetch_page", _fail)
+    assert fetch_rates(store, NOW + 10) == PAGE_RATES
+    data = json.loads(store.read_text())
+    assert (data["read_at"], data["checked_at"]) == (NOW, NOW + 10)
+
+
+def test_fetch_rates_offline_with_nothing_stored_uses_the_builtin_table(
+    store: Path, offline: None
+) -> None:
+    assert fetch_rates(store, NOW) is RATES
+    assert json.loads(store.read_text()) == {"checked_at": NOW}
+
+
+def test_fetch_rates_ignores_a_page_without_a_table(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rates, "fetch_page", lambda url=rates.PRICING_URL: "maintenance")
+    assert fetch_rates(store, NOW) is RATES
+
+
+def test_refresh_rates_fetches_once_a_day(store: Path, page: list[str]) -> None:
+    refresh_rates(store, NOW)
+    refresh_rates(store, NOW + REFRESH_EVERY - 1)
+    assert len(page) == 1
+    refresh_rates(store, NOW + REFRESH_EVERY)
+    assert len(page) == 2
+
+
+def test_refresh_rates_retries_sooner_after_a_failure(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[float] = []
+
+    def fail(url: str = rates.PRICING_URL) -> str:
+        calls.append(1)
+        raise OSError("no network")
+
+    monkeypatch.setattr(rates, "fetch_page", fail)
+    refresh_rates(store, NOW)
+    refresh_rates(store, NOW + RETRY_AFTER - 1)
+    refresh_rates(store, NOW + RETRY_AFTER)
+    assert len(calls) == 2
+
+
+def test_refresh_rates_returns_the_stored_table_between_fetches(
+    store: Path, page: list[str]
+) -> None:
+    refresh_rates(store, NOW)
+    assert refresh_rates(store, NOW + 60) == PAGE_RATES
+    assert len(page) == 1
+
+
+def test_a_corrupt_store_is_ignored(store: Path, offline: None) -> None:
+    store.parent.mkdir(parents=True)
+    store.write_text("{not json")
+    assert load_rates(store) is RATES
+    assert fetch_rates(store, NOW) is RATES
+    store.write_text(json.dumps({"rates": {"x": "not a rate"}}))
+    assert load_rates(store) is RATES
+    store.write_text(json.dumps([1, 2]))
+    assert load_rates(store) is RATES
+
+
+def _fail(url: str = rates.PRICING_URL) -> str:
+    raise OSError("no network")
+
+
+# ----- diagnostics ---------------------------------------------------------------------
 
 
 def test_compare_rates_in_sync() -> None:
@@ -80,46 +206,18 @@ def test_compare_rates_reports_added_changed_and_removed() -> None:
     published["opus-5-5"] = Rate(3, 15, 4, 6, 0.15)
     published["opus-6"] = Rate(1, 2, 3, 4, 5)
     diff = compare_rates(published)
-    assert diff == Diff(
-        {"opus-6": Rate(1, 2, 3, 4, 5)}, {"opus-5-5": Rate(3, 15, 4, 6, 0.15)}, ["opus-4"]
-    )
+    added, changed = {"opus-6": Rate(1, 2, 3, 4, 5)}, {"opus-5-5": Rate(3, 15, 4, 6, 0.15)}
+    assert diff == Diff(added, changed, ["opus-4"])
     assert diff.summary["added"] == {"opus-6": asdict(Rate(1, 2, 3, 4, 5))}
     assert not diff.in_sync
 
 
-@pytest.mark.parametrize(
-    ("usd", "text"), [(4.0, "4"), (0.2, "0.2"), (18.75, "18.75"), (0.125, "0.125")]
-)
-def test_format_price(usd: float, text: str) -> None:
-    assert format_price(usd) == text
-
-
-def test_render_rates_is_valid_python_in_the_files_layout() -> None:
-    block = render_rates({"opus-5-5": Rate(4, 20, 5, 8, 0.2)}, "2026-11-17")
-    assert block.startswith(BEGIN) and block.endswith(END)
-    scope: dict[str, object] = {"Rate": Rate}
-    exec(block, scope)
-    assert scope["RATES"] == {"opus-5-5": Rate(4, 20, 5, 8, 0.2)}
-    assert scope["RATES_READ"] == "2026-11-17"
-
-
-def test_write_rates_replaces_only_the_block(tmp_path: Path) -> None:
-    source = f"head\n{BEGIN} note\nRATES = old\n{END}\ntail\n"
-    path = tmp_path / "pricing.py"
-    path.write_text(source)
-    write_rates(path, {"opus-5-5": Rate(4, 20, 5, 8, 0.2)})
-    written = path.read_text()
-    assert written.startswith("head\n") and written.endswith(f"{END}\ntail\n")
-    assert '"opus-5-5": Rate(4, 20, 5, 8, 0.2),' in written
-    assert "RATES = old" not in written
-
-
-def test_the_real_table_round_trips_through_render(tmp_path: Path) -> None:
-    source = Path(rates.__file__).with_name("pricing.py")
-    copy = tmp_path / "pricing.py"
-    copy.write_text(source.read_text())
-    write_rates(copy, dict(RATES))
-    scope: dict[str, object] = {}
-    exec(copy.read_text(), scope)
-    rewritten: dict[str, object] = scope["RATES"]  # type: ignore[assignment]
-    assert {k: asdict(v) for k, v in rewritten.items()} == {k: asdict(v) for k, v in RATES.items()}  # type: ignore[call-overload]
+def test_describe_store_before_and_after_a_fetch(store: Path, page: list[str]) -> None:
+    empty = describe_store(store, NOW)
+    assert (empty["read_at"], empty["age"], empty["models"]) == (None, None, sorted(RATES))
+    fetch_rates(store, NOW)
+    found = describe_store(store, NOW + 7200)
+    assert (found["age"], found["models"]) == (2.0, sorted(PAGE_RATES))
+    assert found["read_at"] is not None
+    assert found["against_builtin"]["in_sync"] is False
+    assert found["against_builtin"]["added"] == {}
