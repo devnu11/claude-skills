@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 from collections.abc import Iterator
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,9 @@ from claude_agent_sdk import ResultMessage, SystemMessage
 from unattended import awake, cli, notify, store
 from unattended.auth import ENV_VAR
 from unattended.awake import SleepPolicy
+from unattended.pricing import RATES, Rate
 from unattended.prompt_job import PromptJob
+from unattended.rates import BEGIN, END
 from unattended.store import (
     EVENTS_FILE,
     OUTPUT_FILE,
@@ -740,3 +743,36 @@ def test_extend_event_has_no_time_left(tmp_path: Path) -> None:
     assert "time_left" not in event
     assert {"deadline", "hardstop", "idle_stop"} <= set(event)
 
+
+# ----- rates -------------------------------------------------------------------------
+
+
+def test_rates_in_sync(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "fetch_page", lambda: "")
+    monkeypatch.setattr(cli, "parse_rates", lambda page: dict(RATES))
+    assert run(tmp_path, "rates") == 0
+    assert printed(capsys)["in_sync"] is True
+
+
+def test_rates_differ_and_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published = {**RATES, "opus-6": Rate(1, 2, 3, 4, 5)}
+    monkeypatch.setattr(cli, "fetch_page", lambda: "")
+    monkeypatch.setattr(cli, "parse_rates", lambda page: published)
+    target = tmp_path / "pricing.py"
+    target.write_text(f"{BEGIN}\n{END}\n")
+    assert run(tmp_path, "rates", "--write", str(target)) == cli.RATES_DIFFER_EXIT
+    assert printed(capsys)["added"] == {"opus-6": asdict(Rate(1, 2, 3, 4, 5))}
+    assert '"opus-6": Rate(1, 2, 3, 4, 5),' in target.read_text()
+
+
+def test_rates_without_write_touches_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "fetch_page", lambda: "")
+    monkeypatch.setattr(cli, "parse_rates", lambda page: {})
+    assert run(tmp_path, "rates") == cli.RATES_DIFFER_EXIT
+    assert printed(capsys)["removed"] == sorted(RATES)
