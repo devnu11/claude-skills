@@ -28,6 +28,7 @@ from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
 from .inbox import count_messages, post_message
+from .ledger import read_calls
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
 from .pricing import Estimate, Rates, Usage, is_stale
 from .prompt_job import PromptJob
@@ -378,7 +379,8 @@ def _format_usd(usd: float | None) -> float | None:
 def run_cost(args: argparse.Namespace) -> int:
     """Price the job's live run with a table at most a day old; offline, the stored one."""
     rates = refresh_rates(resolve_store(Path(args.home)), time.time())
-    print_json(report_cost(job_home(args).job(args.name).load(), rates))
+    job = job_home(args).job(args.name)
+    print_json(report_cost(job.load(), rates) | {"calls": len(read_calls(job))})
     return 0
 
 

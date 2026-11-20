@@ -17,6 +17,7 @@ from claude_agent_sdk import (
 )
 from unattended import inbox, prompt_job
 from unattended.auth import ENV_VAR
+from unattended.ledger import read_calls
 from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
 from unattended.pricing import Usage
 from unattended.prompt_job import PromptJob
@@ -309,3 +310,18 @@ def test_a_waiting_message_goes_with_the_next_prompt(job: Job) -> None:
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["prompt"].startswith("Reply pong\n\nMessage from the operator")
     assert fake.calls[0]["prompt"].endswith("use the staging data")
+
+
+def test_each_api_response_lands_in_the_ledger_once(job: Job) -> None:
+    messages = [init(), spent("claude-opus-5-5", "m1", 5), spent("claude-opus-5-5", "m1", 9)]
+    messages += [spent("claude-haiku-5-5", "m2", 7), result()]
+    PromptJob(job, {}, FakeClient(messages)).run_once(RunWatch(job))
+    calls = read_calls(job)
+    assert [(c["message_id"], c["tokens"]["output"]) for c in calls] == [("m1", 9), ("m2", 7)]
+    assert {c["run"] for c in calls} == {1}
+
+
+def test_a_crashed_run_still_writes_its_last_response(job: Job) -> None:
+    fake = FakeClient([init(), spent("claude-opus-5-5", "m1", 5)], RuntimeError("crash"))
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert [c["message_id"] for c in read_calls(job)] == ["m1"]

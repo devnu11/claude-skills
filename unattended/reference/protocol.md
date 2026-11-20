@@ -11,7 +11,7 @@ rewrite it).
 |---|---|
 | `start NAME SOURCE [options]` | Create the job and start a detached supervisor (new session, pid file). Prints the job as JSON. |
 | `status [NAME]` | The job as JSON; every job without `NAME`. Right after `deadline` comes `time_left`: the whole minutes until the deadline, measured when the command runs and written like a duration (`23h41m`, `41m`, `0m` under a minute), `overdue` once the deadline has passed, `null` with no deadline. Every report (`list`, `wait`, `extend`, `start`, `resume`) has it; it is never stored. |
-| `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `drift` and `rates_stale` (the last ended run's estimate against the SDK's figure; see [Live cost](#live-cost)), `session_id`, `status` and `max_cost`. `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
+| `cost NAME` | The job's spend as JSON: `cost` (the summed `total_cost_usd` of the runs that ended, as the SDK reported it), `run` (the current run's `tokens` by model, their `cost` at the [published rates](#live-cost) and the `unpriced` models), `estimate` (`cost` plus `run.cost`), `drift` and `rates_stale` (the last ended run's estimate against the SDK's figure; see [Live cost](#live-cost)), `session_id`, `status`, `max_cost` and `calls` (lines in the [per-call ledger](#ledger)). `run.cost` and `estimate` are `null` when a model has no rate. Between runs `run.tokens` is empty and `estimate` equals `cost`. |
 | `rates` | Fetch the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing.md) now, store its table, and print the store's state as JSON: `file`, `read_at`, `checked_at`, `age` (hours), `models`, and `against_builtin` (what differs from `pricing.RATES`). Diagnostic; the table refreshes itself (see [Live cost](#live-cost)). Takes no job name. |
 | `wait NAME [--until-notice]` | Block until the job ends or its supervisor is gone, print it, and exit with its code. With `--until-notice`, also return on the next [notice](#notices): the report then carries `notice` (the `notify` event), and the exit code is 10 while the job still runs. |
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
@@ -71,6 +71,7 @@ unique within a home.
 | `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
+| `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
 | `inbox/` | Messages from `tell` waiting for delivery, one file each, named by when they were sent; removed once delivered. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -307,6 +308,14 @@ to the local one, and the next occurrence after now is used.
   `status` shows the id seconds after the run starts, before any turn ends.
   It is the Claude Code session id: `claude --resume <id>` opens it once the
   job has ended.
+- **Per-call ledger:** <a id="ledger"></a>each API response becomes one
+  line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
+  `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those
+  tokens at the [rate table](#live-cost), `null` for a model it lacks) and
+  `at`. The CLI repeats a response's usage on each content block, so a line
+  is written once that response's last block has gone by, or when the run
+  ends, crashed or not. The file is append-only and flushed per line: another
+  process (a ledger, a dashboard) can follow it as the job's spend feed.
 - **Live cost:** <a id="live-cost"></a>the SDK reports `total_cost_usd` only
   in the result message that ends a run, so mid-run the runner estimates.
   Each `AssistantMessage` carries `model` and `usage` (`input_tokens`,
