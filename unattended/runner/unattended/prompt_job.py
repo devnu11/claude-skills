@@ -6,7 +6,8 @@ headless it may only do what those settings allow. The session id is saved to
 cannot lose it. Each assistant message's token usage is summed by model into
 ``state.run_usage`` as it arrives, so ``unattended cost`` can price the run so
 far; the SDK's own ``total_cost_usd`` comes only with the result. Each API
-response is also written to the per-call ledger, ``calls.jsonl`` (``ledger``).
+response is also written to the per-call ledger, ``calls.jsonl`` (``ledger``),
+and every prompt and message to the run's transcript (``transcript``).
 The final result goes to ``output.md``.
 
 Messages from ``unattended tell`` reach the agent at its next tool step, or
@@ -51,6 +52,7 @@ from .probes import Stamp
 from .rates import load_rates
 from .steps import Advice, Steps
 from .store import OUTPUT_FILE, Job, JobState, ResumeFrom
+from .transcript import Transcript
 from .watch import RunWatch, Verdict
 from .wrapup import Allowance, build_wrap_up_prompt
 
@@ -178,6 +180,7 @@ class Drain:
     job: Job
     session_id: str | None
     ledger: Ledger
+    transcript: Transcript
     spend: Stamp = field(default_factory=Stamp)
     text: str = ""
     result: ResultMessage | None = None
@@ -186,6 +189,7 @@ class Drain:
 
     def note(self, message: Any) -> None:
         self.spend.tick()
+        self.transcript.record_message(message)
         self._save_session(session_of(message))
         self._save_usage(read_usage(message))
         self.text = text_of(message) or self.text
@@ -286,6 +290,19 @@ class CapCheck:
 
 
 @dataclass(frozen=True)
+class Sender:
+    """Sends prompts into a session, recording each in the run's transcript first."""
+
+    client: Client
+    transcript: Transcript
+
+    async def send(self, prompt: str) -> None:
+        """Record ``prompt``, then send it."""
+        self.transcript.record_prompt(prompt)
+        await self.client.query(prompt)
+
+
+@dataclass(frozen=True)
 class Run:
     """One run: the job's state when it started, what its session has produced, its env,
     its watch and the hooks between its steps."""
@@ -308,7 +325,7 @@ async def _watch(run: Run, scope: anyio.CancelScope) -> None:
         await anyio.sleep(run.watch.slice)
         verdicts = run.watch.check()
         if Verdict.GRACEFUL in verdicts:
-            run.steps.end(run.watch.halt or "")
+            run.steps.stop(run.watch.halt or "")
         if Verdict.END in verdicts:
             scope.cancel()
             return
@@ -326,8 +343,9 @@ class PromptJob:
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
         rates = self.rates
-        ledger = Ledger(self.job, state.runs + 1, rates)
-        drain = Drain(self.job, state.session_id, ledger, watch.spend, rates=rates)
+        number = state.runs + 1
+        ledger, transcript = Ledger(self.job, number, rates), Transcript(self.job, number)
+        drain = Drain(self.job, state.session_id, ledger, transcript, watch.spend, rates=rates)
         cap = CapCheck(self.job, drain)
         run = Run(state, drain, {**self.env, **watch.env()}, watch, self.build_steps(cap))
         return cap.settle(self._run(run))
@@ -377,7 +395,8 @@ class PromptJob:
         client = self.open_client(options_for(run))
         await client.connect()
         try:
-            await client.query(deliver_at_start(self.job, prompt_for(self.job, run.state)))
+            prompt = deliver_at_start(self.job, prompt_for(self.job, run.state))
+            await Sender(client, run.drain.transcript).send(prompt)
             async for message in client.receive_response():
                 run.drain.note(message)
             await self._wrap_up(client, run)
@@ -392,7 +411,8 @@ class PromptJob:
             return
         run.steps.wrap_up()
         self.job.event("wrap-up", {"reason": run.steps.halt, "allowance": usd})
-        await client.query(build_wrap_up_prompt(run.state.spec.wrap_up_prompt, run.steps.halt))
+        prompt = build_wrap_up_prompt(run.state.spec.wrap_up_prompt, run.steps.halt)
+        await Sender(client, run.drain.transcript).send(prompt)
         await self._drain_within(client, run)
 
     async def _drain_within(self, client: Client, run: Run) -> None:

@@ -78,6 +78,7 @@ unique within a home.
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
 | `checkpoint.json` | A `--resume-from checkpoint` job's last valid [checkpoint](#checkpoints). |
+| `transcripts/run-N.jsonl` | A prompt run's [transcript](#transcripts): every prompt sent and SDK message received, one JSON line each. |
 | `inbox/` | Messages from `tell` waiting for delivery, one file each, named by when they were sent; removed once delivered. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -347,6 +348,13 @@ to the local one, and the next occurrence after now is used.
   `checkpoint-missing`. The next run starts a fresh session (no `resume`): its
   prompt is the resume prompt, then the checkpoint as JSON, then any waiting
   `tell` messages. No transcript is replayed.
+- **Transcript:** <a id="transcripts"></a>each prompt run writes
+  `transcripts/run-N.jsonl`: one line per prompt the runner sends
+  (`{"type": "prompt", "text": …}`, the wrap-up prompt included) and per SDK
+  message the session yields (`{"type": "<class>", …fields…}`), in order.
+  Values JSON cannot hold are written as text. Lines are flushed as they
+  arrive, so a crashed or killed run keeps what it had. It is for reading the
+  run afterwards; nothing feeds it back to the agent.
 - **Per-call ledger:** <a id="ledger"></a>each API response becomes one
   line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
   `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those

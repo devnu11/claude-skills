@@ -7,7 +7,7 @@ between model calls that belong to unattended:
 - **After each step** every check in ``Steps.checks`` runs, in order. A check
   may add text for the model (``additionalContext``, which the CLI appends after
   the tool result, so the cached prefix is untouched) or ask to end the run.
-- **Ending a run** (``Steps.end``) refuses the next step with ``continue: false``,
+- **Ending a run** (``Steps.stop``) refuses the next step with ``continue: false``,
   so the run ends at a step boundary rather than mid-call. The first reason given
   is the one kept.
 - **Wrapping up** (``Steps.wrap_up``) denies every later tool call instead, so the
@@ -55,7 +55,7 @@ class Steps:
     halt: str | None = None
     mode: Mode = Mode.RUN
 
-    def end(self, reason: str) -> None:
+    def stop(self, reason: str) -> None:
         """End the run at the next step boundary; the first reason is kept."""
         self.halt = self.halt or reason
 
@@ -82,7 +82,7 @@ class Steps:
         found = [check() for check in self.checks]
         for advice in found:
             if advice.stop:
-                self.end(advice.stop)
+                self.stop(advice.stop)
         return build_reply(join_context(found), self.halt)
 
 

@@ -34,6 +34,7 @@ from unattended.store import (
     ResumeFrom,
     Spec,
 )
+from unattended.transcript import Transcript
 from unattended.watch import RunWatch
 
 from .conftest import MakeJob
@@ -486,3 +487,26 @@ def test_session_mode_asks_for_no_schema_and_saves_none(job: Job) -> None:
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].output_format is None
     assert load_checkpoint(job) is None
+
+
+def transcript_types(job: Job, run: int = 1) -> list[str]:
+    lines = Transcript(job, run).path.read_text().splitlines()
+    return [json.loads(line)["type"] for line in lines]
+
+
+def test_a_run_writes_its_transcript(job: Job) -> None:
+    PromptJob(job, {}, FakeClient([init(), said("x"), result()])).run_once(RunWatch(job))
+    assert transcript_types(job) == ["prompt", "SystemMessage", "AssistantMessage", "ResultMessage"]
+
+
+def test_a_crashed_run_keeps_its_transcript(job: Job) -> None:
+    fake = FakeClient([init(), said("x")], RuntimeError("crash"))
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert transcript_types(job) == ["prompt", "SystemMessage", "AssistantMessage"]
+
+
+def test_the_wrap_up_prompt_is_in_the_transcript(job: Job) -> None:
+    fake = over_the_run_cap(job, 0.5)
+    fake.scripts.append([result("summary")])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert transcript_types(job).count("prompt") == 2

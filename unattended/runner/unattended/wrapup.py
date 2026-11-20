@@ -1,6 +1,6 @@
 """The wrap-up turn: when a cap or a graceful stop ends a prompt run, one last reply.
 
-A run ended at a step boundary (``steps.Steps.end``) leaves its session open.
+A run ended at a step boundary (``steps.Steps.stop``) leaves its session open.
 With ``--wrap-up USD`` set, the runner then sends the wrap-up prompt, naming why
 the run stopped, in the same session. During that turn every tool call is
 denied, so the agent can only write. Its spend is a separate allowance, counted
