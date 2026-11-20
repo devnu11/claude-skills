@@ -10,6 +10,10 @@ they are not repeated here.
 - Keep `SKILL.md` short: it is loaded whenever the skill triggers. Put detail
   in `reference/` files that `SKILL.md` points to by path.
 - Add every skill to the table in `README.md`.
+- No file or directory name may start with a chezmoi prefix (`run_`, `dot_`,
+  `exact_`, `private_`…) or end in `.tmpl`: home ships this repo inside its
+  chezmoi source, so chezmoi would run or rename it.
+  `tests/chezmoi_names_test.sh` checks this in CI.
 
 ## Process lives in code
 
