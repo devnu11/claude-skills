@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import system
-from .run_writer import RunWriter
+from .state_writer import RunWriter
 
 LEDGER = "ledger.jsonl"
 USAGE_KEYS = {

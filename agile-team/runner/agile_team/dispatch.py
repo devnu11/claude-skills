@@ -115,11 +115,11 @@ from .roles import (
     parse_handoff,
     scope_note,
 )
-from .run_writer import RunWriter
 from .runner_venv import hide_runner_venv
 from .salvage import Cause, Interruption
 from .stage_log import StageLog, place_of
 from .state import RunState
+from .state_writer import RunWriter
 from .story_branches import KeptSession
 from .upstream import NO_PR_SERVICE, NoPrs, Prs, Upstream
 from .workspaces import REPLAY, SCRATCH_DIRS, PruneReason, Workspaces, find_prune_reason
