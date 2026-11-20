@@ -8,9 +8,11 @@ cannot lose it. Each assistant message's token usage is summed by model into
 far; the SDK's own ``total_cost_usd`` comes only with the result. The final
 result goes to ``output.md``.
 
-A watcher checks the run's ``RunWatch`` after each slice beside the query.
-A hard stop cancels the query; the SDK then ends its CLI subprocess. Prompt
-jobs have no stop command, so the graceful phase lets the run go on.
+The run is a ``ClaudeSDKClient`` session in streaming mode, so its hooks reach
+unattended between steps (``steps.Steps``). A watcher checks the run's
+``RunWatch`` after each slice beside the session. A stop's graceful phase ends
+the run at its next tool step; the hard phase cancels the session, and the SDK
+then ends its CLI subprocess.
 """
 
 from __future__ import annotations
@@ -19,22 +21,23 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import anyio
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    ClaudeSDKClient,
     ResultMessage,
     SystemMessage,
     TextBlock,
-    query,
 )
 
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
+from .steps import Steps
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
 
@@ -42,7 +45,26 @@ SETTING_SOURCES: list[Any] = ["user", "project", "local"]
 # The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
 BUDGET_SUBTYPE = "error_max_budget_usd"
 BUDGET_REASON = "cost cap reached mid-run; resume with a higher --max-cost to continue"
-QueryFn = Callable[..., AsyncIterator[Any]]
+
+
+class Client(Protocol):
+    """What a run needs of a Claude Code session: ``ClaudeSDKClient``, or a fake in tests."""
+
+    async def connect(self) -> None: ...
+
+    async def query(self, prompt: str) -> None: ...  # house-rules: allow verb-name -- SDK's name
+
+    def receive_response(self) -> AsyncIterator[Any]: ...
+
+    async def disconnect(self) -> None: ...
+
+
+ClientFactory = Callable[[ClaudeAgentOptions], Client]
+
+
+def open_client(options: ClaudeAgentOptions) -> Client:
+    """A real Claude Code session with ``options``."""
+    return ClaudeSDKClient(options=options)
 
 
 def prompt_for(state: JobState) -> str:
@@ -50,17 +72,18 @@ def prompt_for(state: JobState) -> str:
     return state.spec.resume_prompt if state.session_id else state.spec.prompt
 
 
-def options_for(state: JobState, env: Mapping[str, str]) -> ClaudeAgentOptions:
-    """SDK options: the user's settings, cwd, model, session and what is left of the cost cap."""
-    spec = state.spec
+def options_for(run: Run) -> ClaudeAgentOptions:
+    """SDK options: the user's settings, cwd, model, session, the cost cap left and the hooks."""
+    state, spec = run.state, run.state.spec
     return ClaudeAgentOptions(
         cwd=spec.cwd,
         model=spec.model,
         resume=state.session_id,
         setting_sources=SETTING_SOURCES,
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
-        env=dict(env),
+        env=dict(run.env),
         max_budget_usd=state.bounds.budget_left(state.cost),
+        hooks=run.steps.hooks,
     )
 
 
@@ -191,22 +214,29 @@ def leaves(exc: BaseException) -> list[BaseException]:
 
 @dataclass(frozen=True)
 class Run:
-    """One run: the job's state when it started, what its query has produced, and its env."""
+    """One run: the job's state when it started, what its session has produced, its env,
+    its watch and the hooks between its steps."""
 
     state: JobState
     drain: Drain
     env: dict[str, str]
+    watch: RunWatch
+    steps: Steps = field(default_factory=Steps)
 
 
-async def _watch(watch: RunWatch, scope: anyio.CancelScope) -> None:
-    """Check ``watch`` after each slice; cancel ``scope`` when it says to end the run.
+async def _watch(run: Run, scope: anyio.CancelScope) -> None:
+    """Check the run's watch after each slice: a graceful stop ends the run at its next
+    step, a hard one cancels ``scope``.
 
     An anyio cancel, not a bare ``asyncio`` task cancel: the SDK's transport
     shields its subprocess cleanup only against anyio cancellation.
     """
     while True:
-        await anyio.sleep(watch.slice)
-        if Verdict.END in watch.check():
+        await anyio.sleep(run.watch.slice)
+        verdicts = run.watch.check()
+        if Verdict.GRACEFUL in verdicts:
+            run.steps.end(run.watch.halt or "")
+        if Verdict.END in verdicts:
             scope.cancel()
             return
 
@@ -217,14 +247,14 @@ class PromptJob:
 
     job: Job
     env: Mapping[str, str]
-    query_fn: QueryFn = query
+    open_client: ClientFactory = open_client
     rates_file: Path | None = None  # the stored rate table; the built-in one when None
 
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
         drain = Drain(self.job, state.session_id, watch.spend, rates=self.rates)
         try:
-            asyncio.run(self._watched(Run(state, drain, {**self.env, **watch.env()}), watch))
+            asyncio.run(self._watched(Run(state, drain, {**self.env, **watch.env()}, watch)))
         except Exception as exc:
             return drain.failed(exc)
         finally:
@@ -236,18 +266,25 @@ class PromptJob:
         """The stored table, else the built-in one."""
         return RATES if self.rates_file is None else load_rates(self.rates_file)
 
-    async def _watched(self, run: Run, watch: RunWatch) -> None:
-        """Drain the query beside a watcher; a hard stop cancels both, ending the run."""
+    async def _watched(self, run: Run) -> None:
+        """Drain the session beside a watcher; a hard stop cancels both, ending the run."""
         with anyio.CancelScope() as scope:
             async with anyio.create_task_group() as watcher:
-                watcher.start_soon(_watch, watch, scope)
+                watcher.start_soon(_watch, run, scope)
                 await self._drain(run)
                 watcher.cancel_scope.cancel()
 
     async def _drain(self, run: Run) -> None:
-        options = options_for(run.state, run.env)
-        async for message in self.query_fn(prompt=prompt_for(run.state), options=options):
-            run.drain.note(message)
+        """Send the prompt and note each message until the result; always disconnect."""
+        client = self.open_client(options_for(run))
+        await client.connect()
+        try:
+            await client.query(prompt_for(run.state))
+            async for message in client.receive_response():
+                run.drain.note(message)
+        finally:
+            with anyio.CancelScope(shield=True):
+                await client.disconnect()
 
     def _write_output(self, drain: Drain) -> None:
         if drain.output:

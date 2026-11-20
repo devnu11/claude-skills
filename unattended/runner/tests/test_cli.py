@@ -29,7 +29,7 @@ from unattended.store import (
     Spec,
 )
 
-from .test_prompt_job import FakeQuery
+from .fakes import FakeClient
 from .test_rates import PAGE, PAGE_RATES
 
 
@@ -113,7 +113,7 @@ def test_start_prompt_in_the_foreground(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     done = ResultMessage("success", 1, 1, False, 2, "s9", total_cost_usd=0.1, result="pong")
-    fake = FakeQuery([SystemMessage("init", {"session_id": "s9"}), done])
+    fake = FakeClient([SystemMessage("init", {"session_id": "s9"}), done])
     monkeypatch.setitem(
         cli.RUNNERS, JobKind.PROMPT, lambda job, env, home: PromptJob(job, env, fake)
     )

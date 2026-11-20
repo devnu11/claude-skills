@@ -97,11 +97,11 @@ answers.
   no cost to `unattended`, so they must enforce their own budget.
 - **The deadline has phases.** Before it, the job runs as usual. From it, no
   new run, resume or wait starts, and a command job's `--stop-command` is run
-  once; a run that ends after that ends the job `limit-reached`, "deadline
-  (graceful)". From the deadline plus `--hardstop`, the run is ended
-  (SIGTERM to its process group, SIGKILL 30 s later; a prompt run is
-  cancelled): "deadline (hard stop after 20m)". Without `--hardstop` a run
-  in progress is never cut short. An early end only notifies; nothing
+  once, and a prompt run is ended at its next tool step; a run that ends
+  after that ends the job `limit-reached`, "deadline (graceful)". From the
+  deadline plus `--hardstop`, the run is ended (SIGTERM to its process group,
+  SIGKILL 30 s later; a prompt run is cancelled): "deadline (hard stop after
+  20m)". Without `--hardstop` a run in progress is never cut off mid-call. An early end only notifies; nothing
   resumes on its own.
 - Prompt jobs use the user's Claude Code settings. Headless, a tool those
   settings don't allow can't be approved by anyone, so allow what the job

@@ -92,9 +92,9 @@ gives the last limit and the bound, e.g. `session limit, resets 7pm; used all
 
 | Reason | When |
 |---|---|
-| `deadline (graceful)` | the stop command was sent at the deadline and the run then ended, or the deadline passed between runs |
+| `deadline (graceful)` | at the deadline the stop command was sent (a command job) or the run was ended at its next tool step (a prompt job), or the deadline passed between runs |
 | `deadline (hard stop after 20m)` | the run was ended at the deadline plus `--hardstop` |
-| `idle (no progress for 1h; graceful)` | the idle stop sent the stop command and the run then ended |
+| `idle (no progress for 1h; graceful)` | the idle stop sent the stop command, or ended a prompt run at its next tool step, and the run then ended |
 | `idle (no progress for 1h; hard stop)` | the idle stop ended the run |
 
 `next_wake` is set only while a timed wait is under way; every other status
@@ -120,6 +120,7 @@ loop:
                 idle or hung for --idle-stop -> start the idle stop sequence
                 each stop sequence (deadline, idle stop), each phase once:
                   graceful: log it, notify, run --stop-command (command jobs)
+                            or end the run at its next tool step (prompt jobs)
                   hard:     log it, notify, end the run (SIGTERM, SIGKILL after 30 s; cancel)
   a stop was sent -> outcome = HALTED with its reason
   outcome                     # DONE | LIMIT | RATE_LIMITED | OFFLINE | BUDGET | FAILED | HALTED
@@ -154,11 +155,12 @@ and each slice re-reads `state.json` (so `extend` takes effect live).
 | Phase | From | What happens |
 |---|---|---|
 | open | before the start | as usual |
-| graceful | the start | No new run, resume or wait. The command job's `--stop-command` runs once; a `deadline` (or `idle-stop`) event and a notice are logged. A prompt job has no stop command, so its run continues. A run that ends on its own here keeps its outcome but is never resumed, unless the stop command was sent: then it ends `limit-reached` with the graceful reason. |
-| hard | the start plus `--hardstop` | The run is ended: SIGTERM to the command's process group, SIGKILL after 30 s; a prompt run's query is cancelled (an anyio cancel, so the SDK ends its CLI). |
+| graceful | the start | No new run, resume or wait. The command job's `--stop-command` runs once; a `deadline` (or `idle-stop`) event and a notice are logged. A prompt run is ended at its next tool step: the PreToolUse hook refuses the step with `continue: false`, so no call is cut off. A run that ends on its own here keeps its outcome but is never resumed, unless the job was asked to stop: then it ends `limit-reached` with the graceful reason. |
+| hard | the start plus `--hardstop` | The run is ended: SIGTERM to the command's process group, SIGKILL after 30 s; a prompt run's session is cancelled (an anyio cancel, so the SDK ends its CLI). |
 
-- A deadline without `--hardstop` has no hard phase, and without a stop
-  command its graceful phase does nothing mid-run: the soft deadline of old.
+- A deadline without `--hardstop` has no hard phase. A command job without a
+  stop command does nothing mid-run in its graceful phase: the soft deadline
+  of old. A prompt job always stops at its next tool step.
 - An idle stop always has a hard phase: `--hardstop` after it starts, or at
   once without `--hardstop` (the stop command, if any, is sent first).
 - Each phase acts once per run. Once the idle stop starts, progress no
@@ -282,11 +284,19 @@ to the local one, and the next occurrence after now is used.
 
 ## Prompt jobs
 
-- **SDK call:** `claude_agent_sdk.query` with `setting_sources=["user",
-  "project", "local"]`, so the job inherits the user's permissions and hooks.
-  It also gets `cwd`, `model`, `permission_mode`, `resume=<session_id>`, the
-  auth environment, and `max_budget_usd` set to `--max-cost` minus the cost so
-  far.
+- **SDK session:** a `ClaudeSDKClient` in streaming mode with
+  `setting_sources=["user", "project", "local"]`, so the job inherits the
+  user's permissions and hooks. It also gets `cwd`, `model`, `permission_mode`,
+  `resume=<session_id>`, the auth environment, and `max_budget_usd` set to
+  `--max-cost` minus the cost so far. The prompt is sent with `query`, and the
+  run reads messages until the result.
+- **Between steps:** <a id="steps"></a>the runner adds its own PreToolUse and
+  PostToolUse hooks (beside the user's), so every tool step passes through
+  unattended. After each step its checks run in order; each may add text for
+  the model, which the CLI appends after the tool result (`additionalContext`,
+  so the cached prefix is untouched), or ask to end the run. Ending a run
+  refuses the next step with `continue: false`: the run stops at a step
+  boundary, never mid-call.
 - **Headless permissions:** no one can approve a tool, so the user's settings
   must already allow what the job needs. Use `--permission-mode` to override.
 - **Session id:** saved to `state.json` from the first message that carries
