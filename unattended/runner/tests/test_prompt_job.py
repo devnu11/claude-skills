@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -510,3 +510,18 @@ def test_the_wrap_up_prompt_is_in_the_transcript(job: Job) -> None:
     fake.scripts.append([result("summary")])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert transcript_types(job).count("prompt") == 2
+
+
+def test_options_carry_effort_tool_rules_and_scope(job: Job, workdir: Path) -> None:
+    tuned = {"effort": "max", "allowed_tools": ["Read"], "disallowed_tools": ["Bash"]}
+    tuned |= {"add_dirs": ["/data"], "setting_sources": ["project"]}
+    job.update(lambda st: setattr(st, "spec", replace(st.spec, **tuned)))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    options = fake.calls[0]["options"]
+    assert (options.effort, options.add_dirs, options.setting_sources) == (
+        "max",
+        ["/data"],
+        ["project"],
+    )
+    assert (options.allowed_tools, options.disallowed_tools) == (["Read"], ["Bash"])

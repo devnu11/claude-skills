@@ -177,6 +177,10 @@ def test_start_uses_the_repo_jobs_dir(tmp_path: Path) -> None:
         (["--prompt", "p", "--stop-command", "s"], "--stop-command only apply to command"),
         (["--command", "c", "--hardstop", "soon"], "cannot read duration"),
         (["--command", "c", "--cwd", "nowhere"], "--cwd nowhere is not a directory"),
+        (["--prompt", "p", "--add-dir", "nowhere"], "--add-dir nowhere is not a directory"),
+        (["--prompt", "p", "--setting-sources", "user,team"], "unknown team"),
+        (["--command", "c", "--effort", "low"], "--effort only apply to prompt jobs"),
+        (["--command", "c", "--add-dir", "."], "--add-dir only apply to prompt jobs"),
         (["--prompt-file", "missing.md"], "cannot read --prompt-file"),
         (["--command", "c", "--until", "2001-01-01T00:00"], "has already passed"),
         (["--command", "c", "--for", "soon"], "cannot read duration"),
@@ -857,3 +861,24 @@ def test_start_resuming_from_checkpoints(tmp_path: Path) -> None:
     state = home_job(tmp_path).load()
     assert state.spec.resume_from is store.ResumeFrom.CHECKPOINT
     assert store.JobState.from_json(state.to_json()).spec.resume_from is store.ResumeFrom.CHECKPOINT
+
+
+def test_start_with_effort_tool_rules_and_scope(tmp_path: Path) -> None:
+    (tmp_path / "data").mkdir()
+    argv = ["start", "j", "--prompt", "p", "--effort", "low", "--add-dir", "data"]
+    argv += ["--allowed-tools", "Read", "--allowed-tools", "Bash(git:*)"]
+    argv += ["--disallowed-tools", "WebFetch", "--setting-sources", "project, local"]
+    assert run(tmp_path, *argv) == 0
+    spec = home_job(tmp_path).load().spec
+    assert spec.effort == "low"
+    assert spec.add_dirs == [str((tmp_path / "data").resolve())]
+    assert spec.allowed_tools == ["Read", "Bash(git:*)"]
+    assert spec.disallowed_tools == ["WebFetch"]
+    assert spec.setting_sources == ["project", "local"]
+
+
+def test_setting_sources_default_to_all_and_none_means_none(tmp_path: Path) -> None:
+    assert run(tmp_path, "start", "a", "--prompt", "p") == 0
+    assert run(tmp_path, "start", "b", "--prompt", "p", "--setting-sources", "none") == 0
+    assert home_job(tmp_path, "a").load().spec.setting_sources == ["user", "project", "local"]
+    assert home_job(tmp_path, "b").load().spec.setting_sources == []

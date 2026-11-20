@@ -41,6 +41,10 @@ rewrite it).
 | `--wrap-up USD` | After a [run cap](#run-caps) or a graceful stop ends a prompt run at a step, give it one [wrap-up](#wrap-up) reply within this many USD. Also on `resume` and `extend`. |
 | `--resume-from session\|checkpoint` | What later runs continue from: the saved Claude Code session, replayed (default), or a fresh session from the last [checkpoint](#checkpoints). Prompt jobs only. |
 | `--wrap-up-prompt T` | The wrap-up prompt; `{reason}` is replaced by why the run stopped. Default: a summary of goal, work, findings with evidence, what was ruled out, and next steps. Prompt jobs only. |
+| `--effort low\|medium\|high\|xhigh\|max` | The model's effort. Default: the model's own. Prompt jobs only. |
+| `--allowed-tools RULE`, `--disallowed-tools RULE` | A tool or permission rule (`Read`, `Bash(git:*)`) to allow without asking, or to refuse; repeatable, added to what the settings say. Prompt jobs only. |
+| `--add-dir D` | Another directory the agent may read and edit beside `--cwd`; repeatable, checked at `start`. Prompt jobs only. |
+| `--setting-sources LIST` | Settings layers to load: a comma list of `user`, `project`, `local`, or `none`. Default: all three. Prompt jobs only. |
 | `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
 | `--hardstop D` | End a run by force `D` after the deadline (or an idle stop). Optional; without it the deadline only bounds waits. See [Stop phases](#stop-phases). Also on `resume` and `extend`. |
@@ -297,8 +301,10 @@ to the local one, and the next occurrence after now is used.
 ## Prompt jobs
 
 - **SDK session:** a `ClaudeSDKClient` in streaming mode with
-  `setting_sources=["user", "project", "local"]`, so the job inherits the
-  user's permissions and hooks. It also gets `cwd`, `model`, `permission_mode`,
+  `setting_sources` from `--setting-sources` (default
+  `["user", "project", "local"]`, so the job inherits the user's permissions
+  and hooks). It also gets `cwd`, `add_dirs`, `model`, `effort`,
+  `permission_mode`, `allowed_tools`, `disallowed_tools`,
   `resume=<session_id>`, the auth environment, and `max_budget_usd` set to
   `--max-cost` minus the cost so far. The prompt is sent with `query`, and the
   run reads messages until the result.
@@ -310,7 +316,8 @@ to the local one, and the next occurrence after now is used.
   refuses the next step with `continue: false`: the run stops at a step
   boundary, never mid-call.
 - **Headless permissions:** no one can approve a tool, so the user's settings
-  must already allow what the job needs. Use `--permission-mode` to override.
+  must already allow what the job needs. Use `--allowed-tools` (or
+  `--permission-mode`) to allow more, and `--add-dir` to reach beyond `--cwd`.
 - **Session id:** saved to `state.json` from the first message that carries
   one (the init message's `data["session_id"]`, or any message's
   `session_id`). The SDK's init message is the first thing a run yields, so
