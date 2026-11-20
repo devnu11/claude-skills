@@ -23,6 +23,14 @@ from claude_agent_sdk import ClaudeAgentOptions, ResultMessage
 from unattended.steps import POST, PRE
 
 USAGE = {"input_tokens": 10, "output_tokens": 5}
+# A valid checkpoint (see ``unattended.checkpoint.SCHEMA``).
+GOOD: dict[str, Any] = {
+    "goal": "find why the board resets",
+    "findings": [{"claim": "watchdog fires", "evidence": ["log.txt:120"]}],
+    "ruled_out": [{"what": "power", "why": "rails stable in trace"}],
+    "next_steps": ["read the watchdog config"],
+    "artifacts": ["trace.csv"],
+}
 STOPPED = ResultMessage(
     "success", 1, 1, False, 2, "s1", total_cost_usd=0.1, usage=USAGE, result="stopped"
 )

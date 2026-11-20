@@ -39,6 +39,7 @@ rewrite it).
 | `--max-cost USD` | Cost cap on the summed `total_cost_usd`. A prompt run is ended at its next tool step once the ended runs plus its own [estimate](#live-cost) reach it ([run caps](#run-caps)), and the SDK's `max_budget_usd` stops it there too. On `resume` it must leave room above what is spent. Command jobs report no cost. |
 | `--max-run-cost USD` | Cost cap on one prompt run, enforced the same way. Also on `resume` and `extend`. |
 | `--wrap-up USD` | After a [run cap](#run-caps) or a graceful stop ends a prompt run at a step, give it one [wrap-up](#wrap-up) reply within this many USD. Also on `resume` and `extend`. |
+| `--resume-from session\|checkpoint` | What later runs continue from: the saved Claude Code session, replayed (default), or a fresh session from the last [checkpoint](#checkpoints). Prompt jobs only. |
 | `--wrap-up-prompt T` | The wrap-up prompt; `{reason}` is replaced by why the run stopped. Default: a summary of goal, work, findings with evidence, what was ruled out, and next steps. Prompt jobs only. |
 | `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
@@ -72,10 +73,11 @@ unique within a home.
 | File | Holds |
 |---|---|
 | `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
+| `checkpoint.json` | A `--resume-from checkpoint` job's last valid [checkpoint](#checkpoints). |
 | `inbox/` | Messages from `tell` waiting for delivery, one file each, named by when they were sent; removed once delivered. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -144,8 +146,10 @@ loop:
 ```
 
 The first run uses the prompt or command. Later runs resume: a prompt job
-resumes its saved session with the resume prompt, and a command job runs the
-resume command. A prompt job with no saved session yet runs its prompt again.
+resumes its saved session with the resume prompt (or, with `--resume-from
+checkpoint`, starts a fresh session from its last checkpoint), and a command
+job runs the resume command. A prompt job with no saved session or checkpoint
+yet runs its prompt again.
 
 `limit-reached` posts a `limit-reached` notice.
 
@@ -331,6 +335,18 @@ to the local one, and the next occurrence after now is used.
   reaching it interrupts the turn at once and logs `wrap-up-cut`. The SDK's
   `max_budget_usd` is the tighter cap plus the allowance, so the backstop
   leaves room for it. The run's outcome is unchanged.
+- **Checkpoints:** <a id="checkpoints"></a>with `--resume-from checkpoint`
+  every run is asked for structured output (`output_format`, a JSON schema),
+  so its final reply, or its wrap-up reply, is the checkpoint: `goal`,
+  `findings` (`claim`, `evidence` pointers), `ruled_out` (`what`, `why`),
+  `next_steps` and `artifacts`, with no other keys. The runner validates it
+  by script against `checkpoint.SCHEMA` and a 16 KB limit, then writes
+  `checkpoint.json` atomically with `schema_version`, `run` and `at`, and logs
+  `checkpoint`. An invalid one logs `checkpoint-invalid` with the problems and
+  the previous checkpoint stays; a run with no structured reply logs
+  `checkpoint-missing`. The next run starts a fresh session (no `resume`): its
+  prompt is the resume prompt, then the checkpoint as JSON, then any waiting
+  `tell` messages. No transcript is replayed.
 - **Per-call ledger:** <a id="ledger"></a>each API response becomes one
   line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
   `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those

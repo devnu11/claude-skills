@@ -850,3 +850,10 @@ def test_start_with_a_wrap_up(tmp_path: Path) -> None:
     state = home_job(tmp_path).load()
     assert state.bounds.wrap_up == 0.5
     assert state.spec.wrap_up_prompt == "Stop: {reason}"
+
+
+def test_start_resuming_from_checkpoints(tmp_path: Path) -> None:
+    assert run(tmp_path, "start", "j", "--prompt", "p", "--resume-from", "checkpoint") == 0
+    state = home_job(tmp_path).load()
+    assert state.spec.resume_from is store.ResumeFrom.CHECKPOINT
+    assert store.JobState.from_json(state.to_json()).spec.resume_from is store.ResumeFrom.CHECKPOINT

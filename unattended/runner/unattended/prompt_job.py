@@ -36,6 +36,13 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from .checkpoint import (
+    OUTPUT_FORMAT,
+    Reply,
+    build_resume_prompt,
+    load_checkpoint,
+    save_checkpoint,
+)
 from .inbox import deliver_at_start, deliver_at_step
 from .ledger import Ledger
 from .limits import Metrics, Outcome, OutcomeKind, Spend, classify, strip_exit_suffix
@@ -43,7 +50,7 @@ from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
 from .steps import Advice, Steps
-from .store import OUTPUT_FILE, Job, JobState
+from .store import OUTPUT_FILE, Job, JobState, ResumeFrom
 from .watch import RunWatch, Verdict
 from .wrapup import Allowance, build_wrap_up_prompt
 
@@ -76,9 +83,28 @@ def open_client(options: ClaudeAgentOptions) -> Client:
     return ClaudeSDKClient(options=options)
 
 
-def prompt_for(state: JobState) -> str:
+def prompt_for(job: Job, state: JobState) -> str:
+    """The prompt for the job's next run, by what its later runs continue from."""
+    return PROMPTS[state.spec.resume_from](job, state)
+
+
+def _continue_session(job: Job, state: JobState) -> str:
     """The resume prompt once a session exists, else the job's prompt."""
     return state.spec.resume_prompt if state.session_id else state.spec.prompt
+
+
+def _continue_checkpoint(job: Job, state: JobState) -> str:
+    """The resume prompt with the last checkpoint, else the job's prompt."""
+    found = load_checkpoint(job)
+    return (
+        state.spec.prompt if found is None else build_resume_prompt(state.spec.resume_prompt, found)
+    )
+
+
+PROMPTS: dict[ResumeFrom, Callable[[Job, JobState], str]] = {
+    ResumeFrom.SESSION: _continue_session,
+    ResumeFrom.CHECKPOINT: _continue_checkpoint,
+}
 
 
 def options_for(run: Run) -> ClaudeAgentOptions:
@@ -87,7 +113,8 @@ def options_for(run: Run) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
         cwd=spec.cwd,
         model=spec.model,
-        resume=state.session_id,
+        resume=state.session_id if spec.resume_from is ResumeFrom.SESSION else None,
+        output_format=OUTPUT_FORMAT if spec.resume_from is ResumeFrom.CHECKPOINT else None,
         setting_sources=SETTING_SOURCES,
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
         env=build_env(run),
@@ -313,8 +340,20 @@ class PromptJob:
             return run.drain.failed(exc)
         finally:
             self._write_output(run.drain)
+            self._save_checkpoint(run)
             run.drain.close()
         return run.drain.finished()
+
+    def _save_checkpoint(self, run: Run) -> None:
+        """Keep the run's structured reply as the checkpoint, when the job resumes from one."""
+        if run.state.spec.resume_from is not ResumeFrom.CHECKPOINT:
+            return
+        found = run.drain.result.structured_output if run.drain.result else None
+        number = run.state.runs + 1
+        if found is None:
+            self.job.event("checkpoint-missing", {"run": number})
+            return
+        save_checkpoint(self.job, Reply(number, found))
 
     def build_steps(self, cap: CapCheck) -> Steps:
         """A run's step hooks: deliver waiting messages, then end the run at a cap."""
@@ -338,7 +377,7 @@ class PromptJob:
         client = self.open_client(options_for(run))
         await client.connect()
         try:
-            await client.query(deliver_at_start(self.job, prompt_for(run.state)))
+            await client.query(deliver_at_start(self.job, prompt_for(self.job, run.state)))
             async for message in client.receive_response():
                 run.drain.note(message)
             await self._wrap_up(client, run)
