@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -157,22 +158,37 @@ def group_of(command: str) -> subprocess.Popen[bytes]:
     return subprocess.Popen(["sh", "-c", command], start_new_session=True)
 
 
+CPU_WAIT = 30.0  # seconds a busy group may take to show a CPU second, even on a loaded runner
+
+
+def wait_for_change(read: Callable[[], object], start: object) -> object:
+    """Poll ``read`` until it differs from ``start`` or ``CPU_WAIT`` passes; its last value."""
+    deadline = time.monotonic() + CPU_WAIT
+    value = read()
+    while value == start and time.monotonic() < deadline:
+        time.sleep(0.25)
+        value = read()
+    return value
+
+
 def test_cpu_moves_for_a_busy_group_and_not_for_a_sleeping_one(ctx: Context) -> None:
+    """Linux ``ps`` counts whole CPU seconds, and a busy loop on a loaded machine can take
+    longer than any fixed wait to use one, so the test waits for the busy group to move."""
     groups = [group_of("while :; do :; done"), group_of("sleep 30 & wait")]
 
-    def cpu() -> list[object]:
-        return [probes.cpu_reading(Context(ctx.job, ctx.cwd, Stamp(), g.pid)).value for g in groups]
+    def cpu(proc: subprocess.Popen[bytes]) -> object:
+        return probes.cpu_reading(Context(ctx.job, ctx.cwd, Stamp(), proc.pid)).value
 
     try:
-        before = cpu()
-        time.sleep(2.2)
-        after = cpu()
+        before = [cpu(proc) for proc in groups]
+        busy = wait_for_change(lambda: cpu(groups[0]), before[0])
+        idle = cpu(groups[1])
     finally:
         for proc in groups:
             os.killpg(proc.pid, 9)
             proc.wait()
-    assert after[0] > before[0]
-    assert after[1] == before[1]
+    assert busy > before[0]  # type: ignore[operator]
+    assert idle == before[1]
 
 
 def test_children_lists_the_group(ctx: Context) -> None:
