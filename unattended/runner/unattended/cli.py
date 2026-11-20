@@ -27,7 +27,7 @@ from . import probes
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
-from .inbox import count_messages, post_message
+from .inbox import count_messages, queue_message
 from .ledger import read_calls
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
 from .pricing import Estimate, Rates, Usage, is_stale
@@ -483,7 +483,7 @@ def run_tell(args: argparse.Namespace) -> int:
     job = job_home(args).job(args.name)
     if job.load().spec.kind is not JobKind.PROMPT:
         raise CliError("only prompt jobs take messages; tell the command itself")
-    post_message(job, _read_message(args))
+    queue_message(job, _read_message(args))
     print(f"queued for job {job.name}: delivered at its next tool step or run")
     return 0
 

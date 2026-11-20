@@ -24,7 +24,7 @@ SUFFIX = ".md"
 HEADER = "Message from the operator (unattended tell), sent {at}:"
 
 
-def post_message(job: Job, text: str) -> None:
+def queue_message(job: Job, text: str) -> None:
     """Queue ``text`` for the job's agent and log a ``tell`` event."""
     inbox = job.path(INBOX)
     inbox.mkdir(exist_ok=True)
