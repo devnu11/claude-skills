@@ -146,6 +146,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         disallowed_tools=args.disallowed_tools or [],
         add_dirs=[str(_directory(path, "--add-dir")) for path in args.add_dir or []],
         skills=_read_skills(args.skill or []),
+        system_prompt=_read_text(args.system_prompt_file, "--system-prompt-file"),
         setting_sources=_read_setting_sources(args.setting_sources),
         wrap_up_prompt=args.wrap_up_prompt or DEFAULT_WRAP_UP_PROMPT,
         resume_from=args.resume_from or ResumeFrom.SESSION,
@@ -168,6 +169,7 @@ KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
         "disallowed_tools",
         "add_dir",
         "skill",
+        "system_prompt_file",
         "setting_sources",
         "wrap_up_prompt",
         "resume_from",
@@ -215,10 +217,15 @@ def _read_setting_sources(text: str | None) -> list[str]:
 def _prompt_text(args: argparse.Namespace) -> str:
     if args.prompt_file is None:
         return args.prompt or ""
+    return _read_text(args.prompt_file, "--prompt-file")
+
+
+def _read_text(path: str | None, flag: str) -> str:
+    """The text of the file ``flag`` names; empty when it names none."""
     try:
-        return Path(args.prompt_file).read_text()
+        return Path(path).read_text() if path else ""
     except OSError as exc:
-        raise CliError(f"cannot read --prompt-file: {exc.strerror}") from exc
+        raise CliError(f"cannot read {flag}: {exc.strerror}") from exc
 
 
 def _idle(text: str) -> float | None:
@@ -756,6 +763,9 @@ START_ARGS: tuple[Arg, ...] = (
     (("--skill",), {"action": "append", "metavar": "DIR",
                     "help": "a skill directory to copy into the job and load from there, so "
                             "every run uses this version; repeatable"}),
+    (("--system-prompt-file",), {"metavar": "F",
+                                 "help": "replace Claude Code's system prompt with this "
+                                         "file's text, read once at start"}),
     (("--setting-sources",), {"metavar": "LIST",
                               "help": f"settings layers to load: {SOURCES_HELP} "
                                       "(default: all three)"}),

@@ -95,6 +95,7 @@ class Spec:
     disallowed_tools: list[str] = field(default_factory=list)
     add_dirs: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)  # pinned skill sources (see pin.py)
+    system_prompt: str = ""  # --system-prompt-file's text; empty for Claude Code's own
     setting_sources: list[str] = field(default_factory=lambda: list(SETTING_SOURCES))
     wrap_up_prompt: str = DEFAULT_WRAP_UP_PROMPT
     resume_from: ResumeFrom = ResumeFrom.SESSION
@@ -120,6 +121,7 @@ class JobState:
     cost: float = 0.0
     run_usage: dict[str, dict[str, int]] = field(default_factory=dict)
     drift: float | None = None
+    prefix: dict[str, str] = field(default_factory=dict)  # see prefix.py
     session_id: str | None = None
     next_wake: float | None = None
     wake_on: WakeOn | None = None

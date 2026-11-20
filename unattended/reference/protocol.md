@@ -45,6 +45,7 @@ rewrite it).
 | `--allowed-tools RULE`, `--disallowed-tools RULE` | A tool or permission rule (`Read`, `Bash(git:*)`) to allow without asking, or to refuse; repeatable, added to what the settings say. Prompt jobs only. |
 | `--add-dir D` | Another directory the agent may read and edit beside `--cwd`; repeatable, checked at `start`. Prompt jobs only. |
 | `--skill DIR` | A skill directory (holding `SKILL.md`) to [pin](#pinned-skills): copied into the job at `start` and loaded from there by every run. Repeatable. Prompt jobs only. |
+| `--system-prompt-file F` | Replace Claude Code's system prompt with `F`'s text, read once at `start`. Default: Claude Code's own, kept [stable](#stable-prefix). Prompt jobs only. |
 | `--setting-sources LIST` | Settings layers to load: a comma list of `user`, `project`, `local`, or `none`. Default: all three. Prompt jobs only. |
 | `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
@@ -77,8 +78,8 @@ unique within a home.
 
 | File | Holds |
 |---|---|
-| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `park` (check, every, reason), `unpark` (by: `check` or `user`), `park-invalid` (problems), `pin` (name, source, commit, dirty), `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `prefix` (the last run's [prefix hashes](#stable-prefix)), `session_id`, `next_wake`, `wake_on`. |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `park` (check, every, reason), `unpark` (by: `check` or `user`), `park-invalid` (problems), `pin` (name, source, commit, dirty), `prefix` (parts, changed), `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
@@ -396,6 +397,18 @@ to the local one, and the next occurrence after now is used.
   Values JSON cannot hold are written as text. Lines are flushed as they
   arrive, so a crashed or killed run keeps what it had. It is for reading the
   run afterwards; nothing feeds it back to the agent.
+- **Stable prefix:** <a id="stable-prefix"></a>so that every run and
+  resume reads the prompt cache instead of rewriting it, the system prompt
+  stays the same for the life of the job: Claude Code's preset with
+  `exclude_dynamic_sections` (the working directory, git status and
+  auto-memory move to the first user message) and `snapshot` (a resumed
+  session keeps the prompt it recorded), or `--system-prompt-file`'s text,
+  also snapshotted. The rest of the prefix comes from the settings, so each
+  run's init message is fingerprinted: a `prefix` event holds a 12-character
+  sha256 per part (`model`, `tools`, `mcp_servers`, `agents`, `skills`,
+  `plugins`, `output_style`) and `changed` names the parts that differ from
+  the last run, the usual cause of a cache miss. `--setting-sources` and
+  `--skill` keep those parts fixed.
 - **Pinned skills:** <a id="pinned-skills"></a>each `--skill DIR` is
   copied at `start` into `plugin/skills/<name>/` (without `.git`, `.venv`,
   `__pycache__`, `node_modules` or `.*_cache`), and every run gets

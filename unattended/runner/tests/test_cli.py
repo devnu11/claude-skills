@@ -898,3 +898,17 @@ def test_start_refuses_a_directory_that_is_not_a_skill(
 ) -> None:
     assert run(tmp_path, "start", "j", "--prompt", "p", "--skill", ".") == 1
     assert "no SKILL.md there" in capsys.readouterr().err
+
+
+def test_start_reads_the_system_prompt_file_once(tmp_path: Path) -> None:
+    (tmp_path / "system.md").write_text("You triage.")
+    assert run(tmp_path, "start", "j", "--prompt", "p", "--system-prompt-file", "system.md") == 0
+    (tmp_path / "system.md").write_text("changed")
+    assert home_job(tmp_path).load().spec.system_prompt == "You triage."
+
+
+def test_start_refuses_a_missing_system_prompt_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(tmp_path, "start", "j", "--prompt", "p", "--system-prompt-file", "none.md") == 1
+    assert "cannot read --system-prompt-file" in capsys.readouterr().err
