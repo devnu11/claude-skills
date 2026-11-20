@@ -5,8 +5,9 @@ headless it may only do what those settings allow. The session id is saved to
 ``state.json`` from the first message that carries it, so a crash mid-run
 cannot lose it. Each assistant message's token usage is summed by model into
 ``state.run_usage`` as it arrives, so ``unattended cost`` can price the run so
-far; the SDK's own ``total_cost_usd`` comes only with the result. The final
-result goes to ``output.md``.
+far; the SDK's own ``total_cost_usd`` comes only with the result. Each API
+response is also written to the per-call ledger, ``calls.jsonl`` (``ledger``).
+The final result goes to ``output.md``.
 
 Messages from ``unattended tell`` reach the agent at its next tool step, or
 with the next run's prompt (``inbox``). The run is a ``ClaudeSDKClient``
@@ -36,6 +37,7 @@ from claude_agent_sdk import (
 )
 
 from .inbox import deliver_at_start, deliver_at_step
+from .ledger import Ledger
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
@@ -143,6 +145,7 @@ class Drain:
     result: ResultMessage | None = None
     usage: dict[str, tuple[str, Usage]] = field(default_factory=dict)
     rates: Rates = field(default_factory=dict)
+    ledger: Ledger | None = None
 
     def note(self, message: Any) -> None:
         self.spend.tick()
@@ -157,6 +160,8 @@ class Drain:
             return
         message_id, model, usage = found
         self.usage[message_id] = (model, usage)
+        if self.ledger:
+            self.ledger.note(found)
         summed = {model: asdict(usage) for model, usage in sum_by_model(self.usage).items()}
         self.job.update(lambda st: setattr(st, "run_usage", summed))
 
@@ -255,7 +260,9 @@ class PromptJob:
 
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
-        drain = Drain(self.job, state.session_id, watch.spend, rates=self.rates)
+        rates = self.rates
+        ledger = Ledger(self.job, state.runs + 1, rates)
+        drain = Drain(self.job, state.session_id, watch.spend, rates=rates, ledger=ledger)
         run = Run(state, drain, {**self.env, **watch.env()}, watch, self.steps)
         try:
             asyncio.run(self._watched(run))
@@ -263,6 +270,7 @@ class PromptJob:
             return drain.failed(exc)
         finally:
             self._write_output(drain)
+            ledger.close()
         return drain.finished()
 
     @property
