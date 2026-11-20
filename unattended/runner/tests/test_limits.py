@@ -10,6 +10,7 @@ from unattended.limits import (
     OutcomeKind,
     Phase,
     Progress,
+    Spend,
     Stop,
     StopCause,
     Waits,
@@ -312,3 +313,14 @@ def test_deadline_stop() -> None:
 )
 def test_time_left(deadline: float | None, text: str | None) -> None:
     assert limits.format_time_left(deadline, 1000.0) == text
+
+
+def test_run_budget_is_the_tighter_cap() -> None:
+    assert Bounds().run_budget(1.0) is None
+    assert Bounds(max_cost=5.0).run_budget(4.0) == 1.0
+    assert Bounds(max_cost=5.0, max_run_cost=0.5).run_budget(1.0) == 0.5
+    assert Bounds(max_run_cost=0.5).run_budget(9.0) == 0.5
+
+
+def test_no_cap_reason_without_a_priced_run() -> None:
+    assert Bounds(max_cost=0.0).find_cap_reason(Spend(5.0, None)) is None

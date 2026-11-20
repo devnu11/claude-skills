@@ -80,6 +80,7 @@ class Spec:
     key_file: str | None = None
     model: str | None = None
     permission_mode: str | None = None
+    max_output_tokens: int | None = None
     fallback_wait: float = DEFAULT_FALLBACK
     sleep: SleepPolicy = SleepPolicy.PREVENT
     idle: float | None = DEFAULT_IDLE

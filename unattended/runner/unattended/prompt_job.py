@@ -38,15 +38,16 @@ from claude_agent_sdk import (
 
 from .inbox import deliver_at_start, deliver_at_step
 from .ledger import Ledger
-from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
+from .limits import Metrics, Outcome, OutcomeKind, Spend, classify, strip_exit_suffix
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
-from .steps import Steps
+from .steps import Advice, Steps
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
 
 SETTING_SOURCES: list[Any] = ["user", "project", "local"]
+OUTPUT_ENV = "CLAUDE_CODE_MAX_OUTPUT_TOKENS"  # the CLI's bound on one response's output
 # The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
 BUDGET_SUBTYPE = "error_max_budget_usd"
 BUDGET_REASON = "cost cap reached mid-run; resume with a higher --max-cost to continue"
@@ -86,10 +87,16 @@ def options_for(run: Run) -> ClaudeAgentOptions:
         resume=state.session_id,
         setting_sources=SETTING_SOURCES,
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
-        env=dict(run.env),
-        max_budget_usd=state.bounds.budget_left(state.cost),
+        env=build_env(run),
+        max_budget_usd=state.bounds.run_budget(state.cost),
         hooks=run.steps.hooks,
     )
+
+
+def build_env(run: Run) -> dict[str, str]:
+    """The run's environment, with the output bound per response when the job sets one."""
+    bound = run.state.spec.max_output_tokens
+    return {**run.env, **({OUTPUT_ENV: str(bound)} if bound else {})}
 
 
 def session_of(message: Any) -> str | None:
@@ -140,12 +147,12 @@ class Drain:
 
     job: Job
     session_id: str | None
+    ledger: Ledger
     spend: Stamp = field(default_factory=Stamp)
     text: str = ""
     result: ResultMessage | None = None
     usage: dict[str, tuple[str, Usage]] = field(default_factory=dict)
     rates: Rates = field(default_factory=dict)
-    ledger: Ledger | None = None
 
     def note(self, message: Any) -> None:
         self.spend.tick()
@@ -160,10 +167,13 @@ class Drain:
             return
         message_id, model, usage = found
         self.usage[message_id] = (model, usage)
-        if self.ledger:
-            self.ledger.note(found)
+        self.ledger.note(found)
         summed = {model: asdict(usage) for model, usage in sum_by_model(self.usage).items()}
         self.job.update(lambda st: setattr(st, "run_usage", summed))
+
+    def close(self) -> None:
+        """Write the ledger's last response; call once the run has ended."""
+        self.ledger.close()
 
     def _save_session(self, session_id: str | None) -> None:
         if session_id and session_id != self.session_id:
@@ -220,6 +230,31 @@ def leaves(exc: BaseException) -> list[BaseException]:
     return [leaf for inner in exc.exceptions for leaf in leaves(inner)]
 
 
+@dataclass
+class CapCheck:
+    """A step check: end the run once its estimated spend reaches the job's or the run's cap.
+
+    The bounds are re-read at each step, so ``extend`` applies live. A run whose model
+    cannot be priced is left to the CLI's own ``max_budget_usd``.
+    """
+
+    job: Job
+    drain: Drain
+    tripped: str | None = None
+
+    def __call__(self) -> Advice:
+        state = self.job.load()
+        reason = state.bounds.find_cap_reason(Spend(state.cost, self.drain.estimate))
+        self.tripped = self.tripped or reason
+        return Advice(stop=reason or "")
+
+    def settle(self, outcome: Outcome) -> Outcome:
+        """``outcome``, or ``BUDGET`` with the cap's reason once a cap ended the run."""
+        if self.tripped is None:
+            return outcome
+        return Outcome(OutcomeKind.BUDGET, self.tripped, outcome.metrics)
+
+
 @dataclass(frozen=True)
 class Run:
     """One run: the job's state when it started, what its session has produced, its env,
@@ -262,21 +297,25 @@ class PromptJob:
         state = self.job.load()
         rates = self.rates
         ledger = Ledger(self.job, state.runs + 1, rates)
-        drain = Drain(self.job, state.session_id, watch.spend, rates=rates, ledger=ledger)
-        run = Run(state, drain, {**self.env, **watch.env()}, watch, self.steps)
+        drain = Drain(self.job, state.session_id, ledger, watch.spend, rates=rates)
+        cap = CapCheck(self.job, drain)
+        run = Run(state, drain, {**self.env, **watch.env()}, watch, self.build_steps(cap))
+        return cap.settle(self._run(run))
+
+    def _run(self, run: Run) -> Outcome:
+        """Run the session; the outcome from its result, or from what it raised."""
         try:
             asyncio.run(self._watched(run))
         except Exception as exc:
-            return drain.failed(exc)
+            return run.drain.failed(exc)
         finally:
-            self._write_output(drain)
-            ledger.close()
-        return drain.finished()
+            self._write_output(run.drain)
+            run.drain.close()
+        return run.drain.finished()
 
-    @property
-    def steps(self) -> Steps:
-        """A run's step hooks, with the checks they run after each step."""
-        return Steps([lambda: deliver_at_step(self.job)])
+    def build_steps(self, cap: CapCheck) -> Steps:
+        """A run's step hooks: deliver waiting messages, then end the run at a cap."""
+        return Steps([lambda: deliver_at_step(self.job), cap])
 
     @property
     def rates(self) -> Rates:
