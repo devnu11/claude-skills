@@ -150,7 +150,7 @@ def test_reset_note_with_a_date() -> None:
 
 
 def test_wake_on_values() -> None:
-    assert [w.value for w in WakeOn] == ["reset", "fallback", "backoff", "network"]
+    assert [w.value for w in WakeOn] == ["reset", "fallback", "backoff", "network", "external"]
 
 
 @pytest.mark.parametrize(

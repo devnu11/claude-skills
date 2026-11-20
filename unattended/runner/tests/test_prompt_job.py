@@ -88,7 +88,8 @@ def test_first_run_options(job: Job, workdir: Path) -> None:
     assert options.cwd == str(workdir)
     assert options.model == "haiku"
     assert options.setting_sources == ["user", "project", "local"]
-    assert options.env == {ENV_VAR: "k", HEARTBEAT_ENV: str(job.path(HEARTBEAT_FILE))}
+    assert options.env == {ENV_VAR: "k", **RunWatch(job).env()}
+    assert options.env[HEARTBEAT_ENV] == str(job.path(HEARTBEAT_FILE))
 
 
 def test_session_id_is_saved_at_the_first_message(job: Job) -> None:
@@ -525,3 +526,12 @@ def test_options_carry_effort_tool_rules_and_scope(job: Job, workdir: Path) -> N
         ["project"],
     )
     assert (options.allowed_tools, options.disallowed_tools) == (["Read"], ["Bash"])
+
+
+def test_a_run_that_parks_ends_at_its_next_step(job: Job) -> None:
+    fake = FakeClient([init(), Tool(), Tool(), result()])
+    fake.on_message.append(lambda: job.path("park.json").write_text('{"check": "true"}'))
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert len(fake.replies) == 1
+    assert fake.replies[0]["continue_"] is False
+    assert job.path("park.json").exists()

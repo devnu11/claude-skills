@@ -47,6 +47,7 @@ from .checkpoint import (
 from .inbox import deliver_at_start, deliver_at_step
 from .ledger import Ledger
 from .limits import Metrics, Outcome, OutcomeKind, Spend, classify, strip_exit_suffix
+from .park import stop_when_parked
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
@@ -378,8 +379,9 @@ class PromptJob:
         save_checkpoint(self.job, Reply(number, found))
 
     def build_steps(self, cap: CapCheck) -> Steps:
-        """A run's step hooks: deliver waiting messages, then end the run at a cap."""
-        return Steps([lambda: deliver_at_step(self.job), cap])
+        """A run's step hooks: deliver waiting messages, then end the run once it parked or
+        reached a cap."""
+        return Steps([lambda: deliver_at_step(self.job), lambda: stop_when_parked(self.job), cap])
 
     @property
     def rates(self) -> Rates:

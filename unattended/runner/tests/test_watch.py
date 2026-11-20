@@ -218,9 +218,12 @@ def heartbeat(watch: RunWatch, at: float, progress: object = 1) -> None:
     watch.heartbeat.write_text(json.dumps({"at": at, "progress": progress}))
 
 
-def test_the_run_is_told_where_its_heartbeat_goes(beating: Job) -> None:
+def test_the_run_is_told_where_its_heartbeat_and_park_request_go(beating: Job) -> None:
     watch = RunWatch(beating)
-    assert watch.env() == {"UNATTENDED_HEARTBEAT": str(beating.path("heartbeat.json"))}
+    assert watch.env() == {
+        "UNATTENDED_HEARTBEAT": str(beating.path("heartbeat.json")),
+        "UNATTENDED_PARK": str(beating.path("park.json")),
+    }
 
 
 def test_never_writing_the_heartbeat_is_not_hung(beating: Job) -> None:
