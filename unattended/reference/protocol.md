@@ -17,8 +17,8 @@ rewrite it).
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `tell NAME (--text T \| --file F)` | Queue a message for a prompt job's agent. It is delivered at the run's next tool step, after the tool result ([Between steps](#steps)), or appended to the next run's prompt when no step comes first; a message sent mid-call waits for the call to end. `status` shows how many wait (`inbox`). Command jobs are refused: tell the command itself (e.g. `agile-team tell`). |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
-| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--max-run-cost USD] [--hardstop D] [--idle-stop D] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
-| `extend NAME [--until T \| --for D] [--hardstop D] [--idle-stop D] [--max-resumes N] [--max-cost USD] [--max-run-cost USD]` | Change the limits of a job that has not ended (`running` or `waiting`, with or without a live supervisor); logs `extend`. A running job's watch re-reads them within 30 s, so a deadline moved into the future returns the run to the open phase. A stop command already sent is not undone. An ended job is refused: use `resume`. |
+| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--max-run-cost USD] [--wrap-up USD] [--hardstop D] [--idle-stop D] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
+| `extend NAME [--until T \| --for D] [--hardstop D] [--idle-stop D] [--max-resumes N] [--max-cost USD] [--max-run-cost USD] [--wrap-up USD]` | Change the limits of a job that has not ended (`running` or `waiting`, with or without a live supervisor); logs `extend`. A running job's watch re-reads them within 30 s, so a deadline moved into the future returns the run to the open phase. A stop command already sent is not undone. An ended job is refused: use `resume`. |
 
 `supervise DIR` is internal: it is what the detached process runs.
 
@@ -38,6 +38,8 @@ rewrite it).
 | `--max-resumes N` | Most automatic resumes; default 10. On `resume` it is the new total, not an increment. |
 | `--max-cost USD` | Cost cap on the summed `total_cost_usd`. A prompt run is ended at its next tool step once the ended runs plus its own [estimate](#live-cost) reach it ([run caps](#run-caps)), and the SDK's `max_budget_usd` stops it there too. On `resume` it must leave room above what is spent. Command jobs report no cost. |
 | `--max-run-cost USD` | Cost cap on one prompt run, enforced the same way. Also on `resume` and `extend`. |
+| `--wrap-up USD` | After a [run cap](#run-caps) or a graceful stop ends a prompt run at a step, give it one [wrap-up](#wrap-up) reply within this many USD. Also on `resume` and `extend`. |
+| `--wrap-up-prompt T` | The wrap-up prompt; `{reason}` is replaced by why the run stopped. Default: a summary of goal, work, findings with evidence, what was ruled out, and next steps. Prompt jobs only. |
 | `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
 | `--hardstop D` | End a run by force `D` after the deadline (or an idle stop). Optional; without it the deadline only bounds waits. See [Stop phases](#stop-phases). Also on `resume` and `extend`. |
@@ -70,7 +72,7 @@ unique within a home.
 | File | Holds |
 |---|---|
 | `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
@@ -319,6 +321,16 @@ to the local one, and the next occurrence after now is used.
   tighter of the two caps as a backstop: it catches a run that spends past a
   cap without a tool step, and a model the rate table cannot price. Caps act
   between steps, so `--max-output-tokens` bounds what one response can add.
+- **Wrap-up:** <a id="wrap-up"></a>a run ended at a step boundary (a run
+  cap, or a deadline or idle stop's graceful phase) keeps its session open.
+  With `--wrap-up USD`, the runner logs `wrap-up` and sends the wrap-up prompt,
+  naming the reason, in the same session. Every tool call in that turn is
+  denied (`permissionDecision: deny`), so the agent can only write; its reply
+  becomes `output.md`. The turn's spend, counted from the run's estimate with
+  input tokens included (it rereads the context), is capped at the allowance:
+  reaching it interrupts the turn at once and logs `wrap-up-cut`. The SDK's
+  `max_budget_usd` is the tighter cap plus the allowance, so the backstop
+  leaves room for it. The run's outcome is unchanged.
 - **Per-call ledger:** <a id="ledger"></a>each API response becomes one
   line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
   `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those

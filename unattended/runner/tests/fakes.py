@@ -3,8 +3,8 @@
 A script is a list of items, played in order once a prompt is sent:
 
 - an SDK message is yielded as the CLI would send it;
-- ``Tool`` is a tool step: the PreToolUse hook runs, then (unless it refused the
-  step) the tool, then the PostToolUse hook. A hook that ends the loop
+- ``Tool`` is a tool step: the PreToolUse hook runs, then (unless it refused or
+  denied the step) the tool, then the PostToolUse hook. A hook that ends the loop
   (``continue_: False``) makes the fake end the response with ``STOPPED``;
 - ``Sleep`` pauses the response; ``Sleep(math.inf)`` hangs until cancelled.
 
@@ -51,8 +51,10 @@ class FakeClient:
     scripts: list[list[Any]] = field(default_factory=list)
     calls: list[dict[str, Any]] = field(default_factory=list)
     replies: list[dict[str, Any]] = field(default_factory=list)
+    denials: list[dict[str, Any]] = field(default_factory=list)
     on_message: list[Any] = field(default_factory=list)
     closed: bool = False
+    interrupts: int = 0
 
     def __call__(self, options: ClaudeAgentOptions) -> FakeSession:
         return FakeSession(self, options)
@@ -91,9 +93,14 @@ class FakeSession:
             raise self.fake.error
 
     async def run_step(self, tool: Tool) -> bool:
-        """Run the hooks around ``tool``; True when a hook ended the loop."""
-        if ended(await self.call_hook(PRE, tool)):
+        """Run the hooks around ``tool``; True when a hook ended the loop. A denied call
+        never runs, so no PostToolUse follows it."""
+        before = await self.call_hook(PRE, tool)
+        if ended(before):
             return True
+        if denied(before):
+            self.fake.denials.append(before)
+            return False
         reply = await self.call_hook(POST, tool)
         self.fake.replies.append(reply)
         return ended(reply)
@@ -104,12 +111,19 @@ class FakeSession:
         replies = [await hook(data, "tool-1", {"signal": None}) for m in hooks for hook in m.hooks]
         return {key: value for reply in replies for key, value in reply.items()}
 
+    async def interrupt(self) -> None:
+        self.fake.interrupts += 1
+
     async def disconnect(self) -> None:
         self.fake.closed = True
 
 
 def ended(reply: dict[str, Any]) -> bool:
     return reply.get("continue_") is False
+
+
+def denied(reply: dict[str, Any]) -> bool:
+    return reply.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
 
 
 async def pause(seconds: float) -> None:

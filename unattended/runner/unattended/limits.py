@@ -277,6 +277,7 @@ class Bounds:
     hardstop: float | None = None
     idle_stop: float | None = None
     max_run_cost: float | None = None
+    wrap_up: float | None = None
 
     def deadline_stop(self) -> Stop | None:
         """The deadline's stop sequence, or None without a deadline."""
@@ -288,10 +289,15 @@ class Bounds:
         """USD the job may still spend, or None without a cost cap."""
         return None if self.max_cost is None else max(self.max_cost - spent, 0.0)
 
-    def run_budget(self, spent: float) -> float | None:
+    def compute_run_budget(self, spent: float) -> float | None:
         """USD the next run may spend: the tighter of the job's and the run's cap."""
         caps = [cap for cap in (self.budget_left(spent), self.max_run_cost) if cap is not None]
         return min(caps, default=None)
+
+    def compute_session_budget(self, spent: float) -> float | None:
+        """The CLI's backstop: the run's budget, plus the wrap-up allowance when set."""
+        budget = self.compute_run_budget(spent)
+        return None if budget is None else budget + (self.wrap_up or 0.0)
 
     def find_cap_reason(self, spend: Spend) -> str | None:
         """Why a run with ``spend`` must end now, or None while it is under every cap."""

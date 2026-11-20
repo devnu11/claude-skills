@@ -35,6 +35,7 @@ from .prompt_job import PromptJob
 from .rates import describe_store, fetch_rates, refresh_rates, resolve_store
 from .store import (
     DEFAULT_RESUME_PROMPT,
+    DEFAULT_WRAP_UP_PROMPT,
     ENDED,
     EVENTS_FILE,
     LOG_FILE,
@@ -135,6 +136,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         model=args.model,
         permission_mode=args.permission_mode,
         max_output_tokens=args.max_output_tokens,
+        wrap_up_prompt=args.wrap_up_prompt or DEFAULT_WRAP_UP_PROMPT,
         fallback_wait=_duration(args.fallback_wait),
         sleep=args.sleep,
         idle=_idle(args.idle),
@@ -144,7 +146,13 @@ def spec_from(args: argparse.Namespace) -> Spec:
 
 
 KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
-    JobKind.PROMPT: ("resume_prompt", "model", "permission_mode", "max_output_tokens"),
+    JobKind.PROMPT: (
+        "resume_prompt",
+        "model",
+        "permission_mode",
+        "max_output_tokens",
+        "wrap_up_prompt",
+    ),
     JobKind.COMMAND: ("resume_command", "stop_command"),
 }
 
@@ -226,6 +234,7 @@ def limits_given(args: argparse.Namespace) -> dict[str, Any]:
         "max_resumes": args.max_resumes,
         "max_cost": args.max_cost,
         "max_run_cost": args.max_run_cost,
+        "wrap_up": args.wrap_up,
         "hardstop": _optional_duration(args.hardstop),
         "idle_stop": _optional_duration(args.idle_stop),
     }
@@ -337,7 +346,7 @@ def report(job: Job, now: float) -> dict[str, Any]:
         "name": st.name, "kind": st.spec.kind, "status": st.status, "reason": st.reason,
         "runs": st.runs, "resumes": st.resumes, "max_resumes": st.bounds.max_resumes,
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
-        "max_run_cost": st.bounds.max_run_cost,
+        "max_run_cost": st.bounds.max_run_cost, "wrap_up": st.bounds.wrap_up,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
         **build_status_limits(st.bounds, now), **watch_report(st.spec),
         "session_id": st.session_id, "inbox": count_messages(job), "supervisor_pid": pid,
@@ -674,6 +683,9 @@ def limit_args(max_resumes: int | None) -> tuple[Arg, ...]:
         (("--max-cost",), {"type": float, "help": "stop resuming once this many USD are spent"}),
         (("--max-run-cost",), {"type": float, "metavar": "USD",
                                "help": "end a prompt run at its next step once it spent this"}),
+        (("--wrap-up",), {"type": float, "metavar": "USD",
+                          "help": "after a cap or stop ends a prompt run, one summary reply "
+                                  "within this many USD"}),
         (("--hardstop",), {"metavar": "DURATION",
                            "help": "end a run by force this long after the deadline (e.g. 20m)"}),
         (("--idle-stop",), {"metavar": "DURATION",
@@ -694,6 +706,7 @@ START_ARGS: tuple[Arg, ...] = (
                               "help": "default: your settings decide"}),
     (("--max-output-tokens",), {"type": int, "metavar": "N",
                                 "help": "bound each model response's output (prompt jobs)"}),
+    (("--wrap-up-prompt",), {"help": "prompt for the wrap-up reply; {reason} names the stop"}),
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
     (("--idle",), {"default": "20m", "metavar": "DURATION",
                    "help": "notify after no progress this long, or 'off' (default 20m)"}),
