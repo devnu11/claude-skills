@@ -17,8 +17,8 @@ rewrite it).
 | `log NAME [-f]` | Print `events.jsonl` and the output; `-f` keeps printing until the job ends. |
 | `tell NAME (--text T \| --file F)` | Queue a message for a prompt job's agent. It is delivered at the run's next tool step, after the tool result ([Between steps](#steps)), or appended to the next run's prompt when no step comes first; a message sent mid-call waits for the call to end. `status` shows how many wait (`inbox`). Command jobs are refused: tell the command itself (e.g. `agile-team tell`). |
 | `stop NAME` | Write the stop file and SIGTERM the supervisor (on Windows, the stop file alone, seen within 30 s; see [Windows](#windows)). With no supervisor alive, mark the job stopped. |
-| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--hardstop D] [--idle-stop D] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
-| `extend NAME [--until T \| --for D] [--hardstop D] [--idle-stop D] [--max-resumes N] [--max-cost USD]` | Change the limits of a job that has not ended (`running` or `waiting`, with or without a live supervisor); logs `extend`. A running job's watch re-reads them within 30 s, so a deadline moved into the future returns the run to the open phase. A stop command already sent is not undone. An ended job is refused: use `resume`. |
+| `resume NAME [--max-resumes N] [--until T \| --for D] [--max-cost USD] [--max-run-cost USD] [--hardstop D] [--idle-stop D] [--now] [--foreground]` | Rerun an ended job (`done`, `failed`, `stopped` or `limit-reached`) with the resume prompt or command, or restart an orphaned one (not ended, no supervisor alive); the retry count resets. Limits given replace the old ones; the rest are kept. With `--now`, a `waiting` job whose supervisor is alive is woken instead: the wake file cuts its wait short within 30 s, and the resume counts as usual. |
+| `extend NAME [--until T \| --for D] [--hardstop D] [--idle-stop D] [--max-resumes N] [--max-cost USD] [--max-run-cost USD]` | Change the limits of a job that has not ended (`running` or `waiting`, with or without a live supervisor); logs `extend`. A running job's watch re-reads them within 30 s, so a deadline moved into the future returns the run to the open phase. A stop command already sent is not undone. An ended job is refused: use `resume`. |
 
 `supervise DIR` is internal: it is what the detached process runs.
 
@@ -36,7 +36,9 @@ rewrite it).
 | `--model M`, `--permission-mode P` | Passed to the Agent SDK. Prompt jobs only. With no `--permission-mode`, the user's settings decide. |
 | `--until T` \| `--for D` | Deadline: `21:00`, `9pm`, `tomorrow 9am`, `today 18:15`, ISO (`2026-10-10T09:00`), or a duration (`24h`, `90m`, `1h30m`, `2d`). |
 | `--max-resumes N` | Most automatic resumes; default 10. On `resume` it is the new total, not an increment. |
-| `--max-cost USD` | Cost cap on the summed `total_cost_usd`. Each prompt run gets what is left as the SDK's `max_budget_usd`, so the run stops itself at the cap. On `resume` it must leave room above what is spent. Command jobs report no cost. |
+| `--max-cost USD` | Cost cap on the summed `total_cost_usd`. A prompt run is ended at its next tool step once the ended runs plus its own [estimate](#live-cost) reach it ([run caps](#run-caps)), and the SDK's `max_budget_usd` stops it there too. On `resume` it must leave room above what is spent. Command jobs report no cost. |
+| `--max-run-cost USD` | Cost cap on one prompt run, enforced the same way. Also on `resume` and `extend`. |
+| `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
 | `--hardstop D` | End a run by force `D` after the deadline (or an idle stop). Optional; without it the deadline only bounds waits. See [Stop phases](#stop-phases). Also on `resume` and `extend`. |
 | `--stop-command C` | Run once, in `--cwd` with a 60 s timeout, when a stop sequence reaches its graceful phase (for example `agile-team stop`); its output goes to `output.log`. Command jobs only. |
@@ -308,6 +310,15 @@ to the local one, and the next occurrence after now is used.
   `status` shows the id seconds after the run starts, before any turn ends.
   It is the Claude Code session id: `claude --resume <id>` opens it once the
   job has ended.
+- **Run caps:** <a id="run-caps"></a>after each tool step the runner re-reads
+  the bounds (so `extend` applies live) and compares the job's ended runs plus
+  this run's estimate with `--max-cost`, and this run's estimate with
+  `--max-run-cost`. Reaching either ends the run at that step boundary with
+  outcome `BUDGET` and a reason such as `run cost ~$1.20 reached the $1.00 run
+  cap`; the job ends `limit-reached`. The SDK's `max_budget_usd` is set to the
+  tighter of the two caps as a backstop: it catches a run that spends past a
+  cap without a tool step, and a model the rate table cannot price. Caps act
+  between steps, so `--max-output-tokens` bounds what one response can add.
 - **Per-call ledger:** <a id="ledger"></a>each API response becomes one
   line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
   `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those

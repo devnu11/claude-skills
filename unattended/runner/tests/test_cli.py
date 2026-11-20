@@ -708,10 +708,11 @@ def test_report_keeps_its_other_fields_in_order(tmp_path: Path) -> None:
     found = cli.report(make(tmp_path), 10_000.0)
     expected = [
         "name", "kind", "status", "reason", "runs", "resumes", "max_resumes", "cost",
-        "max_cost", "next_wake", "wake_on", "deadline", "time_left", "hardstop", "idle_stop",
+        "max_cost", "max_run_cost", "next_wake", "wake_on", "deadline", "time_left",
+        "hardstop", "idle_stop",
     ]  # fmt: skip
     assert list(found)[: len(expected)] == expected
-    assert {"session_id", "supervisor_pid", "dir"} <= set(found)
+    assert {"session_id", "inbox", "supervisor_pid", "dir"} <= set(found)
 
 
 def test_status_list_and_wait_print_time_left(
@@ -820,3 +821,24 @@ def test_tell_refuses_a_command_job(tmp_path: Path, capsys: pytest.CaptureFixtur
     make(tmp_path)
     assert run(tmp_path, "tell", "j", "--text", "hi") == 1
     assert "only prompt jobs take messages" in capsys.readouterr().err
+
+
+def test_start_with_a_run_cap_and_an_output_bound(tmp_path: Path) -> None:
+    argv = ["start", "j", "--prompt", "p", "--max-run-cost", "0.5", "--max-output-tokens", "4000"]
+    assert run(tmp_path, *argv) == 0
+    state = home_job(tmp_path).load()
+    assert state.bounds.max_run_cost == 0.5
+    assert state.spec.max_output_tokens == 4000
+
+
+def test_extend_changes_the_run_cap(tmp_path: Path) -> None:
+    make(tmp_path, JobStatus.RUNNING)
+    assert run(tmp_path, "extend", "j", "--max-run-cost", "2") == 0
+    assert home_job(tmp_path).load().bounds.max_run_cost == 2.0
+
+
+def test_an_output_bound_is_for_prompt_jobs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(tmp_path, "start", "j", "--command", "true", "--max-output-tokens", "9") == 1
+    assert "--max-output-tokens only apply to prompt jobs" in capsys.readouterr().err

@@ -325,3 +325,48 @@ def test_a_crashed_run_still_writes_its_last_response(job: Job) -> None:
     fake = FakeClient([init(), spent("claude-opus-5-5", "m1", 5)], RuntimeError("crash"))
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert [c["message_id"] for c in read_calls(job)] == ["m1"]
+
+
+def capped(job: Job, bounds: Bounds) -> None:
+    job.update(lambda st: setattr(st, "bounds", bounds))
+
+
+def test_the_cli_budget_is_the_tighter_of_job_and_run_caps(job: Job) -> None:
+    capped(job, Bounds(max_cost=5.0, max_run_cost=0.5))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].max_budget_usd == 0.5
+
+
+def test_a_run_cap_ends_the_run_at_its_next_step(job: Job) -> None:
+    capped(job, Bounds(max_run_cost=1.0))
+    script = [init(), spent("claude-opus-5-5", "m1", 60_000), Tool(), Tool(), result()]
+    fake = FakeClient(script)
+    outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert outcome.kind is OutcomeKind.BUDGET
+    assert outcome.reason == "run cost ~$1.20 reached the $1.00 run cap"
+    assert len(fake.replies) == 1
+
+
+def test_a_job_cap_counts_the_ended_runs(job: Job) -> None:
+    capped(job, Bounds(max_cost=1.0))
+    job.update(lambda st: setattr(st, "cost", 0.9))
+    fake = FakeClient([init(), spent("claude-opus-5-5", "m1", 10_000), Tool(), said("never")])
+    outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert outcome == Outcome(
+        OutcomeKind.BUDGET, "cost ~$1.10 reached the $1.00 cap", outcome.metrics
+    )
+    assert fake.replies[0]["continue_"] is False
+
+
+def test_under_the_caps_the_run_goes_on(job: Job) -> None:
+    capped(job, Bounds(max_cost=100.0, max_run_cost=50.0))
+    fake = FakeClient([init(), spent("claude-opus-5-5", "m1", 10), Tool(), result()])
+    assert PromptJob(job, {}, fake).run_once(RunWatch(job)).kind is OutcomeKind.DONE
+
+
+def test_an_output_bound_reaches_the_cli(job: Job) -> None:
+    job.update(lambda st: setattr(st.spec, "max_output_tokens", 4000))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].env[prompt_job.OUTPUT_ENV] == "4000"

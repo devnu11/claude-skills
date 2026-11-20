@@ -263,7 +263,8 @@ class Progress:
 
 @dataclass
 class Bounds:
-    """The limits that end a job: deadline (epoch seconds), resumes and total cost.
+    """The limits that end a job: deadline (epoch seconds), resumes, total cost and the
+    cost of one run.
 
     ``hardstop`` is how many seconds after the deadline (or an idle stop) a run
     is ended by force; None keeps the deadline soft (it bounds waits only).
@@ -275,6 +276,7 @@ class Bounds:
     max_cost: float | None = None
     hardstop: float | None = None
     idle_stop: float | None = None
+    max_run_cost: float | None = None
 
     def deadline_stop(self) -> Stop | None:
         """The deadline's stop sequence, or None without a deadline."""
@@ -283,8 +285,19 @@ class Bounds:
         return Stop(StopCause.DEADLINE, self.deadline, self.hardstop)
 
     def budget_left(self, spent: float) -> float | None:
-        """USD the next run may spend, or None without a cost cap."""
+        """USD the job may still spend, or None without a cost cap."""
         return None if self.max_cost is None else max(self.max_cost - spent, 0.0)
+
+    def run_budget(self, spent: float) -> float | None:
+        """USD the next run may spend: the tighter of the job's and the run's cap."""
+        caps = [cap for cap in (self.budget_left(spent), self.max_run_cost) if cap is not None]
+        return min(caps, default=None)
+
+    def find_cap_reason(self, spend: Spend) -> str | None:
+        """Why a run with ``spend`` must end now, or None while it is under every cap."""
+        if spend.run is None:
+            return None
+        return next((r for check in CAP_CHECKS if (r := check(self, spend))), None)
 
     def stop_reason(self, progress: Progress) -> str | None:
         """Why the job must not resume, or None when it may."""
@@ -311,6 +324,32 @@ def _cost(bounds: Bounds, progress: Progress) -> str | None:
 
 
 CHECKS: tuple[Callable[[Bounds, Progress], str | None], ...] = (_deadline, _resumes, _cost)
+
+
+@dataclass(frozen=True)
+class Spend:
+    """What a job has spent: its ended runs (as the SDK reported), and the current run's
+    estimate (None when it cannot be priced)."""
+
+    job: float
+    run: float | None
+
+
+def _check_job_cap(bounds: Bounds, spend: Spend) -> str | None:
+    total = spend.job + (spend.run or 0.0)
+    if bounds.max_cost is None or total < bounds.max_cost:
+        return None
+    return f"cost ~${total:.2f} reached the ${bounds.max_cost:.2f} cap"
+
+
+def _check_run_cap(bounds: Bounds, spend: Spend) -> str | None:
+    run = spend.run or 0.0
+    if bounds.max_run_cost is None or run < bounds.max_run_cost:
+        return None
+    return f"run cost ~${run:.2f} reached the ${bounds.max_run_cost:.2f} run cap"
+
+
+CAP_CHECKS: tuple[Callable[[Bounds, Spend], str | None], ...] = (_check_job_cap, _check_run_cap)
 
 
 # ----- stop phases ---------------------------------------------------------------
