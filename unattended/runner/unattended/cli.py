@@ -1,7 +1,7 @@
 """``unattended``: run a prompt or command unattended, resuming after usage limits.
 
-start | status | cost | list | wait | log | stop | resume | extend | rates. Jobs live in the repo's
-``.claude/jobs/`` when it exists, else ``~/.claude/jobs/``. Errors print
+start | status | cost | list | wait | log | tell | stop | resume | extend | rates. Jobs live
+in the repo's ``.claude/jobs/`` when it exists, else ``~/.claude/jobs/``. Errors print
 ``unattended <cmd>: <message>`` and return 1.
 """
 
@@ -27,6 +27,7 @@ from . import probes
 from .auth import Auth, AuthSetup
 from .awake import SleepPolicy, keep_awake
 from .command_job import CommandJob
+from .inbox import count_messages, post_message
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
 from .pricing import Estimate, Rates, Usage, is_stale
 from .prompt_job import PromptJob
@@ -335,7 +336,8 @@ def report(job: Job, now: float) -> dict[str, Any]:
         "cost": round(st.cost, 4), "max_cost": st.bounds.max_cost,
         "next_wake": iso(st.next_wake), "wake_on": st.wake_on,
         **build_status_limits(st.bounds, now), **watch_report(st.spec),
-        "session_id": st.session_id, "supervisor_pid": pid, "dir": str(job.dir),
+        "session_id": st.session_id, "inbox": count_messages(job), "supervisor_pid": pid,
+        "dir": str(job.dir),
     }  # fmt: skip
     if st.status not in ENDED and pid is None:
         found["warning"] = f"no supervisor is running; `unattended resume {st.name}` restarts it"
@@ -457,6 +459,25 @@ def cmd_log(args: argparse.Namespace, sleep: SleepPolicy = time.sleep) -> int:
         tail.print_all(LIVE_FILES)
     tail.print_new(OUTPUTS[job.load().spec.kind])
     return 0
+
+
+def run_tell(args: argparse.Namespace) -> int:
+    """Queue a message for a prompt job's agent: its next tool step, or its next run."""
+    job = job_home(args).job(args.name)
+    if job.load().spec.kind is not JobKind.PROMPT:
+        raise CliError("only prompt jobs take messages; tell the command itself")
+    post_message(job, _read_message(args))
+    print(f"queued for job {job.name}: delivered at its next tool step or run")
+    return 0
+
+
+def _read_message(args: argparse.Namespace) -> str:
+    if args.file is None:
+        return args.text
+    try:
+        return Path(args.file).read_text()
+    except OSError as exc:
+        raise CliError(f"cannot read --file: {exc.strerror}") from exc
 
 
 def cmd_stop(args: argparse.Namespace, kill: Kill = os.kill) -> int:
@@ -635,6 +656,11 @@ SOURCE = Exclusive(Need.ONE, (
     (("--command",), {"help": "a shell command; exit 75 means a usage limit"}),
 ))  # fmt: skip
 
+MESSAGE = Exclusive(Need.ONE, (
+    (("--text",), {"help": "the message"}),
+    (("--file",), {"help": "read the message from this file"}),
+))  # fmt: skip
+
 
 def limit_args(max_resumes: int | None) -> tuple[Arg, ...]:
     return (
@@ -697,6 +723,8 @@ COMMANDS = (
     Command("log", "print the job's events and output", cmd_log, (NAME_ARG,
             (("-f", "--follow"), {"action": "store_const", "const": Follow.FOLLOW,
                                   "default": Follow.ONCE, "help": "keep printing until it ends"}))),
+    Command("tell", "send a prompt job's agent a message, delivered between steps", run_tell,
+            (NAME_ARG,), (MESSAGE,)),
     Command("stop", "stop the job", cmd_stop, (NAME_ARG,)),
     Command("resume", "restart a stopped or limit-reached job", cmd_resume, RESUME_ARGS,
             (DEADLINE,)),

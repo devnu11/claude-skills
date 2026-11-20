@@ -15,7 +15,7 @@ from claude_agent_sdk import (
     SystemMessage,
     TextBlock,
 )
-from unattended import prompt_job
+from unattended import inbox, prompt_job
 from unattended.auth import ENV_VAR
 from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
 from unattended.pricing import Usage
@@ -291,3 +291,21 @@ def test_open_client_builds_a_real_session_without_connecting() -> None:
     client = prompt_job.open_client(options)
     assert isinstance(client, prompt_job.ClaudeSDKClient)
     assert client.options is options
+
+
+def test_a_message_reaches_the_agent_after_its_next_step(job: Job) -> None:
+    fake = FakeClient([init(), Tool(), result()])
+    posts = ["check the logs"]
+    fake.on_message.append(lambda: posts and inbox.post_message(job, posts.pop()))
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    context = fake.replies[0]["hookSpecificOutput"]["additionalContext"]
+    assert context.endswith("check the logs")
+    assert inbox.count_messages(job) == 0
+
+
+def test_a_waiting_message_goes_with_the_next_prompt(job: Job) -> None:
+    inbox.post_message(job, "use the staging data")
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["prompt"].startswith("Reply pong\n\nMessage from the operator")
+    assert fake.calls[0]["prompt"].endswith("use the staging data")

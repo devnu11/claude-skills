@@ -8,8 +8,10 @@ cannot lose it. Each assistant message's token usage is summed by model into
 far; the SDK's own ``total_cost_usd`` comes only with the result. The final
 result goes to ``output.md``.
 
-The run is a ``ClaudeSDKClient`` session in streaming mode, so its hooks reach
-unattended between steps (``steps.Steps``). A watcher checks the run's
+Messages from ``unattended tell`` reach the agent at its next tool step, or
+with the next run's prompt (``inbox``). The run is a ``ClaudeSDKClient``
+session in streaming mode, so its hooks reach unattended between steps
+(``steps.Steps``). A watcher checks the run's
 ``RunWatch`` after each slice beside the session. A stop's graceful phase ends
 the run at its next tool step; the hard phase cancels the session, and the SDK
 then ends its CLI subprocess.
@@ -33,6 +35,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from .inbox import deliver_at_start, deliver_at_step
 from .limits import Metrics, Outcome, OutcomeKind, classify, strip_exit_suffix
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
@@ -253,13 +256,19 @@ class PromptJob:
     def run_once(self, watch: RunWatch) -> Outcome:
         state = self.job.load()
         drain = Drain(self.job, state.session_id, watch.spend, rates=self.rates)
+        run = Run(state, drain, {**self.env, **watch.env()}, watch, self.steps)
         try:
-            asyncio.run(self._watched(Run(state, drain, {**self.env, **watch.env()}, watch)))
+            asyncio.run(self._watched(run))
         except Exception as exc:
             return drain.failed(exc)
         finally:
             self._write_output(drain)
         return drain.finished()
+
+    @property
+    def steps(self) -> Steps:
+        """A run's step hooks, with the checks they run after each step."""
+        return Steps([lambda: deliver_at_step(self.job)])
 
     @property
     def rates(self) -> Rates:
@@ -279,7 +288,7 @@ class PromptJob:
         client = self.open_client(options_for(run))
         await client.connect()
         try:
-            await client.query(prompt_for(run.state))
+            await client.query(deliver_at_start(self.job, prompt_for(run.state)))
             async for message in client.receive_response():
                 run.drain.note(message)
         finally:
