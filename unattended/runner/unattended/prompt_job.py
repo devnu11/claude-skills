@@ -56,7 +56,6 @@ from .transcript import Transcript
 from .watch import RunWatch, Verdict
 from .wrapup import Allowance, build_wrap_up_prompt
 
-SETTING_SOURCES: list[Any] = ["user", "project", "local"]
 OUTPUT_ENV = "CLAUDE_CODE_MAX_OUTPUT_TOKENS"  # the CLI's bound on one response's output
 # The result subtype the CLI ends a run with when ``max_budget_usd`` is used up.
 BUDGET_SUBTYPE = "error_max_budget_usd"
@@ -110,14 +109,19 @@ PROMPTS: dict[ResumeFrom, Callable[[Job, JobState], str]] = {
 
 
 def options_for(run: Run) -> ClaudeAgentOptions:
-    """SDK options: the user's settings, cwd, model, session, the cost cap left and the hooks."""
+    """SDK options: the job's settings, scope and tools, the session, the cost cap left and
+    the hooks."""
     state, spec = run.state, run.state.spec
     return ClaudeAgentOptions(
         cwd=spec.cwd,
+        add_dirs=list(spec.add_dirs),
         model=spec.model,
+        effort=spec.effort,  # type: ignore[arg-type]
+        allowed_tools=list(spec.allowed_tools),
+        disallowed_tools=list(spec.disallowed_tools),
         resume=state.session_id if spec.resume_from is ResumeFrom.SESSION else None,
         output_format=OUTPUT_FORMAT if spec.resume_from is ResumeFrom.CHECKPOINT else None,
-        setting_sources=SETTING_SOURCES,
+        setting_sources=list(spec.setting_sources),  # type: ignore[arg-type]
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
         env=build_env(run),
         max_budget_usd=state.bounds.compute_session_budget(state.cost),

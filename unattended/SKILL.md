@@ -115,7 +115,9 @@ answers.
   resumes on its own.
 - Prompt jobs use the user's Claude Code settings. Headless, a tool those
   settings don't allow can't be approved by anyone, so allow what the job
-  needs first, or pass `--permission-mode`.
+  needs first, or pass `--allowed-tools RULE` (repeatable) or
+  `--permission-mode`. `--add-dir D` widens the scope beyond `--cwd`;
+  `--effort` and `--setting-sources` tune the session.
 - **The machine stays awake** while a job runs or waits (`caffeinate` on
   macOS, `systemd-inhibit` on Linux; none on Windows). Closing a laptop lid
   still sleeps it. Pass `--allow-sleep` to let it idle-sleep.

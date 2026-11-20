@@ -21,7 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, get_args
 
-from claude_agent_sdk.types import PermissionMode
+from claude_agent_sdk.types import EffortLevel, PermissionMode
 
 from . import probes
 from .auth import Auth, AuthSetup
@@ -41,6 +41,7 @@ from .store import (
     LOG_FILE,
     OUTPUT_FILE,
     PID_FILE,
+    SETTING_SOURCES,
     SUPERVISOR_LOG,
     Job,
     JobError,
@@ -55,6 +56,8 @@ from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
 
 POLL = 5.0
 IDLE_OFF = "off"
+NO_SETTINGS = "none"  # --setting-sources value that loads no settings layer
+SOURCES_HELP = f"a comma list of {', '.join(SETTING_SOURCES)}, or {NO_SETTINGS!r}"
 NOTICE_EXIT = 10
 FOLLOW_POLL = 1.0
 EXIT_CODES: dict[JobStatus, int] = {
@@ -126,7 +129,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
     _require_kind_flags(args, kind)
     return Spec(
         kind=kind,
-        cwd=str(_directory(args.cwd)),
+        cwd=str(_directory(args.cwd, "--cwd")),
         prompt=_prompt_text(args),
         command=args.command or "",
         resume_prompt=args.resume_prompt or DEFAULT_RESUME_PROMPT,
@@ -137,6 +140,11 @@ def spec_from(args: argparse.Namespace) -> Spec:
         model=args.model,
         permission_mode=args.permission_mode,
         max_output_tokens=args.max_output_tokens,
+        effort=args.effort,
+        allowed_tools=args.allowed_tools or [],
+        disallowed_tools=args.disallowed_tools or [],
+        add_dirs=[str(_directory(path, "--add-dir")) for path in args.add_dir or []],
+        setting_sources=_read_setting_sources(args.setting_sources),
         wrap_up_prompt=args.wrap_up_prompt or DEFAULT_WRAP_UP_PROMPT,
         resume_from=args.resume_from or ResumeFrom.SESSION,
         fallback_wait=_duration(args.fallback_wait),
@@ -153,6 +161,11 @@ KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
         "model",
         "permission_mode",
         "max_output_tokens",
+        "effort",
+        "allowed_tools",
+        "disallowed_tools",
+        "add_dir",
+        "setting_sources",
         "wrap_up_prompt",
         "resume_from",
     ),
@@ -168,11 +181,23 @@ def _require_kind_flags(args: argparse.Namespace, kind: JobKind) -> None:
         raise CliError(f"{', '.join(wrong)} only apply to {other} jobs")
 
 
-def _directory(path: str) -> Path:
+def _directory(path: str, flag: str) -> Path:
+    """``path`` resolved, refused under ``flag``'s name when it is not a directory."""
     resolved = Path(path).resolve()
     if not resolved.is_dir():
-        raise CliError(f"--cwd {path} is not a directory")
+        raise CliError(f"{flag} {path} is not a directory")
     return resolved
+
+
+def _read_setting_sources(text: str | None) -> list[str]:
+    """``--setting-sources``: a comma list of settings layers, or ``none`` for none."""
+    if text is None:
+        return list(SETTING_SOURCES)
+    names = [] if text == NO_SETTINGS else [name.strip() for name in text.split(",")]
+    unknown = [name for name in names if name not in SETTING_SOURCES]
+    if unknown:
+        raise CliError(f"--setting-sources: unknown {', '.join(unknown)}; use {SOURCES_HELP}")
+    return names
 
 
 def _prompt_text(args: argparse.Namespace) -> str:
@@ -707,6 +732,17 @@ START_ARGS: tuple[Arg, ...] = (
     (("--model",), {}),
     (("--permission-mode",), {"choices": get_args(PermissionMode),
                               "help": "default: your settings decide"}),
+    (("--effort",), {"choices": get_args(EffortLevel), "help": "default: the model's own"}),
+    (("--allowed-tools",), {"action": "append", "metavar": "RULE",
+                            "help": "a tool or permission rule to allow without asking, "
+                                    "repeatable (e.g. 'Bash(git:*)')"}),
+    (("--disallowed-tools",), {"action": "append", "metavar": "RULE",
+                               "help": "a tool or permission rule to refuse, repeatable"}),
+    (("--add-dir",), {"action": "append", "metavar": "DIR",
+                      "help": "another directory the agent may read and edit, repeatable"}),
+    (("--setting-sources",), {"metavar": "LIST",
+                              "help": f"settings layers to load: {SOURCES_HELP} "
+                                      "(default: all three)"}),
     (("--max-output-tokens",), {"type": int, "metavar": "N",
                                 "help": "bound each model response's output (prompt jobs)"}),
     (("--resume-from",), {"type": ResumeFrom, "choices": list(ResumeFrom),

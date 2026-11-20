@@ -38,6 +38,7 @@ HEARTBEAT_ENV = "UNATTENDED_HEARTBEAT"
 SUPERVISOR_LOG = "supervisor.log"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 DEFAULT_IDLE = 20 * 60.0
+SETTING_SOURCES = ("user", "project", "local")  # every settings layer, as an interactive session
 DEFAULT_RESUME_PROMPT = "Continue where you left off. If you are done, say so."
 
 
@@ -89,6 +90,11 @@ class Spec:
     model: str | None = None
     permission_mode: str | None = None
     max_output_tokens: int | None = None
+    effort: str | None = None
+    allowed_tools: list[str] = field(default_factory=list)
+    disallowed_tools: list[str] = field(default_factory=list)
+    add_dirs: list[str] = field(default_factory=list)
+    setting_sources: list[str] = field(default_factory=lambda: list(SETTING_SOURCES))
     wrap_up_prompt: str = DEFAULT_WRAP_UP_PROMPT
     resume_from: ResumeFrom = ResumeFrom.SESSION
     fallback_wait: float = DEFAULT_FALLBACK
