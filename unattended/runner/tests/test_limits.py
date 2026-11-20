@@ -316,10 +316,10 @@ def test_time_left(deadline: float | None, text: str | None) -> None:
 
 
 def test_run_budget_is_the_tighter_cap() -> None:
-    assert Bounds().run_budget(1.0) is None
-    assert Bounds(max_cost=5.0).run_budget(4.0) == 1.0
-    assert Bounds(max_cost=5.0, max_run_cost=0.5).run_budget(1.0) == 0.5
-    assert Bounds(max_run_cost=0.5).run_budget(9.0) == 0.5
+    assert Bounds().compute_run_budget(1.0) is None
+    assert Bounds(max_cost=5.0).compute_run_budget(4.0) == 1.0
+    assert Bounds(max_cost=5.0, max_run_cost=0.5).compute_run_budget(1.0) == 0.5
+    assert Bounds(max_run_cost=0.5).compute_run_budget(9.0) == 0.5
 
 
 def test_no_cap_reason_without_a_priced_run() -> None:

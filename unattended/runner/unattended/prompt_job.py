@@ -45,6 +45,7 @@ from .rates import load_rates
 from .steps import Advice, Steps
 from .store import OUTPUT_FILE, Job, JobState
 from .watch import RunWatch, Verdict
+from .wrapup import Allowance, build_wrap_up_prompt
 
 SETTING_SOURCES: list[Any] = ["user", "project", "local"]
 OUTPUT_ENV = "CLAUDE_CODE_MAX_OUTPUT_TOKENS"  # the CLI's bound on one response's output
@@ -61,6 +62,8 @@ class Client(Protocol):
     async def query(self, prompt: str) -> None: ...  # house-rules: allow verb-name -- SDK's name
 
     def receive_response(self) -> AsyncIterator[Any]: ...
+
+    async def interrupt(self) -> None: ...
 
     async def disconnect(self) -> None: ...
 
@@ -88,7 +91,7 @@ def options_for(run: Run) -> ClaudeAgentOptions:
         setting_sources=SETTING_SOURCES,
         permission_mode=spec.permission_mode,  # type: ignore[arg-type]
         env=build_env(run),
-        max_budget_usd=state.bounds.run_budget(state.cost),
+        max_budget_usd=state.bounds.compute_session_budget(state.cost),
         hooks=run.steps.hooks,
     )
 
@@ -338,9 +341,30 @@ class PromptJob:
             await client.query(deliver_at_start(self.job, prompt_for(run.state)))
             async for message in client.receive_response():
                 run.drain.note(message)
+            await self._wrap_up(client, run)
         finally:
             with anyio.CancelScope(shield=True):
                 await client.disconnect()
+
+    async def _wrap_up(self, client: Client, run: Run) -> None:
+        """After a run ended at a step, its wrap-up turn, when the job grants one."""
+        usd = self.job.load().bounds.wrap_up
+        if run.steps.halt is None or usd is None:
+            return
+        run.steps.wrap_up()
+        self.job.event("wrap-up", {"reason": run.steps.halt, "allowance": usd})
+        await client.query(build_wrap_up_prompt(run.state.spec.wrap_up_prompt, run.steps.halt))
+        await self._drain_within(client, run)
+
+    async def _drain_within(self, client: Client, run: Run) -> None:
+        """Note the turn's messages; interrupt it once it has used the wrap-up allowance."""
+        allowance = Allowance(self.job.load().bounds.wrap_up or 0.0, run.drain.estimate or 0.0)
+        async for message in client.receive_response():
+            run.drain.note(message)
+            if allowance.is_used_up(run.drain.estimate):
+                self.job.event("wrap-up-cut", {"allowance": allowance.usd})
+                await client.interrupt()
+                return
 
     def _write_output(self, drain: Drain) -> None:
         if drain.output:

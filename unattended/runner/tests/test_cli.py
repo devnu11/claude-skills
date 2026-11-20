@@ -708,7 +708,7 @@ def test_report_keeps_its_other_fields_in_order(tmp_path: Path) -> None:
     found = cli.report(make(tmp_path), 10_000.0)
     expected = [
         "name", "kind", "status", "reason", "runs", "resumes", "max_resumes", "cost",
-        "max_cost", "max_run_cost", "next_wake", "wake_on", "deadline", "time_left",
+        "max_cost", "max_run_cost", "wrap_up", "next_wake", "wake_on", "deadline", "time_left",
         "hardstop", "idle_stop",
     ]  # fmt: skip
     assert list(found)[: len(expected)] == expected
@@ -842,3 +842,11 @@ def test_an_output_bound_is_for_prompt_jobs(
 ) -> None:
     assert run(tmp_path, "start", "j", "--command", "true", "--max-output-tokens", "9") == 1
     assert "--max-output-tokens only apply to prompt jobs" in capsys.readouterr().err
+
+
+def test_start_with_a_wrap_up(tmp_path: Path) -> None:
+    argv = ["start", "j", "--prompt", "p", "--wrap-up", "0.5", "--wrap-up-prompt", "Stop: {reason}"]
+    assert run(tmp_path, *argv) == 0
+    state = home_job(tmp_path).load()
+    assert state.bounds.wrap_up == 0.5
+    assert state.spec.wrap_up_prompt == "Stop: {reason}"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import time
 from dataclasses import asdict
@@ -23,6 +24,7 @@ from unattended.pricing import Usage
 from unattended.prompt_job import PromptJob
 from unattended.store import (
     DEFAULT_RESUME_PROMPT,
+    EVENTS_FILE,
     HEARTBEAT_ENV,
     HEARTBEAT_FILE,
     OUTPUT_FILE,
@@ -370,3 +372,69 @@ def test_an_output_bound_reaches_the_cli(job: Job) -> None:
     fake = FakeClient([result()])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].env[prompt_job.OUTPUT_ENV] == "4000"
+
+
+def wrap_up_events(job: Job) -> list[dict[str, Any]]:
+    lines = job.path(EVENTS_FILE).read_text().splitlines()
+    return [e for e in map(json.loads, lines) if e["event"].startswith("wrap-up")]
+
+
+def over_the_run_cap(job: Job, wrap_up: float | None) -> FakeClient:
+    capped(job, Bounds(max_run_cost=1.0, wrap_up=wrap_up))
+    return FakeClient([init(), spent("claude-opus-5-5", "m1", 60_000), Tool(), result()])
+
+
+def test_a_capped_run_gets_one_wrap_up_reply(job: Job) -> None:
+    fake = over_the_run_cap(job, 0.5)
+    fake.scripts.append([said("summary so far"), result("summary so far")])
+    outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert outcome.kind is OutcomeKind.BUDGET
+    assert len(fake.calls) == 2
+    assert "run cost ~$1.20 reached the $1.00 run cap" in fake.calls[1]["prompt"]
+    assert job.path(OUTPUT_FILE).read_text() == "summary so far\n"
+    assert wrap_up_events(job)[0]["allowance"] == 0.5
+
+
+def test_the_wrap_up_turn_cannot_call_tools(job: Job) -> None:
+    fake = over_the_run_cap(job, 0.5)
+    fake.scripts.append([Tool("Edit"), said("done"), result("done")])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert len(fake.denials) == 1
+    assert fake.denials[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_the_wrap_up_allowance_is_a_hard_kill(job: Job) -> None:
+    fake = over_the_run_cap(job, 0.5)
+    fake.scripts.append([spent("claude-opus-5-5", "w1", 30_000), said("never"), result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.interrupts == 1
+    assert [e["event"] for e in wrap_up_events(job)] == ["wrap-up", "wrap-up-cut"]
+
+
+def test_no_wrap_up_without_an_allowance(job: Job) -> None:
+    fake = over_the_run_cap(job, None)
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert len(fake.calls) == 1
+
+
+def test_no_wrap_up_for_a_run_that_ended_by_itself(job: Job) -> None:
+    capped(job, Bounds(wrap_up=0.5))
+    fake = FakeClient([init(), Tool(), result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert len(fake.calls) == 1
+
+
+def test_a_graceful_stop_gets_the_wrap_up_too(job: Job) -> None:
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=1000.0, wrap_up=0.2)))
+    watch = RunWatch(job, time.time, 0.01)
+    fake = FakeClient([init(), Sleep(0.05), Tool(), result()])
+    fake.scripts.append([result("handover")])
+    PromptJob(job, {}, fake).run_once(watch)
+    assert "deadline (graceful)" in fake.calls[1]["prompt"]
+
+
+def test_the_cli_backstop_leaves_room_for_the_wrap_up(job: Job) -> None:
+    capped(job, Bounds(max_run_cost=1.0, wrap_up=0.25))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].max_budget_usd == 1.25

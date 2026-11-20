@@ -51,3 +51,12 @@ def test_a_check_can_end_the_run_after_its_step() -> None:
 
 def test_a_reply_without_context_or_halt_is_empty() -> None:
     assert build_reply("", None) == {}
+
+
+def test_wrapping_up_denies_tools_but_lets_the_turn_go_on() -> None:
+    steps = Steps()
+    steps.end("cap")
+    steps.wrap_up()
+    reply = run_before(steps)
+    assert "continue_" not in reply
+    assert reply["hookSpecificOutput"]["permissionDecision"] == "deny"

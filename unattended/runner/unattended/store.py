@@ -23,6 +23,7 @@ from .auth import Auth
 from .awake import SleepPolicy
 from .limits import DEFAULT_FALLBACK, Bounds, Metrics, Progress, WakeOn
 from .pricing import measure_drift
+from .wrapup import DEFAULT_WRAP_UP_PROMPT
 
 JOBS = Path(".claude/jobs")
 STATE_FILE = "state.json"
@@ -81,6 +82,7 @@ class Spec:
     model: str | None = None
     permission_mode: str | None = None
     max_output_tokens: int | None = None
+    wrap_up_prompt: str = DEFAULT_WRAP_UP_PROMPT
     fallback_wait: float = DEFAULT_FALLBACK
     sleep: SleepPolicy = SleepPolicy.PREVENT
     idle: float | None = DEFAULT_IDLE

@@ -96,8 +96,9 @@ answers.
 - **Never print, log or echo the API key.** Only name its file.
 - **State the limits back before starting.** A prompt run stops itself at its
   next tool step when it reaches `--max-cost`, or `--max-run-cost` for one
-  run; `--max-output-tokens` bounds each response in between. The job then
-  ends `limit-reached` with its session saved, and `resume NAME --max-cost <higher>` continues it. Commands report
+  run; `--max-output-tokens` bounds each response in between. `--wrap-up USD`
+  then grants one tool-less summary reply within that allowance, also after a
+  graceful stop. The job ends `limit-reached` with its session saved, and `resume NAME --max-cost <higher>` continues it. Commands report
   no cost to `unattended`, so they must enforce their own budget.
 - **The deadline has phases.** Before it, the job runs as usual. From it, no
   new run, resume or wait starts, and a command job's `--stop-command` is run
