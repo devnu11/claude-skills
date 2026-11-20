@@ -882,3 +882,19 @@ def test_setting_sources_default_to_all_and_none_means_none(tmp_path: Path) -> N
     assert run(tmp_path, "start", "b", "--prompt", "p", "--setting-sources", "none") == 0
     assert home_job(tmp_path, "a").load().spec.setting_sources == ["user", "project", "local"]
     assert home_job(tmp_path, "b").load().spec.setting_sources == []
+
+
+def test_start_pins_skills(tmp_path: Path) -> None:
+    (tmp_path / "triage").mkdir()
+    (tmp_path / "triage" / "SKILL.md").write_text("---\nname: triage\n---\n")
+    assert run(tmp_path, "start", "j", "--prompt", "p", "--skill", "triage") == 0
+    job = home_job(tmp_path)
+    assert job.load().spec.skills == [str((tmp_path / "triage").resolve())]
+    assert (job.path("plugin") / "skills" / "triage" / "SKILL.md").is_file()
+
+
+def test_start_refuses_a_directory_that_is_not_a_skill(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(tmp_path, "start", "j", "--prompt", "p", "--skill", ".") == 1
+    assert "no SKILL.md there" in capsys.readouterr().err

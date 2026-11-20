@@ -44,6 +44,7 @@ rewrite it).
 | `--effort low\|medium\|high\|xhigh\|max` | The model's effort. Default: the model's own. Prompt jobs only. |
 | `--allowed-tools RULE`, `--disallowed-tools RULE` | A tool or permission rule (`Read`, `Bash(git:*)`) to allow without asking, or to refuse; repeatable, added to what the settings say. Prompt jobs only. |
 | `--add-dir D` | Another directory the agent may read and edit beside `--cwd`; repeatable, checked at `start`. Prompt jobs only. |
+| `--skill DIR` | A skill directory (holding `SKILL.md`) to [pin](#pinned-skills): copied into the job at `start` and loaded from there by every run. Repeatable. Prompt jobs only. |
 | `--setting-sources LIST` | Settings layers to load: a comma list of `user`, `project`, `local`, or `none`. Default: all three. Prompt jobs only. |
 | `--max-output-tokens N` | Bound each model response's output (the CLI's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`), since caps are checked only between steps. Prompt jobs only. |
 | `--fallback-wait D` | Wait after a limit with no readable reset time; default `5h`. |
@@ -77,12 +78,13 @@ unique within a home.
 | File | Holds |
 |---|---|
 | `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `park` (check, every, reason), `unpark` (by: `check` or `user`), `park-invalid` (problems), `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `park` (check, every, reason), `unpark` (by: `check` or `user`), `park-invalid` (problems), `pin` (name, source, commit, dirty), `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
 | `checkpoint.json` | A `--resume-from checkpoint` job's last valid [checkpoint](#checkpoints). |
 | `transcripts/run-N.jsonl` | A prompt run's [transcript](#transcripts): every prompt sent and SDK message received, one JSON line each. |
+| `plugin/` | The job's [pinned skills](#pinned-skills) as a local plugin: `.claude-plugin/plugin.json` and `skills/<name>/`. |
 | `park.json` | A run's [park request](#parking), written by the job; removed once the wait ends or when refused. |
 | `inbox/` | Messages from `tell` waiting for delivery, one file each, named by when they were sent; removed once delivered. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
@@ -394,6 +396,15 @@ to the local one, and the next occurrence after now is used.
   Values JSON cannot hold are written as text. Lines are flushed as they
   arrive, so a crashed or killed run keeps what it had. It is for reading the
   run afterwards; nothing feeds it back to the agent.
+- **Pinned skills:** <a id="pinned-skills"></a>each `--skill DIR` is
+  copied at `start` into `plugin/skills/<name>/` (without `.git`, `.venv`,
+  `__pycache__`, `node_modules` or `.*_cache`), and every run gets
+  `plugins=[{"type": "local", "path": "<job dir>/plugin"}]`. Editing the
+  source, a `git pull` or a chezmoi apply mid-job changes nothing the job
+  sees. A `pin` event records the source, its git `commit` and whether its
+  tree was `dirty` (both `null` outside git). Plugin skills are namespaced
+  `unattended-pinned:<name>`; a same-named skill in the user's settings still
+  loads unless `--setting-sources` leaves `user` out.
 - **Per-call ledger:** <a id="ledger"></a>each API response becomes one
   line of `calls.jsonl`: `run`, `message_id`, `model`, `tokens` (`input`,
   `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`), `usd` (those

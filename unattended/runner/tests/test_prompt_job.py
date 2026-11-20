@@ -535,3 +535,10 @@ def test_a_run_that_parks_ends_at_its_next_step(job: Job) -> None:
     assert len(fake.replies) == 1
     assert fake.replies[0]["continue_"] is False
     assert job.path("park.json").exists()
+
+
+def test_options_load_the_pinned_skills_plugin(job: Job) -> None:
+    job.update(lambda st: setattr(st, "spec", replace(st.spec, skills=["/skills/triage"])))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].plugins == [{"type": "local", "path": str(job.path("plugin"))}]

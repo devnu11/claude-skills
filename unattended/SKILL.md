@@ -123,6 +123,9 @@ answers.
   needs first, or pass `--allowed-tools RULE` (repeatable) or
   `--permission-mode`. `--add-dir D` widens the scope beyond `--cwd`;
   `--effort` and `--setting-sources` tune the session.
+- `--skill DIR` (repeatable) pins a skill: the job copies it at `start` and
+  every run uses that copy, so updating the skill mid-job changes nothing.
+  The `pin` event records its git commit.
 - **The machine stays awake** while a job runs or waits (`caffeinate` on
   macOS, `systemd-inhibit` on Linux; none on Windows). Closing a laptop lid
   still sleeps it. Pass `--allow-sleep` to let it idle-sleep.
