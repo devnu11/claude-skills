@@ -31,8 +31,10 @@ from types import FrameType
 from typing import Protocol
 
 from . import network
+from .inbox import queue_message
 from .limits import Metrics, Outcome, OutcomeKind, Phase, Waits, Wake, WakeOn, backoff, local
 from .notify import Notice, Trigger, post
+from .park import Park, find_park, remove_park, run_check, settle_park
 from .pricing import is_stale
 from .rates import fetch_rates, load_rates, refresh_rates
 from .store import HEARTBEAT_FILE, Job, JobState, JobStatus
@@ -85,6 +87,7 @@ class Supervisor:
     sleep: Callable[[float], None] = time.sleep
     online: Callable[[], bool] = network.online
     rates_file: Path | None = None  # the stored rate table, refreshed before each run
+    check: Callable[[str, str], bool] = run_check  # a park check: (command, cwd) -> done
 
     def run(self) -> JobStatus:
         """Run and resume until the job ends; returns its final status."""
@@ -100,19 +103,42 @@ class Supervisor:
 
     def _cycle(self) -> JobStatus | None:
         """One run and what follows; the final status, or None to run again."""
-        self._check_stop()
-        self._check_deadline()
-        self.job.update(lambda st: st.mark(JobStatus.RUNNING))
-        self.job.path(HEARTBEAT_FILE).unlink(missing_ok=True)
-        self._refresh_rates()
+        self._prepare_run()
         watch = RunWatch(self.job, self.clock)
-        outcome = watch.settle(self.runner.run_once(watch))
+        outcome = settle_park(self.job, watch.settle(self.runner.run_once(watch)))
         state = self._record(outcome)
         if outcome.kind in FINAL:
             return self._finish(FINAL[outcome.kind], outcome.reason)
-        if outcome.kind is OutcomeKind.OFFLINE:
-            return self._reconnect(state, outcome.reason)
-        return self._wait(state, outcome)
+        return AFTER.get(outcome.kind, Supervisor._wait)(self, state, outcome)
+
+    def _prepare_run(self) -> None:
+        """Before a run: the stop and deadline checks, any park wait, then a clean start."""
+        self._check_stop()
+        self._check_deadline()
+        self._await_park()
+        self.job.update(lambda st: st.mark(JobStatus.RUNNING))
+        self.job.path(HEARTBEAT_FILE).unlink(missing_ok=True)
+        self._refresh_rates()
+
+    def _await_park(self) -> None:
+        """While the job is parked: wait, spending nothing, until its check passes or
+        ``resume --now``; then tell the next run which it was."""
+        park = find_park(self.job)
+        if park is None:
+            return
+        self._mark_awaiting(park.reason, WakeOn.EXTERNAL)
+        self.job.event("park", asdict(park))
+        by = self._poll_check(park)
+        remove_park(self.job)
+        queue_message(self.job, UNPARK_NOTES[by].format(check=park.check))
+        self.job.event("unpark", {"by": by})
+
+    def _poll_check(self, park: Park) -> str:
+        """Run the check every ``park.every``: ``check`` once it passes, ``user`` on a wake."""
+        while not self._sleep_until(self.clock() + park.every):
+            if self.check(park.check, self.job.load().spec.cwd):
+                return "check"
+        return "user"
 
     def _record(self, outcome: Outcome) -> JobState:
         def apply(st: JobState) -> None:
@@ -151,11 +177,12 @@ class Supervisor:
         self.job.event("resume", {"resumes": state.resumes})
         return None
 
-    def _reconnect(self, state: JobState, reason: str) -> JobStatus | None:
+    def _reconnect(self, state: JobState, outcome: Outcome) -> JobStatus | None:
         """Wait until the API is reachable, then run again; None to run, else the end."""
+        reason = outcome.reason
         if state.retries > MAX_RECONNECTS:
             return self._finish(JobStatus.FAILED, f"{reason}; {MAX_RECONNECTS} reconnects in a row")
-        self._mark_offline(reason)
+        self._mark_awaiting(reason, WakeOn.NETWORK)
         self.job.event("offline", {"reason": reason})
         if not self._await_network(state.bounds.deadline):
             return self._finish(JobStatus.LIMIT_REACHED, f"{reason}; deadline passed offline")
@@ -171,12 +198,13 @@ class Supervisor:
                 return True
         return False
 
-    def _mark_offline(self, reason: str) -> None:
-        """Wait for the network: no wake time, only what is awaited."""
+    def _mark_awaiting(self, reason: str, on: WakeOn) -> None:
+        """Wait for an event (the network, an external job): no wake time, only what is
+        awaited."""
 
         def apply(st: JobState) -> None:
             st.mark(JobStatus.WAITING, reason)
-            st.wake_on = WakeOn.NETWORK
+            st.wake_on = on
 
         self.job.update(apply)
 
@@ -189,13 +217,16 @@ class Supervisor:
         until = local(wake.at).isoformat(timespec="seconds")
         self.job.event("wait", {"until": until, "on": wake.on})
 
-    def _sleep_until(self, wake: float) -> None:
-        """Sleep in ``SLICE`` steps, checking the stop and wake files before each."""
-        while (left := wake - self.clock()) > 0 and not self._woken():
+    def _sleep_until(self, wake: float) -> bool:
+        """Sleep in ``SLICE`` steps, checking the stop and wake files before each; True when
+        ``resume --now`` cut it short."""
+        woken = False
+        while (left := wake - self.clock()) > 0 and not (woken := self._woken()):
             self._check_stop()
             self._check_deadline()
             self.sleep(min(SLICE, left))
         self._check_stop()
+        return woken
 
     def _woken(self) -> bool:
         """True once ``resume --now`` asked to cut the wait short; logs it once."""
@@ -253,6 +284,16 @@ def early(state: JobState, now: float) -> Trigger | None:
 
 def never(state: JobState, now: float) -> Trigger | None:
     return None
+
+
+AFTER: dict[OutcomeKind, Callable[[Supervisor, JobState, Outcome], JobStatus | None]] = {
+    OutcomeKind.OFFLINE: Supervisor._reconnect,
+    OutcomeKind.PARKED: lambda supervisor, state, outcome: None,  # the next cycle waits
+}
+UNPARK_NOTES = {
+    "check": "The external job this run parked on is done: `{check}` passed. Continue.",
+    "user": "The operator resumed this job before `{check}` passed; check it yourself.",
+}
 
 
 END_NOTICES: dict[JobStatus, Callable[[JobState, float], Trigger | None]] = {

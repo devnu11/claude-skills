@@ -77,12 +77,13 @@ unique within a home.
 | File | Holds |
 |---|---|
 | `state.json` | The job (written atomically): `spec` (with `sleep`: `prevent` or `allow`), `bounds`, `status`, `reason`, `runs`, `resumes`, `retries`, `cost`, `run_usage` (the current run's tokens by model), `drift` (the last run's estimate error; both in [Live cost](#live-cost)), `session_id`, `next_wake`, `wake_on`. |
-| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
+| `events.jsonl` | One line per event: `start`, `keep-awake` (by: the inhibitor, or null), `run` (outcome, reason, cost, turns, tokens, estimate, drift), `wait` (until, on: the `wake_on` value), `offline` (reason), `online`, `park` (check, every, reason), `unpark` (by: `check` or `user`), `park-invalid` (problems), `resume`, `extend` (by, deadline, hardstop, idle_stop), `tell` (chars), `delivered` (messages, at: `step` or `start`), `wrap-up` (reason, allowance), `wrap-up-cut` (allowance), `checkpoint`, `checkpoint-missing` and `checkpoint-invalid` (run; problems), `deadline` and `idle-stop` (phase: `graceful` or `hard`, reason), `notify` (trigger, status, reason, by: the notifier, `command`, or null), `end` (status, reason). |
 | `heartbeat.json` | The run's heartbeat, written by the job; see [Heartbeat contract](#heartbeat-contract). Removed before each run. |
 | `output.md` | A prompt job's latest result text. |
 | `calls.jsonl` | A prompt job's [per-call ledger](#ledger): one line per API response. |
 | `checkpoint.json` | A `--resume-from checkpoint` job's last valid [checkpoint](#checkpoints). |
 | `transcripts/run-N.jsonl` | A prompt run's [transcript](#transcripts): every prompt sent and SDK message received, one JSON line each. |
+| `park.json` | A run's [park request](#parking), written by the job; removed once the wait ends or when refused. |
 | `inbox/` | Messages from `tell` waiting for delivery, one file each, named by when they were sent; removed once delivered. |
 | `output.log` | A command job's output, one `--- run N: <command>` header per run. |
 | `supervisor.log` | The detached supervisor's own stderr (tracebacks). |
@@ -121,6 +122,7 @@ what a `waiting` job waits for:
 | `fallback` | now plus `--fallback-wait`: no readable reset time was stated |
 | `backoff` | now plus the rate-limit backoff |
 | `network` | null: offline, waiting for the API to answer |
+| `external` | null: [parked](#parking), waiting for the park check to pass |
 
 ## Supervisor loop
 
@@ -223,6 +225,36 @@ environment, and unattended always reads it as a `heartbeat:` probe.
   notice is posted per wait. It is posted again only after `progress`
   moved. A non-string `waiting` is ignored.
 - The file is removed before each run, so a resume does not start hung.
+
+## Parking
+
+<a id="parking"></a>Each run also gets `UNATTENDED_PARK=<job dir>/park.json`.
+A run that started something slow outside the session (a CI build, a hardware
+test, a long export) hands the wait to the supervisor instead of polling it
+with tokens: it writes the file (atomically) as
+
+```json
+{"check": "gh run view 123 --exit-status", "every": "5m", "reason": "CI run 123"}
+```
+
+- `check` (required): a shell command, run in `--cwd` with a 120 s timeout,
+  that exits 0 once the external job is done. A timeout counts as not done.
+- `every`: how often to run it; default `5m`. `reason`: what the job waits
+  for; default the check. Other keys are refused.
+- A prompt run ends at its next tool step once the file appears (with the
+  [wrap-up](#wrap-up) reply when the job grants one); a command job just
+  exits 0. The run's outcome is `parked`, and the job is `waiting` with
+  `wake_on: external` and the reason. It spends nothing while parked.
+- The check runs every `every` until it exits 0, or until `resume --now`.
+  The file is then removed, the next run starts (a resume of the session, or
+  from the checkpoint) and gets a message saying which ended the wait, the
+  same way as `tell`. Parking does not count against `--max-resumes`; the
+  deadline and stop still apply.
+- The file outlives the supervisor: `resume` after a crash or reboot goes
+  back to waiting on the check.
+- A file that is not valid JSON or breaks the rules above is removed and
+  logged as `park-invalid`; a prompt run is told why after its next step, so
+  it can write a valid one.
 
 ## Notices
 

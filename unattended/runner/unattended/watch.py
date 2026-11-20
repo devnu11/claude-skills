@@ -35,6 +35,7 @@ from pathlib import Path
 from . import probes
 from .limits import Outcome, OutcomeKind, Phase, Stop, StopCause, span
 from .notify import Notice, Trigger, post
+from .park import PARK_ENV, PARK_FILE
 from .probes import Context, Probe, Reading, Stamp
 from .store import HEARTBEAT_ENV, HEARTBEAT_FILE, Job, JobKind, JobState
 
@@ -193,8 +194,8 @@ class RunWatch:
         return self.job.path(HEARTBEAT_FILE)
 
     def env(self) -> dict[str, str]:
-        """What the run's environment gains: where to write its heartbeat."""
-        return {HEARTBEAT_ENV: str(self.heartbeat)}
+        """What the run's environment gains: where to write its heartbeat and a park request."""
+        return {HEARTBEAT_ENV: str(self.heartbeat), PARK_ENV: str(self.job.path(PARK_FILE))}
 
     def track(self, pgid: int) -> None:
         """Point the ``cpu`` and ``children`` probes at the run's process group, which has

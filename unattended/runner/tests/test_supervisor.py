@@ -4,12 +4,13 @@ import json
 import os
 import signal
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import timedelta
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
-from unattended import supervisor
+from unattended import inbox, park, supervisor
 from unattended.limits import GRACE, Bounds, Metrics, Outcome, OutcomeKind, WakeOn, local
 from unattended.store import EVENTS_FILE, HEARTBEAT_FILE, Job, JobKind, JobStatus, Spec
 from unattended.supervisor import StopRequested, Supervisor
@@ -516,3 +517,85 @@ def test_each_run_refreshes_the_table_when_it_is_due(
     store = rates.resolve_store(tmp_path)
     Supervisor(job, Script(LIMIT, DONE), clock, clock.sleep, rates_file=store).run()
     assert len(fetched) == 1  # the resume came within a day of the first run
+
+
+# ----- parking -----------------------------------------------------------------------
+
+
+@dataclass
+class Check:
+    """A park check that fails ``pending`` times, then passes; records each call."""
+
+    pending: int
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def __call__(self, command: str, cwd: str) -> bool:
+        self.calls.append((command, cwd))
+        return len(self.calls) > self.pending
+
+
+def park_request(job: Job, every: str = "1m") -> None:
+    request = {"check": "ci-done 7", "every": every, "reason": "CI run 7"}
+    job.path(park.PARK_FILE).write_text(json.dumps(request))
+
+
+def parked_run(job: Job, script: Script, check: Check) -> tuple[JobStatus, FakeClock]:
+    clock = FakeClock()
+    return Supervisor(job, script, clock, clock.sleep, check=check).run(), clock
+
+
+def test_a_parked_run_waits_for_its_check_then_resumes(job: Job, workdir: Path) -> None:
+    script = Script(DONE, DONE)
+    script.before = lambda: script.outcomes[1:] and park_request(job)
+    check = Check(pending=2)
+    status, clock = parked_run(job, script, check)
+    assert status is JobStatus.DONE
+    assert check.calls == [("ci-done 7", str(workdir))] * 3
+    assert clock.now == START + 180.0
+    assert events(job) == ["run", "park", "tell", "unpark", "run", "end", "notify"]
+    assert job.load().resumes == 0
+    assert not job.path(park.PARK_FILE).exists()
+    assert "`ci-done 7` passed" in inbox.take_messages(job)[0]
+
+
+def test_a_parked_job_waits_on_the_external_job(job: Job) -> None:
+    seen: list[tuple[JobStatus, str, object]] = []
+
+    def check(command: str, cwd: str) -> bool:
+        state = job.load()
+        seen.append((state.status, state.reason, state.wake_on))
+        return True
+
+    park_request(job)
+    clock = FakeClock()
+    Supervisor(job, Script(DONE), clock, clock.sleep, check=check).run()
+    assert seen == [(JobStatus.WAITING, "CI run 7", WakeOn.EXTERNAL)]
+
+
+def test_a_restarted_supervisor_goes_back_to_waiting(job: Job) -> None:
+    park_request(job)
+    check = Check(pending=0)
+    status, _ = parked_run(job, Script(DONE), check)
+    assert status is JobStatus.DONE
+    assert len(check.calls) == 1
+
+
+def test_resume_now_ends_the_park_without_the_check(job: Job) -> None:
+    park_request(job, every="1h")
+    script = Script(DONE)
+    clock = FakeClock()
+
+    def sleep(seconds: float) -> None:
+        job.request_wake()
+        clock.sleep(seconds)
+
+    Supervisor(job, script, clock, sleep, check=Check(pending=99)).run()
+    assert "before `ci-done 7` passed" in inbox.take_messages(job)[0]
+    assert [e for e in events(job) if e.endswith("park")] == ["park", "unpark"]
+
+
+def test_the_deadline_ends_a_park(job: Job) -> None:
+    job.update(lambda st: setattr(st, "bounds", Bounds(deadline=START + 90)))
+    park_request(job)
+    status, _ = parked_run(job, Script(DONE), Check(pending=99))
+    assert status is JobStatus.LIMIT_REACHED

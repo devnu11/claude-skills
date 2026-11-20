@@ -32,6 +32,7 @@ class OutcomeKind(StrEnum):
     OFFLINE = "offline"
     FAILED = "failed"
     HALTED = "halted"
+    PARKED = "parked"
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ class WakeOn(StrEnum):
     FALLBACK = "fallback"
     BACKOFF = "backoff"
     NETWORK = "network"
+    EXTERNAL = "external"
 
 
 @dataclass(frozen=True)
