@@ -126,6 +126,9 @@ answers.
 - `--skill DIR` (repeatable) pins a skill: the job copies it at `start` and
   every run uses that copy, so updating the skill mid-job changes nothing.
   The `pin` event records its git commit.
+- The system prompt stays fixed for the life of a prompt job, so resumes
+  hit the prompt cache; `--system-prompt-file F` replaces it. A `prefix`
+  event per run names any part (tools, MCP servers, skills…) that changed.
 - **The machine stays awake** while a job runs or waits (`caffeinate` on
   macOS, `systemd-inhibit` on Linux; none on Windows). Closing a laptop lid
   still sleeps it. Pass `--allow-sleep` to let it idle-sleep.

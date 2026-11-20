@@ -49,6 +49,7 @@ from .ledger import Ledger
 from .limits import Metrics, Outcome, OutcomeKind, Spend, classify, strip_exit_suffix
 from .park import stop_when_parked
 from .pin import build_plugins
+from .prefix import build_system_prompt, note_prefix
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
@@ -119,6 +120,7 @@ def options_for(run: Run) -> ClaudeAgentOptions:
         add_dirs=list(spec.add_dirs),
         plugins=build_plugins(run.drain.job, spec.skills),
         model=spec.model,
+        system_prompt=build_system_prompt(spec),  # type: ignore[arg-type]
         effort=spec.effort,  # type: ignore[arg-type]
         allowed_tools=list(spec.allowed_tools),
         disallowed_tools=list(spec.disallowed_tools),
@@ -197,6 +199,7 @@ class Drain:
     def note(self, message: Any) -> None:
         self.spend.tick()
         self.transcript.record_message(message)
+        note_prefix(self.job, message)
         self._save_session(session_of(message))
         self._save_usage(read_usage(message))
         self.text = text_of(message) or self.text

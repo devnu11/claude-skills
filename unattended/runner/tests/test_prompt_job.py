@@ -542,3 +542,10 @@ def test_options_load_the_pinned_skills_plugin(job: Job) -> None:
     fake = FakeClient([result()])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].plugins == [{"type": "local", "path": str(job.path("plugin"))}]
+
+
+def test_a_run_asks_for_a_fixed_system_prompt_and_logs_its_prefix(job: Job) -> None:
+    fake = FakeClient([init(), result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].system_prompt["snapshot"] is True
+    assert "prefix" in job.path(EVENTS_FILE).read_text()
