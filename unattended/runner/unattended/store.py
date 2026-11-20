@@ -59,6 +59,13 @@ class JobStatus(StrEnum):
 ENDED = frozenset({JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED, JobStatus.LIMIT_REACHED})
 
 
+class ResumeFrom(StrEnum):
+    """What a prompt job's later runs continue from."""
+
+    SESSION = "session"  # the saved Claude Code session, replayed
+    CHECKPOINT = "checkpoint"  # a fresh session from the last checkpoint
+
+
 class JobKind(StrEnum):
     """What a job runs."""
 
@@ -83,6 +90,7 @@ class Spec:
     permission_mode: str | None = None
     max_output_tokens: int | None = None
     wrap_up_prompt: str = DEFAULT_WRAP_UP_PROMPT
+    resume_from: ResumeFrom = ResumeFrom.SESSION
     fallback_wait: float = DEFAULT_FALLBACK
     sleep: SleepPolicy = SleepPolicy.PREVENT
     idle: float | None = DEFAULT_IDLE
@@ -135,10 +143,7 @@ class JobState:
     def from_json(cls, text: str) -> JobState:
         data = json.loads(text)
         spec = data["spec"]
-        enums = {"kind": JobKind(spec["kind"]), "auth": Auth(spec["auth"])}
-        data["spec"] = Spec(
-            **{**spec, **enums, "sleep": SleepPolicy(spec.get("sleep", SleepPolicy.PREVENT))}
-        )
+        data["spec"] = Spec(**{**spec, **read_spec_enums(spec)})
         data["bounds"] = Bounds(**data["bounds"])
         data["status"] = JobStatus(data["status"])
         data["wake_on"] = _wake_on(data)
@@ -335,6 +340,15 @@ class JobHome:
         """Every job here, by name."""
         found = sorted(self.root.glob(f"*/{STATE_FILE}")) if self.root.is_dir() else []
         return [Job(path.parent) for path in found]
+
+
+def read_spec_enums(spec: dict[str, Any]) -> dict[str, Any]:
+    """The spec's enum fields from their JSON strings; older jobs get the defaults."""
+    return {
+        "kind": JobKind(spec["kind"]), "auth": Auth(spec["auth"]),
+        "sleep": SleepPolicy(spec.get("sleep", SleepPolicy.PREVENT)),
+        "resume_from": ResumeFrom(spec.get("resume_from", ResumeFrom.SESSION)),
+    }  # fmt: skip
 
 
 def check_name(name: str) -> str:

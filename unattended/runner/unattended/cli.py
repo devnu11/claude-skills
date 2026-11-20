@@ -48,6 +48,7 @@ from .store import (
     JobKind,
     JobState,
     JobStatus,
+    ResumeFrom,
     Spec,
 )
 from .supervisor import SLICE, STOP_REASON, Runner, Supervisor, install_sigterm
@@ -137,6 +138,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         permission_mode=args.permission_mode,
         max_output_tokens=args.max_output_tokens,
         wrap_up_prompt=args.wrap_up_prompt or DEFAULT_WRAP_UP_PROMPT,
+        resume_from=args.resume_from or ResumeFrom.SESSION,
         fallback_wait=_duration(args.fallback_wait),
         sleep=args.sleep,
         idle=_idle(args.idle),
@@ -152,6 +154,7 @@ KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
         "permission_mode",
         "max_output_tokens",
         "wrap_up_prompt",
+        "resume_from",
     ),
     JobKind.COMMAND: ("resume_command", "stop_command"),
 }
@@ -706,6 +709,9 @@ START_ARGS: tuple[Arg, ...] = (
                               "help": "default: your settings decide"}),
     (("--max-output-tokens",), {"type": int, "metavar": "N",
                                 "help": "bound each model response's output (prompt jobs)"}),
+    (("--resume-from",), {"type": ResumeFrom, "choices": list(ResumeFrom),
+                          "help": "later runs continue the saved session (default) or start "
+                                  "fresh from the last checkpoint"}),
     (("--wrap-up-prompt",), {"help": "prompt for the wrap-up reply; {reason} names the stop"}),
     (("--fallback-wait",), {"default": "5h", "help": "wait when no reset time is given"}),
     (("--idle",), {"default": "20m", "metavar": "DURATION",

@@ -18,6 +18,7 @@ from claude_agent_sdk import (
 )
 from unattended import inbox, prompt_job
 from unattended.auth import ENV_VAR
+from unattended.checkpoint import OUTPUT_FORMAT, Reply, load_checkpoint, save_checkpoint
 from unattended.ledger import read_calls
 from unattended.limits import Bounds, Metrics, Outcome, OutcomeKind
 from unattended.pricing import Usage
@@ -30,12 +31,13 @@ from unattended.store import (
     OUTPUT_FILE,
     Job,
     JobKind,
+    ResumeFrom,
     Spec,
 )
 from unattended.watch import RunWatch
 
 from .conftest import MakeJob
-from .fakes import FakeClient, Sleep, Tool
+from .fakes import GOOD, FakeClient, Sleep, Tool
 
 LIMIT_TEXT = (
     "Claude Code returned an error result: You've hit your session limit · "
@@ -438,3 +440,49 @@ def test_the_cli_backstop_leaves_room_for_the_wrap_up(job: Job) -> None:
     fake = FakeClient([result()])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].max_budget_usd == 1.25
+
+
+def checkpointing(job: Job) -> None:
+    job.update(lambda st: setattr(st.spec, "resume_from", ResumeFrom.CHECKPOINT))
+
+
+def structured(value: Any) -> ResultMessage:
+    found = result("{}")
+    found.structured_output = value
+    return found
+
+
+def test_checkpoint_mode_asks_for_the_schema_and_keeps_the_reply(job: Job) -> None:
+    checkpointing(job)
+    fake = FakeClient([init(), structured(GOOD)])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    options = fake.calls[0]["options"]
+    assert options.output_format == OUTPUT_FORMAT
+    assert load_checkpoint(job)["goal"] == GOOD["goal"]
+
+
+def test_a_later_run_starts_fresh_from_the_checkpoint(job: Job) -> None:
+    checkpointing(job)
+    job.update(lambda st: setattr(st, "session_id", "old"))
+    save_checkpoint(job, Reply(1, GOOD))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    call = fake.calls[0]
+    assert call["options"].resume is None
+    assert call["prompt"].startswith(DEFAULT_RESUME_PROMPT + "\n\nCheckpoint from the previous run")
+
+
+def test_without_a_checkpoint_the_job_prompt_runs_again(job: Job) -> None:
+    checkpointing(job)
+    job.update(lambda st: setattr(st, "session_id", "old"))
+    fake = FakeClient([result()])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["prompt"] == "Reply pong"
+    assert '"event": "checkpoint-missing"' in job.path(EVENTS_FILE).read_text()
+
+
+def test_session_mode_asks_for_no_schema_and_saves_none(job: Job) -> None:
+    fake = FakeClient([structured(GOOD)])
+    PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert fake.calls[0]["options"].output_format is None
+    assert load_checkpoint(job) is None

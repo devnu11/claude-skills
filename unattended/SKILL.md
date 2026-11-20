@@ -73,6 +73,9 @@ Every flag, the job files, limit detection and the command contract are in
    notice says so too and refetches the page at once; nobody has to run
    anything. `$UN rates` fetches now and shows the store, for debugging.
 
+`--resume-from checkpoint` makes each prompt run end with a validated JSON
+checkpoint (goal, findings with evidence, ruled out, next steps, artifacts),
+and later runs start fresh from it instead of replaying the session.
 `$UN tell NAME --text "…"` (or `--file F`) sends a running prompt job's
 agent a message: it arrives after the next tool step, or with the next run's
 prompt. Use it to steer a job without stopping it.
