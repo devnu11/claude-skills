@@ -26,8 +26,8 @@ def test_a_step_runs_while_the_run_may_go_on() -> None:
 
 def test_end_refuses_the_next_step_and_keeps_the_first_reason() -> None:
     steps = Steps()
-    steps.end("deadline (graceful)")
-    steps.end("later")
+    steps.stop("deadline (graceful)")
+    steps.stop("later")
     assert run_before(steps) == {"continue_": False, "stopReason": "deadline (graceful)"}
 
 
@@ -55,7 +55,7 @@ def test_a_reply_without_context_or_halt_is_empty() -> None:
 
 def test_wrapping_up_denies_tools_but_lets_the_turn_go_on() -> None:
     steps = Steps()
-    steps.end("cap")
+    steps.stop("cap")
     steps.wrap_up()
     reply = run_before(steps)
     assert "continue_" not in reply
