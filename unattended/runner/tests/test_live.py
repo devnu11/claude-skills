@@ -5,8 +5,9 @@ each, on Haiku, capped at ``MAX_COST``). Each runs in a scratch ``HOME``, so
 neither touches the real home directory:
 
 - ``api-key`` reads the key file named by ``UNATTENDED_LIVE_KEY_FILE`` (mode 600);
-- ``login`` uses ``CLAUDE_CODE_OAUTH_TOKEN`` (from ``claude setup-token``),
-  since a scratch ``HOME`` has no saved login.
+- ``login`` reads the token file named by ``UNATTENDED_LIVE_TOKEN_FILE`` (mode
+  600, holding the output of ``claude setup-token``) into
+  ``CLAUDE_CODE_OAUTH_TOKEN``, since a scratch ``HOME`` has no saved login.
 
 The run makes one Bash tool step, so the step hooks, the ledger, the
 transcript and the prefix fingerprint are all checked against the real CLI.
@@ -19,7 +20,7 @@ import os
 from pathlib import Path
 
 import pytest
-from unattended.auth import ENV_VAR, Auth, AuthSetup
+from unattended.auth import ENV_VAR, Auth, AuthSetup, mode_ok
 from unattended.ledger import read_calls
 from unattended.limits import Bounds, OutcomeKind
 from unattended.prompt_job import PromptJob
@@ -36,6 +37,7 @@ pytestmark = [
 MAX_COST = 0.10
 PROMPT = "Use the Bash tool to run `echo pong`, then reply with its output and nothing else."
 LOGIN_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN"
+TOKEN_FILE = "UNATTENDED_LIVE_TOKEN_FILE"
 KEY_FILE = "UNATTENDED_LIVE_KEY_FILE"
 
 
@@ -50,13 +52,21 @@ def scratch_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def setup_for(auth: Auth, home: Path, monkeypatch: pytest.MonkeyPatch) -> AuthSetup:
     """The auth under test, or a skip naming what it needs."""
     if auth is Auth.LOGIN:
-        if not os.environ.get(LOGIN_TOKEN):
-            pytest.skip(f"set {LOGIN_TOKEN} (claude setup-token)")
+        token = read_secret(TOKEN_FILE, "token file from claude setup-token")
+        monkeypatch.setenv(LOGIN_TOKEN, token)
         monkeypatch.delenv(ENV_VAR, raising=False)
         return AuthSetup(auth, None, home)
-    if not os.environ.get(KEY_FILE):
-        pytest.skip(f"set {KEY_FILE} to a mode-600 API key file")
+    read_secret(KEY_FILE, "API key file")
     return AuthSetup(auth, Path(os.environ[KEY_FILE]), home)
+
+
+def read_secret(variable: str, what: str) -> str:
+    """The mode-600 file named by ``variable``, stripped; a skip when it is unset."""
+    if not os.environ.get(variable):
+        pytest.skip(f"set {variable} to a mode-600 {what}")
+    path = Path(os.environ[variable]).expanduser()
+    assert mode_ok(path), f"{path} must be mode 600"
+    return path.read_text().strip()
 
 
 def live_job(make_job: MakeJob, workdir: Path, auth: Auth) -> Job:
