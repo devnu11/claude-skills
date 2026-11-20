@@ -77,6 +77,18 @@ sh tests/install_test.sh                         # install.sh
 (cd routed-group-chat/runner && uv run pytest --cov)  # routed-group-chat runner
 ```
 
+The unattended runner also has live smoke tests (`tests/test_live.py`, marker
+`live`) that run one tiny Haiku prompt job against the real model, about a
+cent each. They skip unless `UNATTENDED_LIVE=1`; the `api-key` one needs
+`UNATTENDED_LIVE_KEY_FILE` (a mode-600 key file) and the `login` one
+`CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`). Both run in a scratch
+`HOME`:
+
+```sh
+cd unattended/runner && UNATTENDED_LIVE=1 UNATTENDED_LIVE_KEY_FILE=~/secrets/anthropic-api-key \
+    CLAUDE_CODE_OAUTH_TOKEN=... uv run pytest -m live -rs
+```
+
 The install tests cover linking, idempotency (a second run changes nothing),
 `--dry-run`, relinking, pruning, and leaving `synced/` and foreign links alone.
 Each works in a scratch directory, never the real `~/.claude/skills`. CI runs
