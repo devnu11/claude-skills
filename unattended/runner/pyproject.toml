@@ -35,6 +35,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["live: spends money on the real model; runs only with UNATTENDED_LIVE=1"]
 
 [tool.coverage.run]
 source = ["unattended"]
