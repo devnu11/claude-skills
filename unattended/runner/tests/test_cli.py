@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import ResultMessage, SystemMessage
-from unattended import awake, cli, notify, rates, store
+from unattended import awake, cli, inbox, notify, rates, store
 from unattended.auth import ENV_VAR
 from unattended.awake import SleepPolicy
 from unattended.pricing import Usage
@@ -785,3 +785,38 @@ def test_cost_offline_uses_the_builtin_table(
     )
     run(tmp_path, "cost", "j")
     assert printed(capsys)["run"]["cost"] == 4.0
+
+
+def prompt_job_here(tmp_path: Path) -> Job:
+    state = JobState("j", Spec(JobKind.PROMPT, str(tmp_path), prompt="p"))
+    return JobHome(tmp_path / "home" / ".claude/jobs").create(state)
+
+
+def test_tell_queues_a_message_for_a_prompt_job(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    job = prompt_job_here(tmp_path)
+    assert run(tmp_path, "tell", "j", "--text", "try the other branch") == 0
+    assert "queued for job j" in capsys.readouterr().out
+    assert run(tmp_path, "status", "j") == 0
+    assert printed(capsys)["inbox"] == 1
+    assert inbox.take_messages(job)[0].endswith("try the other branch")
+
+
+def test_tell_reads_a_file(tmp_path: Path) -> None:
+    job = prompt_job_here(tmp_path)
+    (tmp_path / "note.md").write_text("from a file")
+    assert run(tmp_path, "tell", "j", "--file", str(tmp_path / "note.md")) == 0
+    assert inbox.take_messages(job)[0].endswith("from a file")
+
+
+def test_tell_refuses_a_missing_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    prompt_job_here(tmp_path)
+    assert run(tmp_path, "tell", "j", "--file", str(tmp_path / "none.md")) == 1
+    assert "cannot read --file" in capsys.readouterr().err
+
+
+def test_tell_refuses_a_command_job(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    make(tmp_path)
+    assert run(tmp_path, "tell", "j", "--text", "hi") == 1
+    assert "only prompt jobs take messages" in capsys.readouterr().err

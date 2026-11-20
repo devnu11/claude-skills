@@ -73,6 +73,9 @@ Every flag, the job files, limit detection and the command contract are in
    notice says so too and refetches the page at once; nobody has to run
    anything. `$UN rates` fetches now and shows the store, for debugging.
 
+`$UN tell NAME --text "…"` (or `--file F`) sends a running prompt job's
+agent a message: it arrives after the next tool step, or with the next run's
+prompt. Use it to steer a job without stopping it.
 `$UN stop NAME` stops a job. `$UN resume NAME [--max-resumes N] [--until …]
 [--max-cost …]` reruns any ended job (`done` and `failed` too), with the
 resume prompt or resume command. It also restarts one whose supervisor died,
