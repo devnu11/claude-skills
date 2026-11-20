@@ -13,7 +13,7 @@ from agile_team.state import RunState
 from .lazy import Lazy
 
 po_desk = Lazy("agile_team.po_desk")
-rw = Lazy("agile_team.run_writer")
+rw = Lazy("agile_team.state_writer")
 
 # ---------- RunWriter ----------
 

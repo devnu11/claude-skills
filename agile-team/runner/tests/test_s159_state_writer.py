@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from agile_team import run_writer as rw
+from agile_team import state_writer as rw
 
 
 def test_unbound_submit_writes_at_once_r1() -> None:

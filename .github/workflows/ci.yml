@@ -31,3 +31,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: install.sh tests
         run: sh tests/install_test.sh
+      - name: chezmoi names
+        run: sh tests/chezmoi_names_test.sh

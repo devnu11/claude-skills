@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from . import system
-from .run_writer import RunWriter
+from .state_writer import RunWriter
 
 EVENTS = "events.jsonl"
 INTERRUPTED = "interrupted"  # step-end status of a step cut short (s44)
