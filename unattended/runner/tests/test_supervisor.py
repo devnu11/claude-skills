@@ -369,7 +369,7 @@ def test_the_watch_settles_the_outcome(job: Job) -> None:
     clock = FakeClock()
     runner = Overrun(clock)
     assert Supervisor(job, runner, clock, clock.sleep).run() is JobStatus.LIMIT_REACHED
-    assert runner.verdicts == [(Verdict.END,)]
+    assert runner.verdicts == [(Verdict.GRACEFUL, Verdict.END)]
     assert job.load().reason == "deadline (hard stop after 1m)"
 
 

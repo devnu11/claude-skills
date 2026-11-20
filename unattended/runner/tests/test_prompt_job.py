@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import math
 import time
-from collections.abc import AsyncIterator
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-import anyio
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
@@ -33,6 +32,7 @@ from unattended.store import (
 from unattended.watch import RunWatch
 
 from .conftest import MakeJob
+from .fakes import FakeClient, Sleep, Tool
 
 LIMIT_TEXT = (
     "Claude Code returned an error result: You've hit your session limit · "
@@ -55,24 +55,6 @@ def result(text: str | None = "all done", is_error: bool = False) -> ResultMessa
     )
 
 
-class FakeQuery:
-    """Yields ``messages``, then raises ``error`` if given; records each call."""
-
-    def __init__(self, messages: list[Any], error: Exception | None = None) -> None:
-        self.messages, self.error = messages, error
-        self.calls: list[dict[str, Any]] = []
-        self.on_message: list[Any] = []
-
-    async def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
-        self.calls.append({"prompt": prompt, "options": options})
-        for message in self.messages:
-            yield message
-            for check in self.on_message:
-                check()
-        if self.error:
-            raise self.error
-
-
 def prompt_spec(workdir: Path) -> Spec:
     return Spec(JobKind.PROMPT, str(workdir), prompt="Reply pong", model="haiku")
 
@@ -83,7 +65,7 @@ def job(make_job: MakeJob, workdir: Path) -> Job:
 
 
 def test_done_writes_output_and_metrics(job: Job) -> None:
-    fake = FakeQuery([init(), said("thinking"), result()])
+    fake = FakeClient([init(), said("thinking"), result()])
     outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.DONE, metrics=Metrics(0.25, 3, USAGE))
     assert job.path(OUTPUT_FILE).read_text() == "all done\n"
@@ -91,7 +73,7 @@ def test_done_writes_output_and_metrics(job: Job) -> None:
 
 
 def test_first_run_options(job: Job, workdir: Path) -> None:
-    fake = FakeQuery([result()])
+    fake = FakeClient([result()])
     PromptJob(job, {ENV_VAR: "k"}, fake).run_once(RunWatch(job))
     call = fake.calls[0]
     options = call["options"]
@@ -104,7 +86,7 @@ def test_first_run_options(job: Job, workdir: Path) -> None:
 
 
 def test_session_id_is_saved_at_the_first_message(job: Job) -> None:
-    fake = FakeQuery([init("early"), said("x", "early")], RuntimeError("crash"))
+    fake = FakeClient([init("early"), said("x", "early")], RuntimeError("crash"))
     seen: list[str | None] = []
     fake.on_message.append(lambda: seen.append(job.load().session_id))
     PromptJob(job, {}, fake).run_once(RunWatch(job))
@@ -114,7 +96,7 @@ def test_session_id_is_saved_at_the_first_message(job: Job) -> None:
 
 def test_resume_passes_the_session_and_resume_prompt(job: Job) -> None:
     job.update(lambda st: setattr(st, "session_id", "s1"))
-    fake = FakeQuery([result()])
+    fake = FakeClient([result()])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].resume == "s1"
     assert fake.calls[0]["prompt"] == DEFAULT_RESUME_PROMPT
@@ -122,7 +104,7 @@ def test_resume_passes_the_session_and_resume_prompt(job: Job) -> None:
 
 def test_limit_error_becomes_limit(job: Job) -> None:
     error = ResultError(LIMIT_TEXT, {"result": "x"}, exit_code=1)
-    fake = FakeQuery([init(), result("You've hit your session limit", is_error=True)], error)
+    fake = FakeClient([init(), result("You've hit your session limit", is_error=True)], error)
     outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert outcome.kind is OutcomeKind.LIMIT
     assert outcome.reason == "session limit, resets 7:20pm (America/Edmonton)"
@@ -131,37 +113,37 @@ def test_limit_error_becomes_limit(job: Job) -> None:
 
 def test_limit_in_an_exception_group(job: Job) -> None:
     group = ExceptionGroup("g", [ProcessError("Command failed", 1), ResultError(LIMIT_TEXT)])
-    outcome = PromptJob(job, {}, FakeQuery([], group)).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([], group)).run_once(RunWatch(job))
     assert outcome.reason == "session limit, resets 7:20pm (America/Edmonton)"
 
 
 def test_rate_limit_error(job: Job) -> None:
     error = ResultError("API Error: 529 Overloaded", exit_code=1)
-    outcome = PromptJob(job, {}, FakeQuery([], error)).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([], error)).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.RATE_LIMITED, "rate limited (HTTP 529)")
 
 
 def test_other_errors_fail(job: Job) -> None:
-    fake = FakeQuery([said("partial")], ValueError("bad\nmore"))
+    fake = FakeClient([said("partial")], ValueError("bad\nmore"))
     outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.FAILED, "crashed: ValueError: bad")
     assert job.path(OUTPUT_FILE).read_text() == "partial\n"
 
 
 def test_error_result_without_an_exception(job: Job) -> None:
-    fake = FakeQuery([result("API Error: 429 rate limited", is_error=True)])
+    fake = FakeClient([result("API Error: 429 rate limited", is_error=True)])
     outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert outcome.kind is OutcomeKind.RATE_LIMITED
     assert outcome.metrics.turns == 3
 
 
 def test_error_result_without_text(job: Job) -> None:
-    outcome = PromptJob(job, {}, FakeQuery([result(None, is_error=True)])).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([result(None, is_error=True)])).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.FAILED, "error result", Metrics(0.25, 3, USAGE))
 
 
 def test_no_messages_writes_no_output(job: Job) -> None:
-    assert PromptJob(job, {}, FakeQuery([])).run_once(RunWatch(job)) == Outcome(OutcomeKind.DONE)
+    assert PromptJob(job, {}, FakeClient([])).run_once(RunWatch(job)) == Outcome(OutcomeKind.DONE)
     assert not job.path(OUTPUT_FILE).exists()
 
 
@@ -178,7 +160,7 @@ def budget_result() -> ResultMessage:
 
 
 def test_options_pass_what_is_left_of_the_cost_cap(job: Job) -> None:
-    fake = FakeQuery([result()])
+    fake = FakeClient([result()])
     PromptJob(job, {}, fake).run_once(RunWatch(job))
     assert fake.calls[0]["options"].max_budget_usd is None
     job.update(lambda st: (setattr(st.bounds, "max_cost", 5.0), setattr(st, "cost", 3.5)))
@@ -187,7 +169,7 @@ def test_options_pass_what_is_left_of_the_cost_cap(job: Job) -> None:
 
 
 def test_budget_result_becomes_budget(job: Job) -> None:
-    outcome = PromptJob(job, {}, FakeQuery([init(), budget_result()])).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([init(), budget_result()])).run_once(RunWatch(job))
     assert outcome == Outcome(OutcomeKind.BUDGET, prompt_job.BUDGET_REASON, Metrics(1.5, 4, USAGE))
 
 
@@ -195,32 +177,12 @@ def test_budget_error_becomes_budget(job: Job) -> None:
     error = ResultError(
         "Claude Code returned an error result: budget", {"subtype": "error_max_budget_usd"}
     )
-    outcome = PromptJob(job, {}, FakeQuery([init()], error)).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([init()], error)).run_once(RunWatch(job))
     assert outcome.kind is OutcomeKind.BUDGET
     assert job.load().session_id == "s1"
 
 
 # ----- watched runs ----------------------------------------------------------------------
-
-
-class Hanging:
-    """Yields ``messages`` ``pause`` s apart, then waits forever; records its cleanup.
-
-    With ``pause`` set it ends after the last message instead of waiting.
-    """
-
-    def __init__(self, *messages: Any, pause: float | None = None) -> None:
-        self.messages, self.pause, self.closed = messages, pause, False
-
-    async def __call__(self, *, prompt: str, options: Any) -> AsyncIterator[Any]:
-        try:
-            for message in self.messages:
-                await anyio.sleep(self.pause or 0)
-                yield message
-            if self.pause is None:
-                await anyio.sleep_forever()
-        finally:
-            self.closed = True
 
 
 def hard_stopped(job: Job) -> RunWatch:
@@ -230,7 +192,7 @@ def hard_stopped(job: Job) -> RunWatch:
 
 
 def test_the_hard_stop_cancels_the_query(job: Job) -> None:
-    fake = Hanging(init("kept"), said("working", "kept"))
+    fake = FakeClient([init("kept"), said("working", "kept"), Sleep(math.inf)])
     watch = hard_stopped(job)
     outcome = watch.settle(PromptJob(job, {}, fake).run_once(watch))
     assert outcome == Outcome(OutcomeKind.HALTED, "deadline (hard stop after 0s)")
@@ -239,17 +201,39 @@ def test_the_hard_stop_cancels_the_query(job: Job) -> None:
     assert job.path(OUTPUT_FILE).read_text() == "working\n"
 
 
-def test_a_soft_deadline_lets_the_query_finish(job: Job) -> None:
+def graceful_stopped(job: Job) -> RunWatch:
+    """A watch past its deadline with no hard stop, checking every 10 ms."""
     job.update(lambda st: setattr(st, "bounds", Bounds(deadline=1000.0)))
-    watch = RunWatch(job, time.time, 0.01)
-    fake = Hanging(init(), result(), pause=0.05)
+    return RunWatch(job, time.time, 0.01)
+
+
+def test_a_graceful_stop_lets_the_current_step_finish(job: Job) -> None:
+    watch = graceful_stopped(job)
+    fake = FakeClient([Sleep(0.05), init(), Sleep(0.05), result()])
     assert PromptJob(job, {}, fake).run_once(watch).kind is OutcomeKind.DONE
-    assert watch.halt is None
+    assert watch.halt == "deadline (graceful)"
+
+
+def test_a_graceful_stop_ends_the_run_at_its_next_tool_step(job: Job) -> None:
+    watch = graceful_stopped(job)
+    fake = FakeClient([init(), Sleep(0.05), Tool(), said("never"), result()])
+    outcome = watch.settle(PromptJob(job, {}, fake).run_once(watch))
+    assert outcome.kind is OutcomeKind.HALTED
+    assert outcome.reason == "deadline (graceful)"
+    assert fake.replies == []
+    assert job.path(OUTPUT_FILE).read_text() == "stopped\n"
+
+
+def test_tool_steps_pass_through_the_hooks(job: Job) -> None:
+    fake = FakeClient([init(), Tool(), Tool("Read"), result()])
+    outcome = PromptJob(job, {}, fake).run_once(RunWatch(job))
+    assert outcome.kind is OutcomeKind.DONE
+    assert fake.replies == [{}, {}]
 
 
 def test_each_message_stamps_spend_progress(job: Job) -> None:
     watch = RunWatch(job)
-    PromptJob(job, {}, FakeQuery([init(), said("a"), result()])).run_once(watch)
+    PromptJob(job, {}, FakeClient([init(), said("a"), result()])).run_once(watch)
     assert watch.spend.count == 3
 
 
@@ -260,7 +244,7 @@ def spent(model: str, message_id: str, output: int) -> AssistantMessage:
 
 def test_run_usage_is_summed_by_model_as_messages_arrive(job: Job) -> None:
     messages = [init(), spent("claude-opus-5-5", "m1", 5), spent("claude-haiku-5-5", "m2", 7)]
-    fake = FakeQuery(messages, RuntimeError("crash"))
+    fake = FakeClient(messages, RuntimeError("crash"))
     seen: list[dict[str, Any]] = []
     fake.on_message.append(lambda: seen.append(job.load().run_usage))
     PromptJob(job, {}, fake).run_once(RunWatch(job))
@@ -275,28 +259,35 @@ def test_run_usage_is_summed_by_model_as_messages_arrive(job: Job) -> None:
 def test_run_usage_counts_one_message_once_per_id(job: Job) -> None:
     # The CLI repeats an API response's usage on each content block it emits.
     messages = [init(), spent("m", "same", 5), spent("m", "same", 9), spent("m", None, 1)]
-    PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    PromptJob(job, {}, FakeClient(messages)).run_once(RunWatch(job))
     assert job.load().run_usage == {"m": asdict(Usage(input=20, output=10))}
 
 
 def test_messages_without_usage_change_nothing(job: Job) -> None:
-    PromptJob(job, {}, FakeQuery([init(), said("x"), result()])).run_once(RunWatch(job))
+    PromptJob(job, {}, FakeClient([init(), said("x"), result()])).run_once(RunWatch(job))
     assert job.load().run_usage == {}
 
 
 def test_metrics_carry_the_runs_estimate(job: Job) -> None:
     messages = [init(), spent("claude-opus-5-5", "m1", 1_000_000), result()]
-    outcome = PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient(messages)).run_once(RunWatch(job))
     assert outcome.metrics.estimate == pytest.approx(20 + 10 * 4 / 1_000_000)
     assert outcome.metrics.cost == 0.25
 
 
 def test_estimate_is_none_before_any_usage(job: Job) -> None:
-    outcome = PromptJob(job, {}, FakeQuery([init(), said("x"), result()])).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient([init(), said("x"), result()])).run_once(RunWatch(job))
     assert outcome.metrics.estimate is None
 
 
 def test_estimate_is_none_for_an_unpriced_model(job: Job) -> None:
     messages = [init(), spent("mystery", "m1", 5), result()]
-    outcome = PromptJob(job, {}, FakeQuery(messages)).run_once(RunWatch(job))
+    outcome = PromptJob(job, {}, FakeClient(messages)).run_once(RunWatch(job))
     assert outcome.metrics.estimate is None
+
+
+def test_open_client_builds_a_real_session_without_connecting() -> None:
+    options = prompt_job.ClaudeAgentOptions(cwd=".")
+    client = prompt_job.open_client(options)
+    assert isinstance(client, prompt_job.ClaudeSDKClient)
+    assert client.options is options

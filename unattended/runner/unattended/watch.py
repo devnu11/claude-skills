@@ -14,9 +14,10 @@ within one slice. It then:
 4. **Walks each stop sequence** (deadline, idle stop; see ``limits.PHASES``),
    acting once per phase per run:
 
-   - graceful: logs the stop and asks the runner to run the job's
-     ``--stop-command`` (``Verdict.GRACEFUL``). A soft deadline (no stop
-     command, no hard phase) does nothing mid-run;
+   - graceful: logs the stop and asks the runner to stop gracefully
+     (``Verdict.GRACEFUL``): a command job runs its ``--stop-command``, a
+     prompt job ends at its next tool step. A command job's soft deadline (no
+     stop command, no hard phase) does nothing mid-run;
    - hard: logs the stop and asks the runner to end the run (``Verdict.END``).
 
 Once a stop was sent, ``settle`` turns the run's outcome into ``HALTED`` with
@@ -35,7 +36,7 @@ from . import probes
 from .limits import Outcome, OutcomeKind, Phase, Stop, StopCause, span
 from .notify import Notice, Trigger, post
 from .probes import Context, Probe, Reading, Stamp
-from .store import HEARTBEAT_ENV, HEARTBEAT_FILE, Job, JobState
+from .store import HEARTBEAT_ENV, HEARTBEAT_FILE, Job, JobKind, JobState
 
 SLICE = 30.0
 ORDER = tuple(Phase)
@@ -97,9 +98,15 @@ def due(stop: Stop, now: float) -> list[Step]:
     return [Step(stop, phase) for phase in reached]
 
 
+def stops_gracefully(state: JobState) -> bool:
+    """True when the job can be asked to stop: a prompt job, or a command job with a stop
+    command."""
+    return state.spec.kind is JobKind.PROMPT or bool(state.spec.stop_command)
+
+
 def enforced(step: Step, state: JobState) -> bool:
-    """True when the stop does something: a stop command to send, or a hard phase to come."""
-    return bool(state.spec.stop_command) or step.stop.hard_after is not None
+    """True when the stop does something: a graceful stop to ask for, or a hard phase to come."""
+    return stops_gracefully(state) or step.stop.hard_after is not None
 
 
 def idle(view: View) -> str | None:
@@ -265,6 +272,6 @@ class RunWatch:
 
 
 ACTIONS: dict[Phase, Callable[[JobState], Verdicts]] = {
-    Phase.GRACEFUL: lambda state: (Verdict.GRACEFUL,) if state.spec.stop_command else (),
+    Phase.GRACEFUL: lambda state: (Verdict.GRACEFUL,) if stops_gracefully(state) else (),
     Phase.HARD: lambda state: (Verdict.END,),
 }
