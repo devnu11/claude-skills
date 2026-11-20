@@ -1,6 +1,6 @@
 ---
 name: unattended
-description: Run a long or expensive prompt or command unattended as a background job that waits out Claude usage limits and resumes itself, within a deadline, a resume count and a cost cap; can bill an API key instead of the login. Use when the user says "run this overnight", "keep going after the limit resets", "resume when the limit resets", "run this on the API key", "spin up a prompt on an API thread", or wants to wrap a long command such as `agile-team start` so it survives session limits. Also "stop it hard at 6pm", "extend the deadline", "tell me if it stalls or goes idle".
+description: Run a long or expensive prompt or command unattended as a background job that waits out Claude usage limits and resumes itself, within a deadline, a resume count and a cost cap; can bill an API key instead of the login. Use when the user says "run this overnight", "keep going after the limit resets", "resume when the limit resets", "run this on the API key", "spin up a prompt on an API thread", or wants to wrap a long command such as `agile-team start` so it survives session limits. Also "stop it hard at 6pm", "extend the deadline", "tell me if it stalls or goes idle", "cap each run at $5", "tell the running job to…", "wait for CI then continue", "pin the skill version for this job".
 ---
 
 # unattended
@@ -108,8 +108,9 @@ answers.
   next tool step when it reaches `--max-cost`, or `--max-run-cost` for one
   run; `--max-output-tokens` bounds each response in between. `--wrap-up USD`
   then grants one tool-less summary reply within that allowance, also after a
-  graceful stop. The job ends `limit-reached` with its session saved, and `resume NAME --max-cost <higher>` continues it. Commands report
-  no cost to `unattended`, so they must enforce their own budget.
+  graceful stop. The job ends `limit-reached` with its session saved, and
+  `resume NAME --max-cost <higher>` continues it. Commands report no cost to
+  `unattended`, so they must enforce their own budget.
 - **The deadline has phases.** Before it, the job runs as usual. From it, no
   new run, resume or wait starts, and a command job's `--stop-command` is run
   once, and a prompt run is ended at its next tool step; a run that ends
