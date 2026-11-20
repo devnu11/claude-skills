@@ -30,6 +30,7 @@ from .command_job import CommandJob
 from .inbox import count_messages, queue_message
 from .ledger import read_calls
 from .limits import Bounds, format_time_left, local, parse_duration, parse_until, span
+from .pin import copy_skills, find_skill_problems
 from .pricing import Estimate, Rates, Usage, is_stale
 from .prompt_job import PromptJob
 from .rates import describe_store, fetch_rates, refresh_rates, resolve_store
@@ -144,6 +145,7 @@ def spec_from(args: argparse.Namespace) -> Spec:
         allowed_tools=args.allowed_tools or [],
         disallowed_tools=args.disallowed_tools or [],
         add_dirs=[str(_directory(path, "--add-dir")) for path in args.add_dir or []],
+        skills=_read_skills(args.skill or []),
         setting_sources=_read_setting_sources(args.setting_sources),
         wrap_up_prompt=args.wrap_up_prompt or DEFAULT_WRAP_UP_PROMPT,
         resume_from=args.resume_from or ResumeFrom.SESSION,
@@ -165,6 +167,7 @@ KIND_ONLY: dict[JobKind, tuple[str, ...]] = {
         "allowed_tools",
         "disallowed_tools",
         "add_dir",
+        "skill",
         "setting_sources",
         "wrap_up_prompt",
         "resume_from",
@@ -187,6 +190,15 @@ def _directory(path: str, flag: str) -> Path:
     if not resolved.is_dir():
         raise CliError(f"{flag} {path} is not a directory")
     return resolved
+
+
+def _read_skills(paths: list[str]) -> list[str]:
+    """``--skill``: each directory resolved, refused unless it holds a skill."""
+    sources = [Path(path).resolve() for path in paths]
+    problems = find_skill_problems(sources)
+    if problems:
+        raise CliError("; ".join(problems))
+    return [str(source) for source in sources]
 
 
 def _read_setting_sources(text: str | None) -> list[str]:
@@ -355,6 +367,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     require_auth(spec, Path(args.home))
     job = job_home(args).create(JobState(args.name, spec, bounds))
     job.event("start", {"kind": spec.kind, "cwd": spec.cwd})
+    copy_skills(job, spec.skills)
     return LAUNCHERS[args.launch](job, args)
 
 
@@ -740,6 +753,9 @@ START_ARGS: tuple[Arg, ...] = (
                                "help": "a tool or permission rule to refuse, repeatable"}),
     (("--add-dir",), {"action": "append", "metavar": "DIR",
                       "help": "another directory the agent may read and edit, repeatable"}),
+    (("--skill",), {"action": "append", "metavar": "DIR",
+                    "help": "a skill directory to copy into the job and load from there, so "
+                            "every run uses this version; repeatable"}),
     (("--setting-sources",), {"metavar": "LIST",
                               "help": f"settings layers to load: {SOURCES_HELP} "
                                       "(default: all three)"}),

@@ -48,6 +48,7 @@ from .inbox import deliver_at_start, deliver_at_step
 from .ledger import Ledger
 from .limits import Metrics, Outcome, OutcomeKind, Spend, classify, strip_exit_suffix
 from .park import stop_when_parked
+from .pin import build_plugins
 from .pricing import RATES, Estimate, Rates, Usage
 from .probes import Stamp
 from .rates import load_rates
@@ -116,6 +117,7 @@ def options_for(run: Run) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
         cwd=spec.cwd,
         add_dirs=list(spec.add_dirs),
+        plugins=build_plugins(run.drain.job, spec.skills),
         model=spec.model,
         effort=spec.effort,  # type: ignore[arg-type]
         allowed_tools=list(spec.allowed_tools),

@@ -94,6 +94,7 @@ class Spec:
     allowed_tools: list[str] = field(default_factory=list)
     disallowed_tools: list[str] = field(default_factory=list)
     add_dirs: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)  # pinned skill sources (see pin.py)
     setting_sources: list[str] = field(default_factory=lambda: list(SETTING_SOURCES))
     wrap_up_prompt: str = DEFAULT_WRAP_UP_PROMPT
     resume_from: ResumeFrom = ResumeFrom.SESSION
